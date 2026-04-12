@@ -78,8 +78,9 @@ async function fetchLogSnapshot(
   projectId: string,
   lineCount: number,
   signal: AbortSignal,
+  envParam: string = '',
 ): Promise<LogEntry[]> {
-  const res = await fetch(`/api/projects/${projectId}/logs?lines=${lineCount}`, {
+  const res = await fetch(`/api/projects/${projectId}/logs?lines=${lineCount}${envParam}`, {
     signal,
   });
   if (!res.ok) {

@@ -1,7 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-
 interface HookDispatcher {
   useState<T>(initial: T | (() => T)): readonly [T, (next: T | ((value: T) => T)) => void];
   useCallback<T extends (...args: never[]) => unknown>(callback: T): T;
@@ -99,6 +97,23 @@ vi.mock('@/components/ui/spinner', () => ({
   },
 }));
 
+vi.mock('@/i18n/context', () => ({
+  useLanguage: () => ({
+    t: (key: string) =>
+      (
+        ({
+          'services.status.running': 'Running',
+          'services.status.stopped': 'Stopped',
+          'services.status.error': 'Error',
+          'services.detail.header.start': 'Start',
+          'services.detail.header.stop': 'Stop',
+          'services.detail.header.delete': 'Delete',
+          'services.detail.header.backToServices': 'Back to services',
+        }) as Record<string, string>
+      )[key] ?? key,
+  }),
+}));
+
 function findExactTextInTree(node: any, text: string): boolean {
   if (typeof node === 'string' || typeof node === 'number') {
     return String(node) === text;
@@ -143,9 +158,7 @@ function renderHeader(props: any) {
   }
 }
 
-const describeHeader = isBunRuntime ? describe.skip : describe;
-
-describeHeader('ServiceHeader', () => {
+describe('ServiceHeader', () => {
   beforeAll(async () => {
     const { createRequire } = await import('node:module');
     const require = createRequire(import.meta.url);

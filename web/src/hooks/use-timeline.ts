@@ -18,6 +18,7 @@ interface UseTimelineReturn {
   isStreaming: boolean;
   isComplete: boolean;
   error: string | null;
+  disconnected: boolean;
   submitAnswer: (questionId: string, answers: QuestionAnswerPayload[]) => Promise<void>;
   skipQuestion: (questionId: string) => Promise<void>;
   executeAction: (projectId: string, action: string) => Promise<void>;
@@ -25,6 +26,18 @@ interface UseTimelineReturn {
 
 const MAX_RETRIES = 5;
 const RETRY_DELAY = 3000;
+
+function shouldTreatEventAsActiveBuild(event: BuildStreamEvent): boolean {
+  if (event.type === 'complete') {
+    return false;
+  }
+
+  if (event.type === 'status') {
+    return /build in progress/i.test(event.message);
+  }
+
+  return true;
+}
 
 export function useTimeline({
   projectId,
@@ -37,6 +50,7 @@ export function useTimeline({
   const [isStreaming, setIsStreaming] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [disconnected, setDisconnected] = useState(false);
   const retriesRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const seenEventKeysRef = useRef<Set<string>>(new Set());
@@ -62,7 +76,8 @@ export function useTimeline({
 
       const item = toTimelineItem(event);
       setItems((prev) => {
-        if (item.type === 'progress') {
+        const isProgress = item.type === 'progress';
+        if (isProgress) {
           return [...prev.filter((p) => p.type !== 'progress'), item];
         }
         return [...prev, item];
@@ -80,9 +95,11 @@ export function useTimeline({
 
     setIsStreaming(true);
     setError(null);
+    setDisconnected(false);
 
     try {
-      const response = await fetch(`/api/projects/${projectId}/build/stream`, {
+      const freshStartQuery = runKey > 0 ? '?fresh_start=1' : '';
+      const response = await fetch(`/api/projects/${projectId}/build/stream${freshStartQuery}`, {
         signal: controller.signal,
       });
 
@@ -98,6 +115,7 @@ export function useTimeline({
       const decoder = new TextDecoder();
       let buffer = '';
       retriesRef.current = 0; // Reset retries on successful connection
+      let sawActiveBuildEvent = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -112,6 +130,9 @@ export function useTimeline({
           try {
             const event: BuildStreamEvent = JSON.parse(line);
             appendEvent(event);
+            if (shouldTreatEventAsActiveBuild(event)) {
+              sawActiveBuildEvent = true;
+            }
 
             if (event.type === 'complete') {
               setIsComplete(true);
@@ -129,12 +150,26 @@ export function useTimeline({
         }
       }
 
+      if (sawActiveBuildEvent && retriesRef.current < MAX_RETRIES) {
+        retriesRef.current += 1;
+        setDisconnected(true);
+        setIsStreaming(false);
+        setTimeout(() => {
+          if (!controller.signal.aborted) {
+            connect();
+          }
+        }, RETRY_DELAY);
+        return;
+      }
+
+      setDisconnected(false);
       setIsStreaming(false);
     } catch (err) {
       if (controller.signal.aborted) return;
 
       const message = err instanceof Error ? err.message : 'Stream failed';
       setError(message);
+      setDisconnected(true);
       setIsStreaming(false);
 
       // Auto-retry on disconnect
@@ -147,7 +182,7 @@ export function useTimeline({
         }, RETRY_DELAY);
       }
     }
-  }, [projectId, appendEvent]);
+  }, [projectId, appendEvent, runKey]);
 
   useEffect(() => {
     if (!enabled || !projectId) return;
@@ -160,14 +195,16 @@ export function useTimeline({
 
     let cancelled = false;
     void (async () => {
-      try {
-        const history = await getProjectTimeline(projectId);
-        if (cancelled) return;
-        for (const event of history) {
-          appendEvent(event);
+      if (runKey === 0) {
+        try {
+          const history = await getProjectTimeline(projectId);
+          if (cancelled) return;
+          for (const event of history) {
+            appendEvent(event);
+          }
+        } catch (err) {
+          void err;
         }
-      } catch (err) {
-        void err;
       }
 
       if (!cancelled) {
@@ -261,5 +298,14 @@ export function useTimeline({
     [projectId],
   );
 
-  return { items, isStreaming, isComplete, error, submitAnswer, skipQuestion, executeAction };
+  return {
+    items,
+    isStreaming,
+    isComplete,
+    error,
+    disconnected,
+    submitAnswer,
+    skipQuestion,
+    executeAction,
+  };
 }

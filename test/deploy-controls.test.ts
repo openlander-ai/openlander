@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
+import type { OpenLanderConfig } from '../src/config/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import type { CloudflareTunnelManager } from '../src/pipeline/cloudflare.js';
 import { CloudflareTunnel } from '../src/pipeline/tunnel.js';
@@ -22,9 +23,11 @@ function createMockDocker(): Docker {
   return {
     stopContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     runContainer: vi.fn().mockResolvedValue('container-new-123456'),
     startContainer: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
+    inspectImage: vi.fn().mockResolvedValue({}),
     listContainers: vi.fn().mockResolvedValue([]),
     listAllContainers: vi.fn().mockResolvedValue([]),
     inspectContainer: vi.fn().mockResolvedValue(null),
@@ -39,6 +42,7 @@ describe('DeployPipeline deploy controls', () => {
   let docker: Docker;
   let env: EnvLike;
   let pipeline: DeployPipeline;
+  const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-deploy-controls-'));
@@ -48,7 +52,7 @@ describe('DeployPipeline deploy controls', () => {
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
     };
-    pipeline = new DeployPipeline(docker, db, env as never);
+    pipeline = new DeployPipeline(docker, db, env as never, testConfig);
   });
 
   afterEach(() => {
@@ -153,13 +157,13 @@ describe('DeployPipeline deploy controls', () => {
     expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-development-old',
     );
-    expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-development-old',
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         imageTag: 'openlander/demo-app:development-old',
-        name: expect.stringContaining('ol-demo-app-dev-'),
+        name: 'ol-demo-app',
         port: 11011,
       }),
     );
@@ -434,10 +438,8 @@ describe('DeployPipeline deploy controls', () => {
     await pipeline.stop('parent-ops');
     expect(db.getProject('parent-ops')?.status).toBe('stopped');
     expect(db.getProject('child-ops')?.status).toBe('stopped');
-
-    await pipeline.start('parent-ops');
-    expect(db.getProject('parent-ops')?.status).toBe('running');
-    expect(db.getProject('child-ops')?.status).toBe('running');
+    // After destructive stop, container_id is cleared — start() requires redeploy
+    expect(db.getProject('child-ops')?.container_id).toBeNull();
   });
 
   it('getLogs returns friendly message when project has no container', async () => {

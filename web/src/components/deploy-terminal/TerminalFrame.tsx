@@ -22,7 +22,7 @@ export function TerminalFrame({ children, className, title }: TerminalFrameProps
 
       {title && (
         <div
-          className="flex items-center px-4 py-2 border-b text-[11px] font-mono uppercase tracking-wider"
+          className="flex items-center px-4 py-2 border-b text-xs font-mono uppercase tracking-wider"
           style={{
             borderColor: terminalTokens.colors.border,
             color: terminalTokens.colors.text.muted,

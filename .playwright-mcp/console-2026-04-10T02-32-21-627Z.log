@@ -1,0 +1,146 @@
+[     177ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=4031c4db:20102
+[     261ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/setup/status:0
+[     262ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/verify:0
+[     262ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/setup/status:0
+[     262ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/verify:0
+[     292ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "new-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:5173/login:0
+[   37641ms] [ERROR] Failed to load module script: Expected a JavaScript-or-Wasm module script but the server responded with a MIME type of "application/json". Strict MIME type checking is enforced for module scripts per HTML spec. @ http://localhost:5173/src/lib/api/index.ts:0
+[   59652ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=4031c4db:20102
+[   59781ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/health:0
+[   59782ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/health:0
+[   59785ms] [ERROR] Failed to load projects for ApprovalDialog TypeError: Cannot read properties of undefined (reading 'map')
+    at listProjects (http://localhost:5173/src/lib/api/projects.ts:64:24)
+    at async initProjects (http://localhost:5173/src/components/agent/ApprovalDialog.tsx:41:23) @ http://localhost:5173/src/components/agent/ApprovalDialog.tsx:47
+[   59785ms] [ERROR] Failed to load projects for ApprovalDialog TypeError: Cannot read properties of undefined (reading 'map')
+    at listProjects (http://localhost:5173/src/lib/api/projects.ts:64:24)
+    at async initProjects (http://localhost:5173/src/components/agent/ApprovalDialog.tsx:41:23) @ http://localhost:5173/src/components/agent/ApprovalDialog.tsx:47
+[   59791ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   59791ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   59792ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   59792ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   59821ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   59821ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   59822ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   59822ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   59847ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   59848ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   62847ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   62847ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   62848ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   62848ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   62870ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   62870ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   62871ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   62871ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   62890ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   62891ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   65890ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   65890ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   65891ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   65891ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   65914ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   65914ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   65914ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   65914ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   65936ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   65936ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   68936ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   68936ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   68936ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   68936ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   68963ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   68963ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   68964ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   68964ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   68986ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   68987ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   71986ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   71986ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   71986ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   71986ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   72011ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   72011ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   72012ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   72012ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   72036ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   72037ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   75036ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   75036ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   75037ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   75037ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   75062ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   75062ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   75063ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   75063ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   75085ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   75085ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   78085ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   78085ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   78085ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   78085ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   78110ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   78110ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   78111ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   78111ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   78136ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   78136ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   81136ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   81136ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   81136ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   81136ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   81163ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   81163ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   81164ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   81164ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   81188ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   81189ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   84188ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   84188ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   84189ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   84189ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   84215ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   84215ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   84215ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   84215ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   84240ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   84240ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   87239ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   87239ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   87240ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   87240ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   87264ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   87265ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   87265ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   87265ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   87286ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   87286ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   90286ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   90286ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   90286ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   90286ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   90311ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   90311ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   90312ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   90312ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   90336ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   90336ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   93336ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   93336ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   93337ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   93337ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   93363ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   93363ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   93363ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   93363ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   93384ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   93385ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   96384ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   96384ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   96384ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   96384ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   96409ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   96409ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   96410ms] [WARNING] Translation key not found: opsV2.errors.apiError @ http://localhost:5173/src/i18n/context.tsx:52
+[   96410ms] [WARNING] Translation key not found: opsV2.errors.retry @ http://localhost:5173/src/i18n/context.tsx:52
+[   96434ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52
+[   96434ms] [WARNING] Translation key not found: opsV2.errors.retrying @ http://localhost:5173/src/i18n/context.tsx:52

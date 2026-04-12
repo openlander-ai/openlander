@@ -4,11 +4,10 @@ import { stream } from 'hono/streaming';
 import { nanoid } from 'nanoid';
 
 import type { AppContext } from '../../app.js';
-import { ProjectNotFoundError } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
-import { scanEnvFile, scanEnvTemplate, scanDockerfileArgs } from '../../lib/env-parser.js';
+import { scanRepoEnvVars } from '../../pipeline/env-scan.js';
 import { cloneRepo } from '../../pipeline/git.js';
-import { existsSync } from 'node:fs';
+import { getProjectOrThrow } from './helpers/project-helpers.js';
 
 type TerminalFailureInput = {
   step: 'deploy-start' | 'monorepo' | 'orchestrate';
@@ -29,6 +28,10 @@ export type PlanExecutionDeps = {
   sshKeyPath: string | null;
   trigger: string;
   write: (message: string) => Promise<void>;
+  source?: 'git' | 'image';
+  imageUrl?: string;
+  imageCmd?: string[];
+  containerPort?: number;
 };
 
 export type FailureHandlerDeps = {
@@ -49,9 +52,13 @@ export async function startPlanExecution(deps: PlanExecutionDeps): Promise<void>
     name: deps.projectName,
     envVars: deps.envVars,
     visibility: deps.visibility,
-    environment: deps.environment,
+    environment: 'production',
     sshKeyPath: deps.sshKeyPath || undefined,
     trigger: deps.trigger,
+    source: deps.source,
+    imageUrl: deps.imageUrl,
+    imageCmd: deps.imageCmd,
+    containerPort: deps.containerPort,
   });
 
   await deps.write(deps.isKorean ? '배포 계획 실행 중...' : 'Executing deployment plan...');
@@ -297,9 +304,7 @@ export async function emitTerminalMessage(
 
 export function registerBuildProgressRoute(api: Hono, ctx: AppContext): void {
   api.get('/builds/:id/progress', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const unsubscribers: Array<() => void> = [];
     const progressHandlers: Array<{ event: string; payload: Record<string, unknown> }> = [
@@ -383,26 +388,7 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
     try {
       const cloneResult = await cloneRepo({ repoUrl: body.repo_url, branch: body.branch });
       clonePath = cloneResult.path;
-
-      const detected: Array<{ key: string; source: string; required: boolean; default?: string }> =
-        [];
-      const ENV_TEMPLATES = ['.env.example', '.env.sample', '.env.template'];
-      let hasEnvExample = false;
-      for (const tpl of ENV_TEMPLATES) {
-        const tplPath = `${clonePath}/${tpl}`;
-        if (existsSync(tplPath)) {
-          hasEnvExample = true;
-          detected.push(...scanEnvFile(tplPath, tpl, detected));
-        }
-      }
-
-      const vars = detected.map((d) => ({
-        key: d.key,
-        files: [{ path: d.source, line: 0 }],
-        optional: !d.required,
-      }));
-
-      return c.json({ vars, hasEnvExample, language: 'unknown', serviceHints: [] });
+      return c.json(scanRepoEnvVars(clonePath));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: msg }, 400);
@@ -412,34 +398,16 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
   });
 
   api.post('/projects/:id/env/scan', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) return c.json({ error: 'Project not found' }, 404);
+    const project = getProjectOrThrow(c, ctx);
     if (!project.repo_url) return c.json({ error: 'Project has no repo URL' }, 400);
 
     let clonePath: string | null = null;
     try {
       const cloneResult = await cloneRepo({ repoUrl: project.repo_url, branch: project.branch });
       clonePath = cloneResult.path;
-
-      const detected: Array<{ key: string; source: string; required: boolean; default?: string }> =
-        [];
-      const ENV_TEMPLATES = ['.env.example', '.env.sample', '.env.template'];
-      let hasEnvExample = false;
-      for (const tpl of ENV_TEMPLATES) {
-        const tplPath = `${clonePath}/${tpl}`;
-        if (existsSync(tplPath)) {
-          hasEnvExample = true;
-          detected.push(...scanEnvFile(tplPath, tpl, detected));
-        }
-      }
-      const envRef = `${clonePath}/.env`;
-      if (existsSync(envRef)) {
-        detected.push(...scanEnvTemplate(clonePath, '.env', detected));
-      }
-      if (project.dockerfile_path) {
-        detected.push(...scanDockerfileArgs(clonePath, project.dockerfile_path, detected));
-      }
+      const scanResult = scanRepoEnvVars(clonePath, {
+        dockerfilePath: project.dockerfile_path,
+      });
 
       const allStoredKeys = new Set<string>();
       for (const key of Object.keys(ctx.env.getAll(project.id))) allStoredKeys.add(key);
@@ -448,15 +416,11 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
         for (const key of Object.keys(ctx.env.getAll(project.id, env.id))) allStoredKeys.add(key);
       }
 
-      const vars = detected.map((d) => ({
-        key: d.key,
-        files: [{ path: d.source, line: 0 }],
-        optional: !d.required,
-      }));
+      const vars = scanResult.vars;
       const newVars = vars.filter((v) => !allStoredKeys.has(v.key) && !v.optional);
       const existingVars = vars.filter((v) => allStoredKeys.has(v.key)).map((v) => v.key);
 
-      return c.json({ vars, newVars, existingVars, hasEnvExample });
+      return c.json({ vars, newVars, existingVars, hasEnvExample: scanResult.hasEnvExample });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: msg }, 400);

@@ -28,6 +28,9 @@ function createContext() {
       stop,
       redeploy,
     },
+    deployQueue: {
+      acquire: vi.fn().mockResolvedValue(() => {}),
+    },
   } as unknown as AppContext;
 
   return { ctx, stop, redeploy };
@@ -63,7 +66,8 @@ describe('project-ops restart_project non-blocking', () => {
     expect(result).toEqual({
       status: 'restarting',
       project: 'demo-app',
-      message: 'Redeployment started. Use get_deploy_status to track progress.',
+      message:
+        'Restart initiated (no_cache). Full rebuild may take 3-5+ minutes. Poll get_deploy_status to track progress.',
     });
   });
 });

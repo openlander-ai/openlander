@@ -123,7 +123,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
 
   api.get('/services', async (c) => {
     try {
-      const services = await ctx.serviceManager.list();
+      const services = await ctx.serviceManager.listWithCardSummary();
       return c.json(services);
     } catch (err) {
       log.debug({ err }, 'List services failed');
@@ -375,8 +375,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
   api.delete('/services/:id', async (c) => {
     const id = c.req.param('id');
     try {
-      await ctx.serviceManager.remove(id);
-      return c.json({ status: 'removed' });
+      const result = await ctx.serviceManager.remove(id);
+      return c.json({ status: 'removed', ...result });
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Remove service failed');
       const message = err instanceof Error ? err.message : String(err);

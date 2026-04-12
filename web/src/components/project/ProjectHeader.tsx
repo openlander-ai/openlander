@@ -1,5 +1,6 @@
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -8,7 +9,6 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
-  ExternalLink,
   RotateCw,
   Play,
   Square,
@@ -19,36 +19,43 @@ import {
   History,
   Zap,
   MoreHorizontal,
-  ChevronDown,
-  Plus,
   Trash2,
+  Download,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Project, Environment, EnvironmentType } from '@/types';
+import { useSetup } from '@/hooks/use-setup.js';
+import { useLanguage } from '@/i18n/context';
+import { AISparkle } from '@/components/ui/AISparkle';
+import { DomainUrlDisplay } from './DomainUrlDisplay';
+import type { Project } from '@/types';
 
 interface ProjectHeaderProps {
   project: Project;
-  environments?: Environment[];
-  currentEnvType?: EnvironmentType;
-  onEnvChange?: (env: EnvironmentType) => void;
-  onAddEnv?: (env: EnvironmentType) => void;
   actionLoading: string | null;
   onRedeploy: () => void;
   onStop: () => void;
   onStart: () => void;
   onRollback: () => void;
-  onBlueGreen: () => void;
+  onOpenBlueGreenDialog: () => void;
   onShare: () => void;
-  onDelete: () => void;
+  onArchive: () => void;
+  onUnarchive: () => void;
+  onPurge: () => void;
 }
 
 type StatusConfig = { label: string; color: string; dot: string };
 
-function getStatusConfig(): Record<string, StatusConfig> {
+function getStatusConfig(isImageSource: boolean = false): Record<string, StatusConfig> {
   return {
-    running: { label: 'Live', color: 'text-success', dot: 'bg-success' },
+    running: { label: 'Live', color: 'text-success', dot: 'bg-success animate-pulse' },
     stopped: { label: 'Stopped', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
-    building: { label: 'Deploying', color: 'text-warning', dot: 'bg-warning animate-pulse' },
+    building: {
+      label: isImageSource ? 'Pulling' : 'Deploying',
+      color: 'text-warning',
+      dot: 'bg-warning animate-pulse-ring',
+    },
     error: { label: 'Failed', color: 'text-error', dot: 'bg-error' },
     idle: { label: 'Idle', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
   };
@@ -56,69 +63,64 @@ function getStatusConfig(): Record<string, StatusConfig> {
 
 export function ProjectHeader({
   project,
-  environments = [],
-  currentEnvType = 'production',
-  onEnvChange,
-  onAddEnv,
   actionLoading,
   onRedeploy,
   onStop,
   onStart,
   onRollback,
-  onBlueGreen,
+  onOpenBlueGreenDialog,
   onShare,
-  onDelete,
+  onArchive,
+  onUnarchive,
+  onPurge,
 }: ProjectHeaderProps) {
-  const statusConfig = getStatusConfig();
+  const { status: setupStatus } = useSetup();
+  const { t } = useLanguage();
+  const isImageSource = project.source === 'image';
+  const statusConfig = getStatusConfig(isImageSource);
+  const isLlmConfigured = setupStatus?.llm.ok === true;
 
-  const selectedEnv = environments.find((e) => e.type === currentEnvType);
-  const displayStatus = selectedEnv ? selectedEnv.status : project.status;
-  const displayBranch = selectedEnv ? selectedEnv.branch : project.branch;
-  const displayPublicUrl = selectedEnv ? selectedEnv.publicUrl : project.publicUrl;
-  const displayUrl = currentEnvType === 'production' ? project.url : undefined;
+  const displayStatus = project.status;
+  const displayBranch = project.branch;
+  const displayPublicUrl = project.publicUrl;
 
   const status = statusConfig[displayStatus] ?? statusConfig.stopped;
   const isBuilding = displayStatus === 'building';
   const isRunning = displayStatus === 'running';
   const isStopped = displayStatus === 'stopped' || displayStatus === 'idle';
-  const hasContainer = selectedEnv ? !!selectedEnv.containerId : !!project.port;
-
-  const envColors: Record<EnvironmentType, string> = {
-    production: 'bg-success/10 text-success border-success/20',
-    development: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-  };
-
-  const envLabels: Record<EnvironmentType, string> = {
-    production: 'Production',
-    development: 'Development',
-  };
+  const hasContainer = !!project.port;
 
   // Determine primary action
   const renderPrimaryAction = () => {
     if (isBuilding) {
       return (
-        <Button variant="outline" size="sm" className="h-7 text-[11px] font-body gap-1.5" disabled>
+        <Button variant="outline" size="sm" className="h-7 text-xs font-body gap-1.5" disabled>
           <Spinner className="h-3 w-3" />
-          Deploying...
+          {isImageSource ? 'Pulling...' : 'Deploying...'}
         </Button>
       );
     }
     if (isStopped && !hasContainer) {
       return (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-[11px] font-body gap-1.5 text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30"
-          onClick={onRedeploy}
-          disabled={!!actionLoading}
-        >
-          {actionLoading === 'redeploy' ? (
-            <Spinner className="h-3 w-3" />
-          ) : (
-            <Zap className="h-3 w-3" />
-          )}
-          Deploy
-        </Button>
+        <Tooltip content="AI가 전체 파이프라인을 처리합니다" side="bottom">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs font-body gap-1.5 text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30"
+            onClick={onRedeploy}
+            disabled={!!actionLoading}
+          >
+            {actionLoading === 'redeploy' ? (
+              <Spinner className="h-3 w-3" />
+            ) : (
+              <>
+                {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
+                <Zap className="h-3 w-3" />
+              </>
+            )}
+            Deploy
+          </Button>
+        </Tooltip>
       );
     }
     if (isStopped) {
@@ -126,7 +128,7 @@ export function ProjectHeader({
         <Button
           variant="outline"
           size="sm"
-          className="h-7 text-[11px] font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
+          className="h-7 text-xs font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
           onClick={onStart}
           disabled={!!actionLoading}
         >
@@ -139,29 +141,34 @@ export function ProjectHeader({
         </Button>
       );
     }
-    // running or error → Redeploy
+    // running or error → Redeploy or Pull & Restart for image source
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-7 text-[11px] font-body gap-1.5"
-        onClick={onRedeploy}
-        disabled={!!actionLoading}
-      >
-        {actionLoading === 'redeploy' ? (
-          <Spinner className="h-3 w-3" />
-        ) : (
-          <RotateCw className="h-3 w-3" />
-        )}
-        Redeploy
-      </Button>
+      <Tooltip content="AI가 전체 파이프라인을 처리합니다" side="bottom">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs font-body gap-1.5"
+          onClick={onRedeploy}
+          disabled={!!actionLoading}
+        >
+          {actionLoading === 'redeploy' ? (
+            <Spinner className="h-3 w-3" />
+          ) : (
+            <>
+              {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
+              {isImageSource ? <Download className="h-3 w-3" /> : <RotateCw className="h-3 w-3" />}
+            </>
+          )}
+          {isImageSource ? 'Pull & Restart' : 'Redeploy'}
+        </Button>
+      </Tooltip>
     );
   };
 
   const isShared = project.visibility === 'shared' || project.visibility === 'quick-share';
 
   return (
-    <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
+    <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <div className={cn('h-3 w-3 rounded-full shrink-0', status.dot)} />
@@ -170,46 +177,8 @@ export function ProjectHeader({
               <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate">
                 {project.name}
               </h1>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn(
-                      'h-6 px-2 text-[11px] font-body gap-1 border',
-                      envColors[currentEnvType],
-                    )}
-                  >
-                    {envLabels[currentEnvType]}
-                    <ChevronDown className="h-3 w-3 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-40">
-                  {(['production', 'development'] as EnvironmentType[]).map((env) => {
-                    const exists = env === 'production' || environments.some((e) => e.type === env);
-                    return (
-                      <DropdownMenuItem
-                        key={env}
-                        onClick={() => {
-                          if (exists) {
-                            onEnvChange?.(env);
-                          } else {
-                            onAddEnv?.(env);
-                          }
-                        }}
-                        className="flex items-center justify-between"
-                      >
-                        <span className={cn('text-xs', env === currentEnvType && 'font-medium')}>
-                          {exists ? envLabels[env] : `Create ${envLabels[env].toLowerCase()}…`}
-                        </span>
-                        {!exists && <Plus className="h-3 w-3 text-muted-ol" />}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
-            <div className="flex items-center gap-3 mt-0.5 text-[11px] font-body text-secondary-ol">
+            <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-secondary-ol">
               <span className={status.color}>{status.label}</span>
               {displayBranch && (
                 <span className="flex items-center gap-1 text-muted-ol">
@@ -217,24 +186,14 @@ export function ProjectHeader({
                   {displayBranch}
                 </span>
               )}
-              {displayUrl && (
-                <a
-                  href={displayUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-agent hover:text-agent/80 transition-colors"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  {displayUrl.replace(/^https?:\/\//, '')}
-                </a>
-              )}
+              <DomainUrlDisplay publicUrl={displayPublicUrl} urls={project.urls} />
             </div>
             {displayPublicUrl && (
               <a
                 href={displayPublicUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-success hover:text-success/80 transition-colors text-[11px] font-body mt-0.5"
+                className="flex items-center gap-1 text-success hover:text-success/80 transition-colors text-xs font-body mt-0.5"
               >
                 <Globe className="h-3 w-3" />
                 {displayPublicUrl.replace(/^https?:\/\//, '')}
@@ -252,7 +211,7 @@ export function ProjectHeader({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-[11px] font-body gap-1.5 text-error hover:text-error hover:bg-error/10 hover:border-error/30"
+              className="h-7 text-xs font-body gap-1.5 text-error hover:text-error hover:bg-error/10 hover:border-error/30"
               onClick={onStop}
               disabled={!!actionLoading}
             >
@@ -270,7 +229,7 @@ export function ProjectHeader({
             variant="outline"
             size="sm"
             className={cn(
-              'h-7 text-[11px] font-body gap-1.5',
+              'h-7 text-xs font-body gap-1.5',
               isShared ? 'text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30' : '',
             )}
             onClick={onShare}
@@ -307,21 +266,27 @@ export function ProjectHeader({
               )}
 
               {/* Rollback */}
-              <DropdownMenuItem
-                onClick={onRollback}
-                disabled={!project.previousImageTag || !!actionLoading}
-              >
-                <History className="h-3.5 w-3.5 mr-2" />
+              <DropdownMenuItem onClick={onRollback} disabled={!!actionLoading}>
+                <div className="flex items-center gap-2">
+                  {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
+                  <History className="h-3.5 w-3.5" />
+                </div>
                 Rollback
               </DropdownMenuItem>
 
               {/* Blue-Green */}
-              {currentEnvType === 'production' && (
-                <DropdownMenuItem onClick={onBlueGreen} disabled={!isRunning || !!actionLoading}>
-                  <Zap className="h-3.5 w-3.5 mr-2" />
+              <Tooltip content="AI가 전체 파이프라인을 처리합니다" side="bottom">
+                <DropdownMenuItem
+                  onClick={onOpenBlueGreenDialog}
+                  disabled={!isRunning || !!actionLoading}
+                >
+                  <div className="flex items-center gap-2">
+                    {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
+                    <Zap className="h-3.5 w-3.5" />
+                  </div>
                   Blue-Green Deploy
                 </DropdownMenuItem>
-              )}
+              </Tooltip>
 
               <DropdownMenuSeparator />
 
@@ -344,15 +309,31 @@ export function ProjectHeader({
 
               <DropdownMenuSeparator />
 
-              {/* Delete */}
-              <DropdownMenuItem
-                onClick={onDelete}
-                disabled={!!actionLoading}
-                className="text-error focus:text-error"
-              >
-                <Trash2 className="h-3.5 w-3.5 mr-2" />
-                Delete {currentEnvType === 'production' ? 'Project' : 'Environment'}
-              </DropdownMenuItem>
+              {!project.archived_at ? (
+                <DropdownMenuItem
+                  onClick={onArchive}
+                  disabled={!!actionLoading}
+                  className="text-warning focus:text-warning"
+                >
+                  <Archive className="h-3.5 w-3.5 mr-2" />
+                  {t('projects.archive.button')}
+                </DropdownMenuItem>
+              ) : (
+                <>
+                  <DropdownMenuItem onClick={onUnarchive} disabled={!!actionLoading}>
+                    <ArchiveRestore className="h-3.5 w-3.5 mr-2" />
+                    {t('projects.unarchive.button')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={onPurge}
+                    disabled={!!actionLoading}
+                    className="text-error focus:text-error"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-2" />
+                    {t('projects.purge.button')}
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

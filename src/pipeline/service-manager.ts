@@ -1,67 +1,66 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { PassThrough } from 'node:stream';
 
 import { nanoid } from 'nanoid';
 
-import { getDataDir } from '../config/index.js';
+import { DOCKER_LABELS, getDataDir, SHARED_NETWORK_NAME } from '../config/index.js';
 import type { Database, ServiceRow } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { sleep } from '../lib/sleep.js';
+import { serviceContainerName, serviceVolumeName } from './helpers.js';
+import {
+  getServiceAdapter,
+  type BuiltInServiceType,
+  type CreateDatabaseResult,
+  type CreateUserResult,
+  type ListedDatabase,
+  type ListedUser,
+} from './service-adapters/index.js';
+import { MinioAdapter } from './service-adapters/minio-adapter.js';
+import {
+  assertSafeDatabaseName,
+  assertSafeUserName,
+  execInServiceContainer,
+  type ExecOptions,
+} from './service-adapters/shared.js';
+import type { ContainerExecResult } from './service-adapters/types.js';
 import type { Docker } from './docker.js';
 import { allocatePort } from './port.js';
+import { isDockerNotFoundError } from '../errors.js';
 
 const log = createModuleLogger('service-manager');
+const SERVICE_CARD_SUMMARY_CACHE_TTL_MS = 15_000;
 
-const WEB_NETWORK = 'web';
-type BuiltInServiceType = 'postgresql' | 'mysql' | 'redis' | 'mongodb';
-
-interface ServiceCredentials {
-  user: string;
-  password: string;
-  database: string;
-}
+type ServiceCardSummary = ServiceRow & {
+  summary: {
+    healthStatus: string | null;
+    uptimeSeconds: number | null;
+    restartCount: number | null;
+  };
+};
 
 export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   postgresql: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
   mysql: ['9', '8'],
   redis: ['8-alpine', '7-alpine'],
   mongodb: ['8', '7'],
+  minio: ['RELEASE.2024-11-07T00-52-20Z', 'latest'],
+  rabbitmq: ['4.0-management-alpine', '3.13-management-alpine'],
 };
-
-interface ContainerExecResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-}
-
-interface CreateDatabaseResult {
-  database: string;
-  user?: string;
-  password?: string;
-  connectionString?: string;
-}
-
-interface CreateUserResult {
-  database: string;
-  user: string;
-  password: string;
-  connectionString: string;
-}
-
-interface ListedDatabase {
-  name: string;
-  sizeBytes: number | null;
-}
-
-interface ListedUser {
-  name: string;
-}
 
 export interface ServiceTemplate {
   type: string;
   image: string;
   port: number;
+  cmd?: string[];
+  healthcheck?: {
+    test: string[];
+    interval: number;
+    timeout: number;
+    retries: number;
+    startPeriod: number;
+  };
   env: (creds: { user: string; password: string; database: string }) => string[];
 }
 
@@ -102,6 +101,33 @@ export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
       `MONGO_INITDB_ROOT_PASSWORD=${c.password}`,
     ],
   },
+  minio: {
+    type: 'minio',
+    image: 'minio/minio:RELEASE.2024-11-07T00-52-20Z',
+    port: 9000,
+    cmd: ['server', '/data', '--console-address', ':9001'],
+    healthcheck: {
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live'],
+      interval: 30,
+      timeout: 10,
+      retries: 3,
+      startPeriod: 10,
+    },
+    env: (c) => [`MINIO_ROOT_USER=${c.user}`, `MINIO_ROOT_PASSWORD=${c.password}`],
+  },
+  rabbitmq: {
+    type: 'rabbitmq',
+    image: 'rabbitmq:4.0-management-alpine',
+    port: 5672,
+    healthcheck: {
+      test: ['CMD', 'rabbitmq-diagnostics', 'check_running'],
+      interval: 30,
+      timeout: 10,
+      retries: 3,
+      startPeriod: 30,
+    },
+    env: (c) => [`RABBITMQ_DEFAULT_USER=${c.user}`, `RABBITMQ_DEFAULT_PASS=${c.password}`],
+  },
 };
 
 /**
@@ -113,14 +139,25 @@ const DEFAULT_ENV_KEYS: Record<string, string> = {
   mysql: 'DATABASE_URL',
   redis: 'REDIS_URL',
   mongodb: 'MONGODB_URL',
+  minio: 'S3_ENDPOINT',
+  rabbitmq: 'RABBITMQ_URL',
 };
 
 export class ServiceManager {
+  private serviceCardSummaryCache: { expiresAt: number; data: ServiceCardSummary[] } | null = null;
+  private serviceCardSummaryInFlight: Promise<ServiceCardSummary[]> | null = null;
+  private serviceCardSummaryEpoch = 0;
+
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
     private readonly dataDir: string = getDataDir(),
   ) {}
+
+  private invalidateServiceCardSummaryCache(): void {
+    this.serviceCardSummaryCache = null;
+    this.serviceCardSummaryEpoch += 1;
+  }
 
   /**
    * Compute suggested env var(s) for a newly created service so the agent
@@ -146,6 +183,18 @@ export class ServiceManager {
       .listServices()
       .filter((s) => s.type === service.type && s.id !== service.id);
 
+    if (service.type === 'minio') {
+      const user = (credentials?.['user'] as string | undefined) ?? '';
+      const password = (credentials?.['password'] as string | undefined) ?? '';
+      const prefix =
+        existing.length === 0 ? '' : `${service.name.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_`;
+      return [
+        { key: `${prefix}S3_ENDPOINT`, value: connectionString },
+        { key: `${prefix}AWS_ACCESS_KEY_ID`, value: user },
+        { key: `${prefix}AWS_SECRET_ACCESS_KEY`, value: password },
+      ];
+    }
+
     const key =
       existing.length === 0
         ? baseKey
@@ -166,6 +215,93 @@ export class ServiceManager {
     }
   }
 
+  /**
+   * Reconcile all existing services to the shared network with aliases.
+   * Called at startup to ensure DNS resolution works for pre-existing services.
+   * Idempotent: skips services already connected with correct alias.
+   */
+  async reconcileServiceNetworks(): Promise<void> {
+    const services = this.db.listServices();
+    let reconciled = 0;
+    let migrated = 0;
+    let alreadyConnected = 0;
+
+    for (const service of services) {
+      const containerRef = service.container_id ?? service.container_name;
+      if (!containerRef) {
+        continue;
+      }
+
+      reconciled += 1;
+
+      try {
+        const info = await this.docker.inspectContainer(containerRef);
+
+        if (!info.State.Running) {
+          log.warn(
+            { serviceId: service.id, serviceName: service.name, containerRef },
+            'Service container is stopped — skipping shared network reconciliation',
+          );
+          continue;
+        }
+
+        const networks = info.NetworkSettings.Networks;
+        const sharedNetwork = networks[SHARED_NETWORK_NAME];
+        const aliasesRaw: unknown = sharedNetwork?.Aliases;
+        const aliases: string[] = Array.isArray(aliasesRaw)
+          ? aliasesRaw.filter((alias): alias is string => typeof alias === 'string')
+          : [];
+        const hasAlias = aliases.includes(service.name);
+
+        if (!sharedNetwork) {
+          await this.docker.connectContainerToNetwork(info.Id, SHARED_NETWORK_NAME, [service.name]);
+          migrated += 1;
+          log.info(
+            { serviceId: service.id, serviceName: service.name, containerId: info.Id },
+            'Service network reconciled (migrated to shared network)',
+          );
+          continue;
+        }
+
+        if (hasAlias) {
+          alreadyConnected += 1;
+          log.info(
+            { serviceId: service.id, serviceName: service.name, containerId: info.Id },
+            'Service already connected to shared network with alias',
+          );
+          continue;
+        }
+
+        await this.docker.disconnectContainerFromNetwork(info.Id, SHARED_NETWORK_NAME);
+
+        await this.docker.connectContainerToNetwork(info.Id, SHARED_NETWORK_NAME, [service.name]);
+        migrated += 1;
+        log.info(
+          { serviceId: service.id, serviceName: service.name, containerId: info.Id },
+          'Service network reconciled (alias updated on shared network)',
+        );
+      } catch (err) {
+        if (isDockerNotFoundError(err)) {
+          log.warn(
+            { err, serviceId: service.id, serviceName: service.name, containerRef },
+            'Service container not found — skipping shared network reconciliation',
+          );
+          continue;
+        }
+
+        log.warn(
+          { err, serviceId: service.id, serviceName: service.name, containerRef },
+          'Failed to reconcile service shared network connection',
+        );
+      }
+    }
+
+    log.info(
+      { reconciled, migrated, alreadyConnected },
+      `Reconciled ${String(reconciled)} services: ${String(migrated)} migrated, ${String(alreadyConnected)} already connected`,
+    );
+  }
+
   async create(opts: {
     name: string;
     template?: string;
@@ -177,8 +313,8 @@ export class ServiceManager {
     const hasTemplate = typeof opts.template === 'string';
     const hasImage = typeof opts.image === 'string';
 
-    if (hasTemplate === hasImage) {
-      throw new Error('Provide exactly one of template or image');
+    if (!hasTemplate && !hasImage) {
+      throw new Error('Provide at least one of template or image');
     }
 
     const userEnv = this.toEnvPairs(opts.envVars);
@@ -190,6 +326,8 @@ export class ServiceManager {
     let env: string[];
     let credentialsJson: string | undefined;
     let dataMountPath: string;
+    let containerCmd: string[] | undefined;
+    let containerHealthcheck: ServiceTemplate['healthcheck'] | undefined;
 
     if (hasTemplate) {
       const templateId = opts.template as string;
@@ -201,9 +339,12 @@ export class ServiceManager {
       type = template.type;
       // Use provided version or default to first available version
       const version = opts.version ?? AVAILABLE_VERSIONS[templateId]?.[0] ?? 'latest';
-      image = template.image.replace(/:[^:]+$/, `:${version}`);
+      // If custom image is also provided, use it instead of the template default
+      image = hasImage ? (opts.image as string) : template.image.replace(/:[^:]+$/, `:${version}`);
       port = template.port;
       dataMountPath = this.getDataMountPath(template.type);
+      containerCmd = template.cmd;
+      containerHealthcheck = template.healthcheck;
 
       if (template.type === 'redis') {
         env = [...userEnv];
@@ -216,10 +357,22 @@ export class ServiceManager {
             port,
           ),
         });
+      } else if (template.type === 'minio') {
+        const user = 'openlander';
+        const password = randomBytes(16).toString('hex');
+        const containerName = this.getContainerName(opts.name);
+        env = [...template.env({ user, password, database: '' }), ...userEnv];
+        credentialsJson = JSON.stringify({
+          host: containerName,
+          port,
+          user,
+          password,
+          connectionString: this.getConnectionString('minio', containerName, port),
+        });
       } else {
         const containerName = this.getContainerName(opts.name);
         const credentials = this.buildCredentials(
-          template.type as Exclude<BuiltInServiceType, 'redis'>,
+          template.type as Exclude<BuiltInServiceType, 'redis' | 'minio'>,
           opts.name,
           containerName,
           port,
@@ -241,6 +394,7 @@ export class ServiceManager {
       env = userEnv;
       credentialsJson = undefined;
       dataMountPath = '/data';
+      containerCmd = undefined;
     }
 
     if (!Number.isInteger(port) || port <= 0) {
@@ -248,7 +402,8 @@ export class ServiceManager {
     }
 
     const containerPort = port;
-    const hostPort = await allocatePort(this.db, this.docker);
+    // Given no explicit env context, use production port policy for services.
+    const hostPort = await allocatePort(this.db, this.docker, {}, 'production');
 
     const id = nanoid(12);
     const containerName = this.getContainerName(opts.name);
@@ -256,39 +411,49 @@ export class ServiceManager {
 
     await this.docker.pullImage(image);
 
-    const client = this.docker.getClient();
-    await client.createVolume({
-      Name: volumeName,
-      Labels: {
-        'openlander.managed': 'true',
-        'openlander.role': 'service',
-        'openlander.service': opts.name,
+    await this.docker.createVolume({
+      name: volumeName,
+      labels: {
+        [DOCKER_LABELS.ROLE]: 'service',
+        [DOCKER_LABELS.SERVICE]: opts.name,
       },
     });
 
-    const container = await client.createContainer({
-      Image: image,
+    const envRecord: Record<string, string> = {};
+    for (const entry of env) {
+      const eqIdx = entry.indexOf('=');
+      if (eqIdx > 0) {
+        envRecord[entry.slice(0, eqIdx)] = entry.slice(eqIdx + 1);
+      }
+    }
+
+    const containerId = await this.docker.runServiceContainer({
+      imageTag: image,
       name: containerName,
-      Env: env,
-      Labels: {
-        'openlander.managed': 'true',
-        'openlander.role': 'service',
-        'openlander.service': opts.name,
-      },
-      ExposedPorts: {
-        [`${String(containerPort)}/tcp`]: {},
-      },
-      HostConfig: {
-        NetworkMode: WEB_NETWORK,
-        RestartPolicy: { Name: 'unless-stopped' },
-        Binds: [`${volumeName}:${dataMountPath}`],
-        PortBindings: {
-          [`${String(containerPort)}/tcp`]: [{ HostPort: String(hostPort) }],
-        },
-      },
+      port: containerPort,
+      hostPort,
+      envVars: envRecord,
+      serviceName: opts.name,
+      volumeBinds: [`${volumeName}:${dataMountPath}`],
+      ...(containerHealthcheck ? { healthcheck: containerHealthcheck } : {}),
+      ...(containerCmd ? { cmd: containerCmd } : {}),
     });
 
-    await container.start();
+    const primaryNetwork = this.docker.getNetworkName();
+    const additionalNetworks = [SHARED_NETWORK_NAME].filter(
+      (networkName) => networkName !== primaryNetwork,
+    );
+
+    for (const networkName of additionalNetworks) {
+      try {
+        await this.docker.connectContainerToNetwork(containerId, networkName, [opts.name]);
+      } catch (err) {
+        log.warn(
+          { err, networkName, containerName },
+          'Failed to connect service to additional network',
+        );
+      }
+    }
 
     this.db.createService({
       id,
@@ -301,7 +466,8 @@ export class ServiceManager {
       credentials: credentialsJson,
     });
 
-    this.db.updateService(id, { status: 'running', containerId: container.id });
+    this.db.updateService(id, { status: 'running', containerId });
+    this.invalidateServiceCardSummaryCache();
     const created = this.db.getService(id);
     if (!created) {
       throw new Error(`Failed to create service: ${id}`);
@@ -318,6 +484,7 @@ export class ServiceManager {
     const containerId = service.container_id ?? service.container_name;
     await this.docker.startContainer(containerId);
     this.db.updateService(id, { status: 'running' });
+    this.invalidateServiceCardSummaryCache();
   }
 
   async stop(id: string): Promise<void> {
@@ -329,41 +496,59 @@ export class ServiceManager {
     const containerId = service.container_id ?? service.container_name;
     await this.docker.stopContainer(containerId);
     this.db.updateService(id, { status: 'stopped' });
+    this.invalidateServiceCardSummaryCache();
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(
+    id: string,
+    options?: { force?: boolean },
+  ): Promise<{ warning?: string; connected_projects?: Array<{ id: string; name: string }> }> {
     const service = this.db.getService(id);
     if (!service) {
       throw new Error(`Service not found: ${id}`);
+    }
+
+    // Check for connected projects before deletion
+    const connectedProjects = this.getConnectedProjects(id);
+    let warning: string | undefined;
+    if (connectedProjects.length > 0) {
+      const projectNames = connectedProjects.map((p) => p.name).join(', ');
+      const count = String(connectedProjects.length);
+      if (!options?.force) {
+        throw new Error(
+          `Service "${service.name}" is referenced by ${count} project(s): ${projectNames}. ` +
+            `Remove the service references from their environment variables first, or use force to remove anyway.`,
+        );
+      }
+      warning = `Service "${service.name}" is connected to ${count} project(s): ${projectNames}. These projects may fail to start if they depend on this service.`;
     }
 
     const containerId = service.container_id ?? service.container_name;
     try {
       await this.docker.stopContainer(containerId);
     } catch (error) {
-      if (!this.isNotFoundError(error)) {
+      if (!isDockerNotFoundError(error)) {
         throw error;
       }
     }
     try {
-      await this.docker.removeContainer(containerId);
+      await this.docker.safeRemoveContainer(containerId);
     } catch (error) {
-      if (!this.isNotFoundError(error)) {
+      if (!isDockerNotFoundError(error)) {
         throw error;
       }
     }
 
     const volumeName = this.getVolumeName(service.name);
-    const client = this.docker.getClient();
-    try {
-      await client.getVolume(volumeName).remove();
-    } catch (error) {
-      if (!this.isNotFoundError(error)) {
-        throw error;
-      }
-    }
+    await this.docker.removeVolume(volumeName);
 
     this.db.deleteService(id);
+    this.invalidateServiceCardSummaryCache();
+
+    return {
+      ...(warning && { warning }),
+      ...(connectedProjects.length > 0 && { connected_projects: connectedProjects }),
+    };
   }
 
   async backup(id: string): Promise<{ backupId: string; path: string; size: number }> {
@@ -374,10 +559,47 @@ export class ServiceManager {
     const backupPath = join(backupDir, `${backupId}.tar.gz`);
 
     mkdirSync(backupDir, { recursive: true });
+
+    // Redis: flush in-memory data to disk (BGSAVE) before volume backup.
+    // Without this, the RDB dump file may not exist or be stale, leading to empty backups.
+    const isRedis = service.type === 'redis' || service.image.includes('redis');
+    if (isRedis) {
+      try {
+        const initialResult = await execInServiceContainer(this.docker, service, [
+          'redis-cli',
+          'LASTSAVE',
+        ]);
+        const initialTimestamp = initialResult.stdout.trim();
+
+        await execInServiceContainer(this.docker, service, ['redis-cli', 'BGSAVE']);
+
+        // Poll LASTSAVE until timestamp changes (max 30s, 1s interval)
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          await sleep(1000);
+          const currentResult = await execInServiceContainer(this.docker, service, [
+            'redis-cli',
+            'LASTSAVE',
+          ]);
+          if (currentResult.stdout.trim() !== initialTimestamp) {
+            log.info(`Redis BGSAVE completed for service ${service.id}`);
+            break;
+          }
+          if (attempt === 29) {
+            log.warn(
+              `Redis BGSAVE did not complete within 30s for service ${service.id}, proceeding with backup`,
+            );
+          }
+        }
+      } catch (error) {
+        log.warn(
+          `Redis BGSAVE failed for service ${service.id}, proceeding with backup: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
     await this.docker.pullImage('alpine');
 
-    const client = this.docker.getClient();
-    const container = await client.createContainer({
+    const backupContainerId = await this.docker.runInfraContainer({
       Image: 'alpine',
       Cmd: ['tar', 'czf', `/backup/${backupId}.tar.gz`, '-C', '/data', '.'],
       HostConfig: {
@@ -386,12 +608,7 @@ export class ServiceManager {
       },
     });
 
-    await container.start();
-    const waitResult: unknown = await container.wait();
-    const backupExitCode =
-      waitResult && typeof waitResult === 'object' && 'StatusCode' in waitResult
-        ? (waitResult as { StatusCode: number }).StatusCode
-        : 1;
+    const { StatusCode: backupExitCode } = await this.docker.waitForContainer(backupContainerId);
     if (backupExitCode !== 0) {
       throw new Error(
         `Backup failed with exit code ${String(backupExitCode)} for service: ${service.id}`,
@@ -420,8 +637,8 @@ export class ServiceManager {
 
     try {
       await this.docker.pullImage('alpine');
-      const client = this.docker.getClient();
-      const container = await client.createContainer({
+
+      const restoreContainerId = await this.docker.runInfraContainer({
         Image: 'alpine',
         Cmd: ['sh', '-c', `rm -rf /data/* && tar xzf /backup/${backupFilename} -C /data`],
         HostConfig: {
@@ -430,12 +647,8 @@ export class ServiceManager {
         },
       });
 
-      await container.start();
-      const waitResult: unknown = await container.wait();
-      const restoreExitCode =
-        waitResult && typeof waitResult === 'object' && 'StatusCode' in waitResult
-          ? (waitResult as { StatusCode: number }).StatusCode
-          : 1;
+      const { StatusCode: restoreExitCode } =
+        await this.docker.waitForContainer(restoreContainerId);
       if (restoreExitCode !== 0) {
         throw new Error(
           `Restore failed with exit code ${String(restoreExitCode)} for service: ${service.id}`,
@@ -475,37 +688,12 @@ export class ServiceManager {
   async list(): Promise<ServiceRow[]> {
     const services = this.db.listServices();
 
-    for (const service of services) {
-      if (!service.container_id && !service.container_name) {
-        if (service.status !== 'error') {
-          this.db.updateService(service.id, { status: 'error' });
-          log.warn(
-            { serviceId: service.id },
-            'Service has no container reference, marking as error',
-          );
-        }
-        continue;
-      }
-
-      const containerId = service.container_id ?? service.container_name;
-      try {
-        const info = await this.docker.getClient().getContainer(containerId).inspect();
-        const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
-        const containerIdFromDocker = info.Id;
-
-        if (status !== service.status || containerIdFromDocker !== service.container_id) {
-          this.db.updateService(service.id, { status, containerId: containerIdFromDocker });
-        }
-      } catch (err) {
-        log.warn(
-          { err, serviceId: service.id, containerId },
-          'Failed to inspect service container',
-        );
-        if (service.status !== 'error') {
-          this.db.updateService(service.id, { status: 'error' });
-        }
-      }
-    }
+    await Promise.all(
+      services.map(async (service) => {
+        const inspection = await this.inspectServiceContainer(service);
+        this.syncServiceStateFromInspection(service, inspection);
+      }),
+    );
 
     return this.db.listServices();
   }
@@ -527,7 +715,7 @@ export class ServiceManager {
 
     const containerId = service.container_id ?? service.container_name;
     try {
-      const info = await this.docker.getClient().getContainer(containerId).inspect();
+      const info = await this.docker.inspectContainer(containerId);
       const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
       const containerIdFromDocker = info.Id;
 
@@ -555,6 +743,15 @@ export class ServiceManager {
     return this.docker.getLogs(containerId, tail);
   }
 
+  async exec(id: string, command: string[], options?: ExecOptions): Promise<ContainerExecResult> {
+    const service = this.getRequiredService(id);
+    await this.ensureServiceContainerRunning(service);
+    return execInServiceContainer(this.docker, service, command, {
+      throwOnNonZeroExit: false,
+      ...options,
+    });
+  }
+
   async getStats(id: string): Promise<{
     status: ServiceRow['status'];
     diskUsageBytes: number | null;
@@ -565,9 +762,151 @@ export class ServiceManager {
     maxConnections: number | null;
   }> {
     const service = await this.getDetail(id);
+    const runtimeStats = await this.collectRuntimeStats(service);
+
+    return {
+      status: service.status,
+      ...runtimeStats,
+    };
+  }
+
+  async listWithCardSummary(): Promise<ServiceCardSummary[]> {
+    const cached = this.serviceCardSummaryCache;
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
+    if (this.serviceCardSummaryInFlight) {
+      return this.serviceCardSummaryInFlight;
+    }
+
+    const epoch = this.serviceCardSummaryEpoch;
+    const loadPromise = (async () => {
+      const services = this.db.listServices();
+      const summaries = await Promise.all(
+        services.map(async (service) => {
+          const inspection = await this.inspectServiceContainer(service);
+          this.syncServiceStateFromInspection(service, inspection);
+
+          return {
+            ...service,
+            status: inspection.status,
+            container_id: inspection.containerId ?? service.container_id,
+            summary: {
+              healthStatus: inspection.healthStatus,
+              uptimeSeconds: this.computeUptimeSeconds(inspection.startedAt, inspection.status),
+              restartCount: inspection.restartCount,
+            },
+          };
+        }),
+      );
+
+      if (this.serviceCardSummaryEpoch === epoch) {
+        this.serviceCardSummaryCache = {
+          expiresAt: Date.now() + SERVICE_CARD_SUMMARY_CACHE_TTL_MS,
+          data: summaries,
+        };
+      }
+
+      return summaries;
+    })();
+
+    this.serviceCardSummaryInFlight = loadPromise;
+
+    try {
+      return await loadPromise;
+    } finally {
+      if (this.serviceCardSummaryInFlight === loadPromise) {
+        this.serviceCardSummaryInFlight = null;
+      }
+    }
+  }
+
+  private async inspectServiceContainer(service: ServiceRow): Promise<{
+    status: ServiceRow['status'];
+    containerId: string | null;
+    healthStatus: string | null;
+    startedAt: string | null;
+    restartCount: number | null;
+  }> {
+    if (!service.container_id && !service.container_name) {
+      log.warn({ serviceId: service.id }, 'Service has no container reference, marking as error');
+      return {
+        status: 'error',
+        containerId: null,
+        healthStatus: null,
+        startedAt: null,
+        restartCount: null,
+      };
+    }
+
+    const containerRef = service.container_id ?? service.container_name;
+    try {
+      const info = await this.docker.inspectContainer(containerRef);
+      const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
+      const healthRaw: unknown = info.State.Health?.Status;
+      const startedAtRaw: unknown = info.State.StartedAt;
+      const restartCountRaw: unknown = info.RestartCount;
+
+      return {
+        status,
+        containerId: info.Id,
+        healthStatus: typeof healthRaw === 'string' ? healthRaw : null,
+        startedAt: typeof startedAtRaw === 'string' ? startedAtRaw : null,
+        restartCount: typeof restartCountRaw === 'number' ? restartCountRaw : null,
+      };
+    } catch (err) {
+      log.warn(
+        { err, serviceId: service.id, containerId: containerRef },
+        'Failed to inspect service container',
+      );
+      return {
+        status: 'error',
+        containerId: service.container_id ?? null,
+        healthStatus: null,
+        startedAt: null,
+        restartCount: null,
+      };
+    }
+  }
+
+  private syncServiceStateFromInspection(
+    service: ServiceRow,
+    inspection: { status: ServiceRow['status']; containerId: string | null },
+  ): void {
+    if (inspection.status !== service.status || inspection.containerId !== service.container_id) {
+      this.db.updateService(service.id, {
+        status: inspection.status,
+        containerId: inspection.containerId,
+      });
+    }
+  }
+
+  private computeUptimeSeconds(
+    startedAt: string | null,
+    status: ServiceRow['status'],
+  ): number | null {
+    if (!startedAt || status !== 'running') {
+      return null;
+    }
+    const startedAtMs = Date.parse(startedAt);
+    if (Number.isNaN(startedAtMs)) {
+      return null;
+    }
+    const elapsed = Math.floor((Date.now() - startedAtMs) / 1000);
+    return elapsed >= 0 ? elapsed : null;
+  }
+
+  private async collectRuntimeStats(service: ServiceRow): Promise<{
+    diskUsageBytes: number | null;
+    cpuPercent: number | null;
+    memoryUsageBytes: number | null;
+    memoryLimitBytes: number | null;
+    activeConnections: number | null;
+    maxConnections: number | null;
+  }> {
     if (service.status !== 'running') {
       return {
-        status: service.status,
         diskUsageBytes: null,
         cpuPercent: null,
         memoryUsageBytes: null,
@@ -580,7 +919,11 @@ export class ServiceManager {
     let diskUsageBytes: number | null = null;
     try {
       const dataMountPath = this.getDataMountPath(service.type);
-      const result = await this.execInServiceContainer(service, ['du', '-sb', dataMountPath]);
+      const result = await execInServiceContainer(this.docker, service, [
+        'du',
+        '-sb',
+        dataMountPath,
+      ]);
       const usageRaw = result.stdout.trim().split(/\s+/)[0] ?? '';
       const parsed = Number.parseInt(usageRaw, 10);
       if (Number.isFinite(parsed)) {
@@ -595,18 +938,24 @@ export class ServiceManager {
     let memoryLimitBytes: number | null = null;
     try {
       const containerId = service.container_id ?? service.container_name;
-      const container = this.docker.getClient().getContainer(containerId);
-      const rawStats = await container.stats({ stream: false });
+      const rawStats = (await this.docker.getContainerStats(containerId)) as {
+        cpu_stats: {
+          cpu_usage: { total_usage: number; percpu_usage?: number[] };
+          system_cpu_usage: number;
+        };
+        precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
+        memory_stats: { usage?: number; limit?: number };
+      };
       const cpuDelta =
         rawStats.cpu_stats.cpu_usage.total_usage - rawStats.precpu_stats.cpu_usage.total_usage;
       const systemDelta =
         rawStats.cpu_stats.system_cpu_usage - rawStats.precpu_stats.system_cpu_usage;
-      const percpuUsage = rawStats.cpu_stats.cpu_usage.percpu_usage as number[] | undefined;
+      const percpuUsage = rawStats.cpu_stats.cpu_usage.percpu_usage;
       const numCpus = percpuUsage ? percpuUsage.length : 1;
       cpuPercent =
         systemDelta > 0 ? Math.round((cpuDelta / systemDelta) * numCpus * 100 * 10) / 10 : 0;
-      memoryUsageBytes = (rawStats.memory_stats.usage as number | undefined) ?? null;
-      memoryLimitBytes = (rawStats.memory_stats.limit as number | undefined) ?? null;
+      memoryUsageBytes = rawStats.memory_stats.usage ?? null;
+      memoryLimitBytes = rawStats.memory_stats.limit ?? null;
     } catch {
       // container stats unavailable — non-fatal
     }
@@ -614,87 +963,17 @@ export class ServiceManager {
     let activeConnections: number | null = null;
     let maxConnections: number | null = null;
     try {
-      if (service.type === 'postgresql') {
-        const credentials = this.parseServiceCredentials(service);
-        const connResult = await this.execInServiceContainer(service, [
-          'psql',
-          '-t',
-          '-A',
-          '-U',
-          credentials.user,
-          '-d',
-          'postgres',
-          '-c',
-          'SELECT count(*) FROM pg_stat_activity WHERE state IS NOT NULL',
-        ]);
-        const maxResult = await this.execInServiceContainer(service, [
-          'psql',
-          '-t',
-          '-A',
-          '-U',
-          credentials.user,
-          '-d',
-          'postgres',
-          '-c',
-          'SHOW max_connections',
-        ]);
-        activeConnections = Number.parseInt(connResult.stdout.trim(), 10) || 0;
-        maxConnections = Number.parseInt(maxResult.stdout.trim(), 10) || null;
-      } else if (service.type === 'mysql') {
-        const credentials = this.parseServiceCredentials(service);
-        const connResult = await this.execInServiceContainer(service, [
-          'mysql',
-          '-N',
-          '-uroot',
-          `-p${credentials.password}`,
-          '-e',
-          'SELECT COUNT(*) FROM information_schema.processlist',
-        ]);
-        const maxResult = await this.execInServiceContainer(service, [
-          'mysql',
-          '-N',
-          '-uroot',
-          `-p${credentials.password}`,
-          '-e',
-          "SHOW VARIABLES LIKE 'max_connections'",
-        ]);
-        activeConnections = Number.parseInt(connResult.stdout.trim(), 10) || 0;
-        const maxParts = maxResult.stdout.trim().split(/\s+/);
-        maxConnections =
-          maxParts.length >= 2 ? Number.parseInt(maxParts[1] ?? '', 10) || null : null;
-      } else if (service.type === 'redis') {
-        const infoResult = await this.execInServiceContainer(service, [
-          'redis-cli',
-          'INFO',
-          'clients',
-        ]);
-        const clientsMatch = infoResult.stdout.match(/connected_clients:(\d+)/);
-        const maxMatch = infoResult.stdout.match(/maxclients:(\d+)/);
-        activeConnections = clientsMatch ? Number.parseInt(clientsMatch[1] ?? '', 10) : null;
-        maxConnections = maxMatch ? Number.parseInt(maxMatch[1] ?? '', 10) : null;
-      } else if (service.type === 'mongodb') {
-        const connResult = await this.execInServiceContainer(service, [
-          'mongosh',
-          '--quiet',
-          '--eval',
-          'JSON.stringify(db.serverStatus().connections)',
-        ]);
-        const parsed = JSON.parse(connResult.stdout.trim()) as {
-          current?: number;
-          available?: number;
-        };
-        activeConnections = parsed.current ?? null;
-        maxConnections =
-          parsed.available != null && parsed.current != null
-            ? parsed.current + parsed.available
-            : null;
+      const adapter = getServiceAdapter(service.type);
+      if (adapter) {
+        const connectionStats = await adapter.getConnectionStats(service, this.docker);
+        activeConnections = connectionStats.activeConnections;
+        maxConnections = connectionStats.maxConnections;
       }
     } catch {
       // connection stats unavailable — non-fatal
     }
 
     return {
-      status: service.status,
       diskUsageBytes,
       cpuPercent,
       memoryUsageBytes,
@@ -704,6 +983,13 @@ export class ServiceManager {
     };
   }
 
+  getProjectServices(projectId: string): ServiceRow[] {
+    const envVars = this.db.getEnvVars(projectId);
+    const allValues = Object.values(envVars).join(' ');
+    const services = this.db.listServices();
+    return services.filter((s) => allValues.includes(s.container_name));
+  }
+
   getConnectedProjects(serviceId: string): Array<{ id: string; name: string }> {
     const service = this.getRequiredService(serviceId);
     const containerName = service.container_name;
@@ -711,8 +997,13 @@ export class ServiceManager {
     const connected: Array<{ id: string; name: string }> = [];
 
     for (const project of projects) {
-      const envVars = this.db.getEnvVars(project.id);
-      const hasConnection = Object.values(envVars).some(
+      const projectEnvVars = this.db.getEnvVars(project.id);
+      const environments = this.db.getEnvironmentsByProject(project.id);
+      const allEnvValues: string[] = Object.values(projectEnvVars);
+      for (const env of environments) {
+        allEnvValues.push(...Object.values(this.db.getEnvVars(project.id, env.id)));
+      }
+      const hasConnection = allEnvValues.some(
         (value) => typeof value === 'string' && value.includes(containerName),
       );
       if (hasConnection) {
@@ -726,245 +1017,36 @@ export class ServiceManager {
   async listDatabases(serviceId: string): Promise<ListedDatabase[]> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-
-    if (service.type === 'redis') {
-      throw new Error('Database listing is not supported for redis services');
+    const adapter = getServiceAdapter(service.type);
+    if (!adapter) {
+      throw new Error(`Database listing is not supported for service type: ${service.type}`);
     }
 
-    if (service.type === 'postgresql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForPostgresReady(service, credentials);
-
-      const result = await this.execInServiceContainer(service, [
-        'psql',
-        '-t',
-        '-A',
-        '-F',
-        '|',
-        '-U',
-        credentials.user,
-        '-d',
-        'postgres',
-        '-c',
-        'SELECT datname, pg_database_size(datname) FROM pg_database WHERE datistemplate = false',
-      ]);
-
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .map((line) => {
-          const separatorIndex = line.indexOf('|');
-          if (separatorIndex < 0) {
-            return {
-              name: line,
-              sizeBytes: null,
-            };
-          }
-
-          const name = line.slice(0, separatorIndex).trim();
-          const sizeRaw = line.slice(separatorIndex + 1).trim();
-          const parsedSize = Number.parseInt(sizeRaw, 10);
-          return {
-            name,
-            sizeBytes: Number.isFinite(parsedSize) ? parsedSize : null,
-          };
-        })
-        .filter((database) => database.name.length > 0);
-    }
-
-    if (service.type === 'mysql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForMySqlReady(service, credentials);
-
-      const result = await this.execInServiceContainer(service, [
-        'mysql',
-        '-N',
-        '-uroot',
-        `-p${credentials.password}`,
-        '-e',
-        "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('information_schema','mysql','performance_schema','sys')",
-      ]);
-
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((name) => name.length > 0)
-        .map((name) => ({
-          name,
-          sizeBytes: null,
-        }));
-    }
-
-    if (service.type === 'mongodb') {
-      const result = await this.execInServiceContainer(service, [
-        'mongosh',
-        '--quiet',
-        '--eval',
-        'db.adminCommand("listDatabases").databases.filter(d => !["admin","config","local"].includes(d.name)).forEach(d => print(d.name + "|" + d.sizeOnDisk))',
-      ]);
-
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .map((line) => {
-          const separatorIndex = line.indexOf('|');
-          if (separatorIndex < 0) return { name: line, sizeBytes: null };
-          const name = line.slice(0, separatorIndex).trim();
-          const sizeRaw = line.slice(separatorIndex + 1).trim();
-          const parsedSize = Number.parseInt(sizeRaw, 10);
-          return { name, sizeBytes: Number.isFinite(parsedSize) ? parsedSize : null };
-        })
-        .filter((db) => db.name.length > 0);
-    }
-
-    throw new Error(`Database listing is not supported for service type: ${service.type}`);
+    return adapter.listDatabases(service, this.docker);
   }
 
   async listUsers(serviceId: string): Promise<ListedUser[]> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-
-    if (service.type === 'redis') {
-      throw new Error('User listing is not supported for redis services');
+    const adapter = getServiceAdapter(service.type);
+    if (!adapter) {
+      throw new Error(`User listing is not supported for service type: ${service.type}`);
     }
 
-    if (service.type === 'postgresql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForPostgresReady(service, credentials);
-
-      const result = await this.execInServiceContainer(service, [
-        'psql',
-        '-t',
-        '-A',
-        '-F',
-        '|',
-        '-U',
-        credentials.user,
-        '-d',
-        'postgres',
-        '-c',
-        'SELECT rolname FROM pg_roles WHERE rolcanlogin = true',
-      ]);
-
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .map((line) => {
-          const separatorIndex = line.indexOf('|');
-          const name = separatorIndex >= 0 ? line.slice(0, separatorIndex).trim() : line;
-          return { name };
-        })
-        .filter((user) => user.name.length > 0);
-    }
-
-    if (service.type === 'mysql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForMySqlReady(service, credentials);
-
-      const result = await this.execInServiceContainer(service, [
-        'mysql',
-        '-N',
-        '-uroot',
-        `-p${credentials.password}`,
-        '-e',
-        "SELECT user FROM mysql.user WHERE user NOT IN ('root','mysql.sys','mysql.infoschema','mysql.session')",
-      ]);
-
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((name) => name.length > 0)
-        .map((name) => ({ name }));
-    }
-
-    if (service.type === 'mongodb') {
-      const result = await this.execInServiceContainer(service, [
-        'mongosh',
-        '--quiet',
-        '--eval',
-        'db.system.users.find({}, {user:1, _id:0}).forEach(u => print(u.user))',
-      ]);
-
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((name) => name.length > 0)
-        .map((name) => ({ name }));
-    }
-
-    throw new Error(`User listing is not supported for service type: ${service.type}`);
+    return adapter.listUsers(service, this.docker);
   }
 
   async createDatabase(serviceId: string, dbName: string): Promise<CreateDatabaseResult> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    this.assertSafeDatabaseName(dbName);
+    assertSafeDatabaseName(dbName);
 
-    if (service.type === 'redis') {
-      throw new Error('Database creation is not supported for redis services');
+    const adapter = getServiceAdapter(service.type);
+    if (!adapter) {
+      throw new Error(`Database creation is not supported for service type: ${service.type}`);
     }
 
-    if (service.type === 'postgresql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForPostgresReady(service, credentials);
-
-      await this.execInServiceContainer(service, [
-        'psql',
-        '-v',
-        'ON_ERROR_STOP=1',
-        '-U',
-        credentials.user,
-        '-d',
-        'postgres',
-        '-c',
-        `CREATE DATABASE ${this.quotePostgresIdentifier(dbName)}`,
-      ]);
-
-      return {
-        database: dbName,
-        user: credentials.user,
-        password: credentials.password,
-        connectionString: this.getConnectionString(
-          'postgresql',
-          service.container_name,
-          service.port,
-          {
-            user: credentials.user,
-            password: credentials.password,
-            database: dbName,
-          },
-        ),
-      };
-    }
-
-    if (service.type === 'mysql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForMySqlReady(service, credentials);
-
-      await this.execInServiceContainer(service, [
-        'mysql',
-        '-uroot',
-        `-p${credentials.password}`,
-        '-e',
-        `CREATE DATABASE IF NOT EXISTS ${this.quoteMySqlIdentifier(dbName)};`,
-      ]);
-
-      return {
-        database: dbName,
-        user: credentials.user,
-        password: credentials.password,
-        connectionString: this.getConnectionString('mysql', service.container_name, service.port, {
-          user: credentials.user,
-          password: credentials.password,
-          database: dbName,
-        }),
-      };
-    }
-
-    throw new Error(`Database creation is not supported for service type: ${service.type}`);
+    return adapter.createDatabase(service, dbName, this.docker);
   }
 
   async createUser(
@@ -975,110 +1057,66 @@ export class ServiceManager {
   ): Promise<CreateUserResult> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    this.assertSafeUserName(username);
-
-    if (service.type === 'redis') {
-      throw new Error('User creation is not supported for redis services');
-    }
+    assertSafeUserName(username);
 
     const userPassword = password ?? randomBytes(16).toString('hex');
-
-    if (service.type === 'postgresql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForPostgresReady(service, credentials);
-
-      await this.execInServiceContainer(service, [
-        'psql',
-        '-v',
-        'ON_ERROR_STOP=1',
-        '-U',
-        credentials.user,
-        '-d',
-        'postgres',
-        '-c',
-        `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${this.quoteSqlLiteral(username)}) THEN CREATE ROLE ${this.quotePostgresIdentifier(username)} LOGIN PASSWORD ${this.quoteSqlLiteral(userPassword)}; ELSE ALTER ROLE ${this.quotePostgresIdentifier(username)} LOGIN PASSWORD ${this.quoteSqlLiteral(userPassword)}; END IF; END $$;`,
-      ]);
-
-      const grantDatabase = grants?.database;
-      if (grantDatabase) {
-        this.assertSafeDatabaseName(grantDatabase);
-        await this.execInServiceContainer(service, [
-          'psql',
-          '-v',
-          'ON_ERROR_STOP=1',
-          '-U',
-          credentials.user,
-          '-d',
-          'postgres',
-          '-c',
-          `GRANT ALL PRIVILEGES ON DATABASE ${this.quotePostgresIdentifier(grantDatabase)} TO ${this.quotePostgresIdentifier(username)};`,
-        ]);
-      }
-
-      const database = grantDatabase ?? credentials.database;
-      return {
-        database,
-        user: username,
-        password: userPassword,
-        connectionString: this.getConnectionString(
-          'postgresql',
-          service.container_name,
-          service.port,
-          {
-            user: username,
-            password: userPassword,
-            database,
-          },
-        ),
-      };
+    if (grants?.database) {
+      assertSafeDatabaseName(grants.database);
     }
 
-    if (service.type === 'mysql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForMySqlReady(service, credentials);
-
-      await this.execInServiceContainer(service, [
-        'mysql',
-        '-uroot',
-        `-p${credentials.password}`,
-        '-e',
-        `CREATE USER IF NOT EXISTS ${this.quoteMySqlUserHost(username)} IDENTIFIED BY ${this.quoteSqlLiteral(userPassword)}; ALTER USER ${this.quoteMySqlUserHost(username)} IDENTIFIED BY ${this.quoteSqlLiteral(userPassword)};`,
-      ]);
-
-      const grantDatabase = grants?.database;
-      if (grantDatabase) {
-        this.assertSafeDatabaseName(grantDatabase);
-        await this.execInServiceContainer(service, [
-          'mysql',
-          '-uroot',
-          `-p${credentials.password}`,
-          '-e',
-          `GRANT ALL PRIVILEGES ON ${this.quoteMySqlIdentifier(grantDatabase)}.* TO ${this.quoteMySqlUserHost(username)}; FLUSH PRIVILEGES;`,
-        ]);
-      }
-
-      const database = grantDatabase ?? credentials.database;
-      return {
-        database,
-        user: username,
-        password: userPassword,
-        connectionString: this.getConnectionString('mysql', service.container_name, service.port, {
-          user: username,
-          password: userPassword,
-          database,
-        }),
-      };
+    const adapter = getServiceAdapter(service.type);
+    if (!adapter) {
+      throw new Error(`User creation is not supported for service type: ${service.type}`);
     }
 
-    throw new Error(`User creation is not supported for service type: ${service.type}`);
+    return adapter.createUser(service, { username, password: userPassword, grants }, this.docker);
+  }
+
+  async listBuckets(serviceId: string): Promise<Array<{ name: string; createdAt: string }>> {
+    const service = this.getRequiredService(serviceId);
+    await this.ensureServiceContainerRunning(service);
+    if (service.type !== 'minio') {
+      throw new Error(
+        `Bucket operations are only supported for MinIO services, got: ${service.type}`,
+      );
+    }
+
+    const adapter = new MinioAdapter();
+    return adapter.listBuckets(service, this.docker);
+  }
+
+  async createBucket(serviceId: string, bucketName: string): Promise<void> {
+    const service = this.getRequiredService(serviceId);
+    await this.ensureServiceContainerRunning(service);
+    if (service.type !== 'minio') {
+      throw new Error(
+        `Bucket operations are only supported for MinIO services, got: ${service.type}`,
+      );
+    }
+
+    const adapter = new MinioAdapter();
+    return adapter.createBucket(service, this.docker, bucketName);
+  }
+
+  async deleteBucket(serviceId: string, bucketName: string): Promise<void> {
+    const service = this.getRequiredService(serviceId);
+    await this.ensureServiceContainerRunning(service);
+    if (service.type !== 'minio') {
+      throw new Error(
+        `Bucket operations are only supported for MinIO services, got: ${service.type}`,
+      );
+    }
+
+    const adapter = new MinioAdapter();
+    return adapter.deleteBucket(service, this.docker, bucketName);
   }
 
   private getContainerName(name: string): string {
-    return `ol-svc-${name}`;
+    return serviceContainerName(name);
   }
 
   private getVolumeName(name: string): string {
-    return `ol-svc-data-${name}`;
+    return serviceVolumeName(name);
   }
 
   private getBackupDir(): string {
@@ -1086,22 +1124,16 @@ export class ServiceManager {
   }
 
   private getDataMountPath(type: string): string {
-    switch (type) {
-      case 'postgresql':
-        return '/var/lib/postgresql/data';
-      case 'mysql':
-        return '/var/lib/mysql';
-      case 'redis':
-        return '/data';
-      case 'mongodb':
-        return '/data/db';
-      default:
-        return '/data';
+    const adapter = getServiceAdapter(type);
+    if (!adapter) {
+      return '/data';
     }
+
+    return adapter.getDataMountPath();
   }
 
   private buildCredentials(
-    type: Exclude<BuiltInServiceType, 'redis'>,
+    type: Exclude<BuiltInServiceType, 'redis' | 'minio'>,
     name: string,
     containerName: string,
     port: number,
@@ -1137,30 +1169,12 @@ export class ServiceManager {
     port: number,
     creds?: { user: string; password: string; database: string },
   ): string {
-    if (type === 'redis') {
-      return `redis://${containerName}:${String(port)}`;
+    const adapter = getServiceAdapter(type);
+    if (!adapter) {
+      throw new Error(`Unsupported service type: ${type}`);
     }
 
-    if (!creds) {
-      throw new Error(`Credentials required for ${type}`);
-    }
-
-    const user = encodeURIComponent(creds.user);
-    const password = encodeURIComponent(creds.password);
-    const database = encodeURIComponent(creds.database);
-
-    switch (type) {
-      case 'postgresql':
-        return `postgresql://${user}:${password}@${containerName}:${String(port)}/${database}`;
-      case 'mysql':
-        return `mysql://${user}:${password}@${containerName}:${String(port)}/${database}`;
-      case 'mongodb':
-        return `mongodb://${user}:${password}@${containerName}:${String(port)}/admin`;
-      default: {
-        const _exhaustive: never = type;
-        throw new Error(`Unsupported service type: ${_exhaustive as string}`);
-      }
-    }
+    return adapter.getConnectionString(containerName, port, creds);
   }
 
   private toDatabaseName(name: string): string {
@@ -1185,18 +1199,6 @@ export class ServiceManager {
     return normalized.length > 0 ? normalized : 'custom';
   }
 
-  private isNotFoundError(error: unknown): boolean {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-
-    return (
-      error.message.includes('not found') ||
-      error.message.includes('No such container') ||
-      error.message.includes('No such volume')
-    );
-  }
-
   private getRequiredService(serviceId: string): ServiceRow {
     const service = this.db.getService(serviceId);
     if (!service) {
@@ -1208,199 +1210,15 @@ export class ServiceManager {
   private async ensureServiceContainerRunning(service: ServiceRow): Promise<void> {
     const containerId = service.container_id ?? service.container_name;
     try {
-      const info = await this.docker.getClient().getContainer(containerId).inspect();
+      const info = await this.docker.inspectContainer(containerId);
       if (!info.State.Running) {
         throw new Error(`Service container is not running: ${service.id}`);
       }
     } catch (error) {
-      if (this.isNotFoundError(error)) {
+      if (isDockerNotFoundError(error)) {
         throw new Error(`Service container not found: ${service.id}`);
       }
       throw error;
     }
-  }
-
-  private parseServiceCredentials(service: ServiceRow): ServiceCredentials {
-    if (!service.credentials) {
-      throw new Error(`Service credentials not available: ${service.id}`);
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(service.credentials);
-    } catch (_err) {
-      throw new Error(`Invalid service credentials: ${service.id}`);
-    }
-
-    if (typeof parsed !== 'object' || parsed === null) {
-      throw new Error(`Incomplete service credentials: ${service.id}`);
-    }
-
-    const record = parsed as Record<string, unknown>;
-    if (
-      typeof record['user'] !== 'string' ||
-      typeof record['password'] !== 'string' ||
-      typeof record['database'] !== 'string'
-    ) {
-      throw new Error(`Incomplete service credentials: ${service.id}`);
-    }
-
-    return {
-      user: record['user'],
-      password: record['password'],
-      database: record['database'],
-    };
-  }
-
-  private assertSafeDatabaseName(name: string): void {
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
-      throw new Error(`Invalid database name: ${name}`);
-    }
-  }
-
-  private assertSafeUserName(username: string): void {
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(username)) {
-      throw new Error(`Invalid username: ${username}`);
-    }
-  }
-
-  private quotePostgresIdentifier(identifier: string): string {
-    return `"${identifier.replace(/"/g, '""')}"`;
-  }
-
-  private quoteMySqlIdentifier(identifier: string): string {
-    return `\`${identifier.replace(/`/g, '``')}\``;
-  }
-
-  private quoteMySqlUserHost(username: string): string {
-    return `${this.quoteSqlLiteral(username)}@'%'`;
-  }
-
-  private quoteSqlLiteral(value: string): string {
-    return `'${value.replace(/'/g, "''")}'`;
-  }
-
-  private async waitForPostgresReady(
-    service: ServiceRow,
-    credentials: ServiceCredentials,
-  ): Promise<void> {
-    let lastError = '';
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      try {
-        const result = await this.execInServiceContainer(
-          service,
-          ['pg_isready', '-U', credentials.user, '-d', 'postgres'],
-          { throwOnNonZeroExit: false },
-        );
-        if (result.exitCode === 0) {
-          return;
-        }
-        lastError = result.stderr.trim() || result.stdout.trim();
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error);
-      }
-      await this.sleep(1000);
-    }
-
-    throw new Error(
-      `PostgreSQL service is not ready: ${service.id}${lastError ? ` (${lastError})` : ''}`,
-    );
-  }
-
-  private async waitForMySqlReady(
-    service: ServiceRow,
-    credentials: ServiceCredentials,
-  ): Promise<void> {
-    let lastError = '';
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      try {
-        const result = await this.execInServiceContainer(
-          service,
-          [
-            'mysqladmin',
-            'ping',
-            '-h',
-            '127.0.0.1',
-            '-uroot',
-            `-p${credentials.password}`,
-            '--silent',
-          ],
-          { throwOnNonZeroExit: false },
-        );
-        if (result.exitCode === 0) {
-          return;
-        }
-        lastError = result.stderr.trim() || result.stdout.trim();
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error);
-      }
-      await this.sleep(1000);
-    }
-
-    throw new Error(
-      `MySQL service is not ready: ${service.id}${lastError ? ` (${lastError})` : ''}`,
-    );
-  }
-
-  private async execInServiceContainer(
-    service: ServiceRow,
-    command: string[],
-    options?: { throwOnNonZeroExit?: boolean },
-  ): Promise<ContainerExecResult> {
-    const client = this.docker.getClient();
-    const containerId = service.container_id ?? service.container_name;
-    const container = client.getContainer(containerId);
-    const exec = await container.exec({
-      Cmd: command,
-      AttachStdin: false,
-      AttachStdout: true,
-      AttachStderr: true,
-      Tty: false,
-    });
-
-    const stream = await exec.start({ hijack: false, stdin: false });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    const stdoutStream = new PassThrough();
-    const stderrStream = new PassThrough();
-
-    stdoutStream.on('data', (chunk: Buffer) => {
-      stdoutChunks.push(chunk);
-    });
-    stderrStream.on('data', (chunk: Buffer) => {
-      stderrChunks.push(chunk);
-    });
-
-    client.modem.demuxStream(stream, stdoutStream, stderrStream);
-
-    await new Promise<void>((resolve, reject) => {
-      stream.on('error', reject);
-      stream.on('end', resolve);
-    });
-
-    const info = await exec.inspect();
-    const exitCode = info.ExitCode;
-    if (typeof exitCode !== 'number') {
-      throw new Error(`Container command did not report an exit code for service: ${service.id}`);
-    }
-
-    const stdout = Buffer.concat(stdoutChunks).toString('utf8');
-    const stderr = Buffer.concat(stderrChunks).toString('utf8');
-
-    if (options?.throwOnNonZeroExit !== false && exitCode !== 0) {
-      const commandText = command.join(' ');
-      const output = stderr.trim() || stdout.trim();
-      throw new Error(
-        `Container command failed (${commandText}) with exit code ${String(exitCode)}${output ? `: ${output}` : ''}`,
-      );
-    }
-
-    return { stdout, stderr, exitCode };
-  }
-
-  private async sleep(ms: number): Promise<void> {
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, ms);
-    });
   }
 }

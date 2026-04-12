@@ -10,9 +10,9 @@ import { allocatePort } from './port.js';
 import { buildTraefikLabels, getProjectUrl } from './traefik.js';
 import { cloneRepo } from './git.js';
 import { ensureDockerfile } from './dockerfile-gen.js';
+import { getPolicy } from '../config/index.js';
 
 const DEFAULT_PREVIEW_TTL_MS = 86_400_000;
-const PORT_RANGE_END = 10999;
 
 /**
  * Deployment options for creating a preview environment.
@@ -37,12 +37,14 @@ export interface PreviewResult {
   port?: number;
   containerId?: string;
   error?: string;
+  buildLog?: string;
 }
 
 /**
  * Runtime information for an active preview deployment.
  */
 export interface PreviewDeploy {
+  previewId: string;
   projectId: string;
   branch: string;
   containerId: string;
@@ -83,6 +85,8 @@ export class PreviewDeployer {
       await this.cleanup(existingPreviewId);
     }
 
+    let buildOutput = '';
+
     try {
       const cloneResult = await cloneRepo({
         repoUrl: options.repoUrl,
@@ -93,7 +97,6 @@ export class PreviewDeployer {
       ensureDockerfile(cloneResult.path);
 
       const imageTag = `openlander/preview-${options.branch}:latest`;
-      let buildOutput = '';
       await this.docker.buildImage(cloneResult.path, imageTag, {
         onProgress: (event) => {
           const line = event.stream?.trimEnd() ?? event.error ?? '';
@@ -115,12 +118,14 @@ export class PreviewDeployer {
         containerPort,
         envVars: {},
         traefikLabels,
+        network: getPolicy('production').networkName,
       });
 
       const url = getProjectUrl(previewName);
       const ttlMs = options.ttlMs ?? DEFAULT_PREVIEW_TTL_MS;
 
       const preview: PreviewDeploy = {
+        previewId,
         projectId,
         branch: options.branch,
         containerId,
@@ -151,10 +156,15 @@ export class PreviewDeployer {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
+      const buildLogWithOutput = buildOutput
+        ? `${buildOutput}[error] ${errorMessage}\n`
+        : undefined;
+
       return {
         success: false,
         previewId,
         error: errorMessage,
+        buildLog: buildLogWithOutput,
       };
     }
   }
@@ -184,7 +194,7 @@ export class PreviewDeployer {
     }
 
     try {
-      await this.docker.removeContainer(preview.containerId);
+      await this.docker.safeRemoveContainer(preview.containerId);
     } finally {
       this.previews.delete(key);
       this.previewIds.delete(key);
@@ -249,14 +259,18 @@ export class PreviewDeployer {
   }
 
   private async allocatePreviewPort(): Promise<number> {
-    let port = await allocatePort(this.db, this.docker);
+    // Given no explicit env context, use production port policy for previews.
+    let port = await allocatePort(this.db, this.docker, {}, 'production');
     const dbPorts = new Set(this.db.getUsedPorts());
     const previewPorts = new Set(this.list().map((preview) => preview.port));
+    const { portRangeStart, portRangeEnd } = getPolicy('production');
 
     while (dbPorts.has(port) || previewPorts.has(port)) {
       port += 1;
-      if (port > PORT_RANGE_END) {
-        throw new Error('No available preview ports in range 10001-10999');
+      if (port > portRangeEnd) {
+        throw new Error(
+          `No available preview ports in range ${String(portRangeStart)}-${String(portRangeEnd)}`,
+        );
       }
     }
 

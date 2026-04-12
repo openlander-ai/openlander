@@ -37,6 +37,19 @@ export class EnvManager {
     return masked;
   }
 
+  /** Get all env vars for a project with inheritance (project + production) with masked values. */
+  getAllWithInheritanceMasked(projectId: string): Record<string, string> {
+    const vars = this.getAllWithInheritance(
+      projectId,
+      this.getProductionEnvironmentId(projectId) || '',
+    );
+    const masked: Record<string, string> = {};
+    for (const [key, value] of Object.entries(vars)) {
+      masked[key] = EnvManager.mask(value);
+    }
+    return masked;
+  }
+
   /** Set a single env var. Returns true if container needs restart. */
   set(projectId: string, key: string, value: string, environmentId?: string): boolean {
     const existing = this.db.getEnvVars(projectId, environmentId);

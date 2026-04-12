@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import type { Database } from '../../src/db/index.js';
+import { ModelRegistry } from '../../src/llm/model-registry.js';
 import { DeployQueue } from '../../src/pipeline/deploy-queue.js';
 
 // ---------------------------------------------------------------------------
@@ -9,23 +10,18 @@ import { DeployQueue } from '../../src/pipeline/deploy-queue.js';
 
 export function createMockDocker() {
   return {
-    getClient: vi.fn(() => ({
-      listContainers: vi.fn().mockResolvedValue([]),
-      getContainer: vi.fn().mockReturnValue({
-        stats: vi.fn().mockResolvedValue({
-          cpu_stats: {
-            cpu_usage: { total_usage: 100, percpu_usage: [100] },
-            system_cpu_usage: 1000,
-          },
-          precpu_stats: { cpu_usage: { total_usage: 0 } },
-          memory_stats: { usage: 1024 * 1024 * 100, limit: 1024 * 1024 * 1024 },
-        }),
-        start: vi.fn(),
-        logs: vi.fn().mockReturnValue({
-          on: vi.fn(),
-        }),
-      }),
-    })),
+    listAllContainers: vi.fn().mockResolvedValue([]),
+    inspectContainer: vi.fn(),
+    getContainerStats: vi.fn().mockResolvedValue({
+      cpu_stats: {
+        cpu_usage: { total_usage: 100, percpu_usage: [100] },
+        system_cpu_usage: 1000,
+      },
+      precpu_stats: { cpu_usage: { total_usage: 0 } },
+      memory_stats: { usage: 1024 * 1024 * 100, limit: 1024 * 1024 * 1024 },
+    }),
+    startContainer: vi.fn(),
+    getLogs: vi.fn().mockResolvedValue(''),
   };
 }
 
@@ -44,6 +40,8 @@ export function createMockPipeline() {
     stop: vi.fn().mockResolvedValue(undefined),
     redeploy: vi.fn().mockResolvedValue({ success: true }),
     remove: vi.fn().mockResolvedValue(undefined),
+    archive: vi.fn().mockResolvedValue(undefined),
+    unarchive: vi.fn().mockResolvedValue(undefined),
     getLogs: vi.fn().mockResolvedValue('log output'),
     exposeTunnel: vi.fn().mockResolvedValue('https://abc.trycloudflare.com'),
     closeTunnel: vi.fn(),
@@ -57,8 +55,7 @@ export function createMockPipeline() {
 
 export function createMockEnvManager() {
   return {
-    getAll: vi.fn().mockReturnValue({}),
-    getAllMasked: vi.fn().mockReturnValue({ API_KEY: 'sk-***' }),
+    getAll: vi.fn().mockReturnValue({ API_KEY: 'sk-1234567890abcdef' }),
     setBulk: vi.fn().mockReturnValue(true),
     getGlobalSecrets: vi.fn().mockReturnValue({}),
   };
@@ -118,6 +115,7 @@ export function createMockServiceManager() {
 
   return {
     list: vi.fn().mockResolvedValue([]),
+    listWithCardSummary: vi.fn().mockResolvedValue([]),
     getDetail: vi.fn().mockResolvedValue(baseService),
     getLogs: vi.fn().mockResolvedValue('service logs'),
     getStats: vi.fn().mockResolvedValue({ status: 'running', diskUsageBytes: 128 }),
@@ -182,14 +180,11 @@ export function createMockContext(db: Database): AppContext {
     env: createMockEnvManager() as unknown as AppContext['env'],
     channelManager: createMockChannelManager() as unknown as AppContext['channelManager'],
     healthMonitor: createMockHealthMonitor() as unknown as AppContext['healthMonitor'],
+    agentPool: null,
     agent: createMockAgent() as unknown as AppContext['agent'],
+    modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }),
+    model: null,
     deployQueue: new DeployQueue(),
-    blueGreen: {
-      deploy: vi.fn().mockResolvedValue({ success: true }),
-    } as unknown as AppContext['blueGreen'],
-    dbProvisioner: {
-      provision: vi.fn().mockResolvedValue({ host: 'localhost', port: 5432 }),
-    } as unknown as AppContext['dbProvisioner'],
     serviceManager: createMockServiceManager() as unknown as AppContext['serviceManager'],
     buildDebugger: null,
     previewDeployer: {
@@ -218,5 +213,16 @@ export function createMockContext(db: Database): AppContext {
         .fn()
         .mockResolvedValue({ status: 'building', plan_id: 'plan-test', project_id: 'p1' }),
     } as unknown as AppContext['planEngine'],
+    coordinator: {
+      suppressProject: vi.fn(),
+      stop: vi.fn(),
+      setOpsAgent: vi.fn(),
+      setConfigGetter: vi.fn(),
+      setDeploymentRecovery: vi.fn(),
+    } as unknown as AppContext['coordinator'],
+    approvalGate: {
+      dispose: vi.fn(),
+    } as unknown as AppContext['approvalGate'],
+    llmVerified: false,
   };
 }

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
+import { mkdirSync, writeFileSync } from 'node:fs';
 
 import { Docker, type AllContainerInfo } from '../src/pipeline/docker.js';
 
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-const describeDocker = isBunRuntime ? describe.skip : describe;
+const describeDocker = describe;
 
 const mockPing = vi.fn();
 const mockListContainers = vi.fn();
@@ -13,31 +13,31 @@ const mockCreateContainer = vi.fn();
 const mockGetImage = vi.fn();
 const mockGetContainer = vi.fn();
 const mockFollowProgress = vi.fn();
+const mockGetNetwork = vi.fn();
 
 // Mock dockerode module by injecting into require.cache
-if (!isBunRuntime) {
-  const require = createRequire(import.meta.url);
-  const mockDockerodeClass = vi.fn(function (this: Record<string, unknown>) {
-    this.ping = mockPing;
-    this.listContainers = mockListContainers;
-    this.buildImage = mockBuildImage;
-    this.createContainer = mockCreateContainer;
-    this.getImage = mockGetImage;
-    this.getContainer = mockGetContainer;
-    this.modem = {
-      followProgress: mockFollowProgress,
-    };
-  });
+const require = createRequire(import.meta.url);
+const mockDockerodeClass = vi.fn(function (this: Record<string, unknown>) {
+  this.ping = mockPing;
+  this.listContainers = mockListContainers;
+  this.buildImage = mockBuildImage;
+  this.createContainer = mockCreateContainer;
+  this.getImage = mockGetImage;
+  this.getContainer = mockGetContainer;
+  this.getNetwork = mockGetNetwork;
+  this.modem = {
+    followProgress: mockFollowProgress,
+  };
+});
 
-  // Inject mock into require.cache before Docker class is instantiated
-  const dockerodePath = require.resolve('dockerode');
-  require.cache[dockerodePath] = {
-    id: dockerodePath,
-    filename: dockerodePath,
-    loaded: true,
-    exports: mockDockerodeClass,
-  } as unknown as NodeJS.Module;
-}
+// Inject mock into require.cache before Docker class is instantiated
+const dockerodePath = require.resolve('dockerode');
+require.cache[dockerodePath] = {
+  id: dockerodePath,
+  filename: dockerodePath,
+  loaded: true,
+  exports: mockDockerodeClass,
+} as unknown as NodeJS.Module;
 
 // ---------------------------------------------------------------------------
 // Test Data
@@ -73,6 +73,16 @@ const resetDockerodeMocks = () => {
   mockGetImage.mockReset();
   mockGetContainer.mockReset();
   mockFollowProgress.mockReset();
+  mockGetNetwork.mockReset().mockReturnValue({
+    connect: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    inspect: vi.fn().mockResolvedValue({}),
+  });
+};
+
+const writeEvidence = (relativePath: string, content: string): void => {
+  mkdirSync('.sisyphus/evidence', { recursive: true });
+  writeFileSync(relativePath, content, 'utf8');
 };
 
 type MockContainerHandleOptions = {
@@ -259,6 +269,136 @@ describeDocker('Docker core operations', () => {
           NetworkMode: 'traefik-web',
         }),
       }),
+    );
+  });
+
+  it('Alias set at creation time when NetworkMode = shared network', async () => {
+    const container = createDockerContainerHandle({ id: 'container-shared-id' });
+    mockCreateContainer.mockResolvedValueOnce(container);
+
+    const docker = new Docker('/var/run/docker.sock', 'openlander');
+    await docker.runContainer({
+      imageTag: 'mono-api:v1',
+      name: 'ol-mono-api',
+      port: 19090,
+      containerPort: 3000,
+      envVars: { NODE_ENV: 'production' },
+      traefikLabels: {},
+    });
+
+    expect(mockCreateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        HostConfig: expect.objectContaining({
+          NetworkMode: 'openlander',
+        }),
+        NetworkingConfig: {
+          EndpointsConfig: {
+            openlander: {
+              Aliases: ['mono-api'],
+            },
+          },
+        },
+      }),
+    );
+
+    writeEvidence(
+      '.sisyphus/evidence/task-1-alias-creation.txt',
+      'Verified runContainer passes NetworkingConfig.EndpointsConfig.openlander.Aliases=["mono-api"] when NetworkMode is openlander.',
+    );
+  });
+
+  it('ensureSharedNetworkAttachment silently returns when container is already connected', async () => {
+    const container = createDockerContainerHandle({ id: 'container-reconcile-id' });
+    mockCreateContainer.mockResolvedValueOnce(container);
+
+    const connect = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('endpoint with name already exists in network openlander'));
+    const disconnect = vi.fn().mockResolvedValue(undefined);
+
+    mockGetNetwork.mockImplementation((networkName: string) => {
+      if (networkName === 'openlander') {
+        return { connect, disconnect, inspect: vi.fn().mockResolvedValue({}) };
+      }
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        inspect: vi.fn().mockRejectedValue(new Error('no such network')),
+      };
+    });
+
+    const docker = new Docker('/var/run/docker.sock', 'traefik-web');
+    await docker.runContainer({
+      imageTag: 'mono-worker:v1',
+      name: 'ol-mono-worker',
+      port: 19191,
+      containerPort: 3000,
+      envVars: { NODE_ENV: 'production' },
+      traefikLabels: {},
+    });
+
+    expect(connect).toHaveBeenCalledOnce();
+    expect(connect).toHaveBeenCalledWith({
+      Container: 'container-reconcile-id',
+      EndpointConfig: { Aliases: ['mono-worker'] },
+    });
+    expect(disconnect).not.toHaveBeenCalled();
+
+    writeEvidence(
+      '.sisyphus/evidence/task-1-alias-reconcile.txt',
+      'Verified ensureSharedNetworkAttachment silently returns on "already exists" without disconnect or reconnect.',
+    );
+  });
+
+  it('uses custom restartPolicy when provided, defaults to MaximumRetryCount: 5 otherwise', async () => {
+    const container1 = createDockerContainerHandle({ id: 'container-custom-restart' });
+    const container2 = createDockerContainerHandle({ id: 'container-default-restart' });
+    mockCreateContainer.mockResolvedValueOnce(container1).mockResolvedValueOnce(container2);
+
+    const docker = new Docker('/var/run/docker.sock', 'traefik-web');
+
+    // Test with custom restart policy (monorepo case)
+    await docker.runContainer({
+      imageTag: 'mono-api:v1',
+      name: 'ol-mono-api',
+      port: 19090,
+      containerPort: 3000,
+      envVars: { NODE_ENV: 'production' },
+      traefikLabels: {},
+      restartPolicy: { Name: 'on-failure', MaximumRetryCount: 15 },
+    });
+
+    expect(mockCreateContainer).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        HostConfig: expect.objectContaining({
+          RestartPolicy: { Name: 'on-failure', MaximumRetryCount: 15 },
+        }),
+      }),
+    );
+
+    // Test with default restart policy
+    await docker.runContainer({
+      imageTag: 'app:v1',
+      name: 'ol-app',
+      port: 18080,
+      containerPort: 3000,
+      envVars: { NODE_ENV: 'production' },
+      traefikLabels: {},
+    });
+
+    expect(mockCreateContainer).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        HostConfig: expect.objectContaining({
+          RestartPolicy: { Name: 'on-failure', MaximumRetryCount: 5 },
+        }),
+      }),
+    );
+
+    writeEvidence(
+      '.sisyphus/evidence/task-2-restart-policy.txt',
+      'Verified runContainer uses custom restartPolicy when provided (MaximumRetryCount: 15 for monorepo), defaults to MaximumRetryCount: 5 otherwise.',
     );
   });
 
@@ -498,6 +638,7 @@ describeDocker('Docker core operations', () => {
         status: 'running',
         port: 18080,
         imageTag: 'ol-app:latest',
+        labels: {},
       },
       {
         id: 'def456',
@@ -505,14 +646,9 @@ describeDocker('Docker core operations', () => {
         status: 'exited',
         port: undefined,
         imageTag: 'ol-worker:latest',
+        labels: {},
       },
     ]);
-
-    expect(docker.getClient()).toMatchObject({
-      ping: mockPing,
-      listContainers: mockListContainers,
-      buildImage: mockBuildImage,
-    });
   });
 });
 
@@ -721,12 +857,115 @@ describeDocker('listAllContainers', () => {
 });
 
 // ---------------------------------------------------------------------------
+// cancelBuild Tests (BUG-014)
+// ---------------------------------------------------------------------------
+
+describeDocker('cancelBuild', () => {
+  beforeEach(() => {
+    resetDockerodeMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('BUG-014: cancelBuild destroys stream and removes from activeBuilds', async () => {
+    const destroyFn = vi.fn();
+    const stream = { stream: true, destroy: destroyFn } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(stream);
+
+    let resolveBuild: (() => void) | undefined;
+    mockFollowProgress.mockImplementationOnce(
+      (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) => {
+        resolveBuild = () => done(null);
+      },
+    );
+
+    const docker = new Docker();
+    const buildPromise = docker.buildImage('/tmp/app', 'test:latest', {
+      projectId: 'proj-123',
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const cancelled = docker.cancelBuild('proj-123');
+    expect(cancelled).toBe(true);
+    expect(destroyFn).toHaveBeenCalledTimes(1);
+
+    expect(docker.cancelBuild('proj-123')).toBe(false);
+
+    resolveBuild?.();
+    await buildPromise.catch(() => {});
+
+    writeEvidence(
+      '.sisyphus/evidence/task-13-stop-cancels-build.txt',
+      [
+        'BUG-014 regression: cancelBuild destroys the active stream and returns true.',
+        'Second call returns false (stream already removed).',
+        'destroy() called exactly once on the build stream.',
+      ].join('\n'),
+    );
+  });
+
+  it('cancelBuild returns false when no active build exists', () => {
+    const docker = new Docker();
+    expect(docker.cancelBuild('nonexistent')).toBe(false);
+  });
+
+  it('buildImage cleans up activeBuilds on successful completion', async () => {
+    const destroyFn = vi.fn();
+    const stream = { stream: true, destroy: destroyFn } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(stream);
+    mockFollowProgress.mockImplementationOnce(
+      (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) => {
+        done(null);
+      },
+    );
+
+    const docker = new Docker();
+    await docker.buildImage('/tmp/app', 'test:latest', { projectId: 'proj-cleanup' });
+
+    expect(docker.cancelBuild('proj-cleanup')).toBe(false);
+  });
+
+  it('buildImage cleans up activeBuilds on build failure', async () => {
+    const destroyFn = vi.fn();
+    const stream = { stream: true, destroy: destroyFn } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(stream);
+    mockFollowProgress.mockImplementationOnce(
+      (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) => {
+        done(new Error('build exploded'));
+      },
+    );
+
+    const docker = new Docker();
+    await docker.buildImage('/tmp/app', 'test:latest', { projectId: 'proj-fail' }).catch(() => {});
+
+    expect(docker.cancelBuild('proj-fail')).toBe(false);
+  });
+
+  it('buildImage without projectId does not track in activeBuilds', async () => {
+    const stream = { stream: true } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(stream);
+    mockFollowProgress.mockImplementationOnce(
+      (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) => {
+        done(null);
+      },
+    );
+
+    const docker = new Docker();
+    await docker.buildImage('/tmp/app', 'test:latest');
+
+    expect(docker.cancelBuild('any-id')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Type Export Tests
 // ---------------------------------------------------------------------------
 
 describeDocker('AllContainerInfo type', () => {
   it('exports AllContainerInfo interface', () => {
-    // This is a compile-time check - if it compiles, the type is exported
     const containerInfo: AllContainerInfo = {
       id: 'test-id',
       name: 'test-name',

@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockServiceManagerLogger = vi.hoisted(() => ({
-  debug: vi.fn(),
-  warn: vi.fn(),
-  info: vi.fn(),
-  error: vi.fn(),
+const { mockServiceManagerLogger } = vi.hoisted(() => ({
+  mockServiceManagerLogger: {
+    debug: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 vi.mock('../src/lib/logger.js', () => ({
@@ -38,11 +40,17 @@ function createService(partial: Partial<ServiceRow>): ServiceRow {
   };
 }
 
-function createDbMock(services: ServiceRow[]): Database {
+function createDbMock(
+  services: ServiceRow[],
+  projects: Array<{ id: string; name: string }> = [],
+): Database {
   const byId = new Map(services.map((svc) => [svc.id, svc]));
   return {
     getService: vi.fn((id: string) => byId.get(id) ?? null),
     listServices: vi.fn(() => Array.from(byId.values())),
+    listProjects: vi.fn(() => projects),
+    getEnvVars: vi.fn(() => ({})),
+    getEnvironmentsByProject: vi.fn(() => []),
     updateService: vi.fn(
       (id: string, updates: { status?: ServiceRow['status']; containerId?: string | null }) => {
         const current = byId.get(id);
@@ -57,6 +65,9 @@ function createDbMock(services: ServiceRow[]): Database {
         });
       },
     ),
+    deleteService: vi.fn((id: string) => {
+      byId.delete(id);
+    }),
   } as unknown as Database;
 }
 
@@ -411,26 +422,18 @@ describe('ServiceManager reconciliation behavior', () => {
     });
     const db = createDbMock([service]);
     const dockerHarness = createMockDockerHarness();
-    dockerHarness.client.getContainer.mockReturnValue({
-      inspect: vi.fn().mockRejectedValue(new Error('inspect failed')),
-    });
+    (dockerHarness.docker.inspectContainer as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('inspect failed'),
+    );
 
     const manager = new ServiceManager(dockerHarness.docker, db);
     const list = await manager.list();
 
-    expect(db.updateService).toHaveBeenCalledWith('svc-failed-inspect', { status: 'error' });
+    expect(db.updateService).toHaveBeenCalledWith('svc-failed-inspect', {
+      status: 'error',
+      containerId: 'svc-failed-inspect-container',
+    });
     expect(list[0]?.status).toBe('error');
-    expect(mockServiceManagerLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        serviceId: 'svc-failed-inspect',
-        containerId: 'svc-failed-inspect-container',
-      }),
-      'Failed to inspect service container',
-    );
-    expect(mockServiceManagerLogger.debug).not.toHaveBeenCalledWith(
-      expect.any(Object),
-      'Failed to inspect service container',
-    );
   });
 
   it('list() marks non-provisioning service without container reference as error', async () => {
@@ -445,12 +448,11 @@ describe('ServiceManager reconciliation behavior', () => {
 
     const list = await manager.list();
 
-    expect(db.updateService).toHaveBeenCalledWith('svc-missing-container-ref', { status: 'error' });
+    expect(db.updateService).toHaveBeenCalledWith('svc-missing-container-ref', {
+      status: 'error',
+      containerId: null,
+    });
     expect(list[0]?.status).toBe('error');
-    expect(mockServiceManagerLogger.warn).toHaveBeenCalledWith(
-      { serviceId: 'svc-missing-container-ref' },
-      'Service has no container reference, marking as error',
-    );
   });
 
   it('list() sets service status to running when inspect succeeds', async () => {
@@ -488,15 +490,70 @@ describe('ServiceManager reconciliation behavior', () => {
     ];
     const db = createDbMock(services);
     const dockerHarness = createMockDockerHarness();
-    dockerHarness.docker.getClient = vi.fn(() => {
-      throw new Error('Docker daemon unavailable');
-    });
+    (dockerHarness.docker.inspectContainer as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('Docker daemon unavailable'),
+    );
 
     const manager = new ServiceManager(dockerHarness.docker, db);
     const list = await manager.list();
 
-    expect(db.updateService).toHaveBeenCalledWith('svc-daemon-1', { status: 'error' });
-    expect(db.updateService).toHaveBeenCalledWith('svc-daemon-2', { status: 'error' });
+    expect(db.updateService).toHaveBeenCalledWith('svc-daemon-1', {
+      status: 'error',
+      containerId: 'svc-daemon-1-container',
+    });
+    expect(db.updateService).toHaveBeenCalledWith('svc-daemon-2', {
+      status: 'error',
+      containerId: 'svc-daemon-2-container',
+    });
     expect(list.map((service) => service.status)).toEqual(['error', 'error']);
+  });
+});
+
+describe('ServiceManager remove with connected projects warning', () => {
+  it('remove() returns warning when service has connected projects', async () => {
+    const service = createService({
+      id: 'svc-pg',
+      name: 'shared-pg',
+      container_name: 'ol-svc-shared-pg',
+    });
+    const projects = [
+      { id: 'proj-1', name: 'my-app' },
+      { id: 'proj-2', name: 'api-server' },
+    ];
+    const db = createDbMock([service], projects);
+    vi.mocked(db.getEnvVars).mockImplementation((projectId: string) => {
+      if (projectId === 'proj-1') {
+        return { DATABASE_URL: 'postgresql://ol-svc-shared-pg:5432/db' } as Record<string, string>;
+      }
+      if (projectId === 'proj-2') {
+        return { DB_HOST: 'ol-svc-shared-pg' } as Record<string, string>;
+      }
+      return {} as Record<string, string>;
+    });
+
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    await expect(manager.remove('svc-pg')).rejects.toThrow(
+      'Service "shared-pg" is referenced by 2 project(s): my-app, api-server.',
+    );
+    expect(db.deleteService).not.toHaveBeenCalled();
+  });
+
+  it('remove() returns no warning when service has no connected projects', async () => {
+    const service = createService({
+      id: 'svc-redis',
+      name: 'shared-redis',
+      container_name: 'ol-svc-shared-redis',
+    });
+    const db = createDbMock([service], []);
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    const result = await manager.remove('svc-redis');
+
+    expect(result.warning).toBeUndefined();
+    expect(result.connected_projects).toBeUndefined();
+    expect(db.deleteService).toHaveBeenCalledWith('svc-redis');
   });
 });

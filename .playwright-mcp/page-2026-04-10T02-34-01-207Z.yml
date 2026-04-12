@@ -1,0 +1,34 @@
+- generic [ref=e2]:
+    - region "Notifications alt+T"
+    - generic [ref=e3]:
+        - banner [ref=e4]:
+            - generic [ref=e6] [cursor=pointer]:
+                - img [ref=e8]
+                - generic [ref=e11]: OpenLander
+            - generic [ref=e12]:
+                - button "Notifications" [ref=e14] [cursor=pointer]:
+                    - img
+                - button "Toggle theme" [ref=e15] [cursor=pointer]:
+                    - img
+                    - generic [ref=e16]: Toggle theme
+                - generic "Checking LLM..." [ref=e17]:
+                    - generic [ref=e19]: ...
+        - generic [ref=e20]:
+            - complementary [ref=e21]:
+                - generic [ref=e22]:
+                    - generic [ref=e24]:
+                        - button [ref=e25] [cursor=pointer]
+                        - button "Configure API key in Settings" [ref=e30] [cursor=pointer]
+                    - button [ref=e34] [cursor=pointer]:
+                        - img [ref=e35]
+                    - img [ref=e43]
+                    - generic [ref=e45]:
+                        - button [ref=e46] [cursor=pointer]:
+                            - img [ref=e47]
+                        - button "Services" [ref=e48] [cursor=pointer]:
+                            - img [ref=e49]
+                        - button "Operations" [ref=e53] [cursor=pointer]:
+                            - img [ref=e54]
+                        - button "Settings" [ref=e56] [cursor=pointer]:
+                            - img [ref=e57]
+            - main [ref=e60]

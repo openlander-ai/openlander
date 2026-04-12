@@ -16,7 +16,7 @@ interface GitRepo {
   stars: number;
 }
 
-type Tab = 'repos' | 'search';
+type Tab = 'repos' | 'search' | 'docker';
 
 const langColors: Record<string, string> = {
   TypeScript: 'bg-[#3178c6]',
@@ -70,7 +70,7 @@ export function RepoListStep({
             <Loader2 className="h-5 w-5 animate-spin text-agent" />
           </div>
         ) : displayedRepos.length === 0 && tab === 'search' && searchQuery ? (
-          <div className="text-center py-12 text-secondary-ol text-xs font-body">
+          <div className="text-center py-12 text-secondary-ol text-sm font-body">
             {t('newProject.noReposFound')} "{searchQuery}"
           </div>
         ) : (
@@ -95,11 +95,11 @@ export function RepoListStep({
                     )}
                   </div>
                   {repo.description && (
-                    <p className="text-[11px] text-secondary-ol font-body truncate mt-0.5">
+                    <p className="text-xs text-secondary-ol font-body truncate mt-0.5">
                       {repo.description}
                     </p>
                   )}
-                  <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-ol font-body">
+                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-ol font-body">
                     {repo.language && (
                       <span className="flex items-center gap-1">
                         <span
@@ -126,7 +126,7 @@ export function RepoListStep({
 
                 <Button
                   size="sm"
-                  className="h-7 px-3 text-[11px] font-body gap-1.5 bg-foreground text-background hover:bg-foreground/90 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                  className="h-7 px-3 text-xs font-body gap-1.5 bg-foreground text-background hover:bg-foreground/90 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                   onClick={() => onDeployClick(repo)}
                   disabled={deploying}
                 >

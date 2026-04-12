@@ -14,6 +14,7 @@ import type { BuildTier } from '../pipeline/build-recovery.js';
 import type { ChatStreamEvent } from '../types/agent-events.js';
 import type { Question } from '../lib/question-bridge.js';
 import type { Alert } from '../monitor/alerts.js';
+import type { RequestIdentity } from '../types/identity.js';
 
 const log = createModuleLogger('events');
 
@@ -30,10 +31,8 @@ export type EventType =
   | 'deploy:needs-user-action'
   | 'deploy:crash'
   | 'deploy:rollback'
-  | 'build:autofix'
   | 'build:suggest'
   | 'build:inform'
-  | 'build:dockerfile-fixed'
   | 'build:output'
   | 'compose:start'
   | 'compose:up'
@@ -49,8 +48,12 @@ export type EventType =
   | 'container:start'
   | 'container:stop'
   | 'container:remove'
+  | 'project:archive'
+  | 'project:unarchive'
   | 'container:missing'
   | 'container:health'
+  | 'container:die'
+  | 'container:oom'
   // Tunnel
   | 'tunnel:start'
   | 'tunnel:stop'
@@ -76,10 +79,19 @@ export type EventType =
   | 'question:answered'
   // v0.2.0: Agent events (deploy UX fix)
   | 'agent:event'
+  | 'ai:invoked'
+  | 'ai:completed'
+  | 'health:degraded'
+  | 'recovery:blocked'
+  | 'recovery:stopped'
+  | 'recovery:started'
   | 'recovery:start'
   | 'recovery:success'
   | 'recovery:failed'
   | 'recovery:exhausted'
+  | 'recovery:approval-needed'
+  | 'recovery:approval-auto-skipped'
+  | 'recovery:approval-resolved'
   | 'env:new-keys-detected'
   | 'rollback:suggested'
   | 'secret:detected'
@@ -137,6 +149,8 @@ export interface EventPayload {
     status?: 'pending' | 'in_progress' | 'success' | 'failed';
     message?: string;
     planId?: string;
+    /** Deploy lock session ID — enables session-scoped lock release in event handlers. */
+    sessionId?: string;
   };
   'deploy:failed': {
     projectId: string;
@@ -150,6 +164,10 @@ export interface EventPayload {
     status?: 'pending' | 'in_progress' | 'success' | 'failed';
     message?: string;
     durationMs?: number;
+    /** When 'mcp', auto-recovery is skipped — the MCP client agent handles failure. */
+    source?: 'mcp' | 'dashboard' | 'webhook';
+    /** Deploy lock session ID — enables session-scoped lock release in event handlers. */
+    sessionId?: string;
   };
   'deploy:needs-user-action': {
     projectId: string;
@@ -160,15 +178,8 @@ export interface EventPayload {
   };
   'deploy:crash': { projectId: string; containerId: string; error?: string; exitCode?: number };
   'deploy:rollback': { projectId: string; fromImage: string; toImage: string };
-  'build:autofix': { projectId: string; action: string; category: string };
   'build:suggest': { projectId: string; suggestion: string; diff?: string };
   'build:inform': { projectId: string; summary: string; tier: BuildTier };
-  'build:dockerfile-fixed': {
-    projectId: string;
-    changes: string[];
-    explanation: string;
-    retryCount: number;
-  };
   'build:output': {
     projectId: string;
     line: string;
@@ -182,10 +193,10 @@ export interface EventPayload {
     logChunk?: string;
   };
   'compose:start': { projectId: string; composePath: string; serviceCount: number };
-  'compose:up': { projectId: string; services: string[] };
+  'compose:up': { projectId: string; services: string[]; sessionId?: string };
   'compose:down': { projectId: string };
   'compose:orphans-cleaned': { projectId: string; removed: string[] };
-  'compose:failed': { projectId: string; error: string };
+  'compose:failed': { projectId: string; error: string; sessionId?: string };
   'orchestration:plan': {
     topology: {
       services: Array<{
@@ -223,6 +234,8 @@ export interface EventPayload {
   'container:start': { projectId: string; containerId: string };
   'container:stop': { projectId: string; containerId: string };
   'container:remove': { projectId: string; containerId: string };
+  'project:archive': { projectId: string };
+  'project:unarchive': { projectId: string; port: number };
   'container:missing': {
     projectId: string;
     projectName: string;
@@ -230,6 +243,17 @@ export interface EventPayload {
     suggestion: string;
   };
   'container:health': { projectId: string; healthy: boolean };
+  'container:die': {
+    projectId: string;
+    containerId: string;
+    containerName: string;
+    exitCode: number;
+  };
+  'container:oom': {
+    projectId: string;
+    containerId: string;
+    containerName: string;
+  };
   'tunnel:start': { projectId: string; localPort: number };
   'tunnel:stop': { projectId: string };
   'tunnel:url': { projectId: string; url: string };
@@ -246,16 +270,105 @@ export interface EventPayload {
   'alert:dismissed': { alertId: string };
   'question:pending': { projectId: string; requestId: string; questions: Question[] };
   'question:answered': { projectId: string; requestId: string };
-  'agent:event': { projectId: string; event: ChatStreamEvent & { timestamp: string } };
-  'recovery:start': { projectId: string; error: string; attempt: number };
+  'agent:event': {
+    projectId: string;
+    event: ChatStreamEvent & { timestamp: string };
+    identity?: RequestIdentity;
+  };
+  'ai:invoked': {
+    projectId: string;
+    source: string;
+    model: string;
+    action: string;
+    correlationId?: string;
+  };
+  'ai:completed': {
+    projectId: string;
+    source: string;
+    model: string;
+    action: string;
+    durationMs: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    success: boolean;
+    correlationId?: string;
+  };
+  'health:degraded': {
+    projectId: string;
+    consecutiveFailures: number;
+    lastError: string | null;
+  };
+  'recovery:blocked': {
+    projectId: string;
+    reason: string;
+  };
+  'recovery:stopped': {
+    projectId: string;
+    reason: string;
+    correlationId?: string;
+  };
+  'recovery:started': {
+    projectId: string;
+    trigger: string;
+    correlationId?: string;
+  };
+  'recovery:start': {
+    projectId: string;
+    error: string;
+    attempt: number;
+    source?: string;
+    identity?: RequestIdentity;
+    correlationId?: string;
+  };
   'recovery:success': {
     projectId: string;
     attempt: number;
     durationMs: number;
     lastError?: string;
+    source?: string;
+    identity?: RequestIdentity;
+    tokenCount?: number;
+    costUsd?: number | null;
+    correlationId?: string;
   };
-  'recovery:failed': { projectId: string; error: string; attempt: number };
-  'recovery:exhausted': { projectId: string; totalAttempts: number; lastError: string };
+  'recovery:failed': {
+    projectId: string;
+    error: string;
+    attempt: number;
+    source?: string;
+    identity?: RequestIdentity;
+    correlationId?: string;
+  };
+  'recovery:exhausted': {
+    projectId: string;
+    totalAttempts: number;
+    lastError: string;
+    source?: string;
+    identity?: RequestIdentity;
+    correlationId?: string;
+  };
+  'recovery:approval-needed': {
+    projectId: string;
+    actionRunId: string;
+    toolName: string;
+    attempt: number;
+    source?: string;
+    identity?: RequestIdentity;
+    correlationId?: string;
+  };
+  'recovery:approval-auto-skipped': {
+    projectId: string;
+    actionRunId: string;
+    toolName: string;
+    recoveryStep: string;
+    correlationId?: string;
+  };
+  'recovery:approval-resolved': {
+    actionRunId: string;
+    approved: boolean;
+    projectId?: string;
+    correlationId?: string;
+  };
   'env:new-keys-detected': {
     projectId: string;
     projectName: string;
@@ -293,6 +406,7 @@ type EventHandler<T extends EventType> = (payload: EventPayload[T]) => void | Pr
 
 export class EventBus {
   private handlers = new Map<EventType, Set<EventHandler<EventType>>>();
+  private captureHook?: (event: string, payload: unknown) => void;
 
   /** Subscribe to an event. Returns an unsubscribe function. */
   on<T extends EventType>(event: T, handler: EventHandler<T>): () => void {
@@ -324,6 +438,14 @@ export class EventBus {
 
   /** Emit an event to all subscribers. Errors in handlers are caught and logged. */
   async emit<T extends EventType>(event: T, payload: EventPayload[T]): Promise<void> {
+    if (this.captureHook) {
+      try {
+        this.captureHook(event, payload);
+      } catch {
+        // Swallow capture hook errors to never break emit flow
+      }
+    }
+
     const handlerSet = this.handlers.get(event);
     if (!handlerSet || handlerSet.size === 0) return;
 
@@ -361,6 +483,16 @@ export class EventBus {
   /** Get count of handlers for an event. Useful for testing. */
   listenerCount(event: EventType): number {
     return this.handlers.get(event)?.size ?? 0;
+  }
+
+  /** Set a capture hook that receives all emitted events. */
+  setCaptureHook(hook: (event: string, payload: unknown) => void): void {
+    this.captureHook = hook;
+  }
+
+  /** Remove the capture hook. */
+  removeCaptureHook(): void {
+    this.captureHook = undefined;
   }
 }
 

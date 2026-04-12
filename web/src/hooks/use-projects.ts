@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { listProjects, type ProjectWithOptionalEnvironments } from '../lib/api';
+import { usePollingTask } from './use-polling-task';
 
 const IDLE_POLL_MS = 10_000;
 const ACTIVE_POLL_MS = 3_000;
@@ -11,14 +12,14 @@ export interface UseProjectsReturn {
   refetch: () => void;
 }
 
-export function useProjects(): UseProjectsReturn {
+export function useProjects(includeArchived = false): UseProjectsReturn {
   const [projects, setProjects] = useState<ProjectWithOptionalEnvironments[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchProjects = useCallback(async () => {
     try {
-      const data = await listProjects();
+      const data = await listProjects(includeArchived);
       setProjects(data);
       setError(null);
     } catch (err) {
@@ -26,27 +27,12 @@ export function useProjects(): UseProjectsReturn {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [includeArchived]);
 
-  useEffect(() => {
-    fetchProjects();
+  const hasBuilding = useMemo(() => projects.some((p) => p.status === 'building'), [projects]);
+  const pollMs = hasBuilding ? ACTIVE_POLL_MS : IDLE_POLL_MS;
 
-    // Poll faster when any project is building
-    const hasBuilding = projects.some((p) => p.status === 'building');
-    const pollMs = hasBuilding ? ACTIVE_POLL_MS : IDLE_POLL_MS;
-    const interval = setInterval(fetchProjects, pollMs);
-
-    // Refetch on tab focus
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void fetchProjects();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [fetchProjects, projects.some((p) => p.status === 'building')]);
+  usePollingTask(fetchProjects, { intervalMs: pollMs });
 
   return { projects, loading, error, refetch: fetchProjects };
 }

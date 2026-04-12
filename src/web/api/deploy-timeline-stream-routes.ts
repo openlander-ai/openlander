@@ -4,10 +4,11 @@ import type { Context, Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
 import type { ProjectRow } from '../../db/types.js';
-import { ProjectNotFoundError } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { postDeployCleanup } from '../../pipeline/cleanup.js';
 import { generatePostDeployInsights } from '../../pipeline/post-deploy-insight.js';
+import { getProjectOrThrow } from './helpers/project-helpers.js';
 
 const log = createModuleLogger('api');
 
@@ -213,6 +214,7 @@ function registerDeployLifecycleHandlers(handlerCtx: StreamHandlerContext): Arra
         message: payload.message ?? 'Starting deployment...',
         projectId: project.id,
         percent: scoped.isChild ? undefined : 0,
+        stepName: scoped.isChild ? undefined : 'Preparing',
         phase: payload.phase,
         scope: scoped.scope,
         status: payload.status,
@@ -231,6 +233,7 @@ function registerDeployLifecycleHandlers(handlerCtx: StreamHandlerContext): Arra
         message: payload.message ?? `Cloning repository (${payload.commitSha.slice(0, 7)})`,
         projectId: project.id,
         percent: scoped.isChild ? undefined : 15,
+        stepName: scoped.isChild ? undefined : 'Clone',
         phase: payload.phase,
         scope: scoped.scope,
         status: payload.status,
@@ -251,6 +254,7 @@ function registerDeployLifecycleHandlers(handlerCtx: StreamHandlerContext): Arra
           `Docker image built (${String(Math.round(payload.durationMs / 1000))}s)`,
         projectId: project.id,
         percent: scoped.isChild ? undefined : 60,
+        stepName: scoped.isChild ? undefined : 'Build',
         phase: payload.phase,
         scope: scoped.scope,
         status: payload.status,
@@ -270,6 +274,7 @@ function registerDeployLifecycleHandlers(handlerCtx: StreamHandlerContext): Arra
         message: payload.message ?? `Starting container on port ${String(payload.port)}`,
         projectId: project.id,
         percent: scoped.isChild ? undefined : 90,
+        stepName: scoped.isChild ? undefined : 'Start',
         phase: payload.phase,
         scope: scoped.scope,
         status: payload.status,
@@ -327,13 +332,21 @@ function registerDeployLifecycleHandlers(handlerCtx: StreamHandlerContext): Arra
           log.warn({ err }, 'Post-deploy insight generation failed');
         }
 
+        try {
+          postDeployCleanup();
+        } catch (err) {
+          log.warn({ err }, 'Post-deploy cleanup failed');
+        }
+
         emitTimelineEvent({
           type: 'complete',
           message:
             payload.message ??
-            `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
+            `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s`,
+          url: payload.url,
           projectId: project.id,
           percent: 100,
+          stepName: 'Complete',
           phase: payload.phase,
           scope: scoped.scope,
           status: payload.status,
@@ -371,14 +384,6 @@ function registerBuildEventHandlers(handlerCtx: StreamHandlerContext): Array<() 
   const { project, write, emitTimelineEvent, resolveScopedProject } = handlerCtx;
 
   return [
-    eventBus.on('build:autofix', (payload) => {
-      if (payload.projectId !== project.id) return;
-      emitTimelineEvent({
-        type: 'status',
-        message: `Auto-fix applied: ${payload.action} (${payload.category})`,
-        projectId: project.id,
-      });
-    }),
     eventBus.on('build:suggest', (payload) => {
       if (payload.projectId !== project.id) return;
       emitTimelineEvent({
@@ -392,14 +397,6 @@ function registerBuildEventHandlers(handlerCtx: StreamHandlerContext): Array<() 
       emitTimelineEvent({
         type: 'status',
         message: `Build analysis: ${payload.summary}`,
-        projectId: project.id,
-      });
-    }),
-    eventBus.on('build:dockerfile-fixed', (payload) => {
-      if (payload.projectId !== project.id) return;
-      emitTimelineEvent({
-        type: 'status',
-        message: `Dockerfile fixed (attempt ${String(payload.retryCount)}/3): ${payload.changes.join(', ')}`,
         projectId: project.id,
       });
     }),
@@ -488,6 +485,8 @@ function registerRecoveryEventHandlers(handlerCtx: StreamHandlerContext): Array<
         message: `Recovery Successful (attempt ${String(payload.attempt)}, ${String(Math.round(payload.durationMs / 1000))}s)`,
         projectId: project.id,
         durationMs: payload.durationMs,
+        tokenCount: payload.tokenCount,
+        costUsd: payload.costUsd,
       });
     }),
     eventBus.on('recovery:failed', (payload) => {
@@ -548,10 +547,13 @@ function handleInitialStatusCheck(
         projectId: project.id,
       });
     } else if (fresh.status === 'error') {
+      const lastLog = ctx.db.getLastDeployLog(project.id);
+      const isBuildFailure =
+        lastLog?.status === 'failed' && lastLog.build_log?.includes('Build failed');
       write({
         id: 'current-error',
         type: 'error',
-        message: 'Build failed',
+        message: isBuildFailure ? 'Build failed' : 'Container crashed',
         projectId: project.id,
       });
     } else {
@@ -578,6 +580,9 @@ function handleInitialStatusCheck(
 
 function handleBuildStreamRoute(c: Context, ctx: AppContext, project: ProjectRow) {
   const unsubscribers: Array<() => void> = [];
+  const skipInitialStatusCheck = ['1', 'true'].includes(
+    (c.req.query('fresh_start') ?? '').toLowerCase(),
+  );
 
   return stream(c, async (s) => {
     c.header('Content-Type', 'application/x-ndjson');
@@ -630,7 +635,14 @@ function handleBuildStreamRoute(c: Context, ctx: AppContext, project: ProjectRow
         severity: data.severity,
         percent: data.percent,
         toolName: data.toolName,
-        actionButtons: data.actionButtons ? JSON.stringify(data.actionButtons) : undefined,
+        actionButtons:
+          data.actionButtons || data.tokenCount !== undefined || data.costUsd !== undefined
+            ? JSON.stringify({
+                buttons: data.actionButtons,
+                tokenCount: data.tokenCount,
+                costUsd: data.costUsd,
+              })
+            : undefined,
         createdAt: eventTimestamp,
       });
 
@@ -687,7 +699,14 @@ function handleBuildStreamRoute(c: Context, ctx: AppContext, project: ProjectRow
       cleanup();
     });
 
-    if (handleInitialStatusCheck(ctx, project, write, closeStream)) {
+    if (skipInitialStatusCheck) {
+      write({
+        id: 'fresh-start',
+        type: 'status',
+        message: 'Preparing new deploy...',
+        projectId: project.id,
+      });
+    } else if (handleInitialStatusCheck(ctx, project, write, closeStream)) {
       return;
     }
 
@@ -695,42 +714,54 @@ function handleBuildStreamRoute(c: Context, ctx: AppContext, project: ProjectRow
   });
 }
 
+interface ParsedActionButtons {
+  buttons?: unknown[];
+  tokenCount?: number;
+  costUsd?: number | null;
+}
+
+function parseActionButtons(raw: string | null | undefined): ParsedActionButtons {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as ParsedActionButtons;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
 export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): void {
   api.get('/projects/:id/timeline', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const events = ctx.db.getTimelineEvents(project.id).reverse();
 
     return c.json({
-      events: events.map((event) => ({
-        id: event.id,
-        type: event.type,
-        message: event.message,
-        detail: event.detail,
-        severity: event.severity,
-        percent: event.percent,
-        toolName: event.tool_name,
-        actionButtons: (() => {
-          if (!event.action_buttons) return undefined;
-          try {
-            return JSON.parse(event.action_buttons) as unknown;
-          } catch (err) {
-            void err;
-            return undefined;
-          }
-        })(),
-        projectId: event.project_id,
-        timestamp: event.created_at,
-      })),
+      events: events.map((event) => {
+        const parsedButtons = parseActionButtons(event.action_buttons);
+        return {
+          id: event.id,
+          type: event.type,
+          message: event.message,
+          detail: event.detail,
+          severity: event.severity,
+          percent: event.percent,
+          toolName: event.tool_name,
+          actionButtons: parsedButtons.buttons,
+          tokenCount: parsedButtons.tokenCount,
+          costUsd: parsedButtons.costUsd,
+          projectId: event.project_id,
+          timestamp: event.created_at,
+        };
+      }),
     });
   });
 
   api.get('/projects/:id/build/stream', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     return handleBuildStreamRoute(c, ctx, project);
   });

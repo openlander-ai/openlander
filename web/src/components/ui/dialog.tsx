@@ -69,7 +69,7 @@ function DialogDescription({
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>) {
   return (
     <DialogPrimitive.Description
-      className={cn('text-xs font-body text-secondary-ol', className)}
+      className={cn('text-sm font-body text-secondary-ol', className)}
       {...props}
     />
   );

@@ -1,13 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePollingTask } from '@/hooks/use-polling-task';
 import { Menu, Cpu, MemoryStick, Bell, HardDrive } from 'lucide-react';
 import type { SystemStats } from '@/types';
 import type { Notification } from '@/hooks/use-notifications';
 import { Button } from '@/components/ui/button';
 import { NotificationCenter } from './NotificationCenter';
+import { ThemeSelector } from './ThemeSelector';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
 import { useNavigate } from 'react-router-dom';
 import { Logo } from '@/components/icons/Logo';
+import { subscribeLlmChanged } from '@/lib/llm-events';
+import { ActivityPulse } from './ActivityPulse';
 
 interface HeaderProps {
   stats: SystemStats | null;
@@ -26,32 +30,38 @@ export function Header({
   onNotificationAction,
   onMenuClick,
 }: HeaderProps) {
-  const [llmConnected, setLlmConnected] = useState<boolean | null>(null);
+  const [llmStatus, setLlmStatus] = useState<'online' | 'offline' | 'error' | null>(null);
   const [version, setVersion] = useState<string | null>(null);
   const { t } = useLanguage();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const checkHealth = async () => {
-      try {
-        const res = await fetch('/health');
-        if (res.ok) {
-          const data = await res.json();
-          setLlmConnected(data.llmConfigured === true);
-          if (data.version) setVersion(data.version);
-        }
-      } catch (e) {
-        console.error('Health check failed', e);
-        setLlmConnected(false);
+  const checkHealth = useCallback(async () => {
+    try {
+      const res = await fetch('/health');
+      if (res.ok) {
+        const data = await res.json();
+        setLlmStatus(
+          (data.llmStatus as 'online' | 'offline' | 'error') ??
+            (data.llmConfigured ? 'online' : 'offline'),
+        );
+        if (data.version) setVersion(data.version);
       }
-    };
-
-    checkHealth();
-    const interval = setInterval(checkHealth, 60000);
-    return () => clearInterval(interval);
+    } catch (e) {
+      console.error('Health check failed', e);
+      setLlmStatus('offline');
+    }
   }, []);
+
+  usePollingTask(checkHealth, { intervalMs: 60000 });
+
+  useEffect(() => {
+    const unsubscribe = subscribeLlmChanged(() => {
+      void checkHealth();
+    });
+    return () => unsubscribe();
+  }, [checkHealth]);
 
   // Close notification dropdown on outside click or Escape key
   useEffect(() => {
@@ -99,11 +109,12 @@ export function Header({
             OpenLander
           </span>
           {version && (
-            <span className="px-1.5 py-0.5 rounded-md bg-bg-subtle text-[10px] font-mono text-muted-ol border border-[hsl(var(--border))]">
+            <span className="px-1.5 py-0.5 rounded-md bg-bg-subtle text-xs font-mono text-muted-ol border border-[hsl(var(--border))]">
               v{version}
             </span>
           )}
         </div>
+
         <Button
           variant="ghost"
           size="icon"
@@ -114,12 +125,14 @@ export function Header({
         </Button>
       </div>
       <div className="flex items-center gap-3 text-xs">
+        <ActivityPulse />
+
         {/* System Stats */}
         {stats && (
           <div className="hidden md:flex items-center gap-3 font-mono text-muted-ol">
             <div className="flex items-center gap-1" title={'CPU Usage'}>
               <Cpu className="h-3 w-3" />
-              <span className="text-[10px]">
+              <span className="text-xs">
                 {typeof stats.cpu === 'number'
                   ? stats.cpu.toFixed(0)
                   : (stats.cpu?.usagePercent?.toFixed(0) ?? '—')}
@@ -128,7 +141,7 @@ export function Header({
             </div>
             <div className="flex items-center gap-1" title={'Memory Usage'}>
               <MemoryStick className="h-3 w-3" />
-              <span className="text-[10px]">{formatMemory(stats.memory)}</span>
+              <span className="text-xs">{formatMemory(stats.memory)}</span>
             </div>
             {stats.disk && (
               <div
@@ -139,7 +152,7 @@ export function Header({
                 title={'Disk Usage'}
               >
                 <HardDrive className="h-3 w-3" />
-                <span className="text-[10px]">
+                <span className="text-xs">
                   {stats.disk.usedGB.toFixed(1)}G / {stats.disk.totalGB.toFixed(1)}G (
                   {stats.disk.usagePercent.toFixed(0)}%)
                 </span>
@@ -181,29 +194,42 @@ export function Header({
           )}
         </div>
 
+        {/* Theme Selector */}
+        <ThemeSelector />
+
         {/* LLM Status */}
         <div
           className="flex items-center gap-1.5"
           title={
-            llmConnected === null
+            llmStatus === null
               ? 'Checking LLM...'
-              : llmConnected
+              : llmStatus === 'online'
                 ? 'LLM Connected'
-                : t('header.llmNotConfigured')
+                : llmStatus === 'error'
+                  ? 'LLM configured but not reachable'
+                  : t('header.llmNotConfigured')
           }
         >
           <div
             className={cn(
               'h-2 w-2 rounded-full transition-colors duration-300',
-              llmConnected === null
+              llmStatus === null
                 ? 'bg-muted-foreground/40'
-                : llmConnected
-                  ? 'bg-ai animate-pulse shadow-[0_0_6px_rgba(244,63,94,0.25)]'
-                  : 'bg-error',
+                : llmStatus === 'online'
+                  ? 'bg-success shadow-[0_0_6px_rgba(16,185,129,0.25)]'
+                  : llmStatus === 'error'
+                    ? 'bg-warning animate-pulse'
+                    : 'bg-muted-foreground/40',
             )}
           />
-          <span className="hidden sm:inline text-[11px] font-body text-secondary-ol">
-            {llmConnected === null ? '...' : llmConnected ? 'AI Online' : 'AI Offline'}
+          <span className="hidden sm:inline text-xs font-body text-secondary-ol">
+            {llmStatus === null
+              ? '...'
+              : llmStatus === 'online'
+                ? 'AI Online'
+                : llmStatus === 'error'
+                  ? 'AI Error'
+                  : 'AI Offline'}
           </span>
         </div>
       </div>

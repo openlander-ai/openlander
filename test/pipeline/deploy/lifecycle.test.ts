@@ -13,9 +13,12 @@ function createMockDocker(): Docker {
     stopContainer: vi.fn().mockResolvedValue(undefined),
     startContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
+    removeProjectNetwork: vi.fn().mockResolvedValue(undefined),
     getLogs: vi.fn().mockResolvedValue(''),
     listManagedContainers: vi.fn().mockResolvedValue([]),
     cleanupSecretFiles: vi.fn(),
+    removeImage: vi.fn().mockResolvedValue(undefined),
   } as unknown as Docker;
 }
 
@@ -188,6 +191,129 @@ describe('ContainerLifecycle', () => {
     );
     expect(docker.removeContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
       'container-unrelated',
+    );
+  });
+
+  it('archive() stops container, archives project, and preserves env vars', async () => {
+    db.createProject({
+      id: 'archive-project',
+      name: 'archive-app',
+      repoUrl: 'https://github.com/openlander/archive-app',
+      branch: 'main',
+    });
+    db.updateProject('archive-project', {
+      containerId: 'container-archive',
+      imageTag: 'openlander/archive-app:latest',
+      status: 'running',
+      assignedPort: 12001,
+    });
+    db.setEnvVar('archive-project', 'API_KEY', 'value-123');
+    const tunnelManager = {
+      close: vi.fn(),
+    };
+    const emitSpy = vi.spyOn(eventBus, 'emit');
+
+    await lifecycle.archive('archive-project', tunnelManager as never);
+
+    expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-archive',
+    );
+    expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-archive',
+    );
+    expect(docker.removeImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'openlander/archive-app:latest',
+    );
+    expect(tunnelManager.close).toHaveBeenCalledWith('archive-project');
+    expect(db.getEnvVars('archive-project')).toEqual({ API_KEY: 'value-123' });
+    expect(db.getProject('archive-project')?.archived_at).toBeTruthy();
+    expect(db.getProject('archive-project')?.assigned_port).toBeNull();
+    expect(emitSpy).toHaveBeenCalledWith('project:archive', { projectId: 'archive-project' });
+  });
+
+  it('archive() auto-archives compose child projects', async () => {
+    db.createProject({
+      id: 'archive-parent',
+      name: 'compose-parent',
+      repoUrl: 'https://github.com/openlander/compose-parent',
+      branch: 'main',
+    });
+    db.createProject({
+      id: 'archive-child',
+      name: 'compose-parent/api',
+      repoUrl: 'https://github.com/openlander/compose-parent',
+      branch: 'main',
+      parentProjectId: 'archive-parent',
+    });
+    db.updateProject('archive-parent', { containerId: 'container-parent', status: 'running' });
+    db.updateProject('archive-child', { containerId: 'container-child', status: 'running' });
+
+    await lifecycle.archive('archive-parent');
+
+    expect(db.getProject('archive-parent')?.archived_at).toBeTruthy();
+    expect(db.getProject('archive-child')?.archived_at).toBeTruthy();
+  });
+
+  it('archive() fails for building project', async () => {
+    db.createProject({
+      id: 'building-project',
+      name: 'building-app',
+      repoUrl: 'https://github.com/openlander/building-app',
+      branch: 'main',
+    });
+    db.updateProject('building-project', { status: 'building' });
+
+    await expect(lifecycle.archive('building-project')).rejects.toMatchObject({
+      code: 'ARCHIVE_BUILDING_PROJECT',
+    });
+  });
+
+  it('archive() does not fail when image removal fails', async () => {
+    db.createProject({
+      id: 'image-fail-project',
+      name: 'image-fail-app',
+      repoUrl: 'https://github.com/openlander/image-fail-app',
+      branch: 'main',
+    });
+    db.updateProject('image-fail-project', {
+      containerId: 'container-image-fail',
+      imageTag: 'openlander/image-fail-app:latest',
+      status: 'running',
+    });
+
+    (docker.removeImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('image is referenced in multiple repositories'),
+    );
+
+    await expect(lifecycle.archive('image-fail-project')).resolves.toBeUndefined();
+    expect(docker.removeImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'openlander/image-fail-app:latest',
+    );
+    expect(db.getProject('image-fail-project')?.archived_at).toBeTruthy();
+  });
+
+  it('unarchive() restores project and allocates a new port', async () => {
+    db.createProject({
+      id: 'unarchive-project',
+      name: 'unarchive-app',
+      repoUrl: 'https://github.com/openlander/unarchive-app',
+      branch: 'main',
+    });
+    db.archiveProject('unarchive-project');
+    const emitSpy = vi.spyOn(eventBus, 'emit');
+
+    await lifecycle.unarchive('unarchive-project');
+
+    const restored = db.getProject('unarchive-project');
+    expect(restored?.archived_at).toBeNull();
+    expect(typeof restored?.assigned_port).toBe('number');
+    expect((restored?.assigned_port ?? 0) > 0).toBe(true);
+    expect(emitSpy).toHaveBeenCalledWith(
+      'project:unarchive',
+      expect.objectContaining({
+        projectId: 'unarchive-project',
+        port: restored?.assigned_port,
+      }),
     );
   });
 

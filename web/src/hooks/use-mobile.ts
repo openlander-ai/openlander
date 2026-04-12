@@ -33,7 +33,7 @@ export function showMobileToast(message = 'Please deploy from a desktop browser'
     padding: '8px 16px',
     borderRadius: '8px',
     fontSize: '13px',
-    fontFamily: 'Manrope, system-ui, sans-serif',
+    fontFamily: "'Inter Variable', Inter, system-ui, sans-serif",
     zIndex: '9999',
     border: '1px solid hsl(0 0% 14%)',
     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',

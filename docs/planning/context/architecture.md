@@ -124,7 +124,7 @@ src/
 
 ### 런타임
 
-- **Node.js** + **better-sqlite3** (bun:sqlite에서 마이그레이션 완료)
+- **Node.js** + **better-sqlite3** (better-sqlite3 사용)
 - ESM only, `.js` 확장자 필수
 
 ### 배포 런타임 (DEC-036 반영)

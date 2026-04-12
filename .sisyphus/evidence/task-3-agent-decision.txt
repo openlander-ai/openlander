@@ -1,0 +1,48 @@
+Task: Wire DecisionEngine into web agent tool-call loop
+Date: 2026-04-02
+
+Implemented:
+- Added DecisionEngine module at src/llm/decision.ts and restored classification singleton export.
+- Expanded high-risk defaults to include 8 tools:
+  rollback_project, remove_project, remove_service, create_database,
+  platform_cleanup_orphans, platform_reconcile, platform_force_remove, remove_volume.
+- Added ChatStreamEvent variants:
+  - approval_required { actionRunId, toolName, toolArgs }
+  - notification { toolName, message }
+- Updated Agent constructor to accept optional ApprovalGate.
+- Added Agent.buildGuardedTools(onEvent, actionRunId?) and routed:
+  - high-risk => approval_required emit, action_run pending approval, waitForApproval,
+    then approved/rejected status updates.
+  - medium-risk => notification emit and continue execution.
+  - low-risk => execute normally.
+- chatStream now creates action_run for web_agent and uses guarded tools.
+- chat path now uses guarded tools with no-op event callback (no approval pause in non-stream flow).
+- Wired ApprovalGate into web AgentPool creation paths:
+  - src/app.ts
+  - src/web/api/setup/shared.ts
+- Added ToolDef.riskLevel?: RiskLevel typing in src/tools/defs/types.ts
+  (required to satisfy existing riskLevel usage in tool defs).
+- Added tests: test/llm/agent-decision.test.ts
+  - low-risk no notification + executes
+  - medium-risk notification + executes
+  - high-risk approved emits approval_required + executes
+  - high-risk rejected emits approval_required + returns rejection payload
+
+Verification:
+1) Focused test
+   Command: npm test -- test/llm/agent-decision.test.ts
+   Result: PASS (1 file, 4 tests)
+
+2) Full test suite
+   Command: npm test
+   Result: PASS (170 files, 2029 tests)
+
+3) Typecheck
+   Command: npm run typecheck
+   Result: PASS (tsc --noEmit)
+
+4) LSP diagnostics on modified files
+   Result: No diagnostics found on all changed files.
+
+Notes:
+- Existing repository docstring in src/tools/defs/types.ts remained; no new comment blocks were introduced.

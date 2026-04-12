@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../../src/pipeline/deploy.js';
 import { Database } from '../../src/db/index.js';
+import type { OpenLanderConfig } from '../../src/config/index.js';
 import type { Docker } from '../../src/pipeline/docker.js';
 import type { ProjectConfig } from '../../src/pipeline/deploy-core.js';
 import { clearPortScanCache } from '../../src/pipeline/port.js';
@@ -36,7 +37,8 @@ describe('redeploy() config reconstruction characterization', () => {
       getAll: vi.fn().mockReturnValue({}),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
     };
-    pipeline = new DeployPipeline(docker, db, env as never);
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
+    pipeline = new DeployPipeline(docker, db, env as never, testConfig);
 
     cloneRepoSpy = vi.spyOn(gitPipeline, 'cloneRepo');
     cloneRepoSpy.mockResolvedValue({

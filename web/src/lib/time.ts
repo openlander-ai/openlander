@@ -1,4 +1,4 @@
-function parseTimestamp(timestamp: string): Date | null {
+export function parseTimestamp(timestamp: string): Date | null {
   const trimmed = timestamp.trim();
   if (!trimmed) return null;
 

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { scanForEnvUsage } from '../src/pipeline/env-scan.js';
+import { scanForEnvUsage, scanRepoEnvVars } from '../src/pipeline/env-scan.js';
 
 let tmp: string;
 beforeEach(() => {
@@ -176,5 +176,51 @@ describe('scanForEnvUsage', () => {
     const v = r.vars.find((v) => v.key === 'MIXED_VAR');
     expect(v).toBeDefined();
     expect(v?.optional).toBe(false);
+  });
+});
+
+describe('scanRepoEnvVars', () => {
+  it('merges source, template, committed env, and docker ARG entries by key', () => {
+    writeFileSync(join(tmp, 'app.ts'), "const db = process.env.DATABASE_URL || 'sqlite://local';");
+    writeFileSync(join(tmp, '.env.example'), 'DATABASE_URL=\nEXAMPLE_ONLY=\n');
+    writeFileSync(join(tmp, '.env'), 'DOTENV_ONLY=local\nDATABASE_URL=\n');
+    writeFileSync(join(tmp, 'Dockerfile'), 'FROM node:22\nARG ARG_ONLY\nARG DATABASE_URL\n');
+
+    const result = scanRepoEnvVars(tmp);
+    const keys = result.vars.map((v) => v.key);
+
+    expect(keys).toContain('DATABASE_URL');
+    expect(keys).toContain('EXAMPLE_ONLY');
+    expect(keys).toContain('DOTENV_ONLY');
+    expect(keys).toContain('ARG_ONLY');
+    expect(result.hasEnvExample).toBe(true);
+    expect(result.language).toBe('node');
+
+    const dbVar = result.vars.find((v) => v.key === 'DATABASE_URL');
+    expect(dbVar).toBeDefined();
+    expect(dbVar?.optional).toBe(false);
+    expect(dbVar?.files.map((f) => f.path)).toContain('app.ts');
+    expect(dbVar?.files.map((f) => f.path)).toContain('.env.example');
+    expect(dbVar?.files.some((f) => f.path.includes('Dockerfile ARG'))).toBe(true);
+  });
+
+  it('auto-detects Dockerfile paths when dockerfilePath is not provided', () => {
+    mkdirSync(join(tmp, 'apps', 'api'), { recursive: true });
+    writeFileSync(join(tmp, 'apps', 'api', 'Dockerfile'), 'FROM node:22\nARG API_TOKEN\n');
+
+    const result = scanRepoEnvVars(tmp, { scanSourceCode: false, scanDotEnv: false });
+
+    expect(result.vars.some((v) => v.key === 'API_TOKEN')).toBe(true);
+  });
+
+  it('respects scanDotEnv and scanSourceCode options', () => {
+    writeFileSync(join(tmp, 'app.ts'), 'const x = process.env.SOURCE_ONLY;');
+    writeFileSync(join(tmp, '.env'), 'DOTENV_KEY=value\n');
+
+    const result = scanRepoEnvVars(tmp, { scanSourceCode: false, scanDotEnv: false });
+
+    expect(result.vars).toEqual([]);
+    expect(result.language).toBe('unknown');
+    expect(result.serviceHints).toEqual([]);
   });
 });

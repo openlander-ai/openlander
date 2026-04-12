@@ -12,12 +12,35 @@ export interface AgentResponse {
   toolResults?: ToolResult[];
 }
 
+export interface UsageSummary {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number | null;
+}
+
 export type ChatStreamEvent =
-  | { type: 'session'; sessionId: string }
+  | { type: 'session'; sessionId: string; actionRunId?: string }
   | { type: 'thinking' }
-  | { type: 'tool_call'; toolName: string; arguments: Record<string, unknown> }
-  | { type: 'tool_result'; toolName: string; success: boolean; result?: unknown; error?: string }
+  | {
+      type: 'approval_required';
+      actionRunId: string;
+      toolName: string;
+      toolArgs: Record<string, unknown>;
+    }
+  | { type: 'notification'; toolName: string; message: string }
+  | { type: 'step_progress'; step: number; toolName?: string }
+  | { type: 'reasoning'; content: string }
+  | { type: 'tool_call'; toolName: string; arguments: Record<string, unknown>; stepIndex: number }
+  | {
+      type: 'tool_result';
+      toolName: string;
+      success: boolean;
+      result?: unknown;
+      error?: string;
+      stepIndex: number;
+    }
   | { type: 'message'; content: string }
   | { type: 'question'; request: QuestionRequest }
-  | { type: 'done'; toolResults?: ToolResult[] }
+  | { type: 'done'; toolResults?: ToolResult[]; usage?: UsageSummary }
   | { type: 'error'; error: string };

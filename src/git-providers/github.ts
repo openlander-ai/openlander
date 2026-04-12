@@ -175,6 +175,7 @@ export class GitHubProvider implements GitProvider {
   private async request(path: string): Promise<{ data: unknown; headers: Headers }> {
     const url = `${this.apiBase}${path}`;
     const res = await fetch(url, {
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bearer ${this.token}`,
         Accept: 'application/vnd.github+json',

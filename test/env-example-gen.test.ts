@@ -19,9 +19,9 @@ vi.mock('../src/pipeline/git.js', () => ({
 vi.mock('../src/pipeline/env-scan.js', () => ({
   scanForEnvUsage: vi.fn().mockReturnValue({
     vars: [
-      { key: 'API_KEY', files: [{ path: 'src/app.ts', line: 5 }] },
-      { key: 'APP_ORIGIN', files: [{ path: 'src/app.ts', line: 8 }] },
-      { key: 'FEATURE_FLAG', files: [{ path: 'src/config.ts', line: 3 }] },
+      { key: 'API_KEY', files: [{ path: 'src/app.ts', line: 5 }], optional: false },
+      { key: 'APP_ORIGIN', files: [{ path: 'src/app.ts', line: 8 }], optional: false },
+      { key: 'FEATURE_FLAG', files: [{ path: 'src/config.ts', line: 3 }], optional: false },
     ],
     hasEnvExample: false,
     language: 'node',
@@ -34,8 +34,8 @@ describe('generateEnvExample', () => {
     const text = generateEnvExample(
       {
         vars: [
-          { key: 'API_KEY', files: [{ path: 'src/app.ts', line: 3 }] },
-          { key: 'APP_ORIGIN', files: [{ path: 'src/app.ts', line: 6 }] },
+          { key: 'API_KEY', files: [{ path: 'src/app.ts', line: 3 }], optional: false },
+          { key: 'APP_ORIGIN', files: [{ path: 'src/app.ts', line: 6 }], optional: false },
         ],
         hasEnvExample: false,
         language: 'node',
@@ -74,15 +74,8 @@ describe('GET /api/projects/:id/env-example', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  it('returns generated env-example text for production environment', async () => {
+  it('returns generated env-example text', async () => {
     db.createProject({ id: 'p1', name: 'demo', repoUrl: 'https://github.com/openlander/demo' });
-    db.createEnvironment({
-      id: 'env-development',
-      projectId: 'p1',
-      type: 'development',
-      branch: 'develop',
-    });
-
     const productionEnvironment = db
       .getEnvironmentsByProject('p1')
       .find((environment) => environment.type === 'production');
@@ -97,13 +90,6 @@ describe('GET /api/projects/:id/env-example', () => {
             APP_ORIGIN: 'https://prod.example.com',
           };
         }
-        if (environmentId === 'env-development') {
-          return {
-            API_KEY: 'dev-secret-value',
-            APP_ORIGIN: 'https://dev.example.com',
-            FEATURE_FLAG: 'enabled',
-          };
-        }
         return {};
       },
     );
@@ -111,38 +97,24 @@ describe('GET /api/projects/:id/env-example', () => {
       ctx.env as unknown as { getAllWithInheritance: typeof getAllWithInheritance }
     ).getAllWithInheritance = getAllWithInheritance;
 
-    const productionRes = await app.request('/api/projects/p1/env-example?environment=production');
-    const developmentRes = await app.request(
-      '/api/projects/p1/env-example?environment=development',
-    );
+    const productionRes = await app.request('/api/projects/p1/env-example');
 
     expect(productionRes.status).toBe(200);
-    expect(developmentRes.status).toBe(200);
 
     const productionBody = await productionRes.text();
-    const developmentBody = await developmentRes.text();
 
     expect(productionBody).toContain('FEATURE_FLAG=');
-    expect(developmentBody).toContain('FEATURE_FLAG=<configured-in-openlander>');
     expect(productionBody).toContain('REDIS_URL=redis://redis:6379');
-    expect(developmentBody).toContain('REDIS_URL=redis://redis:6379');
 
     expect(productionBody).not.toContain('prod-secret-value');
-    expect(developmentBody).not.toContain('dev-secret-value');
     expect(productionBody).not.toContain('https://prod.example.com');
-    expect(developmentBody).not.toContain('https://dev.example.com');
 
     const mockedCloneRepo = cloneRepo as unknown as ReturnType<typeof vi.fn>;
-    expect(mockedCloneRepo).toHaveBeenNthCalledWith(
-      1,
+    expect(mockedCloneRepo).toHaveBeenCalledWith(
       expect.objectContaining({ branch: productionEnvironment!.branch }),
-    );
-    expect(mockedCloneRepo).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ branch: 'develop' }),
     );
 
     const mockedScan = scanForEnvUsage as unknown as ReturnType<typeof vi.fn>;
-    expect(mockedScan).toHaveBeenCalledTimes(2);
+    expect(mockedScan).toHaveBeenCalledTimes(1);
   });
 });

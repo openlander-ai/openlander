@@ -54,6 +54,7 @@ function createMockContext() {
     db: {
       getProjectByName: vi.fn().mockReturnValue(project),
       getLastDeployLog: vi.fn(),
+      getDeployLockInfo: vi.fn().mockReturnValue(null),
     },
     composePipeline,
     jobManager,
@@ -156,41 +157,6 @@ describe('registry critical tool behaviors', () => {
           elapsed: expect.any(String),
         }),
       ],
-    });
-  });
-
-  it('deploy_monorepo parses dockerfiles JSON and returns status hint', async () => {
-    const { ctx, pipeline } = createMockContext();
-    const tool = getTool(ctx, 'deploy_monorepo');
-
-    const result = await tool.execute(
-      {
-        repo_url: 'https://github.com/example/repo',
-        clone_path: '/tmp/repo',
-        commit_sha: 'abc123',
-        dockerfiles: '["frontend/Dockerfile","backend/Dockerfile"]',
-      },
-      { target: 'agent' },
-    );
-
-    expect(pipeline.startMonorepoDeploy).toHaveBeenCalledWith({
-      repoUrl: 'https://github.com/example/repo',
-      clonePath: '/tmp/repo',
-      commitSha: 'abc123',
-      dockerfiles: ['frontend/Dockerfile', 'backend/Dockerfile'],
-      branch: undefined,
-    });
-    expect(result).toEqual({
-      parentProjectId: 'parent-1',
-      parentName: 'repo',
-      hint: 'Use get_deploy_status to check progress.',
-      _agent_guidance: {
-        deprecated: true,
-        next_steps: [
-          'DEPRECATED: Use orchestrate_deploy instead for dependency-ordered deployment with atomic rollback.',
-          'orchestrate_deploy handles service ordering, health checks, and automatic rollback on failure.',
-        ],
-      },
     });
   });
 

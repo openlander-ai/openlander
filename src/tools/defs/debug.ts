@@ -5,6 +5,7 @@ import { debugBuildErrorSchema, getBuildLogSchema } from './schemas.js';
 export const debugToolDefs: ToolDef[] = [
   {
     name: 'get_build_log',
+    riskLevel: 'low',
     description:
       'Get the raw build log for a project deployment. Returns the full unprocessed build output. Use this instead of debug_build_error when you need to parse the log yourself. Returns { status, build_log, duration_ms, created_at }. Errors: PROJECT_NOT_FOUND, NO_DEPLOY_LOGS.',
     mcpDescription: 'Get raw Docker build output for debugging build failures.',
@@ -27,9 +28,16 @@ export const debugToolDefs: ToolDef[] = [
         throw new Error('NO_DEPLOY_LOGS: No deploy logs found.');
       }
 
+      let buildLog = log.build_log ?? 'No build log captured.';
+      const tail = args['tail'] as number | undefined;
+      if (tail && log.build_log) {
+        const lines = log.build_log.split('\n');
+        buildLog = lines.slice(-tail).join('\n');
+      }
+
       return Promise.resolve({
         status: log.status,
-        build_log: log.build_log ?? 'No build log captured.',
+        build_log: buildLog,
         duration_ms: log.duration_ms,
         created_at: log.created_at,
       });
@@ -37,6 +45,7 @@ export const debugToolDefs: ToolDef[] = [
   },
   {
     name: 'debug_build_error',
+    riskLevel: 'low',
     description:
       'Analyze a failed build and suggest fixes using AI. Matches against known error patterns first (fast), then uses LLM analysis (thorough). Use when a deployment failed or user reports a build error. Returns { summary, rootCause, suggestedFixes[] }. Errors: PROJECT_NOT_FOUND, NO_FAILED_BUILD if the last deploy succeeded, NO_LLM if build debugger is not configured.',
     mcpDescription: 'Analyze build errors with actionable fix suggestions.',

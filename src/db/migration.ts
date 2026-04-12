@@ -13,6 +13,8 @@ export function initializeDatabase(sqlite: SqliteDatabase): void {
  * Run all schema migrations.
  */
 export function runMigrations(sqlite: SqliteDatabase): void {
+  sqlite.exec('DROP TABLE IF EXISTS chat_history');
+
   const columns = sqlite.prepare("PRAGMA table_info('projects')").all() as Array<{
     name: string;
   }>;
@@ -58,7 +60,21 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   if (!colNames.has('pr_number')) {
     sqlite.exec('ALTER TABLE projects ADD COLUMN pr_number INTEGER');
   }
-
+  if (!colNames.has('source')) {
+    sqlite.exec("ALTER TABLE projects ADD COLUMN source TEXT NOT NULL DEFAULT 'git'");
+  }
+  if (!colNames.has('image_url')) {
+    sqlite.exec('ALTER TABLE projects ADD COLUMN image_url TEXT DEFAULT NULL');
+  }
+  if (!colNames.has('image_cmd')) {
+    sqlite.exec('ALTER TABLE projects ADD COLUMN image_cmd TEXT DEFAULT NULL');
+  }
+  if (!colNames.has('container_port')) {
+    sqlite.exec('ALTER TABLE projects ADD COLUMN container_port INTEGER DEFAULT NULL');
+  }
+  if (!colNames.has('archived_at')) {
+    sqlite.exec('ALTER TABLE projects ADD COLUMN archived_at TEXT');
+  }
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)');
 
   sqlite.exec(`CREATE TABLE IF NOT EXISTS environments (
@@ -72,11 +88,24 @@ export function runMigrations(sqlite: SqliteDatabase): void {
     image_tag TEXT,
     previous_image_tag TEXT,
     public_url TEXT,
+    container_port INTEGER,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(project_id, type)
   )`);
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id)');
+
+  const environmentColumns = sqlite.prepare("PRAGMA table_info('environments')").all() as Array<{
+    name: string;
+  }>;
+  const environmentColNames = new Set(environmentColumns.map((c) => c.name));
+
+  if (!environmentColNames.has('container_port')) {
+    sqlite.exec('ALTER TABLE environments ADD COLUMN container_port INTEGER');
+  }
+  sqlite.exec(
+    'UPDATE environments SET container_port = (SELECT container_port FROM projects WHERE id = environments.project_id) WHERE container_port IS NULL',
+  );
 
   const envVarColumns = sqlite.prepare("PRAGMA table_info('env_vars')").all() as Array<{
     name: string;
@@ -182,6 +211,12 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   }
   if (!dlColNames.has('trigger_detail')) {
     sqlite.exec('ALTER TABLE deploy_logs ADD COLUMN trigger_detail TEXT');
+  }
+  if (!dlColNames.has('commit_message')) {
+    sqlite.exec('ALTER TABLE deploy_logs ADD COLUMN commit_message TEXT');
+  }
+  if (!dlColNames.has('runtime_log')) {
+    sqlite.exec('ALTER TABLE deploy_logs ADD COLUMN runtime_log TEXT');
   }
   sqlite.exec(
     'CREATE INDEX IF NOT EXISTS idx_deploy_logs_environment ON deploy_logs(environment_id)',
@@ -342,5 +377,290 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   )`);
   sqlite.exec(
     'CREATE INDEX IF NOT EXISTS idx_deploy_configs_project ON deploy_configs(project_id)',
+  );
+
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS project_ops_overrides (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+    overrides_json TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_project_ops_overrides_project ON project_ops_overrides(project_id)',
+  );
+
+  // auth table (v1.0.0-rc.2)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS auth (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    password_hash TEXT NOT NULL,
+    api_token TEXT NOT NULL,
+    api_token_iv TEXT,
+    session_token TEXT,
+    session_created_at INTEGER,
+    session_expires_at INTEGER,
+    CHECK(id = 1)
+  )`);
+
+  // ai_usage_log table (v1.0.0-ai)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS ai_usage_log (
+    id TEXT PRIMARY KEY,
+    project_id TEXT,
+    session_id TEXT,
+    action_type TEXT NOT NULL CHECK(action_type IN ('web_agent', 'auto_recovery', 'build_debugger', 'monitor_alert')),
+    model_name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL,
+    tools_called TEXT NOT NULL DEFAULT '[]',
+    result TEXT NOT NULL CHECK(result IN ('success', 'failure', 'partial')),
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    user_id TEXT,
+    tenant_id TEXT,
+    source TEXT CHECK(source IN ('web', 'mcp', 'auto-recovery', 'monitor')),
+    created_at TEXT NOT NULL
+  )`);
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_ai_usage_log_project ON ai_usage_log(project_id)');
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_ai_usage_log_created_at ON ai_usage_log(created_at)');
+
+  // action_runs table (v1.0.0-ai)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS action_runs (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    trigger_source TEXT NOT NULL CHECK(trigger_source IN ('web_agent', 'auto_recovery', 'monitor', 'mcp')),
+    trigger_session_id TEXT,
+    status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'succeeded', 'failed', 'pending_approval')),
+    error_message TEXT,
+    recovery_strategy TEXT CHECK(recovery_strategy IN ('recipe', 'llm', 'memory', 'unknown')),
+    steps_json TEXT,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    tenant_id TEXT,
+    user_id TEXT,
+    created_at TEXT NOT NULL
+  )`);
+
+  const actionRunTable = sqlite
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'action_runs'")
+    .get() as { sql: string | null } | undefined;
+  const hasLegacyActionRunStatusCheck =
+    typeof actionRunTable?.sql === 'string' &&
+    actionRunTable.sql.includes("CHECK(status IN ('running', 'succeeded', 'failed'))");
+
+  if (hasLegacyActionRunStatusCheck) {
+    sqlite.exec(`CREATE TABLE action_runs_migrated (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      trigger_source TEXT NOT NULL CHECK(trigger_source IN ('web_agent', 'auto_recovery', 'monitor', 'mcp')),
+      trigger_session_id TEXT,
+      status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'succeeded', 'failed', 'pending_approval')),
+      error_message TEXT,
+      recovery_strategy TEXT CHECK(recovery_strategy IN ('recipe', 'llm', 'unknown')),
+      steps_json TEXT,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      tenant_id TEXT,
+      user_id TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    sqlite.exec(`INSERT INTO action_runs_migrated (
+      id,
+      project_id,
+      trigger_source,
+      trigger_session_id,
+      status,
+      error_message,
+      recovery_strategy,
+      steps_json,
+      started_at,
+      completed_at,
+      tenant_id,
+      user_id,
+      created_at
+    ) SELECT
+      id,
+      project_id,
+      trigger_source,
+      trigger_session_id,
+      status,
+      error_message,
+      recovery_strategy,
+      steps_json,
+      started_at,
+      completed_at,
+      tenant_id,
+      user_id,
+      created_at
+    FROM action_runs`);
+    sqlite.exec('DROP TABLE action_runs');
+    sqlite.exec('ALTER TABLE action_runs_migrated RENAME TO action_runs');
+  }
+
+  const actionRunCols = sqlite.prepare("PRAGMA table_info('action_runs')").all() as Array<{
+    name: string;
+  }>;
+  const actionRunColNames = new Set(actionRunCols.map((c) => c.name));
+
+  if (!actionRunColNames.has('plan')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN plan TEXT');
+  }
+  if (!actionRunColNames.has('current_step')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN current_step INTEGER');
+  }
+  if (!actionRunColNames.has('total_steps')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN total_steps INTEGER');
+  }
+  if (!actionRunColNames.has('correlation_id')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN correlation_id TEXT');
+  }
+  if (!actionRunColNames.has('updated_at')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN updated_at TEXT');
+  }
+  if (!actionRunColNames.has('approval_status')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN approval_status TEXT');
+  }
+  if (!actionRunColNames.has('approval_tool')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN approval_tool TEXT');
+  }
+  if (!actionRunColNames.has('approval_requested_at')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN approval_requested_at TEXT');
+  }
+  if (!actionRunColNames.has('approval_resolved_at')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN approval_resolved_at TEXT');
+  }
+
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_project ON action_runs(project_id)');
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_status ON action_runs(status)');
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_created_at ON action_runs(created_at)');
+
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS deployment_patterns (
+     id TEXT PRIMARY KEY,
+     project_id TEXT NOT NULL,
+     pattern_type TEXT NOT NULL DEFAULT '',
+     error_signature TEXT NOT NULL DEFAULT '',
+     fix_action TEXT NOT NULL DEFAULT '{}',
+     success_count INTEGER NOT NULL DEFAULT 0,
+     failure_count INTEGER NOT NULL DEFAULT 0,
+     last_seen_at TEXT,
+     created_at TEXT NOT NULL DEFAULT ''
+   )`);
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_deployment_patterns_project ON deployment_patterns(project_id)',
+  );
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_deployment_patterns_signature ON deployment_patterns(project_id, error_signature)',
+  );
+
+  // ops_incidents table (v1.0.0-ops)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS ops_incidents (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    severity TEXT NOT NULL CHECK(severity IN ('critical', 'warning', 'info')),
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'active', 'resolved', 'escalated')),
+    root_cause TEXT,
+    diagnosis TEXT,
+    actions_taken TEXT,
+    created_at INTEGER NOT NULL,
+    resolved_at INTEGER,
+    escalated_at INTEGER
+  )`);
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_ops_incidents_project ON ops_incidents(project_id)');
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_ops_incidents_status ON ops_incidents(status)');
+
+  // ops_incident_events table (v1.0.0-ops)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS ops_incident_events (
+    id TEXT PRIMARY KEY,
+    incident_id TEXT NOT NULL,
+    event_type TEXT NOT NULL CHECK(event_type IN ('detected', 'diagnosed', 'action_taken', 'recovered', 'escalated', 'alert_sent', 'interrupted', 'cascade_detected')),
+    description TEXT NOT NULL,
+    metadata TEXT,
+    created_at INTEGER NOT NULL
+  )`);
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_ops_incident_events_incident ON ops_incident_events(incident_id)',
+  );
+
+  // Migrate ops_incident_events to add cascade_detected event type (for existing DBs)
+  const opsIncidentEventsTableInfo = sqlite
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ops_incident_events'")
+    .get() as { sql: string | null } | undefined;
+  const needsCascadeDetectedMigration =
+    typeof opsIncidentEventsTableInfo?.sql === 'string' &&
+    opsIncidentEventsTableInfo.sql.includes("'interrupted'") &&
+    !opsIncidentEventsTableInfo.sql.includes("'cascade_detected'");
+
+  if (needsCascadeDetectedMigration) {
+    sqlite.exec(`CREATE TABLE ops_incident_events_migrated (
+      id TEXT PRIMARY KEY,
+      incident_id TEXT NOT NULL,
+      event_type TEXT NOT NULL CHECK(event_type IN ('detected', 'diagnosed', 'action_taken', 'recovered', 'escalated', 'alert_sent', 'interrupted', 'cascade_detected')),
+      description TEXT NOT NULL,
+      metadata TEXT,
+      created_at INTEGER NOT NULL
+    )`);
+    sqlite.exec(
+      'INSERT INTO ops_incident_events_migrated SELECT id, incident_id, event_type, description, metadata, created_at FROM ops_incident_events',
+    );
+    sqlite.exec('DROP TABLE ops_incident_events');
+    sqlite.exec('ALTER TABLE ops_incident_events_migrated RENAME TO ops_incident_events');
+    sqlite.exec(
+      'CREATE INDEX IF NOT EXISTS idx_ops_incident_events_incident ON ops_incident_events(incident_id)',
+    );
+  }
+
+  // circuit_breaker_state table (v1.0.0-ops)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS circuit_breaker_state (
+    project_id TEXT PRIMARY KEY,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    last_failure_at INTEGER,
+    opened_at INTEGER,
+    state TEXT NOT NULL DEFAULT 'closed' CHECK(state IN ('closed', 'open', 'half_open')),
+    reset_at INTEGER
+  )`);
+
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS project_dependencies (
+    id TEXT PRIMARY KEY NOT NULL,
+    source_project_id TEXT NOT NULL,
+    target_project_id TEXT,
+    target_service_id TEXT,
+    dependency_type TEXT NOT NULL DEFAULT 'custom' CHECK(dependency_type IN ('database', 'api', 'cache', 'queue', 'storage', 'custom')),
+    source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('auto', 'manual')),
+    created_at TEXT NOT NULL DEFAULT ''
+  )`);
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_project_dependencies_source ON project_dependencies(source_project_id)',
+  );
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_project_dependencies_target_project ON project_dependencies(target_project_id)',
+  );
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_project_dependencies_target_service ON project_dependencies(target_service_id)',
+  );
+
+  // activity_log table (ops-center-v2)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS activity_log (
+    id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    activity_type TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    correlation_id TEXT,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    status TEXT NOT NULL,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  )`);
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log(created_at)');
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_activity_log_correlation_id ON activity_log(correlation_id)',
+  );
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_activity_log_project_created ON activity_log(project_id, created_at)',
+  );
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_activity_log_type_created ON activity_log(activity_type, created_at)',
   );
 }

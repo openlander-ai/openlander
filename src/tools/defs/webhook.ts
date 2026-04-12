@@ -1,21 +1,14 @@
 import { nanoid } from 'nanoid';
 
-import { ProjectNotFoundError } from '../../errors.js';
 import type { ToolDef } from './types.js';
+import { getProjectByName } from './helpers.js';
 import { disableWebhookSchema, enableWebhookSchema, getWebhookConfigSchema } from './schemas.js';
-
-function getProjectByName(appCtx: Parameters<ToolDef['execute']>[1]['appCtx'], name: string) {
-  const project = appCtx.db.getProjectByName(name);
-  if (!project) {
-    throw new ProjectNotFoundError(name);
-  }
-  return project;
-}
 
 const enableWebhookTool: ToolDef = {
   name: 'enable_webhook',
+  riskLevel: 'medium',
   description:
-    'Enable automatic deploys via webhook for a git provider (GitHub, GitLab, or Bitbucket). When enabled, pushing to the configured branch triggers a redeploy. Returns { id, source, secret, enabled, branchFilter, webhookPath }. The webhookPath is relative - combine with your OpenLander host URL to get the full webhook URL for configuring in your git provider. Errors: PROJECT_NOT_FOUND.',
+    'Enable automatic deploys via webhook for a git provider (GitHub, GitLab, or Bitbucket). When enabled, pushing to the configured branch triggers a redeploy. Returns { id, source, secret, enabled, branchFilter, webhookPath, reused }. The webhookPath is relative - combine with your OpenLander host URL to get the full webhook URL for configuring in your git provider. Errors: PROJECT_NOT_FOUND.',
   mcpDescription: 'Configure an auto-deploy webhook for GitHub, GitLab, or Bitbucket.',
   inputSchema: enableWebhookSchema,
   execute: (args, { appCtx }) => {
@@ -23,17 +16,34 @@ const enableWebhookTool: ToolDef = {
     const source = args['source'] as 'github' | 'gitlab' | 'bitbucket';
     const branchFilter = args['branch_filter'] as string | undefined;
     const project = getProjectByName(appCtx, projectName);
-    const id = nanoid(12);
-    const secret = appCtx.webhookManager.generateSecret(project.id);
 
-    appCtx.db.setWebhookConfig({
-      id,
-      projectId: project.id,
-      source,
-      secret,
-      branchFilter,
-      enabled: true,
-    });
+    // Check if webhook config already exists for this project and source
+    const existingConfigs = appCtx.db.getWebhookConfigs(project.id);
+    const existingConfig = existingConfigs.find((config) => config.source === source);
+
+    let id: string;
+    let secret: string;
+    let reused = false;
+
+    if (existingConfig && existingConfig.enabled === 0) {
+      // Reuse existing disabled webhook
+      id = existingConfig.id;
+      secret = existingConfig.secret;
+      reused = true;
+      appCtx.db.setWebhookEnabled(id, true);
+    } else {
+      // Generate new webhook credentials
+      id = nanoid(12);
+      secret = appCtx.webhookManager.generateSecret(project.id);
+      appCtx.db.setWebhookConfig({
+        id,
+        projectId: project.id,
+        source,
+        secret,
+        branchFilter,
+        enabled: true,
+      });
+    }
 
     return {
       id,
@@ -42,11 +52,17 @@ const enableWebhookTool: ToolDef = {
       enabled: true,
       branchFilter: branchFilter ?? 'main',
       webhookPath: `/api/webhooks/${project.id}/${source}`,
+      reused,
       _agent_guidance: {
-        next_steps: [
-          'Configure this webhook URL and secret in git provider settings (GitHub → Settings → Webhooks)',
-          'Call get_webhook_config to verify webhook setup is correct.',
-        ],
+        next_steps: reused
+          ? [
+              'Your existing GitHub webhook settings are still valid - no need to reconfigure in git provider',
+              'Call get_webhook_config to verify webhook setup is correct.',
+            ]
+          : [
+              'Configure this webhook URL and secret in git provider settings (GitHub → Settings → Webhooks)',
+              'Call get_webhook_config to verify webhook setup is correct.',
+            ],
       },
     };
   },
@@ -54,6 +70,7 @@ const enableWebhookTool: ToolDef = {
 
 const disableWebhookTool: ToolDef = {
   name: 'disable_webhook',
+  riskLevel: 'medium',
   description:
     'Disable webhook auto-deploy for a specific git provider on a project. Does not delete the configuration - re-enable with enable_webhook. Returns { status, project, source }. Errors: PROJECT_NOT_FOUND, WEBHOOK_NOT_FOUND.',
   mcpDescription: 'Disable auto-deploy webhook while keeping its configuration.',
@@ -83,8 +100,9 @@ const disableWebhookTool: ToolDef = {
 
 const getWebhookConfigTool: ToolDef = {
   name: 'get_webhook_config',
+  riskLevel: 'low',
   description:
-    'Get all webhook configurations for a project. Shows enabled status, git provider, branch filter, and webhook URL path for each configured webhook. Returns { count, webhooks[] }. Errors: PROJECT_NOT_FOUND.',
+    'Get all webhook configurations for a project. Shows enabled status, git provider, branch filter, webhook URL path, and partially masked secret (first 8 characters) for each configured webhook. Returns { count, webhooks[] }. Errors: PROJECT_NOT_FOUND.',
   mcpDescription: 'Get webhook configuration and enabled status for a project.',
   inputSchema: getWebhookConfigSchema,
   execute: (args, { appCtx }) => {

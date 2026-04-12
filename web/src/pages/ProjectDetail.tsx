@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
+import { usePollingTask } from '@/hooks/use-polling-task';
 import { useLanguage } from '@/i18n/context';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   getProject,
@@ -10,27 +11,38 @@ import {
   rollbackProject,
   blueGreenProject,
   scanProjectEnvVars,
-  deleteProject,
-  deleteEnvironment,
-  createEnvironment,
+  archiveProject,
+  unarchiveProject,
+  purgeProject,
   type EnvVarInfo,
   type ProjectWithOptionalEnvironments,
 } from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
 import { ShareDialog } from '@/components/layout/ShareDialog';
-import type { EnvironmentType } from '@/types';
 import { parseEnvContent } from '@/lib/parse-env';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 
 import { ProjectHeader } from '@/components/project/ProjectHeader';
 import { ProjectDetailLoading } from '@/components/project/ProjectDetailLoading';
 import { ProjectDetailTabs } from '@/components/project/ProjectDetailTabs';
 import { RedeployEnvDialog } from '@/components/project/RedeployEnvDialog';
-import { AddEnvironmentDialog } from '@/components/project/AddEnvironmentDialog';
+import { RollbackDialog } from '@/components/project/RollbackDialog';
+import { BlueGreenDialog } from '@/components/project/BlueGreenDialog';
 
 export function ProjectDetail() {
   const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useLanguage();
   const [project, setProject] = useState<ProjectWithOptionalEnvironments | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,49 +52,16 @@ export function ProjectDetail() {
   const isMobile = useIsMobile();
   const [shareOpen, setShareOpen] = useState(false);
   const [redeploySheet, setRedeploySheet] = useState(false);
+  const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
+  const [blueGreenDialogOpen, setBlueGreenDialogOpen] = useState(false);
   const [redeployVars, setRedeployVars] = useState<EnvVarInfo[]>([]);
   const [redeployPasteText, setRedeployPasteText] = useState('');
-  const [addEnvSheet, setAddEnvSheet] = useState<{ open: boolean; type: EnvironmentType | null }>({
-    open: false,
-    type: null,
-  });
-  const [addEnvBranch, setAddEnvBranch] = useState('');
-
-  const validEnvs: EnvironmentType[] = ['production', 'development'];
-  const envParam = searchParams.get('env') as EnvironmentType;
-  const currentEnvType = validEnvs.includes(envParam) ? envParam : 'production';
-
-  const environments = project?.environments;
-  const selectedEnv = environments?.find((e) => e.type === currentEnvType);
-
-  const handleEnvChange = (env: EnvironmentType) => {
-    setSearchParams({ env });
-  };
-
-  const handleAddEnv = (env: EnvironmentType) => {
-    setAddEnvBranch(project?.branch ?? 'main');
-    setAddEnvSheet({ open: true, type: env });
-  };
-
-  const confirmAddEnv = async () => {
-    const envType = addEnvSheet.type;
-    if (!id || !envType || actionLoading) return;
-    setActionLoading('add-env');
-    try {
-      await createEnvironment(id, envType, addEnvBranch.trim() || undefined);
-      await fetchProject();
-      toast.success(`Created ${envType} environment`);
-      setSearchParams({ env: envType });
-      setAddEnvSheet({ open: false, type: null });
-    } catch (err) {
-      console.error('Failed to create environment:', err);
-      toast.error(
-        'Failed to create environment: ' + (err instanceof Error ? err.message : String(err)),
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'stop' | 'archive';
+    handler: () => void;
+  } | null>(null);
+  const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
+  const [purgeInput, setPurgeInput] = useState('');
 
   // Fetch project details
   const fetchProject = useCallback(async () => {
@@ -97,20 +76,20 @@ export function ProjectDetail() {
     }
   }, [id]);
 
-  useEffect(() => {
-    fetchProject();
-    const interval = setInterval(fetchProject, 5000);
-    return () => clearInterval(interval);
-  }, [fetchProject]);
+  usePollingTask(fetchProject, { intervalMs: 5000 });
 
-  const { items, isStreaming } = useTimeline({
+  const {
+    items,
+    isStreaming,
+    disconnected: timelineDisconnected,
+  } = useTimeline({
     projectId: id,
     enabled: !!id,
     runKey: timelineRunKey,
     onSettled: fetchProject,
   });
 
-  const allTimelineItems = useMemo(() => items, [items]);
+  const allTimelineItems = items;
 
   const handleRedeploy = async () => {
     if (isMobile) {
@@ -121,7 +100,7 @@ export function ProjectDetail() {
     setActionLoading('redeploy');
 
     try {
-      const scan = await scanProjectEnvVars(id, currentEnvType);
+      const scan = await scanProjectEnvVars(id);
       if (scan.newVars.length > 0) {
         setRedeployVars(scan.newVars);
         setRedeployPasteText('');
@@ -135,7 +114,7 @@ export function ProjectDetail() {
 
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
     try {
-      await redeployProject(id, undefined, currentEnvType);
+      await redeployProject(id, undefined);
       setTimelineRunKey((k) => k + 1);
       toast.success('Project redeploying');
     } catch (err) {
@@ -152,22 +131,27 @@ export function ProjectDetail() {
     }
   };
 
-  const handleStop = async () => {
+  const handleStop = () => {
     if (isMobile) {
       showMobileToast();
       return;
     }
     if (!id || actionLoading) return;
-    setActionLoading('stop');
-    try {
-      await stopProject(id, currentEnvType);
-      toast.success('Project stopped');
-    } catch (err) {
-      console.error('Stop failed:', err);
-      toast.error('Stop failed: ' + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      setActionLoading(null);
-    }
+    setConfirmAction({
+      type: 'stop',
+      handler: async () => {
+        setActionLoading('stop');
+        try {
+          await stopProject(id);
+          toast.success('Project stopped');
+        } catch (err) {
+          console.error('Stop failed:', err);
+          toast.error('Stop failed: ' + (err instanceof Error ? err.message : String(err)));
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   const handleRedeploySkip = async () => {
@@ -175,7 +159,7 @@ export function ProjectDetail() {
     setActionLoading('redeploy');
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
     try {
-      await redeployProject(id!, undefined, currentEnvType);
+      await redeployProject(id!, undefined);
       setTimelineRunKey((k) => k + 1);
       toast.success('Project redeploying');
     } catch (err) {
@@ -195,7 +179,7 @@ export function ProjectDetail() {
     setActionLoading('redeploy');
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
     try {
-      await redeployProject(id!, Object.keys(vars).length > 0 ? vars : undefined, currentEnvType);
+      await redeployProject(id!, Object.keys(vars).length > 0 ? vars : undefined);
       setTimelineRunKey((k) => k + 1);
       toast.success('Project deploying');
     } catch (err) {
@@ -213,7 +197,7 @@ export function ProjectDetail() {
     if (!id || actionLoading) return;
     setActionLoading('start');
     try {
-      await startProject(id, currentEnvType);
+      await startProject(id);
       await fetchProject();
       toast.success('Project started');
     } catch (err) {
@@ -224,20 +208,25 @@ export function ProjectDetail() {
     }
   };
 
-  const handleRollback = async () => {
+  const handleRollback = () => {
     if (isMobile) {
       showMobileToast();
       return;
     }
     if (!id || actionLoading) return;
-    if (!project?.previousImageTag) return;
 
+    setRollbackDialogOpen(true);
+  };
+
+  const handleRollbackConfirm = async (deploymentId: string) => {
+    if (!id || actionLoading) return;
     setActionLoading('rollback');
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
 
     try {
-      await rollbackProject(id, currentEnvType);
+      await rollbackProject(id, deploymentId);
       setTimelineRunKey((k) => k + 1);
+      setRollbackDialogOpen(false);
       toast.success('Project rolling back');
     } catch (err) {
       console.error('Rollback failed:', err);
@@ -253,17 +242,30 @@ export function ProjectDetail() {
     }
   };
 
-  const handleBlueGreen = async () => {
+  const handleBlueGreen = () => {
     if (isMobile) {
       showMobileToast();
       return;
     }
-    if (!id || actionLoading) return;
+    if (!id || actionLoading) {
+      return;
+    }
+
+    setBlueGreenDialogOpen(true);
+  };
+
+  const handleBlueGreenConfirm = async (healthCheckPath?: string) => {
+    if (!id || actionLoading) {
+      return;
+    }
+
     setActionLoading('bluegreen');
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
+
     try {
-      await blueGreenProject(id, undefined, currentEnvType);
+      await blueGreenProject(id, healthCheckPath);
       setTimelineRunKey((k) => k + 1);
+      setBlueGreenDialogOpen(false);
       toast.success('Blue-green deploy started');
     } catch (err) {
       console.error('Blue-green deploy failed:', err);
@@ -281,48 +283,58 @@ export function ProjectDetail() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleArchive = async () => {
     if (!id || actionLoading) return;
-    if (currentEnvType === 'production') {
-      if (!confirm('Are you sure you want to delete this project?')) return;
-      setActionLoading('delete');
-      try {
-        await deleteProject(id);
-        window.location.href = '/projects';
-      } catch (err) {
-        toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
-      } finally {
-        setActionLoading(null);
-      }
-    } else {
-      if (!selectedEnv) return;
-      if (!confirm(`Are you sure you want to delete the ${currentEnvType} environment?`)) return;
-      setActionLoading('delete');
-      try {
-        await deleteEnvironment(id, selectedEnv.id);
-        toast.success('Environment deleted');
-        handleEnvChange('production');
-        await fetchProject();
-      } catch (err) {
-        toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
-      } finally {
-        setActionLoading(null);
-      }
+    setConfirmAction({
+      type: 'archive',
+      handler: async () => {
+        setActionLoading('archive');
+        try {
+          await archiveProject(id);
+          toast.success(t('projects.archive.success'));
+          window.location.href = '/projects';
+        } catch (err) {
+          toast.error('Archive failed: ' + (err instanceof Error ? err.message : String(err)));
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
+  };
+
+  const handleUnarchive = async () => {
+    if (!id || actionLoading) return;
+    setActionLoading('unarchive');
+    try {
+      await unarchiveProject(id);
+      toast.success(t('projects.unarchive.success'));
+      await fetchProject();
+    } catch (err) {
+      toast.error('Unarchive failed: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  const displayProject = useMemo(() => {
-    if (!project) return null;
-    if (!selectedEnv) return project;
-    return {
-      ...project,
-      status: selectedEnv.status,
-      branch: selectedEnv.branch,
-      publicUrl: selectedEnv.publicUrl,
-      port: selectedEnv.assignedPort ?? project.port,
-      url: currentEnvType === 'production' ? project.url : undefined,
-    };
-  }, [project, selectedEnv, currentEnvType]);
+  const handlePurge = () => {
+    if (!id || actionLoading) return;
+    setPurgeInput('');
+    setPurgeDialogOpen(true);
+  };
+
+  const handlePurgeConfirm = async () => {
+    if (!id || actionLoading) return;
+    setActionLoading('purge');
+    try {
+      await purgeProject(id);
+      window.location.href = '/projects';
+    } catch (err) {
+      toast.error('Purge failed: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setActionLoading(null);
+      setPurgeDialogOpen(false);
+    }
+  };
 
   if (loading) return <ProjectDetailLoading />;
 
@@ -339,28 +351,26 @@ export function ProjectDetail() {
       <div className="flex flex-col h-full">
         <ProjectHeader
           project={project}
-          environments={environments}
-          currentEnvType={currentEnvType}
-          onEnvChange={handleEnvChange}
-          onAddEnv={handleAddEnv}
           actionLoading={actionLoading}
           onRedeploy={handleRedeploy}
           onStop={handleStop}
           onStart={handleStart}
           onRollback={handleRollback}
-          onBlueGreen={handleBlueGreen}
+          onOpenBlueGreenDialog={handleBlueGreen}
           onShare={() => setShareOpen(true)}
-          onDelete={handleDelete}
+          onArchive={handleArchive}
+          onUnarchive={handleUnarchive}
+          onPurge={handlePurge}
         />
 
         <ProjectDetailTabs
           id={id}
           activeTab={activeTab}
           onActiveTabChange={setActiveTab}
-          displayProject={displayProject}
+          displayProject={project}
           allTimelineItems={allTimelineItems}
           isStreaming={isStreaming}
-          selectedEnvId={selectedEnv?.id}
+          timelineDisconnected={timelineDisconnected}
           onRedeploy={handleRedeploy}
           onStop={handleStop}
           onRollback={handleRollback}
@@ -377,16 +387,21 @@ export function ProjectDetail() {
         onDeploy={handleRedeployWithEnv}
       />
 
-      <AddEnvironmentDialog
-        open={addEnvSheet.open}
-        type={addEnvSheet.type}
-        projectBranch={project?.branch}
-        branchValue={addEnvBranch}
-        onOpenChange={(open) => setAddEnvSheet((prev) => ({ ...prev, open }))}
-        onBranchChange={setAddEnvBranch}
-        onCancel={() => setAddEnvSheet({ open: false, type: null })}
-        onConfirm={() => void confirmAddEnv()}
-        isSubmitting={actionLoading === 'add-env'}
+      <RollbackDialog
+        open={rollbackDialogOpen}
+        onOpenChange={setRollbackDialogOpen}
+        projectId={id!}
+        projectName={project.name}
+        isSubmitting={actionLoading === 'rollback'}
+        onConfirm={handleRollbackConfirm}
+      />
+
+      <BlueGreenDialog
+        open={blueGreenDialogOpen}
+        onOpenChange={setBlueGreenDialogOpen}
+        projectName={project.name}
+        isSubmitting={actionLoading === 'bluegreen'}
+        onConfirm={handleBlueGreenConfirm}
       />
 
       <ShareDialog
@@ -399,6 +414,60 @@ export function ProjectDetail() {
         onOpenChange={setShareOpen}
         onShareChange={fetchProject}
       />
+
+      <ConfirmDialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAction(null);
+        }}
+        title={
+          confirmAction?.type === 'archive'
+            ? t('projects.archive.button')
+            : t('project.confirm.stopTitle')
+        }
+        description={
+          confirmAction?.type === 'archive'
+            ? t('projects.archive.description')
+            : t('project.confirm.stopDescription').replace('{env}', 'production')
+        }
+        confirmLabel={t('project.confirm.confirm')}
+        cancelLabel={t('project.confirm.cancel')}
+        variant={confirmAction?.type === 'archive' ? 'destructive' : 'default'}
+        onConfirm={() => {
+          confirmAction?.handler();
+          setConfirmAction(null);
+        }}
+      />
+
+      <Dialog open={purgeDialogOpen} onOpenChange={setPurgeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-error">{t('projects.purge.title')}</DialogTitle>
+            <DialogDescription>{t('projects.purge.description')}</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={purgeInput}
+              onChange={(e) => setPurgeInput(e.target.value)}
+              placeholder={t('projects.purge.inputPlaceholder')}
+              className="w-full"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPurgeDialogOpen(false)}>
+              {t('project.confirm.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handlePurgeConfirm}
+              disabled={purgeInput !== project.name || actionLoading === 'purge'}
+            >
+              {actionLoading === 'purge' ? <Spinner className="mr-2 h-4 w-4" /> : null}
+              {t('projects.purge.confirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

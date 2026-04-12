@@ -1,23 +1,55 @@
-import { ProjectNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { getAllIps } from '../../pipeline/traefik.js';
+import { SHARED_NETWORK_NAME } from '../../config/index.js';
+import { isDockerNotFoundError } from '../../errors.js';
 import type { ToolDef } from './types.js';
 import {
   backupServiceSchema,
+  createBucketSchema,
   createDatabaseSchema,
-  createServiceDatabaseSchema,
   createServiceSchema,
   createServiceUserSchema,
+  deleteBucketSchema,
+  execServiceContainerSchema,
   getServiceLogsSchema,
+  listBucketsSchema,
   listDatabasesSchema,
   listServiceBackupsSchema,
   listServicesSchema,
-  provisionDbSchema,
+  removeServiceSchema,
   restoreServiceSchema,
   serviceNameSchema,
 } from './schemas.js';
 
 const log = createModuleLogger('tools-defs-service');
 const SERVICE_CRASH_LOG_PATTERN = /PANIC|FATAL|OOM|Segmentation fault|out of memory|No space left/i;
+
+function getServiceExternalAccess(port: number | null) {
+  if (!port) {
+    return [];
+  }
+
+  return getAllIps().map((ip) => ({
+    host: ip.address,
+    port,
+    type: ip.type,
+  }));
+}
+
+function getExternalConnectionStrings(
+  connectionString: string | null | undefined,
+  internalHost: string | null | undefined,
+) {
+  if (!connectionString || !internalHost) {
+    return [];
+  }
+
+  return getAllIps().map((ip) => ({
+    connectionString: connectionString.replace(internalHost, ip.address),
+    type: ip.type,
+    ip: ip.address,
+  }));
+}
 
 function parseServiceCredentials(credentials: string | null): Record<string, unknown> | null {
   if (!credentials) {
@@ -50,9 +82,11 @@ async function getServiceByName(
 export const serviceToolDefs: ToolDef[] = [
   {
     name: 'create_service',
+    riskLevel: 'medium',
     description:
-      'Create a new service (database, cache, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, or custom Docker image service. Provide either template (postgresql/mysql/redis/mongodb) or custom image with port. Returns { service, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL) for connecting a project. Call set_env_vars with the suggested key/value to auto-link. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
-    mcpDescription: 'Create a PostgreSQL, MySQL, Redis, MongoDB, or custom image service.',
+      'Create a new service (database, cache, message broker, object storage, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, RabbitMQ, MinIO (S3-compatible storage), or custom Docker image service. Provide template (postgresql/mysql/redis/mongodb/rabbitmq/minio), custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17" gives you PostgreSQL credential generation with the pgvector image). Returns { service, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, RABBITMQ_URL, S3_ENDPOINT) for connecting a project. For MinIO: returns S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Call set_env_vars with the suggested key/value to auto-link. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+    mcpDescription:
+      'Create a service. Supports template, custom image, or template + custom image combo (auto-credentials with custom image).',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
       const result = await appCtx.serviceManager.create({
@@ -75,6 +109,7 @@ export const serviceToolDefs: ToolDef[] = [
           credentials: parseServiceCredentials(result.credentials),
         },
         suggested_env: suggestedEnv,
+        externalAccess: getServiceExternalAccess(result.port),
         _agent_guidance: {
           next_steps: [
             'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
@@ -87,6 +122,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'list_services',
+    riskLevel: 'low',
     description:
       'List all services (databases, caches, custom containers) with status, type, and connection details. Use to see what services are available and their current state. Returns { count, services[] } with id, name, type, status, port, and credentials.',
     mcpDescription: 'List infrastructure services with type, status, and exposed port.',
@@ -103,9 +139,18 @@ export const serviceToolDefs: ToolDef[] = [
             type: service.type,
             status: service.status,
             port: service.port,
+            network: SHARED_NETWORK_NAME,
             image: service.image,
             createdAt: service.created_at,
+            externalAccess: getServiceExternalAccess(service.port),
           })),
+          _agent_guidance: {
+            networking: [
+              `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
+              'For inter-container communication, use http://ol-{project-name}:{port} (DNS auto-resolved).',
+              'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
+            ],
+          },
         };
       }
 
@@ -125,6 +170,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'list_databases',
+    riskLevel: 'low',
     description:
       'List databases for a named PostgreSQL or MySQL service. Use when selecting an existing database during environment setup. Returns { service, count, databases[] }. Errors: SERVICE_NOT_FOUND or unsupported service type.',
     mcpDescription: 'List databases inside a PostgreSQL or MySQL service.',
@@ -156,6 +202,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'create_database',
+    riskLevel: 'high',
     description:
       'Create a database in a named PostgreSQL or MySQL service. Use when provisioning app-specific database credentials. Returns { status, service, database, user, password, connectionString }. Errors: SERVICE_NOT_FOUND or unsupported service type.',
     mcpDescription: 'Create a database inside an existing PostgreSQL or MySQL service.',
@@ -187,7 +234,68 @@ export const serviceToolDefs: ToolDef[] = [
     targets: ['agent'],
   },
   {
+    name: 'list_buckets',
+    riskLevel: 'low',
+    description:
+      'List S3 buckets in a MinIO service. Use to see what storage buckets exist. Returns { service, count, buckets[] } where each bucket has name and createdAt. Errors: SERVICE_NOT_FOUND, not a MinIO service.',
+    mcpDescription: 'List S3 buckets in a MinIO object storage service.',
+    inputSchema: listBucketsSchema,
+    execute: async (args, { appCtx }) => {
+      const serviceName = args['service_name'] as string;
+      const service = await getServiceByName(appCtx, serviceName);
+      const buckets = await appCtx.serviceManager.listBuckets(service.id);
+      return {
+        service: service.name,
+        count: buckets.length,
+        buckets,
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'create_bucket',
+    riskLevel: 'medium',
+    description:
+      'Create an S3 bucket in a MinIO service. Use when setting up storage for a project. Bucket names must be 3-63 chars, lowercase, following S3 naming rules. Returns { status, service, bucket }. Errors: SERVICE_NOT_FOUND, bucket already exists, not a MinIO service.',
+    mcpDescription: 'Create an S3 bucket in a MinIO object storage service.',
+    inputSchema: createBucketSchema,
+    execute: async (args, { appCtx }) => {
+      const serviceName = args['service_name'] as string;
+      const bucketName = args['bucket_name'] as string;
+      const service = await getServiceByName(appCtx, serviceName);
+      await appCtx.serviceManager.createBucket(service.id, bucketName);
+      return {
+        status: 'created',
+        service: service.name,
+        bucket: bucketName,
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'delete_bucket',
+    riskLevel: 'medium',
+    description:
+      'Delete an empty S3 bucket from a MinIO service. The bucket must be empty before deletion. Returns { status, service, bucket, warning }. Errors: SERVICE_NOT_FOUND, bucket not empty, not a MinIO service.',
+    mcpDescription: 'Delete an empty S3 bucket from a MinIO object storage service.',
+    inputSchema: deleteBucketSchema,
+    execute: async (args, { appCtx }) => {
+      const serviceName = args['service_name'] as string;
+      const bucketName = args['bucket_name'] as string;
+      const service = await getServiceByName(appCtx, serviceName);
+      await appCtx.serviceManager.deleteBucket(service.id, bucketName);
+      return {
+        status: 'deleted',
+        service: service.name,
+        bucket: bucketName,
+        warning: 'Bucket and all its contents have been permanently deleted.',
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
     name: 'get_service_status',
+    riskLevel: 'low',
     description:
       'Get the current status of a specific service. Returns { id, name, status, health, type, port, ... } where status is running/stopped and health reflects container health (healthy/unhealthy/unknown/degraded). healthDetail may be included when crash-like log patterns are detected. Errors: SERVICE_NOT_FOUND if the service name is invalid.',
     mcpDescription: 'Get service status, health, container state, and metadata.',
@@ -200,7 +308,7 @@ export const serviceToolDefs: ToolDef[] = [
       const containerId = service.container_id ?? service.container_name;
       if (containerId) {
         try {
-          const info = (await appCtx.docker.getClient().getContainer(containerId).inspect()) as {
+          const info = (await appCtx.docker.inspectContainer(containerId)) as {
             State?: { Health?: { Status?: string } };
           };
           const dockerHealth = info.State?.Health?.Status;
@@ -241,19 +349,29 @@ export const serviceToolDefs: ToolDef[] = [
         health,
         ...(healthDetail ? { healthDetail } : {}),
         port: service.port,
+        network: SHARED_NETWORK_NAME,
         image: service.image,
         containerName: service.container_name,
         containerId: service.container_id,
         createdAt: service.created_at,
         updatedAt: service.updated_at,
+        externalAccess: getServiceExternalAccess(service.port),
+        _agent_guidance: {
+          networking: [
+            `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
+            'For inter-container communication, use http://ol-{project-name}:{port} (DNS auto-resolved).',
+            'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
+          ],
+        },
       };
     },
     targets: ['mcp'],
   },
   {
     name: 'start_service',
+    riskLevel: 'medium',
     description:
-      'Start a stopped service. Use when a service is stopped and needs to be running. Returns { status, id, name }. Errors: SERVICE_NOT_FOUND.',
+      'Start a stopped service. Use when a service is stopped and needs to be running. Returns { status, service }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription: 'Start a stopped service container.',
     inputSchema: serviceNameSchema,
     execute: async (args, { appCtx }) => {
@@ -266,8 +384,9 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'stop_service',
+    riskLevel: 'medium',
     description:
-      'Stop a running service gracefully. Use when a service needs to be paused without deletion. Returns { status, id, name }. Errors: SERVICE_NOT_FOUND.',
+      'Stop a running service gracefully. Use when a service needs to be paused without deletion. Returns { status, service }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription: 'Stop a running service container gracefully.',
     inputSchema: serviceNameSchema,
     execute: async (args, { appCtx }) => {
@@ -280,25 +399,29 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'remove_service',
+    riskLevel: 'high',
     description:
-      'Permanently remove a service — deletes the container, volume, and ALL persistent data. DESTRUCTIVE — cannot be undone. WARNING: This deletes database files, cache data, and everything stored in the service volume. ALWAYS call backup_service BEFORE removing a service with important data. Returns { status, service, warning }. Errors: SERVICE_NOT_FOUND.',
+      'Permanently remove a service — deletes the container, volume, and ALL persistent data. DESTRUCTIVE — cannot be undone. WARNING: This deletes database files, cache data, and everything stored in the service volume. ALWAYS call backup_service BEFORE removing a service with important data. If projects reference this service, removal is blocked unless force=true. Returns { status, service, warning, connected_projects }. Errors: SERVICE_NOT_FOUND, SERVICE_IN_USE.',
     mcpDescription: 'Remove a service container and volume. Data is permanently deleted.',
-    inputSchema: serviceNameSchema,
+    inputSchema: removeServiceSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
+      const force = (args['force'] as boolean | undefined) ?? false;
       const service = await getServiceByName(appCtx, serviceName);
       const serviceType = service.type;
-      await appCtx.serviceManager.remove(service.id);
+      const result = await appCtx.serviceManager.remove(service.id, { force });
       return {
         status: 'removed',
         service: serviceName,
         warning: `All persistent data for ${serviceType} service "${serviceName}" has been permanently deleted. This cannot be undone. If you needed the data, it is now lost. Use backup_service before remove_service in the future.`,
+        ...(result.connected_projects && { connected_projects: result.connected_projects }),
       };
     },
     targets: ['mcp'],
   },
   {
     name: 'backup_service',
+    riskLevel: 'medium',
     description:
       "Create a backup snapshot of a service's persistent data (database files, etc.). Returns { status, backupId, path, sizeBytes }. Use BEFORE remove_service to prevent data loss.",
     mcpDescription: 'Create a backup snapshot of service data before destructive actions.',
@@ -318,6 +441,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'restore_service',
+    riskLevel: 'medium',
     description:
       'Restore a service volume from a backup snapshot. Stops the service container, restores the selected backup into the service volume, then starts the service again. Returns { status, service, backupId }.',
     mcpDescription: 'Restore service data from a selected backup snapshot.',
@@ -336,6 +460,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'list_service_backups',
+    riskLevel: 'low',
     description:
       'List available backup snapshots for a service. Returns { service, count, backups[] } with backupId, createdAt, and sizeBytes for each snapshot.',
     mcpDescription: 'List available backup snapshots for a service.',
@@ -357,6 +482,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'get_service_logs',
+    riskLevel: 'low',
     description:
       'Get recent container logs for a service (database, cache, or custom container). Use when a service is in error state or behaving unexpectedly. Returns { service, logs }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription: 'Get recent container logs for an infrastructure service.',
@@ -370,10 +496,7 @@ export const serviceToolDefs: ToolDef[] = [
         return { service: serviceName, logs };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const isContainerGone =
-          message.includes('not found') ||
-          message.includes('No such container') ||
-          message.includes('is not running');
+        const isContainerGone = isDockerNotFoundError(error) || message.includes('is not running');
         if (isContainerGone) {
           return {
             service: serviceName,
@@ -388,9 +511,49 @@ export const serviceToolDefs: ToolDef[] = [
     targets: ['mcp'],
   },
   {
-    name: 'get_service_credentials',
+    name: 'exec_service_container',
+    riskLevel: 'high',
     description:
-      'Get connection credentials for a service (connection string, host, port, user, password). Use when a project needs to connect to a service. Returns { id, name, credentials } with full connection details. Errors: SERVICE_NOT_FOUND.',
+      'Execute a command inside a running service container (like docker exec). Use for installing extensions (e.g., pgvector), running SQL, debugging, or any ad-hoc command. Returns { service, command, exitCode, stdout, stderr }. Non-zero exit codes are returned (not thrown) so you can inspect the output. Errors: SERVICE_NOT_FOUND, container not running.',
+    mcpDescription:
+      'Run a command inside a service container. Returns stdout, stderr, and exit code.',
+    inputSchema: execServiceContainerSchema,
+    execute: async (args, { appCtx }) => {
+      const serviceName = args['service_name'] as string;
+      const command = args['command'] as string[];
+      const service = await getServiceByName(appCtx, serviceName);
+      const timeoutMs =
+        typeof args['timeout_seconds'] === 'number' ? args['timeout_seconds'] * 1000 : undefined;
+      const result = await appCtx.serviceManager.exec(service.id, command, { timeoutMs });
+      return {
+        service: serviceName,
+        command,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        ...(result.truncated ? { truncated: true } : {}),
+        ...(result.exitCode === -1
+          ? {
+              error:
+                'Command timed out. Output may be partial. The command may still be running inside the container.',
+            }
+          : {}),
+        _agent_guidance: {
+          notes: [
+            'Exit code 0 means success. Non-zero means the command failed — check stderr for details.',
+            'Exit code -1 means the command timed out. Use timeout_seconds to extend the limit.',
+            'For database extensions: after installing, verify with a query (e.g., SELECT * FROM pg_extension).',
+          ],
+        },
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'get_service_credentials',
+    riskLevel: 'low',
+    description:
+      'Get connection credentials for a service (connection string, host, port, user, password). Use when a project needs to connect to a service. Returns { service, type, credentials, connectionString, host, port, user, password, database, externalAccess, externalConnectionStrings }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription:
       'Get service connection credentials. Host is Docker internal DNS (e.g., ol-svc-pg), not localhost. Use for DATABASE_URL, REDIS_URL, etc. in projects.',
     inputSchema: serviceNameSchema,
@@ -398,44 +561,29 @@ export const serviceToolDefs: ToolDef[] = [
       const serviceName = args['service_name'] as string;
       const service = await getServiceByName(appCtx, serviceName);
       const credentials = parseServiceCredentials(service.credentials);
+      const internalHost = (credentials?.['host'] as string | undefined) || null;
+      const connectionString = (credentials?.['connectionString'] as string | undefined) || null;
+
       return {
         service: serviceName,
         type: service.type,
         credentials,
-        connectionString: (credentials?.['connectionString'] as string | undefined) || null,
-        host: (credentials?.['host'] as string | undefined) || null,
+        connectionString,
+        host: internalHost,
         port: (credentials?.['port'] as number | undefined) || service.port,
         user: (credentials?.['user'] as string | undefined) || null,
         password: (credentials?.['password'] as string | undefined) || null,
         database: (credentials?.['database'] as string | undefined) || null,
+        externalAccess: getServiceExternalAccess(service.port),
+        externalConnectionStrings: getExternalConnectionStrings(connectionString, internalHost),
       };
     },
     targets: ['mcp'],
   },
-  {
-    name: 'create_service_database',
-    description:
-      'Create a new database in a PostgreSQL or MySQL service. Use when a project needs a dedicated database. Returns { status, service, database, user, password, connectionString }. Errors: SERVICE_NOT_FOUND, UNSUPPORTED_SERVICE_TYPE (redis, mongodb), CONTAINER_NOT_RUNNING.',
-    mcpDescription: 'Create an additional database in a PostgreSQL or MySQL service.',
-    inputSchema: createServiceDatabaseSchema,
-    execute: async (args, { appCtx }) => {
-      const serviceName = args['service_name'] as string;
-      const databaseName = args['database_name'] as string;
-      const service = await getServiceByName(appCtx, serviceName);
-      const result = await appCtx.serviceManager.createDatabase(service.id, databaseName);
-      return {
-        status: 'created',
-        service: serviceName,
-        database: result.database,
-        user: result.user,
-        password: result.password,
-        connectionString: result.connectionString,
-      };
-    },
-    targets: ['mcp'],
-  },
+
   {
     name: 'create_service_user',
+    riskLevel: 'medium',
     description:
       'Create a new user in a PostgreSQL or MySQL service with optional database grants. Use when a project needs a dedicated database user. Returns { status, service, user, password, database, connectionString }. Errors: SERVICE_NOT_FOUND, UNSUPPORTED_SERVICE_TYPE (redis, mongodb), CONTAINER_NOT_RUNNING.',
     mcpDescription: 'Create a database user with optional per-database grants.',
@@ -459,22 +607,5 @@ export const serviceToolDefs: ToolDef[] = [
       };
     },
     targets: ['mcp'],
-  },
-  {
-    name: 'provision_database',
-    description:
-      'Provision a database sidecar (PostgreSQL or SQLite) for a project. Automatically sets DATABASE_URL in the project env vars and redeploys. Use when user says they need a database. Defaults to PostgreSQL. Returns { status, connectionUrl, type }. For other services (Redis, MongoDB) use create_service + set_env_vars pattern instead. Errors: PROJECT_NOT_FOUND, ALREADY_PROVISIONED.',
-    mcpDescription: 'Provision PostgreSQL or SQLite and auto-set DATABASE_URL for a project.',
-    inputSchema: provisionDbSchema,
-    execute: async (args, { appCtx }) => {
-      const projectName = args['project_name'] as string;
-      const project = appCtx.db.getProjectByName(projectName);
-      if (!project) {
-        throw new ProjectNotFoundError(projectName);
-      }
-      const dbType = (args['db_type'] as string | undefined) === 'sqlite' ? 'sqlite' : 'postgres';
-      const result = await appCtx.dbProvisioner.provision(project.id, { type: dbType });
-      return { status: 'provisioned', project: projectName, ...result };
-    },
   },
 ];

@@ -3,33 +3,46 @@ import { Hono } from 'hono';
 import type { AppContext } from '../../app.js';
 import type { QuestionAnswer } from '../../lib/question-bridge.js';
 import type { ChatStreamEvent } from '../../types/agent-events.js';
+import type { ContextScope } from '../../llm/context-assembler.js';
 
 export function createChatRoutes(ctx: AppContext): Hono {
   const api = new Hono();
-  let activeStream = false;
+  const activeStreams = new Map<string, boolean>();
 
   api.post('/chat/stream', async (c) => {
-    if (!ctx.agent) {
-      return c.json({ error: 'LLM not configured' }, 503);
+    if (!ctx.config.ai.webAgent.enabled) {
+      return c.json({ error: 'Web agent is disabled' }, 503);
     }
-    const agent = ctx.agent;
 
-    if (activeStream) {
-      return c.json({ error: 'Another chat stream is already active' }, 429);
+    if (!ctx.agentPool) {
+      return c.json({ error: 'LLM not configured' }, 503);
     }
 
     const body = await c.req
-      .json<{ message?: unknown; session_id?: unknown }>()
-      .catch(() => ({ message: undefined, session_id: undefined }));
+      .json<{ message?: unknown; session_id?: unknown; projectId?: unknown }>()
+      .catch(() => ({ message: undefined, session_id: undefined, projectId: undefined }));
 
     const message = typeof body.message === 'string' ? body.message.trim() : '';
-    const sessionId = typeof body.session_id === 'string' ? body.session_id.trim() : '';
+    let sessionId = typeof body.session_id === 'string' ? body.session_id.trim() : '';
+    const projectId = typeof body.projectId === 'string' ? body.projectId.trim() : undefined;
 
-    if (!message || !sessionId) {
-      return c.json({ error: 'message and session_id are required' }, 400);
+    if (!message) {
+      return c.json({ error: 'message is required' }, 400);
     }
 
-    activeStream = true;
+    // Derive session key: project-scoped if projectId provided, otherwise auto-generated
+    if (!sessionId) {
+      sessionId = projectId ? `project:${projectId}` : `web-agent-${Date.now().toString(36)}`;
+    }
+
+    const scope: ContextScope | undefined = projectId ? { type: 'project', projectId } : undefined;
+
+    if (activeStreams.get(sessionId)) {
+      return c.json({ error: 'Another message is being processed for this session' }, 429);
+    }
+
+    const agent = ctx.agentPool.getOrCreate(sessionId);
+    activeStreams.set(sessionId, true);
 
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -47,17 +60,20 @@ export function createChatRoutes(ctx: AppContext): Hono {
               return Promise.resolve();
             },
             sessionId,
+            scope,
           );
         } catch (err) {
           const error = err instanceof Error ? err.message : String(err);
           write({ type: 'error', error });
         } finally {
-          activeStream = false;
+          activeStreams.delete(sessionId);
+          ctx.agentPool?.release(sessionId);
           controller.close();
         }
       },
       cancel() {
-        activeStream = false;
+        activeStreams.delete(sessionId);
+        ctx.agentPool?.release(sessionId);
       },
     });
 
@@ -126,30 +142,6 @@ export function createChatRoutes(ctx: AppContext): Hono {
   api.post('/question/dismiss', (c) => {
     ctx.questionBridge.reject();
     return c.json({ status: 'dismissed' });
-  });
-
-  api.get('/sessions', (c) => {
-    const sessions = ctx.db.listChatSessions();
-    return c.json({
-      sessions: sessions.map((session) => ({
-        sessionId: session.session_id,
-        messageCount: session.message_count,
-        lastActive: session.last_message,
-        firstMessage: session.first_message,
-      })),
-    });
-  });
-
-  api.get('/sessions/:id/messages', (c) => {
-    const sessionId = c.req.param('id');
-    const messages = ctx.db.getChatHistory(sessionId);
-    return c.json({ messages });
-  });
-
-  api.delete('/sessions/:id', (c) => {
-    const sessionId = c.req.param('id');
-    ctx.db.deleteSession(sessionId);
-    return c.json({ ok: true });
   });
 
   return api;

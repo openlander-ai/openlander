@@ -1,5 +1,9 @@
 # OpenLander Web MVP — UI/UX Design Specification
 
+> **⚠️ SUPERSEDED**: 이 문서의 Agent Timeline 중심 설계는 DEC-041 (2026-03)에서 Button-to-Chat 패턴으로 전환됨.
+> 새 설계: `docs/planning/release/v1.0.0-web-ui-vision.md`
+> 아래 내용은 디자인 시스템(색상, 타이포그래피, 컴포넌트)의 레퍼런스로만 유효.
+
 ## 1. Design Direction
 
 ### Aesthetic: "Cyber-Industrial Precision"

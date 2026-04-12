@@ -1,12 +1,16 @@
 import { nanoid } from 'nanoid';
 
 import type { Database, EnvironmentRow, ProjectRow } from '../../db/index.js';
+import { getPolicy } from '../../config/index.js';
+import type { OpenLanderEnv } from '../../config/index.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { allocatePort } from '../port.js';
 import { buildTraefikLabels, getProjectUrl } from '../traefik.js';
 import type { Docker } from '../docker.js';
 import { getRouteName } from './helpers.js';
+import { containerName as projectContainerName } from '../helpers.js';
+import { isDockerNotFoundError } from '../../errors.js';
 
 const log = createModuleLogger('deploy:rollback');
 
@@ -14,6 +18,8 @@ export interface RollbackResult {
   success: boolean;
   projectId: string;
   projectName: string;
+  previousImageTag?: string;
+  rollbackImageTag?: string;
   containerId?: string;
   url?: string;
   port?: number;
@@ -48,9 +54,14 @@ export class RollbackExecutor {
       return target.result;
     }
 
-    const rollbackImageTag = target.target.environment
-      ? target.target.environment.previous_image_tag
-      : target.target.project.previous_image_tag;
+    const productionEnvironment =
+      target.target.environment ??
+      this.db
+        .getEnvironmentsByProject(projectId)
+        .find((environment) => environment.type === 'production');
+
+    const rollbackImageTag =
+      productionEnvironment?.previous_image_tag ?? target.target.project.previous_image_tag;
 
     if (!rollbackImageTag) {
       return {
@@ -61,42 +72,54 @@ export class RollbackExecutor {
       };
     }
 
-    const currentImageTag = target.target.environment
-      ? (target.target.environment.image_tag ?? '')
-      : (target.target.project.image_tag ?? '');
+    const currentImageTag =
+      productionEnvironment?.image_tag ?? target.target.project.image_tag ?? '';
+
+    try {
+      await this.docker.inspectImage(rollbackImageTag);
+    } catch {
+      return {
+        success: false,
+        projectId,
+        projectName: project.name,
+        error: 'No previous image available for rollback — the image may have been pruned',
+      };
+    }
 
     try {
       await this.cleanupRunningContainer(target.target);
 
-      const { port, containerName, environmentType } = await this.resolveContainerRuntime(
-        target.target,
-      );
+      const { port, containerName } = await this.resolveContainerRuntime(target.target);
       const containerPort = (await this.docker.getImageExposedPort(rollbackImageTag)) ?? port;
 
+      const envType: OpenLanderEnv = 'production';
       const containerId = await this.docker.runContainer({
         imageTag: rollbackImageTag,
         name: containerName,
         port,
         containerPort,
-        envVars: this.db.getEnvVars(projectId, target.target.environment?.id),
-        traefikLabels: buildTraefikLabels(project.name, containerPort, undefined, environmentType),
+        envVars: this.db.getEnvVars(projectId, productionEnvironment?.id),
+        traefikLabels: buildTraefikLabels(project.name, containerPort, undefined, envType),
+        network: getPolicy(envType).networkName,
       });
 
-      if (target.target.environment) {
-        this.db.updateEnvironment(target.target.environment.id, {
+      this.db.updateProject(projectId, {
+        status: 'running',
+        assignedPort: port,
+        containerPort,
+        containerId,
+        imageTag: rollbackImageTag,
+        previousImageTag: currentImageTag,
+      });
+
+      if (productionEnvironment) {
+        this.db.updateEnvironment(productionEnvironment.id, {
           status: 'running',
           containerId,
           imageTag: rollbackImageTag,
           previousImageTag: currentImageTag,
           assignedPort: port,
-        });
-      } else {
-        this.db.updateProject(projectId, {
-          status: 'running',
-          assignedPort: port,
-          containerId,
-          imageTag: rollbackImageTag,
-          previousImageTag: currentImageTag,
+          containerPort,
         });
       }
 
@@ -110,26 +133,20 @@ export class RollbackExecutor {
       this.db.createDeployLog({
         id: nanoid(12),
         projectId,
-        environmentId: target.target.environment?.id,
+        environmentId: productionEnvironment?.id,
         status: 'success',
         trigger: 'api',
+        commitMessage: undefined,
         buildLog: `[rollback] ${currentImageTag} → ${rollbackImageTag}\n`,
         durationMs: totalDuration,
       });
-
-      if (target.target.environment) {
-        return {
-          success: true,
-          projectId,
-          projectName: project.name,
-          buildDurationMs: totalDuration,
-        };
-      }
 
       return {
         success: true,
         projectId,
         projectName: project.name,
+        previousImageTag: currentImageTag,
+        rollbackImageTag,
         containerId,
         url: getProjectUrl(project.name),
         port,
@@ -137,18 +154,26 @@ export class RollbackExecutor {
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
+      if (isDockerNotFoundError(error)) {
+        return {
+          success: false,
+          projectId,
+          projectName: project.name,
+          error: 'No previous image available for rollback — the image may have been pruned',
+          buildDurationMs: Date.now() - startTime,
+        };
+      }
 
-      if (target.target.environment) {
-        this.db.updateEnvironment(target.target.environment.id, { status: 'error' });
-      } else {
-        this.db.updateProject(projectId, { status: 'error' });
+      this.db.updateProject(projectId, { status: 'error' });
+      if (productionEnvironment) {
+        this.db.updateEnvironment(productionEnvironment.id, { status: 'error' });
       }
 
       return {
         success: false,
         projectId,
         projectName: project.name,
-        error: target.target.environment ? errorMsg : `Rollback failed: ${errorMsg}`,
+        error: `Rollback failed: ${errorMsg}`,
         buildDurationMs: Date.now() - startTime,
       };
     }
@@ -190,7 +215,7 @@ export class RollbackExecutor {
 
     try {
       await this.docker.stopContainer(containerId);
-      await this.docker.removeContainer(containerId);
+      await this.docker.safeRemoveContainer(containerId);
     } catch (err) {
       log.warn({ err, containerId }, 'Container cleanup during rollback failed');
     }
@@ -198,21 +223,16 @@ export class RollbackExecutor {
 
   private async resolveContainerRuntime(
     target: RollbackTarget,
-  ): Promise<{ port: number; containerName: string; environmentType?: EnvironmentRow['type'] }> {
-    if (!target.environment) {
-      return {
-        port: await allocatePort(this.db, this.docker),
-        containerName: `ol-${target.project.name}`,
-      };
-    }
-
-    const routeName = getRouteName(target.project.name, target.environment.type);
-    const port = target.environment.assigned_port ?? (await allocatePort(this.db, this.docker));
+  ): Promise<{ port: number; containerName: string }> {
+    const routeName = getRouteName(target.project.name);
+    const port =
+      target.environment?.assigned_port ??
+      target.project.assigned_port ??
+      (await allocatePort(this.db, this.docker, {}, 'production'));
 
     return {
       port,
-      containerName: `ol-${routeName}-${String(Date.now())}`,
-      environmentType: target.environment.type,
+      containerName: projectContainerName(routeName),
     };
   }
 }

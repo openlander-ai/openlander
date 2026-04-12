@@ -1,45 +1,106 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/geist-mono';
+@import '@fontsource-variable/jetbrains-mono';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* ── OpenLander Design Tokens (Clean Light + Rose) ── */
-    --bg-app: #ffffff; /* white — app background */
-    --bg-panel: #fafafa; /* zinc-50 — card/panel backgrounds */
-    --bg-subtle: #f4f4f5; /* zinc-100 — subtle backgrounds, hover states */
-    --bg-surface: #f9fafb; /* zinc-50 — card surface */
-    --bg-terminal: #1e1e1e; /* VS Code dark — slightly warmer than zinc */
-    --color-accent: #f43f5e; /* rose-500 — brand color */
-    --color-ai: #f43f5e; /* rose-500 — AI identity (unified brand) */
-    --color-success: #16a34a; /* green-600 */
-    --color-warning: #d97706; /* amber-600 */
-    --color-error: #dc2626; /* red-600 */
-    --text-primary: #09090b; /* zinc-950 — primary text */
-    --text-secondary: #52525b; /* zinc-600 — secondary text */
-    --text-muted: #a1a1aa; /* zinc-400 — muted/dim text */
+    /* ── Typography Scale ── */
+    --font-size-xs: 0.75rem; /* 12px */
+    --font-size-sm: 0.875rem; /* 14px */
+    --font-size-base: 1rem; /* 16px */
+    --font-size-lg: 1.125rem; /* 18px */
+    --font-size-xl: 1.25rem; /* 20px */
+    --font-size-2xl: 1.5rem; /* 24px */
+    --font-size-3xl: 1.875rem; /* 30px */
 
-    /* ── shadcn/ui — Clean Light palette ── */
-    --background: 0 0% 100%; /* white */
-    --foreground: 240 10% 3.9%; /* zinc-950 */
-    --card: 0 0% 98%; /* zinc-50 */
-    --card-foreground: 240 10% 3.9%; /* zinc-950 */
-    --popover: 0 0% 100%; /* white */
-    --popover-foreground: 240 10% 3.9%; /* zinc-950 */
-    --primary: 347 77% 50%; /* rose-500 HSL */
-    --primary-foreground: 0 0% 100%; /* white */
-    --secondary: 240 5% 96%; /* zinc-100 */
-    --secondary-foreground: 240 6% 10%; /* zinc-900 */
-    --muted: 240 5% 96%; /* zinc-100 */
-    --muted-foreground: 240 4% 46%; /* zinc-600 */
-    --accent: 240 5% 96%; /* zinc-100 */
-    --accent-foreground: 240 6% 10%; /* zinc-900 */
-    --destructive: 0 84% 60%; /* red-600 */
-    --destructive-foreground: 0 0% 100%; /* white */
-    --border: 240 6% 90%; /* zinc-200 */
-    --input: 240 6% 90%; /* zinc-200 */
-    --ring: 347 77% 50%; /* rose-500 for focus rings */
-    --radius: 0.5rem;
+    /* ── OpenLander Enterprise Cloud (Light Base) ── */
+    --bg-app: #f1f5f9;       /* slate-100 */
+    --bg-panel: #ffffff;     /* crisp white */
+    --bg-subtle: #f8fafc;    /* slate-50 */
+    --bg-surface: #ffffff; 
+    --bg-terminal: #0f172a;  /* slate-900 (sharp contrast for terminal windows) */
+    --color-accent: #6366f1; /* indigo-500 */
+    --color-ai: #f43f5e;     /* rose-500 */
+    --color-success: #10b981;/* emerald-500 */
+    --color-warning: #f59e0b;/* amber-500 */
+    --color-error: #ef4444;  /* red-500 */
+    
+    /* 💎 AI Sparkle Gradient (Light Mode) 💎 */
+    --sparkle-start: #4f46e5; /* Indigo 600 - Professional and sharp */
+    --sparkle-end: #f43f5e;   /* Rose 500 - Magic AI */
+
+    --text-primary: #0f172a; /* slate-900 */
+    --text-secondary: #334155; /* slate-700 (darker for contrast) */
+    --text-muted: #64748b;   /* slate-500 (darker for readability) */
+
+    /* ── shadcn/ui — Light Slate & Indigo ── */
+    --background: 210 40% 98%; /* slate-50 */
+    --foreground: 222 47% 11%; /* slate-900 */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 239 84% 67%; /* indigo-500 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%; /* slate-100 */
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%; /* slate-500 */
+    --accent: 210 40% 96%;
+    --accent-foreground: 239 84% 67%; /* indigo text when hovered */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 84%; /* slate-300 (stronger borders for crisp white panels) */
+    --input: 214 32% 84%;  /* slate-300 input borders */
+    --ring: 239 84% 67%; /* indigo-500 */
+    --radius: 0.5rem; /* rounded-lg */
+  }
+
+  [data-theme='dark'], .dark {
+    /* ── OpenLander Enterprise Cloud (Dark Base) ── */
+    --bg-app: #0f172a;       /* slate-900 - deep navy backdrop */
+    --bg-panel: #1e293b;     /* slate-800 - cards structure */
+    --bg-subtle: #334155;    /* slate-700 */
+    --bg-surface: #0f172a; 
+    --bg-terminal: #020617;  /* slate-950 - extremely dark for real terminals */
+    --color-accent: #6366f1; /* indigo-500 */
+    --color-ai: #f43f5e;     /* rose-500 - popping magic */
+    --color-success: #10b981;
+    --color-warning: #f59e0b;
+    --color-error: #ef4444;
+    
+    /* 💎 AI Sparkle Gradient (Dark Mode) 💎 */
+    --sparkle-start: #22d3ee; /* Cyan 400 - Futuristic Tech */
+    --sparkle-end: #a855f7;   /* Purple 500 - Deep AI Magic */
+
+    --text-primary: #f8fafc; /* slate-50 */
+    --text-secondary: #cbd5e1; /* slate-300 */
+    --text-muted: #94a3b8;   /* slate-400 */
+
+    /* ── shadcn/ui — Dark Slate & Indigo ── */
+    --background: 222 47% 11%; /* slate-900 */
+    --foreground: 210 40% 98%; /* slate-50 */
+    --card: 215 28% 17%; /* slate-800 */
+    --card-foreground: 210 40% 98%;
+    --popover: 215 28% 17%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 239 84% 67%; /* indigo-500 */
+    --primary-foreground: 210 40% 98%; /* white text on indigo */
+    --secondary: 215 28% 22%; /* slate-700 */
+    --secondary-foreground: 210 40% 98%;
+    --muted: 215 28% 22%;
+    --muted-foreground: 215 20% 65%; /* slate-400 */
+    --accent: 215 28% 22%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 215 28% 22%; /* slate-700 */
+    --input: 215 28% 22%;
+    --ring: 239 84% 67%; /* indigo-500 */
   }
 }
 
@@ -59,10 +120,14 @@
     @apply bg-background text-foreground;
     margin: 0;
     font-family:
-      'Manrope',
+      'Inter Variable',
+      'Inter',
       system-ui,
       -apple-system,
       sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   h1,
   h2,
@@ -89,14 +154,19 @@
       0 1px 3px rgba(0, 0, 0, 0.06);
   }
   .card-hover:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    border-color: rgba(244, 63, 94, 0.2); /* rose-500/20 */
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    border-color: rgba(99, 102, 241, 0.4); /* indigo-500/40 */
   }
 
   /* AI Deployment Border — left accent only */
   .ai-deploy-border {
-    border-left: 2px solid #f43f5e;
+    border-left: 3px solid #f43f5e; /* Rose 500 AI Magic */
+  }
+
+  .ai-sparkle-glow {
+    filter: drop-shadow(0 0 3px rgba(168, 85, 247, 0.5))
+      drop-shadow(0 0 6px rgba(244, 63, 94, 0.25));
   }
 }
 
@@ -142,3 +212,9 @@
     opacity: 1;
   }
 }
+
+.bg-agent, .bg-primary {
+  --sparkle-start: #ffffff;
+  --sparkle-end: #cffafe;
+}
+

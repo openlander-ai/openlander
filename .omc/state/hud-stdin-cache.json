@@ -1,0 +1,38 @@
+{
+  "session_id": "f47c76a8-cc1f-42eb-9822-aacf192ffe49",
+  "transcript_path": "/home/lee/.claude/projects/-home-lee-OpenLander/f47c76a8-cc1f-42eb-9822-aacf192ffe49.jsonl",
+  "cwd": "/home/lee/OpenLander",
+  "model": { "id": "claude-opus-4-6[1m]", "display_name": "Opus 4.6 (1M context)" },
+  "workspace": {
+    "current_dir": "/home/lee/OpenLander",
+    "project_dir": "/home/lee/OpenLander",
+    "added_dirs": []
+  },
+  "version": "2.1.100",
+  "output_style": { "name": "default" },
+  "cost": {
+    "total_cost_usd": 13.420999250000003,
+    "total_duration_ms": 5385733,
+    "total_api_duration_ms": 935698,
+    "total_lines_added": 97,
+    "total_lines_removed": 44
+  },
+  "context_window": {
+    "total_input_tokens": 127,
+    "total_output_tokens": 32130,
+    "context_window_size": 1000000,
+    "current_usage": {
+      "input_tokens": 3,
+      "output_tokens": 8,
+      "cache_creation_input_tokens": 4600,
+      "cache_read_input_tokens": 255898
+    },
+    "used_percentage": 26,
+    "remaining_percentage": 74
+  },
+  "exceeds_200k_tokens": true,
+  "rate_limits": {
+    "five_hour": { "used_percentage": 13, "resets_at": 1775829600 },
+    "seven_day": { "used_percentage": 56.00000000000001, "resets_at": 1776074400 }
+  }
+}

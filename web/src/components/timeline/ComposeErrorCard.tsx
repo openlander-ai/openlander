@@ -90,7 +90,7 @@ export function ComposeErrorCard({
               {t('timeline.composeError.title')}
             </p>
             {errorType && (
-              <span className="text-[10px] font-mono text-agent/80 px-1.5 py-0.5 bg-agent/10 rounded border border-agent/20">
+              <span className="text-xs font-mono text-agent/80 px-1.5 py-0.5 bg-agent/10 rounded border border-agent/20">
                 {errorType}
               </span>
             )}
@@ -100,7 +100,7 @@ export function ComposeErrorCard({
 
         {errorType === 'env_file_missing' && (
           <div className="space-y-1.5 pt-2">
-            <p className="text-[11px] font-mono text-agent/80 uppercase tracking-wider">
+            <p className="text-xs font-mono text-agent/80 uppercase tracking-wider">
               {t('timeline.composeError.envVarsOptional')}
             </p>
             <textarea
@@ -121,7 +121,7 @@ export function ComposeErrorCard({
 
         {patterns.length > 0 && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] font-mono text-agent/80 uppercase tracking-wider">
+            <p className="text-xs font-mono text-agent/80 uppercase tracking-wider">
               {t('timeline.composeError.selectPattern')}
             </p>
             <div className="grid grid-cols-1 gap-2">
@@ -134,7 +134,7 @@ export function ComposeErrorCard({
                     'flex flex-col text-left p-3 rounded-md border transition-all duration-200',
                     selectedPatternId === pattern.id
                       ? 'bg-agent/10 border-agent/50 ring-1 ring-agent/50'
-                      : 'bg-bg-subtle/30 border-border hover:border-agent/30 hover:bg-bg-subtle/50',
+                      : 'bg-bg-panel border-border hover:border-agent/30 hover:bg-bg-subtle/50',
                     isSubmitting &&
                       selectedPatternId !== pattern.id &&
                       'opacity-50 cursor-not-allowed',
@@ -145,7 +145,7 @@ export function ComposeErrorCard({
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-primary-ol">{pattern.name}</span>
                         {pattern.recommended && (
-                          <span className="text-[10px] font-mono text-success px-1.5 py-0.5 bg-success/10 rounded border border-success/20">
+                          <span className="text-xs font-mono text-success px-1.5 py-0.5 bg-success/10 rounded border border-success/20">
                             {t('timeline.composeError.recommended')}
                           </span>
                         )}
@@ -154,13 +154,13 @@ export function ComposeErrorCard({
                       {(pattern.pros || pattern.cons) && (
                         <div className="mt-1.5 space-y-1">
                           {pattern.pros && (
-                            <p className="text-[11px] text-success/90 flex items-start gap-1.5">
+                            <p className="text-xs text-success/90 flex items-start gap-1.5">
                               <span className="font-bold mt-0.5">+</span>
                               <span>{pattern.pros}</span>
                             </p>
                           )}
                           {pattern.cons && (
-                            <p className="text-[11px] text-error/90 flex items-start gap-1.5">
+                            <p className="text-xs text-error/90 flex items-start gap-1.5">
                               <span className="font-bold mt-0.5">-</span>
                               <span>{pattern.cons}</span>
                             </p>
@@ -171,7 +171,7 @@ export function ComposeErrorCard({
                   </div>
                   {pattern.codeSnippet && (
                     <div className="mt-2 w-full">
-                      <pre className="text-[11px] font-mono text-agent/90 bg-bg-terminal p-2 rounded border border-agent/10 overflow-x-auto whitespace-pre-wrap break-all">
+                      <pre className="text-xs font-mono text-agent/90 bg-bg-terminal p-2 rounded border border-agent/10 overflow-x-auto whitespace-pre-wrap break-all">
                         {pattern.codeSnippet}
                       </pre>
                     </div>

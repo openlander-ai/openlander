@@ -1,11 +1,13 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Activity, History, SquareTerminal, Settings } from 'lucide-react';
+import { Activity, History, SquareTerminal, Settings, ShieldAlert } from 'lucide-react';
 import { OverviewTab } from '@/components/project/OverviewTab';
 import { DeploymentsTab } from '@/components/project/DeploymentsTab';
+import { RecoveryTab } from '@/components/project/RecoveryTab';
 import { ConsoleTab } from '@/components/project/ConsoleTab';
 import { SettingsTab } from '@/components/project/SettingsTab';
 import type { ProjectWithOptionalEnvironments } from '@/lib/api';
 import type { TimelineItem } from '@/lib/event-types';
+import { useLanguage } from '@/i18n/context';
 
 interface ProjectDetailTabsProps {
   id?: string;
@@ -14,7 +16,7 @@ interface ProjectDetailTabsProps {
   displayProject: ProjectWithOptionalEnvironments | null;
   allTimelineItems: TimelineItem[];
   isStreaming: boolean;
-  selectedEnvId?: string;
+  timelineDisconnected?: boolean;
   onRedeploy: () => void;
   onStop: () => void;
   onRollback: () => void;
@@ -27,11 +29,12 @@ export function ProjectDetailTabs({
   displayProject,
   allTimelineItems,
   isStreaming,
-  selectedEnvId,
+  timelineDisconnected,
   onRedeploy,
   onStop,
   onRollback,
 }: ProjectDetailTabsProps) {
+  const { t } = useLanguage();
   return (
     <Tabs
       value={activeTab}
@@ -44,28 +47,35 @@ export function ProjectDetailTabs({
           className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
         >
           <Activity className="h-3.5 w-3.5" />
-          Overview
+          {t('project.tabs.overview') ?? 'Overview'}
         </TabsTrigger>
         <TabsTrigger
           value="deployments"
           className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
         >
           <History className="h-3.5 w-3.5" />
-          Deployments
+          {t('project.tabs.deployments') ?? 'Deployments'}
         </TabsTrigger>
         <TabsTrigger
-          value="console"
+          value="recovery"
+          className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+        >
+          <ShieldAlert className="h-3.5 w-3.5" />
+          {t('project.tabs.recovery') ?? 'Recovery'}
+        </TabsTrigger>
+        <TabsTrigger
+          value="runtime"
           className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
         >
           <SquareTerminal className="h-3.5 w-3.5" />
-          Console
+          {t('project.tabs.runtime') ?? 'Runtime'}
         </TabsTrigger>
         <TabsTrigger
           value="settings"
           className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
         >
           <Settings className="h-3.5 w-3.5" />
-          Settings
+          {t('project.tabs.settings') ?? 'Settings'}
         </TabsTrigger>
       </TabsList>
 
@@ -77,7 +87,10 @@ export function ProjectDetailTabs({
             displayProject={displayProject}
             timelineItems={allTimelineItems}
             isTimelineStreaming={isStreaming}
-            onOpenLogs={() => onActiveTabChange('console')}
+            timelineDisconnected={timelineDisconnected}
+            onOpenLogs={() => onActiveTabChange('runtime')}
+            onOpenDeployments={() => onActiveTabChange('deployments')}
+            onOpenSettings={() => onActiveTabChange('settings')}
             onRedeploy={onRedeploy}
             onStop={onStop}
             onRollback={onRollback}
@@ -91,16 +104,19 @@ export function ProjectDetailTabs({
             projectId={id}
             projectStatus={displayProject.status}
             projectBranch={displayProject.branch}
-            environmentId={selectedEnvId}
           />
         )}
       </TabsContent>
 
-      <TabsContent value="console" className="flex-1 min-h-0 mt-0">
+      <TabsContent value="recovery" className="flex-1 min-h-0 mt-0">
+        {id && displayProject && <RecoveryTab projectId={id} />}
+      </TabsContent>
+
+      <TabsContent value="runtime" className="flex-1 min-h-0 mt-0">
         {id && displayProject && (
           <ConsoleTab
             projectId={id}
-            isActive={activeTab === 'console'}
+            isActive={activeTab === 'runtime'}
             projectStatus={displayProject.status}
           />
         )}

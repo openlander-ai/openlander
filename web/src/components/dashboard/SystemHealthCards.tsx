@@ -1,23 +1,8 @@
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import type { ProjectWithOptionalEnvironments, ServerStatus, SetupStatus } from '@/lib/api';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Activity,
-  AlertCircle,
-  AlertTriangle,
-  Box,
-  CheckCircle2,
-  Server,
-  ShieldCheck,
-} from 'lucide-react';
+import { AlertCircle, AlertTriangle, ChevronRight, X } from 'lucide-react';
+import { useState } from 'react';
 
 interface SystemHealthCardsProps {
   serverStatus: ServerStatus | null;
@@ -27,130 +12,130 @@ interface SystemHealthCardsProps {
   t: (key: string) => string;
 }
 
+interface Issue {
+  id: string;
+  icon: 'error' | 'warning';
+  label: string;
+  action?: string;
+  onClick?: () => void;
+}
+
 export function SystemHealthCards({
-  serverStatus,
   setupStatus,
   projects,
   onNavigate,
   t,
 }: SystemHealthCardsProps) {
+  const [dismissed, setDismissed] = useState(false);
+
   const isDockerOk = setupStatus?.docker?.ok;
   const isTraefikOk = setupStatus?.traefik?.ok;
   const isLlmOk = setupStatus?.llm?.ok;
-  const containerCount = serverStatus?.containers?.total ?? 0;
   const errorProjects = projects.filter((project) => project.status === 'error');
-  const isAllOk = isDockerOk && isTraefikOk && errorProjects.length === 0;
+
+  // Collect all issues
+  const issues: Issue[] = [];
+
+  if (!isDockerOk) {
+    issues.push({
+      id: 'docker',
+      icon: 'error',
+      label: 'Docker Engine is disconnected',
+      action: 'Settings',
+      onClick: () => onNavigate('/settings'),
+    });
+  }
+
+  if (!isTraefikOk) {
+    issues.push({
+      id: 'traefik',
+      icon: 'warning',
+      label: 'Traefik Proxy is offline — redeployments may break external access',
+      action: 'Settings',
+      onClick: () => onNavigate('/settings'),
+    });
+  }
+
+  if (!isLlmOk) {
+    issues.push({
+      id: 'llm',
+      icon: 'warning',
+      label: 'AI Recovery is not configured — auto-fix disabled',
+      action: 'Configure',
+      onClick: () => onNavigate('/settings'),
+    });
+  }
+
+  for (const project of errorProjects) {
+    issues.push({
+      id: `project-${project.id}`,
+      icon: 'error',
+      label: `${project.name} — deployment failed ${formatRelativeTime(project.updatedAt, t)}`,
+      action: 'View',
+      onClick: () => onNavigate(`/projects/${project.id}`),
+    });
+  }
+
+  // All OK = render nothing
+  if (issues.length === 0 || dismissed) {
+    return null;
+  }
+
+  const hasErrors = issues.some((i) => i.icon === 'error');
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex items-center gap-4 hover:bg-bg-subtle/50 transition-colors text-left w-full cursor-pointer">
-            <div className="p-2.5 bg-bg-subtle rounded-md shrink-0">
-              <Activity className="h-5 w-5 text-primary-ol" />
-            </div>
-            <div>
-              <p className="text-xs font-mono text-muted-ol mb-0.5">SYSTEM HEALTH</p>
-              <div className="flex items-center gap-1.5">
-                <div
-                  className={cn(
-                    'h-2 w-2 rounded-full shrink-0',
-                    isAllOk ? 'bg-success' : 'bg-error',
-                  )}
-                />
-                <span className="text-sm font-semibold text-primary-ol">
-                  {isAllOk ? 'All Systems Operational' : 'System Issues Detected'}
-                </span>
-              </div>
-            </div>
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-80" align="start">
-          <DropdownMenuLabel>System Issues</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {!isTraefikOk && (
-            <DropdownMenuItem onClick={() => onNavigate('/settings')} className="cursor-pointer">
-              <AlertTriangle className="h-3.5 w-3.5 text-warning mr-2 shrink-0" />
-              <span>Traefik Proxy: Offline</span>
-            </DropdownMenuItem>
+    <div
+      className={cn(
+        'rounded-lg border px-4 py-3 space-y-1.5',
+        hasErrors ? 'bg-error/5 border-error/20' : 'bg-warning/5 border-warning/20',
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {hasErrors ? (
+            <AlertCircle className="h-4 w-4 text-error shrink-0" />
+          ) : (
+            <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
           )}
-          {errorProjects.map((project) => (
-            <DropdownMenuItem
-              key={project.id}
-              onClick={() => onNavigate(`/projects/${project.id}`)}
-              className="cursor-pointer"
-            >
-              <AlertCircle className="h-3.5 w-3.5 text-error mr-2 shrink-0" />
-              <span className="truncate">{project.name}: error</span>
-              <span className="text-muted-ol text-[10px] ml-auto shrink-0">
-                {formatRelativeTime(project.updatedAt, t)}
+          <span className={cn('text-sm font-semibold', hasErrors ? 'text-error' : 'text-warning')}>
+            {issues.length === 1
+              ? '1 issue needs attention'
+              : `${issues.length} issues need attention`}
+          </span>
+        </div>
+        <button
+          onClick={() => setDismissed(true)}
+          className="p-1 rounded-md text-muted-ol hover:text-primary-ol hover:bg-bg-subtle transition-colors"
+          title="Dismiss"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="space-y-1">
+        {issues.map((issue) => (
+          <button
+            key={issue.id}
+            onClick={issue.onClick}
+            className="w-full flex items-center gap-2 text-left px-2 py-1.5 rounded-md hover:bg-bg-panel/60 transition-colors group"
+          >
+            <div
+              className={cn(
+                'h-1.5 w-1.5 rounded-full shrink-0',
+                issue.icon === 'error' ? 'bg-error' : 'bg-warning',
+              )}
+            />
+            <span className="text-xs font-body text-secondary-ol flex-1 truncate">
+              {issue.label}
+            </span>
+            {issue.action && (
+              <span className="text-[10px] font-medium text-muted-ol group-hover:text-agent flex items-center gap-0.5 shrink-0 transition-colors">
+                {issue.action}
+                <ChevronRight className="h-3 w-3" />
               </span>
-            </DropdownMenuItem>
-          ))}
-          {isAllOk && (
-            <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-body text-success">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              All systems operational
-            </div>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex items-center gap-4">
-        <div className="p-2.5 bg-bg-subtle rounded-md">
-          <Box className="h-5 w-5 text-primary-ol" />
-        </div>
-        <div>
-          <p className="text-xs font-mono text-muted-ol mb-0.5">DOCKER ENGINE</p>
-          <div className="flex items-center gap-1.5">
-            {isDockerOk ? (
-              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-            ) : (
-              <AlertCircle className="h-3.5 w-3.5 text-error" />
             )}
-            <span className="text-sm font-semibold text-primary-ol">
-              {isDockerOk ? `${containerCount} Containers` : 'Disconnected'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex items-center gap-4">
-        <div className="p-2.5 bg-bg-subtle rounded-md">
-          <Server className="h-5 w-5 text-primary-ol" />
-        </div>
-        <div>
-          <p className="text-xs font-mono text-muted-ol mb-0.5">TRAEFIK PROXY</p>
-          <div className="flex items-center gap-1.5">
-            {isTraefikOk ? (
-              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-            ) : (
-              <AlertCircle className="h-3.5 w-3.5 text-error" />
-            )}
-            <span className="text-sm font-semibold text-primary-ol">
-              {isTraefikOk ? 'Routing Active' : 'Offline'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex items-center gap-4">
-        <div className="p-2.5 bg-bg-subtle rounded-md">
-          <ShieldCheck className="h-5 w-5 text-primary-ol" />
-        </div>
-        <div>
-          <p className="text-xs font-mono text-muted-ol mb-0.5">AI RECOVERY</p>
-          <div className="flex items-center gap-1.5">
-            {isLlmOk ? (
-              <CheckCircle2 className="h-3.5 w-3.5 text-agent" />
-            ) : (
-              <AlertCircle className="h-3.5 w-3.5 text-warning" />
-            )}
-            <span className="text-sm font-semibold text-primary-ol">
-              {isLlmOk ? 'Armed & Ready' : 'Not Configured'}
-            </span>
-          </div>
-        </div>
+          </button>
+        ))}
       </div>
     </div>
   );

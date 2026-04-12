@@ -5,37 +5,35 @@ import { useLogStream, type LogEntry } from '@/hooks/use-log-stream';
 import { cn } from '@/lib/utils';
 import { Search, ArrowDown, Trash2, Radio, RefreshCw } from 'lucide-react';
 import { normalizeLogText, parseAnsiLine } from '@/lib/ansi';
+import { detectLevel, levelColors } from '@/lib/log-utils';
 import {
   CONSOLE_LABELS,
   DEFAULT_CONSOLE_FILTER_STATE,
   getConsoleSurfaceState,
   type ConsoleFilterState,
-  type ConsoleLogLevel,
   type ConsoleLogLevelFilter,
 } from '@/types';
+
+function formatLogTime(isoString: string): string {
+  try {
+    const d = new Date(isoString);
+    const Y = d.getFullYear();
+    const M = String(d.getMonth() + 1).padStart(2, '0');
+    const D = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    const ms = String(d.getMilliseconds()).padStart(3, '0');
+    return `${Y}-${M}-${D} ${hh}:${mm}:${ss}.${ms}`;
+  } catch {
+    return '';
+  }
+}
 
 interface LogViewerProps {
   projectId: string;
   toolbarActions?: React.ReactNode;
 }
-
-/** Detect log level from line content */
-function detectLevel(line: string): ConsoleLogLevel {
-  const lower = normalizeLogText(line).toLowerCase();
-  if (/\berror\b|\bfatal\b|\bpanic\b/.test(lower)) return 'error';
-  if (/\bwarn(ing)?\b/.test(lower)) return 'warn';
-  if (/\binfo\b/.test(lower)) return 'info';
-  if (/\bdebug\b|\btrace\b/.test(lower)) return 'debug';
-  return 'plain';
-}
-
-const levelColors: Record<ConsoleLogLevel, string> = {
-  error: 'text-error',
-  warn: 'text-warning',
-  info: '',
-  debug: 'text-muted-ol',
-  plain: '',
-};
 
 export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
   const { t } = useLanguage();
@@ -172,7 +170,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-panel/50">
+      <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-panel">
         {/* Left: Search */}
         <div className="flex items-center gap-1.5 flex-1 max-w-md">
           <Search className="h-3.5 w-3.5 text-muted-ol shrink-0" />
@@ -201,7 +199,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
               }))
             }
             className={cn(
-              'px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors',
+              'px-1.5 py-0.5 rounded text-xs font-mono transition-colors',
               isRegex
                 ? 'bg-agent/15 text-agent border border-agent/30'
                 : 'text-muted-ol hover:text-secondary-ol border border-transparent',
@@ -231,7 +229,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
         {/* Right: Controls & Status */}
         <div className="flex items-center gap-3">
           {/* Status Indicators */}
-          <div className="flex items-center gap-2 text-[11px] font-mono">
+          <div className="flex items-center gap-2 text-xs font-mono">
             {isConnected && (
               <span className="flex items-center gap-1.5 text-success">
                 <span className="relative flex h-2 w-2">
@@ -298,11 +296,10 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
         </div>
       </div>
 
-      {/* Log content — virtualized */}
       <div
         ref={parentRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-auto font-mono text-xs leading-5 bg-bg-app"
+        className="flex-1 overflow-auto font-log text-xs leading-5 bg-bg-panel"
       >
         {showRecoveryBanner && (
           <div className="sticky top-0 z-10 border-b border-[hsl(var(--border))] bg-bg-panel/95 px-4 py-2 backdrop-blur-sm">
@@ -311,7 +308,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                 <p className={cn('text-sm font-body', error ? 'text-error' : 'text-warning')}>
                   {error ? t('logs.errorTitle') : t('logs.disconnectedTitle')}
                 </p>
-                <p className="text-xs font-body text-muted-ol">
+                <p className="text-sm font-body text-muted-ol">
                   {error ? error : t('logs.disconnectedInlineBody')}
                 </p>
               </div>
@@ -333,7 +330,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
               onClick={() => void loadOlderWithScrollAnchor()}
               disabled={isLoadingOlder}
               className={cn(
-                'rounded-full border border-[hsl(var(--border))] px-3 py-1 text-[11px] font-body transition-colors',
+                'rounded-full border border-[hsl(var(--border))] px-3 py-1 text-xs font-body transition-colors',
                 isLoadingOlder
                   ? 'text-muted-ol bg-bg-panel/60 cursor-wait'
                   : 'text-secondary-ol bg-bg-panel hover:text-primary-ol',
@@ -406,11 +403,11 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                     transform: `translateY(${virtualItem.start}px)`,
                   }}
                   className={cn(
-                    'flex items-start px-4 py-0.5 hover:bg-bg-subtle/50 group border-b border-transparent hover:border-[hsl(var(--border))]/30 transition-colors border-l-2',
+                    'flex items-start px-4 py-0.5 hover:bg-bg-subtle/50 group border-b border-b-transparent hover:border-b-[hsl(var(--border))]/30 transition-colors border-l-2',
                     level === 'error'
-                      ? 'bg-error/10 border-error'
+                      ? 'bg-error/10 border-l-error'
                       : level === 'warn'
-                        ? 'bg-warning/10 border-warning'
+                        ? 'bg-warning/10 border-l-warning'
                         : 'border-l-transparent',
                     level === 'debug' && 'opacity-60',
                     level !== 'error' &&
@@ -420,13 +417,19 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                     level !== 'error' &&
                       level !== 'warn' &&
                       virtualItem.index % 2 === 0 &&
-                      'bg-bg-subtle/20',
+                      'bg-bg-subtle',
                   )}
                 >
                   {/* Line number */}
-                  <span className="shrink-0 w-12 text-right pr-3 text-muted-ol/40 group-hover:text-muted-ol select-none tabular-nums text-[10px] leading-5">
+                  <span className="shrink-0 w-12 text-right pr-3 text-muted-ol/40 group-hover:text-muted-ol select-none tabular-nums text-xs leading-5">
                     {virtualItem.index + 1}
                   </span>
+                  {/* Timestamp */}
+                  {entry.time && (
+                    <span className="shrink-0 pr-3 text-muted-ol/50 group-hover:text-muted-ol/70 select-none tabular-nums text-xs leading-5 font-mono">
+                      {formatLogTime(entry.time)}
+                    </span>
+                  )}
                   {/* Content */}
                   <span
                     className={cn('flex-1 whitespace-pre', levelColors[level])}
@@ -448,7 +451,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
             className={cn(
               'flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg transition-all duration-200',
               unseenCount > 0
-                ? 'bg-primary-ol text-bg-app font-medium hover:scale-105 hover:shadow-xl'
+                ? 'bg-primary-ol text-white font-medium hover:scale-105 hover:shadow-xl'
                 : 'bg-bg-panel border border-[hsl(var(--border))] text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle',
             )}
           >

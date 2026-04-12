@@ -3,26 +3,103 @@ import { stream } from 'hono/streaming';
 import { rm } from 'node:fs/promises';
 
 import type { AppContext } from '../../app.js';
-import { ProjectNotFoundError, TunnelStartError } from '../../errors.js';
+import { DeployLockedError, TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { encrypt } from '../../env/crypto.js';
-import { getProjectUrl } from '../../pipeline/traefik.js';
+import {
+  getProjectUrl,
+  getProjectUrls,
+  getAllIps,
+  getEnvironmentProjectHostname,
+} from '../../pipeline/traefik.js';
 import { cloneRepo } from '../../pipeline/git.js';
 import { scanForEnvUsage } from '../../pipeline/env-scan.js';
-import { generateEnvExample } from '../../pipeline/env-inject.js';
-import type { EnvironmentRow, EnvironmentType } from '../../db/index.js';
+import {
+  autoInjectServiceEnv,
+  cleanupAutoInjectedEnv,
+  generateEnvExample,
+} from '../../pipeline/env-inject.js';
+import type { EnvironmentRow, ProjectRow } from '../../db/index.js';
+import {
+  getEnvironmentByIdOrThrow,
+  getProjectOrThrow,
+  resolveEnvironmentByType,
+} from './helpers/project-helpers.js';
 
 const log = createModuleLogger('api');
 
-function isEnvironmentType(value: unknown): value is EnvironmentType {
-  return value === 'production' || value === 'development';
-}
-
-function mapEnvironment(environment: EnvironmentRow) {
+function mapEnvironment(projectName: string, environment: EnvironmentRow) {
+  const ips = getAllIps();
   return {
     ...environment,
+    url: `http://${getEnvironmentProjectHostname(projectName, environment.type)}`,
+    urls: ips.map((ip) => ({
+      url: `http://${getEnvironmentProjectHostname(projectName, environment.type, ip.address)}`,
+      type: ip.type,
+      ip: ip.address,
+    })),
     created_at: normalizeTimestamp(environment.created_at),
     updated_at: normalizeTimestamp(environment.updated_at),
+  };
+}
+
+function parseImageCmd(imageCmd: string | null): string[] | null {
+  if (!imageCmd) {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(imageCmd);
+    return Array.isArray(parsed) && parsed.every((entry: unknown) => typeof entry === 'string')
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseServiceCredentials(credentials: string | null): Record<string, string> | undefined {
+  if (!credentials) {
+    return undefined;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(credentials);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return undefined;
+    }
+
+    const entries = Object.entries(parsed);
+    const normalized: Record<string, string> = {};
+    for (const [key, value] of entries) {
+      if (typeof value === 'string') {
+        normalized[key] = value;
+        continue;
+      }
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        normalized[key] = String(value);
+      }
+    }
+    return normalized;
+  } catch {
+    return undefined;
+  }
+}
+
+function mapProjectForApi(project: ProjectRow) {
+  return {
+    ...project,
+    port: project.assigned_port ?? null,
+    url: project.assigned_port ? getProjectUrl(project.name) : null,
+    urls: project.assigned_port ? getProjectUrls(project.name) : [],
+    publicUrl: project.public_url ?? null,
+    repoUrl: project.repo_url,
+    source: project.source,
+    imageUrl: project.image_url ?? undefined,
+    imageCmd: parseImageCmd(project.image_cmd),
+    containerPort: project.container_port ?? null,
+    created_at: normalizeTimestamp(project.created_at),
+    updated_at: normalizeTimestamp(project.updated_at),
   };
 }
 
@@ -67,6 +144,27 @@ function extractFailureSummary(buildLog: string | null): string | null {
   return errorLine ?? lines.at(-1) ?? null;
 }
 
+function extractImageTagFromBuildLog(buildLog: string | null): string | null {
+  if (!buildLog) return null;
+
+  const buildMatch = buildLog.match(/\[build\]\s+([^\s]+)\s+\(\d+ms\)/);
+  if (buildMatch?.[1]) {
+    return buildMatch[1];
+  }
+
+  const rollbackMatch = buildLog.match(/\[rollback\]\s+[^\s]+\s+→\s+([^\s]+)/);
+  if (rollbackMatch?.[1]) {
+    return rollbackMatch[1];
+  }
+
+  const monorepoMatch = buildLog.match(/\[monorepo\].*→\s+([^\s]+)/);
+  if (monorepoMatch?.[1]) {
+    return monorepoMatch[1];
+  }
+
+  return null;
+}
+
 export function createProjectRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
@@ -88,6 +186,18 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     if (!projectName) {
       return c.json(
         { error: 'INVALID_PROJECT_NAME', message: 'Could not determine project name' },
+        400,
+      );
+    }
+
+    const PROJECT_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+    if (!PROJECT_NAME_REGEX.test(projectName)) {
+      return c.json(
+        {
+          error: 'INVALID_PROJECT_NAME',
+          message:
+            'Project name must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens',
+        },
         400,
       );
     }
@@ -121,22 +231,28 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/projects/:id/stats', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     if (project.container_id && project.status === 'running') {
       try {
-        const container = ctx.docker.getClient().getContainer(project.container_id);
-        const stats = await container.stats({ stream: false });
+        const stats = (await ctx.docker.getContainerStats(project.container_id)) as {
+          cpu_stats: {
+            cpu_usage: { total_usage: number };
+            system_cpu_usage: number;
+            online_cpus?: number;
+          };
+          precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
+          memory_stats: { usage: number; limit: number };
+        };
 
         const cpuDelta =
           stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
         const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
-        const cpuPercent =
-          systemDelta > 0
-            ? (cpuDelta / systemDelta) * stats.cpu_stats.cpu_usage.percpu_usage.length * 100
-            : 0;
+        const cpuCountRaw = (stats.cpu_stats.cpu_usage as unknown as { percpu_usage?: number[] })
+          .percpu_usage?.length;
+        const cpuCount =
+          cpuCountRaw && cpuCountRaw > 0 ? cpuCountRaw : stats.cpu_stats.online_cpus || 1;
+        const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
 
         return c.json({
           cpu: Math.round(cpuPercent * 10) / 10,
@@ -170,7 +286,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       | 'building'
       | 'error'
       | undefined;
-    const projects = ctx.db.listProjects(status);
+    const includeArchived = c.req.query('include_archived') === 'true';
+    const projects = ctx.db.listProjects(status, { includeArchived });
+    const ips = getAllIps();
 
     return c.json({
       count: projects.length,
@@ -181,172 +299,179 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           name: p.name,
           status: p.status,
           visibility: p.visibility,
+          source: p.source,
           repoUrl: p.repo_url,
           branch: p.branch,
           port: p.assigned_port,
           url: p.assigned_port ? getProjectUrl(p.name) : null,
+          urls: p.assigned_port
+            ? ips.map((ip) => ({
+                url: `http://${p.name}.${ip.address}.sslip.io`,
+                type: ip.type,
+                ip: ip.address,
+              }))
+            : [],
           publicUrl: p.public_url,
+          ...(p.image_url ? { imageUrl: p.image_url } : {}),
           createdAt: normalizeTimestamp(p.created_at),
           updatedAt: normalizeTimestamp(p.updated_at),
           parentProjectId: p.parent_project_id,
           isCompose: ctx.db.isParentProject(p.id),
           serviceCount: ctx.db.getChildProjects(p.id).length,
-          environments: environments.map(mapEnvironment),
+          environments: environments.map((env) => mapEnvironment(p.name, env)),
         };
       }),
     });
   });
 
   api.get('/projects/:id', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
-    const envVars = ctx.env.getAllMasked(project.id);
+    const envVars = ctx.env.getAll(project.id);
     const environments = ctx.db.getEnvironmentsByProject(project.id);
     const deployLogs = ctx.db.getDeployLogs(project.id, 5);
 
     return c.json({
-      ...project,
-      port: project.assigned_port ?? null,
-      url: project.assigned_port ? getProjectUrl(project.name) : null,
-      publicUrl: project.public_url ?? null,
-      repoUrl: project.repo_url,
-      created_at: normalizeTimestamp(project.created_at),
-      updated_at: normalizeTimestamp(project.updated_at),
-      environments: environments.map(mapEnvironment),
+      ...mapProjectForApi(project),
+      environments: environments.map((env) => mapEnvironment(project.name, env)),
       envVars,
-      recentDeploys: deployLogs,
+      recentDeploys: deployLogs.map((log) => ({
+        ...log,
+        commitMessage: log.commit_message ?? null,
+      })),
     });
   });
 
-  api.post('/projects/:id/environments', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+  api.patch('/projects/:id', async (c) => {
+    const project = getProjectOrThrow(c, ctx);
 
     const body = await c.req
-      .json<{ type?: unknown; branch?: unknown }>()
-      .catch(() => ({ type: undefined, branch: undefined }));
+      .json<{
+        imageUrl?: unknown;
+        imageCmd?: unknown;
+        containerPort?: unknown;
+        image_url?: unknown;
+        image_cmd?: unknown;
+        container_port?: unknown;
+      }>()
+      .catch(
+        (): {
+          imageUrl?: unknown;
+          imageCmd?: unknown;
+          containerPort?: unknown;
+          image_url?: unknown;
+          image_cmd?: unknown;
+          container_port?: unknown;
+        } => ({}),
+      );
 
-    if (!isEnvironmentType(body.type)) {
+    const imageUrlRaw = body.imageUrl ?? body.image_url;
+    const imageCmdRaw = body.imageCmd ?? body.image_cmd;
+    const containerPortRaw = body.containerPort ?? body.container_port;
+
+    const imageUrl =
+      imageUrlRaw === undefined || imageUrlRaw === null
+        ? undefined
+        : typeof imageUrlRaw === 'string'
+          ? imageUrlRaw
+          : undefined;
+
+    const imageCmd =
+      imageCmdRaw === undefined || imageCmdRaw === null
+        ? undefined
+        : Array.isArray(imageCmdRaw) && imageCmdRaw.every((entry) => typeof entry === 'string')
+          ? imageCmdRaw
+          : typeof imageCmdRaw === 'string'
+            ? imageCmdRaw
+                .split(' ')
+                .map((part) => part.trim())
+                .filter((part) => part.length > 0)
+            : undefined;
+
+    const containerPort =
+      containerPortRaw === undefined || containerPortRaw === null
+        ? undefined
+        : typeof containerPortRaw === 'number' && Number.isInteger(containerPortRaw)
+          ? containerPortRaw
+          : typeof containerPortRaw === 'string'
+            ? Number.parseInt(containerPortRaw, 10)
+            : undefined;
+
+    if (containerPort !== undefined && !Number.isFinite(containerPort)) {
       return c.json(
-        {
-          error: 'INVALID_ENVIRONMENT_TYPE',
-          message: 'type must be one of: production, development',
-        },
+        { error: 'INVALID_FIELD', message: 'containerPort must be a valid integer' },
         400,
       );
     }
 
-    const existing = ctx.db
-      .getEnvironmentsByProject(project.id)
-      .find((environment) => environment.type === body.type);
-    if (existing) {
+    if (containerPort !== undefined && (containerPort < 1 || containerPort > 65535)) {
       return c.json(
-        {
-          error: 'ENVIRONMENT_ALREADY_EXISTS',
-          message: `${body.type} environment already exists for project`,
-        },
-        409,
+        { error: 'INVALID_FIELD', message: 'containerPort must be between 1 and 65535' },
+        400,
       );
     }
 
-    const branch =
-      typeof body.branch === 'string' && body.branch.trim().length > 0
-        ? body.branch.trim()
-        : body.type === 'development'
-          ? 'develop'
-          : project.branch;
-
-    const created = ctx.db.createEnvironment({
-      id: crypto.randomUUID(),
-      projectId: project.id,
-      type: body.type,
-      branch,
+    ctx.db.updateProject(project.id, {
+      imageUrl,
+      imageCmd,
+      containerPort,
     });
 
-    return c.json({ environment: mapEnvironment(created) }, 201);
+    const updatedProject = ctx.db.getProject(project.id);
+    if (!updatedProject) {
+      return c.json({ error: 'NOT_FOUND', message: 'Project not found' }, 404);
+    }
+
+    return c.json(mapProjectForApi(updatedProject));
+  });
+
+  api.post('/projects/:id/environments', (_c) => {
+    return _c.json({ error: 'FEATURE_FROZEN', message: 'Environment creation is disabled' }, 410);
   });
 
   api.get('/projects/:id/environments', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const environments = ctx.db.getEnvironmentsByProject(project.id);
-    return c.json({ environments: environments.map(mapEnvironment) });
+    return c.json({ environments: environments.map((env) => mapEnvironment(project.name, env)) });
   });
 
   api.get('/projects/:id/environments/:envId', (c) => {
-    const id = c.req.param('id');
-    const envId = c.req.param('envId');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    const environment = ctx.db.getEnvironment(envId);
-    if (!environment || environment.project_id !== project.id) {
-      return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message: 'Environment not found' }, 404);
+    const project = getProjectOrThrow(c, ctx);
+    const environment = getEnvironmentByIdOrThrow(c, ctx, project.id);
+    if (environment instanceof Response) {
+      return environment;
     }
 
-    return c.json({ environment: mapEnvironment(environment) });
+    return c.json({ environment: mapEnvironment(project.name, environment) });
   });
 
-  api.delete('/projects/:id/environments/:envId', (c) => {
-    const id = c.req.param('id');
-    const envId = c.req.param('envId');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    const environment = ctx.db.getEnvironment(envId);
-    if (!environment || environment.project_id !== project.id) {
-      return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message: 'Environment not found' }, 404);
-    }
-
-    if (environment.type === 'production') {
-      return c.json(
-        {
-          error: 'PRODUCTION_ENVIRONMENT_PROTECTED',
-          message: 'Production environment cannot be deleted',
-        },
-        400,
-      );
-    }
-
-    ctx.db.deleteEnvironment(environment.id);
-    return c.json({ status: 'deleted', environmentId: environment.id });
+  api.delete('/projects/:id/environments/:envId', (_c) => {
+    return _c.json({ error: 'FEATURE_FROZEN', message: 'Environment deletion is disabled' }, 410);
   });
 
   api.get('/projects/:id/environments/:envId/env', (c) => {
-    const id = c.req.param('id');
-    const envId = c.req.param('envId');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    const environment = ctx.db.getEnvironment(envId);
-    if (!environment || environment.project_id !== project.id) {
-      return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message: 'Environment not found' }, 404);
+    const project = getProjectOrThrow(c, ctx);
+    const environment = getEnvironmentByIdOrThrow(c, ctx, project.id);
+    if (environment instanceof Response) {
+      return environment;
     }
 
     const envVars = ctx.env.getAllWithInheritance(project.id, environment.id);
     const inheritance = ctx.env.getInheritanceInfo(project.id, environment.id);
 
     return c.json({
-      environment: mapEnvironment(environment),
+      environment: mapEnvironment(project.name, environment),
       envVars,
       inheritance,
     });
   });
 
   api.post('/projects/:id/environments/:envId/env', async (c) => {
-    const id = c.req.param('id');
-    const envId = c.req.param('envId');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    const environment = ctx.db.getEnvironment(envId);
-    if (!environment || environment.project_id !== project.id) {
-      return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message: 'Environment not found' }, 404);
+    const project = getProjectOrThrow(c, ctx);
+    const environment = getEnvironmentByIdOrThrow(c, ctx, project.id);
+    if (environment instanceof Response) {
+      return environment;
     }
 
     const body = await c.req.json<{ variables?: Record<string, string> }>();
@@ -364,12 +489,154 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
   });
 
+  // --- Connected Services ---
+
+  api.get('/projects/:id/services', (c) => {
+    const project = getProjectOrThrow(c, ctx);
+    const connections = ctx.db.listServiceConnectionsByProject(project.id);
+
+    if (connections.length > 0) {
+      const services = connections
+        .map((connection) => ctx.db.getService(connection.service_id))
+        .filter((service) => service !== undefined);
+
+      return c.json(
+        services.map((service) => ({
+          id: service.id,
+          name: service.name,
+          type: service.type,
+          status: service.status,
+          port: service.port,
+          containerName: service.container_name,
+        })),
+      );
+    }
+
+    const services = ctx.serviceManager.getProjectServices(project.id);
+    return c.json(
+      services.map((s) => ({
+        id: s.id,
+        name: s.name,
+        type: s.type,
+        status: s.status,
+        port: s.port,
+        containerName: s.container_name,
+      })),
+    );
+  });
+
+  api.post('/projects/:id/services/:serviceId', (c) => {
+    const project = getProjectOrThrow(c, ctx);
+    const serviceId = c.req.param('serviceId');
+
+    const service = ctx.db.getService(serviceId);
+    if (!service) {
+      return c.json({ error: 'SERVICE_NOT_FOUND', message: 'Service not found' }, 404);
+    }
+
+    const existing = ctx.db.getServiceConnectionByProjectAndService(project.id, serviceId);
+    if (existing) {
+      return c.json({ error: 'ALREADY_CONNECTED', message: 'Service already connected' }, 409);
+    }
+
+    const connection = ctx.db.createServiceConnection({
+      projectId: project.id,
+      serviceId,
+    });
+
+    const credentials = parseServiceCredentials(service.credentials);
+    const injectedKeys = autoInjectServiceEnv({
+      db: ctx.db,
+      env: ctx.env,
+      projectId: project.id,
+      serviceId: service.id,
+      serviceName: service.name,
+      serviceType: service.type,
+      containerName: service.container_name,
+      credentials,
+    });
+    ctx.db.updateServiceConnection(connection.id, {
+      autoInjectedEnvKeys: JSON.stringify(injectedKeys),
+    });
+
+    // Auto-sync dependency
+    try {
+      ctx.db.createProjectDependency({
+        source_project_id: project.id,
+        target_service_id: serviceId,
+        dependency_type:
+          service.type === 'postgres' || service.type === 'mysql'
+            ? 'database'
+            : service.type === 'redis'
+              ? 'cache'
+              : 'custom',
+        source: 'auto',
+      });
+    } catch {
+      // dependency sync is best-effort, don't fail the connection creation
+    }
+
+    return c.json(
+      {
+        id: connection.id,
+        service: {
+          id: service.id,
+          name: service.name,
+          type: service.type,
+          status: service.status,
+          port: service.port,
+          containerName: service.container_name,
+        },
+        createdAt: connection.created_at,
+        autoInjectedEnvKeys: injectedKeys,
+      },
+      201,
+    );
+  });
+
+  api.delete('/projects/:id/services/:serviceId', (c) => {
+    const project = getProjectOrThrow(c, ctx);
+    const serviceId = c.req.param('serviceId');
+
+    const existing = ctx.db.getServiceConnectionByProjectAndService(project.id, serviceId);
+    if (!existing) {
+      return c.json(
+        { error: 'NOT_CONNECTED', message: 'Service not connected to this project' },
+        404,
+      );
+    }
+
+    const parsedAutoInjected = JSON.parse(existing.auto_injected_env_keys ?? '[]') as unknown;
+    const autoInjectedEnvKeys = Array.isArray(parsedAutoInjected)
+      ? parsedAutoInjected.filter((key): key is string => typeof key === 'string')
+      : [];
+    cleanupAutoInjectedEnv({
+      db: ctx.db,
+      env: ctx.env,
+      projectId: project.id,
+      autoInjectedEnvKeys,
+    });
+
+    ctx.db.deleteServiceConnectionByProjectAndService(project.id, serviceId);
+
+    // Auto-remove dependency
+    try {
+      const deps = ctx.db.findDependenciesByProject(project.id);
+      const matchingDep = deps.find(
+        (d) => d.target_service_id === serviceId && d.source === 'auto',
+      );
+      if (matchingDep) ctx.db.deleteProjectDependency(matchingDep.id);
+    } catch {
+      // dependency cleanup is best-effort
+    }
+
+    return c.json({ message: 'Service disconnected', serviceId });
+  });
+
   // --- Deployment History ---
 
   api.get('/projects/:id/deployments', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const limit = parseInt(c.req.query('limit') ?? '50', 10);
     const environmentId = c.req.query('environmentId');
@@ -383,6 +650,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         trigger: log.trigger,
         triggerDetail: log.trigger_detail,
         commitSha: log.commit_sha,
+        commitMessage: log.commit_message ?? null,
         durationMs: log.duration_ms,
         createdAt: normalizeTimestamp(log.created_at),
         failureSummary: log.status === 'failed' ? extractFailureSummary(log.build_log) : null,
@@ -391,10 +659,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/projects/:id/deployments/:deployId', (c) => {
-    const id = c.req.param('id');
     const deployId = c.req.param('deployId');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const log = ctx.db.getDeployLog(deployId);
     if (!log || log.project_id !== project.id) {
@@ -408,7 +674,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       trigger: log.trigger,
       triggerDetail: log.trigger_detail,
       commitSha: log.commit_sha,
+      commitMessage: log.commit_message ?? null,
       buildLog: log.build_log,
+      runtimeLog: log.runtime_log ?? null,
       durationMs: log.duration_ms,
       createdAt: normalizeTimestamp(log.created_at),
     });
@@ -416,192 +684,156 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // v0.2.3: Start a stopped project
   api.post('/projects/:id/start', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
-    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
-    const environmentRow = environments.find(
-      (environment) => environment.type === requestedEnvironment,
-    );
-
-    if (requestedEnvironment !== 'production' && !environmentRow) {
-      return c.json(
-        {
-          error: 'ENVIRONMENT_NOT_FOUND',
-          message: `${requestedEnvironment} environment not found for project`,
-        },
-        404,
-      );
+    if (!project.container_id) {
+      return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
     }
 
-    if (requestedEnvironment === 'production') {
-      if (!project.container_id) {
-        return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
-      }
-      await ctx.pipeline.start(project.id);
-    } else if (environmentRow) {
-      if (!environmentRow.container_id) {
-        return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
-      }
-      await ctx.pipeline.start(project.id, environmentRow.id);
-    }
+    await ctx.pipeline.start(project.id);
     return c.json({ status: 'started', project: project.name });
   });
 
   api.post('/projects/:id/stop', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
-    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
-    const environmentRow = environments.find(
-      (environment) => environment.type === requestedEnvironment,
-    );
-
-    if (requestedEnvironment !== 'production' && !environmentRow) {
-      return c.json(
-        {
-          error: 'ENVIRONMENT_NOT_FOUND',
-          message: `${requestedEnvironment} environment not found for project`,
-        },
-        404,
-      );
-    }
-
-    if (requestedEnvironment === 'production') {
-      await ctx.pipeline.stop(project.id);
-    } else if (environmentRow) {
-      await ctx.pipeline.stop(project.id, environmentRow.id);
-    }
+    ctx.coordinator.suppressProject(project.id, 60_000);
+    await ctx.pipeline.stop(project.id);
     return c.json({ status: 'stopped', project: project.name });
   });
 
   api.post('/projects/:id/redeploy', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
-    const environmentRow = environments.find(
-      (environment) => environment.type === requestedEnvironment,
-    );
-
-    if (requestedEnvironment !== 'production' && !environmentRow) {
-      return c.json(
-        {
-          error: 'ENVIRONMENT_NOT_FOUND',
-          message: `${requestedEnvironment} environment not found for project`,
-        },
-        404,
-      );
-    }
+    const project = getProjectOrThrow(c, ctx);
+    const strategy = (c.req.query('strategy') ?? 'force') as 'blue-green' | 'force';
 
     // If caller provides env_vars, merge them into existing vars before redeploying
     const body = await c.req
-      .json<{ env_vars?: Record<string, string> }>()
-      .catch(() => ({ env_vars: undefined }));
+      .json<{
+        env_vars?: Record<string, string>;
+        no_cache?: boolean;
+        health_check_path?: string;
+      }>()
+      .catch(() => ({ env_vars: undefined, no_cache: undefined, health_check_path: undefined }));
     if (body.env_vars && typeof body.env_vars === 'object') {
-      const envId = requestedEnvironment === 'production' ? undefined : environmentRow?.id;
       for (const [key, value] of Object.entries(body.env_vars)) {
         if (value.trim()) {
-          ctx.env.set(project.id, key, value.trim(), envId);
+          ctx.env.set(project.id, key, value.trim());
         }
       }
     }
 
+    if (project.source === 'git' && !project.repo_url) {
+      return c.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
+    }
+
+    const release = await ctx.deployQueue.acquire();
     try {
-      if (requestedEnvironment === 'production') {
-        ctx.db.updateProject(project.id, { status: 'building' });
-        const result = await ctx.pipeline.redeploy(project.id);
-        return c.json(result, result.success ? 200 : 500);
-      } else if (environmentRow) {
-        ctx.db.updateEnvironment(environmentRow.id, { status: 'building' });
-        const result = await ctx.pipeline.deployEnvironment(project.id, environmentRow.id, {
-          trigger: 'api',
-        });
-        return c.json(result, result.success ? 200 : 500);
-      }
-      return c.json({ success: false, error: 'Unknown environment' }, 500);
+      ctx.coordinator.suppressProject(project.id, 120_000);
+      ctx.db.updateProject(project.id, { status: 'building' });
+      const result = await ctx.pipeline.redeploy(project.id, {
+        noCache: body.no_cache,
+        strategy,
+        healthCheckPath: body.health_check_path,
+      });
+      return c.json(result, result.success ? 200 : 500);
     } catch (err) {
-      if (requestedEnvironment === 'production') {
-        ctx.db.updateProject(project.id, { status: 'error' });
-      } else if (environmentRow) {
-        ctx.db.updateEnvironment(environmentRow.id, { status: 'error' });
+      if (err instanceof DeployLockedError) {
+        return c.json(err.toJSON(), 409);
       }
+      ctx.db.updateProject(project.id, { status: 'error' });
       const errMsg = err instanceof Error ? err.message : String(err);
       return c.json({ success: false, error: errMsg }, 500);
+    } finally {
+      release();
     }
   });
 
   // v0.3: Rollback
   api.post('/projects/:id/rollback', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
-    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
-    const environmentRow = environments.find(
-      (environment) => environment.type === requestedEnvironment,
-    );
+    const environmentResolution = resolveEnvironmentByType(c, ctx, project);
+    if ('response' in environmentResolution) {
+      return environmentResolution.response;
+    }
+    const { environmentRow } = environmentResolution;
 
-    if (requestedEnvironment !== 'production' && !environmentRow) {
-      return c.json(
-        {
-          error: 'ENVIRONMENT_NOT_FOUND',
-          message: `${requestedEnvironment} environment not found for project`,
-        },
-        404,
-      );
+    const body = await c.req
+      .json<{ deployment_id?: unknown }>()
+      .catch(() => ({ deployment_id: undefined }));
+    const deploymentId =
+      typeof body.deployment_id === 'string' && body.deployment_id.trim().length > 0
+        ? body.deployment_id.trim()
+        : undefined;
+
+    if (deploymentId) {
+      const deployment = ctx.db.getDeployLog(deploymentId);
+      if (!deployment || deployment.project_id !== project.id) {
+        return c.json(
+          {
+            error: 'DEPLOYMENT_NOT_FOUND',
+            message: `Deployment ${deploymentId} not found for project`,
+          },
+          404,
+        );
+      }
+
+      const isRequestedEnvironmentMatch =
+        deployment.environment_id === null ||
+        (!!environmentRow && deployment.environment_id === environmentRow.id);
+
+      if (!isRequestedEnvironmentMatch) {
+        return c.json(
+          {
+            error: 'DEPLOYMENT_ENVIRONMENT_MISMATCH',
+            message: 'Selected deployment does not belong to the requested environment',
+          },
+          400,
+        );
+      }
+
+      const imageTag = extractImageTagFromBuildLog(deployment.build_log);
+      if (!imageTag) {
+        return c.json(
+          {
+            error: 'DEPLOYMENT_IMAGE_NOT_FOUND',
+            message: 'Could not determine image tag from selected deployment',
+          },
+          400,
+        );
+      }
+
+      ctx.db.updateProject(project.id, { previousImageTag: imageTag });
+      if (environmentRow) {
+        ctx.db.updateEnvironment(environmentRow.id, { previousImageTag: imageTag });
+      }
     }
 
-    let result;
-    if (requestedEnvironment === 'production') {
-      result = await ctx.pipeline.rollback(project.id);
-    } else if (environmentRow) {
-      result = await ctx.pipeline.rollback(project.id, environmentRow.id);
-    } else {
-      return c.json({ success: false, error: 'Unknown environment' }, 500);
-    }
+    const result = await ctx.pipeline.rollback(project.id);
     return c.json(result, result.success ? 200 : 500);
   });
 
   // v0.3: Blue-green deployment
   api.post('/projects/:id/blue-green', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
-    if (requestedEnvironment !== 'production') {
-      return c.json(
-        {
-          success: false,
-          error:
-            'Blue-green deployment is currently only supported for the production environment.',
-        },
-        400,
-      );
-    }
-
+    const project = getProjectOrThrow(c, ctx);
     const body = await c.req
       .json<{ health_check_path?: string }>()
       .catch((): { health_check_path?: string } => ({}));
-    const result = await ctx.blueGreen.deploy(project.id, {
-      healthCheckPath: body.health_check_path,
-    });
-    return c.json(result, result.success ? 200 : 500);
+    const release = await ctx.deployQueue.acquire();
+    try {
+      const result = await ctx.pipeline.redeploy(project.id, {
+        strategy: 'blue-green',
+        healthCheckPath: body.health_check_path,
+      });
+      return c.json(result, result.success ? 200 : 500);
+    } finally {
+      release();
+    }
   });
 
   // v0.2.3: Webhook settings API
   api.get('/projects/:id/webhooks', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
     const configs = ctx.db.getWebhookConfigs(project.id);
     return c.json({
       webhooks: configs.map((cfg) => ({
@@ -617,9 +849,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/webhooks', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
     const body = await c.req.json<{ source: string; branch_filter?: string; enabled?: boolean }>();
     if (!body.source || !['github', 'gitlab', 'bitbucket'].includes(body.source)) {
       return c.json({ error: 'Invalid source. Must be github, gitlab, or bitbucket.' }, 400);
@@ -651,31 +881,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.delete('/projects/:id/webhooks/:source', (c) => {
-    const id = c.req.param('id');
     const source = c.req.param('source');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
     if (!['github', 'gitlab', 'bitbucket'].includes(source)) {
       return c.json({ error: 'Invalid source' }, 400);
     }
     ctx.db.deleteWebhookConfig(project.id, source as 'github' | 'gitlab' | 'bitbucket');
     return c.json({ status: 'deleted' });
-  });
-
-  // v0.3: Database provisioning
-  api.post('/projects/:id/provision-db', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    const body = await c.req
-      .json<{ type?: 'sqlite' | 'postgres'; db_name?: string }>()
-      .catch((): { type?: 'sqlite' | 'postgres'; db_name?: string } => ({}));
-    const result = await ctx.dbProvisioner.provision(project.id, {
-      type: body.type ?? 'postgres',
-      dbName: body.db_name,
-    });
-    return c.json({ status: 'provisioned', project: project.name, ...result });
   });
 
   // v0.3: Build error debugging
@@ -723,9 +935,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // --- v0.0.11: Insight action handlers ---
 
   api.post('/projects/:id/actions', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const body = await c.req.json<{ action: string }>().catch(() => ({ action: '' }));
     const { action } = body;
@@ -740,12 +950,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
             c.id !== project.container_id &&
             c.status === 'running',
         );
-        const client = ctx.docker.getClient();
         for (const container of stale) {
           try {
-            const dockerContainer = client.getContainer(container.id);
-            await dockerContainer.stop();
-            await dockerContainer.remove();
+            await ctx.docker.stopContainer(container.id);
+            await ctx.docker.removeContainer(container.id);
           } catch (err) {
             log.warn({ err, containerId: container.id }, 'Failed to remove stale container');
           }
@@ -773,19 +981,47 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     }
   });
 
-  api.delete('/projects/:id', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+  // --- Archive / Unarchive / Purge ---
 
+  api.post('/projects/:id/archive', async (c) => {
+    const project = getProjectOrThrow(c, ctx);
+    ctx.coordinator.suppressProject(project.id, 60_000);
+    await ctx.pipeline.archive(project.id);
+    const updated = ctx.db.getProject(project.id);
+    return c.json({ project: updated });
+  });
+
+  api.post('/projects/:id/unarchive', async (c) => {
+    const project = getProjectOrThrow(c, ctx);
+    await ctx.pipeline.unarchive(project.id);
+    const updated = ctx.db.getProject(project.id);
+    return c.json({ project: updated });
+  });
+
+  api.delete('/projects/:id/purge', async (c) => {
+    const confirm = c.req.query('confirm');
+    if (confirm !== 'true') {
+      return c.json(
+        { error: 'Confirmation required. Add ?confirm=true to permanently delete.' },
+        400,
+      );
+    }
+    const project = getProjectOrThrow(c, ctx);
+    ctx.coordinator.suppressProject(project.id, 60_000);
     await ctx.pipeline.remove(project.id, ctx.cloudflare);
-    return c.json({ status: 'removed', project: project.name });
+    return c.json({ success: true, message: 'Project permanently deleted' });
+  });
+
+  api.delete('/projects/:id', async (c) => {
+    const project = getProjectOrThrow(c, ctx);
+
+    ctx.coordinator.suppressProject(project.id, 60_000);
+    await ctx.pipeline.archive(project.id);
+    return c.json({ status: 'archived', project: project.name });
   });
 
   api.get('/projects/:id/logs', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const follow = c.req.query('follow');
 
@@ -795,13 +1031,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         c.header('Content-Type', 'application/x-ndjson');
 
         try {
-          const container = ctx.docker.getClient().getContainer(containerId);
-          const logStream = await container.logs({
-            follow: true,
-            stdout: true,
-            stderr: true,
-            tail: 50,
-          });
+          const logStream = await ctx.docker.getLogStream(containerId, { tail: 50 });
 
           logStream.on('data', (chunk: Buffer) => {
             const headerSize = 8;
@@ -839,22 +1069,19 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     const lines = parseInt(c.req.query('lines') ?? '50', 10);
     const logs = await ctx.pipeline.getLogs(project.id, lines);
+
     return c.json({ project: project.name, logs });
   });
 
   api.get('/projects/:id/env', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
-    const vars = ctx.env.getAllMasked(project.id);
+    const vars = ctx.env.getAll(project.id);
     return c.json({ project: project.name, envVars: vars });
   });
 
   api.get('/projects/:id/env-example', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
     if (!project.repo_url) {
       return c.json({ error: 'MISSING_REPO_URL', message: 'Project has no repository URL' }, 400);
     }
@@ -871,19 +1098,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
 
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
-    const environmentRow = environments.find(
-      (environment) => environment.type === requestedEnvironment,
-    );
-    if (environments.length > 0 && !environmentRow) {
-      return c.json(
-        {
-          error: 'ENVIRONMENT_NOT_FOUND',
-          message: `${requestedEnvironment} environment not found for project`,
-        },
-        404,
-      );
+    const environmentResolution = resolveEnvironmentByType(c, ctx, project, {
+      requireExistingEnvironmentWhenAnyExists: true,
+    });
+    if ('response' in environmentResolution) {
+      return environmentResolution.response;
     }
+    const { environmentRow } = environmentResolution;
 
     let clonePath: string | null = null;
     try {
@@ -909,9 +1130,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/env', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const body = await c.req.json<{ variables?: Record<string, string> }>();
     if (!body.variables) {
@@ -1031,9 +1250,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/expose', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     if (!project.assigned_port) {
       return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
@@ -1057,18 +1274,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/unexpose', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     ctx.pipeline.closeTunnel(project.id);
     return c.json({ status: 'unexposed', project: project.name });
   });
 
   api.post('/projects/:id/share', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const body = await c.req.json<{ accessCode: string }>();
     if (!body.accessCode || body.accessCode.length < 4) {
@@ -1153,9 +1366,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.delete('/projects/:id/share', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const tunnel = ctx.pipeline.getTunnel(project.id);
     if (tunnel) {
@@ -1172,9 +1383,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/projects/:id/previews', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const previews = ctx.db.getPreviewProjects(project.id);
     return c.json({
@@ -1192,10 +1401,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.delete('/projects/:id/previews/:previewId', async (c) => {
-    const id = c.req.param('id');
     const previewId = c.req.param('previewId');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const preview = ctx.db.getProject(previewId);
     if (!preview || preview.parent_project_id !== project.id) {

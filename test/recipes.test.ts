@@ -246,8 +246,8 @@ describe('matchAllRecipes', () => {
 });
 
 describe('BUILD_RECIPES', () => {
-  it('has 25 recipes', () => {
-    expect(BUILD_RECIPES).toHaveLength(25);
+  it('has 26 recipes', () => {
+    expect(BUILD_RECIPES).toHaveLength(26);
   });
 
   it('all recipes have required fields', () => {
@@ -258,5 +258,24 @@ describe('BUILD_RECIPES', () => {
       expect(typeof recipe.diagnosis).toBe('string');
       expect(typeof recipe.fix).toBe('string');
     }
+  });
+
+  it('adds executable action to node-gyp recipe', () => {
+    const recipe = BUILD_RECIPES.find((entry) => entry.title.includes('node-gyp'));
+    expect(recipe?.action).toEqual({
+      type: 'dockerfile_replace_pattern',
+      pattern: 'FROM (node:[^-\\s]+)-alpine',
+      replacement: 'FROM $1-bookworm-slim',
+    });
+  });
+
+  it('adds executable action to OOM recipe', () => {
+    const recipe = BUILD_RECIPES.find((entry) => entry.title.includes('Out of memory'));
+    expect(recipe?.action).toEqual({
+      type: 'dockerfile_add_line',
+      line: 'ENV NODE_OPTIONS="--max-old-space-size=4096"',
+      anchor: '^CMD\\b|^ENTRYPOINT\\b',
+      position: 'before',
+    });
   });
 });

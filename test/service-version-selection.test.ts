@@ -87,10 +87,10 @@ describe('ServiceManager.create() with version selection', () => {
       template: 'postgresql',
     });
 
-    const createCall = dockerHarness.client.createContainer.mock.calls[0];
-    expect(createCall).toBeDefined();
-    const containerConfig = createCall?.[0];
-    expect(containerConfig?.Image).toBe('postgres:17-alpine');
+    const runCall = (dockerHarness.docker.runServiceContainer as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(runCall).toBeDefined();
+    expect(runCall?.[0]?.imageTag).toBe('postgres:17-alpine');
   });
 
   it('should override image tag when specific version is provided', async () => {
@@ -104,10 +104,10 @@ describe('ServiceManager.create() with version selection', () => {
       version: '15-alpine',
     });
 
-    const createCall = dockerHarness.client.createContainer.mock.calls[0];
-    expect(createCall).toBeDefined();
-    const containerConfig = createCall?.[0];
-    expect(containerConfig?.Image).toBe('postgres:15-alpine');
+    const runCall = (dockerHarness.docker.runServiceContainer as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(runCall).toBeDefined();
+    expect(runCall?.[0]?.imageTag).toBe('postgres:15-alpine');
   });
 
   it('should use first version for mysql when version is omitted', async () => {
@@ -120,10 +120,10 @@ describe('ServiceManager.create() with version selection', () => {
       template: 'mysql',
     });
 
-    const createCall = dockerHarness.client.createContainer.mock.calls[0];
-    expect(createCall).toBeDefined();
-    const containerConfig = createCall?.[0];
-    expect(containerConfig?.Image).toBe('mysql:9');
+    const runCall = (dockerHarness.docker.runServiceContainer as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(runCall).toBeDefined();
+    expect(runCall?.[0]?.imageTag).toBe('mysql:9');
   });
 
   it('should override mysql version when specified', async () => {
@@ -137,10 +137,10 @@ describe('ServiceManager.create() with version selection', () => {
       version: '8',
     });
 
-    const createCall = dockerHarness.client.createContainer.mock.calls[0];
-    expect(createCall).toBeDefined();
-    const containerConfig = createCall?.[0];
-    expect(containerConfig?.Image).toBe('mysql:8');
+    const runCall = (dockerHarness.docker.runServiceContainer as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(runCall).toBeDefined();
+    expect(runCall?.[0]?.imageTag).toBe('mysql:8');
   });
 
   it('should use first version for redis when version is omitted', async () => {
@@ -153,10 +153,10 @@ describe('ServiceManager.create() with version selection', () => {
       template: 'redis',
     });
 
-    const createCall = dockerHarness.client.createContainer.mock.calls[0];
-    expect(createCall).toBeDefined();
-    const containerConfig = createCall?.[0];
-    expect(containerConfig?.Image).toBe('redis:8-alpine');
+    const runCall = (dockerHarness.docker.runServiceContainer as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(runCall).toBeDefined();
+    expect(runCall?.[0]?.imageTag).toBe('redis:8-alpine');
   });
 
   it('should override redis version when specified', async () => {
@@ -170,10 +170,10 @@ describe('ServiceManager.create() with version selection', () => {
       version: '7-alpine',
     });
 
-    const createCall = dockerHarness.client.createContainer.mock.calls[0];
-    expect(createCall).toBeDefined();
-    const containerConfig = createCall?.[0];
-    expect(containerConfig?.Image).toBe('redis:7-alpine');
+    const runCall = (dockerHarness.docker.runServiceContainer as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(runCall).toBeDefined();
+    expect(runCall?.[0]?.imageTag).toBe('redis:7-alpine');
   });
 
   it('should use first version for mongodb when version is omitted', async () => {
@@ -186,10 +186,10 @@ describe('ServiceManager.create() with version selection', () => {
       template: 'mongodb',
     });
 
-    const createCall = dockerHarness.client.createContainer.mock.calls[0];
-    expect(createCall).toBeDefined();
-    const containerConfig = createCall?.[0];
-    expect(containerConfig?.Image).toBe('mongo:8');
+    const runCall = (dockerHarness.docker.runServiceContainer as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(runCall).toBeDefined();
+    expect(runCall?.[0]?.imageTag).toBe('mongo:8');
   });
 
   it('should override mongodb version when specified', async () => {
@@ -203,9 +203,9 @@ describe('ServiceManager.create() with version selection', () => {
       version: '7',
     });
 
-    const createCall = dockerHarness.client.createContainer.mock.calls[0];
-    expect(createCall).toBeDefined();
-    const containerConfig = createCall?.[0];
-    expect(containerConfig?.Image).toBe('mongo:7');
+    const runCall = (dockerHarness.docker.runServiceContainer as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(runCall).toBeDefined();
+    expect(runCall?.[0]?.imageTag).toBe('mongo:7');
   });
 });

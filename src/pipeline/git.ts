@@ -29,6 +29,25 @@ export interface CloneOptions {
 export interface CloneResult {
   path: string;
   commitSha: string;
+  branch: string;
+}
+
+export async function getCommitSubject(
+  repoPath: string,
+  commitSha?: string,
+): Promise<string | undefined> {
+  try {
+    const args = ['log', '-1', '--pretty=%s'];
+    if (commitSha && commitSha.trim().length > 0) {
+      args.push(commitSha.trim());
+    }
+    const { stdout } = await exec('git', args, { cwd: repoPath, timeout: 10_000 });
+    const subject = stdout.trim();
+    return subject.length > 0 ? subject : undefined;
+  } catch (error) {
+    log.debug({ err: error, repoPath, commitSha }, 'Failed to resolve commit subject');
+    return undefined;
+  }
 }
 
 /**
@@ -79,9 +98,11 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
   }
   args.push(normalizedUrl, cloneDir);
 
-  const env: Record<string, string> = { ...process.env } as Record<string, string>;
-  // Prevent git from trying to prompt for credentials (fails in non-interactive environments)
-  env['GIT_TERMINAL_PROMPT'] = '0';
+  const env: Record<string, string> = { GIT_TERMINAL_PROMPT: '0' };
+  for (const key of ['PATH', 'HOME', 'USER', 'LANG', 'SSH_AUTH_SOCK', 'GIT_SSH_COMMAND']) {
+    const val = process.env[key];
+    if (val) env[key] = val;
+  }
   if (sshKeyPath) {
     env['GIT_SSH_COMMAND'] = `ssh -i ${sshKeyPath} -o StrictHostKeyChecking=no`;
   }
@@ -121,22 +142,25 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
       if (msg.includes('Authentication failed') || msg.includes('Permission denied')) {
         throw new GitAuthError(repoUrl);
       }
-      if (msg.includes('Remote branch') && msg.includes('not found')) {
+      if (isGitBranchNotFoundMessage(msg)) {
         throw new GitBranchNotFoundError(repoUrl, branch ?? 'unknown');
       }
-      if (msg.includes('not found') || msg.includes('does not exist') || msg.includes('404')) {
+      if (isGitRepoNotFoundMessage(msg)) {
         throw new GitRepoNotFoundError(repoUrl);
       }
       throw new GitCloneError(repoUrl, msg);
     }
   }
 
-  // Get commit SHA
   const { stdout: sha } = await exec('git', ['rev-parse', 'HEAD'], { cwd: cloneDir });
+  const { stdout: resolvedBranch } = await exec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+    cwd: cloneDir,
+  });
 
   return {
     path: cloneDir,
     commitSha: sha.trim(),
+    branch: resolvedBranch.trim() || branch || 'main',
   };
 }
 
@@ -164,4 +188,14 @@ function toSshUrl(url: string): string | null {
   // Only convert known hosts
   if (!['github.com', 'gitlab.com', 'bitbucket.org'].some((h) => host.includes(h))) return null;
   return `git@${host}:${path}`;
+}
+
+function isGitBranchNotFoundMessage(message: string): boolean {
+  return message.includes('Remote branch') && message.includes('not found');
+}
+
+function isGitRepoNotFoundMessage(message: string): boolean {
+  return (
+    message.includes('not found') || message.includes('does not exist') || message.includes('404')
+  );
 }

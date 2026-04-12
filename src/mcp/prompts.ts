@@ -110,13 +110,6 @@ Set up automatic deploys on git push:
 2. Configure webhook in GitHub/GitLab with the URL and secret
 3. Pushes to the configured branch auto-trigger redeploy
 
-## Multi-Environment Deploys
-
-Each project auto-creates a production environment. Add a development environment:
-1. create_environment({ project_name: "myapp", type: "development", branch: "develop" })
-2. deploy_environment({ project_name: "myapp", environment_type: "development" })
-3. list_environments({ project_name: "myapp" }) — see all environments
-
 ${typeSpecific}`,
           },
         },

@@ -13,9 +13,11 @@ function createMockDocker(): Docker {
   return {
     stopContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     runContainer: vi.fn().mockResolvedValue('container-rollback-new'),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
     listAllContainers: vi.fn().mockResolvedValue([]),
+    inspectImage: vi.fn().mockResolvedValue({}),
   } as unknown as Docker;
 }
 
@@ -66,13 +68,13 @@ describe('RollbackExecutor', () => {
     expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-env-old',
     );
-    expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-env-old',
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         imageTag: 'openlander/env-app:dev-old',
-        name: expect.stringContaining('ol-env-app-dev-'),
+        name: 'ol-env-app',
         port: 11011,
       }),
     );
@@ -138,6 +140,96 @@ describe('RollbackExecutor', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('No previous image available for rollback');
+  });
+
+  it('BUG-004: rollback succeeds after two timestamp-tagged deployments', async () => {
+    db.createProject({
+      id: 'p-bug-004',
+      name: 'rollback-app',
+      repoUrl: 'https://github.com/openlander/rollback-app',
+      branch: 'main',
+    });
+    db.updateProject('p-bug-004', {
+      status: 'running',
+      containerId: 'container-current',
+      imageTag: 'openlander/rollback-app:1712345679000',
+      previousImageTag: 'openlander/rollback-app:1712345600000',
+    });
+
+    const result = await rollbackExecutor.rollbackToImage('p-bug-004');
+
+    expect(result.success).toBe(true);
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageTag: 'openlander/rollback-app:1712345600000',
+      }),
+    );
+    expect(db.getProject('p-bug-004')?.image_tag).toBe('openlander/rollback-app:1712345600000');
+    expect(db.getProject('p-bug-004')?.previous_image_tag).toBe(
+      'openlander/rollback-app:1712345679000',
+    );
+  });
+
+  it('BUG-004: returns clear error when rollback image was pruned', async () => {
+    db.createProject({
+      id: 'p-pruned',
+      name: 'pruned-app',
+      repoUrl: 'https://github.com/openlander/pruned-app',
+      branch: 'main',
+    });
+    db.updateProject('p-pruned', {
+      status: 'running',
+      containerId: 'container-pruned',
+      imageTag: 'openlander/pruned-app:1712345679000',
+      previousImageTag: 'openlander/pruned-app:1712345600000',
+    });
+
+    (docker.inspectImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Image not found: openlander/pruned-app:1712345600000'),
+    );
+
+    const result = await rollbackExecutor.rollbackToImage('p-pruned');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe(
+      'No previous image available for rollback — the image may have been pruned',
+    );
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
+  it('persists containerPort to project and environment on rollback', async () => {
+    db.createProject({
+      id: 'p-port',
+      name: 'port-app',
+      repoUrl: 'https://github.com/openlander/port-app',
+      branch: 'main',
+    });
+    db.updateProject('p-port', {
+      status: 'running',
+      containerId: 'container-port-old',
+      imageTag: 'openlander/port-app:v2',
+      previousImageTag: 'openlander/port-app:v1',
+      assignedPort: 10050,
+    });
+    db.updateEnvironment('p-port-production', {
+      status: 'running',
+      containerId: 'container-port-old',
+      imageTag: 'openlander/port-app:v2',
+      previousImageTag: 'openlander/port-app:v1',
+      assignedPort: 10050,
+    });
+
+    (docker.getImageExposedPort as ReturnType<typeof vi.fn>).mockResolvedValueOnce(8080);
+
+    const result = await rollbackExecutor.rollbackToImage('p-port', 'p-port-production');
+
+    expect(result.success).toBe(true);
+
+    const project = db.getProject('p-port');
+    expect(project?.container_port).toBe(8080);
+
+    const environment = db.getEnvironment('p-port-production');
+    expect(environment?.container_port).toBe(8080);
   });
 
   it('returns an error and marks status when container start fails', async () => {

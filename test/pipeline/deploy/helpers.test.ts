@@ -31,6 +31,62 @@ describe('parsePendingFix', () => {
     expect(result).toBeNull();
   });
 
+  it('parses valid JSON with filePath and patches', () => {
+    const result = parsePendingFix(
+      JSON.stringify({
+        filePath: 'Dockerfile',
+        patches: [{ pattern: 'FROM node:22-alpine', replacement: 'FROM node:22-bookworm-slim' }],
+      }),
+    );
+
+    expect(result).toEqual({
+      filePath: 'Dockerfile',
+      patches: [
+        {
+          pattern: 'FROM node:22-alpine',
+          replacement: 'FROM node:22-bookworm-slim',
+          flags: 'gm',
+        },
+      ],
+    });
+  });
+
+  it('parses patch flags when provided', () => {
+    const result = parsePendingFix(
+      JSON.stringify({
+        filePath: 'Dockerfile',
+        patches: [
+          {
+            pattern: '^CMD',
+            replacement: 'ENV NODE_OPTIONS="--max-old-space-size=4096"\n$&',
+            flags: 'm',
+          },
+        ],
+      }),
+    );
+
+    expect(result).toEqual({
+      filePath: 'Dockerfile',
+      patches: [
+        {
+          pattern: '^CMD',
+          replacement: 'ENV NODE_OPTIONS="--max-old-space-size=4096"\n$&',
+          flags: 'm',
+        },
+      ],
+    });
+  });
+
+  it('returns null when patches array exists but no valid patches', () => {
+    const result = parsePendingFix(
+      JSON.stringify({
+        filePath: 'Dockerfile',
+        patches: [{ pattern: 123, replacement: false }],
+      }),
+    );
+    expect(result).toBeNull();
+  });
+
   it('returns null when filePath is not a string', () => {
     const result = parsePendingFix('{"filePath":123,"content":"FROM node:20"}');
     expect(result).toBeNull();
@@ -121,14 +177,14 @@ describe('resolveDockerfilePath', () => {
 });
 
 describe('deriveServiceName', () => {
-  it('returns main for root Dockerfile', () => {
+  it('returns app for root Dockerfile', () => {
     const result = deriveServiceName('Dockerfile');
-    expect(result).toBe('main');
+    expect(result).toBe('app');
   });
 
-  it('returns main for current directory', () => {
+  it('returns app for current directory', () => {
     const result = deriveServiceName('./Dockerfile');
-    expect(result).toBe('main');
+    expect(result).toBe('app');
   });
 
   it('returns first directory component for nested path', () => {
@@ -136,9 +192,9 @@ describe('deriveServiceName', () => {
     expect(result).toBe('services');
   });
 
-  it('returns main when dirname is dot', () => {
+  it('returns app when dirname is dot', () => {
     const result = deriveServiceName('');
-    expect(result).toBe('main');
+    expect(result).toBe('app');
   });
 
   it('extracts service name from single-level subdirectory', () => {
@@ -153,23 +209,23 @@ describe('getRouteName', () => {
     expect(result).toBe('myapp');
   });
 
-  it('returns projectName-dev for development environment', () => {
+  it('returns projectName for development environment', () => {
     const result = getRouteName('myapp', 'development');
-    expect(result).toBe('myapp-dev');
+    expect(result).toBe('myapp');
   });
 
-  it('returns projectName-staging for staging environment', () => {
+  it('returns projectName for staging environment', () => {
     const result = getRouteName('myapp', 'staging');
-    expect(result).toBe('myapp-staging');
+    expect(result).toBe('myapp');
   });
 
-  it('returns projectName-custom for custom environment type', () => {
+  it('returns projectName for custom environment type', () => {
     const result = getRouteName('myapp', 'custom');
-    expect(result).toBe('myapp-custom');
+    expect(result).toBe('myapp');
   });
 
   it('handles projectName with hyphens', () => {
     const result = getRouteName('my-app', 'development');
-    expect(result).toBe('my-app-dev');
+    expect(result).toBe('my-app');
   });
 });

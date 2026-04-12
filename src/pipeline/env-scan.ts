@@ -1,6 +1,8 @@
 import { createModuleLogger } from '../lib/logger.js';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { scanDockerfileArgs, scanEnvFile } from '../lib/env-parser.js';
+import { findDockerfiles } from '../lib/repo-scanner.js';
 import { detectEnvFile } from './env-inject.js';
 
 const log = createModuleLogger('env-scan');
@@ -16,6 +18,112 @@ export interface EnvScanResult {
   hasEnvExample: boolean;
   language: string;
   serviceHints: string[];
+}
+
+export interface ScanRepoOptions {
+  /** Dockerfile path(s) for ARG detection. Auto-detected if not provided. */
+  dockerfilePath?: string;
+  /** Scan source code for process.env/os.environ (default: true) */
+  scanSourceCode?: boolean;
+  /** Scan committed .env file for values (default: true) */
+  scanDotEnv?: boolean;
+}
+
+export function scanRepoEnvVars(clonePath: string, opts: ScanRepoOptions = {}): EnvScanResult {
+  const scanSourceCode = opts.scanSourceCode ?? true;
+  const scanDotEnv = opts.scanDotEnv ?? true;
+
+  const mergedByKey = new Map<
+    string,
+    { files: Array<{ path: string; line: number }>; optionalFlags: boolean[] }
+  >();
+  const addUsage = (usage: EnvVarUsage): void => {
+    const entry = mergedByKey.get(usage.key) ?? { files: [], optionalFlags: [] };
+    for (const file of usage.files) {
+      if (
+        !entry.files.some((existing) => existing.path === file.path && existing.line === file.line)
+      ) {
+        entry.files.push(file);
+      }
+    }
+    entry.optionalFlags.push(usage.optional);
+    mergedByKey.set(usage.key, entry);
+  };
+
+  const envTemplates = ['.env.example', '.env.sample', '.env.template'];
+  let hasEnvExample = false;
+  let language = 'unknown';
+  let serviceHints: string[] = [];
+
+  if (scanSourceCode) {
+    const sourceResult = scanForEnvUsage(clonePath);
+    hasEnvExample = sourceResult.hasEnvExample;
+    language = sourceResult.language;
+    serviceHints = sourceResult.serviceHints;
+    for (const usage of sourceResult.vars) {
+      addUsage(usage);
+    }
+  }
+
+  for (const tpl of envTemplates) {
+    const tplPath = join(clonePath, tpl);
+    if (!existsSync(tplPath)) {
+      continue;
+    }
+
+    hasEnvExample = true;
+    const parsed = scanEnvFile(tplPath, tpl);
+    for (const envEntry of parsed) {
+      addUsage({
+        key: envEntry.key,
+        files: [{ path: envEntry.source, line: 0 }],
+        optional: !envEntry.required,
+      });
+    }
+  }
+
+  if (scanDotEnv) {
+    const envPath = join(clonePath, '.env');
+    if (existsSync(envPath)) {
+      const parsed = scanEnvFile(envPath, '.env');
+      for (const envEntry of parsed) {
+        addUsage({
+          key: envEntry.key,
+          files: [{ path: envEntry.source, line: 0 }],
+          optional: !envEntry.required,
+        });
+      }
+    }
+  }
+
+  const dockerfilePaths = opts.dockerfilePath
+    ? [opts.dockerfilePath]
+    : findDockerfiles(clonePath).map((dockerfilePath) => relative(clonePath, dockerfilePath));
+  for (const dockerfilePath of dockerfilePaths) {
+    const parsed = scanDockerfileArgs(clonePath, dockerfilePath);
+    for (const envEntry of parsed) {
+      addUsage({
+        key: envEntry.key,
+        files: [{ path: envEntry.source, line: 0 }],
+        optional: !envEntry.required,
+      });
+    }
+  }
+
+  const vars: EnvVarUsage[] = Array.from(mergedByKey.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, { files, optionalFlags }]) => ({
+      key,
+      files,
+      optional: optionalFlags.every((flag) => flag),
+    }));
+
+  return {
+    vars,
+    hasEnvExample,
+    language,
+    serviceHints,
+  };
 }
 
 const SKIP_DIRS = new Set([
@@ -127,7 +235,7 @@ function detectPythonFallback(content: string, key: string, matchIndex: number):
   return fallbackRegex.test(context);
 }
 
-export function scanForEnvUsage(projectPath: string): EnvScanResult {
+export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScanResult {
   const findings: Finding[] = [];
   let hasNode = false;
   let hasPython = false;
@@ -210,8 +318,9 @@ export function scanForEnvUsage(projectPath: string): EnvScanResult {
     }
   }
 
+  const scanRoot = scopeDir ? join(projectPath, scopeDir) : projectPath;
   try {
-    scanDir(projectPath);
+    scanDir(scanRoot);
   } catch (err) {
     log.warn({ err }, 'Error during env scan');
   }

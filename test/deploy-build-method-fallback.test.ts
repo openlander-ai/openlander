@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
+import type { OpenLanderConfig } from '../src/config/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import * as gitPipeline from '../src/pipeline/git.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
@@ -17,6 +18,7 @@ function createMockDocker(): Docker {
     getLogs: vi.fn().mockResolvedValue(''),
     listAllContainers: vi.fn().mockResolvedValue([]),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     cleanupSecretFiles: vi.fn().mockResolvedValue(undefined),
   } as unknown as Docker;
@@ -41,6 +43,7 @@ describe('DeployPipeline build_method fallback', () => {
     vi.spyOn(gitPipeline, 'cloneRepo').mockResolvedValue({
       path: clonePath,
       commitSha: 'aabbccddeeff0011',
+      branch: 'main',
     });
   });
 
@@ -59,11 +62,17 @@ describe('DeployPipeline build_method fallback', () => {
       branch: 'main',
     });
 
-    const pipeline = new DeployPipeline(docker, db, {
-      getGlobalSecrets: vi.fn().mockReturnValue({}),
-      getAll: vi.fn().mockReturnValue({}),
-      getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
-    } as never);
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
+    const pipeline = new DeployPipeline(
+      docker,
+      db,
+      {
+        getGlobalSecrets: vi.fn().mockReturnValue({}),
+        getAll: vi.fn().mockReturnValue({}),
+        getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
+      } as never,
+      testConfig,
+    );
 
     const originalUpdateProject = db.updateProject.bind(db);
     vi.spyOn(db, 'updateProject').mockImplementation((projectId, updates) => {

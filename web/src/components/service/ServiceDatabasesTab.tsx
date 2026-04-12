@@ -10,6 +10,7 @@ import {
   type ServiceDatabase,
   type ServiceUser,
 } from '@/lib/api';
+import { copyToClipboard } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -20,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useCopy } from '@/hooks/use-copy';
 
 function formatBytes(bytes: number | null): string {
   if (bytes == null) return 'Unknown size';
@@ -35,6 +37,7 @@ interface ServiceDatabasesTabProps {
 }
 
 export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
+  const { copy, isCopied } = useCopy();
   const [databases, setDatabases] = useState<ServiceDatabase[]>([]);
   const [users, setUsers] = useState<ServiceUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,8 +53,6 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserDatabase, setNewUserDatabase] = useState('');
   const [creatingUser, setCreatingUser] = useState(false);
-
-  const [copiedString, setCopiedString] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -87,7 +88,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
       void fetchData();
 
       if (res.connectionString) {
-        await navigator.clipboard.writeText(res.connectionString);
+        await copyToClipboard(res.connectionString);
         toast.success('Connection string copied to clipboard');
       }
     } catch (err) {
@@ -117,7 +118,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
       void fetchData();
 
       if (res.connectionString) {
-        await navigator.clipboard.writeText(res.connectionString);
+        await copyToClipboard(res.connectionString);
         toast.success('Connection string copied to clipboard');
       }
     } catch (err) {
@@ -127,15 +128,9 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
     }
   };
 
-  const copyToClipboard = async (text: string, id: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedString(id);
-      setTimeout(() => setCopiedString(null), 2000);
-      toast.success('Copied to clipboard');
-    } catch {
-      toast.error('Failed to copy');
-    }
+  const handleCopyConnString = (text: string, id: string) => {
+    void copy(text, id);
+    toast.success('Copied to clipboard');
   };
 
   if (loading) {
@@ -161,7 +156,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
         </div>
 
         {databases.length === 0 ? (
-          <div className="text-sm text-muted-ol bg-bg-panel/50 border border-[hsl(var(--border))] rounded-lg p-8 text-center">
+          <div className="text-sm text-muted-ol bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-8 text-center">
             No databases found.
           </div>
         ) : (
@@ -186,7 +181,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
               return (
                 <div
                   key={db.name}
-                  className="bg-bg-panel/50 border border-[hsl(var(--border))] rounded-lg p-4 flex flex-col justify-between"
+                  className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex flex-col justify-between"
                 >
                   <div>
                     <div className="font-mono text-sm text-primary-ol mb-1">{db.name}</div>
@@ -198,9 +193,9 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
                         variant="ghost"
                         size="sm"
                         className="h-8 text-xs"
-                        onClick={() => copyToClipboard(connString, `db-${db.name}`)}
+                        onClick={() => handleCopyConnString(connString, `db-${db.name}`)}
                       >
-                        {copiedString === `db-${db.name}` ? (
+                        {isCopied(`db-${db.name}`) ? (
                           <Check className="h-3.5 w-3.5 mr-1.5 text-success" />
                         ) : (
                           <Copy className="h-3.5 w-3.5 mr-1.5" />
@@ -229,7 +224,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
         </div>
 
         {users.length === 0 ? (
-          <div className="text-sm text-muted-ol bg-bg-panel/50 border border-[hsl(var(--border))] rounded-lg p-8 text-center">
+          <div className="text-sm text-muted-ol bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-8 text-center">
             No users found.
           </div>
         ) : (
@@ -237,7 +232,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
             {users.map((user) => (
               <div
                 key={user.name}
-                className="bg-bg-panel/50 border border-[hsl(var(--border))] rounded-lg p-3 flex items-center gap-3"
+                className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-3 flex items-center gap-3"
               >
                 <div className="h-8 w-8 rounded-full bg-primary-ol/10 flex items-center justify-center shrink-0">
                   <Users className="h-4 w-4 text-primary-ol" />

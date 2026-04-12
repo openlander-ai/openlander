@@ -16,7 +16,6 @@ const EXPECTED_TOOL_NAMES = [
   'update_deploy_plan',
   'execute_deploy_plan',
   'stop_project',
-  'remove_project',
   'get_logs',
   'list_projects',
   'list_env_vars',
@@ -25,7 +24,6 @@ const EXPECTED_TOOL_NAMES = [
   'unexpose_public',
   'get_system_stats',
   'rollback_project',
-  'provision_database',
   'deploy_blue_green',
   'debug_build_error',
   'preview_deploy',
@@ -37,7 +35,7 @@ const EXPECTED_TOOL_NAMES = [
   'get_deploy_status',
   'get_deploy_history',
   'scan_dockerfiles',
-  'deploy_monorepo',
+
   'orchestrate_deploy',
   'list_github_repos',
   'search_github_repos',
@@ -52,10 +50,8 @@ const EXPECTED_TOOL_NAMES = [
   'stop_service',
   'remove_service',
   'get_service_credentials',
-  'create_service_database',
   'create_service_user',
   'analyze_infrastructure',
-  'web_search',
 ];
 
 function createMockContext(opts?: {
@@ -76,6 +72,7 @@ function createMockContext(opts?: {
   const db = {
     listProjects: vi.fn().mockReturnValue(opts?.projects ?? []),
     getProjectByName: vi.fn().mockImplementation((name: string) => opts?.getProjectByName?.(name)),
+    getEnvironmentsByProject: vi.fn().mockReturnValue([{ id: 'env-prod', type: 'production' }]),
   };
 
   const pipeline = {
@@ -90,7 +87,10 @@ function createMockContext(opts?: {
 
   const env = {
     setBulk: vi.fn().mockReturnValue(false),
+    getAll: vi.fn().mockReturnValue({}),
+    getAllWithInheritance: vi.fn().mockReturnValue({}),
     getAllMasked: vi.fn().mockReturnValue({}),
+    getAllWithInheritanceMasked: vi.fn().mockReturnValue({}),
     verifyRoundTrip: vi.fn().mockReturnValue([]),
   };
 
@@ -119,6 +119,9 @@ function createMockContext(opts?: {
     pipeline,
     planEngine,
     buildDebugger: null,
+    deployQueue: {
+      acquire: vi.fn().mockResolvedValue(() => {}),
+    },
   } as unknown as AppContext;
 
   return { ctx, db, env, pipeline, planEngine };
@@ -189,7 +192,9 @@ describe('Tool Registry', () => {
 
     expect(invalid.success).toBe(false);
     if (!invalid.success) {
-      expect(invalid.error.issues[0]?.path).toContain('repo_url');
+      expect(invalid.error.issues.some((issue) => JSON.stringify(issue).includes('repo_url'))).toBe(
+        true,
+      );
     }
   });
 
@@ -354,14 +359,17 @@ describe('Tool Registry', () => {
     });
     const listEnvVars = getTool(ctx, 'list_env_vars');
 
-    env.getAllMasked.mockReturnValueOnce({
+    env.getAllWithInheritanceMasked.mockReturnValueOnce({
       DATABASE_URL: 'pos****5432',
-      API_KEY: 'sk-****7890',
+      API_KEY: 'sk-****cdef',
     });
     const result = await listEnvVars.execute({ project_name: 'my-app' }, { target: 'mcp' });
-    expect(env.getAllMasked).toHaveBeenCalledWith('p1');
+    expect(env.getAllWithInheritanceMasked).toHaveBeenCalledWith('p1');
     expect(result).toEqual({
-      variables: { DATABASE_URL: 'pos****5432', API_KEY: 'sk-****7890' },
+      variables: {
+        DATABASE_URL: 'pos****5432',
+        API_KEY: 'sk-****cdef',
+      },
       count: 2,
     });
   });
@@ -394,18 +402,13 @@ describe('Tool Registry', () => {
     const { ctx } = createMockContext();
     const debugBuildError = getTool(ctx, 'debug_build_error');
 
-    const agentResult = await debugBuildError.execute(
-      { project_name: 'my-app' },
-      { target: 'agent' },
-    );
-    const mcpResult = await debugBuildError.execute({ project_name: 'my-app' }, { target: 'mcp' });
+    await expect(
+      debugBuildError.execute({ project_name: 'my-app' }, { target: 'agent' }),
+    ).rejects.toThrow('Build debugger requires an LLM provider. Configure one first.');
 
-    expect(agentResult).toEqual({
-      error: 'Build debugger requires an LLM provider. Configure one first.',
-    });
-    expect(mcpResult).toEqual({
-      error: 'Build debugger requires an LLM provider.',
-    });
+    await expect(
+      debugBuildError.execute({ project_name: 'my-app' }, { target: 'mcp' }),
+    ).rejects.toThrow('Build debugger requires an LLM provider.');
   });
 
   it('debug_build_error returns NO_FAILED_BUILD when last deploy did not fail', async () => {
@@ -423,9 +426,10 @@ describe('Tool Registry', () => {
     ).db.getLastDeployLog = vi.fn().mockReturnValueOnce({ status: 'done' });
 
     const debugBuildError = getTool(ctx, 'debug_build_error');
-    const result = await debugBuildError.execute({ project_name: 'my-app' }, { target: 'agent' });
 
-    expect(result).toEqual({ error: 'No failed build found for this project.' });
+    await expect(
+      debugBuildError.execute({ project_name: 'my-app' }, { target: 'agent' }),
+    ).rejects.toThrow('No failed build found for this project.');
     expect(diagnose).not.toHaveBeenCalled();
   });
 

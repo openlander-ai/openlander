@@ -13,11 +13,16 @@ import { nanoid } from 'nanoid';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import { buildTraefikLabels } from './traefik.js';
+import { getCommitSubject } from './git.js';
+import { getPolicy } from '../config/index.js';
+import type { OpenLanderEnv } from '../config/index.js';
+import { extractProjectName, composeContainerName } from './helpers.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import type { EnvManager } from './env.js';
 import type { JobManager } from './job-manager.js';
+import { isDockerNotFoundError } from '../errors.js';
 
 const log = createModuleLogger('compose');
 
@@ -65,12 +70,14 @@ export interface ComposeDeployConfig {
   repoUrl: string;
   branch?: string;
   clonePath: string;
+  commitSha?: string;
   composePath: string;
   profiles?: string[];
   services?: string[];
   name?: string;
   envVars?: Record<string, string>;
   trigger?: 'chat' | 'webhook' | 'api';
+  environmentType?: OpenLanderEnv;
   _parentId?: string;
 }
 
@@ -460,7 +467,9 @@ export class ComposePipeline {
     const parentName = config.name ?? extractProjectName(config.repoUrl);
     const projectName = sanitizeComposeProjectName(parentName);
     const parentProjectId = config._parentId ?? nanoid(12);
+    const envType: OpenLanderEnv = 'production';
     let buildLog = '';
+    const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
     const composeProject = this.parseComposeFile(config.composePath);
     const filteredComposeProject: ComposeProject = {
@@ -583,14 +592,14 @@ export class ComposePipeline {
             try {
               await this.docker.stopContainer(child.container_id);
             } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              if (!msg.includes('not found') && !msg.includes('No such container')) {
+              if (!isDockerNotFoundError(err)) {
                 throw err;
               }
             }
-            await this.docker.removeContainer(child.container_id);
+            await this.docker.safeRemoveContainer(child.container_id);
           }
 
+          // Hard delete intentional: orphaned compose children are not user-created projects and should not be archived.
           this.db.deleteProject(child.id);
           removed.push(serviceName);
         }
@@ -655,6 +664,15 @@ export class ComposePipeline {
         }
       }
 
+      for (const service of filteredComposeProject.services) {
+        const staleContainerName = composeContainerName(parentName, service.name);
+        try {
+          await this.docker.safeRemoveContainer(staleContainerName);
+        } catch {
+          // container doesn't exist — expected
+        }
+      }
+
       const orchestration = await orchestrator.executeOrdered(topology, {
         deployService: async (service) => {
           const composeService = serviceByName.get(service.name);
@@ -674,7 +692,7 @@ export class ComposePipeline {
             };
           }
 
-          const containerName = `ol-${parentName}-${service.name}`;
+          const containerName = composeContainerName(parentName, service.name);
           containerNameByService.set(service.name, containerName);
 
           let allocatedHostPort: number | null = null;
@@ -693,6 +711,7 @@ export class ComposePipeline {
                 contextPath,
                 dockerfile,
                 tag: imageTag,
+                cacheFrom: [imageTag],
               });
             } else {
               buildLog += `[compose pull ${service.name}] ${imageTag}\n`;
@@ -700,16 +719,21 @@ export class ComposePipeline {
             }
 
             this.jobManager?.updatePhase(childId, 'starting');
-            await this.docker.removeContainer(containerName);
+            await this.docker.safeRemoveContainer(containerName);
 
             const parsedPort = this.resolveServicePortMapping(composeService);
-            let hostPort = await allocatePort(this.db, this.docker, {
-              preferredPort: parsedPort?.hostPort ?? undefined,
-            });
+            let hostPort = await allocatePort(
+              this.db,
+              this.docker,
+              {
+                preferredPort: parsedPort?.hostPort ?? undefined,
+              },
+              envType,
+            );
             allocatedHostPort = hostPort;
             const containerPort = parsedPort?.containerPort ?? hostPort;
             const routeName = sanitizeComposeProjectName(`${projectName}-${service.name}`);
-            const traefikLabels = buildTraefikLabels(routeName, containerPort);
+            const traefikLabels = buildTraefikLabels(routeName, containerPort, undefined, envType);
             const resolvedEnvVars = this.resolveComposeServiceEnvVars(composeService, envVars);
             const healthcheck = this.resolveDockerHealthcheck(composeService.healthcheck);
 
@@ -728,7 +752,7 @@ export class ComposePipeline {
                   entrypoint: composeService.entrypoint,
                   restart: composeService.restart,
                   healthcheck,
-                  networks: [projectNetwork, 'web'],
+                  networks: [projectNetwork, getPolicy(envType).networkName],
                 });
                 break;
               } catch (error) {
@@ -739,7 +763,7 @@ export class ComposePipeline {
                 if (attempt === 0 && isPortConflict) {
                   releasePortReservation(hostPort);
                   clearPortScanCache();
-                  hostPort = await allocatePort(this.db, this.docker);
+                  hostPort = await allocatePort(this.db, this.docker, {}, envType);
                   allocatedHostPort = hostPort;
                   continue;
                 }
@@ -826,23 +850,21 @@ export class ComposePipeline {
             try {
               await this.docker.stopContainer(deployment.containerId);
             } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              if (!message.includes('not found') && !message.includes('No such container')) {
+              if (!isDockerNotFoundError(error)) {
                 throw error;
               }
             }
-            await this.docker.removeContainer(deployment.containerId);
+            await this.docker.safeRemoveContainer(deployment.containerId);
             releasePortReservation(deployment.port);
           } else if (containerName) {
             try {
               await this.docker.stopContainer(containerName);
             } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              if (!message.includes('not found') && !message.includes('No such container')) {
+              if (!isDockerNotFoundError(error)) {
                 throw error;
               }
             }
-            await this.docker.removeContainer(containerName);
+            await this.docker.safeRemoveContainer(containerName);
           }
 
           if (childId) {
@@ -944,6 +966,8 @@ export class ComposePipeline {
         projectId: parentProjectId,
         status: hasError ? 'failed' : 'success',
         trigger,
+        commitSha: config.commitSha,
+        commitMessage,
         buildLog,
         durationMs: Date.now() - startTime,
       });
@@ -985,8 +1009,7 @@ export class ComposePipeline {
         try {
           await this.docker.stopContainer(deployment.containerId);
         } catch (stopError) {
-          const message = stopError instanceof Error ? stopError.message : String(stopError);
-          if (!message.includes('not found') && !message.includes('No such container')) {
+          if (!isDockerNotFoundError(stopError)) {
             log.debug(
               { err: stopError, serviceName },
               'Failed to stop compose service during rollback',
@@ -994,7 +1017,7 @@ export class ComposePipeline {
           }
         }
         try {
-          await this.docker.removeContainer(deployment.containerId);
+          await this.docker.safeRemoveContainer(deployment.containerId);
         } catch (removeError) {
           log.debug(
             { err: removeError, serviceName },
@@ -1017,6 +1040,8 @@ export class ComposePipeline {
         projectId: parentProjectId,
         status: 'failed',
         trigger,
+        commitSha: config.commitSha,
+        commitMessage,
         buildLog: `${buildLog}[error] ${errorMsg}\n`,
         durationMs: Date.now() - startTime,
       });
@@ -1055,7 +1080,7 @@ export class ComposePipeline {
         }
 
         try {
-          await this.docker.removeContainer(child.container_id);
+          await this.docker.safeRemoveContainer(child.container_id);
         } catch (error) {
           log.debug(
             { err: error, childProjectId: child.id, containerId: child.container_id },
@@ -1196,7 +1221,7 @@ export class ComposePipeline {
     }
 
     if (service.build) {
-      return `ol-${projectName}-${service.name}:latest`;
+      return `${composeContainerName(projectName, service.name)}:latest`;
     }
 
     throw new Error(`Service ${service.name} must define either build or image`);
@@ -1330,15 +1355,6 @@ function parseComposeDurationSeconds(value?: string): number | undefined {
   }
 
   return Number.isFinite(seconds) ? seconds : undefined;
-}
-
-function extractProjectName(repoUrl: string): string {
-  const cleaned = repoUrl
-    .replace(/\.git$/, '')
-    .replace(/^(https?:\/\/|git@)/, '')
-    .replace(/:/g, '/');
-  const parts = cleaned.split('/');
-  return parts[parts.length - 1] ?? 'project';
 }
 
 function parseHostPort(portMapping: string): number | null {

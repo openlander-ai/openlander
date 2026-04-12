@@ -5,7 +5,339 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.0-rc.8] — 2026-04-11
+
+### Added
+
+- **Overview landing page**: New `/overview` route with KPI dashboard (6 stats: active deploys, recoveries, approvals, incidents, unhealthy services, AI spend), live activity timeline, needs-attention queue, and project health grid
+- **Global Deployments page**: New `/deployments` route showing deployment history across all projects with status/project filters
+- **Activity Pulse header**: Real-time status chips in the header bar showing active deploys, recoveries, pending approvals, and AI spend — polling every 10 seconds
+- **Operations 6-tab layout**: Restructured from 2-view toggle to 6 tabs — Live, Incidents, Approvals, Postmortems, Patterns, Usage
+- **Approvals tab**: Pending recovery approval queue with Approve/Reject actions
+- **Postmortems tab**: Auto-generated postmortem reports viewer with markdown rendering
+- **Deployment Patterns tab**: Error signature → fix action mapping table with success/failure counts
+- **AI Usage tab**: Token usage summary, cost tracking, and recent AI activity log
+- **Deployment Detail Diagnosis Panel**: Sticky right panel showing error detection, AI diagnosis, and recovery attempts alongside build logs
+- **Recovery tab (Project Detail)**: Replaces Operations tab — incident/recovery history, postmortems, approval requests, and real-time agent progress card
+- **Runtime tab (Project Detail)**: Console tab renamed to Runtime for clarity
+- **3 new backend API endpoints**: `GET /api/ops/postmortems`, `GET /api/ops/patterns`, `GET /api/overview/stats`
+- **Sidebar navigation**: Added Overview and Deployments nav items with Lucide icons
+
+### Fixed
+
+- **UTC timezone parsing bug**: Created `parseDBTimestamp()` utility — fixes 9-hour offset on KST servers caused by SQLite `CURRENT_TIMESTAMP` (no TZ qualifier) being parsed as local time. Applied to 17 locations across backend (8) and frontend (9)
+- **Recovery restart policy**: `recoverProject()` now sets `restartPolicy: { Name: 'unless-stopped' }` matching normal deploy behavior — previously used default `on-failure(max 5)` which prevented Docker daemon restart recovery
+
+### Changed
+
+- **i18n**: 50+ new translation keys added to both `en.ts` and `ko.ts` for all new pages and components
+
+## [1.0.0-rc.7] — 2026-04-07
+
+### Added
+
+- **RecoveryCoordinator**: Single-owner recovery architecture — all AI recovery calls routed through centralized Eligibility Gate (7 gate conditions: project status, archived, AI enabled, operator suppression, global LLM budget, circuit breaker, incident dedup)
+- **Executor refactoring**: auto-recovery.ts converted to callable handler interface (0 direct EventBus subscriptions), OpsAgent recovery subscriptions removed (container:die/oom/missing/deploy:failed)
+- **shouldContinue mid-stream abort**: LLM chatStream checks project eligibility before each tool call, aborts if project stopped/archived/budget exceeded
+- **ai:invoked/completed events**: Real-time LLM call visibility in Activity Feed NDJSON stream (model, duration, token counts, success status)
+- **NotificationCenter recovery alerts**: recovery:started/stopped/blocked events sent to Slack/Discord/Telegram via ChannelManager
+- **PostmortemGenerator conditional automation v2**: Auto-generate postmortem after recovery:success + 5-min stability window, cancel on failure events
+- **Incident error-pattern fingerprinting**: 30-min dedup window with normalized error fingerprints (hex IDs, timestamps, ports stripped), cascade_detected for different patterns
+- **container:missing Coordinator routing**: Removed OpsAgent direct subscription, routed through Eligibility Gate
+- **Activity Feed**: recovery:blocked/stopped/started and ai:invoked/completed cards with icons, status colors, i18n (en/ko)
+
+### Changed
+
+- **Status ownership**: Detection layer (alerts.ts) no longer sets project status — Coordinator manages status transitions (recovering/error)
+- **Eligibility Gate**: Allows 'error' status for recovery (deploy pipeline sets error before emit)
+
+### Fixed
+
+- **NDJSON live stream**: reason/trigger fields now included in both buffer and live stream paths
+- **Coordinator exception handling**: try/catch added to all async event handlers (deploy:failed, compose:failed, container failure, health:degraded)
+- **Container recovery blocked path**: Sets status='error' when recovery is blocked (prevents stale 'running' status with dead container)
+
 ## [Unreleased]
+
+### Added
+
+- **AI Usage API**: `GET /api/usage/summary` and `GET /api/usage/recent` endpoints with SQL-level filtering, counting, and camelCase response mapping
+- **Approval Gate**: In-memory Promise-based mechanism with 10-minute auto-reject for high-risk auto-recovery tools (`rollback_project`, `remove_project`, `remove_service`, `create_database`)
+- **Approval API**: `GET /api/approvals/pending`, `POST /api/projects/:id/recovery/approve`, `POST /api/projects/:id/recovery/reject` with projectId ownership validation
+- **AI Usage Dashboard**: StatCards (input tokens, output tokens, total cost, API calls) + recent AI calls list in Settings > AI Features tab
+- **Approval Banner**: Polling-based notification banner in AppLayout for pending recovery approvals
+- **Multi-provider LLM**: ModelRegistry with provider caching, per-feature model routing, provider CRUD API, and LLM Settings UI
+- **AgentPool**: Session-level agent isolation (`MAX_POOL_SIZE=5`) with idle timeout cleanup
+- **Context Assembler**: Structured module extracted from `prompts.ts` — project state, server stats, deploy history
+- **Transparency Layer**: Token tracking (`ai_usage_log` table), cost calculation (`PRICING_TABLE`), usage logging per AI call
+- **AI Feature Settings**: 8 individual toggles (autoRecovery, buildDebugger, webAgent, envDetection, secretScan, rollbackSuggestion, operationalMonitoring, codingPlan) with config + API + Settings UI
+- **RequestIdentity type**: Optional `userId`, `tenantId`, `role`, `source` fields on ToolContext and EventBus payloads for future enterprise extension
+- **action_runs table**: Operation ledger for auto-recovery tracking with `pending_approval` active state and SQLite migration path for existing DBs
+- **i18n**: AI usage dashboard keys (`settings.ai.usage.*`) and approval banner keys (`approval.banner.*`) in en.ts + ko.ts
+- **LLM providers**: xAI (Grok), DeepSeek, Mistral, Groq, Together AI, Z.ai (Zhipu GLM), Z.ai Coding Plan as new provider options
+- **Auto-test on provider register**: Automatically validate provider API key on registration and show connection status
+- **AI feature auto-recommend**: Tier-based model capability assessment with automatic AI feature toggle recommendations on provider register
+- **codingPlan AI feature toggle**: Dedicated toggle for AI-assisted deployment planning in Settings UI
+
+### Changed
+
+- **Auto-recovery redesign**: Gate Checks → Context Assembler → Recovery Planner (recipe fast-path + LLM fallback) → ApprovalGate for high-risk tools → flag-based reject/timeout short-circuit
+- **Single-environment simplification**: Removed multi-env UI, environment selector, env-specific dropdown; always deploy to production
+- **Token display**: Recovery timeline events now show token usage and cost
+- **Provider scores**: Updated benchmark data with 2025-2026 model scores; prioritize accuracy over cost in auto-recommend scoring
+- **Non-proprietary provider removal**: Removed non-proprietary providers, unified provider type system, updated defaults
+
+### Fixed
+
+- **Auto-recovery callback flow**: Reject/timeout now short-circuits via `approvalState` flag instead of swallowed throws
+- **ModelRegistry logging**: Use Pino logger instead of `console.warn`
+- **Provider delete**: Use `saveConfig` for provider deletion to bypass deepMerge key-preservation
+- **Config gating**: 4 remaining AI toggles now properly gate their features
+- **Parallel redeployment**: Support concurrent project redeployments
+- **Deploy pipeline auto-expand**: Automatically expand on error status
+- **Sidebar icons**: Center icons in collapsed mode
+- **Domain link styling**: Standardized across dashboard, overview, and settings
+- **AI settings responsive layout**: Responsive layout and i18n fixes for AI settings components
+- **i18n provider label**: Fixed provider label translation in AddProviderForm
+- **Monitor review fixes**: Suppression guard, recordLlmCall timing, postmortem eligibility, coordinator type fixes
+
+## [1.0.0-rc.5] - 2026-03-27
+
+### Added
+
+- **Deploy terminal AI inline events**: Agent events render as visually distinct blocks (diagnostic=red, prescription=purple, info=blue) inside the deploy terminal
+- **TerminalAIBlock component**: Terminal-native block with 3 variants using terminal-tokens color system
+- **Premium AISparkle icon**: Gradient purple→rose fill + glow effect on all AI-enhanced buttons
+- **Status dot animations**: Building uses pulse-ring, running uses breathing pulse
+- **Stop action confirmation**: ConfirmDialog added to stop button
+
+### Fixed
+
+- **Agent event pipeline bug**: toTimelineItem() now preserves agent event types instead of converting to progress
+- **Missing sparkle icons**: Rollback and ProjectCard Redeploy now show conditional sparkle (DEC-046)
+- **pulse-ring animation**: Registered in tailwind.config.js
+
+### Changed
+
+- **Single-environment model**: Reverted multi-env UI to single production environment; removed segment control, EnvironmentContext, and env-specific filtering across all components
+- **Vision document**: Acknowledges Agent Mode (v0.9.0) coexistence with Smart Deploy Terminal
+
+## [1.0.0-rc.3] - 2026-03-26
+
+### Added
+
+- **Shared `openlander` network with service-name DNS aliases**: All containers now connect to a shared Docker network enabling service-to-service communication via container names
+- **`service_connections` table with CRUD API**: Database schema and REST endpoints for managing service interconnections
+- **Auto env injection on service connect/disconnect**: Environment variables automatically updated when services are connected or disconnected
+- **Connected Services writable UI**: Web dashboard panel for adding and removing service connections
+- **Env vars plaintext by default**: Environment variables displayed in plaintext in the UI (with secure storage in database)
+- **Runtime incidents system with LLM diagnosis**: Automatic detection and AI-powered analysis of runtime failures
+- **Deploy connectivity check (DNS+TCP)**: Preflight validation ensuring services can reach their dependencies before deployment
+- **Service health monitoring**: Continuous health checks for all deployed services with status reporting
+- **MCP session incident briefing**: AI agents receive incident context in MCP tool responses for better recovery guidance
+
+## [1.0.0-rc.2] - 2026-03-25
+
+### Added
+
+- **Authentication system**: Single-user password login with bcrypt hashing (salt rounds=10), session cookies (HttpOnly, SameSite=Strict, 7-day TTL), Bearer token auth for MCP HTTP
+- **API token management**: Auto-generated `ol_`-prefixed tokens with AES-256-GCM encryption, token show/copy/regenerate in Settings Security tab
+- **Settings Security tab**: API token management + password change in web dashboard
+- **CLI `openlander config reset-password`**: Password recovery without server restart
+- **Onboarding 6-step flow**: Language → Password (required) → Infrastructure → LLM (required) → GitHub → MCP Guide
+- **MCP connection guide**: Setup wizard step showing URL + token for AI coding tool integration
+- **WebSocket terminal auth**: Session cookie validation on WebSocket upgrade
+
+### Changed
+
+- **LLM API Key now required** during onboarding (was optional); enables AI auto-recovery
+- **Setup completion condition** now requires password to be set (in addition to Docker)
+- **MCP HTTP transport** now requires Bearer token when password is configured
+
+## [1.0.0-rc.1] - 2026-03-25
+
+### Added
+
+- **E2E quality gate test suite**: 20 tests across 10 spec files validating core deployment scenarios
+- **7 test repositories**: Dedicated test repos for deploy pipeline verification (Node.js, Python, Ruby, Java, PHP, .NET, Go)
+- **Event sequence golden path verification**: Q-2 quality gate ensuring deterministic event ordering in deploy lifecycle
+- **Quality gate coverage mapping**: Documentation of test coverage across all deployment paths and failure scenarios
+
+### Fixed
+
+- **Orphaned chat artifacts cleanup**: Removed stale chat session artifacts from previous web agent mode
+- **LSP error fixes**: Resolved TypeScript strict mode violations and type safety issues
+
+## [0.9.18] - 2026-03-25
+
+### Added
+
+- **Docker network isolation**: Production and development containers now run on separate Docker networks (`openlander-prod` / `openlander-dev`). Traefik auto-joins both networks at startup.
+- **Per-container `traefik.docker.network` label**: Tells Traefik which network to use for reaching each container, enabling correct routing across isolated networks.
+- **Multi-network Traefik**: `ensureAllNetworks()` creates both networks at startup; `connectToNetwork()` joins Traefik to the secondary network (idempotent).
+- **Service dual-network**: Shared services (PostgreSQL, Redis, etc.) are automatically connected to both networks after creation, ensuring accessibility from either environment.
+- **MCP environment parameter**: `deploy_compose` and `deploy_blue_green` tools now accept optional `environment` parameter for network-aware deployments.
+
+### Changed
+
+- **run-step.ts**: `ContainerRunner.run()` passes `getPolicy(envType).networkName` to `docker.runContainer()`.
+- **compose.ts**: `ComposeDeployConfig` accepts `environmentType`; port allocation, Traefik labels, and compose service networks are all environment-driven.
+- **rollback.ts / blue-green.ts**: Container creation uses environment-specific network.
+- **Blue-green API**: `POST /projects/:id/blue-green` now accepts `?environment=development` (previously production-only).
+- **orchestrator.ts / deploy-core.ts**: `buildProject()` propagates `environmentType` to compose pipeline.
+
+## [0.9.17] - 2026-03-24
+
+### Added
+
+- **Deploy-level environment policies**: `getPolicy(envType)` returns per-environment config (network name, port range, Traefik settings). Production: ports 10001-10999, Development: ports 20001-20999.
+- **MCP environment parameter**: `deploy`, `create_deploy_plan`, `redeploy_project`, `stop_project`, `restart_project` tools now accept optional `environment` parameter (`production`|`development`).
+- **Environment validation**: `isValidEnvironment()` prevents arbitrary strings from being used as environment types.
+- **Docker network override infrastructure**: `runContainer()` accepts optional `network` parameter (ready for future per-env network isolation).
+
+### Changed
+
+- **Hardcoded values removed**: All references to `'web'` network, `'openlander-traefik'` container name, and fixed port range `10001-10999` replaced with policy-driven values.
+- **allocatePort environment-aware**: All callers now pass environment type for correct port range selection.
+- **TraefikManager config-driven**: Container name, network, and ports driven by constructor options instead of module constants.
+- **redeploy() environment routing**: Correctly routes development environment redeploys to the right container/environment.
+
+## [0.9.16] - 2026-03-24
+
+### Added
+
+- **Docker image deployment**: Deploy pre-built Docker images directly without git clone/build. Supports image URL, port, command override via API, MCP, and web UI.
+- **Deploy Dialog image toggle**: Git/Image source selector in deploy dialog with conditional fields (image URL, port, command).
+- **ProjectCard Docker badge**: Container icon and image URL display for image-source projects.
+- **OverviewTab image info**: Shows image URL, port, command for image-source projects instead of git-specific info.
+- **ProjectHeader "Pull & Restart"**: Image projects show "Pull & Restart" instead of "Redeploy" button.
+- **Settings image fields**: Editable image URL, port, command in project settings with PATCH API.
+- **MCP image deployment schema**: Extended `create_deploy_plan` schema with source/image/cmd/port params.
+- **Image URL validation**: `parseImageUrl()`, `getImageExposedPort()`, `mapPullError()` utilities.
+- **Pipeline tests**: 7 pipeline tests + 10 MCP schema tests + 3 E2E integration tests for image deployment.
+
+## [0.9.15] - 2026-03-24
+
+### Added
+
+- **Runtime log snapshots**: Captures last 500 lines of container logs before redeploy, stored in deploy history. Viewable in DeploymentDetail page under "Runtime Logs" section.
+- **Docker log rotation**: All containers created by OpenLander now have `json-file` log driver with 10MB×3 rotation, preventing unbounded disk growth.
+- **`cleanup_docker` MCP tool**: Three-level Docker cleanup (soft/standard/aggressive) with per-phase status reporting and build-safety guards.
+- **Deploy terminal phase rail**: Phase indicators now update correctly during builds with pulse animation on active step.
+
+### Fixed
+
+- **Build log propagation**: Blue-green, preview, and monorepo deploy paths now preserve Docker build output on failure.
+- **Phase rail not updating**: Backend SSE events were missing `stepName` field — all deploy lifecycle events now include it.
+- **Docker cleanup during builds**: Health monitor and cleanup_docker MCP tool now skip aggressive cleanup when projects are building.
+
+### Removed
+
+- **`provision_database` tool**: Replaced by `create_service(template="postgres")` which uses Docker named volumes for data persistence. The legacy tool created containers without volumes — data was lost on container removal.
+- **`deploy_monorepo` tool**: Deprecated in favor of `orchestrate_deploy` which supports dependency ordering and atomic rollback.
+- **`/auth/pkce.ts`**: Unused PKCE utilities (CLI has its own implementation).
+
+## [0.9.14] - 2026-03-23
+
+### Added
+
+- **Dashboard VPN URL display**: Project list, detail, card, and table views now show VPN (Tailscale/WireGuard) URLs alongside LAN URLs with purple VPN badge. API returns `urls: ProjectUrl[]` field.
+
+### Fixed
+
+- **Build log propagation**: Blue-green, preview, and monorepo deploy paths now preserve Docker build output on failure. Previously only the main deploy path captured build logs — the other three paths discarded build output in catch blocks.
+- **tsup build race condition**: Removed per-entry `clean: true` from tsup config (parallel builds could delete each other's output). Build script now runs `rm -rf dist` before tsup instead.
+- **VPN URL environment guard**: VPN URLs only shown when viewing production environment, preventing production URL leakage in development views.
+- **Project list API performance**: `getAllIps()` hoisted to single call per request instead of per-project in the list endpoint.
+
+## [0.9.13] - 2026-03-23
+
+### Added
+
+- **Platform debug/admin MCP tools**: 11 new `platform_*` tools for diagnosing OpenLander internal state, gated behind `config.mcp.platformTools` flag (default: false).
+  - **Tier 1 (read-only)**: `platform_health` (process health summary), `platform_event_log` (recent EventBus emissions), `platform_container_audit` (Docker vs DB mismatch detection), `platform_config` (redacted config viewer)
+  - **Tier 2 (debug)**: `platform_logs` (OpenLander process logs), `platform_docker_inspect` (raw Docker inspect), `platform_docker_ps` (full Docker container listing), `platform_db_inspect` (structured DB table query)
+  - **Tier 3 (corrective)**: `platform_cleanup_orphans` (orphan container cleanup), `platform_reconcile` (DB↔Docker state sync), `platform_force_remove` (force container removal)
+- **Generic RingBuffer**: In-memory circular buffer (`src/lib/ring-buffer.ts`) with timestamp wrapping and time-filtered retrieval.
+- **EventBus capture hook**: All EventBus emissions automatically captured for `platform_event_log` without per-event registration.
+- **Pino log ring buffer**: Process logs captured in-memory via custom Writable stream for `platform_logs` tool.
+
+## [0.9.12] - 2026-03-23
+
+### Added
+
+- **Volume auto-mount on deploy**: `runContainer()` and `runComposeService()` now query Docker for project volumes by label and auto-mount them as Binds. Volumes created via `add_volume` are automatically available inside containers on next deploy.
+- **Bucket management MCP tools**: `create_bucket`, `list_buckets`, `delete_bucket` for managing S3 buckets inside MinIO services via `mc` CLI.
+- **VPN sslip.io routes**: Traefik HTTP provider now generates sslip.io routes for all detected IPs (LAN + VPN). Tailscale, ZeroTier, and WireGuard users can access projects via VPN IP.
+- **MCP VPN guidance**: `SERVER_INSTRUCTIONS` updated to advise agents to prefer VPN URLs when available, and document volume/MinIO/bucket tools.
+
+### Fixed
+
+- **Sidebar Issues section removed**: Projects with error/building status now stay in their normal group instead of a distracting separate section with warning emoji.
+
+## [0.9.11] - 2026-03-23
+
+### Added
+
+- **Volume MCP tools**: `add_volume`, `list_volumes`, `remove_volume`, `get_disk_usage` for managing Docker persistent volumes per project. Includes inspect-before-create duplicate detection, ownership label verification on removal, and schema validation (regex for volume names, absolute path for mount paths).
+- **MinIO service template**: `create_service(template="minio")` provisions S3-compatible object storage with auto-generated credentials. Includes health check (`/minio/health/live`), pinned version (`RELEASE.2024-11-07T00-52-20Z`), and `getSuggestedEnv` returning `S3_ENDPOINT`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`.
+- **Bucket management MCP tools**: `create_bucket`, `list_buckets`, `delete_bucket` for managing MinIO S3 buckets via `mc` CLI inside the service container.
+- **ServiceTemplate extensions**: Optional `cmd` and `healthcheck` fields on `ServiceTemplate` interface, reusable by future templates.
+
+## [0.9.10] - 2026-03-23
+
+### Fixed
+
+- **Deploy terminal readability**: Bumped muted color (#555→#6b6b6b), build log uses secondary (#888) for WCAG AA contrast, timestamp opacity 50%→70%.
+- **Log error/warn underline**: Border color now only applies to left indicator, not bottom underline.
+- **Container name truncation**: Increased max-width from 200px to 300px in Project Info.
+- **Deploy time wrapping**: Fixed `w-16` causing "58m ago" line break in both Overview and Deployments list.
+- **xterm terminal font**: Unified to Geist Mono via terminalTokens instead of hardcoded system monospace.
+- **no_cache timeout guidance**: redeploy/restart responses now advise `timeout=600` for full rebuilds.
+
+## [0.9.9] - 2026-03-23
+
+### Added
+
+- **Typography system overhaul**: Migrated to Inter (body+display) + Geist Mono (code), self-hosted via fontsource. Established 14px body base, 12px minimum for accessibility. Typography CSS tokens (`--font-size-xs` through `--font-size-3xl`).
+- **Docker image cleanup system**: Automatic cleanup module (`src/pipeline/cleanup.ts`) with dangling image prune, build cache prune, and disk-threshold-triggered aggressive cleanup (80% threshold, 10-minute cooldown). Post-deploy hook prunes dangling images after each successful deploy.
+
+### Fixed
+
+- **sslip.io stale IP on network change**: Added sslip.io routes to Traefik HTTP provider endpoint (`/api/traefik/config`), so IP changes are reflected within 5 seconds via polling instead of requiring container redeploy.
+- **get_deploy_status wait=true for multiple deploys**: `wait=true` without `project_name` now blocks until ALL active deploys complete, instead of returning immediately. Prevents agents from falling back to `sleep`.
+- **Traefik killed on restart**: Orphan container cleanup now skips infrastructure containers with `openlander.role` label, preventing Traefik from being destroyed during process restart.
+
+## [0.9.8] - 2026-03-23
+
+### Added
+
+- **MCP tool `update_project_config`**: Change project's `dockerfile_path`, `docker_target`, and `build_context` stored in DB. Includes path traversal validation and at-least-one-field requirement. Use when build config is stuck from prior deploys.
+- **Dockerfile mismatch warning**: When a commit modifies a Dockerfile that differs from the one used for the build, a warning is logged with `update_project_config` hint (e.g., `[warning] Commit modified apps/api/Dockerfile, but build uses Dockerfile.api`).
+- **Dockerfile build log preview**: Build log now shows key RUN/CMD/EXPOSE lines from the Dockerfile being built, so users can verify the right file at a glance.
+- **Dockerfile fallback in redeploy**: When DB `dockerfile_path` points to a missing file in the clone, falls back to root `Dockerfile` or single discovered candidate. Fails with actionable message when multiple Dockerfiles found.
+- **Dockerfile discovery in deploy plan**: `resolveBuildConfig` now uses discovered Dockerfiles instead of auto-generating when the repo already has one.
+
+### Changed
+
+- **Removed RecoveryOrchestrator**: Build failures now propagate immediately to `deploy:failed` event, letting `auto-recovery.ts` route to agent instead of silently retrying with LLM-rewritten Dockerfiles (Tier 2.5). Removed `attemptTier1Fix`, `_retryCount`, `build:autofix` and `build:dockerfile-fixed` events.
+
+## [0.9.7] - 2026-03-23
+
+### Changed
+
+- **Backend refactoring** — service-manager.ts (1406→817 lines, -42%): Extracted ServiceAdapter interface + 4 adapter implementations (PostgreSQL, MySQL, Redis, MongoDB), replacing type-based if/else branches with adapter factory pattern
+- **Backend refactoring** — setup-routes.ts (819→234 lines, -71%): Split into domain sub-files (cloudflare, github, mcp handlers), extracted reloadAgent() and mergeToolsIfMcpEnabled() shared helpers
+- **Backend refactoring** — project-routes.ts (1285→1174 lines, -9%): Extracted getProjectOrThrow, getEnvironmentByIdOrThrow, resolveEnvironmentByType shared helpers replacing 39 duplication instances
+
+### Added
+
+- **MCP service external access**: `list_services`, `create_service`, `get_service_status`, and `get_service_credentials` MCP tool responses now include `externalAccess` array with server LAN/VPN IPs — AI agents can now correctly guide users to connect to services from their machines instead of only seeing Docker internal hostnames
+- **MCP service external connection strings**: `get_service_credentials` returns `externalConnectionStrings` with the Docker internal hostname replaced by each detected server IP
+
+### Fixed
+
+- **Test suite green**: Fixed 41 pre-existing test failures across vitest and bun test runners — deleted orphan tests for removed AI assistant components, updated MCP tool test expectations for `_agent_guidance` fields, fixed `vi.hoisted()` vitest compatibility, corrected stale worktree path references
 
 ## [0.9.6] - 2026-03-22
 

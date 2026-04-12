@@ -15,7 +15,7 @@ type Translations = Record<string, TranslationValue>;
 interface LanguageContextType {
   language: Language;
   setLanguage: (lang: Language) => Promise<void>;
-  t: (key: string) => string;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
@@ -48,7 +48,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const t = (key: string): string => {
+  const t = (key: string, params?: Record<string, string | number>): string => {
     const keys = key.split('.');
     let current: TranslationValue | undefined = translations[language];
 
@@ -65,7 +65,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       return key;
     }
 
-    return current;
+    let result = current;
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        result = result.replace(new RegExp(`{${k}}`, 'g'), String(v));
+      }
+    }
+
+    return result;
   };
 
   return (

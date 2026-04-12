@@ -6,7 +6,7 @@ export const terminalTokens = {
     text: {
       primary: '#e0e0e0',
       secondary: '#888888',
-      muted: '#555555',
+      muted: '#6b6b6b',
       success: '#22c55e',
       error: '#ef4444',
       warning: '#eab308',
@@ -22,9 +22,9 @@ export const terminalTokens = {
     },
   },
   typography: {
-    fontFamily: '"JetBrains Mono", monospace',
+    fontFamily: '"Geist Mono Variable", "Geist Mono", ui-monospace, monospace',
     fontSize: {
-      sm: '11px',
+      sm: '12px',
       base: '13px',
     },
     lineHeight: '1.6',

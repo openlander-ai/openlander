@@ -173,6 +173,9 @@ export function createMockDockerHarness(containers: MockContainer[] = []): MockD
       createdVolumes.push(opts);
       return { name: opts['Name'] };
     }),
+    getVolume: vi.fn((volumeName: string) => ({
+      remove: vi.fn().mockResolvedValue(undefined),
+    })),
     createContainer: vi.fn(async (opts: Record<string, unknown>) => {
       createdContainers.push(opts);
       const name =
@@ -210,14 +213,51 @@ export function createMockDockerHarness(containers: MockContainer[] = []): MockD
     docker: {
       listAllContainers: vi.fn().mockResolvedValue(containers),
       removeContainer: vi.fn().mockResolvedValue(undefined),
+      safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
       startContainer: vi.fn(async (containerId: string) => {
         await getContainerControl(containerId).start();
       }),
       stopContainer: vi.fn(async (containerId: string) => {
         await getContainerControl(containerId).stop();
       }),
+      inspectContainer: vi.fn(async (containerId: string) => {
+        return getContainerControl(containerId).inspect();
+      }),
+      createVolume: vi.fn(async (opts: { name: string; labels?: Record<string, string> }) => {
+        createdVolumes.push({ Name: opts.name, Labels: opts.labels ?? {} });
+      }),
+      removeVolume: vi.fn().mockResolvedValue(undefined),
+      runServiceContainer: vi.fn(async (opts: Record<string, unknown>) => {
+        createdContainers.push(opts);
+        const name =
+          typeof opts['name'] === 'string' ? opts['name'] : `svc-${createdContainers.length}`;
+        const id = `${name}-id`;
+        runningContainers.set(id, true);
+        return id;
+      }),
+      runInfraContainer: vi.fn(async (opts: Record<string, unknown>) => {
+        createdContainers.push(opts);
+        const id = `infra-${createdContainers.length}-id`;
+        runningContainers.set(id, true);
+        return id;
+      }),
+      waitForContainer: vi.fn().mockResolvedValue({ StatusCode: 0 }),
+      connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
       pullImage: vi.fn().mockResolvedValue(undefined),
-      getClient: vi.fn().mockReturnValue(client),
+      inspectImage: vi.fn().mockResolvedValue({ Config: { ExposedPorts: {} } }),
+      removeImage: vi.fn().mockResolvedValue(undefined),
+      listVolumes: vi.fn().mockResolvedValue([]),
+      inspectVolume: vi.fn(),
+      getDiskUsage: vi.fn().mockResolvedValue({ Images: [], Containers: [], Volumes: [] }),
+      renameContainer: vi.fn().mockResolvedValue(undefined),
+      getContainerStats: vi.fn().mockResolvedValue({}),
+      getNetworkName: vi.fn().mockReturnValue('openlander-prod'),
+      execSimple: vi.fn(async (containerId: string, cmd: string[]) => {
+        const cmds = execCommands.get(containerId) ?? [];
+        cmds.push(cmd);
+        execCommands.set(containerId, cmds);
+        return getNextExecPlan(containerId);
+      }),
     } as unknown as Docker,
     client,
     createdVolumes,

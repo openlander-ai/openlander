@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`pipeline event golden snapshots captures compose failed event sequence and payload shapes 1`] = `
+exports[`pipeline event golden snapshots > captures compose failed event sequence and payload shapes 1`] = `
 [
   {
     "payloadShape": {
@@ -20,7 +20,7 @@ exports[`pipeline event golden snapshots captures compose failed event sequence 
 ]
 `;
 
-exports[`pipeline event golden snapshots captures compose success + down event sequence and payload shapes 1`] = `
+exports[`pipeline event golden snapshots > captures compose success + down event sequence and payload shapes 1`] = `
 [
   {
     "payloadShape": {
@@ -48,23 +48,23 @@ exports[`pipeline event golden snapshots captures compose success + down event s
 ]
 `;
 
-exports[`pipeline event golden snapshots captures monorepo deploy event sequence and payload shapes 1`] = `
+exports[`pipeline event golden snapshots > captures monorepo deploy event sequence and payload shapes 1`] = `
 [
   "deploy:start",
   "deploy:clone",
   "deploy:start",
+  "deploy:build",
+  "deploy:run",
+  "deploy:success",
   "deploy:start",
   "deploy:build",
-  "deploy:build",
   "deploy:run",
-  "deploy:run",
-  "deploy:success",
-  "deploy:success",
-  "deploy:success",
+  "deploy:failed",
+  "deploy:failed",
 ]
 `;
 
-exports[`pipeline event golden snapshots captures monorepo deploy event sequence and payload shapes 2`] = `
+exports[`pipeline event golden snapshots > captures monorepo deploy event sequence and payload shapes 2`] = `
 [
   {
     "payloadShape": {
@@ -103,6 +103,46 @@ exports[`pipeline event golden snapshots captures monorepo deploy event sequence
   },
   {
     "payloadShape": {
+      "durationMs": "number",
+      "imageTag": "string",
+      "message": "string",
+      "parentProjectId": "string",
+      "phase": "string",
+      "projectId": "string",
+      "scope": "string",
+      "status": "string",
+    },
+    "type": "deploy:build",
+  },
+  {
+    "payloadShape": {
+      "containerId": "string",
+      "message": "string",
+      "parentProjectId": "string",
+      "phase": "string",
+      "port": "number",
+      "projectId": "string",
+      "scope": "string",
+      "status": "string",
+      "url": "string",
+    },
+    "type": "deploy:run",
+  },
+  {
+    "payloadShape": {
+      "message": "string",
+      "parentProjectId": "string",
+      "phase": "string",
+      "projectId": "string",
+      "scope": "string",
+      "status": "string",
+      "totalDurationMs": "number",
+      "url": "string",
+    },
+    "type": "deploy:success",
+  },
+  {
+    "payloadShape": {
       "message": "string",
       "parentProjectId": "string",
       "phase": "string",
@@ -128,87 +168,50 @@ exports[`pipeline event golden snapshots captures monorepo deploy event sequence
   },
   {
     "payloadShape": {
+      "containerId": "string",
+      "message": "string",
+      "parentProjectId": "string",
+      "phase": "string",
+      "port": "number",
+      "projectId": "string",
+      "scope": "string",
+      "status": "string",
+      "url": "string",
+    },
+    "type": "deploy:run",
+  },
+  {
+    "payloadShape": {
+      "buildLog": "string",
       "durationMs": "number",
-      "imageTag": "string",
+      "error": "string",
       "message": "string",
       "parentProjectId": "string",
       "phase": "string",
       "projectId": "string",
       "scope": "string",
       "status": "string",
+      "step": "string",
     },
-    "type": "deploy:build",
+    "type": "deploy:failed",
   },
   {
     "payloadShape": {
-      "containerId": "string",
-      "message": "string",
-      "parentProjectId": "string",
-      "phase": "string",
-      "port": "number",
-      "projectId": "string",
-      "scope": "string",
-      "status": "string",
-      "url": "string",
-    },
-    "type": "deploy:run",
-  },
-  {
-    "payloadShape": {
-      "containerId": "string",
-      "message": "string",
-      "parentProjectId": "string",
-      "phase": "string",
-      "port": "number",
-      "projectId": "string",
-      "scope": "string",
-      "status": "string",
-      "url": "string",
-    },
-    "type": "deploy:run",
-  },
-  {
-    "payloadShape": {
-      "message": "string",
-      "parentProjectId": "string",
-      "phase": "string",
-      "projectId": "string",
-      "scope": "string",
-      "status": "string",
-      "totalDurationMs": "number",
-      "url": "string",
-    },
-    "type": "deploy:success",
-  },
-  {
-    "payloadShape": {
-      "message": "string",
-      "parentProjectId": "string",
-      "phase": "string",
-      "projectId": "string",
-      "scope": "string",
-      "status": "string",
-      "totalDurationMs": "number",
-      "url": "string",
-    },
-    "type": "deploy:success",
-  },
-  {
-    "payloadShape": {
+      "durationMs": "number",
+      "error": "string",
       "message": "string",
       "phase": "string",
       "projectId": "string",
       "scope": "string",
       "status": "string",
-      "totalDurationMs": "number",
-      "url": "string",
+      "step": "string",
     },
-    "type": "deploy:success",
+    "type": "deploy:failed",
   },
 ]
 `;
 
-exports[`pipeline event golden snapshots captures rollback event sequence and payload shapes 1`] = `
+exports[`pipeline event golden snapshots > captures rollback event sequence and payload shapes 1`] = `
 [
   {
     "payloadShape": {
@@ -221,7 +224,7 @@ exports[`pipeline event golden snapshots captures rollback event sequence and pa
 ]
 `;
 
-exports[`pipeline event golden snapshots captures single deploy event sequence and payload shapes 1`] = `
+exports[`pipeline event golden snapshots > captures single deploy event sequence and payload shapes 1`] = `
 [
   {
     "payloadShape": {
@@ -266,6 +269,7 @@ exports[`pipeline event golden snapshots captures single deploy event sequence a
   {
     "payloadShape": {
       "projectId": "string",
+      "sessionId": "undefined",
       "totalDurationMs": "number",
       "url": "string",
     },
@@ -274,7 +278,7 @@ exports[`pipeline event golden snapshots captures single deploy event sequence a
 ]
 `;
 
-exports[`pipeline event golden snapshots captures stop/start/remove event sequence and payload shapes 1`] = `
+exports[`pipeline event golden snapshots > captures stop/start/remove event sequence and payload shapes 1`] = `
 [
   {
     "payloadShape": {
@@ -288,21 +292,13 @@ exports[`pipeline event golden snapshots captures stop/start/remove event sequen
       "containerId": "string",
       "projectId": "string",
     },
-    "type": "container:start",
-  },
-  {
-    "payloadShape": {
-      "containerId": "string",
-      "projectId": "string",
-    },
     "type": "container:remove",
   },
 ]
 `;
 
-exports[`pipeline event golden snapshots catalogs all unique deploy.ts + compose.ts event types 1`] = `
+exports[`pipeline event golden snapshots > catalogs all unique deploy.ts + compose.ts event types 1`] = `
 [
-  "build:dockerfile-fixed",
   "build:inform",
   "build:output",
   "build:suggest",

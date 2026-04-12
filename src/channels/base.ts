@@ -3,9 +3,10 @@ import { type EventBus, eventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { ChatStreamEvent } from '../types/agent-events.js';
 import type { QuestionRequest } from '../lib/question-bridge.js';
+import type { OpsAlert } from '../monitor/ops-types.js';
 
 const log = createModuleLogger('channels');
-export type ChannelType = 'slack' | 'discord' | 'telegram';
+export type ChannelType = 'slack' | 'discord' | 'telegram' | 'email';
 
 export type ChannelComponent =
   | {
@@ -42,6 +43,7 @@ export interface Channel {
     text: string,
     components: ChannelComponent[],
   ): Promise<string>;
+  formatOpsAlert?(alert: OpsAlert): { text: string; extra?: unknown };
   isConnected(): boolean;
 }
 
@@ -160,7 +162,9 @@ export class ChannelManager {
         ? this.ctx.config.channels.slack.recoveryChannelId
         : type === 'discord'
           ? this.ctx.config.channels.discord.recoveryChannelId
-          : this.ctx.config.channels.telegram.recoveryChannelId;
+          : type === 'telegram'
+            ? this.ctx.config.channels.telegram.recoveryChannelId
+            : 'email-broadcast';
 
     if (!configuredId) {
       return null;
@@ -220,6 +224,31 @@ export class ChannelManager {
     }
   }
 
+  async broadcastStructured(alert: OpsAlert): Promise<void> {
+    for (const [type, channel] of this.channels.entries()) {
+      if (!channel.isConnected()) {
+        continue;
+      }
+
+      const channelId = this.getBroadcastChannelId(type);
+      if (!channelId) {
+        continue;
+      }
+
+      try {
+        if (channel.formatOpsAlert) {
+          const formatted = channel.formatOpsAlert(alert);
+          await channel.sendMessage(channelId, formatted.text);
+        } else {
+          const text = `[${alert.severity.toUpperCase()}] ${alert.project.name}: ${alert.title}\n${alert.description}`;
+          await channel.sendMessage(channelId, text);
+        }
+      } catch (error) {
+        log.error({ error, channelType: type }, 'Failed to broadcastStructured');
+      }
+    }
+  }
+
   async sendRecoveryNotification(message: string): Promise<void> {
     await this.broadcast(message);
   }
@@ -256,6 +285,12 @@ export class ChannelManager {
     const channel = this.channels.get(msg.channelType);
     if (!channel) {
       log.error({ channelType: msg.channelType }, 'No registered channel for type');
+      return;
+    }
+
+    const trimmedContent = msg.content.trim();
+    if (trimmedContent.startsWith('/ops') || trimmedContent.startsWith('!ops')) {
+      await this.handleOpsCommand(msg, channel, trimmedContent);
       return;
     }
 
@@ -395,6 +430,90 @@ export class ChannelManager {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
+    }
+  }
+
+  private async handleOpsCommand(
+    msg: ChannelMessage,
+    channel: Channel,
+    content: string,
+  ): Promise<void> {
+    const parts = content
+      .replace(/^[/!]ops\s*/, '')
+      .trim()
+      .split(/\s+/);
+    const command = parts[0]?.toLowerCase() ?? 'help';
+    const args = parts.slice(1);
+
+    try {
+      let response: string;
+
+      switch (command) {
+        case 'status': {
+          const projects = this.ctx.db.listProjects();
+          const lines = projects.map((p) => `${p.name}: ${p.status}`).join('\n') || 'No projects';
+          response = `📊 Project Status:\n${lines}`;
+          break;
+        }
+        case 'health': {
+          try {
+            const { getSystemStats } = await import('../monitor/stats.js');
+            const stats = getSystemStats();
+            response = [
+              '🏥 System Health:',
+              `CPU: ${String(Math.round(stats.cpu.usagePercent))}%`,
+              `Memory: ${String(Math.round(stats.memory.usagePercent))}%`,
+              `Disk: ${String(Math.round(stats.disk.usagePercent))}%`,
+            ].join('\n');
+          } catch {
+            response = '❌ Health check failed';
+          }
+          break;
+        }
+        case 'incidents': {
+          const now = Date.now();
+          const dayAgo = now - 24 * 60 * 60 * 1000;
+          const recent = this.ctx.db.listOpsIncidentsByDateRange(dayAgo, now);
+          const active = recent.filter((i) => i.status !== 'resolved');
+          if (active.length === 0) {
+            response = '✅ No active incidents';
+          } else {
+            response =
+              `⚠️ Active Incidents (${String(active.length)}):\n` +
+              active
+                .map((i) => {
+                  const project = this.ctx.db.getProject(i.project_id);
+                  const name = project?.name ?? i.project_id.slice(0, 8);
+                  return `- [${i.severity}] ${name}: ${i.root_cause ?? i.status}`;
+                })
+                .join('\n');
+          }
+          break;
+        }
+        case 'restart': {
+          const projectName = args.join(' ');
+          if (!projectName) {
+            response = '❌ Usage: /ops restart <project-name>';
+            break;
+          }
+          response = `🔄 Restart for "${projectName}" queued — use the web dashboard to confirm`;
+          break;
+        }
+        default: {
+          response = [
+            '📋 OpsAgent Commands:',
+            '/ops status — List all projects and their status',
+            '/ops health — System health (CPU, memory, disk)',
+            '/ops incidents — List active incidents',
+            '/ops restart <project> — Request project restart',
+          ].join('\n');
+        }
+      }
+
+      await channel.sendMessage(msg.channelId, response);
+    } catch (err) {
+      log.error({ err, command }, 'Failed to handle ops command');
+      await channel.sendMessage(msg.channelId, '❌ Command failed').catch(() => undefined);
     }
   }
 }

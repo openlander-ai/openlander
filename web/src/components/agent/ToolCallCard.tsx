@@ -36,7 +36,7 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
           {Object.keys(toolCall.arguments).length > 0 && (
             <div className="mb-2">
               <span className="text-muted-ol">Arguments:</span>
-              <pre className="mt-1 overflow-x-auto text-[11px]">
+              <pre className="mt-1 overflow-x-auto text-xs">
                 {JSON.stringify(toolCall.arguments, null, 2)}
               </pre>
             </div>
@@ -44,7 +44,7 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
           {toolCall.toolResult && (
             <div>
               <span className="text-muted-ol">Result:</span>
-              <pre className="mt-1 overflow-x-auto text-[11px]">
+              <pre className="mt-1 overflow-x-auto text-xs">
                 {toolCall.toolResult.error || JSON.stringify(toolCall.toolResult.result, null, 2)}
               </pre>
             </div>

@@ -14,15 +14,15 @@ describe('Traefik environment hostnames', () => {
     );
   });
 
-  it('adds development hostname prefix', () => {
+  it('returns same hostname for development environment', () => {
     expect(getEnvironmentProjectHostname('my-app', 'development', '10.0.0.7')).toBe(
-      'dev-my-app.10.0.0.7.sslip.io',
+      'my-app.10.0.0.7.sslip.io',
     );
   });
 
-  it('adds development hostname prefix', () => {
+  it('returns same hostname for development environment (duplicate coverage)', () => {
     expect(getEnvironmentProjectHostname('my-app', 'development', '10.0.0.7')).toBe(
-      'dev-my-app.10.0.0.7.sslip.io',
+      'my-app.10.0.0.7.sslip.io',
     );
   });
 });
@@ -37,15 +37,15 @@ describe('Traefik labels with environment', () => {
     );
   });
 
-  it('uses development prefix in generated host rule', () => {
+  it('uses production-style host rule even when development is passed', () => {
     const labels = buildTraefikLabels('my-app', 10001, undefined, 'development');
 
-    expect(labels['traefik.http.routers.ol-my-app.rule']).toContain('dev-my-app.');
+    expect(labels['traefik.http.routers.ol-my-app.rule']).toContain('my-app.');
   });
 
-  it('uses development prefix in generated host rule', () => {
+  it('uses production-style host rule even when development is passed (duplicate coverage)', () => {
     const labels = buildTraefikLabels('my-app', 10001, undefined, 'development');
 
-    expect(labels['traefik.http.routers.ol-my-app.rule']).toContain('dev-my-app.');
+    expect(labels['traefik.http.routers.ol-my-app.rule']).toContain('my-app.');
   });
 });

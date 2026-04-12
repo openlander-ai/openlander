@@ -1,7 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-
 interface HookDispatcher {
   useState<T>(initial: T | (() => T)): readonly [T, (next: T | ((value: T) => T)) => void];
   useCallback<T extends (...args: never[]) => unknown>(callback: T): T;
@@ -102,6 +100,22 @@ vi.mock('sonner', () => ({
     success: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+vi.mock('@/i18n/context', () => ({
+  useLanguage: () => ({
+    t: (key: string) =>
+      (
+        ({
+          'services.detail.notFound': 'Service not found',
+          'services.detail.tabs.overview': 'Overview',
+          'services.detail.tabs.connection': 'Connection',
+          'services.detail.tabs.databases': 'Databases',
+          'services.detail.tabs.logs': 'Logs',
+          'services.detail.tabs.settings': 'Settings',
+        }) as Record<string, string>
+      )[key] ?? key,
+  }),
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -232,9 +246,7 @@ function renderDetail() {
   }
 }
 
-const describeDetail = isBunRuntime ? describe.skip : describe;
-
-describeDetail('ServiceDetail', () => {
+describe('ServiceDetail', () => {
   beforeAll(async () => {
     const { createRequire } = await import('node:module');
     const require = createRequire(import.meta.url);

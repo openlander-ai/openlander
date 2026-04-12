@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDeploymentDetail } from '@/lib/api';
@@ -14,7 +14,6 @@ import {
   ArrowLeft,
   GitCommit,
   Clock,
-  AlertTriangle,
   CheckCircle2,
   XCircle,
   MinusCircle,
@@ -22,7 +21,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
-import { parseAnsiLine } from '@/lib/ansi';
+import { StaticLogViewer } from '@/components/logs/StaticLogViewer';
+import { DiagnosisPanel } from '@/components/deploy/DiagnosisPanel';
 
 export function DeploymentDetail() {
   const { id, deployId } = useParams();
@@ -30,7 +30,6 @@ export function DeploymentDetail() {
   const { t } = useLanguage();
   const [deployment, setDeployment] = useState<DeployLogDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const logEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!id || !deployId) return;
@@ -47,16 +46,10 @@ export function DeploymentDetail() {
     fetchDetail();
   }, [id, deployId]);
 
-  useEffect(() => {
-    if (deployment?.buildLog) {
-      logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [deployment?.buildLog]);
-
   if (loading) {
     return (
       <div className="flex flex-col h-full bg-bg-app">
-        <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
+        <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel px-6 py-4">
           <div className="flex flex-col gap-3">
             <Skeleton className="h-4 w-32" />
             <div className="flex items-center justify-between">
@@ -106,7 +99,7 @@ export function DeploymentDetail() {
 
   return (
     <div className="flex flex-col h-full bg-bg-app">
-      <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
+      <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel px-6 py-4">
         <div className="flex flex-col gap-3">
           <button
             onClick={() => navigate(`/projects/${id}`)}
@@ -129,7 +122,7 @@ export function DeploymentDetail() {
                     </span>
                   )}
                 </h1>
-                <div className="flex items-center gap-3 mt-0.5 text-[11px] font-body text-secondary-ol">
+                <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-secondary-ol">
                   <span className={cn('flex items-center gap-1', statusMeta.textClass)}>
                     <StatusIcon className="h-3 w-3" />
                     {statusMeta.label}
@@ -153,32 +146,32 @@ export function DeploymentDetail() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
-              <div className="text-[11px] font-body uppercase tracking-wide text-muted-ol">
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-3">
+              <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
                 {'Status'}
               </div>
               <div className={cn('mt-1 text-sm font-display font-medium', statusMeta.textClass)}>
                 {statusMeta.label}
               </div>
             </div>
-            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
-              <div className="text-[11px] font-body uppercase tracking-wide text-muted-ol">
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-3">
+              <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
                 {'Trigger'}
               </div>
               <div className="mt-1 text-sm font-body text-primary-ol capitalize">
                 {getDeploymentTriggerMetaLabel(deployment.trigger)}
               </div>
             </div>
-            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
-              <div className="text-[11px] font-body uppercase tracking-wide text-muted-ol">
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-3">
+              <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
                 {'Started'}
               </div>
               <div className="mt-1 text-sm font-body text-primary-ol">
                 {formatDateTime(deployment.createdAt) || 'Unknown'}
               </div>
             </div>
-            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
-              <div className="text-[11px] font-body uppercase tracking-wide text-muted-ol">
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-3">
+              <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
                 {'Duration'}
               </div>
               <div className="mt-1 text-sm font-body text-primary-ol">
@@ -189,40 +182,34 @@ export function DeploymentDetail() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 space-y-6">
-        {deployment.status === 'failed' && deployment.buildLog && (
-          <div className="rounded-lg border border-warning/30 bg-warning/5 border-l-4 border-l-warning p-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <h3 className="text-sm font-display font-medium text-primary-ol">
-                  {'AI Analysis'}
-                </h3>
-                <p className="text-sm font-body text-secondary-ol">
-                  {t('deploy.buildFailureDetected')}
-                </p>
+      <div className="flex-1 overflow-auto p-6">
+        <div className="flex flex-col lg:flex-row gap-6">
+          <div className="flex-1 space-y-6 min-w-0">
+            <div className="space-y-2">
+              <h3 className="text-sm font-display font-medium text-secondary-ol">Build Logs</h3>
+              <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
+                <StaticLogViewer content={deployment.buildLog} />
               </div>
             </div>
-          </div>
-        )}
 
-        <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] bg-bg-terminal overflow-hidden">
-          <div className="flex items-center px-4 py-2 border-b border-border bg-bg-panel">
-            <span className="text-xs font-mono text-muted-ol">{'build_log'}</span>
-          </div>
-          <div className="flex-1 overflow-auto p-4">
-            {deployment.buildLog ? (
-              <div className="text-[13px] font-mono text-gray-300 whitespace-pre-wrap break-all">
-                {deployment.buildLog.split('\n').map((line, i) => (
-                  <div key={i} dangerouslySetInnerHTML={{ __html: parseAnsiLine(line) }} />
-                ))}
-                <div ref={logEndRef} />
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-sm font-mono text-gray-500">
-                {t('deploy.noBuildLog')}
+            {deployment.runtimeLog && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-display font-medium text-secondary-ol flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  Runtime Logs
+                  <span className="text-xs font-body text-muted-ol font-normal">
+                    (last 500 lines before redeploy)
+                  </span>
+                </h3>
+                <div className="flex flex-col h-full min-h-[300px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
+                  <StaticLogViewer content={deployment.runtimeLog} />
+                </div>
               </div>
             )}
+          </div>
+
+          <div className="lg:w-80 xl:w-96 shrink-0">
+            <DiagnosisPanel deployment={deployment} />
           </div>
         </div>
       </div>

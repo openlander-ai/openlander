@@ -4,18 +4,10 @@ vi.mock('../src/pipeline/git.js', () => ({
   cloneRepo: vi.fn(),
 }));
 
-vi.mock('../src/lib/infra-analyzer.js', () => ({
-  analyzeInfrastructure: vi.fn(),
-}));
-
-vi.mock('node:fs', () => ({
-  existsSync: vi.fn(),
-  readFileSync: vi.fn(),
-}));
-
 import { PlanEngine } from '../src/pipeline/deploy-plan/engine.js';
 import type { PlanEngineDeps } from '../src/pipeline/deploy-plan/engine.js';
 import { createMockDeployPlan } from './helpers/deploy-plan-mocks.js';
+import * as infraAnalyzer from '../src/lib/infra-analyzer.js';
 
 describe('PlanEngine.updatePlan', () => {
   let engine: PlanEngine;
@@ -25,8 +17,10 @@ describe('PlanEngine.updatePlan', () => {
   let mockServiceManager: any;
   let mockAutoDetector: any;
   let mockConfig: any;
+  let mockAnalyzeInfra: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    mockAnalyzeInfra = vi.spyOn(infraAnalyzer, 'analyzeInfrastructure');
     mockDb = {
       createDeployPlan: vi.fn(),
       getDeployPlan: vi.fn(),
@@ -64,6 +58,7 @@ describe('PlanEngine.updatePlan', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    mockAnalyzeInfra.mockRestore();
   });
 
   it('fills missing env var with flat format { env: { DATABASE_URL: "postgres://..." } }', () => {
@@ -606,7 +601,7 @@ describe('PlanEngine.executePlan', () => {
     });
 
     await expect(engine.executePlan(plan.plan_id)).rejects.toThrow(
-      'Plan is already executing. Cannot execute concurrently.',
+      'Plan status is "executing" — only "ready" plans can be executed.',
     );
   });
 
@@ -620,7 +615,7 @@ describe('PlanEngine.executePlan', () => {
     });
 
     await expect(engine.executePlan(plan.plan_id)).rejects.toThrow(
-      'Plan is already needs_input. Cannot execute concurrently.',
+      'Plan requires missing environment variables',
     );
   });
 
@@ -949,7 +944,7 @@ describe('PlanEngine.executePlan', () => {
     });
 
     await expect(engine.executePlan(plan.plan_id)).rejects.toThrow(
-      'Plan is already completed. Cannot execute concurrently.',
+      'Plan status is "completed" — only "ready" plans can be executed.',
     );
   });
 
@@ -963,7 +958,7 @@ describe('PlanEngine.executePlan', () => {
     });
 
     await expect(engine.executePlan(plan.plan_id)).rejects.toThrow(
-      'Plan is already failed. Cannot execute concurrently.',
+      'Plan status is "failed" — only "ready" plans can be executed.',
     );
   });
 

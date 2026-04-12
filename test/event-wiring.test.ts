@@ -111,14 +111,7 @@ describe('Event wiring (static source scan)', () => {
   });
 
   it('every individual route subscription has an emit source', () => {
-    const individualRouteSubscriptions = [
-      'build:autofix',
-      'build:suggest',
-      'build:inform',
-      'build:dockerfile-fixed',
-      'agent:event',
-      'question:pending',
-    ];
+    const individualRouteSubscriptions = ['agent:event', 'question:pending'];
 
     const missingEmitSource = individualRouteSubscriptions.filter(
       (eventName) => !emittedEvents.has(eventName),

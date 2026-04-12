@@ -5,18 +5,17 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+
 import type { AppContext } from '../../app.js';
+import type { CompositeTool } from '../../mcp/composite-tools.js';
 import type { ToolDef } from '../defs/types.js';
 
-const agentExecuteGoalSchema = z.object({
-  goal: z.string().min(1).describe('The goal for the agent to accomplish using available tools'),
-});
-
-const agentExecuteGoalDescription =
-  'Run the AI agent to accomplish a complex goal. The agent reasons about steps and chains multiple tools (deploy, configure, debug, etc.) automatically. Use this for multi-step tasks instead of calling individual tools.';
-
-function toInputSchema(schema: z.ZodType) {
-  return z.toJSONSchema(schema);
+function toInputSchema(schema: z.ZodType): Record<string, unknown> {
+  const jsonSchema = z.toJSONSchema(schema) as Record<string, unknown>;
+  if ('$schema' in jsonSchema) {
+    delete jsonSchema['$schema'];
+  }
+  return jsonSchema;
 }
 
 function successResponse(result: unknown): { content: Array<{ type: 'text'; text: string }> } {
@@ -47,25 +46,27 @@ interface McpRequestHandlerServer {
   ): void;
 }
 
-export function registerMcpTools(
+export function registerCompositeMcpTools(
   server: McpRequestHandlerServer,
-  defs: ToolDef[],
+  composites: CompositeTool[],
+  platformDefs: ToolDef[],
   appCtx: AppContext,
 ): void {
-  const mcpDefs = defs.filter(isMcpTargeted);
+  const mcpPlatformDefs = platformDefs.filter(isMcpTargeted);
 
   server.setRequestHandler(ListToolsRequestSchema, () => {
-    const tools = mcpDefs.map((def) => ({
-      name: def.name,
-      description: def.mcpDescription ?? def.description,
-      inputSchema: toInputSchema(def.inputSchema),
-    }));
-
-    tools.push({
-      name: 'agent_execute_goal',
-      description: agentExecuteGoalDescription,
-      inputSchema: toInputSchema(agentExecuteGoalSchema),
-    });
+    const tools = [
+      ...composites.map((composite) => ({
+        name: composite.name,
+        description: composite.description,
+        inputSchema: toInputSchema(composite.inputSchema),
+      })),
+      ...mcpPlatformDefs.map((def) => ({
+        name: def.name,
+        description: def.mcpDescription ?? def.description,
+        inputSchema: toInputSchema(def.inputSchema),
+      })),
+    ];
 
     return Promise.resolve({ tools });
   });
@@ -75,28 +76,18 @@ export function registerMcpTools(
       const toolName = request.params.name;
       const rawArgs = request.params.arguments ?? {};
 
-      if (toolName === 'agent_execute_goal') {
-        const parsed = agentExecuteGoalSchema.safeParse(rawArgs);
+      const composite = composites.find((item) => item.name === toolName);
+      if (composite) {
+        const parsed = composite.inputSchema.safeParse(rawArgs);
         if (!parsed.success) {
           throw new McpError(ErrorCode.InvalidParams, parsed.error.message);
         }
 
-        if (!appCtx.agent) {
-          return successResponse({
-            error: 'Agent requires an LLM provider. Configure one in OpenLander settings first.',
-          });
-        }
-
-        const sessionId = `mcp-${String(Date.now())}`;
-        const response = await appCtx.agent.chat(parsed.data.goal, sessionId);
-        return successResponse({
-          message: response.message,
-          toolResults: response.toolResults ?? [],
-          sessionId,
-        });
+        const result = await composite.execute(parsed.data, { target: 'mcp', appCtx });
+        return successResponse(result);
       }
 
-      const def = mcpDefs.find((item) => item.name === toolName);
+      const def = mcpPlatformDefs.find((item) => item.name === toolName);
       if (!def) {
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
       }

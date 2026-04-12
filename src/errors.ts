@@ -121,6 +121,44 @@ export class ContainerNotFoundError extends OpenLanderError {
   }
 }
 
+export class NetworkNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Docker network not found: ${identifier}`, 'NETWORK_NOT_FOUND', 404, { identifier });
+    this.name = 'NetworkNotFoundError';
+  }
+}
+
+export class VolumeNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Docker volume not found: ${identifier}`, 'VOLUME_NOT_FOUND', 404, { identifier });
+    this.name = 'VolumeNotFoundError';
+  }
+}
+
+export class ImageNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Docker image not found: ${identifier}`, 'IMAGE_NOT_FOUND', 404, { identifier });
+    this.name = 'ImageNotFoundError';
+  }
+}
+
+export class CloudflareNotFoundError extends OpenLanderError {
+  constructor(resource: string) {
+    super(`Cloudflare resource not found: ${resource}`, 'CLOUDFLARE_NOT_FOUND', 404, { resource });
+    this.name = 'CloudflareNotFoundError';
+  }
+}
+
+/**
+ * Check if a raw error from dockerode is a "not found" error.
+ * Use at boundaries where raw dockerode is called directly (not via Docker wrapper).
+ * Prefer `instanceof ContainerNotFoundError` etc. when the error comes from Docker class methods.
+ */
+export function isDockerNotFoundError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return /not found|No such (container|network|volume|image)/i.test(msg);
+}
+
 // --- Port errors ---
 
 export class PortExhaustedError extends OpenLanderError {
@@ -231,5 +269,49 @@ export class PreflightCheckError extends OpenLanderError {
       warnings: result.warnings,
     });
     this.name = 'PreflightCheckError';
+  }
+}
+
+// --- Authentication errors ---
+
+export class AuthenticationError extends OpenLanderError {
+  constructor(message = 'Authentication failed') {
+    super(message, 'AUTHENTICATION_FAILED', 401);
+    this.name = 'AuthenticationError';
+  }
+}
+
+export class SetupRequiredError extends OpenLanderError {
+  constructor(message = 'Setup is required before accessing this resource') {
+    super(message, 'SETUP_REQUIRED', 403);
+    this.name = 'SetupRequiredError';
+  }
+}
+
+// --- Deploy lock errors ---
+
+export class DeployLockedError extends OpenLanderError {
+  constructor(projectId: string, lockedBySession: string) {
+    super(
+      `Project ${projectId} is currently being deployed. Try again after the current deployment completes.`,
+      'DEPLOY_LOCKED',
+      409,
+      { projectId, lockedBySession },
+    );
+    this.name = 'DeployLockedError';
+  }
+}
+
+// --- Project validation errors ---
+
+export class InvalidProjectNameError extends OpenLanderError {
+  constructor(name: string) {
+    super(
+      `Invalid project name: "${name}". Project names must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens.`,
+      'INVALID_PROJECT_NAME',
+      400,
+      { name },
+    );
+    this.name = 'InvalidProjectNameError';
   }
 }

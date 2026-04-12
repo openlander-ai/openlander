@@ -39,7 +39,7 @@ describe('HealthMonitor checkPort fallback', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   let getProject: ReturnType<typeof vi.fn>;
   let emit: ReturnType<typeof vi.fn>;
-  let getContainer: ReturnType<typeof vi.fn>;
+  let inspectContainer: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     fetchMock = vi.fn();
@@ -47,7 +47,7 @@ describe('HealthMonitor checkPort fallback', () => {
 
     getProject = vi.fn().mockReturnValue(createProject());
     emit = vi.fn().mockResolvedValue(undefined);
-    getContainer = vi.fn();
+    inspectContainer = vi.fn();
   });
 
   afterEach(() => {
@@ -57,13 +57,14 @@ describe('HealthMonitor checkPort fallback', () => {
 
   function createMonitor(): HealthMonitor {
     const docker = {
-      getClient: vi.fn().mockReturnValue({
-        getContainer,
-      }),
+      inspectContainer,
     } as unknown as Docker;
 
     const db = {
       getProject,
+      updateProject: vi.fn(),
+      getCircuitBreakerState: vi.fn().mockReturnValue(null),
+      resetCircuitBreaker: vi.fn(),
     } as unknown as Database;
 
     const events = {
@@ -81,15 +82,14 @@ describe('HealthMonitor checkPort fallback', () => {
 
     expect(result.healthy).toBe(true);
     expect(result.statusCode).toBe(200);
-    expect(getContainer).not.toHaveBeenCalled();
+    expect(inspectContainer).not.toHaveBeenCalled();
   });
 
   it('marks healthy when HTTP fails but container is running and not restarting', async () => {
     fetchMock.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
-    getContainer.mockReturnValueOnce({
-      inspect: vi.fn().mockResolvedValue({
-        State: { Running: true, Restarting: false },
-      }),
+    inspectContainer.mockResolvedValueOnce({
+      State: { Running: true, Restarting: false },
+      RestartCount: 0,
     });
     const monitor = createMonitor();
 
@@ -98,15 +98,15 @@ describe('HealthMonitor checkPort fallback', () => {
     expect(result.healthy).toBe(true);
     expect(result.error).toBeUndefined();
     expect(result.consecutiveFailures).toBe(0);
-    expect(getContainer).toHaveBeenCalledWith('container-1');
+    expect(inspectContainer).toHaveBeenCalledWith('container-1');
   });
 
   it('stays unhealthy when HTTP fails and container is not running', async () => {
     fetchMock.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
-    getContainer.mockReturnValueOnce({
-      inspect: vi.fn().mockResolvedValue({
-        State: { Running: false, Restarting: false },
-      }),
+    inspectContainer.mockResolvedValueOnce({
+      State: { Running: false, Restarting: false, ExitCode: 1 },
+      RestartCount: 0,
+      Config: { Image: 'test:latest' },
     });
     const monitor = createMonitor();
 
@@ -119,9 +119,7 @@ describe('HealthMonitor checkPort fallback', () => {
 
   it('stays unhealthy when Docker inspect fallback fails', async () => {
     fetchMock.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
-    getContainer.mockReturnValueOnce({
-      inspect: vi.fn().mockRejectedValue(new Error('inspect failed')),
-    });
+    inspectContainer.mockRejectedValueOnce(new Error('inspect failed'));
     const monitor = createMonitor();
 
     const result = await monitor.checkProject('project-1');

@@ -30,29 +30,18 @@ export interface DrizzleDatabase {
 
 export function createDrizzleDatabase(dbPath: string): DrizzleDatabase {
   const require = createRequire(import.meta.url);
-  const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
-  const sqlite = isBunRuntime
-    ? new (require('bun:sqlite') as { Database: new (path: string) => SqliteDatabase }).Database(
-        dbPath,
-      )
-    : new (require('better-sqlite3') as new (path: string) => SqliteDatabase)(dbPath);
+  const sqlite = new (require('better-sqlite3') as new (path: string) => SqliteDatabase)(dbPath);
 
   sqlite.exec('PRAGMA journal_mode = WAL');
   sqlite.exec('PRAGMA foreign_keys = ON');
   sqlite.exec('PRAGMA busy_timeout = 5000');
 
-  const db = isBunRuntime
-    ? (
-        require('drizzle-orm/bun-sqlite') as {
-          drizzle: (client: SqliteDatabase, config: { schema: typeof schema }) => DrizzleClient;
-        }
-      ).drizzle(sqlite, { schema })
-    : (
-        require('drizzle-orm/better-sqlite3') as {
-          drizzle: (client: SqliteDatabase, config: { schema: typeof schema }) => DrizzleClient;
-        }
-      ).drizzle(sqlite, { schema });
+  const db = (
+    require('drizzle-orm/better-sqlite3') as {
+      drizzle: (client: SqliteDatabase, config: { schema: typeof schema }) => DrizzleClient;
+    }
+  ).drizzle(sqlite, { schema });
 
   return { sqlite, db };
 }

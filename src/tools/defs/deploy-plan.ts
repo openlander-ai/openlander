@@ -1,9 +1,15 @@
+import { nanoid } from 'nanoid';
+import { DeployLockedError } from '../../errors.js';
 import type { ToolDef } from './types.js';
 import type { DeployPlan } from '../../pipeline/deploy-plan/types.js';
 import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/engine.js';
 import { eventBus } from '../../events/index.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
+import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getProjectUrls } from '../../pipeline/traefik.js';
+import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
+import { SHARED_NETWORK_NAME } from '../../config/index.js';
+import { buildDeployLockedResponse, tryAcquireDeployLockOrResponse } from './helpers.js';
 
 import {
   createDeployPlanSchema,
@@ -16,6 +22,7 @@ import {
 export const deployPlanToolDefs: ToolDef[] = [
   {
     name: 'create_deploy_plan',
+    riskLevel: 'medium',
     description:
       'Analyze a repository and create a deployment plan. Returns a plan with detected services, required env vars, and build config. Use update_deploy_plan to fill missing values before executing.',
     mcpDescription:
@@ -27,9 +34,13 @@ export const deployPlanToolDefs: ToolDef[] = [
       const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
 
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
-        repoUrl: args['repo_url'] as string,
+        repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
         branch: (args['branch'] as string | undefined) ?? undefined,
         name: (args['name'] as string | undefined) ?? undefined,
+        source: (args['source'] as 'git' | 'image' | undefined) ?? undefined,
+        imageUrl: (args['image'] as string | undefined) ?? undefined,
+        imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
+        containerPort: (args['port'] as number | undefined) ?? undefined,
         envVars,
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
@@ -61,7 +72,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                 next_steps: [
                   `Plan has missing values. Call update_deploy_plan to provide: ${plan.missing.join(', ')}`,
                   'After updating, call execute_deploy_plan to start deployment',
-                  'If DATABASE_URL is missing, call provision_database first to auto-create PostgreSQL.',
+                  'If DATABASE_URL is missing, call create_service with template="postgres" to provision a database with persistent volume.',
                 ],
               },
             }
@@ -80,10 +91,11 @@ export const deployPlanToolDefs: ToolDef[] = [
   },
   {
     name: 'update_deploy_plan',
+    riskLevel: 'medium',
     description:
-      'Update a deployment plan with missing values (env vars, Dockerfile selection, service config). Call after create_deploy_plan when status is "needs_input".',
+      'Update a deployment plan with missing values (env vars, Dockerfile selection, service config). Call after create_deploy_plan when status is "needs_input". Returns the full updated plan with plan_id, status, complexity, app, build, services, env, missing, warnings.',
     mcpDescription:
-      'Update a deployment plan with missing values. Pass updates as a JSON string with fields like env (environment variables), dockerfile (Dockerfile path), or services (service configuration). Returns updated plan_id, status, and remaining missing values.',
+      'Update a deployment plan with missing values. Pass updates as a JSON string with fields like env (environment variables), dockerfile (Dockerfile path), or services (service configuration). Returns the full updated plan with plan_id, status, complexity, app, build, services, env, missing, warnings.',
     inputSchema: updateDeployPlanSchema,
     execute: (args, context) => {
       const appCtx = context.appCtx;
@@ -113,6 +125,7 @@ export const deployPlanToolDefs: ToolDef[] = [
   },
   {
     name: 'execute_deploy_plan',
+    riskLevel: 'medium',
     description:
       'Execute a deployment plan. Plan must be in "ready" status. Provisions services, injects env vars, and deploys the application.',
     mcpDescription:
@@ -121,9 +134,54 @@ export const deployPlanToolDefs: ToolDef[] = [
     execute: async (args, context) => {
       const appCtx = context.appCtx;
       const planId = args['plan_id'] as string;
+      const toolSessionId = `mcp-execute-plan-${nanoid(12)}`;
 
       const deployOnly = (args['deploy_only'] as string[] | undefined) ?? undefined;
-      const result: ExecutePlanResult = await appCtx.planEngine.executePlan(planId, deployOnly);
+      const planRow =
+        typeof appCtx.db.getDeployPlan === 'function' ? appCtx.db.getDeployPlan(planId) : undefined;
+      if (planRow) {
+        const planData = JSON.parse(planRow.plan_json) as DeployPlan;
+        const lockProjectId =
+          planData.project_id ?? appCtx.db.getProjectByName(planData.app.name)?.id ?? null;
+        if (lockProjectId) {
+          const lockResult = tryAcquireDeployLockOrResponse(lockProjectId, toolSessionId, context);
+          if (lockResult) {
+            return lockResult;
+          }
+        }
+        if (planData.project_id) {
+          markMcpDeploy(planData.project_id);
+        }
+      }
+      let result: ExecutePlanResult;
+      try {
+        result = await appCtx.planEngine.executePlan(planId, deployOnly, toolSessionId);
+      } catch (err) {
+        if (err instanceof DeployLockedError) {
+          return buildDeployLockedResponse(err);
+        }
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('missing environment variables')) {
+          const planData = planRow ? (JSON.parse(planRow.plan_json) as DeployPlan) : undefined;
+          return {
+            plan_id: planId,
+            status: 'needs_input',
+            error: msg,
+            missing: planData?.missing ?? [],
+            _agent_guidance: {
+              next_steps: [
+                'Call update_deploy_plan with the missing env vars',
+                'Then call execute_deploy_plan again',
+              ],
+            },
+          };
+        }
+        throw err;
+      }
+
+      if (result.project_id) {
+        markMcpDeploy(result.project_id);
+      }
 
       if (result.status === 'building') {
         return {
@@ -143,8 +201,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           error: result.error,
           _agent_guidance: {
             next_steps: [
-              'Call get_build_log for raw build output',
-              'Call debug_build_error for AI diagnosis',
+              'Check the error message above — this is a preflight failure (before build started)',
               'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
             ],
           },
@@ -154,22 +211,30 @@ export const deployPlanToolDefs: ToolDef[] = [
   },
   {
     name: 'deploy',
+    riskLevel: 'medium',
     description:
-      'One-call deploy: analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
+      'One-call deploy: analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and on failure auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
     mcpDescription:
-      'One-call deploy: repo analysis → build → deploy → result. Blocks until done by default (wait=true). Returns URL on success, error + diagnosis guidance on failure. Use the 3-step flow (create/execute/status) for finer control.',
+      'One-call deploy: repo analysis → build → deploy → result. Returns immediately with status. Poll get_deploy_status to track progress. Returns URL on success, error + diagnosis guidance on failure. Use the 3-step flow (create/execute/status) for finer control.',
     inputSchema: deploySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
+      const toolSessionId = `mcp-deploy-${nanoid(12)}`;
       const envVarsRaw = (args['env_vars'] as string | undefined) ?? undefined;
       const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
       const wait = (args['wait'] as boolean | undefined) ?? true;
       const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
+      const expose = (args['expose'] as boolean | undefined) ?? false;
+      const domain = (args['domain'] as string | undefined) ?? undefined;
 
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
-        repoUrl: args['repo_url'] as string,
+        repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
         branch: (args['branch'] as string | undefined) ?? undefined,
         name: (args['name'] as string | undefined) ?? undefined,
+        source: (args['source'] as 'git' | 'image' | undefined) ?? undefined,
+        imageUrl: (args['image'] as string | undefined) ?? undefined,
+        imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
+        containerPort: (args['port'] as number | undefined) ?? undefined,
         envVars,
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
@@ -192,7 +257,31 @@ export const deployPlanToolDefs: ToolDef[] = [
         };
       }
 
-      const result: ExecutePlanResult = await appCtx.planEngine.executePlan(plan.plan_id);
+      if (plan.project_id) {
+        markMcpDeploy(plan.project_id);
+      }
+      const lockProjectId =
+        plan.project_id ?? appCtx.db.getProjectByName(plan.app.name)?.id ?? null;
+      if (lockProjectId) {
+        const lockResult = tryAcquireDeployLockOrResponse(lockProjectId, toolSessionId, context);
+        if (lockResult) {
+          return lockResult;
+        }
+      }
+
+      let result: ExecutePlanResult;
+      try {
+        result = await appCtx.planEngine.executePlan(plan.plan_id, undefined, toolSessionId);
+      } catch (err) {
+        if (err instanceof DeployLockedError) {
+          return buildDeployLockedResponse(err);
+        }
+        throw err;
+      }
+
+      if (result.project_id) {
+        markMcpDeploy(result.project_id);
+      }
 
       if (result.status === 'failed') {
         return {
@@ -210,15 +299,19 @@ export const deployPlanToolDefs: ToolDef[] = [
       }
 
       if (!wait) {
+        const nextSteps = ['Poll get_deploy_status to monitor build progress'];
+        if (expose || domain) {
+          nextSteps.push(
+            'expose/domain require wait=true. After deploy completes, call expose_public or map_domain separately.',
+          );
+        }
         return {
           plan_id: plan.plan_id,
           status: 'building',
           project_name: result.project_name,
           project_id: result.project_id,
           estimated_seconds: result.estimated_seconds,
-          _agent_guidance: {
-            next_steps: ['Poll get_deploy_status to monitor build progress'],
-          },
+          _agent_guidance: { next_steps: nextSteps },
         };
       }
 
@@ -244,9 +337,42 @@ export const deployPlanToolDefs: ToolDef[] = [
           unsubFailed();
         };
 
+        const runPostDeploy = async (): Promise<{
+          extra: Record<string, unknown>;
+          warnings: string[];
+        }> => {
+          const extra: Record<string, unknown> = {};
+          const warnings: string[] = [];
+          const proj = appCtx.db.getProjectByName(result.project_name);
+          if (!proj) return { extra, warnings };
+          if (expose) {
+            try {
+              if (proj.assigned_port) {
+                extra.public_url = await appCtx.pipeline.exposeTunnel(proj.id, proj.assigned_port);
+              }
+            } catch (err) {
+              warnings.push(`expose failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+          if (domain) {
+            try {
+              await appCtx.cloudflare.createTunnel(proj.id, domain);
+              extra.domain = domain;
+              extra.domain_url = `https://${domain}`;
+            } catch (err) {
+              warnings.push(
+                `domain mapping failed: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          }
+          return { extra, warnings };
+        };
+
         const resolveSuccess = (
           payload: { url?: string; totalDurationMs?: number },
           timedOut: boolean,
+          postDeploy?: Record<string, unknown>,
+          postDeployWarnings?: string[],
         ): void => {
           if (settled) return;
           settled = true;
@@ -257,12 +383,16 @@ export const deployPlanToolDefs: ToolDef[] = [
             project_name: result.project_name,
             project_id: projectId,
             urls: payload.url ? [payload.url] : getProjectUrls(result.project_name),
-            internal_host: `ol-${result.project_name}`,
+            internal_host: projectContainerName(result.project_name),
             docker_host: getDockerHostType(),
             ...(payload.totalDurationMs
               ? { elapsed: `${String(Math.round(payload.totalDurationMs / 1000))}s` }
               : {}),
             ...(timedOut ? { timeout: true } : {}),
+            ...postDeploy,
+            ...(postDeployWarnings && postDeployWarnings.length > 0
+              ? { warnings: postDeployWarnings }
+              : {}),
           });
         };
 
@@ -297,7 +427,7 @@ export const deployPlanToolDefs: ToolDef[] = [
             ...(timedOut ? { timeout: true } : {}),
             _agent_guidance: {
               next_steps: [
-                'Call debug_build_error for AI diagnosis',
+                ...(!job?.autoDiagnosis ? ['Call debug_build_error for AI diagnosis'] : []),
                 'Fix the issue, then call deploy again to retry',
               ],
             },
@@ -334,7 +464,18 @@ export const deployPlanToolDefs: ToolDef[] = [
         }): boolean => payload.projectId === projectId || payload.parentProjectId === projectId;
 
         const unsubSuccess = eventBus.on('deploy:success', (payload) => {
-          if (matchesProject(payload)) resolveSuccess(payload, false);
+          if (!matchesProject(payload)) return;
+          if (expose || domain) {
+            void runPostDeploy()
+              .then(({ extra, warnings }) => {
+                resolveSuccess(payload, false, extra, warnings);
+              })
+              .catch(() => {
+                resolveSuccess(payload, false);
+              });
+          } else {
+            resolveSuccess(payload, false);
+          }
         });
 
         const unsubFailed = eventBus.on('deploy:failed', (payload) => {
@@ -350,14 +491,28 @@ export const deployPlanToolDefs: ToolDef[] = [
 
         const currentJob = appCtx.jobManager.getStatus(projectId);
         if (currentJob && (currentJob.phase === 'done' || currentJob.phase === 'failed')) {
-          if (currentJob.phase === 'done') resolveSuccess({}, false);
-          else resolveFailed({ error: currentJob.errorSummary }, false);
+          if (currentJob.phase === 'done') {
+            if (expose || domain) {
+              void runPostDeploy()
+                .then(({ extra, warnings }) => {
+                  resolveSuccess({}, false, extra, warnings);
+                })
+                .catch(() => {
+                  resolveSuccess({}, false);
+                });
+            } else {
+              resolveSuccess({}, false);
+            }
+          } else {
+            resolveFailed({ error: currentJob.errorSummary }, false);
+          }
         }
       });
     },
   },
   {
     name: 'validate_deploy_plan',
+    riskLevel: 'low',
     description:
       'Validate a deployment plan before executing. Checks for common mistakes: env vars pointing to localhost, placeholder secrets, missing HEALTHCHECK, port conflicts, and Dockerfile issues. Call after create_deploy_plan (or update_deploy_plan) and before execute_deploy_plan to catch problems early.',
     mcpDescription:
@@ -516,6 +671,13 @@ export const deployPlanToolDefs: ToolDef[] = [
               : `All ${String(passCount)} check(s) passed`,
         checks,
         warnings: plan.warnings,
+        _agent_guidance: {
+          networking: [
+            `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
+            'For inter-container communication, use http://ol-{project-name}:{port} (DNS auto-resolved).',
+            'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
+          ],
+        },
       });
     },
   },

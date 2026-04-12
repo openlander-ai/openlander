@@ -1,4 +1,5 @@
 import type { SystemStats } from '../../types';
+import { apiGet, apiPost, apiPostVoid, apiPut } from './client';
 
 export interface NetworkIp {
   address: string;
@@ -21,12 +22,12 @@ export async function getAllIps(): Promise<NetworkIp[]> {
 }
 
 export async function getSystemStats(): Promise<SystemStats> {
-  const res = await fetch('/api/system/stats');
-  return res.json();
+  return apiGet<SystemStats>('/api/system/stats');
 }
 
 export interface SetupStatus {
   ready: boolean;
+  hasPassword?: boolean;
   language?: 'en' | 'ko';
   docker: { ok: boolean; state?: string; groupFixed?: boolean; message: string };
   traefik: { ok: boolean; message: string };
@@ -35,17 +36,55 @@ export interface SetupStatus {
 }
 
 export async function setLanguage(language: string): Promise<void> {
-  const res = await fetch('/api/setup/language', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ language }),
-  });
-  if (!res.ok) throw new Error('Failed to set language');
+  return apiPostVoid('/api/setup/language', { language });
 }
 
 export async function getSetupStatus(): Promise<SetupStatus> {
-  const res = await fetch('/api/setup/status');
-  if (!res.ok) throw new Error('Failed to fetch setup status');
+  return apiGet<SetupStatus>('/api/setup/status');
+}
+
+export interface ProviderInfo {
+  id: string;
+  provider: string;
+  defaultModel: string;
+  hasApiKey: boolean;
+  apiKeyPreview: string;
+}
+
+export interface ProvidersResponse {
+  providers: ProviderInfo[];
+}
+
+export async function getProviders(): Promise<ProvidersResponse> {
+  return apiGet<ProvidersResponse>('/api/setup/providers');
+}
+
+export async function addProvider(data: {
+  id: string;
+  provider: string;
+  apiKey?: string;
+  defaultModel: string;
+}): Promise<{ status: string; id: string }> {
+  const res = await fetch('/api/setup/providers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message ?? 'Failed to add provider');
+  }
+  return res.json();
+}
+
+export async function deleteProvider(id: string): Promise<{ status: string }> {
+  const res = await fetch(`/api/setup/providers/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message ?? 'Failed to delete provider');
+  }
   return res.json();
 }
 
@@ -72,12 +111,43 @@ export async function configureLLM(
     body.model = model;
   }
 
-  const res = await fetch('/api/setup/llm', {
+  return apiPost<unknown>('/api/setup/llm', body);
+}
+
+export interface TestLlmConnectionParams {
+  providerId?: string;
+  provider?: string;
+  apiKey?: string;
+  authToken?: string;
+  model?: string;
+}
+
+export async function testLLMConnection(params: TestLlmConnectionParams = {}): Promise<{
+  ok: boolean;
+  latencyMs?: number;
+  providerId?: string;
+  provider?: string;
+  model?: string;
+  error?: string;
+}> {
+  const body: Record<string, string> = {};
+  if (params.providerId) body.provider_id = params.providerId;
+  if (params.provider) body.provider = params.provider;
+  if (params.apiKey) body.api_key = params.apiKey;
+  if (params.authToken) body.auth_token = params.authToken;
+  if (params.model) body.model = params.model;
+
+  const res = await fetch('/api/setup/llm/test', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to configure LLM');
+  return res.json();
+}
+
+export async function deleteLLMConfig(): Promise<{ status: string; message: string }> {
+  const res = await fetch('/api/setup/llm', { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to remove LLM configuration');
   return res.json();
 }
 
@@ -86,17 +156,11 @@ export async function configureCloudflare(config: {
   accountId: string;
   tunnelId: string;
 }): Promise<unknown> {
-  const res = await fetch('/api/setup/cloudflare', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_token: config.apiToken,
-      account_id: config.accountId,
-      tunnel_id: config.tunnelId,
-    }),
+  return apiPost<unknown>('/api/setup/cloudflare', {
+    api_token: config.apiToken,
+    account_id: config.accountId,
+    tunnel_id: config.tunnelId,
   });
-  if (!res.ok) throw new Error('Failed to configure Cloudflare');
-  return res.json();
 }
 
 export async function connectCloudflare(
@@ -117,21 +181,15 @@ export async function connectCloudflare(
 }
 
 export async function getCloudflareStatus(): Promise<{ configured: boolean; accountId?: string }> {
-  const res = await fetch('/api/setup/cloudflare');
-  if (!res.ok) throw new Error('Failed to fetch Cloudflare status');
-  return res.json();
+  return apiGet<{ configured: boolean; accountId?: string }>('/api/setup/cloudflare');
 }
 
 export async function startTraefik(): Promise<unknown> {
-  const res = await fetch('/api/setup/traefik', { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to start Traefik');
-  return res.json();
+  return apiPost<unknown>('/api/setup/traefik');
 }
 
 export async function completeSetup(): Promise<unknown> {
-  const res = await fetch('/api/setup/complete', { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to complete setup');
-  return res.json();
+  return apiPost<unknown>('/api/setup/complete');
 }
 
 export interface GlobalSecret {
@@ -141,9 +199,7 @@ export interface GlobalSecret {
 }
 
 export async function getGlobalSecrets(): Promise<{ secrets: GlobalSecret[] }> {
-  const res = await fetch('/api/secrets');
-  if (!res.ok) throw new Error('Failed to fetch secrets');
-  return res.json();
+  return apiGet<{ secrets: GlobalSecret[] }>('/api/secrets');
 }
 
 export async function setGlobalSecret(
@@ -151,13 +207,7 @@ export async function setGlobalSecret(
   value: string,
   description?: string,
 ): Promise<unknown> {
-  const res = await fetch('/api/secrets', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, value, description }),
-  });
-  if (!res.ok) throw new Error('Failed to save secret');
-  return res.json();
+  return apiPost<unknown>('/api/secrets', { key, value, description });
 }
 
 export async function deleteGlobalSecret(key: string): Promise<unknown> {
@@ -171,20 +221,15 @@ export interface OAuthStatus {
 }
 
 export async function getOAuthStatus(): Promise<OAuthStatus> {
-  const res = await fetch('/api/auth/status');
-  if (!res.ok) throw new Error('Failed to fetch OAuth status');
-  return res.json();
+  return apiGet<OAuthStatus>('/api/auth/status');
 }
 
 export async function startOAuthFlow(provider: string): Promise<{ url: string; state: string }> {
-  const res = await fetch(`/api/auth/start/${provider}`);
-  if (!res.ok) throw new Error('Failed to start OAuth flow');
-  return res.json();
+  return apiGet<{ url: string; state: string }>(`/api/auth/start/${provider}`);
 }
 
 export async function disconnectOAuth(provider: string): Promise<void> {
-  const res = await fetch(`/api/auth/disconnect/${provider}`, { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to disconnect');
+  return apiPostVoid(`/api/auth/disconnect/${provider}`);
 }
 
 export async function connectGithub(token: string): Promise<void> {
@@ -214,9 +259,13 @@ export async function startGithubDeviceFlow(): Promise<{
   interval: number;
   expires_in: number;
 }> {
-  const res = await fetch('/api/setup/github/device-code', { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to start GitHub auth');
-  return res.json();
+  return apiPost<{
+    user_code: string;
+    verification_uri: string;
+    device_code: string;
+    interval: number;
+    expires_in: number;
+  }>('/api/setup/github/device-code');
 }
 
 export async function pollGithubDeviceFlow(
@@ -246,4 +295,39 @@ export interface ServerStatus {
 export async function getServerStatus(): Promise<ServerStatus> {
   const res = await fetch('/api/server/status');
   return res.json();
+}
+
+export interface AiFeatureState {
+  enabled: boolean;
+  available: boolean;
+  providerId?: string;
+  model?: string;
+}
+
+export interface AiFeaturesResponse {
+  features: {
+    autoRecovery: AiFeatureState;
+    buildDebugger: AiFeatureState;
+    webAgent: AiFeatureState;
+    envDetection: AiFeatureState;
+    secretScan: AiFeatureState;
+    rollbackSuggestion: AiFeatureState;
+    operationalMonitoring: AiFeatureState;
+    codingPlan: AiFeatureState;
+  };
+}
+
+export async function getAiFeatures(): Promise<AiFeaturesResponse> {
+  return apiGet<AiFeaturesResponse>('/api/setup/ai-features');
+}
+
+export async function updateAiFeatures(
+  updates: Partial<
+    Record<
+      keyof AiFeaturesResponse['features'],
+      { enabled: boolean; providerId?: string; model?: string }
+    >
+  >,
+): Promise<AiFeaturesResponse> {
+  return apiPut<AiFeaturesResponse>('/api/setup/ai-features', updates);
 }

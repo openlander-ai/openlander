@@ -66,6 +66,7 @@ describe('MCP webhook tools', () => {
   it('enable_webhook creates config and returns webhook info', () => {
     const { ctx, db, webhookManager } = createMockContext();
     db.getProjectByName.mockReturnValue({ id: 'proj-1', name: 'demo' });
+    db.getWebhookConfigs.mockReturnValue([]);
     webhookManager.generateSecret.mockReturnValue('proj-1.super-secret');
 
     const tool = getTool(ctx, 'enable_webhook');
@@ -92,6 +93,7 @@ describe('MCP webhook tools', () => {
       enabled: true,
       branchFilter: 'develop',
       webhookPath: '/api/webhooks/proj-1/github',
+      reused: false,
     });
     expect(typeof result.id).toBe('string');
   });
@@ -149,19 +151,18 @@ describe('MCP webhook tools', () => {
     db.getWebhookConfigs.mockReturnValue([]);
 
     const tool = getTool(ctx, 'disable_webhook');
-    const result = tool.execute(
-      {
-        project_name: 'demo',
-        source: 'gitlab',
-      },
-      { target: 'mcp' },
-    );
+
+    expect(() =>
+      tool.execute(
+        {
+          project_name: 'demo',
+          source: 'gitlab',
+        },
+        { target: 'mcp' },
+      ),
+    ).toThrow('WEBHOOK_NOT_FOUND: No webhook configured for gitlab on project demo');
 
     expect(db.setWebhookEnabled).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      error: 'WEBHOOK_NOT_FOUND',
-      message: 'No webhook configured for gitlab on project demo',
-    });
   });
 
   it('get_webhook_config returns all webhooks with masked secrets', () => {
@@ -220,6 +221,119 @@ describe('MCP webhook tools', () => {
     expect(result).toEqual({
       count: 0,
       webhooks: [],
+    });
+  });
+
+  it('enable_webhook reuses existing disabled webhook credentials', () => {
+    const { ctx, db, webhookManager } = createMockContext();
+    db.getProjectByName.mockReturnValue({ id: 'proj-1', name: 'demo' });
+    db.getWebhookConfigs.mockReturnValue([
+      {
+        id: 'wh-existing',
+        source: 'github',
+        enabled: 0,
+        branch_filter: 'main',
+        secret: 'proj-1.existing-secret',
+      },
+    ]);
+
+    const tool = getTool(ctx, 'enable_webhook');
+    const result = tool.execute(
+      {
+        project_name: 'demo',
+        source: 'github',
+        branch_filter: 'develop',
+      },
+      { target: 'mcp' },
+    ) as Record<string, unknown>;
+
+    expect(db.setWebhookEnabled).toHaveBeenCalledWith('wh-existing', true);
+    expect(db.setWebhookConfig).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      id: 'wh-existing',
+      source: 'github',
+      secret: 'proj-1.existing-secret',
+      enabled: true,
+      reused: true,
+    });
+    expect(result._agent_guidance).toMatchObject({
+      next_steps: expect.arrayContaining([
+        expect.stringContaining('existing GitHub webhook settings are still valid'),
+      ]),
+    });
+  });
+
+  it('enable_webhook generates new credentials when no existing webhook', () => {
+    const { ctx, db, webhookManager } = createMockContext();
+    db.getProjectByName.mockReturnValue({ id: 'proj-1', name: 'demo' });
+    db.getWebhookConfigs.mockReturnValue([]);
+    webhookManager.generateSecret.mockReturnValue('proj-1.new-secret');
+
+    const tool = getTool(ctx, 'enable_webhook');
+    const result = tool.execute(
+      {
+        project_name: 'demo',
+        source: 'github',
+      },
+      { target: 'mcp' },
+    ) as Record<string, unknown>;
+
+    expect(db.setWebhookConfig).toHaveBeenCalledWith({
+      id: expect.any(String),
+      projectId: 'proj-1',
+      source: 'github',
+      secret: 'proj-1.new-secret',
+      branchFilter: undefined,
+      enabled: true,
+    });
+    expect(db.setWebhookEnabled).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      source: 'github',
+      secret: 'proj-1.new-secret',
+      enabled: true,
+      reused: false,
+    });
+    expect(result._agent_guidance).toMatchObject({
+      next_steps: expect.arrayContaining([
+        expect.stringContaining('Configure this webhook URL and secret in git provider settings'),
+      ]),
+    });
+  });
+
+  it('enable_webhook generates new credentials when existing webhook is enabled', () => {
+    const { ctx, db, webhookManager } = createMockContext();
+    db.getProjectByName.mockReturnValue({ id: 'proj-1', name: 'demo' });
+    db.getWebhookConfigs.mockReturnValue([
+      {
+        id: 'wh-existing',
+        source: 'github',
+        enabled: 1,
+        branch_filter: 'main',
+        secret: 'proj-1.existing-secret',
+      },
+    ]);
+    webhookManager.generateSecret.mockReturnValue('proj-1.new-secret');
+
+    const tool = getTool(ctx, 'enable_webhook');
+    const result = tool.execute(
+      {
+        project_name: 'demo',
+        source: 'github',
+      },
+      { target: 'mcp' },
+    ) as Record<string, unknown>;
+
+    expect(db.setWebhookConfig).toHaveBeenCalledWith({
+      id: expect.any(String),
+      projectId: 'proj-1',
+      source: 'github',
+      secret: 'proj-1.new-secret',
+      branchFilter: undefined,
+      enabled: true,
+    });
+    expect(db.setWebhookEnabled).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      reused: false,
     });
   });
 });

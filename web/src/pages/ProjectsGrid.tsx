@@ -19,7 +19,7 @@ function getStatusConfig(): Record<
   return {
     running: {
       label: 'Healthy',
-      dot: 'bg-success',
+      dot: 'bg-success animate-pulse',
       badge: 'bg-success/10 text-success border border-success/30',
       border: 'border-success/20',
     },
@@ -31,7 +31,7 @@ function getStatusConfig(): Record<
     },
     building: {
       label: 'Deploying',
-      dot: 'bg-warning animate-pulse',
+      dot: 'bg-warning animate-pulse-ring',
       badge: 'bg-warning/10 text-warning border border-warning/30',
       border: 'border-warning/30',
     },
@@ -47,14 +47,17 @@ function getStatusConfig(): Record<
 export function ProjectsGrid() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { projects, loading: projectsLoading, refetch } = useProjects();
+  const [showArchived, setShowArchived] = useState(false);
+  const { projects, loading: projectsLoading, refetch } = useProjects(showArchived);
   const { serverStatus, setupStatus, loading: systemLoading } = useSystemStatus();
   const { t } = useLanguage();
   const statusConfig = getStatusConfig();
-  const [redeployingId, setRedeployingId] = useState<string | null>(null);
+  const [redeployingIds, setRedeployingIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => {
     return (localStorage.getItem('openlander-view-mode') as 'grid' | 'table') || 'grid';
   });
+
+  const filteredProjects = projects;
 
   const toggleView = (mode: 'grid' | 'table') => {
     setViewMode(mode);
@@ -67,21 +70,24 @@ export function ProjectsGrid() {
       showMobileToast();
       return;
     }
-    setRedeployingId(projectId);
+    setRedeployingIds((prev) => new Set(prev).add(projectId));
     try {
       await redeployProject(projectId);
       refetch();
     } catch (error) {
       console.error('Redeploy failed:', error);
     } finally {
-      setRedeployingId(null);
+      setRedeployingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(projectId);
+        return next;
+      });
     }
   };
 
   if (projectsLoading || systemLoading) {
     return (
       <div className="p-6 xl:p-8 max-w-7xl mx-auto w-full space-y-6">
-        <Skeleton className="h-24 w-full rounded-lg" />
         <div className="flex items-center justify-between mb-6">
           <div>
             <Skeleton className="h-7 w-32 mb-2" />
@@ -103,7 +109,7 @@ export function ProjectsGrid() {
       <SystemHealthCards
         serverStatus={serverStatus}
         setupStatus={setupStatus}
-        projects={projects}
+        projects={filteredProjects}
         onNavigate={navigate}
         t={t}
       />
@@ -113,11 +119,21 @@ export function ProjectsGrid() {
           <h1 className="font-display font-bold text-xl text-primary-ol tracking-tight">
             Project Overview
           </h1>
-          <p className="text-xs font-body text-secondary-ol mt-0.5">
-            {projects.length} {projects.length === 1 ? 'project monitored' : 'projects monitored'}
+          <p className="text-sm font-body text-secondary-ol mt-0.5">
+            {filteredProjects.length}{' '}
+            {filteredProjects.length === 1 ? 'project monitored' : 'projects monitored'}
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm font-body text-secondary-ol cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              className="rounded border-border bg-bg-subtle text-agent focus:ring-agent"
+            />
+            {t('projects.filter.showArchived')}
+          </label>
           <div className="flex items-center gap-1 bg-bg-subtle rounded-lg p-0.5">
             <button
               onClick={() => toggleView('grid')}
@@ -150,7 +166,7 @@ export function ProjectsGrid() {
               }
               navigate('/projects/new');
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body bg-foreground text-background hover:bg-foreground/90 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body bg-agent text-white hover:bg-agent/90 transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
             New Project
@@ -158,10 +174,10 @@ export function ProjectsGrid() {
         </div>
       </div>
 
-      {projects.length === 0 ? (
+      {filteredProjects.length === 0 ? (
         <button
           onClick={() => navigate('/projects/new')}
-          className="w-full max-w-md mx-auto flex flex-col items-center gap-4 py-16 px-8 rounded-lg border-2 border-dashed border-[hsl(var(--border))] hover:border-agent/40 bg-bg-panel/50 hover:bg-bg-panel transition-all duration-200 group cursor-pointer"
+          className="w-full max-w-md mx-auto flex flex-col items-center gap-4 py-16 px-8 rounded-lg border-2 border-dashed border-[hsl(var(--border))] hover:border-agent/40 bg-bg-panel hover:bg-bg-panel transition-all duration-200 group cursor-pointer"
         >
           <div className="p-4 rounded-full bg-agent/10 group-hover:bg-agent/15 transition-colors">
             <Plus className="h-8 w-8 text-agent" />
@@ -170,19 +186,19 @@ export function ProjectsGrid() {
             <p className="font-display font-semibold text-primary-ol">
               {t('projects.deployFirstApp')}
             </p>
-            <p className="text-xs font-body text-secondary-ol mt-1">
+            <p className="text-sm font-body text-secondary-ol mt-1">
               {t('projects.connectGithub')}
             </p>
           </div>
         </button>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
-          {projects.map((project) => (
+          {filteredProjects.map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
               statusConfig={statusConfig}
-              redeployingId={redeployingId}
+              redeployingIds={redeployingIds}
               onNavigate={navigate}
               onRedeploy={handleRedeploy}
               t={t}
@@ -190,7 +206,12 @@ export function ProjectsGrid() {
           ))}
         </div>
       ) : (
-        <ProjectTable projects={projects} statusConfig={statusConfig} onNavigate={navigate} t={t} />
+        <ProjectTable
+          projects={filteredProjects}
+          statusConfig={statusConfig}
+          onNavigate={navigate}
+          t={t}
+        />
       )}
     </div>
   );

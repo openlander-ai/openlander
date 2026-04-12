@@ -1,30 +1,29 @@
 import type { Agent } from '../llm/agent.js';
 import type { Database, DeployLogRow } from '../db/index.js';
-import type { EventBus, EventPayload } from '../events/index.js';
+import type { EventBus } from '../events/index.js';
 import type { OpenLanderConfig } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('postmortem');
 
-interface PostmortemEntry {
+export interface PostmortemEntry {
+  id?: string;
   projectId: string;
   projectName: string;
   markdown: string;
-  generatedAt: Date;
+  createdAt: Date;
 }
 
 type Locale = 'en' | 'ko';
 
 export class PostmortemGenerator {
-  private readonly events: EventBus;
   private readonly db: Database;
   private readonly agent: Agent;
   private readonly config: OpenLanderConfig;
   private readonly postmortems = new Map<string, PostmortemEntry>();
-  private unsubscribers: Array<() => void> = [];
 
-  constructor(events: EventBus, db: Database, agent: Agent, config: OpenLanderConfig) {
-    this.events = events;
+  constructor(_events: EventBus, db: Database, agent: Agent, config: OpenLanderConfig) {
+    // EventBus parameter kept for backward compatibility but not used
     this.db = db;
     this.agent = agent;
     this.config = config;
@@ -39,25 +38,37 @@ export class PostmortemGenerator {
   }
 
   start(): void {
-    this.unsubscribers.push(
-      this.events.on('recovery:success', (payload) => {
-        void this.generatePostmortem(payload.projectId, true, payload);
-      }),
-      this.events.on('recovery:exhausted', (payload) => {
-        void this.generatePostmortem(payload.projectId, false, payload);
-      }),
-    );
+    log.info('PostmortemGenerator ready (manual invocation only)');
   }
 
   getLatest(projectId: string): PostmortemEntry | undefined {
     return this.postmortems.get(projectId);
   }
 
+  listPostmortems(): Array<{
+    id: string;
+    projectId: string;
+    projectName: string;
+    createdAt: string;
+  }> {
+    return Array.from(this.postmortems.values()).map((p) => ({
+      id: p.id ?? p.projectId,
+      projectId: p.projectId,
+      projectName: p.projectName,
+      createdAt: p.createdAt.toISOString(),
+    }));
+  }
+
+  getPostmortem(identifier: string): PostmortemEntry | undefined {
+    const byId = this.postmortems.get(identifier);
+    if (byId) return byId;
+    return Array.from(this.postmortems.values()).find(
+      (p) => p.projectId === identifier || p.projectName === identifier,
+    );
+  }
+
   stop(): void {
-    for (const unsub of this.unsubscribers) {
-      unsub();
-    }
-    this.unsubscribers = [];
+    // No subscriptions to clean up
   }
 
   private redactSecrets(text: string): string {
@@ -79,28 +90,38 @@ export class PostmortemGenerator {
     return result;
   }
 
-  private async generatePostmortem(
-    projectId: string,
-    recovered: boolean,
-    payload: EventPayload['recovery:success'] | EventPayload['recovery:exhausted'],
-  ): Promise<void> {
+  private static readonly DEDUP_WINDOW_MS = 30 * 60_000; // 30 minutes
+
+  async generatePostmortem(projectId: string): Promise<void> {
     try {
+      // Dedup: skip if a postmortem was generated for this project recently
+      const existing = this.postmortems.get(projectId);
+      if (
+        existing &&
+        Date.now() - existing.createdAt.getTime() < PostmortemGenerator.DEDUP_WINDOW_MS
+      ) {
+        log.debug({ projectId }, 'Postmortem dedup — skipping (recent postmortem exists)');
+        return;
+      }
       const project = this.db.getProject(projectId);
       const projectName = project?.name ?? projectId;
+
+      // Skip non-running projects — no postmortem needed
+      if (!project || project.status !== 'running' || project.archived_at) {
+        log.debug(
+          { projectId, status: project?.status },
+          'Skipping postmortem for non-running project',
+        );
+        return;
+      }
 
       const logs = this.db.getDeployLogs(projectId, 1);
       const latestLog: DeployLogRow | undefined = logs[0];
       const rawBuildLog = latestLog?.build_log?.slice(-3000) ?? 'No build log available';
       const buildLogTail = this.redactSecrets(rawBuildLog);
-      const errorMessage = ('lastError' in payload ? payload.lastError : undefined) ?? 'unknown';
-
-      const attempts =
-        'attempt' in payload
-          ? payload.attempt
-          : 'totalAttempts' in payload
-            ? payload.totalAttempts
-            : 0;
-      const durationMs = 'durationMs' in payload ? payload.durationMs : 0;
+      const errorMessage = 'unknown';
+      const attempts = 0;
+      const durationMs = 0;
 
       const locale = this.getCurrentLocale();
       const languageInstruction =
@@ -142,7 +163,7 @@ Required structure:
 
 Incident data:
 - Project: ${projectName}
-- Recovery Status: ${recovered ? 'success' : 'failed'}
+- Recovery Status: unknown
 - Attempts: ${String(attempts)}
 - Recovery Duration: ${String(durationMs)}ms
 - Last Error: ${errorMessage}
@@ -155,10 +176,11 @@ ${buildLogTail}
       const result = await this.agent.chat(prompt, `postmortem-${projectId}`);
 
       this.postmortems.set(projectId, {
+        id: projectId,
         projectId,
         projectName,
         markdown: result.message,
-        generatedAt: new Date(),
+        createdAt: new Date(),
       });
 
       log.info({ projectId }, 'Postmortem generated');

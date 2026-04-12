@@ -28,13 +28,12 @@ describe('deploy-plan integration', () => {
     vi.clearAllMocks();
   });
 
-  it('deploy_project and redeploy_project are NOT in tool registry', () => {
+  it('deploy_project is NOT in tool registry (replaced by deploy plan engine)', () => {
     const ctx = createMockContext();
     const registry = createSharedToolRegistry(ctx);
     const toolNames = registry.map((tool) => tool.name);
 
     expect(toolNames).not.toContain('deploy_project');
-    expect(toolNames).not.toContain('redeploy_project');
   });
 
   it('create_deploy_plan, update_deploy_plan, execute_deploy_plan ARE in tool registry', () => {
@@ -153,7 +152,11 @@ describe('deploy-plan integration', () => {
 
     const result = await tool!.execute({ plan_id: 'plan_123' }, { target: 'mcp' });
 
-    expect(ctx.planEngine.executePlan).toHaveBeenCalledWith('plan_123', undefined);
+    expect(ctx.planEngine.executePlan).toHaveBeenCalledWith(
+      'plan_123',
+      undefined,
+      expect.any(String),
+    );
 
     expect(result).toEqual({
       plan_id: 'plan_123',
@@ -189,8 +192,7 @@ describe('deploy-plan integration', () => {
       error: 'Service creation failed',
       _agent_guidance: {
         next_steps: [
-          'Call get_build_log for raw build output',
-          'Call debug_build_error for AI diagnosis',
+          'Check the error message above — this is a preflight failure (before build started)',
           'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
         ],
       },

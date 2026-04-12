@@ -32,9 +32,7 @@ function getListProjectsTool(ctx: AppContext) {
 
 describe('project-ops list_projects reconciliation', () => {
   it('returns running status when container actually exists', async () => {
-    const inspect = vi.fn(async () => ({ Id: 'container-1', State: { Running: true } }));
-    const getContainer = vi.fn(() => ({ inspect }));
-    const getClient = vi.fn(() => ({ getContainer }));
+    const inspectContainer = vi.fn(async () => ({ Id: 'container-1', State: { Running: true } }));
     const project = createProject();
     const listProjects = vi.fn(() => [project]);
     const updateProject = vi.fn();
@@ -45,14 +43,13 @@ describe('project-ops list_projects reconciliation', () => {
         updateProject,
       },
       docker: {
-        getClient,
+        inspectContainer,
       },
     } as unknown as AppContext;
 
     const result = await getListProjectsTool(ctx).execute({}, { target: 'mcp' });
 
-    expect(getContainer).toHaveBeenCalledWith('container-1');
-    expect(inspect).toHaveBeenCalledTimes(1);
+    expect(inspectContainer).toHaveBeenCalledWith('container-1');
     expect(updateProject).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       count: 1,
@@ -66,11 +63,9 @@ describe('project-ops list_projects reconciliation', () => {
   });
 
   it('updates status to error when container_id exists but container is gone', async () => {
-    const inspect = vi.fn(async () => {
+    const inspectContainer = vi.fn(async () => {
       throw new Error('No such container');
     });
-    const getContainer = vi.fn(() => ({ inspect }));
-    const getClient = vi.fn(() => ({ getContainer }));
     const project = createProject();
     const staleProject = createProject({ status: 'error', updated_at: '2026-01-01 00:01:00' });
     const listProjects = vi
@@ -85,13 +80,13 @@ describe('project-ops list_projects reconciliation', () => {
         updateProject,
       },
       docker: {
-        getClient,
+        inspectContainer,
       },
     } as unknown as AppContext;
 
     const result = await getListProjectsTool(ctx).execute({}, { target: 'mcp' });
 
-    expect(getContainer).toHaveBeenCalledWith('container-1');
+    expect(inspectContainer).toHaveBeenCalledWith('container-1');
     expect(updateProject).toHaveBeenCalledWith('project-1', { status: 'error' });
     expect(result).toMatchObject({
       projects: [
@@ -104,9 +99,7 @@ describe('project-ops list_projects reconciliation', () => {
   });
 
   it('handles projects without container_id gracefully', async () => {
-    const inspect = vi.fn();
-    const getContainer = vi.fn(() => ({ inspect }));
-    const getClient = vi.fn(() => ({ getContainer }));
+    const inspectContainer = vi.fn();
     const project = createProject({ container_id: null });
     const listProjects = vi.fn(() => [project]);
     const updateProject = vi.fn();
@@ -117,24 +110,21 @@ describe('project-ops list_projects reconciliation', () => {
         updateProject,
       },
       docker: {
-        getClient,
+        inspectContainer,
       },
     } as unknown as AppContext;
 
     const result = await getListProjectsTool(ctx).execute({}, { target: 'mcp' });
 
-    expect(getContainer).not.toHaveBeenCalled();
-    expect(inspect).not.toHaveBeenCalled();
+    expect(inspectContainer).not.toHaveBeenCalled();
     expect(updateProject).not.toHaveBeenCalled();
     expect(result).toMatchObject({ count: 1 });
   });
 
   it('does not crash when Docker inspect throws', async () => {
-    const inspect = vi.fn(async () => {
+    const inspectContainer = vi.fn(async () => {
       throw new Error('Docker daemon unavailable');
     });
-    const getContainer = vi.fn(() => ({ inspect }));
-    const getClient = vi.fn(() => ({ getContainer }));
     const project = createProject();
     const staleProject = createProject({ status: 'error' });
     const listProjects = vi
@@ -149,7 +139,7 @@ describe('project-ops list_projects reconciliation', () => {
         updateProject,
       },
       docker: {
-        getClient,
+        inspectContainer,
       },
     } as unknown as AppContext;
 

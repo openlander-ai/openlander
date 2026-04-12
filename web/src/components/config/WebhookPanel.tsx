@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Webhook, Trash2, Check, Copy, Loader2, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCopy } from '@/hooks/use-copy';
 
 interface WebhookPanelProps {
   projectId: string;
@@ -13,12 +14,12 @@ interface WebhookPanelProps {
 
 export function WebhookPanel({ projectId }: WebhookPanelProps) {
   const { t } = useLanguage();
+  const { copy, isCopied } = useCopy();
   const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [selectedSource, setSelectedSource] = useState<string>('github');
   const [branchFilter, setBranchFilter] = useState('main');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fetchWebhooks = useCallback(async () => {
     try {
@@ -75,9 +76,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
   };
 
   const handleCopy = (text: string, id: string) => {
-    void navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    void copy(text, id);
   };
 
   const configuredSources = new Set(webhooks.map((w) => w.source));
@@ -123,146 +122,152 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
   }
 
   return (
-    <div className="space-y-4">
-      {webhooks.length === 0 ? (
-        <div className="text-center py-8 text-secondary-ol text-sm font-body">
-          <Webhook className="h-8 w-8 mx-auto mb-3 text-muted-ol" />
-          <p>{t('webhooks.noWebhooks')}</p>
-          <p className="text-xs text-muted-ol mt-1">{t('webhooks.description')}</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {webhooks.map((webhook) => {
-            const fullUrl = `${window.location.origin}${webhook.webhookUrl}`;
-            return (
-              <div
-                key={webhook.id}
-                className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-display font-medium text-primary-ol capitalize">
-                      {webhook.source}
-                    </span>
-                    <span
-                      className={cn(
-                        'text-[10px] px-1.5 py-0.5 rounded font-body',
-                        webhook.enabled
-                          ? 'bg-success/10 text-success'
-                          : 'bg-[var(--bg-subtle)] text-muted-ol',
-                      )}
-                    >
-                      {webhook.enabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-[11px] font-body"
-                      onClick={() => handleToggle(webhook)}
-                    >
-                      {webhook.enabled ? 'Disable' : 'Enable'}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-[11px] font-body text-error hover:text-error"
-                      onClick={() => handleDelete(webhook.source)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-xs font-body">
-                  <div>
-                    <span className="text-muted-ol">{'Webhook URL'}:</span>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-[11px] text-secondary-ol truncate">
-                        {fullUrl}
-                      </code>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 shrink-0"
-                        onClick={() => handleCopy(fullUrl, `url-${webhook.id}`)}
-                      >
-                        {copiedId === `url-${webhook.id}` ? (
-                          <Check className="h-3 w-3 text-success" />
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-muted-ol">{'Secret'}:</span>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-[11px] text-secondary-ol truncate">
-                        {webhook.secret}
-                      </code>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 shrink-0"
-                        onClick={() => handleCopy(webhook.secret, `secret-${webhook.id}`)}
-                      >
-                        {copiedId === `secret-${webhook.id}` ? (
-                          <Check className="h-3 w-3 text-success" />
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-muted-ol">
-                    <span>{'Branch filter'}:</span>
-                    <span className="text-secondary-ol">{webhook.branchFilter}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {availableSources.length > 0 && (
-        <div className="rounded-lg border border-dashed border-[hsl(var(--border))] p-4">
-          <div className="flex items-center gap-3">
-            <select
-              value={selectedSource}
-              onChange={(e) => setSelectedSource(e.target.value)}
-              className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-primary-ol capitalize"
-            >
-              {availableSources.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-              placeholder="main"
-              className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-primary-ol w-24"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs font-body gap-1.5"
-              onClick={handleAdd}
-              disabled={adding}
-            >
-              {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-              {'Add Webhook'}
-            </Button>
+    <div className="p-4">
+      <div className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-5 space-y-4">
+        {webhooks.length === 0 ? (
+          <div className="text-center py-8 text-secondary-ol text-sm font-body">
+            <Webhook className="h-8 w-8 mx-auto mb-3 text-muted-ol" />
+            <p>{t('webhooks.noWebhooks')}</p>
+            <p className="text-xs text-muted-ol mt-1">{t('webhooks.description')}</p>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="space-y-3">
+            {webhooks.map((webhook) => {
+              const fullUrl = `${window.location.origin}${webhook.webhookUrl}`;
+              return (
+                <div
+                  key={webhook.id}
+                  className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-display font-semibold text-primary-ol capitalize">
+                        {webhook.source}
+                      </span>
+                      <span
+                        className={cn(
+                          'text-xs px-1.5 py-0.5 rounded font-body',
+                          webhook.enabled
+                            ? 'bg-success/10 text-success'
+                            : 'bg-[var(--bg-subtle)] text-muted-ol',
+                        )}
+                      >
+                        {webhook.enabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs font-body"
+                        onClick={() => handleToggle(webhook)}
+                      >
+                        {webhook.enabled ? 'Disable' : 'Enable'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs font-body text-error hover:text-error"
+                        onClick={() => handleDelete(webhook.source)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs font-body">
+                    <div>
+                      <span className="text-muted-ol">{'Webhook URL'}:</span>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-xs text-secondary-ol truncate">
+                          {fullUrl}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 shrink-0"
+                          onClick={() => handleCopy(fullUrl, `url-${webhook.id}`)}
+                        >
+                          {isCopied(`url-${webhook.id}`) ? (
+                            <Check className="h-3 w-3 text-success" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-muted-ol">{'Secret'}:</span>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-xs text-secondary-ol truncate">
+                          {webhook.secret}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 shrink-0"
+                          onClick={() => handleCopy(webhook.secret, `secret-${webhook.id}`)}
+                        >
+                          {isCopied(`secret-${webhook.id}`) ? (
+                            <Check className="h-3 w-3 text-success" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-muted-ol">
+                      <span>{'Branch filter'}:</span>
+                      <span className="text-secondary-ol">{webhook.branchFilter}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {availableSources.length > 0 && (
+          <div className="rounded-lg border border-dashed border-[hsl(var(--border))] p-4">
+            <div className="flex items-center gap-3">
+              <select
+                value={selectedSource}
+                onChange={(e) => setSelectedSource(e.target.value)}
+                className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-primary-ol capitalize"
+              >
+                {availableSources.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+                placeholder="main"
+                className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-primary-ol w-24"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs font-body gap-1.5"
+                onClick={handleAdd}
+                disabled={adding}
+              >
+                {adding ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Plus className="h-3 w-3" />
+                )}
+                {'Add Webhook'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

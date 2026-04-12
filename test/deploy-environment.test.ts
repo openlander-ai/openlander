@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
+import type { OpenLanderConfig } from '../src/config/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
 import * as gitPipeline from '../src/pipeline/git.js';
@@ -22,11 +23,13 @@ type EnvLike = {
 function createMockDocker(): Docker {
   return {
     buildImage: vi.fn().mockResolvedValue(undefined),
+    tagImage: vi.fn().mockResolvedValue(undefined),
     runContainer: vi.fn().mockResolvedValue('container-abc123456789'),
     waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
     getLogs: vi.fn().mockResolvedValue(''),
     listAllContainers: vi.fn().mockResolvedValue([]),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     stopContainer: vi.fn().mockResolvedValue(undefined),
   } as unknown as Docker;
 }
@@ -40,6 +43,11 @@ describe('DeployPipeline deployEnvironment', () => {
   let pipeline: DeployPipeline;
   let cloneRepoSpy: ReturnType<typeof vi.spyOn>;
   let ensureDockerfileSpy: ReturnType<typeof vi.spyOn>;
+  const testConfig = {
+    ai: {
+      secretScan: { enabled: false },
+    },
+  } as OpenLanderConfig;
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -56,7 +64,7 @@ describe('DeployPipeline deployEnvironment', () => {
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
     };
-    pipeline = new DeployPipeline(docker, db, env as never);
+    pipeline = new DeployPipeline(docker, db, env as never, testConfig);
 
     cloneRepoSpy = vi.spyOn(gitPipeline, 'cloneRepo');
     cloneRepoSpy.mockResolvedValue({
@@ -75,7 +83,7 @@ describe('DeployPipeline deployEnvironment', () => {
     vi.clearAllMocks();
   });
 
-  it('deployEnvironment clones environment branch and uses merged env by environment', async () => {
+  it('deployEnvironment clones branch and deploys using production route/container naming', async () => {
     db.createProject({
       id: 'p1',
       name: 'demo-app',
@@ -102,29 +110,34 @@ describe('DeployPipeline deployEnvironment', () => {
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'ol-demo-app-dev',
+        name: 'ol-demo-app',
       }),
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         traefikLabels: expect.objectContaining({
-          'traefik.http.routers.ol-demo-app.rule': expect.stringContaining('dev-demo-app.'),
+          'traefik.http.routers.ol-demo-app.rule': expect.stringContaining('demo-app.'),
         }),
       }),
     );
-    expect(result.url).toContain('dev-demo-app.');
+    expect(result.url).toContain('demo-app.');
 
     const developmentEnvironment = db.getEnvironment('p1-development');
     expect(developmentEnvironment?.status).toBe('running');
     expect(developmentEnvironment?.container_id).toBe('container-abc123456789');
     expect(developmentEnvironment?.assigned_port).toBeGreaterThanOrEqual(10001);
-    expect(developmentEnvironment?.image_tag).toBe('openlander/demo-app-dev:latest');
+    expect(developmentEnvironment?.image_tag).toMatch(/^openlander\/demo-app:\d+$/);
 
     // Verify passive Docker mocks were called
     expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       clonePath,
-      'openlander/demo-app-dev:latest',
+      expect.stringMatching(/^openlander\/demo-app:\d+$/),
       expect.any(Object),
+    );
+    expect(docker.tagImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.stringMatching(/^openlander\/demo-app:\d+$/),
+      'openlander/demo-app',
+      'latest',
     );
     expect(docker.waitForHealthy as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-abc123456789',
@@ -194,7 +207,7 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(env.getSecretFilesForDeploy as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('p2');
   });
 
-  it('deployEnvironment uses dev suffix for development container naming', async () => {
+  it('deployEnvironment uses project naming without dev suffix', async () => {
     db.createProject({
       id: 'p3',
       name: 'dev-app',
@@ -215,20 +228,45 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(result.success).toBe(true);
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'ol-dev-app-dev',
+        name: 'ol-dev-app',
       }),
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         traefikLabels: expect.objectContaining({
-          'traefik.http.routers.ol-dev-app.rule': expect.stringContaining('dev-dev-app.'),
+          'traefik.http.routers.ol-dev-app.rule': expect.stringContaining('dev-app.'),
         }),
       }),
     );
-    expect(result.url).toContain('dev-dev-app.');
+    expect(result.url).toContain('dev-app.');
 
     const developmentEnvironment = db.getEnvironment('p3-development');
-    expect(developmentEnvironment?.image_tag).toBe('openlander/dev-app-dev:latest');
+    expect(developmentEnvironment?.image_tag).toMatch(/^openlander\/dev-app:\d+$/);
+  });
+
+  it('BUG-004: stores timestamp image tag in DB and updates latest alias', async () => {
+    db.createProject({
+      id: 'p-bug-004-tag',
+      name: 'rollback-tag-app',
+      repoUrl: 'https://github.com/openlander/rollback-tag-app',
+      branch: 'main',
+    });
+
+    const result = await pipeline.deploy({
+      _projectId: 'p-bug-004-tag',
+      name: 'rollback-tag-app',
+      repoUrl: 'https://github.com/openlander/rollback-tag-app',
+      trigger: 'api',
+    });
+
+    expect(result.success).toBe(true);
+    const project = db.getProject('p-bug-004-tag');
+    expect(project?.image_tag).toMatch(/^openlander\/rollback-tag-app:\d+$/);
+    expect(docker.tagImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.stringMatching(/^openlander\/rollback-tag-app:\d+$/),
+      'openlander/rollback-tag-app',
+      'latest',
+    );
   });
 
   it('delegates to compose pipeline when compose file is detected', async () => {
@@ -258,6 +296,7 @@ describe('DeployPipeline deployEnvironment', () => {
       docker,
       db,
       env as never,
+      testConfig,
       undefined,
       composePipeline as never,
     );
@@ -273,7 +312,7 @@ describe('DeployPipeline deployEnvironment', () => {
         branch: 'compose-branch',
         clonePath,
         composePath: join(clonePath, 'docker-compose.yml'),
-        name: 'compose-app-dev',
+        name: 'compose-app',
         trigger: 'api',
       }),
     );
@@ -307,12 +346,17 @@ describe('DeployPipeline deployEnvironment', () => {
       }),
     });
 
+    let builtDockerfile = '';
+    (docker.buildImage as ReturnType<typeof vi.fn>).mockImplementationOnce(async (path: string) => {
+      builtDockerfile = readFileSync(join(path, 'Dockerfile'), 'utf8');
+    });
+
     const result = await pipeline.deployEnvironment('p8', productionEnvironment!.id, {
       repoUrl: 'https://github.com/openlander/pending-fix-app',
     });
 
     expect(result.success).toBe(true);
-    expect(readFileSync(join(clonePath, 'Dockerfile'), 'utf8')).toContain('FROM node:20');
+    expect(builtDockerfile).toContain('FROM node:20');
     expect(db.getProject('p8')?.pending_fix).toBeNull();
   });
 
@@ -353,8 +397,23 @@ describe('DeployPipeline deployEnvironment', () => {
       docker,
       db,
       env as never,
+      testConfig,
       undefined,
       composePipeline as never,
+    );
+
+    let delegatedComposeFile = '';
+    composePipeline.deployCompose.mockImplementationOnce(
+      async (config: { composePath: string }) => {
+        delegatedComposeFile = readFileSync(config.composePath, 'utf8');
+        return {
+          success: true,
+          parentProjectId: 'p9',
+          parentName: 'compose-fix-app',
+          services: [],
+          buildDurationMs: 123,
+        };
+      },
     );
 
     const result = await composeEnabledPipeline.deployEnvironment('p9', 'p9-development', {
@@ -362,9 +421,59 @@ describe('DeployPipeline deployEnvironment', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(readFileSync(composePath, 'utf8')).toContain('nginx:2');
+    expect(delegatedComposeFile).toContain('nginx:2');
     expect(db.getProject('p9')?.pending_fix).toBeNull();
     expect(composePipeline.deployCompose).toHaveBeenCalledOnce();
+  });
+
+  it('applies patch-based pending fix from DB after clone and clears it', async () => {
+    db.createProject({
+      id: 'p10',
+      name: 'pending-patch-app',
+      repoUrl: 'https://github.com/openlander/pending-patch-app',
+      branch: 'main',
+    });
+    const productionEnvironment = db
+      .getEnvironmentsByProject('p10')
+      .find((environment) => environment.type === 'production');
+    expect(productionEnvironment).toBeDefined();
+
+    writeFileSync(
+      join(clonePath, 'Dockerfile'),
+      'FROM node:22-alpine\nCMD ["npm","start"]\n',
+      'utf8',
+    );
+    db.updateProject('p10', {
+      pendingFix: JSON.stringify({
+        filePath: 'Dockerfile',
+        patches: [
+          {
+            pattern: 'FROM (node:[^-\\s]+)-alpine',
+            replacement: 'FROM $1-bookworm-slim',
+            flags: 'gm',
+          },
+          {
+            pattern: '^CMD\\b|^ENTRYPOINT\\b',
+            replacement: 'ENV NODE_OPTIONS="--max-old-space-size=4096"\\n$&',
+            flags: 'm',
+          },
+        ],
+      }),
+    });
+
+    let builtDockerfile = '';
+    (docker.buildImage as ReturnType<typeof vi.fn>).mockImplementationOnce(async (path: string) => {
+      builtDockerfile = readFileSync(join(path, 'Dockerfile'), 'utf8');
+    });
+
+    const result = await pipeline.deployEnvironment('p10', productionEnvironment!.id, {
+      repoUrl: 'https://github.com/openlander/pending-patch-app',
+    });
+
+    expect(result.success).toBe(true);
+    expect(builtDockerfile).toContain('FROM node:22-bookworm-slim');
+    expect(builtDockerfile).toContain('ENV NODE_OPTIONS="--max-old-space-size=4096"');
+    expect(db.getProject('p10')?.pending_fix).toBeNull();
   });
 
   it('exposes quick-share tunnel for production environment deployments', async () => {
@@ -418,6 +527,7 @@ describe('DeployPipeline deployEnvironment', () => {
       docker,
       db,
       env as never,
+      testConfig,
       undefined,
       undefined,
       autoDetector as never,
@@ -468,6 +578,11 @@ describe('DeployPipeline deployEnvironment', () => {
       },
     );
 
+    let builtDockerfile = '';
+    (docker.buildImage as ReturnType<typeof vi.fn>).mockImplementationOnce(async (path: string) => {
+      builtDockerfile = readFileSync(join(path, 'Dockerfile'), 'utf8');
+    });
+
     const result = await pipeline.deployEnvironment('p7', productionEnvironment!.id, {
       repoUrl: 'https://github.com/openlander/build-args-app',
       envVars: {
@@ -479,7 +594,7 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(result.success).toBe(true);
     expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       clonePath,
-      'openlander/build-args-app:latest',
+      expect.stringMatching(/^openlander\/build-args-app:\d+$/),
       expect.objectContaining({
         buildArgs: {
           NEXT_PUBLIC_API_URL: 'https://api.example.com',
@@ -488,7 +603,7 @@ describe('DeployPipeline deployEnvironment', () => {
       }),
     );
 
-    const dockerfileContent = readFileSync(join(clonePath, 'Dockerfile'), 'utf8');
+    const dockerfileContent = builtDockerfile;
     expect(dockerfileContent).toContain('ARG VITE_CLIENT_FLAG');
     expect(dockerfileContent).toContain('ARG NEXT_PUBLIC_API_URL');
     expect(dockerfileContent).not.toContain('ARG SERVER_ONLY_TOKEN');
@@ -576,7 +691,7 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(cloneRepoSpy).not.toHaveBeenCalled();
   });
 
-  it('does not open quick-share tunnel for non-production environments', async () => {
+  it('opens quick-share tunnel even when environment type is development', async () => {
     db.createProject({
       id: 'p12',
       name: 'development-share-app',
@@ -599,11 +714,11 @@ describe('DeployPipeline deployEnvironment', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.publicUrl).toBeUndefined();
-    expect(exposeTunnelSpy).not.toHaveBeenCalled();
+    expect(result.publicUrl).toBe('https://should-not-be-used.example.trycloudflare.com');
+    expect(exposeTunnelSpy).toHaveBeenCalledWith('p12', expect.any(Number));
   });
 
-  it('stores env vars per-environment for non-production deploys', async () => {
+  it('stores env vars at project scope regardless of environment type', async () => {
     db.createProject({
       id: 'p13',
       name: 'env-store-app',
@@ -626,11 +741,9 @@ describe('DeployPipeline deployEnvironment', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(mergeEnvVarsSpy).toHaveBeenCalledWith(
-      'p13',
-      { API_BASE_URL: 'https://dev.example.com' },
-      'p13-development',
-    );
+    expect(mergeEnvVarsSpy).toHaveBeenCalledWith('p13', {
+      API_BASE_URL: 'https://dev.example.com',
+    });
   });
 
   it('cleanupStaleTunnels resets quick-share/shared projects to internal on startup', () => {
@@ -655,7 +768,7 @@ describe('DeployPipeline deployEnvironment', () => {
       publicUrl: 'https://shared.example.com',
     });
 
-    const startupPipeline = new DeployPipeline(docker, db, env as never);
+    const startupPipeline = new DeployPipeline(docker, db, env as never, testConfig);
 
     expect(startupPipeline).toBeDefined();
     expect(db.getProject('p15')?.visibility).toBe('internal');

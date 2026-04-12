@@ -58,7 +58,7 @@ export function MessageList({ messages, children }: MessageListProps) {
             'absolute bottom-4 left-1/2 -translate-x-1/2 z-10',
             'flex items-center gap-1.5 px-3 py-1.5 rounded-full',
             'bg-bg-panel border border-[hsl(var(--border))] shadow-lg',
-            'text-[11px] font-body text-secondary-ol hover:text-primary-ol transition-colors',
+            'text-xs font-body text-secondary-ol hover:text-primary-ol transition-colors',
           )}
         >
           <ArrowDown className="h-3 w-3" />

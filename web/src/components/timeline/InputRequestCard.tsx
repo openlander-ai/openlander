@@ -99,9 +99,7 @@ export function InputRequestCard({
           <div key={qIndex} className="space-y-2">
             {/* Question header */}
             {q.header && (
-              <p className="text-[11px] font-mono text-muted-ol uppercase tracking-wider">
-                {q.header}
-              </p>
+              <p className="text-xs font-mono text-muted-ol uppercase tracking-wider">{q.header}</p>
             )}
 
             {/* Question text */}
@@ -135,14 +133,12 @@ export function InputRequestCard({
                             selected ? 'border-agent bg-agent' : 'border-muted-ol',
                           )}
                         >
-                          {selected && (
-                            <Check className="h-2.5 w-2.5 text-bg-app" strokeWidth={3} />
-                          )}
+                          {selected && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
                         </span>
                         <span>{opt.label}</span>
                       </span>
                       {opt.description && (
-                        <span className="block ml-[22px] text-[11px] text-muted-ol mt-0.5">
+                        <span className="block ml-[22px] text-xs text-muted-ol mt-0.5">
                           {opt.description}
                         </span>
                       )}
@@ -183,7 +179,7 @@ export function InputRequestCard({
             disabled={isSubmitting}
             className={cn(
               'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body font-medium',
-              'bg-agent text-bg-app hover:bg-agent/90',
+              'bg-agent text-white hover:bg-agent/90',
               'transition-colors',
               isSubmitting && 'opacity-50 cursor-not-allowed',
             )}

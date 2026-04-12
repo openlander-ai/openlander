@@ -3,9 +3,15 @@ import type { LanguageModel, ToolSet } from 'ai';
 import type { ChatMessage } from './index.js';
 import type { QuestionRequest, QuestionBridge } from '../lib/question-bridge.js';
 import type { Database } from '../db/index.js';
-import type { ChatHistoryRow } from '../db/types.js';
 import { buildSystemPrompt, type ContextProvider, type LLMProvider } from './prompts.js';
+import type { ContextScope } from './context-assembler.js';
+import { createModuleLogger } from '../lib/logger.js';
+import { calculateCost, extractUsageFromResult, logAiUsage } from './transparency.js';
 import type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-events.js';
+import { compactHistory } from './compaction.js';
+import { decisionEngine } from './decision.js';
+import type { ApprovalGate } from '../pipeline/approval-gate.js';
+import { eventBus } from '../events/index.js';
 
 /**
  * OpenLander AI Agent.
@@ -37,12 +43,14 @@ const MAX_HISTORY_MESSAGES = 40;
 const KEEP_RECENT = 30;
 
 const DEFAULT_CHANNEL_SESSION_ID = 'channel-default';
+const log = createModuleLogger('agent');
 
 export class Agent {
   private history: ChatMessage[] = [];
   private tools: ToolSet = {};
   private questionBridge: QuestionBridge | null = null;
   private currentSessionId: string | null = null;
+  private currentScope?: ContextScope;
   private lockPromise: Promise<void> = Promise.resolve();
 
   constructor(
@@ -51,6 +59,8 @@ export class Agent {
     private readonly contextProvider?: ContextProvider,
     private readonly provider: LLMProvider = 'gemini',
     private readonly locale: string = 'en',
+    private readonly actionType: 'web_agent' | 'auto_recovery' = 'web_agent',
+    private readonly approvalGate?: ApprovalGate,
   ) {}
 
   /** Set the question bridge for ask_user_question tool support. */
@@ -85,15 +95,7 @@ export class Agent {
       }
 
       this.history.push({ role: 'user', content: userMessage });
-
-      // Save user message to DB
-      const { nanoid } = await import('nanoid');
-      this.db.saveChatMessage({
-        id: nanoid(12),
-        sessionId: resolvedSessionId,
-        role: 'user',
-        content: userMessage,
-      });
+      const startedAt = Date.now();
 
       const result = await generateText({
         model: this.model,
@@ -101,7 +103,7 @@ export class Agent {
           role: m.role,
           content: m.content,
         })),
-        tools: this.tools,
+        tools: this.buildGuardedTools(() => Promise.resolve()),
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
       });
 
@@ -122,14 +124,22 @@ export class Agent {
 
       // Update history with the final response
       this.history.push({ role: 'assistant', content: responseText });
-      this.trimHistory();
+      await this.compactAndTrim();
 
-      this.db.saveChatMessage({
-        id: nanoid(12),
+      const usage = extractUsageFromResult(result.usage);
+      this.logUsageSafe({
+        projectId: this.currentScope?.projectId,
         sessionId: resolvedSessionId,
-        role: 'assistant',
-        content: responseText,
-        toolCalls: allToolResults.length > 0 ? allToolResults : undefined,
+        actionType: this.actionType,
+        modelName: this.getModelName(),
+        provider: this.provider,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+        toolsCalled: allToolResults.map((toolResult) => toolResult.toolName),
+        result: 'success',
+        durationMs: Date.now() - startedAt,
+        source: this.actionType === 'auto_recovery' ? 'auto-recovery' : 'web',
       });
 
       return {
@@ -145,15 +155,10 @@ export class Agent {
     }
 
     this.history = [];
-    const rows: ChatHistoryRow[] = this.db.getChatHistory(sessionId);
-    this.history = rows.map((row) => ({
-      role: row.role,
-      content: row.content,
-    }));
     this.currentSessionId = sessionId;
 
     await this.refreshSystemPrompt();
-    this.trimHistory();
+    await this.compactAndTrim();
   }
 
   /**
@@ -168,9 +173,10 @@ export class Agent {
     userMessage: string,
     onEvent: (event: ChatStreamEvent) => Promise<void>,
     sessionId?: string,
+    scope?: ContextScope,
   ): Promise<void> {
     return this.withLock(async () => {
-      const { nanoid } = await import('nanoid');
+      this.currentScope = scope;
       const resolvedSessionId = this.resolveSessionId(sessionId);
       if (resolvedSessionId !== this.currentSessionId) {
         await this.switchSession(resolvedSessionId);
@@ -179,17 +185,19 @@ export class Agent {
         await this.refreshSystemPrompt();
       }
 
-      await onEvent({ type: 'session', sessionId: resolvedSessionId });
+      let actionRunId: string | undefined;
+
+      if (this.actionType === 'web_agent') {
+        actionRunId = this.db.createActionRun({
+          projectId: sessionId ?? 'web_agent',
+          triggerSource: 'web_agent',
+          triggerSessionId: sessionId,
+        });
+      }
+
+      await onEvent({ type: 'session', sessionId: resolvedSessionId, actionRunId });
 
       this.history.push({ role: 'user', content: userMessage });
-
-      // Save user message to DB
-      this.db.saveChatMessage({
-        id: nanoid(12),
-        sessionId: resolvedSessionId,
-        role: 'user',
-        content: userMessage,
-      });
 
       await onEvent({ type: 'thinking' });
 
@@ -202,6 +210,26 @@ export class Agent {
 
       const allToolResults: ToolResult[] = [];
       let responseText = '';
+      const startedAt = Date.now();
+      const projectId = scope?.projectId;
+      const modelName = this.getModelName();
+      const source = this.actionType;
+      let didStreamFail = false;
+      let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+      let currentStepIndex = 0;
+      let lastToolName: string | undefined;
+
+      const guardedTools = this.buildGuardedTools(onEvent, actionRunId);
+
+      if (projectId) {
+        await eventBus.emit('ai:invoked', {
+          projectId,
+          source,
+          model: modelName,
+          action: 'chatStream',
+          correlationId: projectId,
+        });
+      }
 
       try {
         const result = streamText({
@@ -210,21 +238,28 @@ export class Agent {
             role: m.role,
             content: m.content,
           })),
-          tools: this.tools,
+          tools: guardedTools,
+          maxRetries: 1,
           stopWhen: stepCountIs(MAX_TOOL_STEPS),
         });
 
-        for await (const part of result.fullStream) {
+        streamLoop: for await (const part of result.fullStream) {
           switch (part.type) {
             case 'text-delta': {
               responseText += part.text;
               break;
             }
+            case 'reasoning-delta': {
+              await onEvent({ type: 'reasoning', content: part.text });
+              break;
+            }
             case 'tool-call': {
+              lastToolName = part.toolName;
               await onEvent({
                 type: 'tool_call',
                 toolName: part.toolName,
                 arguments: part.input as Record<string, unknown>,
+                stepIndex: currentStepIndex,
               });
               break;
             }
@@ -235,7 +270,7 @@ export class Agent {
                 result: part.output,
               };
               allToolResults.push(toolResult);
-              await onEvent({ type: 'tool_result', ...toolResult });
+              await onEvent({ type: 'tool_result', ...toolResult, stepIndex: currentStepIndex });
               break;
             }
             case 'tool-error': {
@@ -245,10 +280,20 @@ export class Agent {
                 error: part.error instanceof Error ? part.error.message : String(part.error),
               };
               allToolResults.push(errorResult);
-              await onEvent({ type: 'tool_result', ...errorResult });
+              await onEvent({ type: 'tool_result', ...errorResult, stepIndex: currentStepIndex });
               break;
             }
             case 'finish-step': {
+              currentStepIndex++;
+              if (actionRunId) {
+                this.db.updateActionRunStep(actionRunId, currentStepIndex);
+              }
+              await onEvent({
+                type: 'step_progress',
+                step: currentStepIndex,
+                toolName: lastToolName,
+              });
+              lastToolName = undefined;
               // Emit thinking for next step if there are more steps coming
               await onEvent({ type: 'thinking' });
               break;
@@ -256,16 +301,59 @@ export class Agent {
             case 'error': {
               const errMsg = part.error instanceof Error ? part.error.message : String(part.error);
               await onEvent({ type: 'error', error: errMsg });
-              return;
+              didStreamFail = true;
+              break streamLoop;
             }
             default:
-              // Ignore other event types (start, start-step, text-start, text-end, etc.)
               break;
           }
         }
+
+        if (!didStreamFail) {
+          usage = extractUsageFromResult(await result.usage);
+        }
       } catch (error) {
-        const errMsg = error instanceof Error ? error.message : String(error);
+        const rawMsg = error instanceof Error ? error.message : String(error);
+        const isRateLimit = /rate.limit|too many|429|quota|exceeded/i.test(rawMsg);
+        const errMsg = isRateLimit
+          ? `LLM rate limit exceeded. Please wait a moment and try again. (${rawMsg})`
+          : rawMsg;
         await onEvent({ type: 'error', error: errMsg });
+        didStreamFail = true;
+      } finally {
+        if (projectId) {
+          await eventBus.emit('ai:completed', {
+            projectId,
+            source,
+            model: modelName,
+            action: 'chatStream',
+            correlationId: projectId,
+            durationMs: Date.now() - startedAt,
+            inputTokens: usage.inputTokens || undefined,
+            outputTokens: usage.outputTokens || undefined,
+            success: !didStreamFail,
+          });
+        }
+      }
+
+      if (didStreamFail) {
+        if (actionRunId) {
+          this.db.updateActionRunStatus(actionRunId, 'failed', 'Agent stream execution failed');
+        }
+        this.logUsageSafe({
+          projectId: this.currentScope?.projectId,
+          sessionId: resolvedSessionId,
+          actionType: this.actionType,
+          modelName,
+          provider: this.provider,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          toolsCalled: allToolResults.map((toolResult) => toolResult.toolName),
+          result: 'failure',
+          durationMs: Date.now() - startedAt,
+          source: this.actionType === 'auto_recovery' ? 'auto-recovery' : 'web',
+        });
         return;
       }
 
@@ -275,20 +363,45 @@ export class Agent {
 
       // Update history with the final response
       this.history.push({ role: 'assistant', content: finalText });
-      this.trimHistory();
-
-      this.db.saveChatMessage({
-        id: nanoid(12),
-        sessionId: resolvedSessionId,
-        role: 'assistant',
-        content: finalText,
-        toolCalls: allToolResults.length > 0 ? allToolResults : undefined,
-      });
+      await this.compactAndTrim();
 
       await onEvent({ type: 'message', content: finalText });
+
+      if (actionRunId) {
+        this.db.updateActionRunStatus(actionRunId, 'succeeded');
+      }
+
+      this.logUsageSafe({
+        projectId: this.currentScope?.projectId,
+        sessionId: resolvedSessionId,
+        actionType: this.actionType,
+        modelName,
+        provider: this.provider,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+        toolsCalled: allToolResults.map((toolResult) => toolResult.toolName),
+        result: 'success',
+        durationMs: Date.now() - startedAt,
+        source: this.actionType === 'auto_recovery' ? 'auto-recovery' : 'web',
+      });
+
+      const costUsd = calculateCost(
+        this.provider,
+        modelName,
+        usage.inputTokens,
+        usage.outputTokens,
+      );
+
       await onEvent({
         type: 'done',
         toolResults: allToolResults.length > 0 ? allToolResults : undefined,
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.totalTokens,
+          costUsd,
+        },
       });
     });
   }
@@ -313,7 +426,9 @@ export class Agent {
    * Called at the start of every chat() / chatStream() turn.
    */
   private async refreshSystemPrompt(): Promise<void> {
-    const contextSnapshot = this.contextProvider ? await this.contextProvider() : '';
+    const contextSnapshot = this.contextProvider
+      ? await this.contextProvider(this.currentScope)
+      : '';
     const systemContent = buildSystemPrompt(contextSnapshot, this.provider, this.locale);
 
     // Replace or insert system message at position 0
@@ -329,14 +444,28 @@ export class Agent {
    * Trim conversation history to prevent token overflow.
    * Keeps the system prompt + a sliding window of recent messages.
    */
-  private trimHistory(): void {
+  private async compactAndTrim(): Promise<void> {
     if (this.history.length <= MAX_HISTORY_MESSAGES) {
       return;
     }
 
     const system: ChatMessage = this.history[0] ?? { role: 'system', content: '' };
-    const trimmed = this.history.length - MAX_HISTORY_MESSAGES;
     const recent = this.history.slice(-KEEP_RECENT);
+    const messagesToCompact = this.history.slice(1, -KEEP_RECENT);
+
+    try {
+      const summary = await compactHistory(this.model, messagesToCompact);
+      const summaryMessage: ChatMessage = {
+        role: 'system',
+        content: summary.startsWith('[Summary]') ? summary : `[Summary] ${summary}`,
+      };
+      this.history = [system, summaryMessage, ...recent];
+      return;
+    } catch (err) {
+      log.warn({ err }, 'Compaction failed, falling back to simple trim');
+    }
+
+    const trimmed = this.history.length - MAX_HISTORY_MESSAGES;
 
     // Insert a note about trimmed history
     const trimNote: ChatMessage = {
@@ -349,6 +478,102 @@ export class Agent {
 
   private resolveSessionId(sessionId?: string): string {
     return sessionId ?? DEFAULT_CHANNEL_SESSION_ID;
+  }
+
+  private buildGuardedTools(
+    onEvent: (event: ChatStreamEvent) => Promise<void>,
+    actionRunId?: string,
+  ): ToolSet {
+    const guardedTools: ToolSet = {};
+
+    const toText = (value: unknown): string => {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        return String(value);
+      }
+      return 'unknown';
+    };
+
+    for (const [name, toolDef] of Object.entries(this.tools)) {
+      type ExecuteFn = (args: Record<string, unknown>, options: unknown) => unknown;
+
+      const originalExecute = (toolDef as { execute?: ExecuteFn }).execute;
+
+      guardedTools[name] = {
+        ...toolDef,
+        execute: async (args: Record<string, unknown>, options: unknown) => {
+          const decision = decisionEngine.classify(name);
+
+          if (
+            decision === 'REQUIRE_APPROVAL' &&
+            this.actionType === 'web_agent' &&
+            this.approvalGate &&
+            actionRunId
+          ) {
+            await onEvent({
+              type: 'approval_required',
+              actionRunId,
+              toolName: name,
+              toolArgs: args,
+            });
+
+            this.db.updateActionRunStatus(actionRunId, 'pending_approval');
+            this.db.updateActionRunApproval(actionRunId, 'pending', name);
+
+            const approvalResult = await this.approvalGate.waitForApproval(actionRunId, {
+              projectId: toText(args['project_id'] ?? args['projectId']),
+              projectName: toText(args['project_name'] ?? args['projectName']),
+              toolName: name,
+              attempt: 1,
+              actionRunId,
+              createdAt: new Date(),
+            });
+
+            if (approvalResult !== 'approved') {
+              const reason =
+                approvalResult === 'timed_out'
+                  ? 'Approval timed out for this action'
+                  : 'User rejected the action';
+              this.db.updateActionRunStatus(actionRunId, 'failed', reason);
+              this.db.updateActionRunApproval(actionRunId, 'rejected', name);
+              return {
+                error: approvalResult === 'timed_out' ? 'ACTION_TIMED_OUT' : 'ACTION_REJECTED',
+                message: reason,
+              };
+            }
+
+            this.db.updateActionRunStatus(actionRunId, 'running');
+            this.db.updateActionRunApproval(actionRunId, 'approved', name);
+          } else if (decision === 'NOTIFY_THEN_ALLOW') {
+            await onEvent({
+              type: 'notification',
+              toolName: name,
+              message: `Executing ${name}...`,
+            });
+          }
+
+          if (!originalExecute) {
+            return null;
+          }
+
+          return originalExecute(args, options);
+        },
+      };
+    }
+
+    return guardedTools;
+  }
+
+  private getModelName(): string {
+    const modelMeta = this.model as { modelId?: string; model?: string };
+    return modelMeta.modelId ?? modelMeta.model ?? 'unknown';
+  }
+
+  private logUsageSafe(params: Parameters<typeof logAiUsage>[1]): void {
+    try {
+      logAiUsage(this.db, params);
+    } catch (error) {
+      log.warn({ error }, 'Failed to persist AI usage log entry');
+    }
   }
 
   private async withLock<T>(fn: () => Promise<T>): Promise<T> {

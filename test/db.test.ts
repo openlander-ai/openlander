@@ -9,19 +9,12 @@ import { ProjectAlreadyExistsError } from '../src/errors.js';
 
 type LegacySqlite = {
   exec: (sql: string) => unknown;
+  prepare: (sql: string) => { all: () => unknown };
   close: () => void;
 };
 
 function createLegacySqlite(dbPath: string): LegacySqlite {
   const require = createRequire(import.meta.url);
-  const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-
-  if (isBunRuntime) {
-    const BunSqlite = require('bun:sqlite') as {
-      Database: new (path: string) => LegacySqlite;
-    };
-    return new BunSqlite.Database(dbPath);
-  }
 
   const BetterSqlite3 = require('better-sqlite3') as new (path: string) => LegacySqlite;
   return new BetterSqlite3(dbPath);
@@ -286,40 +279,6 @@ describe('Database', () => {
     });
   });
 
-  // --- Chat History ---
-
-  describe('Chat History', () => {
-    it('saves and retrieves chat messages', () => {
-      db.saveChatMessage({
-        id: 'msg1',
-        sessionId: 'session-1',
-        role: 'user',
-        content: 'Deploy my app',
-      });
-
-      db.saveChatMessage({
-        id: 'msg2',
-        sessionId: 'session-1',
-        role: 'assistant',
-        content: 'Deploying...',
-      });
-
-      const history = db.getChatHistory('session-1');
-      expect(history).toHaveLength(2);
-      expect(history[0]!.role).toBe('user');
-      expect(history[1]!.role).toBe('assistant');
-    });
-
-    it('lists chat sessions', () => {
-      db.saveChatMessage({ id: 'msg1', sessionId: 's1', role: 'user', content: 'hi' });
-      db.saveChatMessage({ id: 'msg2', sessionId: 's1', role: 'assistant', content: 'hello' });
-      db.saveChatMessage({ id: 'msg3', sessionId: 's2', role: 'user', content: 'deploy' });
-
-      const sessions = db.listChatSessions();
-      expect(sessions).toHaveLength(2);
-    });
-  });
-
   describe('Monorepo (parent-child projects)', () => {
     it('creates a parent project with children', () => {
       db.createProject({ id: 'parent1', name: 'my-saas', repoUrl: 'https://github.com/test/saas' });
@@ -472,6 +431,56 @@ describe('Database', () => {
       expect(() =>
         db.createProject({ id: 'p2', name: 'app-2', repoUrl: 'https://github.com/test/b' }),
       ).not.toThrow();
+    });
+  });
+
+  describe('Environments container_port', () => {
+    beforeEach(() => {
+      db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/a' });
+    });
+
+    it('environments table has container_port column after migration', () => {
+      const dbPath = join(tmpDir, 'test.db');
+      const sqlite = createLegacySqlite(dbPath);
+
+      const columns = (
+        sqlite.prepare('PRAGMA table_info(environments)').all() as Array<{
+          name: string;
+        }>
+      ).map((c) => c.name);
+
+      sqlite.close();
+      expect(columns).toContain('container_port');
+    });
+
+    it('updateEnvironment persists containerPort', () => {
+      const envs = db.getEnvironmentsByProject('p1');
+      const env = envs.find((e) => e.type === 'production');
+      expect(env).toBeDefined();
+
+      db.updateEnvironment(env!.id, { containerPort: 8080 });
+
+      const updated = db.getEnvironment(env!.id);
+      expect(updated).toBeDefined();
+      expect(updated!.container_port).toBe(8080);
+    });
+
+    it('backfill SQL copies container_port from projects to environments', () => {
+      db.updateProject('p1', { containerPort: 3000 });
+
+      db.updateEnvironment(
+        db.getEnvironmentsByProject('p1').find((e) => e.type === 'production')!.id,
+        { containerPort: null },
+      );
+
+      const sqlite = (db as unknown as { sqlite: { exec: (sql: string) => void } }).sqlite;
+      sqlite.exec(
+        'UPDATE environments SET container_port = (SELECT container_port FROM projects WHERE id = environments.project_id) WHERE container_port IS NULL',
+      );
+
+      const env = db.getEnvironmentsByProject('p1').find((e) => e.type === 'production');
+      expect(env).toBeDefined();
+      expect(env!.container_port).toBe(3000);
     });
   });
 });

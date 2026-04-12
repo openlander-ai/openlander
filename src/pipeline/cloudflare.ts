@@ -6,6 +6,8 @@ import { nanoid } from 'nanoid';
 import type { CloudflareConfig } from '../config/index.js';
 import type { Database, DomainMappingRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
+import { CloudflareNotFoundError } from '../errors.js';
+import { containerName as projectContainerName } from './helpers.js';
 import { buildTraefikLabels } from './traefik.js';
 
 interface CloudflareApiError {
@@ -46,10 +48,14 @@ export class CloudflareTunnelManager {
   private readonly traefikLabels = new Map<string, Record<string, string>>();
 
   constructor(
-    private readonly config: CloudflareConfig,
+    private config: CloudflareConfig,
     private readonly db: Database,
     private readonly events: EventBus,
   ) {}
+
+  reloadConfig(config: CloudflareConfig): void {
+    this.config = config;
+  }
 
   async createTunnel(projectId: string, domain: string): Promise<void> {
     const normalizedDomain = normalizeDomain(domain);
@@ -172,7 +178,7 @@ export class CloudflareTunnelManager {
       return labels;
     }
 
-    const routerName = `ol-${projectName}`;
+    const routerName = projectContainerName(projectName);
     labels[`traefik.http.routers.${routerName}.rule`] = domains
       .map((domain) => `Host(\`${domain}\`)`)
       .join(' || ');
@@ -203,7 +209,7 @@ export class CloudflareTunnelManager {
       );
     } catch (error) {
       // Tunnel may have been deleted externally via Cloudflare dashboard
-      if (error instanceof Error && error.message.includes('(404)')) {
+      if (isCloudflare404(error)) {
         log.warn('Tunnel config update failed (404) — tunnel may have been deleted externally');
         return;
       }
@@ -255,7 +261,7 @@ export class CloudflareTunnelManager {
         );
         return updated.id;
       } catch (error) {
-        if (error instanceof Error && error.message.includes('(404)')) {
+        if (isCloudflare404(error)) {
           log.debug(
             { zoneId, recordId: cname.id },
             'CNAME record deleted externally — creating new one',
@@ -284,7 +290,7 @@ export class CloudflareTunnelManager {
       );
     } catch (error) {
       // Zone may have been deleted externally
-      if (error instanceof Error && error.message.includes('(404)')) {
+      if (isCloudflare404(error)) {
         log.debug({ zoneId, domain }, 'Zone not found when fetching DNS records — returning empty');
         return [];
       }
@@ -297,7 +303,7 @@ export class CloudflareTunnelManager {
       await this.cloudflareRequest(`zones/${zoneId}/dns_records/${recordId}`, { method: 'DELETE' });
     } catch (error) {
       // Record already deleted externally (e.g. via Cloudflare dashboard) — safe to ignore
-      if (error instanceof Error && error.message.includes('(404)')) {
+      if (isCloudflare404(error)) {
         log.debug({ zoneId, recordId }, 'DNS record already deleted — skipping');
         return;
       }
@@ -308,6 +314,7 @@ export class CloudflareTunnelManager {
   private async cloudflareRequest<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${CLOUDFLARE_API_BASE}/${path}`, {
       ...init,
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bearer ${this.config.apiToken}`,
         'Content-Type': 'application/json',
@@ -363,4 +370,11 @@ function normalizeDomain(domain: string): string {
 
 function normalizeHost(host: string): string {
   return host.trim().toLowerCase().replace(/\.$/, '');
+}
+
+function isCloudflare404(error: unknown): boolean {
+  return (
+    error instanceof CloudflareNotFoundError ||
+    (error instanceof Error && error.message.includes('(404)'))
+  );
 }

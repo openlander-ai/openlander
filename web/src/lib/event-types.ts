@@ -33,6 +33,10 @@ export interface BuildStreamEvent {
     | 'log'
     | 'complete'
     | 'error'
+    | 'agent_thinking'
+    | 'agent_tool_call'
+    | 'agent_tool_result'
+    | 'agent_message'
     | 'question_pending'
     | 'insight'
     | 'dockerfile_fixed'
@@ -66,6 +70,8 @@ export interface BuildStreamEvent {
   durationMs?: number;
   logChunk?: string;
   sourceProjectId?: string;
+  tokenCount?: number;
+  costUsd?: number | null;
 }
 
 /** Action button for insight/anomaly timeline items */
@@ -127,6 +133,10 @@ export interface TimelineItem {
   toolResult?: unknown;
   toolError?: string;
   toolSuccess?: boolean;
+  /** Present only for agent_thinking items — detailed thinking content */
+  content?: string;
+  tokenCount?: number;
+  costUsd?: number | null;
 }
 
 /** Message pattern → progress percentage mapping */
@@ -152,6 +162,26 @@ function extractUrl(message: string): string | undefined {
 }
 
 let idCounter = 0;
+
+/**
+ * Filter timeline items to show only the first recovery_start event.
+ * Subsequent recovery_start events are skipped, but all recovery results
+ * (success/failed/exhausted) are always shown.
+ */
+export function filterRecoveryEvents(items: TimelineItem[]): TimelineItem[] {
+  let recoveryStartSeen = false;
+
+  return items.filter((item) => {
+    if (item.type === 'recovery_start') {
+      if (recoveryStartSeen) {
+        return false; // Skip subsequent recovery_start events
+      }
+      recoveryStartSeen = true;
+      return true;
+    }
+    return true;
+  });
+}
 
 /** Convert backend NDJSON event to frontend timeline item */
 export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
@@ -233,6 +263,51 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         ...scopedMeta,
       };
 
+    case 'agent_thinking':
+      return {
+        id,
+        type: 'agent_thinking',
+        timestamp: event.timestamp,
+        title: event.message,
+        content: event.message,
+        percent: -1,
+        ...scopedMeta,
+      };
+
+    case 'agent_tool_call':
+      return {
+        id,
+        type: 'agent_tool_call',
+        timestamp: event.timestamp,
+        title: event.message,
+        percent: -1,
+        toolName: event.message.match(/tool:?\s*(\w+)/i)?.[1],
+        ...scopedMeta,
+      };
+
+    case 'agent_tool_result':
+      return {
+        id,
+        type: 'agent_tool_result',
+        timestamp: event.timestamp,
+        title: event.message,
+        percent: -1,
+        ...scopedMeta,
+      };
+
+    case 'agent_message':
+      return {
+        id,
+        type: 'agent_message',
+        timestamp: event.timestamp,
+        title: event.message,
+        detail: event.detail ?? undefined,
+        percent: -1,
+        tokenCount: event.tokenCount,
+        costUsd: event.costUsd,
+        ...scopedMeta,
+      };
+
     case 'needs_user_action':
       return {
         id,
@@ -256,6 +331,9 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         detail: event.detail ?? undefined,
         percent: -1,
         retryCount: event.retryCount,
+        actionButtons: event.actionButtons,
+        tokenCount: event.tokenCount,
+        costUsd: event.costUsd,
         ...scopedMeta,
       };
     default:

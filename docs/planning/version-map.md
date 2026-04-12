@@ -8,14 +8,14 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v0.9.6 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0-rc.5 🧪 ── v1.0.0-rc.6 🧪 ── v1.0.0-rc.7 🧪 ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v0.9.6 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0-rc.5 🧪 ── v1.0.0-rc.6 🧪 ── v1.0.0-rc.7 🧪 ── v1.0.0 (TBD)
 
 ```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v0.9.6 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v0.9.6 ✅ ── v0.9.7 ✅ ── v0.9.8 ✅ ── v0.9.9 ✅ ── v0.9.10 ✅ ── v0.9.11 ✅ ── v0.9.12 ✅ ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0 (TBD)
 
 ```
 
@@ -1417,4 +1417,285 @@ AI: bugs.md → 해결됨 + gh issue close
 - 제거된 컴포넌트: SummaryDashboard, Infrastructure Info card, Quick Actions card, LogPreview
 
 ---
+
+### v0.9.7 — Backend Refactoring & MCP Service Access ✅
+
+**상태**: ✅ 완료 | **관련 커밋**: 4개
+
+> **핵심 가치**: 3대 대형 파일 리팩토링 (-37%, 1285줄 제거) + MCP 서비스 도구에 서버 IP 접근 정보 추가 + 테스트 스위트 전체 그린
+
+| 항목 | 내용 | 상태 |
+| --- | --- | --- |
+| service-manager.ts 리팩토링 | 어댑터 패턴 (PostgreSQL/MySQL/Redis/MongoDB), 1406→817줄 (-42%) | ✅ |
+| setup-routes.ts 리팩토링 | 도메인별 분리 (cloudflare/github/mcp), 819→234줄 (-71%) | ✅ |
+| project-routes.ts 리팩토링 | 공유 헬퍼 3개 추출, 39개 중복 제거, 1285→1174줄 (-9%) | ✅ |
+| MCP 서비스 externalAccess | list_services, create_service, get_service_status, get_service_credentials에 서버 IP (LAN/VPN) 접근 정보 추가 | ✅ |
+| 테스트 스위트 그린 | vitest 1462 pass / 0 fail. 41개 pre-existing 실패 수정 | ✅ |
+
+**구현 내역**:
+
+- `src/pipeline/service-adapters/` — 신규 디렉토리: types.ts, shared.ts, postgres-adapter.ts, mysql-adapter.ts, redis-adapter.ts, mongo-adapter.ts, index.ts
+- `src/pipeline/service-manager.ts` — 어댑터 팩토리 위임으로 전환 (1406→817줄)
+- `src/web/api/setup-routes.ts` — 코어 핸들러만 남기고 도메인별 분리 (819→234줄)
+- `src/web/api/setup/` — 신규: cloudflare-routes.ts, github-routes.ts, mcp-routes.ts, shared.ts
+- `src/web/api/helpers/project-helpers.ts` — 신규: 3개 공유 헬퍼
+- `src/web/api/project-routes.ts` — 39개 중복 인스턴스 헬퍼로 대체
+- `src/tools/defs/service.ts` — getServiceExternalAccess(), getExternalConnectionStrings() 추가
+
 ```
+
+---
+
+### v0.9.8 — Dockerfile Configuration & Build Hardening ✅
+
+**상태**: ✅ 완료 | **관련 커밋**: TBD
+
+> **핵심 가치**: Dockerfile 경로 변경 도구 추가 + 빌드 설정 불일치 감지 + 빌드 로그 미리보기 + 재배포 시 Dockerfile 폴백 로직
+
+| 항목                             | 내용                                                                                                        | 상태 |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---- |
+| `update_project_config` MCP 도구 | DB의 dockerfile_path, docker_target, build_context 변경. 경로 순회 검증 + 최소 1개 필드 필수                | ✅   |
+| Dockerfile 불일치 경고           | 커밋이 수정한 Dockerfile과 빌드에 사용된 파일이 다르면 경고 + update_project_config 힌트                    | ✅   |
+| 빌드 로그 Dockerfile 미리보기    | 빌드 로그에 RUN/CMD/EXPOSE 라인 표시로 올바른 파일 확인                                                     | ✅   |
+| Dockerfile 폴백 (재배포)         | DB dockerfile_path가 클론에 없으면 root Dockerfile 또는 발견된 단일 후보로 폴백. 여러 개면 실패 메시지      | ✅   |
+| 배포 계획 Dockerfile 발견        | resolveBuildConfig가 자동 생성 대신 발견된 Dockerfile 사용                                                  | ✅   |
+| RecoveryOrchestrator 제거        | 빌드 실패 즉시 deploy:failed 이벤트로 전파. auto-recovery.ts가 에이전트로 라우팅. Tier 2.5 자동 재시도 제거 | ✅   |
+
+**구현 내역**:
+
+- `src/tools/registry.ts` — update_project_config 도구 추가
+- `src/pipeline/deploy.ts` — Dockerfile 불일치 감지 + 폴백 로직 + 빌드 로그 미리보기
+- `src/pipeline/auto-detect.ts` — resolveBuildConfig Dockerfile 발견 통합
+- `src/pipeline/recovery.ts` — RecoveryOrchestrator 제거, 즉시 실패 전파
+
+---
+
+## v0.9.9 — Typography & Infrastructure (2026-03-23) ✅
+
+| 항목                        | 내용                                                                                                    | 상태 |
+| --------------------------- | ------------------------------------------------------------------------------------------------------- | ---- |
+| Typography 시스템 개편      | Inter (body+display) + Geist Mono (code), self-hosted fontsource, 14px base, 12px 최소, CSS 토큰 시스템 | ✅   |
+| Docker image 자동 정리      | cleanup.ts 모듈, 디스크 80% 임계치 트리거, 배포 후 dangling prune, 10분 쿨다운                          | ✅   |
+| sslip.io 동적 IP 갱신       | Traefik HTTP provider에 sslip.io 라우트 추가, 5초 폴링으로 IP 변경 자동 반영                            | ✅   |
+| get_deploy_status 멀티 대기 | wait=true + project_name 미지정시 모든 active job 완료까지 대기                                         | ✅   |
+| Traefik 재시작 생존         | orphan cleanup에서 openlander.role 라벨 기반 인프라 컨테이너 보호                                       | ✅   |
+
+**구현 내역**:
+
+- `web/` — 50+ TSX 파일 폰트 마이그레이션, `index.css` 토큰, `tailwind.config.js` fontFamily
+- `src/pipeline/cleanup.ts` — Docker 이미지/캐시 정리 모듈 (신규)
+- `src/monitor/health.ts` — 디스크 임계치 체크 + 쿨다운 통합
+- `src/web/api/routes.ts` — Traefik HTTP config에 sslip.io 라우트 추가
+- `src/tools/defs/deploy.ts` — get_deploy_status 멀티 프로젝트 대기 로직
+- `src/pipeline/deploy-core.ts` — orphan cleanup role 라벨 스킵
+- `src/pipeline/docker.ts` — ContainerInfo에 labels 필드 추가
+
+---
+
+## v0.9.13 — Platform Debug/Admin Tools (2026-03-23) ✅
+
+| 항목                       | 내용                                                                                                               | 상태 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---- |
+| Platform debug/admin tools | 11개 `platform_*` MCP 도구 (Tier 1: read-only, Tier 2: debug, Tier 3: corrective), config.mcp.platformTools 플래그 | ✅   |
+| Generic RingBuffer         | 메모리 순환 버퍼 (`src/lib/ring-buffer.ts`), 타임스탐프 래핑, 시간 필터링 조회                                     | ✅   |
+| EventBus capture hook      | 모든 EventBus 이벤트 자동 캡처, `platform_event_log` 도구 지원                                                     | ✅   |
+| Pino log ring buffer       | 프로세스 로그 메모리 캡처 (custom Writable stream), `platform_logs` 도구 지원                                      | ✅   |
+
+**구현 내역**:
+
+- `src/lib/ring-buffer.ts` — 신규: 제네릭 순환 버퍼 (push, getAll, getFiltered)
+- `src/tools/registry.ts` — 11개 platform\_\* 도구 추가 (health, event_log, container_audit, config, logs, docker_inspect, docker_ps, db_inspect, cleanup_orphans, reconcile, force_remove)
+- `src/events/index.ts` — EventBus 캡처 훅 통합
+- `src/monitor/pino-ring-buffer.ts` — 신규: Pino custom Writable stream
+- `src/config/index.ts` — mcp.platformTools 플래그 추가
+
+---
+
+## v0.9.14 — Dashboard VPN URL Display (2026-03-23) ✅
+
+| 항목                   | 내용                                                                                                                   | 상태 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---- |
+| Dashboard VPN URL 표시 | Project list, detail, card, table 뷰에서 VPN (Tailscale/WireGuard) URL 표시, 보라색 VPN 배지, API `urls: ProjectUrl[]` | ✅   |
+| Build log 전파 버그    | Blue-green, preview, monorepo 배포 경로에서 Docker build 출력 보존                                                     | ✅   |
+| tsup 빌드 경합 조건    | 병렬 빌드 시 `clean: true` 제거, 빌드 전 `rm -rf dist` 실행                                                            | ✅   |
+| VPN URL 환경 보호      | VPN URL은 production 환경에서만 표시, development 뷰에서 숨김                                                          | ✅   |
+| Project list API 성능  | `getAllIps()` 호출 최적화 (요청당 1회 → 프로젝트당 1회 제거)                                                           | ✅   |
+
+---
+
+## v0.9.15 — Runtime Log Snapshots & Docker Cleanup (2026-03-24) ✅
+
+| 항목                       | 내용                                                                                                           | 상태 |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------- | ---- |
+| Runtime log snapshots      | 재배포 전 컨테이너 로그 마지막 500줄 캡처, 배포 히스토리에 저장, DeploymentDetail "Runtime Logs" 섹션에서 조회 | ✅   |
+| Docker log rotation        | OpenLander이 생성한 모든 컨테이너에 `json-file` 로그 드라이버 + 10MB×3 로테이션 설정, 무제한 디스크 증가 방지  | ✅   |
+| `cleanup_docker` MCP 도구  | 3단계 정리 (soft/standard/aggressive) + 단계별 상태 리포팅 + 빌드 중 안전 가드                                 | ✅   |
+| Deploy terminal phase rail | 배포 중 phase indicator 올바르게 업데이트, active step에 pulse 애니메이션                                      | ✅   |
+| Build log 전파 버그 수정   | Blue-green, preview, monorepo 배포 경로에서 Docker build 출력 보존                                             | ✅   |
+| Phase rail 업데이트 버그   | Backend SSE 이벤트에 `stepName` 필드 추가, 모든 배포 lifecycle 이벤트 포함                                     | ✅   |
+| Docker cleanup 빌드 보호   | Health monitor와 cleanup_docker 도구가 빌드 중인 프로젝트 aggressive cleanup 스킵                              | ✅   |
+
+---
+
+## v0.9.18 — Docker Network Isolation ✅
+
+| 항목                        | 내용                                                                                                          | 상태 |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------- | ---- |
+| Traefik multi-network       | `ensureAllNetworks()` + `connectToNetwork()` — Traefik이 prod/dev 양쪽 네트워크에 자동 연결                   | ✅   |
+| Per-container network label | `buildTraefikLabels()`에 `traefik.docker.network` 추가, 환경별 올바른 네트워크로 라우팅                       | ✅   |
+| run-step network isolation  | `ContainerRunner.run()`이 `getPolicy(envType).networkName`을 `runContainer()`에 전달                          | ✅   |
+| compose network isolation   | `ComposeDeployConfig.environmentType` 추가, allocatePort/traefik labels/networks 환경별 분리                  | ✅   |
+| rollback/blue-green network | 롤백 및 blue-green 배포 시 환경별 네트워크 사용                                                               | ✅   |
+| Service dual-network        | 공유 서비스(PostgreSQL, Redis 등) 생성 후 secondary 네트워크에 자동 connect                                   | ✅   |
+| Caller chain (MCP/API)      | `deploy_compose`, `deploy_blue_green` MCP 도구 + API에 environment 파라미터 추가, orchestrator → compose 전달 | ✅   |
+| Tests                       | traefik labels(3), run-step network(2), compose-network dev(1) — 6개 신규 테스트                              | ✅   |
+
+---
+
+## v0.9.16 — Docker Image Deployment ✅
+
+| 항목                           | 내용                                                                                                                  | 상태 |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ---- |
+| Docker image deployment        | 사전 빌드된 Docker 이미지 직접 배포 (git clone/build 불필요), image URL, port, command override 지원 (API/MCP/Web UI) | ✅   |
+| Deploy Dialog image toggle     | Git/Image 소스 선택기, 조건부 필드 (image URL, port, command)                                                         | ✅   |
+| ProjectCard Docker badge       | Container 아이콘 + image URL 표시 (image-source 프로젝트)                                                             | ✅   |
+| OverviewTab image info         | Image URL, port, command 표시 (image-source 프로젝트, git 정보 대신)                                                  | ✅   |
+| ProjectHeader "Pull & Restart" | Image 프로젝트는 "Pull & Restart" 버튼 표시 ("Redeploy" 대신)                                                         | ✅   |
+| Settings image fields          | Project settings에서 image URL, port, command 편집 가능, PATCH API 지원                                               | ✅   |
+| MCP image deployment schema    | `create_deploy_plan` 스키마 확장 (source/image/cmd/port 파라미터)                                                     | ✅   |
+| Image URL validation           | `parseImageUrl()`, `getImageExposedPort()`, `mapPullError()` 유틸리티                                                 | ✅   |
+| Pipeline tests                 | 7개 pipeline 테스트 + 10개 MCP schema 테스트 + 3개 E2E integration 테스트                                             | ✅   |
+
+---
+
+## v1.0.0-rc.2 — Release Candidate (2026-03-25) 🧪
+
+| 항목                    | 내용                                                                                                                                 | 상태 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---- |
+| Authentication system   | 단일 사용자 비밀번호 로그인, bcrypt 해싱 (salt rounds=10), 세션 쿠키 (HttpOnly, SameSite=Strict, 7일 TTL), MCP HTTP Bearer 토큰 인증 | ✅   |
+| API token management    | `ol_` 접두사 자동 생성 토큰, AES-256-GCM 암호화, Settings Security 탭에서 토큰 표시/복사/재생성                                      | ✅   |
+| Settings Security tab   | API 토큰 관리 + 웹 대시보드 비밀번호 변경                                                                                            | ✅   |
+| CLI password reset      | `openlander config reset-password` — 서버 재시작 없이 비밀번호 복구                                                                  | ✅   |
+| Onboarding 6-step flow  | 언어 → 비밀번호 (필수) → 인프라 → LLM (필수) → GitHub → MCP 가이드                                                                   | ✅   |
+| MCP connection guide    | 설정 마법사 단계, URL + 토큰 표시 (AI 코딩 도구 통합용)                                                                              | ✅   |
+| WebSocket terminal auth | WebSocket 업그레이드 시 세션 쿠키 검증                                                                                               | ✅   |
+
+**상태**: 🧪 도그푸딩 중 (인증 시스템 및 보안 기능 검증 중)
+
+**다음 단계**: 보안 기능 전체 검증 → v1.0.0 정식 릴리즈
+
+---
+
+## v1.0.0-rc.1 — Release Candidate (2026-03-25) 🧪
+
+| 항목                                    | 내용                                                                                 | 상태 |
+| --------------------------------------- | ------------------------------------------------------------------------------------ | ---- |
+| E2E quality gate test suite             | 20개 테스트 (10개 spec 파일), 핵심 배포 시나리오 검증                                | ✅   |
+| 7개 테스트 레포지토리                   | Node.js, Python, Ruby, Java, PHP, .NET, Go — 배포 파이프라인 검증용 전용 테스트 레포 | ✅   |
+| Event sequence golden path verification | Q-2 품질 게이트, 배포 lifecycle 결정론적 이벤트 순서 검증                            | ✅   |
+| Quality gate coverage mapping           | 모든 배포 경로 및 실패 시나리오 테스트 커버리지 문서화                               | ✅   |
+| Orphaned chat artifacts cleanup         | 이전 web agent mode 스테일 채팅 세션 아티팩트 제거                                   | ✅   |
+| LSP error fixes                         | TypeScript strict mode 위반 및 타입 안전성 문제 해결                                 | ✅   |
+
+**상태**: 🧪 도그푸딩 중 (품질 게이트 테스트 스위트 검증 중)
+
+**다음 단계**: 품질 게이트 테스트 전체 통과 → v1.0.0 정식 릴리즈
+
+---
+
+### v1.0.0-rc.3 — Service Connectivity & Runtime Incidents 🧪
+
+**상태**: 🧪 도그푸딩 중 | **날짜**: 2026-03-26
+
+**핵심 가치**: 서비스 간 네트워크 연결성 관리 + 런타임 장애 자동 감지 및 AI 진단
+
+| 항목                                              | 내용                                                                            | 상태 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------- | ---- |
+| Shared `openlander` network with service-name DNS | 모든 컨테이너가 공유 Docker 네트워크에 연결, 컨테이너명으로 서비스 간 통신 가능 | ✅   |
+| `service_connections` table with CRUD API         | 서비스 상호연결 관리용 DB 스키마 및 REST API 엔드포인트                         | ✅   |
+| Auto env injection on service connect/disconnect  | 서비스 연결/해제 시 환경변수 자동 업데이트                                      | ✅   |
+| Connected Services writable UI                    | 웹 대시보드에서 서비스 연결 추가/제거 가능한 UI 패널                            | ✅   |
+| Env vars plaintext by default                     | 환경변수를 UI에서 평문으로 표시 (DB에는 안전하게 저장)                          | ✅   |
+| Runtime incidents system with LLM diagnosis       | 런타임 장애 자동 감지 및 AI 기반 분석                                           | ✅   |
+| Deploy connectivity check (DNS+TCP)               | 배포 전 서비스 간 연결성 검증 (DNS + TCP 포트 확인)                             | ✅   |
+| Service health monitoring                         | 모든 배포된 서비스의 지속적 헬스 체크 및 상태 리포팅                            | ✅   |
+| MCP session incident briefing                     | MCP 도구 응답에 장애 컨텍스트 포함, AI 에이전트의 복구 가이드 개선              | ✅   |
+
+**다음 단계**: 도그푸딩 완료 → v1.0.0 정식 릴리즈
+
+---
+
+### v1.0.0-rc.7 — Recovery Architecture Rebuild 🧪
+
+**상태**: 🧪 도그푸딩 중 | **날짜**: 2026-04-07
+
+**핵심 가치**: 단일 소유자 복구 아키텍처 + 이벤트 가시성 + 알림 통합 + 인시던트 중복 제거
+
+| 항목                           | 내용                                                                                            | 상태 |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- | ---- |
+| RecoveryCoordinator            | 단일 소유자 복구 아키텍처 — 모든 AI 복구를 Eligibility Gate (7 조건) 경유                       | ✅   |
+| Executor refactoring           | auto-recovery.ts를 callable handler로 전환, OpsAgent EventBus 구독 제거                         | ✅   |
+| shouldContinue mid-stream      | LLM chatStream이 각 도구 호출 전 프로젝트 적격성 확인, 부적격 시 중단                           | ✅   |
+| ai:invoked/completed events    | Activity Feed에 실시간 LLM 호출 가시성 (모델, 소요 시간, 토큰 수, 성공 여부)                    | ✅   |
+| NotificationCenter             | recovery:started/stopped/blocked 이벤트를 Slack/Discord/Telegram으로 전송                       | ✅   |
+| PostmortemGenerator v2         | recovery:success 후 5분 안정성 윈도우 확인 후 자동 생성, 실패 시 취소                           | ✅   |
+| Incident fingerprinting        | 30분 중복 제거 윈도우 + 정규화된 에러 핑거프린트 (hex, 타임스탬프, 포트 제거), cascade_detected | ✅   |
+| container:missing routing      | OpsAgent 직접 구독 제거, Eligibility Gate 경유로 변경                                           | ✅   |
+| Activity Feed cards            | recovery:blocked/stopped/started + ai:invoked/completed 카드 (아이콘, 상태 색상, i18n)          | ✅   |
+| Status ownership               | 감지 레이어가 프로젝트 상태 설정하지 않음 — Coordinator가 상태 전이 관리                        | ✅   |
+| NDJSON live stream fix         | reason/trigger 필드가 버퍼와 라이브 스트림 양쪽에 포함                                          | ✅   |
+| Coordinator exception handling | 모든 async 이벤트 핸들러에 try/catch 추가                                                       | ✅   |
+
+**다음 단계**: 멀티 프로바이더 확장 + AI 설정 UX 고도화 → v1.0.0 정식 릴리즈
+
+---
+
+### v1.0.0-rc.6 — AI Architecture Phase 1 🧪
+
+**상태**: 🧪 도그푸딩 중 | **날짜**: 2026-03-28
+
+**핵심 가치**: AI 사용량 가시성 + 자동복구 승인 게이트 + 멀티 LLM 프로바이더 + 환경 단순화
+
+| 항목                      | 내용                                                                    | 상태 |
+| ------------------------- | ----------------------------------------------------------------------- | ---- |
+| AI Usage API              | `GET /api/usage/summary`, `GET /api/usage/recent` (SQL-level filtering) | ✅   |
+| Approval Gate             | 고위험 자동복구 도구 승인 메커니즘 (in-memory Promise, 10분 타임아웃)   | ✅   |
+| Approval API              | `GET /api/approvals/pending`, `POST approve/reject` (projectId 검증)    | ✅   |
+| AI Usage Dashboard        | Settings > AI Features 탭에 StatCard 4개 + 최근 호출 리스트             | ✅   |
+| Approval Banner           | 글로벌 폴링 기반 승인 알림 배너 (AppLayout)                             | ✅   |
+| Multi-provider LLM        | ModelRegistry + provider CRUD + per-feature routing + Settings UI       | ✅   |
+| AgentPool                 | 세션별 Agent 인스턴스 분리 (MAX_POOL_SIZE=5, idle timeout)              | ✅   |
+| Context Assembler         | prompts.ts에서 구조화된 모듈로 추출                                     | ✅   |
+| Transparency Layer        | ai_usage_log 테이블 + PRICING_TABLE + 토큰/비용 추적                    | ✅   |
+| AI Feature Settings       | 7개 개별 토글 + config + API + Settings UI                              | ✅   |
+| Auto-recovery redesign    | Gate Checks → Context Assembler → Recovery Planner → ApprovalGate       | ✅   |
+| action_runs table         | 자동복구 작업 추적 + pending_approval 상태 + SQLite 마이그레이션        | ✅   |
+| RequestIdentity           | ToolContext/EventBus에 optional identity 필드 예약 (기업용 확장 대비)   | ✅   |
+| Single-env simplification | 멀티 환경 UI 제거, 항상 production 배포                                 | ✅   |
+| i18n                      | AI 사용량 + 승인 배너 키 (en + ko)                                      | ✅   |
+
+**남은 Phase 1 항목**: MCP 도구 품질 강화, 운영 모니터링 기본 대응
+
+**다음 단계**: Phase 1 잔여 항목 완료 → v1.0.0 정식 릴리즈
+
+---
+
+### v1.0.0-rc.5 — Environment UI Redesign 🧪
+
+**상태**: 🧪 도그푸딩 중 | **날짜**: 2026-03-27
+
+**핵심 가치**: 환경 전환 UX 개선 + 환경별 URL 관리 + Traefik 라벨 기반 자동 감지
+
+| 항목                                      | 내용                                                               | 상태 |
+| ----------------------------------------- | ------------------------------------------------------------------ | ---- |
+| Environment segment control               | ProjectHeader의 드롭다운을 세그먼트 컨트롤로 교체 (빠른 환경 전환) | ✅   |
+| DomainUrlDisplay component                | 환경별 URL 우선순위 표시 + 팝오버 상세 정보                        | ✅   |
+| Environment-specific API URLs             | API가 개발 환경에 dev- 접두사 URL 반환                             | ✅   |
+| set_env_vars MCP tool enhancement         | 선택적 `environment_name` 파라미터 지원 (환경별 변수 설정)         | ✅   |
+| Traefik label-based environment detection | 컨테이너 라벨에서 환경 자동 감지 및 dev 라우트 생성                | ✅   |
+| Sidebar project dot aggregation           | 상태 점이 환경 상태 집계 (모두 초록/일부 빨강/일부 노랑)           | ✅   |
+| Environment switch opacity fade           | 환경 전환 시 150ms 페이드 애니메이션 (시각적 피드백)               | ✅   |
+| env-status aggregation utility            | 환경 상태 로직용 헬퍼 함수 + 13개 포괄적 테스트                    | ✅   |
+| Dead traefik-ol-dev config removed        | 더 이상 사용하지 않는 Traefik 설정 정리                            | ✅   |
+
+**다음 단계**: 도그푸딩 완료 → v1.0.0 정식 릴리즈

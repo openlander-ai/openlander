@@ -14,7 +14,7 @@ import { projectOpsToolDefs } from './defs/project-ops.js';
 import { serviceToolDefs } from './defs/service.js';
 
 export { toAiSdkTools } from './adapters/ai-sdk.js';
-export { registerMcpTools } from './adapters/mcp.js';
+export { registerCompositeMcpTools } from './adapters/mcp.js';
 export {
   composeToolDefs,
   debugToolDefs,

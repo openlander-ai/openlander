@@ -13,19 +13,25 @@ import type { OpenLanderConfig } from '../config/index.js';
 type LlmProvider = OpenLanderConfig['llm']['provider'];
 
 const LLM_PROVIDERS: Array<{ label: string; value: LlmProvider }> = [
-  { label: 'OpenRouter (free, no credit card)', value: 'openrouter' },
   { label: 'Gemini (free tier available)', value: 'gemini' },
   { label: 'Anthropic (Claude)', value: 'anthropic' },
   { label: 'OpenAI (GPT)', value: 'openai' },
-  { label: 'Ollama (local)', value: 'ollama' },
+  { label: 'xAI (Grok)', value: 'xai' },
+  { label: 'DeepSeek', value: 'deepseek' },
+  { label: 'Mistral AI', value: 'mistral' },
+  { label: 'Z.ai (GLM)', value: 'zai' },
+  { label: 'Z.ai Coding Plan', value: 'zai-coding' },
 ];
 
 const MODEL_DEFAULTS: Record<LlmProvider, string> = {
-  openrouter: 'openrouter/free',
-  gemini: 'gemini-2.0-flash',
+  gemini: 'gemini-2.5-flash',
   anthropic: 'claude-sonnet-4-20250514',
-  openai: 'gpt-4o-mini',
-  ollama: 'llama3.2',
+  openai: 'gpt-4o',
+  xai: 'grok-3-mini-fast',
+  deepseek: 'deepseek-chat',
+  mistral: 'mistral-large-latest',
+  zai: 'glm-4.7',
+  'zai-coding': 'glm-4.7',
 };
 
 /**
@@ -41,69 +47,37 @@ export async function setupLlm(): Promise<void> {
   const provider = await select({
     message: 'Choose your AI provider',
     choices: LLM_PROVIDERS.map((p) => ({ name: p.label, value: p.value })),
-    default: 'openrouter',
+    default: 'gemini',
   });
 
   let apiKey = '';
-  let usedOAuth = false;
 
-  // Step 2: Authenticate (OAuth or API key)
-  if (provider === 'openrouter') {
-    const authMethod = await select({
-      message: 'How would you like to authenticate?',
-      choices: [
-        { name: 'Login via browser (OAuth)', value: 'oauth' },
-        { name: 'Enter API key manually', value: 'manual' },
-      ],
-      default: 'oauth',
-    });
+  apiKey = await password({
+    message: `Enter your ${provider} API key`,
+    mask: '*',
+  });
 
-    if (authMethod === 'oauth') {
-      try {
-        const { openRouterOAuth } = await import('./openrouter-oauth.js');
-        apiKey = await openRouterOAuth();
-        usedOAuth = true;
-        console.log(pc.green('  ✓ Connected to OpenRouter via OAuth'));
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        console.log(pc.yellow('  ⚠ OAuth failed. Falling back to manual API key entry.'));
-        console.log(pc.dim(`    Reason: ${errorMessage}`));
-      }
-    }
-  }
-
-  // Step 3: Enter API key manually (if OAuth wasn't used or failed)
-  if (!usedOAuth && provider !== 'ollama') {
+  while (!apiKey.trim()) {
+    console.log(pc.red('  API key is required. Please try again.'));
     apiKey = await password({
       message: `Enter your ${provider} API key`,
       mask: '*',
     });
-
-    while (!apiKey.trim()) {
-      console.log(pc.red('  API key is required. Please try again.'));
-      apiKey = await password({
-        message: `Enter your ${provider} API key`,
-        mask: '*',
-      });
-    }
   }
 
-  // Step 4: Select model (with default)
   const defaultModel = MODEL_DEFAULTS[provider];
   const model = await input({
     message: 'Model (press Enter for default)',
     default: defaultModel,
   });
 
-  // Step 5: Save to config
   const resolvedApiKey = apiKey.trim();
-  const resolvedAuthToken = usedOAuth ? resolvedApiKey : '';
 
   updateConfig({
     llm: {
       provider,
-      apiKey: provider === 'ollama' || usedOAuth ? '' : resolvedApiKey,
-      authToken: resolvedAuthToken,
+      apiKey: resolvedApiKey,
+      authToken: '',
       model: model.trim() || defaultModel,
     },
   });

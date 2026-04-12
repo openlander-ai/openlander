@@ -1,15 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Check, CheckCircle2, Copy, ExternalLink, Github, Loader2, RefreshCw } from 'lucide-react';
-import {
-  connectGithub,
-  disconnectGithub,
-  pollGithubDeviceFlow,
-  startGithubDeviceFlow,
-  type SetupStatus,
-} from '@/lib/api';
+import { connectGithub, disconnectGithub, type SetupStatus } from '@/lib/api';
 import { useLanguage } from '@/i18n/context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useCopy } from '@/hooks/use-copy';
+import { useGithubDeviceFlow } from '@/hooks/use-github-device-flow';
 
 interface GithubSettingsTabProps {
   status: SetupStatus | null;
@@ -18,18 +14,18 @@ interface GithubSettingsTabProps {
 
 export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
   const { t } = useLanguage();
+  const { copy, isCopied } = useCopy();
   const [githubToken, setGithubToken] = useState('');
   const [githubConnecting, setGithubConnecting] = useState(false);
   const [githubDisconnecting, setGithubDisconnecting] = useState(false);
-  const [githubError, setGithubError] = useState('');
-  const [deviceFlow, setDeviceFlow] = useState<{
-    userCode: string;
-    verificationUri: string;
-    deviceCode: string;
-    interval: number;
-  } | null>(null);
-  const [deviceFlowPolling, setDeviceFlowPolling] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
+  const {
+    deviceFlow,
+    githubError,
+    setGithubError,
+    startDeviceFlow: handleStartDeviceFlow,
+    cancelDeviceFlow: handleCancelDeviceFlow,
+    resetDeviceFlow,
+  } = useGithubDeviceFlow({ onComplete: refetch });
 
   const handleConnectGithub = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +49,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
     setGithubError('');
     try {
       await disconnectGithub();
+      resetDeviceFlow();
       await refetch();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to disconnect GitHub';
@@ -62,94 +59,21 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
     }
   };
 
-  const handleStartDeviceFlow = async () => {
-    setGithubError('');
-    try {
-      const response = await startGithubDeviceFlow();
-      setDeviceFlow({
-        userCode: response.user_code,
-        verificationUri: response.verification_uri,
-        deviceCode: response.device_code,
-        interval: response.interval,
-      });
-      setDeviceFlowPolling(true);
-    } catch {
-      setGithubError('Failed to start GitHub authorization');
-    }
-  };
-
   const handleCopyCode = async () => {
     if (!deviceFlow?.userCode) return;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(deviceFlow.userCode);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = deviceFlow.userCode;
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 2000);
-    } catch {
-      window.prompt('Copy this code:', deviceFlow.userCode);
-    }
+    await copy(deviceFlow.userCode);
   };
-
-  const handleCancelDeviceFlow = () => {
-    setDeviceFlow(null);
-    setDeviceFlowPolling(false);
-    setGithubError('');
-  };
-
-  useEffect(() => {
-    if (!deviceFlowPolling || !deviceFlow) return;
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const result = await pollGithubDeviceFlow(deviceFlow.deviceCode, deviceFlow.interval);
-
-        if (result.status === 'complete') {
-          clearInterval(pollInterval);
-          setDeviceFlow(null);
-          setDeviceFlowPolling(false);
-          await refetch();
-        } else if (result.status === 'slow_down') {
-          setDeviceFlow((prev) =>
-            prev ? { ...prev, interval: result.interval ?? prev.interval } : null,
-          );
-        } else if (
-          result.status === 'expired' ||
-          result.status === 'denied' ||
-          result.status === 'error'
-        ) {
-          clearInterval(pollInterval);
-          setDeviceFlow(null);
-          setDeviceFlowPolling(false);
-          setGithubError(result.message || `Authorization ${result.status}`);
-        }
-      } catch {
-        return;
-      }
-    }, deviceFlow.interval * 1000);
-
-    return () => clearInterval(pollInterval);
-  }, [deviceFlowPolling, deviceFlow, refetch]);
 
   return (
-    <section className="space-y-4">
+    <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
       <div className="flex items-center gap-2">
         <Github className="h-4 w-4 text-secondary-ol" />
-        <h2 className="font-display text-lg font-semibold text-primary-ol">
+        <h2 className="font-display text-sm font-semibold text-primary-ol">
           {'GitHub Connection'}
         </h2>
       </div>
 
-      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">
+      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-3">
         <p className="text-sm font-body text-secondary-ol">{t('settings.github.description')}</p>
 
         {status?.github?.ok ? (
@@ -203,12 +127,12 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
                 onClick={handleCopyCode}
                 className="gap-1.5 font-body"
               >
-                {copiedCode ? (
+                {isCopied() ? (
                   <Check className="h-3.5 w-3.5 text-success" />
                 ) : (
                   <Copy className="h-3.5 w-3.5" />
                 )}
-                {copiedCode ? 'Copied' : 'Copy Code'}
+                {isCopied() ? 'Copied' : 'Copy Code'}
               </Button>
             </div>
             <div className="flex items-center justify-center gap-2 text-muted-ol">
@@ -233,7 +157,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
               type="button"
               onClick={handleStartDeviceFlow}
               size="sm"
-              className="w-full gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+              className="w-full gap-1.5 bg-agent text-white hover:bg-agent/90 font-body"
             >
               <Github className="h-3.5 w-3.5" />
               {t('settings.github.connectWithGithub')}
@@ -244,7 +168,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
                 <span className="w-full border-t border-[hsl(var(--border))]" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="bg-bg-subtle/30 px-2 text-muted-ol font-body">{'or'}</span>
+                <span className="bg-bg-panel px-2 text-muted-ol font-body">{'or'}</span>
               </div>
             </div>
 
@@ -283,7 +207,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
               </Button>
             </form>
 
-            {githubError && <p className="text-xs font-body text-error">{githubError}</p>}
+            {githubError && <p className="text-sm font-body text-error">{githubError}</p>}
 
             <Button
               type="button"

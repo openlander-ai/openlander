@@ -63,7 +63,7 @@ export function ChatInput({ onSend, isStreaming, onAbort }: ChatInputProps) {
         rows={1}
         className={cn(
           'flex-1 resize-none rounded-lg border border-border bg-bg-app px-3 py-2 text-sm text-primary-ol placeholder:text-muted-ol',
-          'focus:outline-none focus:ring-1 focus:ring-ai',
+          'focus:outline-none focus:ring-1 focus:ring-border',
           'disabled:opacity-50 disabled:cursor-not-allowed',
         )}
       />

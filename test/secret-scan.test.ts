@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-const describeSecretScan = isBunRuntime ? describe.skip : describe;
+const describeSecretScan = describe;
 
 let scanForSecrets!: (projectPath: string) => Array<{
   file: string;

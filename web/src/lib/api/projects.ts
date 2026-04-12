@@ -6,6 +6,7 @@ import type {
   Project,
 } from '../../types';
 import type { BuildStreamEvent } from '../event-types';
+import { apiDelete, apiGet, apiPost, apiPostVoid } from './client';
 
 interface BackendEnvironment {
   id: string;
@@ -18,6 +19,8 @@ interface BackendEnvironment {
   image_tag: string | null;
   previous_image_tag: string | null;
   public_url: string | null;
+  url?: string;
+  urls?: Array<{ url: string; type: 'lan' | 'vpn'; ip: string }>;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +35,25 @@ export interface EnvironmentEnvVarsResponse {
   environment: Environment;
   envVars: Record<string, string>;
   inheritance: Record<string, EnvironmentEnvVarMeta>;
+}
+
+export interface ActionRun {
+  id: string;
+  project_id: string;
+  status: 'running' | 'succeeded' | 'failed';
+  approval_status: 'pending' | 'approved' | 'rejected' | null;
+  approval_tool: string | null;
+  approval_requested_at: string | null;
+  approval_resolved_at: string | null;
+  error_message: string | null;
+  recovery_strategy: 'recipe' | 'llm' | 'memory' | 'unknown' | null;
+  plan: string | null;
+  steps_json: string | null;
+  current_step: number | null;
+  total_steps: number | null;
+  trigger_source: 'web_agent' | 'auto_recovery' | 'monitor' | 'mcp' | null;
+  created_at: string;
+  updated_at: string | null;
 }
 
 export type ProjectWithOptionalEnvironments = Project & { environments?: Environment[] };
@@ -49,30 +71,40 @@ function mapEnvironment(environment: BackendEnvironment): Environment {
     imageTag: environment.image_tag,
     previousImageTag: environment.previous_image_tag,
     publicUrl: environment.public_url,
+    url: environment.url,
+    urls: environment.urls,
     createdAt: environment.created_at,
     updatedAt: environment.updated_at,
   };
 }
 
 export async function deployProject(
-  repoUrl: string,
+  repoUrl?: string,
   branch?: string,
   name?: string,
   envVars?: Record<string, string>,
-  environment?: string,
+  source?: 'git' | 'image',
+  imageUrl?: string,
+  imageCmd?: string | string[],
+  port?: number,
 ): Promise<DeployResult> {
-  const res = await fetch('/api/projects/deploy', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ repo_url: repoUrl, branch, name, env_vars: envVars, environment }),
-  });
+  const body: Record<string, unknown> = {
+    branch,
+    name,
+    env_vars: envVars,
+  };
 
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to deploy project');
+  if (source === 'image') {
+    body.source = 'image';
+    body.image_url = imageUrl;
+    body.image_cmd = imageCmd;
+    body.port = port;
+  } else {
+    body.source = 'git';
+    body.repo_url = repoUrl;
   }
 
-  return res.json();
+  return apiPost<DeployResult>('/api/projects/deploy', body);
 }
 
 export async function createProject(
@@ -80,22 +112,17 @@ export async function createProject(
   branch?: string,
   name?: string,
 ): Promise<{ project: { id: string; name: string; status: Project['status'] } }> {
-  const res = await fetch('/api/projects', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ repo_url: repoUrl, branch, name }),
-  });
-
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to create project');
-  }
-
-  return res.json();
+  return apiPost<{ project: { id: string; name: string; status: Project['status'] } }>(
+    '/api/projects',
+    { repo_url: repoUrl, branch, name },
+  );
 }
 
-export async function listProjects(): Promise<ProjectWithOptionalEnvironments[]> {
-  const res = await fetch('/api/projects');
+export async function listProjects(
+  includeArchived = false,
+): Promise<ProjectWithOptionalEnvironments[]> {
+  const query = includeArchived ? '?include_archived=true' : '';
+  const res = await fetch(`/api/projects${query}`);
   if (!res.ok) {
     throw new Error('Failed to fetch projects');
   }
@@ -135,24 +162,26 @@ export async function getProject(id: string): Promise<ProjectWithOptionalEnviron
   };
 }
 
-export async function createEnvironment(
-  projectId: string,
-  type: Environment['type'],
-  branch?: string,
-): Promise<Environment> {
-  const res = await fetch(`/api/projects/${projectId}/environments`, {
-    method: 'POST',
+export async function updateProject(
+  id: string,
+  data: { imageUrl?: string; imageCmd?: string; containerPort?: number },
+): Promise<ProjectWithOptionalEnvironments> {
+  const res = await fetch(`/api/projects/${id}`, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, branch }),
+    body: JSON.stringify({
+      image_url: data.imageUrl,
+      image_cmd: data.imageCmd,
+      container_port: data.containerPort,
+    }),
   });
 
   if (!res.ok) {
     const error = await res.text();
-    throw new Error(error || 'Failed to create environment');
+    throw new Error(error || 'Failed to update project');
   }
 
-  const data = (await res.json()) as { environment: BackendEnvironment };
-  return mapEnvironment(data.environment);
+  return res.json();
 }
 
 export async function getEnvironments(projectId: string): Promise<Environment[]> {
@@ -189,21 +218,33 @@ export async function getEnvironmentEnvVars(
   };
 }
 
+export async function fetchPendingApprovals(): Promise<ActionRun[]> {
+  const res = await fetch('/api/action-runs?approval_status=pending');
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to fetch pending approvals');
+  }
+
+  const data = (await res.json()) as { actionRuns?: ActionRun[] };
+  return Array.isArray(data.actionRuns) ? data.actionRuns : [];
+}
+
+export async function approveActionRun(actionRunId: string): Promise<void> {
+  return apiPostVoid(`/api/action-runs/${actionRunId}/approve`);
+}
+
+export async function rejectActionRun(actionRunId: string): Promise<void> {
+  return apiPostVoid(`/api/action-runs/${actionRunId}/reject`);
+}
+
 export async function updateEnvironmentEnvVars(
   projectId: string,
   envId: string,
   env: Record<string, string>,
 ): Promise<void> {
-  const res = await fetch(`/api/projects/${projectId}/environments/${envId}/env`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ variables: env }),
+  return apiPostVoid(`/api/projects/${projectId}/environments/${envId}/env`, {
+    variables: env,
   });
-
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to update environment variables');
-  }
 }
 
 export interface PRPreview {
@@ -225,8 +266,7 @@ export async function getProjectPreviews(projectId: string): Promise<PRPreview[]
 }
 
 export async function deleteProjectPreview(projectId: string, previewId: string): Promise<void> {
-  const res = await fetch(`/api/projects/${projectId}/previews/${previewId}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete preview');
+  return apiDelete(`/api/projects/${projectId}/previews/${previewId}`);
 }
 
 export async function getProjectDeployments(
@@ -244,6 +284,50 @@ export async function getProjectDeployments(
   return data.deployments;
 }
 
+export interface ConnectedService {
+  id: string;
+  name: string;
+  type: string;
+  status: 'running' | 'stopped' | 'error';
+  port: number;
+  containerName: string;
+  autoInjectedEnvKeys?: string[];
+}
+
+export async function getProjectConnectedServices(
+  id: string,
+  environmentId?: string,
+): Promise<ConnectedService[]> {
+  const params = environmentId ? `?environmentId=${environmentId}` : '';
+  const res = await fetch(`/api/projects/${id}/services${params}`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function connectProjectService(
+  projectId: string,
+  serviceId: string,
+): Promise<{
+  id: string;
+  service: ConnectedService;
+  createdAt: string;
+  autoInjectedEnvKeys?: string[];
+}> {
+  return apiPost<{
+    id: string;
+    service: ConnectedService;
+    createdAt: string;
+    autoInjectedEnvKeys?: string[];
+  }>(`/api/projects/${projectId}/services/${serviceId}`);
+}
+
+export async function disconnectProjectService(
+  projectId: string,
+  serviceId: string,
+): Promise<void> {
+  return apiDelete(`/api/projects/${projectId}/services/${serviceId}`);
+}
+
 export async function getProjectTimeline(id: string): Promise<BuildStreamEvent[]> {
   const res = await fetch(`/api/projects/${id}/timeline`);
   if (!res.ok) {
@@ -257,38 +341,19 @@ export async function getDeploymentDetail(
   projectId: string,
   deployId: string,
 ): Promise<DeployLogDetail> {
-  const res = await fetch(`/api/projects/${projectId}/deployments/${deployId}`);
-  if (!res.ok) throw new Error('Failed to fetch deployment detail');
-  return res.json();
+  return apiGet<DeployLogDetail>(`/api/projects/${projectId}/deployments/${deployId}`);
 }
 
-export async function stopProject(id: string, environment?: string): Promise<void> {
-  const url = environment
-    ? `/api/projects/${id}/stop?environment=${environment}`
-    : `/api/projects/${id}/stop`;
-  await fetch(url, { method: 'POST' });
+export async function stopProject(id: string): Promise<void> {
+  await fetch(`/api/projects/${id}/stop`, { method: 'POST' });
 }
 
-export async function startProject(id: string, environment?: string): Promise<void> {
-  const url = environment
-    ? `/api/projects/${id}/start?environment=${environment}`
-    : `/api/projects/${id}/start`;
-  const res = await fetch(url, { method: 'POST' });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to start project');
-  }
+export async function startProject(id: string): Promise<void> {
+  return apiPostVoid(`/api/projects/${id}/start`);
 }
 
-export async function redeployProject(
-  id: string,
-  envVars?: Record<string, string>,
-  environment?: string,
-): Promise<void> {
-  const url = environment
-    ? `/api/projects/${id}/redeploy?environment=${environment}`
-    : `/api/projects/${id}/redeploy`;
-  const res = await fetch(url, {
+export async function redeployProject(id: string, envVars?: Record<string, string>): Promise<void> {
+  const res = await fetch(`/api/projects/${id}/redeploy`, {
     method: 'POST',
     headers: envVars ? { 'Content-Type': 'application/json' } : undefined,
     body: envVars ? JSON.stringify({ env_vars: envVars }) : undefined,
@@ -304,11 +369,12 @@ export async function redeployProject(
   }
 }
 
-export async function rollbackProject(id: string, environment?: string): Promise<DeployResult> {
-  const url = environment
-    ? `/api/projects/${id}/rollback?environment=${environment}`
-    : `/api/projects/${id}/rollback`;
-  const res = await fetch(url, { method: 'POST' });
+export async function rollbackProject(id: string, deploymentId?: string): Promise<DeployResult> {
+  const res = await fetch(`/api/projects/${id}/rollback`, {
+    method: 'POST',
+    headers: deploymentId ? { 'Content-Type': 'application/json' } : undefined,
+    body: deploymentId ? JSON.stringify({ deployment_id: deploymentId }) : undefined,
+  });
 
   if (!res.ok) {
     const error = await res.text();
@@ -328,15 +394,11 @@ export interface BlueGreenResult {
 export async function blueGreenProject(
   id: string,
   healthCheckPath?: string,
-  environment?: string,
 ): Promise<BlueGreenResult> {
-  const url = environment
-    ? `/api/projects/${id}/blue-green?environment=${environment}`
-    : `/api/projects/${id}/blue-green`;
-  const res = await fetch(url, {
+  const res = await fetch(`/api/projects/${id}/redeploy?strategy=blue-green`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ health_check_path: healthCheckPath }),
+    headers: healthCheckPath ? { 'Content-Type': 'application/json' } : undefined,
+    body: healthCheckPath ? JSON.stringify({ health_check_path: healthCheckPath }) : undefined,
   });
 
   if (!res.ok) {
@@ -351,16 +413,21 @@ export async function deleteProject(id: string): Promise<void> {
   await fetch(`/api/projects/${id}`, { method: 'DELETE' });
 }
 
-export async function deleteEnvironment(projectId: string, envId: string): Promise<void> {
-  const res = await fetch(`/api/projects/${projectId}/environments/${envId}`, { method: 'DELETE' });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to delete environment');
-  }
+export async function archiveProject(id: string): Promise<void> {
+  return apiPostVoid(`/api/projects/${id}/archive`);
+}
+
+export async function unarchiveProject(id: string): Promise<void> {
+  return apiPostVoid(`/api/projects/${id}/unarchive`);
+}
+
+export async function purgeProject(id: string): Promise<void> {
+  return apiDelete(`/api/projects/${id}/purge?confirm=true`);
 }
 
 export async function getProjectLogs(id: string): Promise<string> {
   const res = await fetch(`/api/projects/${id}/logs`);
+  if (!res.ok) return '';
   return res.text();
 }
 
@@ -380,9 +447,8 @@ export async function getProjectEnv(id: string): Promise<Record<string, string>>
   return data as Record<string, string>;
 }
 
-export async function generateEnvExample(id: string, environment?: string): Promise<string> {
-  const query = environment ? `?environment=${encodeURIComponent(environment)}` : '';
-  const res = await fetch(`/api/projects/${id}/env-example${query}`);
+export async function generateEnvExample(id: string): Promise<string> {
+  const res = await fetch(`/api/projects/${id}/env-example`);
   if (!res.ok) {
     const error = await res.text();
     let message = 'Failed to generate .env.example';
@@ -398,15 +464,7 @@ export async function generateEnvExample(id: string, environment?: string): Prom
 }
 
 export async function updateProjectEnv(id: string, env: Record<string, string>): Promise<void> {
-  const res = await fetch(`/api/projects/${id}/env`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ variables: env }),
-  });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to update env vars');
-  }
+  return apiPostVoid(`/api/projects/${id}/env`, { variables: env });
 }
 
 export async function exposeProject(id: string): Promise<{ publicUrl: string }> {
@@ -462,11 +520,7 @@ export async function shareProject(id: string, accessCode: string): Promise<{ pu
 }
 
 export async function unshareProject(id: string): Promise<void> {
-  const res = await fetch(`/api/projects/${id}/share`, { method: 'DELETE' });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to unshare project');
-  }
+  return apiDelete(`/api/projects/${id}/share`);
 }
 
 export interface WebhookConfig {
@@ -548,6 +602,7 @@ export interface EnvScanResult {
   vars: EnvVarInfo[];
   hasEnvExample: boolean;
   language: string;
+  serviceHints?: string[];
 }
 
 export interface ProjectEnvScanResult {
@@ -558,30 +613,14 @@ export interface ProjectEnvScanResult {
 }
 
 export async function scanEnvVars(repoUrl: string, branch?: string): Promise<EnvScanResult> {
-  const res = await fetch('/api/env/scan', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ repo_url: repoUrl, branch }),
-  });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to scan env vars');
-  }
-  return res.json();
+  return apiPost<EnvScanResult>('/api/env/scan', { repo_url: repoUrl, branch });
 }
 
 export async function scanProjectEnvVars(
   projectId: string,
   environment?: string,
 ): Promise<ProjectEnvScanResult> {
-  const res = await fetch(`/api/projects/${projectId}/env/scan`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ environment }),
+  return apiPost<ProjectEnvScanResult>(`/api/projects/${projectId}/env/scan`, {
+    environment,
   });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to scan project env vars');
-  }
-  return res.json();
 }

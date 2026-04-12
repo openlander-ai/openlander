@@ -1,5 +1,4 @@
 import {
-  useState,
   useCallback,
   type ReactNode,
   type HTMLAttributes,
@@ -14,7 +13,9 @@ import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
 import { Bot, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ToolCallCard } from './ToolCallCard';
+import { useCopy } from '@/hooks/use-copy';
+import { ToolCallGroup } from './ToolCallGroup';
+import { ReasoningBox } from './ReasoningBox';
 
 function extractLanguage(children: ReactNode): string | null {
   const child = Children.toArray(children)[0];
@@ -33,26 +34,23 @@ function extractText(node: ReactNode): string {
 }
 
 function CodeBlock({ children, ...rest }: HTMLAttributes<HTMLPreElement>) {
-  const [copied, setCopied] = useState(false);
+  const { copy, isCopied } = useCopy();
   const language = extractLanguage(children);
 
   const handleCopy = useCallback(() => {
     const text = extractText(children as ReactNode);
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }, [children]);
+    void copy(text);
+  }, [children, copy]);
 
   return (
     <div className="relative group rounded-lg overflow-hidden my-3 border border-border">
       <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-800 border-b border-zinc-700">
-        <span className="text-[11px] font-mono text-zinc-400">{language ?? 'code'}</span>
+        <span className="text-xs font-mono text-zinc-400">{language ?? 'code'}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors"
+          className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
         >
-          {copied ? (
+          {isCopied() ? (
             <>
               <Check className="h-3 w-3" />
               Copied
@@ -90,11 +88,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       title={message.createdAt ? new Date(message.createdAt).toLocaleString() : undefined}
     >
       {isUser ? (
-        <p className="text-[10px] text-muted-ol mb-1 text-right">You</p>
+        <p className="text-xs text-muted-ol mb-1 text-right">You</p>
       ) : (
         <div className="flex items-center gap-1.5 mb-1">
           <Bot className="h-3 w-3 text-ai" />
-          <p className="text-[10px] text-ai">Agent</p>
+          <p className="text-xs text-ai">Agent</p>
         </div>
       )}
       <div
@@ -109,6 +107,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           <p className="text-sm whitespace-pre-wrap">{message.content}</p>
         ) : (
           <>
+            {message.reasoning ? <ReasoningBox content={message.reasoning} /> : null}
             {message.content && (
               <div
                 className="prose prose-sm max-w-none
@@ -132,9 +131,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 </ReactMarkdown>
               </div>
             )}
-            {message.toolCalls?.map((tc, i) => (
-              <ToolCallCard key={i} toolCall={tc} />
-            ))}
+            <ToolCallGroup toolCalls={message.toolCalls ?? []} />
           </>
         )}
       </div>

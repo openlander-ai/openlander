@@ -11,6 +11,8 @@ export interface Environment {
   imageTag: string | null;
   previousImageTag: string | null;
   publicUrl: string | null;
+  url?: string;
+  urls?: { url: string; type: 'lan' | 'vpn'; ip: string }[];
   createdAt: string;
   updatedAt: string;
 }
@@ -25,10 +27,19 @@ export interface Project {
   port?: number;
   previousImageTag?: string | null;
   url?: string;
+  urls?: { url: string; type: 'lan' | 'vpn'; ip: string }[];
   publicUrl?: string | null;
   accessCode?: string | null;
   createdAt: string;
   updatedAt: string;
+  source?: 'git' | 'image';
+  imageUrl?: string;
+  imageCmd?: string[];
+  containerPort?: number;
+  parentProjectId?: string | null;
+  isCompose?: boolean;
+  serviceCount?: number;
+  archived_at?: string | null;
 }
 
 export interface ProjectWithEnvironments extends Project {
@@ -42,6 +53,13 @@ export interface ToolResult {
   error?: string;
 }
 
+export interface UsageSummary {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number | null;
+}
+
 export type ChatStreamEvent =
   | { type: 'session'; sessionId: string }
   | { type: 'thinking' }
@@ -49,7 +67,7 @@ export type ChatStreamEvent =
   | { type: 'tool_result'; toolName: string; success: boolean; result?: unknown; error?: string }
   | { type: 'text_delta'; text: string }
   | { type: 'message'; content: string }
-  | { type: 'done'; toolResults?: ToolResult[] }
+  | { type: 'done'; toolResults?: ToolResult[]; usage?: UsageSummary }
   | { type: 'error'; error: string }
   | {
       type: 'question';
@@ -89,6 +107,7 @@ export interface DeployLogSummary {
   trigger: 'chat' | 'webhook' | 'api';
   triggerDetail?: string | null;
   commitSha: string | null;
+  commitMessage?: string | null;
   durationMs: number | null;
   createdAt: string;
   failureSummary?: string | null;
@@ -97,6 +116,7 @@ export interface DeployLogSummary {
 export interface DeployLogDetail extends DeployLogSummary {
   projectId: string;
   buildLog: string | null;
+  runtimeLog: string | null;
 }
 
 export type DeploymentHistoryFilter = 'all' | 'failed' | 'success' | 'in_progress';

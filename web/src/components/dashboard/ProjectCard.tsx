@@ -1,9 +1,12 @@
 import { Spinner } from '@/components/ui/spinner';
-import type { ProjectWithOptionalEnvironments } from '@/lib/api';
+import type { Project } from '@/types';
+import { getSetupStatus } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { Clock, ExternalLink, GitBranch, RotateCw, Settings } from 'lucide-react';
 import type { MouseEvent } from 'react';
+import { useEffect, useState } from 'react';
+import { AISparkle } from '@/components/ui/AISparkle';
 
 interface StatusDisplay {
   label: string;
@@ -13,9 +16,9 @@ interface StatusDisplay {
 }
 
 interface ProjectCardProps {
-  project: ProjectWithOptionalEnvironments;
+  project: Project;
   statusConfig: Record<string, StatusDisplay>;
-  redeployingId: string | null;
+  redeployingIds: Set<string>;
   onNavigate: (path: string) => void;
   onRedeploy: (event: MouseEvent, projectId: string) => Promise<void>;
   t: (key: string) => string;
@@ -24,25 +27,29 @@ interface ProjectCardProps {
 export function ProjectCard({
   project,
   statusConfig,
-  redeployingId,
+  redeployingIds,
   onNavigate,
   onRedeploy,
   t,
 }: ProjectCardProps) {
+  const [llmConfigured, setLlmConfigured] = useState(false);
+
+  useEffect(() => {
+    getSetupStatus()
+      .then((s) => setLlmConfigured(s.llm.ok))
+      .catch(() => setLlmConfigured(false));
+  }, []);
+
   const status = statusConfig[project.status] ?? statusConfig.stopped;
-  const environments = project.environments ?? [];
-  const hasProd = environments.some((environment) => environment.type === 'production');
-  const allEnvironments = hasProd
-    ? environments
-    : [{ type: 'production', status: project.status }, ...environments];
 
   return (
     <div
       key={project.id}
       onClick={() => onNavigate(`/projects/${project.id}`)}
       className={cn(
-        'group relative flex flex-col rounded-lg border bg-bg-panel hover:bg-bg-panel/80 hover:shadow-md hover:border-agent/20 transition-all duration-200 cursor-pointer overflow-hidden card-hover',
+        'group relative flex flex-col rounded-lg border bg-bg-panel hover:bg-bg-panel/80 hover:shadow-md hover:border-agent/20 transition-all duration-200 cursor-pointer overflow-hidden card-hover min-h-[160px]',
         status.border,
+        project.archived_at && 'opacity-60 grayscale-[0.5]',
       )}
     >
       <div className="flex items-center justify-between p-4 pb-3 border-b border-[hsl(var(--border))]/50">
@@ -60,15 +67,22 @@ export function ProjectCard({
             {project.name}
           </h3>
         </div>
-        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium shrink-0', status.badge)}>
-          {status.label}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          {project.archived_at && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-bg-subtle text-muted-ol border border-border">
+              {t('projects.card.archivedBadge')}
+            </span>
+          )}
+          <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', status.badge)}>
+            {statusConfig[project.status]?.label ?? 'Unknown'}
+          </span>
+        </div>
       </div>
 
       <div className="p-4 space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
+            <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
               Last Deploy
             </p>
             <div className="flex items-center gap-1.5 text-xs font-body text-secondary-ol">
@@ -77,7 +91,7 @@ export function ProjectCard({
             </div>
           </div>
           <div>
-            <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
+            <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
               Branch
             </p>
             <div className="flex items-center gap-1.5 text-xs font-body text-secondary-ol truncate">
@@ -89,52 +103,52 @@ export function ProjectCard({
 
         {project.url && (
           <div>
-            <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
+            <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
               Endpoint
             </p>
             <a
-              href={project.url}
+              href={project.url ?? '#'}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
-              className="flex items-center gap-1.5 text-xs font-mono text-agent hover:text-agent/80 truncate transition-colors"
+              className="flex items-center gap-1.5 text-xs font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 truncate transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-              {project.url.replace(/^https?:\/\//, '')}
+              {(project.url ?? '').replace(/^https?:\/\//, '')}
             </a>
+            {project.urls
+              ?.filter((u) => u.type === 'vpn')
+              .map((vpn) => (
+                <a
+                  key={vpn.ip}
+                  href={vpn.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(event) => event.stopPropagation()}
+                  className="flex items-center gap-1.5 text-xs font-mono text-purple-400 hover:text-purple-300 truncate transition-colors mt-1"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                  {vpn.url.replace(/^https?:\/\//, '')}
+                </a>
+              ))}
           </div>
         )}
 
-        {allEnvironments.length > 0 && (
-          <div className="pt-2 border-t border-[hsl(var(--border))]/50">
-            <p className="text-[10px] font-mono text-muted-ol mb-2 uppercase tracking-[0.08em]">
-              Environments
+        {project.publicUrl && (
+          <div>
+            <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
+              Public
             </p>
-            <div className="flex items-center gap-2 flex-wrap">
-              {allEnvironments.map((environment) => {
-                const environmentStatus = statusConfig[environment.status] ?? statusConfig.stopped;
-                return (
-                  <button
-                    key={environment.type}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onNavigate(`/projects/${project.id}?env=${environment.type}`);
-                    }}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded border border-[hsl(var(--border))] hover:border-agent/30 bg-bg-subtle hover:bg-bg-panel transition-colors group/env"
-                    title={`${environment.type} - ${environmentStatus.label}`}
-                  >
-                    <div className={cn('h-1.5 w-1.5 rounded-full', environmentStatus.dot)} />
-                    <span className="text-[10px] font-mono text-secondary-ol group-hover/env:text-primary-ol transition-colors">
-                      {environment.type === 'production'
-                        ? 'prod'
-                        : environment.type === 'development'
-                          ? 'dev'
-                          : String(environment.type).substring(0, 4)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <a
+              href={project.publicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(event) => event.stopPropagation()}
+              className="flex items-center gap-1.5 text-xs font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 truncate transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              {project.publicUrl.replace(/^https?:\/\//, '')}
+            </a>
           </div>
         )}
       </div>
@@ -144,14 +158,17 @@ export function ProjectCard({
           onClick={(event) => {
             void onRedeploy(event, project.id);
           }}
-          disabled={redeployingId === project.id}
+          disabled={redeployingIds.has(project.id)}
           className="p-1.5 rounded text-secondary-ol hover:text-agent hover:bg-agent/10 transition-colors disabled:opacity-50"
           title="Redeploy"
         >
-          {redeployingId === project.id ? (
+          {redeployingIds.has(project.id) ? (
             <Spinner className="h-4 w-4" />
           ) : (
-            <RotateCw className="h-4 w-4" />
+            <div className="flex items-center gap-1">
+              {llmConfigured && <AISparkle className="h-3 w-3" />}
+              <RotateCw className="h-4 w-4" />
+            </div>
           )}
         </button>
         <button

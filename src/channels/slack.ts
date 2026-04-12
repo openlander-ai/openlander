@@ -10,6 +10,7 @@ import {
   type ChannelMessage,
 } from './base.js';
 import { createModuleLogger } from '../lib/logger.js';
+import type { OpsAlert } from '../monitor/ops-types.js';
 
 const log = createModuleLogger('slack');
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
@@ -138,6 +139,7 @@ export class SlackChannel implements Channel {
   async sendMessage(channelId: string, text: string): Promise<string> {
     const response = await fetch(SLACK_API_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bearer ${this.token}`,
         'Content-Type': 'application/json',
@@ -164,6 +166,7 @@ export class SlackChannel implements Channel {
   async editMessage(channelId: string, messageId: string, text: string): Promise<void> {
     const response = await fetch(SLACK_UPDATE_API_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bearer ${this.token}`,
         'Content-Type': 'application/json',
@@ -219,6 +222,7 @@ export class SlackChannel implements Channel {
 
     const response = await fetch(SLACK_API_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bearer ${this.token}`,
         'Content-Type': 'application/json',
@@ -296,6 +300,26 @@ export class SlackChannel implements Channel {
    */
   getSigningSecret(): string {
     return this.signingSecret;
+  }
+
+  /**
+   * Formats an OpsAlert for Slack with rich markdown formatting.
+   */
+  formatOpsAlert(alert: OpsAlert): { text: string; extra?: unknown } {
+    const icon = alert.severity === 'critical' ? '🔴' : alert.severity === 'warning' ? '🟡' : '🔵';
+    const lines = [
+      `${icon} *[${alert.severity.toUpperCase()}]* ${alert.project.name}: ${alert.title}`,
+      alert.description,
+    ];
+    if (alert.suggestion) lines.push(`💡 _${alert.suggestion}_`);
+    if (alert.actions_taken.length > 0) {
+      lines.push(`Actions: ${alert.actions_taken.join(', ')}`);
+    }
+    const unixTimestamp = String(Math.floor(alert.timestamp / 1000));
+    lines.push(
+      `<!date^${unixTimestamp}^{date_short_pretty} {time}|${new Date(alert.timestamp).toISOString()}>`,
+    );
+    return { text: lines.join('\n') };
   }
 }
 

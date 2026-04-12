@@ -4,10 +4,12 @@ import type { Database } from '../../../src/db/index.js';
 import type { Docker } from '../../../src/pipeline/docker.js';
 import * as portPipeline from '../../../src/pipeline/port.js';
 import { ContainerRunner } from '../../../src/pipeline/deploy/run-step.js';
+import { SHARED_NETWORK_NAME } from '../../../src/config/index.js';
 
 function createMockDocker(): Docker {
   return {
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     runContainer: vi.fn().mockResolvedValue('container-abc123456789'),
   } as unknown as Docker;
 }
@@ -36,10 +38,17 @@ describe('ContainerRunner', () => {
       secretFiles: [{ filename: '.env', content: 'A=1', mountPath: '/run/secrets/.env' }],
     });
 
-    expect(allocatePortSpy).toHaveBeenCalledWith(db, docker, { preferredPort: 12001 });
-    expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('ol-demo-app');
+    expect(allocatePortSpy).toHaveBeenCalledWith(
+      db,
+      docker,
+      { preferredPort: 12001 },
+      'production',
+    );
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'ol-demo-app',
+    );
     expect(
-      (docker.removeContainer as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
+      (docker.safeRemoveContainer as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
     ).toBeLessThan((docker.runContainer as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]);
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -48,13 +57,14 @@ describe('ContainerRunner', () => {
         port: 12001,
         containerPort: 12001,
         envVars: { NODE_ENV: 'test' },
+        network: SHARED_NETWORK_NAME,
         secretFiles: [{ filename: '.env', content: 'A=1', mountPath: '/run/secrets/.env' }],
       }),
     );
     expect(result).toEqual({
       containerId: 'container-abc123456789',
       port: 12001,
-      url: expect.stringContaining('dev-demo-app.'),
+      url: expect.stringContaining('demo-app.'),
     });
   });
 
@@ -80,26 +90,26 @@ describe('ContainerRunner', () => {
     expect(result.url).toContain('mono-api.');
   });
 
-  it('does not perform health check or DB status updates', async () => {
+  it('passes shared network for production environment', async () => {
     const docker = createMockDocker();
     const db = createMockDatabase();
     const runner = new ContainerRunner(docker, db);
     vi.spyOn(portPipeline, 'allocatePort').mockResolvedValue(14000);
 
-    await expect(
-      runner.run({
-        imageTag: 'openlander/fail:latest',
-        projectName: 'failing-app',
-        projectId: 'p-fail',
-        environmentId: 'p-fail-production',
-        environmentType: 'production',
-        envVars: {},
-      }),
-    ).resolves.toEqual({
-      containerId: 'container-abc123456789',
-      port: 14000,
-      url: expect.stringContaining('failing-app.'),
+    await runner.run({
+      imageTag: 'openlander/fail:latest',
+      projectName: 'failing-app',
+      projectId: 'p-fail',
+      environmentId: 'p-fail-production',
+      environmentType: 'production',
+      envVars: {},
     });
+
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({
+        network: SHARED_NETWORK_NAME,
+      }),
+    );
   });
 
   it('returns deploy:run payload fields for upstream event emission', async () => {

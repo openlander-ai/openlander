@@ -1,12 +1,18 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createModuleLogger } from '../../lib/logger.js';
 import { findDockerfiles } from '../../lib/repo-scanner.js';
 import { scanDockerfileArgs, scanEnvFile, scanEnvTemplate } from '../../lib/env-parser.js';
+import { scanForEnvUsage } from '../env-scan.js';
 import { cloneRepo } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
-import { extractProjectName } from '../helpers.js';
+import {
+  extractProjectName,
+  composeContainerName,
+  containerName as projectContainerName,
+} from '../helpers.js';
+import { parseImageUrl } from '../image-utils.js';
 import type {
   DeployPlan,
   PlanService,
@@ -24,13 +30,18 @@ import type { AutoDetector } from '../auto-detect.js';
 import type { OpenLanderConfig } from '../../config/index.js';
 import type { EventBus } from '../../events/index.js';
 import type { ComposePipeline } from '../compose.js';
+import { DeployLockedError } from '../../errors.js';
 
 const log = createModuleLogger('plan-engine');
 
 export interface CreatePlanOptions {
-  repoUrl: string;
+  repoUrl?: string;
   branch?: string;
   name?: string;
+  source?: 'git' | 'image';
+  imageUrl?: string;
+  imageCmd?: string[];
+  containerPort?: number;
   envVars?: Record<string, string>;
   visibility?: 'internal' | 'quick-share' | 'shared';
   environment?: string;
@@ -39,6 +50,7 @@ export interface CreatePlanOptions {
   preferDockerfile?: boolean;
   dockerfilePath?: string;
   dockerTarget?: string;
+  projectId?: string;
 }
 
 interface PlanExecutionContext {
@@ -46,6 +58,8 @@ interface PlanExecutionContext {
   environment?: string;
   sshKeyPath?: string;
   trigger?: string;
+  imageCmd?: string[];
+  containerPort?: number;
 }
 
 export interface PlanUpdates {
@@ -71,6 +85,7 @@ const SERVICE_ENV_VARS: Record<string, string> = {
   mysql: 'MYSQL_URL',
   redis: 'REDIS_URL',
   mongodb: 'MONGODB_URI',
+  rabbitmq: 'RABBITMQ_URL',
 };
 
 export interface ExecutePlanResult {
@@ -118,8 +133,18 @@ export class PlanEngine {
   } {
     const dockerfiles = findDockerfiles(clonePath);
     const relativeDockerfiles = dockerfiles.map((d) => relative(clonePath, d));
-    const userDockerfile = opts.dockerfilePath ?? 'Dockerfile';
-    const dockerfileExists = existsSync(join(clonePath, userDockerfile));
+    let userDockerfile = opts.dockerfilePath ?? 'Dockerfile';
+    let dockerfileExists = existsSync(join(clonePath, userDockerfile));
+
+    // If the specified/default Dockerfile doesn't exist but we found one elsewhere, use it.
+    const firstFound = relativeDockerfiles[0];
+    if (!dockerfileExists && firstFound) {
+      userDockerfile = firstFound;
+      dockerfileExists = true;
+      warnings.push(
+        `Specified "${opts.dockerfilePath ?? 'Dockerfile'}" not found; using discovered ${userDockerfile}`,
+      );
+    }
 
     if (relativeDockerfiles.length > 1) {
       warnings.push(
@@ -259,15 +284,38 @@ export class PlanEngine {
     userDockerfile: string,
     detectedEnv: PlanEnvEntry[],
   ): void {
+    // Scope env scanning to the build context directory (derived from dockerfile path).
+    // e.g., 'services/api/Dockerfile' → scopeDir='services/api'
+    // Falls back to full repo scan when Dockerfile is at root.
+    const scopeDir = userDockerfile.includes('/')
+      ? userDockerfile.substring(0, userDockerfile.lastIndexOf('/'))
+      : undefined;
+
     const ENV_TEMPLATE_FILES = ['.env.example', '.env.sample', '.env.template'];
     for (const envFileName of ENV_TEMPLATE_FILES) {
-      const envPath = join(clonePath, envFileName);
+      const envPath = scopeDir
+        ? join(clonePath, scopeDir, envFileName)
+        : join(clonePath, envFileName);
       if (!existsSync(envPath)) {
         continue;
       }
-      detectedEnv.push(...scanEnvFile(envPath, envFileName, detectedEnv));
+      const envSource = scopeDir ? join(scopeDir, envFileName) : envFileName;
+      detectedEnv.push(...scanEnvFile(envPath, envSource, detectedEnv));
     }
     detectedEnv.push(...scanDockerfileArgs(clonePath, userDockerfile, detectedEnv));
+
+    const sourceResult = scanForEnvUsage(clonePath, scopeDir);
+    for (const variable of sourceResult.vars) {
+      if (detectedEnv.some((entry) => entry.key === variable.key)) {
+        continue;
+      }
+
+      detectedEnv.push({
+        key: variable.key,
+        source: variable.files[0]?.path ?? 'source',
+        required: !variable.optional,
+      });
+    }
   }
 
   private buildExecutionContext(opts: CreatePlanOptions): PlanExecutionContext | undefined {
@@ -276,13 +324,17 @@ export class PlanEngine {
       environment: opts.environment,
       sshKeyPath: opts.sshKeyPath,
       trigger: opts.trigger,
+      imageCmd: opts.imageCmd,
+      containerPort: opts.containerPort,
     };
 
     if (
       !execution.visibility &&
       !execution.environment &&
       !execution.sshKeyPath &&
-      !execution.trigger
+      !execution.trigger &&
+      !execution.imageCmd &&
+      execution.containerPort === undefined
     ) {
       return undefined;
     }
@@ -329,6 +381,7 @@ export class PlanEngine {
     repoUrl: string;
     planBranch: string;
     commitSha: string;
+    imageUrl?: string;
     buildMethod: DeployPlan['build']['method'];
     userDockerfile: string;
     dockerTarget?: string;
@@ -360,11 +413,11 @@ export class PlanEngine {
       restart: service.restart,
       healthcheck: service.healthcheck,
       internal_url: service.port
-        ? `http://ol-${params.projectName}-${service.name}:${String(service.port)}`
-        : `http://ol-${params.projectName}-${service.name}`,
+        ? `http://${composeContainerName(params.projectName, service.name)}:${String(service.port)}`
+        : `http://${composeContainerName(params.projectName, service.name)}`,
     }));
 
-    const internalUrl = `http://ol-${params.projectName}`;
+    const internalUrl = `http://${projectContainerName(params.projectName)}`;
     const internalUrlNote = 'Port determined after build. Set EXPOSE in Dockerfile.';
 
     return {
@@ -377,6 +430,7 @@ export class PlanEngine {
           repo_url: params.repoUrl,
           branch: params.planBranch,
           commit_sha: params.commitSha,
+          image_url: params.imageUrl,
         },
       },
       build: {
@@ -412,10 +466,124 @@ export class PlanEngine {
     };
   }
 
+  private detectServiceDependencies(envVars: Record<string, string>, warnings: string[]): void {
+    const olHostPattern = /ol-[a-z0-9][\w-]*/gi;
+    const referencedServices: string[] = [];
+    for (const [key, value] of Object.entries(envVars)) {
+      const matches = value.match(olHostPattern);
+      if (matches) {
+        for (const match of matches) {
+          referencedServices.push(`${key} → ${match}`);
+        }
+      }
+    }
+    if (referencedServices.length > 0) {
+      warnings.push(
+        `Env vars reference other OpenLander containers: ${referencedServices.join(', ')}. ` +
+          'Ensure those projects are deployed and running first, or the app may fail to connect at startup.',
+      );
+    }
+  }
+
+  private detectPersistenceWarnings(clonePath: string, warnings: string[]): void {
+    const depFiles: { name: string; pattern: RegExp }[] = [
+      {
+        name: 'package.json',
+        pattern: /better-sqlite3|"sqlite3"|sql\.js|drizzle.*sqlite|prisma.*sqlite/i,
+      },
+      { name: 'requirements.txt', pattern: /sqlite|peewee|sqlalchemy/i },
+      { name: 'pyproject.toml', pattern: /sqlite|peewee|sqlalchemy/i },
+      { name: 'Gemfile', pattern: /sqlite3/i },
+      { name: 'go.mod', pattern: /go-sqlite3|modernc\.org\/sqlite/i },
+      { name: 'Cargo.toml', pattern: /rusqlite|diesel.*sqlite/i },
+    ];
+
+    for (const { name, pattern } of depFiles) {
+      const filePath = join(clonePath, name);
+      if (!existsSync(filePath)) continue;
+
+      try {
+        const content = readFileSync(filePath, 'utf-8');
+        if (pattern.test(content)) {
+          warnings.push(
+            'SQLite dependency detected. Data stored in SQLite will be lost on container restart ' +
+              'unless a persistent volume is mounted. Use add_volume to attach storage at the ' +
+              'database path (e.g., /app/data).',
+          );
+          return;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
   async createPlan(opts: CreatePlanOptions): Promise<DeployPlan> {
-    const { repoUrl, branch, name, envVars = {}, sshKeyPath } = opts;
+    const { repoUrl, branch, name, envVars = {}, sshKeyPath, source, imageUrl, projectId } = opts;
     const { nanoid } = await import('nanoid');
     const planId = `plan_${nanoid(12)}`;
+
+    if (source === 'image' || imageUrl) {
+      const normalizedImageUrl = imageUrl?.trim();
+      if (!normalizedImageUrl) {
+        throw new Error('imageUrl is required when source is "image"');
+      }
+
+      const parsedImage = parseImageUrl(normalizedImageUrl);
+      if (!parsedImage) {
+        throw new Error(`Invalid Docker image URL: ${normalizedImageUrl}`);
+      }
+
+      const imageNameParts = parsedImage.name.split('/');
+      const fallbackProjectName = imageNameParts[imageNameParts.length - 1] || parsedImage.name;
+      const projectName = name || fallbackProjectName;
+      const initialStatus: DeployPlan['status'] = 'ready';
+      const complexity: DeployPlanComplexity = 'simple';
+
+      const plan = this.assemblePlan({
+        planId,
+        status: initialStatus,
+        complexity,
+        projectName,
+        repoUrl: '',
+        planBranch: '',
+        commitSha: '',
+        imageUrl: normalizedImageUrl,
+        buildMethod: 'image',
+        userDockerfile: 'Dockerfile',
+        dockerTarget: opts.dockerTarget,
+        relativeDockerfiles: [],
+        services: [],
+        autoEnvVars: {},
+        requiredEnvVars: [],
+        envVars,
+        detectedEnv: [],
+        missing: [],
+        warnings: [],
+      });
+
+      const execution = this.buildExecutionContext(opts);
+      if (execution) {
+        (plan as DeployPlan & { execution?: PlanExecutionContext }).execution = execution;
+      }
+
+      log.info({ planId, status: initialStatus, buildMethod: 'image' }, 'Creating deploy plan');
+      this.db.createDeployPlan({
+        id: planId,
+        projectName,
+        status: initialStatus,
+        complexity,
+        planJson: JSON.stringify(this.preparePlanForStorage(plan)),
+        commitSha: '',
+      });
+
+      return plan;
+    }
+
+    if (!repoUrl) {
+      throw new Error('repoUrl is required when source is "git" or undefined');
+    }
+
     const projectName = name || extractProjectName(repoUrl);
 
     log.info({ repoUrl, branch }, 'Cloning repository');
@@ -436,13 +604,23 @@ export class PlanEngine {
 
     const services = this.detectPlanServices(clonePath);
     this.detectEnvVars(clonePath, userDockerfile, detectedEnv);
+    this.detectPersistenceWarnings(clonePath, warnings);
+    this.detectServiceDependencies(envVars, warnings);
 
     const requiredEnvVars = Array.from(
       new Set(detectedEnv.filter((e) => e.required).map((e) => e.key)),
     );
     const autoEnvVars = this.buildAutoEnvVars(services);
 
-    const missingEntries = computeMissingEnvVars(detectedEnv, envVars, autoEnvVars);
+    // Fetch existing env vars from database if projectId is provided
+    const existingEnvVars = projectId ? this.env.getAll(projectId) : {};
+
+    const missingEntries = computeMissingEnvVars(
+      detectedEnv,
+      envVars,
+      autoEnvVars,
+      existingEnvVars,
+    );
     const missing = missingEntries.map((entry) => entry.key);
 
     const isCompose = buildMethod === 'compose';
@@ -455,7 +633,7 @@ export class PlanEngine {
 
     const initialStatus = missing.length > 0 ? 'needs_input' : 'ready';
 
-    const planBranch = branch || 'default';
+    const planBranch = cloneResult.branch;
     const plan = this.assemblePlan({
       planId,
       status: initialStatus,
@@ -569,18 +747,63 @@ export class PlanEngine {
     return merged;
   }
 
-  async executePlan(planId: string, deployOnly?: string[]): Promise<ExecutePlanResult> {
+  async executePlan(
+    planId: string,
+    deployOnly?: string[],
+    lockSessionId?: string,
+  ): Promise<ExecutePlanResult> {
     // Re-read from DB to prevent race condition
     const freshRow = this.db.getDeployPlan(planId);
     if (!freshRow) {
       throw new Error(`Plan not found: ${planId}`);
     }
     const freshPlan = JSON.parse(freshRow.plan_json) as DeployPlan;
+    if (freshPlan.status === 'needs_input') {
+      const missingKeys = freshPlan.missing.join(', ') || 'unknown';
+      throw new Error(
+        `Plan requires missing environment variables: ${missingKeys}. ` +
+          `Call update_deploy_plan to provide them, then execute again.`,
+      );
+    }
     if (freshPlan.status !== 'ready') {
-      throw new Error(`Plan is already ${freshPlan.status}. Cannot execute concurrently.`);
+      throw new Error(`Plan status is "${freshPlan.status}" — only "ready" plans can be executed.`);
+    }
+
+    const PROJECT_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+    if (!PROJECT_NAME_REGEX.test(freshPlan.app.name)) {
+      throw new Error(
+        `Invalid project name "${freshPlan.app.name}": must contain only lowercase letters, numbers, and hyphens, starting with a letter or number`,
+      );
     }
 
     const plan = freshPlan;
+
+    const existingProject = this.db.getProjectByName(plan.app.name);
+    let lockProjectId: string | null = null;
+    let deployLockReleased = false;
+    const safeReleaseDeployLock = () => {
+      if (!lockProjectId || deployLockReleased) {
+        return;
+      }
+
+      try {
+        this.db.releaseDeployLock(lockProjectId, lockSessionId ?? `plan-${planId}`);
+      } catch (error) {
+        log.warn({ planId, projectId: lockProjectId, error }, 'Failed to release deploy lock');
+      } finally {
+        deployLockReleased = true;
+      }
+    };
+
+    if (existingProject) {
+      const lockSession = lockSessionId ?? `plan-${planId}`;
+      const locked = this.db.acquireDeployLock(existingProject.id, lockSession);
+      if (!locked) {
+        const lockInfo = this.db.getDeployLockInfo(existingProject.id);
+        throw new DeployLockedError(existingProject.id, lockInfo?.session ?? 'unknown');
+      }
+      lockProjectId = existingProject.id;
+    }
 
     const executingPlan = PlanStateMachine.transition(plan, 'executing');
     this.db.updateDeployPlan(planId, {
@@ -621,6 +844,7 @@ export class PlanEngine {
 
       const deployMode = this.getDeployMode(plan);
       const execution = this.getExecutionContext(plan);
+      const isImage = plan.build.method === 'image';
 
       let startedProjectId: string;
       let startedProjectName: string;
@@ -661,6 +885,12 @@ export class PlanEngine {
           branch: plan.app.source.branch,
           name: plan.app.name,
           envVars: mergedEnv,
+          ...(isImage ? { source: 'image' as const } : {}),
+          ...(isImage && plan.app.source.image_url ? { imageUrl: plan.app.source.image_url } : {}),
+          ...(execution.imageCmd ? { imageCmd: execution.imageCmd } : {}),
+          ...(execution.containerPort !== undefined
+            ? { containerPort: execution.containerPort }
+            : {}),
           preferDockerfile: isCompose ? false : !plan.build.generated_dockerfile,
           dockerfilePath:
             !isCompose && plan.build.dockerfile !== 'Dockerfile'
@@ -693,6 +923,7 @@ export class PlanEngine {
               status: 'completed',
               planJson: JSON.stringify(this.preparePlanForStorage(completed)),
             });
+            safeReleaseDeployLock();
             log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
             cleanup();
           }
@@ -707,6 +938,7 @@ export class PlanEngine {
               planJson: JSON.stringify(this.preparePlanForStorage(failed)),
               errorMessage: errMsg,
             });
+            safeReleaseDeployLock();
             log.info(
               { planId, projectId: payload.projectId, error: errMsg },
               'Plan failed via event',
@@ -722,6 +954,7 @@ export class PlanEngine {
               status: 'completed',
               planJson: JSON.stringify(this.preparePlanForStorage(completed)),
             });
+            safeReleaseDeployLock();
             log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
             cleanup();
           }
@@ -736,6 +969,7 @@ export class PlanEngine {
               planJson: JSON.stringify(this.preparePlanForStorage(failed)),
               errorMessage: errMsg,
             });
+            safeReleaseDeployLock();
             log.info(
               { planId, projectId: payload.projectId, error: errMsg },
               'Plan failed via event',
@@ -753,13 +987,14 @@ export class PlanEngine {
       }
 
       if (preflightError) {
-        const errMsg = preflightError || 'Preflight check failed';
+        const errMsg = preflightError;
         const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
         this.db.updateDeployPlan(planId, {
           status: 'failed',
           planJson: JSON.stringify(this.preparePlanForStorage(failedPlan)),
           errorMessage: errMsg,
         });
+        safeReleaseDeployLock();
         return {
           status: 'failed',
           plan_id: planId,
@@ -785,6 +1020,7 @@ export class PlanEngine {
         estimated_seconds: estimatedSeconds,
       };
     } catch (error) {
+      safeReleaseDeployLock();
       const errorMsg = error instanceof Error ? error.message : String(error);
       const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errorMsg);
       this.db.updateDeployPlan(planId, {

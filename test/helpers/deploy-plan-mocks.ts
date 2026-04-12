@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import type { Database } from '../../src/db/index.js';
+import { ModelRegistry } from '../../src/llm/model-registry.js';
 import { DeployQueue } from '../../src/pipeline/deploy-queue.js';
 
 // ---------------------------------------------------------------------------
@@ -95,9 +96,8 @@ export function createMockPlanContext(db?: Database): AppContext {
     } as unknown as AppContext['config'],
     db: mockDb,
     docker: {
-      getClient: vi.fn(() => ({
-        listContainers: vi.fn().mockResolvedValue([]),
-      })),
+      listAllContainers: vi.fn().mockResolvedValue([]),
+      inspectContainer: vi.fn(),
     } as unknown as AppContext['docker'],
     pipeline: {
       deploy: vi.fn().mockResolvedValue({ success: true, projectId: 'p1' }),
@@ -106,11 +106,13 @@ export function createMockPlanContext(db?: Database): AppContext {
     traefik: {} as unknown as AppContext['traefik'],
     env: {
       getAll: vi.fn().mockReturnValue({}),
-      getAllMasked: vi.fn().mockReturnValue({}),
       setBulk: vi.fn().mockReturnValue(true),
       getGlobalSecrets: vi.fn().mockReturnValue({}),
     } as unknown as AppContext['env'],
+    agentPool: null,
     agent: null,
+    modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }),
+    model: null,
     deployQueue: new DeployQueue(),
     healthMonitor: {
       start: vi.fn(),
@@ -120,12 +122,6 @@ export function createMockPlanContext(db?: Database): AppContext {
       triggerWebhook: vi.fn(),
     } as unknown as AppContext['webhookManager'],
     cloudflare: {} as unknown as AppContext['cloudflare'],
-    blueGreen: {
-      deploy: vi.fn().mockResolvedValue({ success: true }),
-    } as unknown as AppContext['blueGreen'],
-    dbProvisioner: {
-      provision: vi.fn().mockResolvedValue({ host: 'localhost', port: 5432 }),
-    } as unknown as AppContext['dbProvisioner'],
     buildDebugger: null,
     channelManager: {
       register: vi.fn(),
@@ -175,6 +171,10 @@ export function createMockPlanContext(db?: Database): AppContext {
       disconnectAll: vi.fn().mockResolvedValue(undefined),
     } as unknown as AppContext['mcpClientManager'],
     planEngine: createMockPlanEngine() as unknown as AppContext['planEngine'],
+    approvalGate: {
+      dispose: vi.fn(),
+    } as unknown as AppContext['approvalGate'],
+    llmVerified: false,
   };
 }
 

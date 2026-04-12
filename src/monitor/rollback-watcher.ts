@@ -81,6 +81,12 @@ export class RollbackWatcher {
     const watcher = this.watchers.get(projectId);
     if (!watcher) return;
 
+    const project = this.db.getProject(projectId);
+    if (!project || project.status === 'stopped') {
+      this.stopWatching(projectId);
+      return;
+    }
+
     if (healthy) {
       watcher.consecutiveFailures = 0;
       return;
@@ -93,8 +99,7 @@ export class RollbackWatcher {
     );
 
     if (watcher.consecutiveFailures >= this.FAILURE_THRESHOLD) {
-      const project = this.db.getProject(projectId);
-      if (project?.previous_image_tag) {
+      if (project.previous_image_tag) {
         // If this is a plan-originated deploy and we have pipeline, auto-execute rollback
         if (watcher.planId && this.pipeline) {
           void this.executeAutoRollback(projectId, watcher.planId);

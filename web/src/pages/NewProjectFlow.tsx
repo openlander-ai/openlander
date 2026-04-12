@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useEnvScanFlow } from '@/hooks/use-env-scan-flow';
 import { Input } from '@/components/ui/input';
-import { Search, ArrowLeft } from 'lucide-react';
+import { Search, ArrowLeft, Container } from 'lucide-react';
 import { DeployingOverlay } from '@/components/new-project/DeployingOverlay';
 import { RepoListStep } from '@/components/new-project/RepoListStep';
 import type { GitRepo, Tab } from '@/components/new-project/RepoListStep';
@@ -29,17 +29,15 @@ export function NewProjectFlow() {
   const [ghError, setGhError] = useState<string | null>(null);
   const [deployStatus, setDeployStatus] = useState<string | null>(null);
 
+  const [imageUrl, setImageUrl] = useState('');
+  const [port, setPort] = useState('');
+  const [imageCmd, setImageCmd] = useState('');
+  const [imageName, setImageName] = useState('');
+
   const [selectedRepo, setSelectedRepo] = useState<GitRepo | null>(null);
-  const [environment, setEnvironment] = useState<string>('production');
   const [branch, setBranch] = useState<string>('main');
 
   const envScan = useEnvScanFlow();
-
-  const handleEnvironmentChange = (value: string) => {
-    setEnvironment(value);
-    if (value === 'production') setBranch('main');
-    else if (value === 'development') setBranch('develop');
-  };
 
   const fetchRepos = useCallback(async (pageNum: number) => {
     setLoading(true);
@@ -96,7 +94,6 @@ export function NewProjectFlow() {
       return;
     }
     setSelectedRepo(repo);
-    setEnvironment('production');
     setBranch(repo.defaultBranch || 'main');
     envScan.reset();
   };
@@ -125,10 +122,41 @@ export function NewProjectFlow() {
         branch,
         selectedRepo.name,
         Object.keys(filtered).length > 0 ? filtered : undefined,
-        environment,
+        'git',
       );
       if (result.success && result.projectId) {
-        navigate(`/projects/${result.projectId}?env=${environment}`);
+        navigate(`/projects/${result.projectId}`);
+      } else {
+        setError(result.error ?? 'Deploy failed');
+        setDeploying(false);
+        setDeployStatus(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Deploy failed');
+      setDeploying(false);
+      setDeployStatus(null);
+    }
+  };
+
+  const handleDeployImage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!imageUrl) return;
+    setDeploying(true);
+    setError(null);
+    setDeployStatus('Starting deployment...');
+    try {
+      const result = await deployProject(
+        undefined,
+        undefined,
+        imageName || undefined,
+        undefined,
+        'image',
+        imageUrl,
+        imageCmd || undefined,
+        port ? parseInt(port, 10) : undefined,
+      );
+      if (result.success && result.projectId) {
+        navigate(`/projects/${result.projectId}`);
       } else {
         setError(result.error ?? 'Deploy failed');
         setDeploying(false);
@@ -146,7 +174,7 @@ export function NewProjectFlow() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
+      <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel px-6 py-4">
         <div className="flex items-center gap-3 mb-3">
           <button
             onClick={() => navigate('/projects')}
@@ -158,7 +186,7 @@ export function NewProjectFlow() {
             <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight">
               {'New Project'}
             </h1>
-            <p className="text-xs font-body text-secondary-ol">{t('newProject.selectRepo')}</p>
+            <p className="text-sm font-body text-secondary-ol">{t('newProject.selectRepo')}</p>
           </div>
         </div>
 
@@ -186,6 +214,18 @@ export function NewProjectFlow() {
             >
               {'Search'}
             </button>
+            <button
+              onClick={() => setTab('docker')}
+              className={cn(
+                'px-3 py-1 rounded text-xs font-body transition-colors flex items-center gap-1.5',
+                tab === 'docker'
+                  ? 'bg-bg-panel text-primary-ol'
+                  : 'text-secondary-ol hover:text-primary-ol',
+              )}
+            >
+              <Container className="h-3.5 w-3.5" />
+              {'Docker Image'}
+            </button>
           </div>
 
           {tab === 'search' && (
@@ -204,14 +244,14 @@ export function NewProjectFlow() {
       </div>
 
       {(error || ghError) && (
-        <div className="mx-6 mt-4 px-3 py-2 rounded border border-error/30 bg-error/10 text-error text-xs font-body">
+        <div className="mx-6 mt-4 px-3 py-2 rounded border border-error/30 bg-error/10 text-error text-sm font-body">
           {error ?? ghError}
         </div>
       )}
 
       {deploying && <DeployingOverlay deployStatus={deployStatus} />}
 
-      {!deploying && !selectedRepo && (
+      {!deploying && !selectedRepo && tab !== 'docker' && (
         <RepoListStep
           displayedRepos={displayedRepos}
           loading={loading}
@@ -228,13 +268,102 @@ export function NewProjectFlow() {
         />
       )}
 
+      {!deploying && tab === 'docker' && (
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-xl mx-auto space-y-6">
+            <form onSubmit={handleDeployImage} className="space-y-4">
+              <div className="space-y-2">
+                <label
+                  htmlFor="image-url"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                >
+                  {'Docker Image'}
+                </label>
+                <Input
+                  id="image-url"
+                  placeholder="e.g., nginx:latest or ghcr.io/user/app:v1"
+                  value={imageUrl}
+                  onChange={(e) => {
+                    setImageUrl(e.target.value);
+                    if (e.target.value) {
+                      const parts = e.target.value.split('/');
+                      const lastPart = parts[parts.length - 1].split(':')[0];
+                      if (lastPart) setImageName(lastPart);
+                    } else {
+                      setImageName('');
+                    }
+                  }}
+                  required
+                  className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="port"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                  >
+                    {'Port (Optional)'}
+                  </label>
+                  <Input
+                    id="port"
+                    type="number"
+                    placeholder="80"
+                    value={port}
+                    onChange={(e) => setPort(e.target.value)}
+                    className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="image-cmd"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                >
+                  {'Command (Optional)'}
+                </label>
+                <Input
+                  id="image-cmd"
+                  placeholder="e.g., --model-id BAAI/bge-m3"
+                  value={imageCmd}
+                  onChange={(e) => setImageCmd(e.target.value)}
+                  className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
+                />
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="name-image"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                >
+                  {t('deploy.dialog.projectName')}
+                </label>
+                <Input
+                  id="name-image"
+                  placeholder={t('deploy.dialog.autoDetected')}
+                  value={imageName}
+                  onChange={(e) => setImageName(e.target.value)}
+                  className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
+                />
+              </div>
+              <div className="pt-4">
+                <button
+                  type="submit"
+                  disabled={deploying || !imageUrl}
+                  className="w-full inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-foreground text-background hover:bg-foreground/90 h-10 px-4 py-2"
+                >
+                  {'Deploy Image'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {!deploying && selectedRepo && (
         <ConfigureDeployStep
           selectedRepo={selectedRepo}
-          environment={environment}
           branch={branch}
           onBranchChange={setBranch}
-          onEnvironmentChange={handleEnvironmentChange}
           onCancel={() => {
             setSelectedRepo(null);
             envScan.reset();

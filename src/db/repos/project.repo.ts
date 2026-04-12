@@ -1,8 +1,12 @@
-import { and, asc, count, desc, eq, sql } from 'drizzle-orm';
-import { ProjectAlreadyExistsError } from '../../errors.js';
+import { and, asc, count, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { OpenLanderError, ProjectAlreadyExistsError, ProjectNotFoundError } from '../../errors.js';
+import { createModuleLogger } from '../../lib/logger.js';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import { buildSetValues } from '../helpers.js';
 import { projects } from '../schema.drizzle.js';
 import type { PendingFixRow, ProjectRow } from '../types.js';
+
+const log = createModuleLogger('project-repo');
 
 export class ProjectRepo {
   constructor(
@@ -19,6 +23,10 @@ export class ProjectRepo {
     dockerfilePath?: string;
     dockerTarget?: string;
     buildContext?: string;
+    source?: ProjectRow['source'];
+    imageUrl?: string;
+    imageCmd?: string[];
+    containerPort?: number;
   }): ProjectRow {
     try {
       this.db
@@ -32,6 +40,10 @@ export class ProjectRepo {
           dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
           docker_target: project.dockerTarget ?? null,
           build_context: project.buildContext ?? null,
+          source: project.source ?? 'git',
+          image_url: project.imageUrl ?? null,
+          image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
+          container_port: project.containerPort ?? null,
         })
         .run();
     } catch (error) {
@@ -59,12 +71,19 @@ export class ProjectRepo {
       | undefined;
   }
 
-  listProjects(status?: ProjectRow['status']): ProjectRow[] {
+  listProjects(status?: ProjectRow['status'], opts?: { includeArchived?: boolean }): ProjectRow[] {
+    const conditions = [];
     if (status) {
+      conditions.push(eq(projects.status, status));
+    }
+    if (!opts?.includeArchived) {
+      conditions.push(isNull(projects.archived_at));
+    }
+    if (conditions.length > 0) {
       return this.db
         .select()
         .from(projects)
-        .where(eq(projects.status, status))
+        .where(and(...conditions))
         .orderBy(desc(projects.updated_at))
         .all() as ProjectRow[];
     }
@@ -86,6 +105,10 @@ export class ProjectRepo {
       dockerTarget: string | null;
       buildContext: string | null;
       buildMethod: ProjectRow['build_method'];
+      source: ProjectRow['source'];
+      imageUrl: string | null;
+      imageCmd: string[] | null;
+      containerPort: number | null;
       pendingFix: string | null;
       accessCode: string | null;
       accessCodeIv: string | null;
@@ -94,63 +117,32 @@ export class ProjectRepo {
       branch: string;
     }>,
   ): void {
-    const setValues: Partial<typeof projects.$inferInsert> = {};
-
-    if (updates.status !== undefined) {
-      setValues.status = updates.status;
+    const setValues = buildSetValues(updates, {
+      status: 'status',
+      visibility: 'visibility',
+      assignedPort: 'assigned_port',
+      containerId: 'container_id',
+      imageTag: 'image_tag',
+      previousImageTag: 'previous_image_tag',
+      publicUrl: 'public_url',
+      parentProjectId: 'parent_project_id',
+      dockerfilePath: 'dockerfile_path',
+      dockerTarget: 'docker_target',
+      buildContext: 'build_context',
+      buildMethod: 'build_method',
+      source: 'source',
+      imageUrl: 'image_url',
+      containerPort: 'container_port',
+      pendingFix: 'pending_fix',
+      accessCode: 'access_code',
+      accessCodeIv: 'access_code_iv',
+      isPreview: 'is_preview',
+      prNumber: 'pr_number',
+      branch: 'branch',
+    });
+    if (updates.imageCmd !== undefined) {
+      setValues.image_cmd = updates.imageCmd === null ? null : JSON.stringify(updates.imageCmd);
     }
-    if (updates.visibility !== undefined) {
-      setValues.visibility = updates.visibility;
-    }
-    if (updates.assignedPort !== undefined) {
-      setValues.assigned_port = updates.assignedPort;
-    }
-    if (updates.containerId !== undefined) {
-      setValues.container_id = updates.containerId;
-    }
-    if (updates.imageTag !== undefined) {
-      setValues.image_tag = updates.imageTag;
-    }
-    if (updates.previousImageTag !== undefined) {
-      setValues.previous_image_tag = updates.previousImageTag;
-    }
-    if (updates.publicUrl !== undefined) {
-      setValues.public_url = updates.publicUrl;
-    }
-    if (updates.parentProjectId !== undefined) {
-      setValues.parent_project_id = updates.parentProjectId;
-    }
-    if (updates.dockerfilePath !== undefined) {
-      setValues.dockerfile_path = updates.dockerfilePath;
-    }
-    if (updates.dockerTarget !== undefined) {
-      setValues.docker_target = updates.dockerTarget;
-    }
-    if (updates.buildContext !== undefined) {
-      setValues.build_context = updates.buildContext;
-    }
-    if (updates.buildMethod !== undefined) {
-      setValues.build_method = updates.buildMethod;
-    }
-    if (updates.pendingFix !== undefined) {
-      setValues.pending_fix = updates.pendingFix;
-    }
-    if (updates.accessCode !== undefined) {
-      setValues.access_code = updates.accessCode;
-    }
-    if (updates.accessCodeIv !== undefined) {
-      setValues.access_code_iv = updates.accessCodeIv;
-    }
-    if (updates.isPreview !== undefined) {
-      setValues.is_preview = updates.isPreview;
-    }
-    if (updates.prNumber !== undefined) {
-      setValues.pr_number = updates.prNumber;
-    }
-    if (updates.branch !== undefined) {
-      setValues.branch = updates.branch;
-    }
-
     if (Object.keys(setValues).length === 0) return;
 
     this.db
@@ -176,6 +168,60 @@ export class ProjectRepo {
       this.updateProject(projectId, { pendingFix: null });
       return rawPendingFix;
     })();
+  }
+
+  archiveProject(id: string): void {
+    const project = this.getProject(id);
+    if (!project) {
+      throw new ProjectNotFoundError(id);
+    }
+    if (project.status === 'building') {
+      throw new OpenLanderError(
+        'Cannot archive a project that is currently building',
+        'ARCHIVE_BUILDING_PROJECT',
+        400,
+        { projectId: id },
+      );
+    }
+    this.db
+      .update(projects)
+      .set({
+        archived_at: new Date().toISOString(),
+        assigned_port: null,
+        container_id: null,
+        image_tag: null,
+        status: 'stopped',
+        updated_at: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(projects.id, id))
+      .run();
+  }
+
+  unarchiveProject(id: string): void {
+    this.db
+      .update(projects)
+      .set({
+        archived_at: null,
+        status: 'stopped',
+        updated_at: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(projects.id, id))
+      .run();
+  }
+
+  listArchivedProjects(): ProjectRow[] {
+    return this.db
+      .select()
+      .from(projects)
+      .where(isNotNull(projects.archived_at))
+      .orderBy(desc(projects.updated_at))
+      .all() as ProjectRow[];
+  }
+
+  isArchived(id: string): boolean {
+    const project = this.getProject(id);
+    if (!project) return false;
+    return project.archived_at !== null;
   }
 
   deleteProject(id: string): void {
@@ -211,11 +257,6 @@ export class ProjectRepo {
 
   acquireDeployLock(projectId: string, sessionId: string): boolean {
     this.cleanExpiredDeployLocks();
-    const project = this.getProject(projectId);
-    if (!project) return false;
-    if (project.deploy_lock_session && project.deploy_lock_session !== sessionId) {
-      return false;
-    }
     this.db
       .update(projects)
       .set({
@@ -223,17 +264,61 @@ export class ProjectRepo {
         deploy_lock_at: sql`CURRENT_TIMESTAMP`,
         updated_at: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(projects.id, projectId))
+      .where(
+        and(
+          eq(projects.id, projectId),
+          or(isNull(projects.deploy_lock_session), eq(projects.deploy_lock_session, sessionId)),
+        ),
+      )
       .run();
-    return true;
+    const row = this.sqlite.prepare('SELECT changes() as changes').get() as {
+      changes: number;
+    } | null;
+    return (row?.changes ?? 0) > 0;
   }
 
-  releaseDeployLock(projectId: string): void {
+  releaseDeployLock(projectId: string, sessionId?: string): boolean {
+    if (sessionId !== undefined) {
+      this.db
+        .update(projects)
+        .set({
+          deploy_lock_session: null,
+          deploy_lock_at: null,
+          updated_at: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(and(eq(projects.id, projectId), eq(projects.deploy_lock_session, sessionId)))
+        .run();
+
+      const row = this.sqlite.prepare('SELECT changes() as changes').get() as {
+        changes: number;
+      } | null;
+
+      if ((row?.changes ?? 0) === 0) {
+        const current = this.getDeployLockInfo(projectId);
+        if (current) {
+          log.warn(
+            { projectId, sessionId, currentSession: current.session },
+            '[DeployLock] releaseDeployLock session mismatch — lock held by different session',
+          );
+        } else {
+          log.debug(
+            { projectId, sessionId },
+            '[DeployLock] releaseDeployLock no-op — lock already released',
+          );
+        }
+        return false;
+      }
+
+      return true;
+    }
+
     this.db
       .update(projects)
       .set({ deploy_lock_session: null, deploy_lock_at: null, updated_at: sql`CURRENT_TIMESTAMP` })
       .where(eq(projects.id, projectId))
       .run();
+
+    return true;
   }
 
   getDeployLockInfo(projectId: string): { session: string; lockedAt: string } | null {
@@ -242,7 +327,7 @@ export class ProjectRepo {
     return { session: project.deploy_lock_session, lockedAt: project.deploy_lock_at };
   }
 
-  cleanExpiredDeployLocks(timeoutMinutes = 10): number {
+  cleanExpiredDeployLocks(timeoutMinutes = 30): number {
     this.db
       .update(projects)
       .set({ deploy_lock_session: null, deploy_lock_at: null })

@@ -15,6 +15,8 @@ import type { Docker } from './docker.js';
 import type { Database, DeployLogRow } from '../db/index.js';
 import { getSystemStats } from '../monitor/stats.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { pickLocale, type Locale } from '../lib/locale.js';
+import { sleep } from '../lib/sleep.js';
 
 const log = createModuleLogger('insight');
 
@@ -39,8 +41,6 @@ interface InsightContext {
   totalDurationMs: number;
   url: string;
 }
-
-type Locale = 'en' | 'ko';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -307,11 +307,3 @@ function checkBuildTime(ctx: InsightContext, db: Database, locale: Locale): Insi
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function pickLocale(locale: Locale, text: { ko: string; en: string }): string {
-  return locale === 'ko' ? text.ko : text.en;
-}

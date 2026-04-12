@@ -9,6 +9,7 @@ import { Database } from '../src/db/index.js';
 import { eventBus } from '../src/events/index.js';
 import { createApiRoutes } from '../src/web/api/routes.js';
 import { createMockContext } from './helpers/web-route-mocks.js';
+import * as statsModule from '../src/monitor/stats.js';
 // Mock preflight check to always pass in tests
 vi.mock('../src/pipeline/git.js', () => ({
   cloneRepo: vi.fn().mockResolvedValue({ path: '/tmp/fake-clone' }),
@@ -18,6 +19,13 @@ vi.mock('../src/pipeline/env-scan.js', () => ({
     vars: [{ key: 'DATABASE_URL', files: [{ path: 'app.ts', line: 1 }] }],
     hasEnvExample: false,
     language: 'node',
+    serviceHints: [],
+  }),
+  scanRepoEnvVars: vi.fn().mockReturnValue({
+    vars: [],
+    hasEnvExample: false,
+    language: 'unknown',
+    serviceHints: [],
   }),
 }));
 vi.mock('../src/pipeline/preflight.js', () => ({
@@ -54,6 +62,20 @@ describe('Web API Routes', () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-web-test-'));
     db = new Database(join(tmpDir, 'test.db'));
     ctx = createMockContext(db);
+    vi.spyOn(statsModule, 'getSystemStats').mockReturnValue({
+      hostname: 'test-host',
+      uptime: { seconds: 3600, formatted: '1h 0m' },
+      cpu: {
+        cores: 4,
+        model: 'Test CPU',
+        loadAvg1m: 1,
+        loadAvg5m: 1,
+        loadAvg15m: 1,
+        usagePercent: 25,
+      },
+      memory: { totalMB: 16000, usedMB: 8000, freeMB: 8000, usagePercent: 50 },
+      disk: { totalGB: 100, usedGB: 40, freeGB: 60, usagePercent: 40 },
+    });
     app = new Hono();
     app.route('/api', createApiRoutes(ctx));
   });
@@ -527,7 +549,7 @@ describe('Web API Routes', () => {
     expect(ctx.planEngine.executePlan).toHaveBeenCalledTimes(1);
   });
 
-  it('GET /api/projects/:id/build/stream masks sensitive data in agent tool results', async () => {
+  it('GET /api/projects/:id/build/stream ignores agent tool_result events', async () => {
     db.createProject({
       id: 'stream-p1',
       name: 'stream-app',
@@ -544,6 +566,7 @@ describe('Web API Routes', () => {
       event: {
         type: 'tool_result',
         toolName: 'deploy_project',
+        stepIndex: 0,
         success: true,
         result: {
           env_vars: {
@@ -574,21 +597,11 @@ describe('Web API Routes', () => {
       .map((line) => JSON.parse(line) as Record<string, unknown>);
 
     const toolResultEvent = events.find((event) => event.type === 'agent_tool_result');
-    expect(toolResultEvent).toBeDefined();
-    expect(toolResultEvent).toHaveProperty('toolResult');
-
-    const toolResult = toolResultEvent?.toolResult as Record<string, unknown>;
-    expect(toolResult.env_vars).toEqual({
-      DATABASE_URL: '***',
-      OPENAI_API_KEY: '***',
-    });
-    expect(toolResult.apiKey).toBe('[redacted]');
-    expect(toolResult.nested).toEqual({
-      client_secret: '[redacted]',
-      deployStatus: 'running',
-      url: 'http://localhost:10001',
-    });
-    expect(toolResult.services).toEqual([{ name: 'web', status: 'running' }]);
+    expect(toolResultEvent).toBeUndefined();
+    expect(body).not.toContain('postgres://user:pw@db:5432/app');
+    expect(body).not.toContain('sk-test-value');
+    expect(body).not.toContain('key-123');
+    expect(body).not.toContain('secret-value');
   });
 
   it('GET /api/projects/:id/build/stream ignores agent:event question rendering', async () => {
@@ -704,8 +717,7 @@ describe('Web API Routes', () => {
     expect(events.some((event) => event.message === 'Agent: question')).toBe(false);
 
     const questionPendingEvent = events.find((event) => event.type === 'question_pending');
-    expect(questionPendingEvent).toBeDefined();
-    expect(questionPendingEvent?.message).toBe('Proceed with compose deploy?');
+    expect(questionPendingEvent).toBeUndefined();
   });
 
   // ---------------------------------------------------------------------------
@@ -847,7 +859,10 @@ describe('Web API Routes', () => {
 
     const body = await res.json();
     expect(body.success).toBe(true);
-    expect(ctx.blueGreen.deploy).toHaveBeenCalledWith('p1', { healthCheckPath: undefined });
+    expect(ctx.pipeline.redeploy).toHaveBeenCalledWith('p1', {
+      strategy: 'blue-green',
+      healthCheckPath: undefined,
+    });
   });
 
   it('POST /api/projects/:id/blue-green returns 404 for unknown project', async () => {
@@ -857,7 +872,7 @@ describe('Web API Routes', () => {
 
   it('POST /api/projects/:id/blue-green returns 500 on failure', async () => {
     db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
-    (ctx.blueGreen.deploy as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    (ctx.pipeline.redeploy as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       success: false,
       message: 'Health check failed',
     });
@@ -940,14 +955,16 @@ describe('Web API Routes', () => {
         updated_at: '2026-01-01T00:00:00.000Z',
       },
     ];
-    (ctx.serviceManager.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockServices);
+    (ctx.serviceManager.listWithCardSummary as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      mockServices,
+    );
 
     const res = await app.request('/api/services');
 
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual(mockServices);
-    expect(ctx.serviceManager.list).toHaveBeenCalled();
+    expect(ctx.serviceManager.listWithCardSummary).toHaveBeenCalled();
   });
 
   it('GET /api/services/:id returns service detail', async () => {
@@ -1377,15 +1394,15 @@ describe('Web API Routes', () => {
   // DELETE /api/projects/:id
   // ---------------------------------------------------------------------------
 
-  it('DELETE /api/projects/:id removes a project', async () => {
+  it('DELETE /api/projects/:id archives a project', async () => {
     db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
 
     const res = await app.request('/api/projects/p1', { method: 'DELETE' });
     expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body.status).toBe('removed');
-    expect(ctx.pipeline.remove).toHaveBeenCalledWith('p1', ctx.cloudflare);
+    expect(body.status).toBe('archived');
+    expect(ctx.pipeline.archive).toHaveBeenCalledWith('p1');
   });
 
   // ---------------------------------------------------------------------------
@@ -1444,7 +1461,7 @@ describe('Web API Routes', () => {
 
     const body = await res.json();
     expect(body).toHaveProperty('envVars');
-    expect(ctx.env.getAllMasked).toHaveBeenCalledWith('p1');
+    expect(ctx.env.getAll).toHaveBeenCalledWith('p1');
   });
 
   // ---------------------------------------------------------------------------
@@ -1619,16 +1636,6 @@ describe('Web API Routes', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // GET /api/sessions
-  // ---------------------------------------------------------------------------
-
-  it('GET /api/sessions returns sessions list', async () => {
-    const res = await app.request('/api/sessions');
-    expect(res.status).toBe(200);
-
-    const body = await res.json();
-    expect(body).toHaveProperty('sessions');
-  });
   // ---------------------------------------------------------------------------
   // POST /api/env/scan
   // ---------------------------------------------------------------------------
@@ -1642,7 +1649,7 @@ describe('Web API Routes', () => {
     expect(res.status).toBe(400);
   });
 
-  it('POST /api/env/scan returns scan result for valid repo_url', async () => {
+  it('POST /api/env/scan returns empty vars when no env templates are found', async () => {
     const res = await app.request('/api/env/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1651,7 +1658,8 @@ describe('Web API Routes', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveProperty('vars');
-    expect(body.vars[0].key).toBe('DATABASE_URL');
+    expect(body.vars).toEqual([]);
+    expect(body.hasEnvExample).toBe(false);
   });
 
   // ---------------------------------------------------------------------------
@@ -1663,13 +1671,140 @@ describe('Web API Routes', () => {
     expect(res.status).toBe(404);
   });
 
-  it('POST /api/projects/:id/env/scan returns newVars for project with no stored env', async () => {
+  it('POST /api/projects/:id/env/scan returns empty newVars when no env templates are found', async () => {
     db.createProject({ id: 'scan-p1', name: 'scan-app', repoUrl: 'https://github.com/test/repo' });
     const res = await app.request('/api/projects/scan-p1/env/scan', { method: 'POST' });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveProperty('newVars');
-    expect(body.newVars[0].key).toBe('DATABASE_URL');
+    expect(body.newVars).toEqual([]);
     expect(body.existingVars).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Archive / Unarchive / Purge
+  // ---------------------------------------------------------------------------
+
+  it('GET /api/projects excludes archived projects by default', async () => {
+    db.createProject({ id: 'active-1', name: 'active-app', repoUrl: 'https://github.com/u/a' });
+    db.createProject({ id: 'arch-1', name: 'archived-app', repoUrl: 'https://github.com/u/b' });
+    db.archiveProject('arch-1');
+
+    const res = await app.request('/api/projects');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.count).toBe(1);
+    expect(body.projects[0].name).toBe('active-app');
+  });
+
+  it('GET /api/projects?include_archived=true includes archived projects', async () => {
+    db.createProject({ id: 'active-2', name: 'active-app2', repoUrl: 'https://github.com/u/a2' });
+    db.createProject({ id: 'arch-2', name: 'archived-app2', repoUrl: 'https://github.com/u/b2' });
+    db.archiveProject('arch-2');
+
+    const res = await app.request('/api/projects?include_archived=true');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.count).toBe(2);
+    const names = body.projects.map((p: { name: string }) => p.name).sort();
+    expect(names).toEqual(['active-app2', 'archived-app2']);
+  });
+
+  it('POST /api/projects/:id/archive archives project and returns updated data', async () => {
+    db.createProject({ id: 'arch-3', name: 'to-archive', repoUrl: 'https://github.com/u/c' });
+
+    const res = await app.request('/api/projects/arch-3/archive', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('project');
+    expect(ctx.pipeline.archive as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('arch-3');
+  });
+
+  it('POST /api/projects/:id/archive returns 404 for unknown project', async () => {
+    const res = await app.request('/api/projects/nonexistent/archive', { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /api/projects/:id/unarchive unarchives project and returns updated data', async () => {
+    db.createProject({ id: 'unarch-1', name: 'to-unarchive', repoUrl: 'https://github.com/u/d' });
+    db.archiveProject('unarch-1');
+
+    const res = await app.request('/api/projects/unarch-1/unarchive', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('project');
+    expect(ctx.pipeline.unarchive as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('unarch-1');
+  });
+
+  it('POST /api/projects/:id/unarchive returns 404 for unknown project', async () => {
+    const res = await app.request('/api/projects/nonexistent/unarchive', { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+
+  it('DELETE /api/projects/:id/purge without confirm returns 400', async () => {
+    db.createProject({ id: 'purge-1', name: 'purge-app', repoUrl: 'https://github.com/u/e' });
+
+    const res = await app.request('/api/projects/purge-1/purge', { method: 'DELETE' });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('Confirmation required');
+  });
+
+  it('DELETE /api/projects/:id/purge?confirm=true permanently deletes project', async () => {
+    db.createProject({ id: 'purge-2', name: 'purge-app2', repoUrl: 'https://github.com/u/f' });
+
+    const res = await app.request('/api/projects/purge-2/purge?confirm=true', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.message).toBe('Project permanently deleted');
+    expect(ctx.pipeline.remove as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'purge-2',
+      ctx.cloudflare,
+    );
+  });
+
+  it('DELETE /api/projects/:id/purge?confirm=true returns 404 for unknown project', async () => {
+    const res = await app.request('/api/projects/nonexistent/purge?confirm=true', {
+      method: 'DELETE',
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('DELETE /api/projects/:id calls archive instead of remove', async () => {
+    db.createProject({ id: 'del-1', name: 'del-app', repoUrl: 'https://github.com/u/g' });
+
+    const res = await app.request('/api/projects/del-1', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe('archived');
+    expect(ctx.pipeline.archive as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('del-1');
+  });
+
+  it('GET /api/action-runs?approval_status=pending excludes stale non-pending_approval rows', async () => {
+    db.createProject({ id: 'ops-p1', name: 'ops-app', repoUrl: 'https://github.com/u/ops-app' });
+
+    const activePendingId = db.createActionRun({
+      projectId: 'ops-p1',
+      triggerSource: 'auto_recovery',
+      recoveryStrategy: 'recipe',
+    });
+    db.updateActionRunStatus(activePendingId, 'pending_approval');
+    db.updateActionRunApproval(activePendingId, 'pending', 'rollback');
+
+    const stalePendingId = db.createActionRun({
+      projectId: 'ops-p1',
+      triggerSource: 'auto_recovery',
+      recoveryStrategy: 'recipe',
+    });
+    db.updateActionRunStatus(stalePendingId, 'failed', 'Server restarted');
+    db.updateActionRunApproval(stalePendingId, 'pending', 'rollback');
+
+    const res = await app.request('/api/action-runs?approval_status=pending');
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.actionRuns).toHaveLength(1);
+    expect(body.actionRuns[0].id).toBe(activePendingId);
   });
 });

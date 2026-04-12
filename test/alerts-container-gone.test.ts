@@ -4,12 +4,9 @@ import { AlertMonitor } from '../src/monitor/alerts.js';
 import type { Database, ProjectRow } from '../src/db/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import type { EventBus } from '../src/events/index.js';
+import * as statsModule from '../src/monitor/stats.js';
 
 let getSystemStatsMock = vi.fn();
-
-vi.mock('../src/monitor/stats.js', () => ({
-  getSystemStats: (...args: unknown[]) => getSystemStatsMock(...args),
-}));
 
 function createProject(partial?: Partial<ProjectRow>): ProjectRow {
   return {
@@ -55,23 +52,25 @@ describe('AlertMonitor missing container handling', () => {
   }
 
   beforeEach(() => {
+    vi.spyOn(statsModule, 'getSystemStats').mockImplementation((...args) =>
+      getSystemStatsMock(...args),
+    );
     emit = vi.fn().mockResolvedValue(undefined);
     updateProject = vi.fn();
     listImages = vi.fn().mockResolvedValue([]);
     listProjects = vi.fn().mockReturnValue([createProject()]);
 
     docker = {
-      getClient: vi.fn().mockReturnValue({
-        getContainer: vi.fn().mockReturnValue({
-          inspect: vi.fn().mockRejectedValue(new Error('No such container')),
-        }),
-        listImages,
-      }),
+      inspectContainer: vi.fn().mockRejectedValue(new Error('No such container')),
+      getContainerStats: vi.fn(),
     } as unknown as Docker;
 
     db = {
       listProjects,
       updateProject,
+      listOpsIncidentsByDateRange: vi.fn().mockReturnValue([]),
+      listAllActiveOpsIncidents: vi.fn().mockReturnValue([]),
+      getProject: vi.fn().mockReturnValue(null),
     } as unknown as Database;
 
     events = {
@@ -90,10 +89,10 @@ describe('AlertMonitor missing container handling', () => {
     });
   });
 
-  it('updates project status to error when container inspect fails (container gone)', async () => {
+  it('emits container:missing without changing project status (Coordinator manages status)', async () => {
     await runChecks();
 
-    expect(updateProject).toHaveBeenCalledWith('project-1', { status: 'error' });
+    expect(updateProject).not.toHaveBeenCalledWith('project-1', { status: 'error' });
     expect(emit).toHaveBeenCalledWith(
       'container:missing',
       expect.objectContaining({

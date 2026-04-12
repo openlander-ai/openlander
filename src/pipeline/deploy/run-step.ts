@@ -1,5 +1,8 @@
 import type { Database } from '../../db/index.js';
+import { getPolicy } from '../../config/index.js';
+import type { OpenLanderEnv } from '../../config/index.js';
 import type { Docker } from '../docker.js';
+import { containerName as projectContainerName } from '../helpers.js';
 import { allocatePort, clearPortScanCache, releasePortReservation } from '../port.js';
 import { buildTraefikLabels, getEnvironmentProjectHostname } from '../traefik.js';
 
@@ -8,12 +11,14 @@ export interface RunConfig {
   projectName: string;
   containerName?: string;
   projectId: string;
-  environmentType?: string;
+  environmentType?: OpenLanderEnv;
   environmentId?: string;
   envVars: Record<string, string>;
+  imageCmd?: string[];
   containerPort?: number;
   preferredPort?: number;
   secretFiles?: Array<{ filename: string; content: string; mountPath: string }>;
+  restartPolicy?: { Name: string; MaximumRetryCount?: number };
 }
 
 export class ContainerRunner {
@@ -23,21 +28,32 @@ export class ContainerRunner {
   ) {}
 
   async run(config: RunConfig): Promise<{ containerId: string; port: number; url: string }> {
-    let port = await allocatePort(this.db, this.docker, {
-      preferredPort: config.preferredPort,
-    });
+    const envType: OpenLanderEnv = 'production';
+    let port = await allocatePort(
+      this.db,
+      this.docker,
+      {
+        preferredPort: config.preferredPort,
+      },
+      envType,
+    );
 
-    const environmentType = config.environmentType === 'development' ? 'development' : 'production';
-    const containerName = `ol-${config.containerName ?? config.projectName}`;
-    await this.docker.removeContainer(containerName);
+    const containerName = projectContainerName(config.containerName ?? config.projectName);
+    await this.docker.safeRemoveContainer(containerName);
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      const containerPort = config.containerPort ?? port;
+      const configuredContainerPort = config.containerPort;
+      const containerPort =
+        typeof configuredContainerPort === 'number' &&
+        Number.isInteger(configuredContainerPort) &&
+        configuredContainerPort > 0
+          ? configuredContainerPort
+          : port;
       const traefikLabels = buildTraefikLabels(
         config.projectName,
         containerPort,
         undefined,
-        environmentType,
+        envType,
       );
 
       try {
@@ -47,12 +63,15 @@ export class ContainerRunner {
           port,
           containerPort,
           envVars: config.envVars,
+          cmd: config.imageCmd,
           traefikLabels,
+          network: getPolicy(envType).networkName,
           secretFiles: config.secretFiles,
+          restartPolicy: config.restartPolicy,
         });
 
         releasePortReservation(port);
-        const url = `http://${getEnvironmentProjectHostname(config.projectName, environmentType)}`;
+        const url = `http://${getEnvironmentProjectHostname(config.projectName, envType)}`;
         return {
           containerId,
           port,
@@ -66,7 +85,7 @@ export class ContainerRunner {
         if (attempt === 0 && isPortConflict) {
           releasePortReservation(port);
           clearPortScanCache();
-          port = await allocatePort(this.db, this.docker);
+          port = await allocatePort(this.db, this.docker, {}, envType);
           continue;
         }
         releasePortReservation(port);

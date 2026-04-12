@@ -1,19 +1,26 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { getRouteName } from './helpers.js';
+import { containerName as projectContainerName } from '../helpers.js';
 
 import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
-import { ContainerNotFoundError } from '../../errors.js';
+import { ContainerNotFoundError, OpenLanderError } from '../../errors.js';
 import type { Docker } from '../docker.js';
-import { clearPortScanCache } from '../port.js';
+import { allocatePort, clearPortScanCache } from '../port.js';
+import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import type { TunnelManager } from './tunnel.js';
 
 const log = createModuleLogger('deploy:lifecycle');
+
+export interface CoordinatorSuppressor {
+  suppressProject(projectId: string, durationMs: number): void;
+}
 
 export class ContainerLifecycle {
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
+    private readonly coordinator?: CoordinatorSuppressor,
   ) {}
 
   async start(projectId: string): Promise<void> {
@@ -42,16 +49,24 @@ export class ContainerLifecycle {
           'Container not found during start — may have been removed externally',
         );
         this.db.updateProject(projectId, { status: 'error' });
+        for (const env of this.db.getEnvironmentsByProject(projectId)) {
+          this.db.updateEnvironment(env.id, { status: 'error' });
+        }
         throw new Error(`Container for project ${project.name} no longer exists. Please redeploy.`);
       }
       throw err;
     }
 
     this.db.updateProject(projectId, { status: 'running' });
+    for (const env of this.db.getEnvironmentsByProject(projectId)) {
+      this.db.updateEnvironment(env.id, { status: 'running' });
+    }
     await eventBus.emit('container:start', { projectId, containerId: project.container_id });
   }
 
   async stop(projectId: string): Promise<void> {
+    this.coordinator?.suppressProject(projectId, 60_000);
+
     const children = this.db
       .listProjects()
       .filter((project) => project.parent_project_id === projectId);
@@ -74,7 +89,17 @@ export class ContainerLifecycle {
       }
     }
 
-    this.db.updateProject(projectId, { status: 'stopped' });
+    // Remove container after stop so Docker events can no longer fire for this project
+    try {
+      await this.docker.removeContainer(project.container_id);
+    } catch (err) {
+      log.debug({ err, projectId }, 'Stop remove container skipped (already removed)');
+    }
+
+    this.db.updateProject(projectId, { status: 'stopped', containerId: null });
+    for (const env of this.db.getEnvironmentsByProject(projectId)) {
+      this.db.updateEnvironment(env.id, { status: 'stopped' });
+    }
     await eventBus.emit('container:stop', { projectId, containerId: project.container_id });
   }
 
@@ -90,9 +115,82 @@ export class ContainerLifecycle {
     if (!project) return;
 
     await this.cleanupProjectContainers(projectId);
+
+    try {
+      await this.docker.removeProjectNetwork(project.name);
+    } catch (err) {
+      log.warn(
+        { err, projectId, projectName: project.name },
+        'Failed to remove project network (non-fatal)',
+      );
+    }
+
     tunnelManager?.close(projectId);
     this.db.deleteProject(projectId);
     await eventBus.emit('container:remove', { projectId, containerId: project.container_id ?? '' });
+  }
+
+  async archive(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
+    const project = this.db.getProject(projectId);
+    if (!project) return;
+
+    this.coordinator?.suppressProject(projectId, 60_000);
+
+    if (project.status === 'building') {
+      throw new OpenLanderError(
+        'Cannot archive a building project',
+        'ARCHIVE_BUILDING_PROJECT',
+        400,
+        { projectId },
+      );
+    }
+
+    const children = this.db
+      .listProjects(undefined, { includeArchived: false })
+      .filter((candidate) => candidate.parent_project_id === projectId);
+    for (const child of children) {
+      await this.archive(child.id, tunnelManager);
+    }
+
+    // Archive in DB first so if Docker emits a 'die' event during cleanup,
+    // the Eligibility Gate will see archived_at and reject recovery
+    this.db.archiveProject(projectId);
+
+    if (project.container_id) {
+      try {
+        await this.docker.stopContainer(project.container_id);
+      } catch (err) {
+        log.debug({ err, projectId }, 'Archive stop skipped');
+      }
+
+      try {
+        await this.docker.removeContainer(project.container_id);
+      } catch (err) {
+        log.debug({ err, projectId }, 'Archive remove container skipped');
+      }
+    }
+
+    if (project.image_tag) {
+      try {
+        await this.docker.removeImage(project.image_tag);
+      } catch (err) {
+        log.debug({ err, projectId, imageTag: project.image_tag }, 'Archive remove image skipped');
+      }
+    }
+
+    tunnelManager?.close(projectId);
+    clearPortScanCache();
+    await eventBus.emit('project:archive', { projectId });
+  }
+
+  async unarchive(projectId: string): Promise<void> {
+    const project = this.db.getProject(projectId);
+    if (!project) return;
+
+    this.db.unarchiveProject(projectId);
+    const port = await allocatePort(this.db, this.docker, {}, 'production');
+    this.db.updateProject(projectId, { assignedPort: port });
+    await eventBus.emit('project:unarchive', { projectId, port });
   }
 
   async cleanupProjectContainers(projectId: string): Promise<void> {
@@ -104,17 +202,17 @@ export class ContainerLifecycle {
     const names = new Set<string>();
 
     if (project.container_id) ids.add(project.container_id);
-    names.add(`ol-${project.name}`);
+    names.add(projectContainerName(project.name));
 
     const children = this.db.getChildProjects(projectId);
     for (const child of children) {
       if (child.container_id) ids.add(child.container_id);
-      names.add(`ol-${child.name}`);
+      names.add(projectContainerName(child.name));
     }
 
     for (const environment of environments) {
       if (environment.container_id) ids.add(environment.container_id);
-      names.add(`ol-${getRouteName(project.name, environment.type)}`);
+      names.add(projectContainerName(getRouteName(project.name, environment.type)));
     }
 
     const managed =
@@ -140,6 +238,12 @@ export class ContainerLifecycle {
 
     for (const identifier of identifiers) {
       try {
+        await this.docker.disconnectContainerFromNetwork(identifier, SHARED_NETWORK_NAME);
+      } catch (err) {
+        log.warn({ err, identifier }, 'Network disconnect during cleanup failed');
+      }
+
+      try {
         await this.docker.stopContainer(identifier);
       } catch (err) {
         log.warn({ err, identifier }, 'Container stop during cleanup failed');
@@ -149,6 +253,17 @@ export class ContainerLifecycle {
         await this.docker.removeContainer(identifier);
       } catch (err) {
         log.warn({ err, identifier }, 'Container removal during cleanup failed');
+      }
+    }
+
+    if (identifiers.size > 0 && typeof this.docker.listManagedContainers === 'function') {
+      const maxAttempts = 5;
+      const intervalMs = 200;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const managed = await this.docker.listManagedContainers();
+        const remaining = managed.some((c) => ids.has(c.id) || names.has(c.name));
+        if (!remaining) break;
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
       }
     }
 
@@ -166,6 +281,12 @@ export class ContainerLifecycle {
     if (conflicts.length > 0) {
       for (const conflict of conflicts) {
         try {
+          await this.docker.disconnectContainerFromNetwork(conflict.id, SHARED_NETWORK_NAME);
+        } catch (err) {
+          log.debug({ err, container: conflict.name }, 'Conflict network disconnect failed');
+        }
+
+        try {
           await this.docker.stopContainer(conflict.id);
         } catch (err) {
           log.debug({ err, container: conflict.name }, 'Conflict stop failed');
@@ -178,6 +299,12 @@ export class ContainerLifecycle {
         }
       }
       return;
+    }
+
+    try {
+      await this.docker.disconnectContainerFromNetwork(containerName, SHARED_NETWORK_NAME);
+    } catch (err) {
+      log.debug({ err, container: containerName }, 'Conflict network disconnect by name failed');
     }
 
     try {

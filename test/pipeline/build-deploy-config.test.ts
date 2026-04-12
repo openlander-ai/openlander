@@ -21,7 +21,7 @@ describe('buildDeployConfig', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('applies precedence runtime > stored snapshot > DB columns', () => {
+  it('applies precedence runtime > DB columns > stored snapshot', () => {
     db.createProject({
       id: 'p1',
       name: 'api-service',
@@ -52,8 +52,8 @@ describe('buildDeployConfig', () => {
     });
 
     expect(config.dockerTarget).toBe('runtime-target');
-    expect(config.buildContext).toBe('stored-context');
-    expect(config.preferDockerfile).toBe(false);
+    expect(config.buildContext).toBe('apps/api');
+    expect(config.preferDockerfile).toBe(true);
     expect(config._noCacheBuild).toBe(true);
   });
 
@@ -86,6 +86,10 @@ describe('buildDeployConfig', () => {
       branch: 'develop',
       name: 'fallback-app',
       visibility: 'shared',
+      source: 'git',
+      imageUrl: undefined,
+      imageCmd: undefined,
+      containerPort: undefined,
       dockerTarget: 'production',
       dockerfilePath: undefined,
       buildContext: '',
@@ -175,5 +179,37 @@ describe('buildDeployConfig', () => {
         db,
       });
     }).toThrow('Project not found: missing-project');
+  });
+
+  it('BUG-005: respects dockerfile_path from DB config over stored snapshot', () => {
+    db.createProject({
+      id: 'p6',
+      name: 'dockerfile-override-app',
+      repoUrl: 'https://github.com/example/dockerfile-override',
+      branch: 'main',
+      dockerfilePath: 'worker/Dockerfile',
+    });
+
+    // Simulate a previous deploy with a different dockerfile path stored in snapshot
+    db.saveDeployConfig(
+      'p6',
+      serializeConfig({
+        dockerfilePath: 'api/Dockerfile',
+      }),
+      CONFIG_VERSION,
+    );
+
+    // User updates the project config to use a new dockerfile path
+    db.updateProject('p6', {
+      dockerfilePath: 'worker/Dockerfile',
+    });
+
+    const config = buildDeployConfig({
+      projectId: 'p6',
+      db,
+    });
+
+    // DB config (worker/Dockerfile) should take precedence over stored snapshot (api/Dockerfile)
+    expect(config.dockerfilePath).toBe('worker/Dockerfile');
   });
 });

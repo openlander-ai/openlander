@@ -39,7 +39,7 @@ export function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        'px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider',
+        'px-1.5 py-0.5 rounded text-xs font-medium uppercase tracking-wider',
         isUp ? 'bg-success/10 text-success' : 'bg-error/10 text-error',
       )}
     >
@@ -124,11 +124,11 @@ export function DeployComposeResult({ result }: { result: unknown }) {
                 return (
                   <tr key={i} className="text-primary-ol">
                     <td className="px-3 py-1.5">{name}</td>
-                    <td className="px-3 py-1.5 font-mono text-[10px] text-muted-ol">{container}</td>
+                    <td className="px-3 py-1.5 font-mono text-xs text-muted-ol">{container}</td>
                     <td className="px-3 py-1.5">
                       {status ? <StatusBadge status={status} /> : '-'}
                     </td>
-                    <td className="px-3 py-1.5 font-mono text-[10px]">
+                    <td className="px-3 py-1.5 font-mono text-xs">
                       {ports.length > 0 ? ports.join(', ') : '-'}
                     </td>
                   </tr>
@@ -159,7 +159,7 @@ export function RollbackProjectResult({ result }: { result: unknown }) {
 
       <div className="flex items-center gap-2 text-xs text-secondary-ol bg-bg-app/50 p-2 rounded-md border border-border/50">
         <div className="flex flex-col">
-          <span className="text-[10px] uppercase tracking-wider text-muted-ol">From</span>
+          <span className="text-xs uppercase tracking-wider text-muted-ol">From</span>
           <span className="font-mono text-error/80">
             {typeof res.previousImageTag === 'string'
               ? res.previousImageTag.slice(0, 7)
@@ -168,7 +168,7 @@ export function RollbackProjectResult({ result }: { result: unknown }) {
         </div>
         <span className="text-muted-ol">→</span>
         <div className="flex flex-col">
-          <span className="text-[10px] uppercase tracking-wider text-muted-ol">To</span>
+          <span className="text-xs uppercase tracking-wider text-muted-ol">To</span>
           <span className="font-mono text-success/80">
             {typeof res.commitSha === 'string' ? res.commitSha.slice(0, 7) : 'unknown'}
           </span>
@@ -206,7 +206,7 @@ export function FixDockerfileResult({ result }: { result: unknown }) {
 
       {changes.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-[11px] font-mono text-agent/80 uppercase tracking-wider">Changes</p>
+          <p className="text-xs font-mono text-agent/80 uppercase tracking-wider">Changes</p>
           <ul className="space-y-1">
             {changes.map((change: unknown, i: number) => (
               <li key={i} className="text-xs text-secondary-ol flex items-start gap-1.5">
@@ -220,24 +220,24 @@ export function FixDockerfileResult({ result }: { result: unknown }) {
 
       {(before || after) && (
         <div className="space-y-1.5">
-          <p className="text-[11px] font-mono text-agent/80 uppercase tracking-wider">Diff</p>
+          <p className="text-xs font-mono text-agent/80 uppercase tracking-wider">Diff</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {before && (
               <div className="space-y-1">
-                <span className="text-[10px] font-mono text-error/80 px-1.5 py-0.5 bg-error/10 rounded">
+                <span className="text-xs font-mono text-error/80 px-1.5 py-0.5 bg-error/10 rounded">
                   Before
                 </span>
-                <pre className="text-[11px] font-mono text-error/90 bg-error/5 p-2.5 rounded border border-error/10 overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                <pre className="text-xs font-mono text-error/90 bg-error/5 p-2.5 rounded border border-error/10 overflow-x-auto whitespace-pre-wrap break-all max-h-48">
                   {before}
                 </pre>
               </div>
             )}
             {after && (
               <div className="space-y-1">
-                <span className="text-[10px] font-mono text-success/80 px-1.5 py-0.5 bg-success/10 rounded">
+                <span className="text-xs font-mono text-success/80 px-1.5 py-0.5 bg-success/10 rounded">
                   After
                 </span>
-                <pre className="text-[11px] font-mono text-success/90 bg-success/5 p-2.5 rounded border border-success/10 overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                <pre className="text-xs font-mono text-success/90 bg-success/5 p-2.5 rounded border border-success/10 overflow-x-auto whitespace-pre-wrap break-all max-h-48">
                   {after}
                 </pre>
               </div>
@@ -248,10 +248,10 @@ export function FixDockerfileResult({ result }: { result: unknown }) {
 
       {typeof res.dockerfileContent === 'string' && !after && (
         <details className="mt-1 group/df">
-          <summary className="text-[11px] font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
+          <summary className="text-xs font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
             View Dockerfile ▾
           </summary>
-          <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+          <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
             {res.dockerfileContent}
           </pre>
         </details>
@@ -317,7 +317,7 @@ export function ListProjectsResult({ result }: { result: unknown }) {
         </table>
       </div>
       {remaining > 0 && (
-        <div className="mt-1.5 text-[11px] text-secondary-ol text-center">
+        <div className="mt-1.5 text-xs text-secondary-ol text-center">
           +{remaining} more projects
         </div>
       )}
@@ -340,10 +340,10 @@ export function GetLogsResult({ result }: { result: unknown }) {
 
   return (
     <details className="mt-2 group/log">
-      <summary className="text-[11px] font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
+      <summary className="text-xs font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
         View logs ▾
       </summary>
-      <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+      <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
         {displayLogs}
       </pre>
     </details>
@@ -414,7 +414,7 @@ export function SetEnvVarsResult({ result }: { result: unknown }) {
         {keys.map((key, i) => (
           <div
             key={i}
-            className="px-2 py-1 rounded bg-bg-subtle border border-border text-[11px] font-mono text-primary-ol flex items-center gap-1.5"
+            className="px-2 py-1 rounded bg-bg-subtle border border-border text-xs font-mono text-primary-ol flex items-center gap-1.5"
           >
             <span>{key}</span>
             <span className="text-muted-ol">***</span>
@@ -429,10 +429,10 @@ export function FallbackResult({ result }: { result: unknown }) {
   const masked = maskSecrets(result);
   return (
     <details className="mt-2 group/json">
-      <summary className="text-[11px] font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
+      <summary className="text-xs font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
         View result ▾
       </summary>
-      <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+      <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
         {JSON.stringify(masked, null, 2)}
       </pre>
     </details>

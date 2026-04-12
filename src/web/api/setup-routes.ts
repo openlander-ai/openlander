@@ -1,49 +1,117 @@
-import { requestDeviceCode, getGitHubClientId } from '../../git-providers/github-oauth.js';
-
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
-import { loadConfig, saveConfig, updateConfig } from '../../config/index.js';
+import { loadConfig, saveConfig, updateConfig, normalizeLlmConfig } from '../../config/index.js';
 import { loadDecryptedToken } from '../../auth/token-store.js';
-import type { OpenLanderConfig, McpServerEntry } from '../../config/index.js';
-import { createGitProvider } from '../../git-providers/index.js';
+import type { AIFeaturesConfig, LLMRoute, AIModelFeature } from '../../config/index.js';
+import type { LLMConfig } from '../../llm/index.js';
+import type { LLMProviderType } from '../../llm/providers.js';
+import { LLM_PROVIDERS } from '../../llm/providers.js';
 import { createModuleLogger } from '../../lib/logger.js';
-import type { ToolSet } from 'ai';
+import { createCloudflareSetupRoutes } from './setup/cloudflare-routes.js';
+import { createGithubSetupRoutes } from './setup/github-routes.js';
+import { createMcpSetupRoutes } from './setup/mcp-routes.js';
+import {
+  getLlmRuntimeStatus,
+  reloadAgent,
+  resolveDefaultLlmProvider,
+  runLlmConnectivityTest,
+  syncLlmRuntime,
+} from './setup/shared.js';
 
 const log = createModuleLogger('setup-routes');
 
-/**
- * Setup / onboarding API routes.
- *
- * These endpoints let the web UI check readiness and configure
- * the system without using the CLI `openlander onboard` command.
- *
- * Endpoints:
- *  GET   /setup/status   — Check Docker, Traefik, LLM readiness
- *  POST  /setup/llm      — Save LLM provider + API key
- *  POST  /setup/traefik  — Start Traefik container
- *  POST  /setup/complete  — Mark setup as done (saves config if needed)
- */
+function isValidProvider(provider: string): provider is LLMProviderType {
+  return LLM_PROVIDERS.includes(provider as LLMProviderType);
+}
+
+// Benchmark-based provider scores (1-5). Sources: MMLU, BFCL v3, ReliabilityBench, MCPMark (2025-2026)
+//                          reasoning  speed  toolUse  cost
+// anthropic (sonnet-4)     MMLU 90%   44t/s  BFCL 70% $3.00/1M
+// openai (gpt-4o)          MMLU 88%   80t/s  BFCL~85% $2.50/1M
+// gemini (2.5-flash)       MMLU 85%   200t/s RBench96% $0.30/1M
+// deepseek (V3)            MMLU 89%   48t/s  82%      $0.28/1M
+// xai (grok-3-mini-fast)   MMLU~80%   190t/s 78%      $0.60/1M
+// mistral (large)          MMLU 86%   90t/s  88%      $2.00/1M
+// zai (glm-4.7)            MMLU~82%   120t/s 71%      $0.60/1M
+const PROVIDER_SCORES: Record<
+  string,
+  { reasoning: number; speed: number; toolUse: number; cost: number }
+> = {
+  anthropic: { reasoning: 5, speed: 2, toolUse: 5, cost: 5 },
+  openai: { reasoning: 5, speed: 3, toolUse: 5, cost: 4 },
+  gemini: { reasoning: 4, speed: 5, toolUse: 4, cost: 1 },
+  xai: { reasoning: 3, speed: 5, toolUse: 3, cost: 2 },
+  deepseek: { reasoning: 5, speed: 3, toolUse: 3, cost: 1 },
+  mistral: { reasoning: 4, speed: 3, toolUse: 4, cost: 3 },
+  zai: { reasoning: 4, speed: 3, toolUse: 3, cost: 2 },
+  'zai-coding': { reasoning: 4, speed: 3, toolUse: 3, cost: 2 },
+};
+
+const FEATURE_WEIGHTS: Record<
+  string,
+  {
+    primary: keyof (typeof PROVIDER_SCORES)['gemini'];
+    secondary: keyof (typeof PROVIDER_SCORES)['gemini'];
+  }
+> = {
+  codingPlan: { primary: 'reasoning', secondary: 'toolUse' },
+  autoRecovery: { primary: 'toolUse', secondary: 'reasoning' },
+  buildDebugger: { primary: 'reasoning', secondary: 'speed' },
+  webAgent: { primary: 'toolUse', secondary: 'reasoning' },
+  envDetection: { primary: 'speed', secondary: 'reasoning' },
+  secretScan: { primary: 'speed', secondary: 'reasoning' },
+  rollbackSuggestion: { primary: 'speed', secondary: 'reasoning' },
+  operationalMonitoring: { primary: 'speed', secondary: 'toolUse' },
+};
+
+type ModelTier = 'flagship' | 'balanced' | 'lite';
+
+const FEATURE_TIER: Record<string, ModelTier> = {
+  codingPlan: 'flagship',
+  autoRecovery: 'flagship',
+  webAgent: 'flagship',
+  buildDebugger: 'balanced',
+  rollbackSuggestion: 'balanced',
+  envDetection: 'lite',
+  secretScan: 'lite',
+  operationalMonitoring: 'lite',
+};
+
+const PROVIDER_MODEL_TIERS: Record<string, Record<ModelTier, string>> = {
+  anthropic: {
+    flagship: 'claude-sonnet-4-20250514',
+    balanced: 'claude-sonnet-4-20250514',
+    lite: 'claude-haiku-4-5-20251001',
+  },
+  openai: { flagship: 'gpt-4o', balanced: 'gpt-4o', lite: 'gpt-4o-mini' },
+  gemini: { flagship: 'gemini-2.5-pro', balanced: 'gemini-2.5-flash', lite: 'gemini-2.5-flash' },
+  xai: { flagship: 'grok-3-fast', balanced: 'grok-3-mini-fast', lite: 'grok-3-mini-fast' },
+  deepseek: { flagship: 'deepseek-reasoner', balanced: 'deepseek-chat', lite: 'deepseek-chat' },
+  mistral: {
+    flagship: 'mistral-large-latest',
+    balanced: 'mistral-medium-latest',
+    lite: 'mistral-small-latest',
+  },
+  zai: { flagship: 'glm-5', balanced: 'glm-4.7', lite: 'glm-4.7-flash' },
+  'zai-coding': { flagship: 'glm-5', balanced: 'glm-4.7', lite: 'glm-4.7-flash' },
+};
+
 export function createSetupRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
-  /**
-   * GET /setup/status
-   *
-   * Returns the readiness state of all required components.
-   * Frontend calls this on load to decide: show setup or show chat.
-   */
   api.get('/setup/status', async (c) => {
     const [dockerStatus, traefikOk] = await Promise.all([
       ctx.docker.status(),
       ctx.traefik.isRunning().catch(() => false),
     ]);
 
-    const dockerOk = dockerStatus.state === 'running';
-    const llmConfigured = ctx.agent !== null;
     const config = loadConfig();
+    const dockerOk = dockerStatus.state === 'running';
+    const llmStatus = getLlmRuntimeStatus(config, ctx.llmVerified);
+    const hasPassword = ctx.db.isPasswordSet();
 
-    const ready = dockerOk;
+    const ready = dockerOk && hasPassword;
 
     let dockerMessage: string;
     if (dockerStatus.state === 'running') {
@@ -62,6 +130,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
 
     return c.json({
       ready,
+      hasPassword,
       docker: {
         ok: dockerOk,
         state: dockerStatus.state,
@@ -76,12 +145,15 @@ export function createSetupRoutes(ctx: AppContext): Hono {
           : 'Traefik is not running. Click "Start Traefik" to set it up.',
       },
       llm: {
-        ok: llmConfigured,
-        provider: config.llm.provider,
-        model: config.llm.model,
-        message: llmConfigured
-          ? `${config.llm.provider} (${config.llm.model})`
-          : 'No LLM configured. Connect a provider and token/API key.',
+        ok: llmStatus.configured,
+        provider: llmStatus.provider,
+        model: llmStatus.model,
+        message:
+          llmStatus.state === 'offline'
+            ? 'No LLM configured. Connect a provider and token/API key.'
+            : llmStatus.state === 'online'
+              ? `${llmStatus.provider} (${llmStatus.model})`
+              : `${llmStatus.provider} (${llmStatus.model}) configured, but the latest connection test failed.`,
       },
       github: {
         ok: Boolean(config.gitProviders.github.token),
@@ -94,14 +166,6 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     });
   });
 
-  /**
-   * POST /setup/llm
-   *
-   * Save LLM provider and API key. Requires server restart to take effect
-   * (the LLM client and Agent are created at startup).
-   *
-   * Body: { provider: string, api_key: string, model?: string }
-   */
   api.post('/setup/llm', async (c) => {
     const body = await c.req.json<{
       provider: string;
@@ -113,14 +177,14 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     const provider = body.provider;
     const rawApiKey = typeof body.api_key === 'string' ? body.api_key.trim() : '';
     const rawAuthToken = typeof body.auth_token === 'string' ? body.auth_token.trim() : '';
-    const isOauthProvider = provider === 'openrouter' || provider === 'openai';
+    const isOauthProvider = provider === 'openai';
 
     if (!provider) {
       return c.json({ error: 'MISSING_FIELD', message: 'provider is required' }, 400);
     }
 
-    const validProviders = ['gemini', 'openrouter', 'anthropic', 'openai', 'ollama'];
-    if (!validProviders.includes(provider)) {
+    const validProviders = [...LLM_PROVIDERS];
+    if (!isValidProvider(provider)) {
       return c.json(
         {
           error: 'INVALID_PROVIDER',
@@ -130,16 +194,18 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       );
     }
 
-    // Default model per provider
     const modelDefaults: Record<string, string> = {
-      gemini: 'gemini-2.0-flash',
-      openrouter: 'openrouter/free',
+      gemini: 'gemini-2.5-flash',
       anthropic: 'claude-sonnet-4-20250514',
-      openai: 'gpt-4o-mini',
-      ollama: 'llama3.2',
+      openai: 'gpt-4o',
+      xai: 'grok-3-mini-fast',
+      deepseek: 'deepseek-chat',
+      mistral: 'mistral-large-latest',
+      zai: 'glm-4.7',
+      'zai-coding': 'glm-4.7',
     };
 
-    const model = body.model || modelDefaults[provider] || 'gemini-2.0-flash';
+    const model = body.model || modelDefaults[provider] || 'gemini-2.5-flash';
     const storedOauthToken = isOauthProvider
       ? (loadDecryptedToken(ctx.db, provider)?.accessToken ?? '')
       : '';
@@ -156,56 +222,45 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     const apiKey = !isOauthProvider || rawApiKey ? rawApiKey : '';
     const resolvedAuthToken = isOauthProvider && !apiKey ? authToken : '';
 
-    updateConfig({
+    const updated = updateConfig({
       llm: {
-        provider: provider as OpenLanderConfig['llm']['provider'],
+        provider: provider,
         apiKey,
         authToken: resolvedAuthToken,
         model,
       },
     });
+    ctx.config = updated;
 
-    // Hot-reload: try to create the agent now so the user doesn't need to restart
     try {
-      const { createModel } = await import('../../llm/index.js');
-      const { Agent } = await import('../../llm/agent.js');
-      const { createTools } = await import('../../tools/index.js');
-      const { mergeWithMcpTools } = await import('../../mcp/client-manager.js');
-      const { buildContextSnapshot } = await import('../../llm/prompts.js');
+      await syncLlmRuntime(ctx);
 
-      const llmModel = createModel({
-        provider: provider as OpenLanderConfig['llm']['provider'],
+      const verifyResult = await runLlmConnectivityTest({
+        provider: provider,
         apiKey,
         authToken: resolvedAuthToken || undefined,
         model,
       });
-
-      const agent = new Agent(
-        llmModel,
-        ctx.db,
-        async () => buildContextSnapshot(ctx.db, ctx.docker),
-        body.provider as OpenLanderConfig['llm']['provider'],
-        ctx.config.language,
-      );
-
-      let tools: ToolSet = createTools(ctx, ctx.questionBridge);
-      if (ctx.config.mcp.enabled && ctx.mcpClientManager.connectedCount > 0) {
-        tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
+      if (verifyResult.ok) {
+        ctx.llmVerified = true;
+      } else {
+        ctx.llmVerified = false;
       }
-      agent.setTools(tools);
-      agent.setQuestionBridge(ctx.questionBridge);
-
-      (ctx as { agent: typeof agent }).agent = agent;
 
       return c.json({
         status: 'configured',
         provider: body.provider,
         model,
         hot_reloaded: true,
-        message: 'LLM configured and ready. No restart needed.',
+        llmVerified: ctx.llmVerified,
+        message: ctx.llmVerified
+          ? 'LLM configured and verified.'
+          : (verifyResult.error ??
+            'LLM configured but connectivity test failed. Check your API key.'),
       });
     } catch (error) {
-      // Config saved but hot-reload failed — user needs to restart
+      ctx.llmVerified = false;
+      await syncLlmRuntime(ctx).catch(() => undefined);
       return c.json({
         status: 'configured',
         provider: body.provider,
@@ -217,143 +272,121 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     }
   });
 
-  api.get('/setup/cloudflare', (c) => {
+  api.post('/setup/llm/test', async (c) => {
+    const body = await c.req
+      .json<{
+        provider_id?: string;
+        provider?: string;
+        api_key?: string;
+        auth_token?: string;
+        model?: string;
+      }>()
+      .catch(
+        (): {
+          provider_id?: string;
+          provider?: string;
+          api_key?: string;
+          auth_token?: string;
+          model?: string;
+        } => ({}),
+      );
+
     const config = loadConfig();
-    const cloudflare = config.cloudflare;
-    const configured =
-      cloudflare.apiToken.trim() !== '' &&
-      cloudflare.accountId.trim() !== '' &&
-      cloudflare.tunnelId.trim() !== '';
+    const providerId = typeof body.provider_id === 'string' ? body.provider_id.trim() : '';
+    let persistVerification = false;
 
-    return c.json(
-      configured
-        ? {
-            configured: true,
-            accountId: cloudflare.accountId,
-          }
-        : {
-            configured: false,
-          },
-    );
-  });
+    let provider: LLMConfig['provider'];
+    let model: string;
+    let apiKey = '';
+    let authToken: string | undefined;
+    if (providerId) {
+      const normalized = normalizeLlmConfig(config.llm);
+      const entry = normalized.providers[providerId];
+      if (!entry) {
+        return c.json({ ok: false, providerId, error: 'Provider not found' }, 404);
+      }
 
-  api.post('/setup/cloudflare/connect', async (c) => {
-    const body = await c.req.json<{ api_token?: string }>();
-    const apiToken = typeof body.api_token === 'string' ? body.api_token.trim() : '';
+      provider = entry.provider;
+      model = body.model ?? entry.defaultModel;
+      apiKey = body.api_key?.trim() || entry.apiKey || '';
+      authToken = body.auth_token?.trim() || entry.authToken;
+      persistVerification = normalized.defaultRoute.providerId === providerId;
+    } else {
+      const useStoredDefault =
+        !body.provider && !body.api_key && !body.auth_token && !body.model && !body.provider_id;
+      const resolvedDefault = useStoredDefault ? resolveDefaultLlmProvider(config) : null;
 
-    if (!apiToken) {
-      return c.json({ error: 'MISSING_FIELD', message: 'api_token is required' }, 400);
+      provider = (body.provider ||
+        resolvedDefault?.provider ||
+        config.llm.provider) as LLMConfig['provider'];
+      model = body.model || resolvedDefault?.model || config.llm.model;
+      apiKey = body.api_key?.trim() || resolvedDefault?.apiKey || config.llm.apiKey;
+      authToken =
+        body.auth_token?.trim() || resolvedDefault?.authToken || config.llm.authToken || undefined;
+      persistVerification = useStoredDefault;
     }
 
-    try {
-      const accountsResp = await fetch('https://api.cloudflare.com/client/v4/accounts', {
-        headers: {
-          Authorization: `Bearer ${apiToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const accountsData = (await accountsResp.json()) as {
-        success?: boolean;
-        result?: Array<{ id?: string; name?: string }>;
-        errors?: Array<{ message?: string }>;
-      };
-
-      if (accountsResp.status === 401 || accountsResp.status === 403) {
-        const message = accountsData.errors?.[0]?.message || 'Invalid Cloudflare API token';
-        return c.json({ error: 'INVALID_TOKEN', message }, 401);
-      }
-
-      if (!accountsResp.ok || !accountsData.success) {
-        const message = accountsData.errors?.[0]?.message || 'Failed to list Cloudflare accounts';
-        return c.json({ error: 'CF_API_FAILED', message }, 500);
-      }
-
-      const account = accountsData.result?.[0];
-      const accountId = account?.id?.trim() || '';
-      const accountName = account?.name?.trim() || '';
-
-      if (!accountId || !accountName) {
-        return c.json({ error: 'CF_API_FAILED', message: 'No Cloudflare account found' }, 500);
-      }
-
-      const tunnelsResp = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${accountId}/cfd_tunnel?is_deleted=false`,
-        {
-          headers: {
-            Authorization: `Bearer ${apiToken}`,
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-
-      const tunnelsData = (await tunnelsResp.json()) as {
-        success?: boolean;
-        result?: Array<{ id?: string; name?: string }>;
-        errors?: Array<{ message?: string }>;
-      };
-
-      if (!tunnelsResp.ok || !tunnelsData.success) {
-        const message = tunnelsData.errors?.[0]?.message || 'Failed to list Cloudflare tunnels';
-        return c.json({ error: 'CF_API_FAILED', message }, 500);
-      }
-
-      const tunnels = (tunnelsData.result ?? [])
-        .map((tunnel) => ({
-          id: tunnel.id?.trim() || '',
-          name: tunnel.name?.trim() || '',
-        }))
-        .filter((tunnel) => tunnel.id !== '');
-
-      return c.json({ accountId, accountName, tunnels });
-    } catch (error) {
+    if (!apiKey && !authToken) {
       return c.json(
-        {
-          error: 'CF_API_FAILED',
-          message: error instanceof Error ? error.message : 'Cloudflare API request failed',
-        },
-        500,
-      );
-    }
-  });
-
-  api.post('/setup/cloudflare', async (c) => {
-    const body = await c.req.json<{
-      api_token?: string;
-      account_id?: string;
-      tunnel_id?: string;
-    }>();
-
-    const apiToken = typeof body.api_token === 'string' ? body.api_token.trim() : '';
-    const accountId = typeof body.account_id === 'string' ? body.account_id.trim() : '';
-    const tunnelId = typeof body.tunnel_id === 'string' ? body.tunnel_id.trim() : '';
-
-    if (!apiToken || !accountId || !tunnelId) {
-      return c.json(
-        {
-          error: 'MISSING_FIELD',
-          message: 'api_token, account_id, and tunnel_id are required',
-        },
+        { ok: false, providerId: providerId || undefined, error: 'No API key configured' },
         400,
       );
     }
 
-    updateConfig({
-      cloudflare: {
-        apiToken,
-        accountId,
-        tunnelId,
-      },
+    const result = await runLlmConnectivityTest({
+      provider,
+      apiKey,
+      authToken,
+      model,
     });
+    if (persistVerification) {
+      ctx.llmVerified = result.ok;
+    }
 
-    return c.json({ status: 'configured' });
+    if (result.ok) {
+      return c.json({
+        ok: true,
+        providerId: providerId || undefined,
+        provider,
+        model,
+        latencyMs: result.latencyMs ?? 0,
+      });
+    }
+
+    return c.json({
+      ok: false,
+      providerId: providerId || undefined,
+      provider,
+      model,
+      error: result.error ?? 'Connection failed',
+    });
   });
 
-  /**
-   * POST /setup/traefik
-   *
-   * Start the Traefik reverse proxy container.
-   */
+  api.delete('/setup/llm', async (c) => {
+    const config = loadConfig();
+    const updated = {
+      ...config,
+      llm: {
+        ...config.llm,
+        provider: 'gemini' as const,
+        apiKey: '',
+        authToken: '',
+        model: 'gemini-2.5-flash',
+        providers: {},
+        defaultRoute: { providerId: '__none__' },
+        routes: {},
+      },
+    };
+    saveConfig(updated);
+    ctx.config = updated;
+
+    ctx.llmVerified = false;
+    await syncLlmRuntime(ctx);
+    log.info('LLM configuration removed');
+
+    return c.json({ status: 'removed', message: 'LLM configuration cleared.' });
+  });
+
   api.post('/setup/traefik', async (c) => {
     try {
       const isRunning = await ctx.traefik.isRunning();
@@ -375,266 +408,411 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     }
   });
 
-  /**
-   * POST /setup/github
-   *
-   * Save and validate a GitHub Personal Access Token.
-   * On success, caches the username in config.
-   *
-   * Body: { token: string }
-   */
-  api.post('/setup/github', async (c) => {
-    const body = await c.req.json<{ token: string }>();
+  api.post('/setup/language', async (c) => {
+    const body = await c.req.json<{ language: string }>();
 
-    if (!body.token) {
-      return c.json({ error: 'MISSING_FIELD', message: 'token is required' }, 400);
+    if (body.language !== 'en' && body.language !== 'ko') {
+      return c.json({ error: 'INVALID_LANGUAGE', message: 'Language must be "en" or "ko"' }, 400);
     }
 
-    // Validate the token against GitHub API
-    const provider = createGitProvider('github', { token: body.token, username: '' });
-    const validation = await provider.validateToken();
+    const language = body.language;
+    updateConfig({ language });
+    ctx.config.language = language;
 
-    if (!validation.valid) {
+    if (ctx.agent) {
+      try {
+        const llmModel = await reloadAgent(ctx, {
+          provider: ctx.config.llm.provider,
+          apiKey: ctx.config.llm.apiKey,
+          model: ctx.config.llm.model,
+          authToken: ctx.config.llm.authToken || undefined,
+          language,
+        });
+
+        if (ctx.buildDebugger) {
+          const { BuildDebugger } = await import('../../pipeline/build-debugger.js');
+          ctx.buildDebugger = new BuildDebugger(llmModel, language);
+        }
+      } catch (err) {
+        log.error({ err, language }, 'Agent hot-reload failed');
+      }
+    }
+
+    return c.json({ status: 'saved', language });
+  });
+
+  api.get('/setup/ai-features', (c) => {
+    const config = ctx.config;
+    const hasModel = ctx.model !== null;
+
+    const featureKeys: Array<keyof AIFeaturesConfig> = [
+      'autoRecovery',
+      'buildDebugger',
+      'webAgent',
+      'envDetection',
+      'secretScan',
+      'rollbackSuggestion',
+      'operationalMonitoring',
+      'codingPlan',
+    ];
+
+    const features: Record<
+      string,
+      { enabled: boolean; available: boolean; providerId?: string; model?: string }
+    > = {};
+    for (const key of featureKeys) {
+      const toggle = config.ai[key];
+      features[key] = {
+        enabled: toggle.enabled,
+        available: hasModel,
+        ...(toggle.providerId !== undefined && { providerId: toggle.providerId }),
+        ...(toggle.model !== undefined && { model: toggle.model }),
+      };
+    }
+
+    return c.json({ features });
+  });
+
+  api.put('/setup/ai-features', async (c) => {
+    const body =
+      await c.req.json<
+        Partial<
+          Record<keyof AIFeaturesConfig, { enabled: boolean; providerId?: string; model?: string }>
+        >
+      >();
+
+    const config = loadConfig();
+    const merged: AIFeaturesConfig = { ...config.ai };
+    for (const [key, value] of Object.entries(body)) {
+      if (key in merged) {
+        const existing = merged[key as keyof AIFeaturesConfig];
+        merged[key as keyof AIFeaturesConfig] = {
+          ...existing,
+          enabled: value.enabled,
+          ...(value.providerId !== undefined && { providerId: value.providerId }),
+          ...(value.model !== undefined && { model: value.model }),
+        };
+      }
+    }
+
+    const updated = updateConfig({ ai: merged });
+    ctx.config = updated;
+
+    const normalizedLlm = normalizeLlmConfig(updated.llm);
+    const newRoutes: Partial<Record<AIModelFeature, LLMRoute>> = {};
+    const featureRoutingKeys: AIModelFeature[] = [
+      'autoRecovery',
+      'buildDebugger',
+      'webAgent',
+      'envDetection',
+      'operationalMonitoring',
+      'codingPlan',
+      'secretScan',
+      'rollbackSuggestion',
+    ];
+    for (const fk of featureRoutingKeys) {
+      const toggle = updated.ai[fk];
+      if (toggle.providerId) {
+        newRoutes[fk] = { providerId: toggle.providerId, model: toggle.model };
+      }
+    }
+    ctx.modelRegistry.updateConfig({
+      providers: normalizedLlm.providers,
+      defaultRoute: normalizedLlm.defaultRoute,
+      routes: { ...normalizedLlm.routes, ...newRoutes },
+    });
+
+    const hasModel = ctx.model !== null;
+    const featureKeys: Array<keyof AIFeaturesConfig> = [
+      'autoRecovery',
+      'buildDebugger',
+      'webAgent',
+      'envDetection',
+      'secretScan',
+      'rollbackSuggestion',
+      'operationalMonitoring',
+      'codingPlan',
+    ];
+
+    const features: Record<
+      string,
+      { enabled: boolean; available: boolean; providerId?: string; model?: string }
+    > = {};
+    for (const key of featureKeys) {
+      const toggle = updated.ai[key];
+      features[key] = {
+        enabled: toggle.enabled,
+        available: hasModel,
+        ...(toggle.providerId !== undefined && { providerId: toggle.providerId }),
+        ...(toggle.model !== undefined && { model: toggle.model }),
+      };
+    }
+
+    return c.json({ features });
+  });
+
+  api.get('/setup/providers', (c) => {
+    const config = loadConfig();
+    const providers = config.llm.providers ?? {};
+
+    const masked = Object.entries(providers).map(([id, entry]) => ({
+      id,
+      provider: entry.provider,
+      defaultModel: entry.defaultModel,
+      hasApiKey: !!(entry.apiKey || entry.authToken),
+      apiKeyPreview: entry.apiKey
+        ? entry.apiKey.substring(0, 6) + '······'
+        : entry.authToken
+          ? '(oauth)'
+          : '',
+    }));
+
+    return c.json({ providers: masked });
+  });
+
+  api.post('/setup/providers', async (c) => {
+    const body = await c.req.json<{
+      id: string;
+      provider: string;
+      apiKey?: string;
+      authToken?: string;
+      defaultModel: string;
+    }>();
+
+    if (!body.id || !body.provider || !body.defaultModel) {
+      return c.json(
+        { error: 'MISSING_FIELD', message: 'id, provider, and defaultModel are required' },
+        400,
+      );
+    }
+
+    const validProviders = [...LLM_PROVIDERS];
+    if (!isValidProvider(body.provider)) {
       return c.json(
         {
-          status: 'invalid',
-          error: validation.error ?? 'Token validation failed',
-          message:
-            'GitHub token is invalid or expired. Generate a new one at github.com/settings/tokens.',
+          error: 'INVALID_PROVIDER',
+          message: `Invalid provider. Must be one of: ${validProviders.join(', ')}`,
         },
         400,
       );
     }
 
-    // Save validated token + username
-    updateConfig({
-      gitProviders: {
-        github: {
-          token: body.token,
-          username: validation.user?.username ?? '',
-        },
-      },
+    if (!body.apiKey && !body.authToken) {
+      return c.json({ error: 'MISSING_FIELD', message: 'apiKey or authToken is required' }, 400);
+    }
+
+    const testResult = await runLlmConnectivityTest({
+      provider: body.provider,
+      model: body.defaultModel,
+      apiKey: body.apiKey,
+      authToken: body.authToken,
     });
 
-    return c.json({
-      status: 'connected',
-      username: validation.user?.username,
-      scopes: validation.scopes,
-      message: `Connected to GitHub as ${validation.user?.username ?? 'unknown'}.`,
-    });
-  });
-
-  /**
-   * DELETE /setup/github
-   *
-   * Disconnect GitHub — removes stored token.
-   */
-  api.delete('/setup/github', (c) => {
-    updateConfig({
-      gitProviders: {
-        github: { token: '', username: '' },
-      },
-    });
-    return c.json({ status: 'disconnected', message: 'GitHub disconnected.' });
-  });
-
-  /**
-   * POST /setup/github/device-code
-   *
-   * Initiates GitHub Device Flow for browser-based OAuth.
-   * Returns device code and user code for the user to authorize.
-   */
-  api.post('/setup/github/device-code', async (c) => {
-    try {
-      const response = await requestDeviceCode(getGitHubClientId());
-      return c.json(response);
-    } catch (error) {
+    if (!testResult.ok) {
       return c.json(
         {
-          error: 'DEVICE_CODE_FAILED',
-          message: error instanceof Error ? error.message : 'Failed to request device code',
+          error: 'CONNECTION_FAILED',
+          message: testResult.error ?? 'Connection test failed. Check your API key and try again.',
+          latencyMs: testResult.latencyMs,
         },
-        500,
+        400,
       );
     }
-  });
 
-  /**
-   * POST /setup/github/poll
-   *
-   * Single poll attempt for Device Flow token.
-   * Frontend polls this endpoint at the specified interval.
-   *
-   * Body: { device_code: string, interval: number }
-   */
-  api.post('/setup/github/poll', async (c) => {
-    const body = await c.req.json<{ device_code: string; interval: number }>();
+    const config = loadConfig();
+    const previousDefaultProviderId = normalizeLlmConfig(config.llm).defaultRoute.providerId;
+    const existingProviders = config.llm.providers ?? {};
 
-    if (!body.device_code) {
-      return c.json({ error: 'MISSING_FIELD', message: 'device_code is required' }, 400);
-    }
-
-    // Single poll attempt against GitHub's token endpoint
-    const response = await fetch('https://github.com/login/oauth/access_token', {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
+    const updatedProviders = {
+      ...existingProviders,
+      [body.id]: {
+        provider: body.provider,
+        apiKey: body.apiKey,
+        authToken: body.authToken,
+        defaultModel: body.defaultModel,
       },
-      body: JSON.stringify({
-        client_id: getGitHubClientId(),
-        device_code: body.device_code,
-        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-      }),
-    });
-
-    if (!response.ok) {
-      return c.json(
-        { status: 'error', message: `GitHub API error: ${String(response.status)}` },
-        500,
-      );
-    }
-
-    const data = (await response.json()) as {
-      access_token?: string;
-      error?: string;
-      error_description?: string;
     };
 
-    // Handle GitHub OAuth errors
-    if (data.error) {
-      switch (data.error) {
-        case 'authorization_pending':
-          return c.json({ status: 'pending' });
+    const existingDefaultRoute = config.llm.defaultRoute;
+    const hasValidExistingDefault =
+      !!existingDefaultRoute &&
+      existingDefaultRoute.providerId !== '__none__' &&
+      existingDefaultRoute.providerId in updatedProviders;
+    const defaultRoute = hasValidExistingDefault ? existingDefaultRoute : { providerId: body.id };
 
-        case 'slow_down':
-          return c.json({ status: 'slow_down', interval: body.interval + 5 });
+    const updated = updateConfig({
+      llm: { providers: updatedProviders, defaultRoute },
+    });
+    ctx.config = updated;
 
-        case 'expired_token':
-          return c.json({ status: 'expired', message: 'Code expired. Please restart.' }, 410);
-
-        case 'access_denied':
-          return c.json({ status: 'denied', message: 'Authorization denied.' }, 403);
-
-        default:
-          return c.json(
-            {
-              status: 'error',
-              message: data.error_description || data.error,
-            },
-            400,
-          );
-      }
+    const normalizedUpdated = normalizeLlmConfig(updated.llm);
+    const activeProviderId = normalizedUpdated.defaultRoute.providerId;
+    if (activeProviderId !== previousDefaultProviderId || activeProviderId === body.id) {
+      ctx.llmVerified = false;
     }
 
-    // Success - validate token and save
-    if (data.access_token) {
-      try {
-        const provider = createGitProvider('github', {
-          token: data.access_token,
-          username: '',
-        });
-        const validation = await provider.validateToken();
+    await syncLlmRuntime(ctx);
 
-        if (!validation.valid) {
-          return c.json(
-            {
-              status: 'error',
-              message: 'Token validation failed',
-            },
-            400,
-          );
-        }
+    const latestConfig = loadConfig();
+    const allProviders = latestConfig.llm.providers ?? {};
+    const recommendations = computeRecommendations(allProviders);
+    applyRecommendations(recommendations);
+    await syncLlmRuntime(ctx);
 
-        const username = validation.user?.username ?? '';
-        updateConfig({
-          gitProviders: {
-            github: { token: data.access_token, username },
-          },
-        });
-
-        return c.json({ status: 'complete', username });
-      } catch (error) {
-        return c.json(
-          {
-            status: 'error',
-            message: error instanceof Error ? error.message : 'Failed to save token',
-          },
-          500,
-        );
-      }
-    }
-
-    // Unexpected response
-    return c.json({ status: 'error', message: 'Unexpected response from GitHub' }, 500);
+    return c.json({
+      status: 'added',
+      id: body.id,
+      verified: true,
+      latencyMs: testResult.latencyMs,
+      recommendations,
+    });
   });
 
-  /**
-   * POST /setup/complete
-   *
-   * Ensure config file exists (marks onboarding as "done" for isOnboarded() check).
-   */
-  /**
-   * POST /setup/language
-   *
-   * Save the user's preferred language.
-   * Body: { language: 'en' | 'ko' }
-   */
-  api.post('/setup/language', async (c) => {
-    const body = await c.req.json<{ language: string }>();
-    const lang = body.language;
+  api.delete('/setup/providers/:id', async (c) => {
+    const id = c.req.param('id');
+    const config = loadConfig();
+    const providers = config.llm.providers ?? {};
 
-    if (!lang || !['en', 'ko'].includes(lang)) {
-      return c.json({ error: 'INVALID_LANGUAGE', message: 'Language must be "en" or "ko"' }, 400);
+    if (!(id in providers)) {
+      return c.json({ error: 'NOT_FOUND', message: `Provider "${id}" not found` }, 404);
     }
 
-    updateConfig({ language: lang as 'en' | 'ko' });
-    ctx.config.language = lang as 'en' | 'ko';
+    if (Object.keys(providers).length === 1) {
+      const updated = {
+        ...config,
+        llm: {
+          ...config.llm,
+          provider: 'gemini' as const,
+          apiKey: '',
+          authToken: '',
+          model: 'gemini-2.5-flash',
+          providers: {},
+          defaultRoute: { providerId: '__none__' },
+          routes: {},
+        },
+      };
+      saveConfig(updated);
+      ctx.config = updated;
+      ctx.llmVerified = false;
+      await syncLlmRuntime(ctx);
+      log.info({ providerId: id }, 'Last LLM provider removed, AI disconnected');
+      return c.json({ status: 'removed', id, llmDisconnected: true });
+    }
 
-    // If agent exists, recreate with new locale
-    if (ctx.agent) {
-      try {
-        const { createModel } = await import('../../llm/index.js');
-        const { Agent } = await import('../../llm/agent.js');
-        const { createTools } = await import('../../tools/index.js');
-        const { buildContextSnapshot } = await import('../../llm/prompts.js');
-        const { BuildDebugger } = await import('../../pipeline/build-debugger.js');
+    const defaultProviderId = config.llm.defaultRoute?.providerId;
+    if (defaultProviderId === id) {
+      return c.json(
+        {
+          error: 'DEFAULT_PROVIDER',
+          message: 'Cannot delete the default provider. Reassign defaultRoute first.',
+        },
+        400,
+      );
+    }
 
-        const llmModel = createModel({
-          provider: ctx.config.llm.provider,
-          apiKey: ctx.config.llm.apiKey,
-          model: ctx.config.llm.model,
-          authToken: ctx.config.llm.authToken || undefined,
-        });
+    const { [id]: _removed, ...remainingProviders } = providers;
 
-        const agent = new Agent(
-          llmModel,
-          ctx.db,
-          async () => buildContextSnapshot(ctx.db, ctx.docker),
-          ctx.config.llm.provider,
-          lang,
-        );
+    const existingRoutes = config.llm.routes ?? {};
+    const cleanedRoutes = Object.fromEntries(
+      Object.entries(existingRoutes).filter(([, route]) => route.providerId !== id),
+    );
 
-        let tools: ToolSet = createTools(ctx, ctx.questionBridge);
-        if (ctx.config.mcp.enabled && ctx.mcpClientManager.connectedCount > 0) {
-          const { mergeWithMcpTools } = await import('../../mcp/client-manager.js');
-          tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
+    // Use saveConfig directly — deepMerge cannot remove keys from Record fields
+    const updated = {
+      ...config,
+      llm: { ...config.llm, providers: remainingProviders, routes: cleanedRoutes },
+    };
+    saveConfig(updated);
+    ctx.config = updated;
+
+    const aiConfig = updated.ai;
+    const aiKeys: Array<keyof typeof aiConfig> = [
+      'autoRecovery',
+      'buildDebugger',
+      'webAgent',
+      'envDetection',
+      'operationalMonitoring',
+      'codingPlan',
+    ];
+    let aiUpdated = false;
+    const newAiConfig = { ...aiConfig };
+    for (const key of aiKeys) {
+      if (newAiConfig[key].providerId === id) {
+        newAiConfig[key] = { ...newAiConfig[key], providerId: undefined, model: undefined };
+        aiUpdated = true;
+      }
+    }
+    if (aiUpdated) {
+      const updatedWithAi = updateConfig({ ai: newAiConfig });
+      ctx.config = updatedWithAi;
+    }
+
+    await syncLlmRuntime(ctx);
+
+    return c.json({ status: 'removed', id });
+  });
+
+  function computeRecommendations(
+    providers: Record<string, { provider: string; defaultModel: string }>,
+  ): Record<string, { providerId: string; model: string }> {
+    const recommendations: Record<string, { providerId: string; model: string }> = {};
+    const providerEntries = Object.entries(providers);
+
+    for (const [feature, weights] of Object.entries(FEATURE_WEIGHTS)) {
+      let bestScore = -1;
+      let bestProviderId = '';
+      let bestModel = '';
+
+      const tier = FEATURE_TIER[feature] ?? 'balanced';
+
+      for (const [id, entry] of providerEntries) {
+        const scores = PROVIDER_SCORES[entry.provider];
+        if (!scores) continue;
+
+        const score =
+          scores[weights.primary] * 3 + scores[weights.secondary] * 2 - scores.cost * 0.1;
+        if (score > bestScore) {
+          bestScore = score;
+          bestProviderId = id;
+          bestModel = PROVIDER_MODEL_TIERS[entry.provider]?.[tier] ?? entry.defaultModel;
         }
-        agent.setTools(tools);
-        agent.setQuestionBridge(ctx.questionBridge);
-        (ctx as { agent: typeof agent }).agent = agent;
+      }
 
-        // Recreate BuildDebugger with new locale
-        if (ctx.buildDebugger) {
-          ctx.buildDebugger = new BuildDebugger(llmModel, lang);
-        }
-      } catch (err) {
-        log.error({ err, language: lang }, 'Agent hot-reload failed');
-        // Agent hot-reload failed — language saved but agent uses old locale until restart
+      if (bestProviderId) {
+        recommendations[feature] = { providerId: bestProviderId, model: bestModel };
       }
     }
 
-    return c.json({ status: 'saved', language: lang });
+    return recommendations;
+  }
+
+  function applyRecommendations(
+    recommendations: Record<string, { providerId: string; model: string }>,
+  ): void {
+    const config = loadConfig();
+    const aiConfig = { ...config.ai };
+    const routes: Record<string, LLMRoute> = { ...(config.llm.routes ?? {}) };
+
+    for (const [feature, rec] of Object.entries(recommendations)) {
+      const key = feature as keyof typeof aiConfig;
+      aiConfig[key] = { ...aiConfig[key], providerId: rec.providerId, model: rec.model };
+      routes[feature] = { providerId: rec.providerId, model: rec.model };
+    }
+
+    const updated = updateConfig({ ai: aiConfig, llm: { routes } });
+    ctx.config = updated;
+  }
+
+  api.post('/setup/providers/auto-recommend', (c) => {
+    const config = loadConfig();
+    const providers = config.llm.providers ?? {};
+
+    if (Object.keys(providers).length === 0) {
+      return c.json({ error: 'NO_PROVIDERS', message: 'No providers registered' }, 400);
+    }
+
+    const recommendations = computeRecommendations(providers);
+    return c.json({ recommendations });
   });
 
   api.post('/setup/complete', (c) => {
@@ -643,177 +821,9 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     return c.json({ status: 'complete', message: 'Setup marked as complete.' });
   });
 
-  // ── MCP Server Management ───────────────────────────────────────────────
-
-  /**
-   * GET /setup/mcp/servers
-   *
-   * List configured MCP servers.
-   */
-  api.get('/setup/mcp/servers', (c) => {
-    const config = loadConfig();
-    return c.json({
-      enabled: config.mcp.enabled,
-      servers: config.mcp.servers,
-      connectedCount: ctx.mcpClientManager.connectedCount,
-    });
-  });
-
-  /**
-   * POST /setup/mcp/servers
-   *
-   * Add a new MCP server.
-   * Body: McpServerEntry (without id — auto-generated)
-   */
-  api.post('/setup/mcp/servers', async (c) => {
-    const body = await c.req.json<{
-      name: string;
-      transport: 'stdio' | 'sse' | 'http';
-      url?: string;
-      command?: string;
-      args?: string[];
-      headers?: Record<string, string>;
-      env?: Record<string, string>;
-      enabled?: boolean;
-    }>();
-
-    if (!body.name || !body.name.trim()) {
-      return c.json({ error: 'MISSING_FIELD', message: 'name is required' }, 400);
-    }
-    if (!['stdio', 'sse', 'http'].includes(body.transport)) {
-      return c.json(
-        { error: 'INVALID_TRANSPORT', message: 'transport must be stdio, sse, or http' },
-        400,
-      );
-    }
-    if (body.transport === 'stdio' && !body.command?.trim()) {
-      return c.json(
-        { error: 'MISSING_FIELD', message: 'command is required for stdio transport' },
-        400,
-      );
-    }
-    if ((body.transport === 'sse' || body.transport === 'http') && !body.url?.trim()) {
-      return c.json(
-        { error: 'MISSING_FIELD', message: 'url is required for sse/http transport' },
-        400,
-      );
-    }
-
-    const { nanoid } = await import('nanoid');
-    const config = loadConfig();
-    const server: McpServerEntry = {
-      id: nanoid(12),
-      name: body.name.trim(),
-      transport: body.transport,
-      url: body.url?.trim(),
-      command: body.command?.trim(),
-      args: body.args,
-      headers: body.headers,
-      env: body.env,
-      enabled: body.enabled !== false,
-    };
-
-    config.mcp.servers.push(server);
-    config.mcp.enabled = true;
-    saveConfig(config);
-    ctx.config.mcp = config.mcp;
-
-    return c.json({ status: 'created', server });
-  });
-
-  /**
-   * DELETE /setup/mcp/servers/:id
-   *
-   * Remove an MCP server by ID.
-   */
-  api.delete('/setup/mcp/servers/:id', (c) => {
-    const id = c.req.param('id');
-    const config = loadConfig();
-    const idx = config.mcp.servers.findIndex((s) => s.id === id);
-
-    if (idx === -1) {
-      return c.json({ error: 'NOT_FOUND', message: 'Server not found' }, 404);
-    }
-
-    config.mcp.servers.splice(idx, 1);
-    if (config.mcp.servers.length === 0) {
-      config.mcp.enabled = false;
-    }
-    saveConfig(config);
-    ctx.config.mcp = config.mcp;
-
-    return c.json({ status: 'deleted' });
-  });
-
-  /**
-   * POST /setup/mcp/servers/:id/test
-   *
-   * Test connection to an MCP server.
-   * Uses the server config from the request body (allows testing before saving).
-   */
-  api.post('/setup/mcp/servers/:id/test', async (c) => {
-    const id = c.req.param('id');
-    const config = loadConfig();
-    const server = config.mcp.servers.find((s) => s.id === id);
-
-    if (!server) {
-      return c.json({ error: 'NOT_FOUND', message: 'Server not found' }, 404);
-    }
-
-    try {
-      const result = await ctx.mcpClientManager.testConnection(server);
-      return c.json({ status: 'ok', tools: result.tools });
-    } catch (error) {
-      return c.json(
-        {
-          status: 'failed',
-          message: error instanceof Error ? error.message : 'Connection failed',
-        },
-        500,
-      );
-    }
-  });
-
-  /**
-   * POST /setup/mcp/reconnect
-   *
-   * Disconnect all MCP clients and reconnect.
-   * Also re-merges tools with the agent.
-   */
-  api.post('/setup/mcp/reconnect', async (c) => {
-    const config = loadConfig();
-    ctx.config.mcp = config.mcp;
-
-    await ctx.mcpClientManager.disconnectAll();
-
-    if (!config.mcp.enabled || config.mcp.servers.length === 0) {
-      // Re-set tools without MCP
-      if (ctx.agent) {
-        const { createTools } = await import('../../tools/index.js');
-        ctx.agent.setTools(createTools(ctx, ctx.questionBridge));
-      }
-      return c.json({ status: 'disconnected', connected: 0 });
-    }
-
-    const enabled = config.mcp.servers.filter((s) => s.enabled);
-    await ctx.mcpClientManager.connectAll(enabled);
-
-    // Re-merge tools
-    if (ctx.agent) {
-      const { createTools } = await import('../../tools/index.js');
-      const { mergeWithMcpTools } = await import('../../mcp/client-manager.js');
-      const tools = await mergeWithMcpTools(
-        createTools(ctx, ctx.questionBridge),
-        ctx.mcpClientManager,
-      );
-      ctx.agent.setTools(tools);
-    }
-
-    return c.json({
-      status: 'connected',
-      connected: ctx.mcpClientManager.connectedCount,
-    });
-  });
+  api.route('/', createCloudflareSetupRoutes(ctx));
+  api.route('/', createGithubSetupRoutes(ctx));
+  api.route('/', createMcpSetupRoutes(ctx));
 
   return api;
 }

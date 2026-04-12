@@ -1,15 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('node:fs', () => ({
-  existsSync: vi.fn(),
-  readFileSync: vi.fn(),
-}));
-
 import { existsSync, readFileSync } from 'node:fs';
 import { scanDockerfileArgs, scanEnvFile, scanEnvTemplate } from '../../src/lib/env-parser.js';
 
-const mockExistsSync = existsSync as unknown as ReturnType<typeof vi.fn>;
-const mockReadFileSync = readFileSync as unknown as ReturnType<typeof vi.fn>;
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    existsSync: vi.fn(),
+    readFileSync: vi.fn(),
+  };
+});
+
+const mockExistsSync = vi.mocked(existsSync);
+const mockReadFileSync = vi.mocked(readFileSync);
 
 describe('env-parser', () => {
   beforeEach(() => {
@@ -81,22 +84,24 @@ describe('env-parser', () => {
   });
 
   it('detects .env.example, .env.sample, and .env.template template files', () => {
-    mockExistsSync.mockImplementation((path: string) => {
+    mockExistsSync.mockImplementation((path) => {
+      const pathText = String(path);
       return (
-        path === '/repo/services/.env.example' ||
-        path === '/repo/apps/.env.sample' ||
-        path === '/repo/jobs/.env.template'
+        pathText === '/repo/services/.env.example' ||
+        pathText === '/repo/apps/.env.sample' ||
+        pathText === '/repo/jobs/.env.template'
       );
     });
 
-    mockReadFileSync.mockImplementation((path: string) => {
-      if (path === '/repo/services/.env.example') {
+    mockReadFileSync.mockImplementation((path) => {
+      const pathText = String(path);
+      if (pathText === '/repo/services/.env.example') {
         return 'SERVICE_KEY=\n';
       }
-      if (path === '/repo/apps/.env.sample') {
+      if (pathText === '/repo/apps/.env.sample') {
         return 'APP_KEY=sample\n';
       }
-      if (path === '/repo/jobs/.env.template') {
+      if (pathText === '/repo/jobs/.env.template') {
         return 'JOB_TOKEN=\n';
       }
       return '';

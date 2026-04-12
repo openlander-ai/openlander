@@ -67,19 +67,6 @@ export interface LogEntry {
   message: string;
 }
 
-export interface SessionInfo {
-  sessionId: string;
-  messageCount: number;
-  lastActivity: string;
-  preview: string;
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-}
-
 export interface DeployResponse {
   success: boolean;
   projectId: string;
@@ -295,8 +282,21 @@ export class OpenLanderClient {
     return this.post(`/api/projects/${id}/redeploy`, {});
   }
 
-  async removeProject(id: string): Promise<{ status: string }> {
+  /**
+   * Archive a project (soft-delete). Stops the container, removes the image,
+   * frees the port, and marks the project as archived. The project record is
+   * preserved and can be unarchived later.
+   */
+  async archiveProject(id: string): Promise<{ status: string }> {
     return this.delete(`/api/projects/${id}`);
+  }
+
+  /**
+   * @deprecated Use {@link archiveProject} instead. This method now archives
+   * the project (soft-delete) rather than permanently deleting it.
+   */
+  async removeProject(id: string): Promise<{ status: string }> {
+    return this.archiveProject(id);
   }
 
   async exposeProject(id: string): Promise<{ publicUrl: string }> {
@@ -367,16 +367,6 @@ export class OpenLanderClient {
 
   // ---------------------------------------------------------------------------
   // Sessions & Chat History
-  // ---------------------------------------------------------------------------
-
-  async listSessions(): Promise<SessionInfo[]> {
-    return this.get<SessionInfo[]>('/api/sessions');
-  }
-
-  async getSessionMessages(sessionId: string): Promise<ChatMessage[]> {
-    return this.get<ChatMessage[]>(`/api/sessions/${sessionId}/messages`);
-  }
-
   // ---------------------------------------------------------------------------
   // System
   // ---------------------------------------------------------------------------

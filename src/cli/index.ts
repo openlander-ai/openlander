@@ -3,8 +3,9 @@ import pc from 'picocolors';
 import { join } from 'node:path';
 import { existsSync, unlinkSync, readFileSync } from 'node:fs';
 import { createModuleLogger } from '../lib/logger.js';
+import { sleep } from '../lib/sleep.js';
 import { VERSION } from '../version.js';
-import { getProjectUrl, getLanIp } from '../pipeline/traefik.js';
+import { getLanIp } from '../pipeline/traefik.js';
 import type { ToolSet } from 'ai';
 
 const log = createModuleLogger('cli');
@@ -38,7 +39,7 @@ program
     config.server.host = options.host;
 
     const { createAppContext } = await import('../app.js');
-    const ctx = createAppContext(config, getDbPath());
+    const ctx = await createAppContext(config, getDbPath());
 
     // Register tools with agent (including external MCP tools)
     if (ctx.agent) {
@@ -112,7 +113,7 @@ program
     const config = loadConfig();
 
     const { createAppContext } = await import('../app.js');
-    const ctx = createAppContext(config, getDbPath());
+    const ctx = await createAppContext(config, getDbPath());
 
     // Register tools with agent (including external MCP tools)
     if (ctx.agent) {
@@ -233,14 +234,14 @@ program
     }
 
     // Wait briefly for cleanup
-    await new Promise((r) => setTimeout(r, 500));
+    await sleep(500);
 
     // Start
     const { loadConfig, getDbPath } = await import('../config/index.js');
     const config = loadConfig();
 
     const { createAppContext } = await import('../app.js');
-    const ctx = createAppContext(config, getDbPath());
+    const ctx = await createAppContext(config, getDbPath());
 
     if (ctx.agent) {
       const { createTools } = await import('../tools/index.js');
@@ -267,7 +268,7 @@ program
 program
   .command('config')
   .description('Manage configuration')
-  .argument('[action]', 'Action: show (default) or reset')
+  .argument('[action]', 'Action: show (default), reset, or reset-password')
   .action(async (action) => {
     const { loadConfig, isOnboarded, getDataDir } = await import('../config/index.js');
     const configPath = join(getDataDir(), 'config.json');
@@ -284,6 +285,41 @@ program
       } else {
         console.log(pc.yellow('No config file found. Already reset.'));
       }
+      return;
+    }
+
+    if (action === 'reset-password') {
+      const { getDbPath } = await import('../config/index.js');
+      const dbPath = getDbPath();
+
+      if (!existsSync(dbPath)) {
+        console.log(pc.red('No database found. Run OpenLander first.'));
+        return;
+      }
+
+      const { password } = await import('@inquirer/prompts');
+
+      const newPassword = await password({ message: 'New password:' });
+      const confirmPassword = await password({ message: 'Confirm password:' });
+
+      if (newPassword !== confirmPassword) {
+        console.log(pc.red('Passwords do not match.'));
+        return;
+      }
+
+      if (!newPassword) {
+        console.log(pc.red('Password cannot be empty.'));
+        return;
+      }
+
+      const { Database } = await import('../db/index.js');
+      const { AuthService } = await import('../auth/auth-service.js');
+
+      const db = new Database(dbPath);
+      const authService = new AuthService(db);
+      authService.resetPassword(newPassword);
+
+      console.log(pc.green('Password reset successfully.'));
       return;
     }
 
@@ -316,77 +352,114 @@ program
     console.log();
   });
 
-// ── openlander status ────────────────────────────────────────────────────────
+// ── openlander recover ──────────────────────────────────────────────────────
 
 program
-  .command('status')
-  .description('Show running projects and system stats')
-  .action(async () => {
+  .command('recover')
+  .description('Recover containers after Docker migration (preserves data)')
+  .option('--dry-run', 'Preview recovery actions without making changes')
+  .action(async (options: { dryRun?: boolean }) => {
     const { loadConfig, getDbPath } = await import('../config/index.js');
-    const { Database } = await import('../db/index.js');
-    const { getSystemStats, formatStatsSummary } = await import('../monitor/stats.js');
-
     const config = loadConfig();
-    const db = new Database(getDbPath());
 
-    console.log(pc.bold(pc.cyan('\n  🛬 OpenLander Status\n')));
+    const { createAppContext } = await import('../app.js');
+    const ctx = await createAppContext(config, getDbPath());
 
-    const stats = getSystemStats();
-    console.log(pc.bold('  System:'));
-    console.log('  ' + formatStatsSummary(stats).split('\n').join('\n  '));
-    console.log();
+    const { recover } = await import('../pipeline/recover.js');
+    const dryRun = options.dryRun ?? false;
 
-    const projects = db.listProjects();
-    if (projects.length === 0) {
-      console.log(pc.dim('  No projects deployed yet.\n'));
-    } else {
-      console.log(pc.bold(`  Projects (${String(projects.length)}):`));
-      for (const p of projects) {
-        const statusIcon = p.status === 'running' ? pc.green('●') : pc.red('○');
-        const url = p.assigned_port ? getProjectUrl(p.name) : '';
-        console.log(`  ${statusIcon} ${pc.bold(p.name)} — ${p.status} ${pc.dim(url)}`);
-        if (p.public_url) {
-          console.log(`    ${pc.cyan('↗')} ${p.public_url}`);
-        }
-      }
-      console.log();
+    if (dryRun) {
+      console.log(pc.dim('Dry run — no changes will be made.\n'));
     }
 
-    if (config.llm.apiKey || config.llm.authToken) {
-      console.log(pc.green(`  LLM: ${config.llm.provider} (${config.llm.model})`));
-    } else {
-      console.log(pc.yellow('  LLM: not configured'));
+    console.log(pc.bold('Recovering platform...\n'));
+    const result = await recover(ctx, { dryRun });
+
+    // Networks
+    console.log(pc.bold('Networks:'));
+    for (const n of result.networks) {
+      const icon =
+        n.status === 'error' ? pc.red('✗') : n.status === 'created' ? pc.green('✓') : pc.dim('·');
+      const label =
+        n.status === 'created'
+          ? pc.green('created')
+          : n.status === 'error'
+            ? pc.red(n.error ?? 'error')
+            : pc.dim('ok');
+      console.log(`  ${icon} ${n.name} ${label}`);
     }
 
-    console.log(pc.bold('  Health Monitoring:'));
+    // Services
+    console.log(pc.bold('\nServices:'));
+    for (const s of result.services) {
+      const icon =
+        s.status === 'error'
+          ? pc.red('✗')
+          : s.status === 'recreated'
+            ? pc.green('✓')
+            : s.status === 'started'
+              ? pc.yellow('↑')
+              : pc.dim('·');
+      const label =
+        s.status === 'error'
+          ? pc.red(s.error ?? 'error')
+          : s.status === 'recreated'
+            ? pc.green('recreated')
+            : s.status === 'started'
+              ? pc.yellow('started')
+              : pc.dim('running');
+      console.log(`  ${icon} ${s.name} ${label}`);
+    }
+
+    // Projects
+    console.log(pc.bold('\nProjects:'));
+    for (const p of result.projects) {
+      const icon =
+        p.status === 'error'
+          ? pc.red('✗')
+          : p.status === 'needs_redeploy'
+            ? pc.yellow('!')
+            : p.status === 'recreated'
+              ? pc.green('✓')
+              : p.status === 'started'
+                ? pc.yellow('↑')
+                : p.status === 'skipped'
+                  ? pc.dim('-')
+                  : pc.dim('·');
+      const label =
+        p.status === 'error'
+          ? pc.red(p.error ?? 'error')
+          : p.status === 'needs_redeploy'
+            ? pc.yellow('needs redeploy (no image)')
+            : p.status === 'recreated'
+              ? pc.green('recreated from image')
+              : p.status === 'started'
+                ? pc.yellow('started')
+                : p.status === 'skipped'
+                  ? pc.dim('skipped (stopped)')
+                  : pc.dim('running');
+      console.log(`  ${icon} ${p.name} ${label}`);
+    }
+
+    // Summary
+    const svcRecovered = result.services.filter(
+      (s) => s.status === 'recreated' || s.status === 'started',
+    ).length;
+    const prjRecovered = result.projects.filter(
+      (p) => p.status === 'recreated' || p.status === 'started',
+    ).length;
+    const errors = [...result.services, ...result.projects].filter(
+      (x) => x.status === 'error',
+    ).length;
+    const needsRedeploy = result.projects.filter((p) => p.status === 'needs_redeploy').length;
+
     console.log(
-      pc.dim('    Healthcheck interval: ' + String(config.monitoring.healthcheckIntervalSec) + 's'),
+      `\n${pc.bold('Summary:')} ${pc.green(`${String(svcRecovered + prjRecovered)} recovered`)}` +
+        (errors > 0 ? `, ${pc.red(`${String(errors)} errors`)}` : '') +
+        (needsRedeploy > 0 ? `, ${pc.yellow(`${String(needsRedeploy)} need redeploy`)}` : ''),
     );
 
-    const webhookProjects = projects.filter((p) => {
-      const ghConfig = db.getWebhookConfig(p.id, 'github');
-      const glConfig = db.getWebhookConfig(p.id, 'gitlab');
-      const bbConfig = db.getWebhookConfig(p.id, 'bitbucket');
-      return ghConfig || glConfig || bbConfig;
-    });
-    if (webhookProjects.length > 0) {
-      console.log(pc.bold(`  Webhooks (${String(webhookProjects.length)} projects):`));
-      for (const p of webhookProjects) {
-        console.log(`    ${pc.bold(p.name)}`);
-      }
-    }
-
-    const oauthProviders = ['anthropic', 'openai', 'google'] as const;
-    const authenticatedProviders = oauthProviders.filter((p) => db.getOAuthTokens(p) != null);
-    if (authenticatedProviders.length > 0) {
-      console.log(pc.bold('  OAuth:'));
-      for (const p of authenticatedProviders) {
-        console.log(pc.green(`    ✓ ${p}`));
-      }
-    }
-
-    console.log();
-    db.close();
+    process.exit(errors > 0 ? 1 : 0);
   });
 
 // ── openlander mcp ───────────────────────────────────────────────────────────
@@ -405,7 +478,7 @@ program
     const config = loadConfig();
 
     const { createAppContext } = await import('../app.js');
-    const ctx = createAppContext(config, getDbPath());
+    const ctx = await createAppContext(config, getDbPath());
 
     if (ctx.agent) {
       const { createTools } = await import('../tools/index.js');
@@ -418,188 +491,12 @@ program
       ctx.agent.setTools(tools);
     }
 
+    if (ctx.config.ai.operationalMonitoring.enabled) {
+      ctx.alertMonitor.start();
+    }
+
     const { startMcpServer } = await import('../mcp/server.js');
     await startMcpServer(ctx);
   });
-
-// ── openlander deploy <repo> ─────────────────────────────────────────────────
-
-program
-  .command('deploy <repo>')
-  .description('Deploy a repo (shorthand for web API call)')
-  .option('-b, --branch <branch>', 'Branch to deploy', 'main')
-  .option('-n, --name <name>', 'Project name')
-  .option('-p, --port <port>', 'API port', '10114')
-  .action(async (repo: string, opts: { branch: string; name?: string; port: string }) => {
-    const base = `http://localhost:${opts.port}`;
-    const name =
-      opts.name ??
-      repo
-        .split('/')
-        .pop()
-        ?.replace(/\.git$/, '') ??
-      'project';
-
-    console.log(pc.dim(`  Deploying ${repo} (branch: ${opts.branch})...`));
-
-    try {
-      const res = await fetch(`${base}/api/projects/deploy`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repoUrl: repo, branch: opts.branch, name }),
-      });
-      const data = (await res.json()) as { project?: { id: string; name: string }; error?: string };
-      if (!res.ok) {
-        console.error(pc.red(`  Deploy failed: ${data.error ?? res.statusText}`));
-        process.exit(1);
-      }
-      console.log(pc.green(`  ✓ Project created: ${data.project?.name ?? name}`));
-      console.log(pc.dim(`    ID: ${data.project?.id ?? '—'}`));
-      console.log(pc.dim(`    Web: ${base}/projects/${data.project?.id ?? ''}`));
-    } catch (err) {
-      log.error({ err }, pc.red('  Could not connect to OpenLander daemon.'));
-      log.error(pc.dim('  Make sure `openlander` is running.'));
-      process.exit(1);
-    }
-  });
-
-// ── openlander logs <project> ────────────────────────────────────────────────
-
-program
-  .command('logs <project>')
-  .description('Stream logs for a project')
-  .option('-p, --port <port>', 'API port', '10114')
-  .option('-n, --lines <n>', 'Number of lines', '100')
-  .action(async (project: string, opts: { port: string; lines: string }) => {
-    const base = `http://localhost:${opts.port}`;
-
-    // Resolve project name to ID
-    const projectId = await resolveProjectId(base, project);
-    if (!projectId) {
-      console.error(pc.red(`  Project "${project}" not found.`));
-      process.exit(1);
-    }
-
-    try {
-      const res = await fetch(`${base}/api/projects/${projectId}/logs?lines=${opts.lines}`);
-      if (!res.ok) {
-        console.error(pc.red(`  Failed to fetch logs: ${res.statusText}`));
-        process.exit(1);
-      }
-      const data = (await res.json()) as { logs?: string };
-      if (data.logs) {
-        process.stdout.write(data.logs);
-      } else {
-        console.log(pc.dim('  No logs available.'));
-      }
-    } catch (err) {
-      log.error({ err }, pc.red('  Could not connect to OpenLander daemon.'));
-      process.exit(1);
-    }
-  });
-
-// ── openlander open <project> ────────────────────────────────────────────────
-
-program
-  .command('open <project>')
-  .description('Open project URL in browser')
-  .option('-p, --port <port>', 'API port', '10114')
-  .action(async (project: string, opts: { port: string }) => {
-    const base = `http://localhost:${opts.port}`;
-
-    const projectId = await resolveProjectId(base, project);
-    if (!projectId) {
-      console.error(pc.red(`  Project "${project}" not found.`));
-      process.exit(1);
-    }
-
-    try {
-      const res = await fetch(`${base}/api/projects/${projectId}`);
-      const data = (await res.json()) as { name?: string; url?: string; publicUrl?: string };
-      const url = data.publicUrl ?? data.url;
-      if (!url) {
-        console.error(pc.yellow(`  Project "${data.name ?? project}" has no URL yet.`));
-        process.exit(1);
-      }
-
-      console.log(pc.dim(`  Opening ${url}...`));
-      const { exec } = await import('node:child_process');
-      const openCmd =
-        process.platform === 'darwin'
-          ? 'open'
-          : process.platform === 'win32'
-            ? 'start'
-            : 'xdg-open';
-      exec(`${openCmd} ${url}`, (err) => {
-        if (err) console.error(pc.yellow('  Could not open browser.'));
-      });
-    } catch (err) {
-      log.error({ err }, pc.red('  Could not connect to OpenLander daemon.'));
-      process.exit(1);
-    }
-  });
-
-// ── openlander projects ──────────────────────────────────────────────────────
-
-const projectsCmd = program.command('projects').description('Manage projects');
-
-projectsCmd
-  .command('ls')
-  .description('List all projects')
-  .option('-p, --port <port>', 'API port', '10114')
-  .action(async (opts: { port: string }) => {
-    const base = `http://localhost:${opts.port}`;
-
-    try {
-      const res = await fetch(`${base}/api/projects`);
-      if (!res.ok) {
-        console.error(pc.red(`  Failed: ${res.statusText}`));
-        process.exit(1);
-      }
-      const projects = (await res.json()) as Array<{
-        id: string;
-        name: string;
-        status: string;
-        url?: string;
-        publicUrl?: string;
-      }>;
-
-      if (projects.length === 0) {
-        console.log(pc.dim('  No projects deployed yet.'));
-        return;
-      }
-
-      console.log(pc.bold(`\n  Projects (${String(projects.length)}):\n`));
-      for (const p of projects) {
-        const icon =
-          p.status === 'running' ? pc.green('●') : p.status === 'error' ? pc.red('●') : pc.dim('○');
-        const url = p.publicUrl ?? p.url ?? '';
-        console.log(`  ${icon} ${pc.bold(p.name)}  ${pc.dim(p.status)}  ${pc.cyan(url)}`);
-      }
-      console.log();
-    } catch (err) {
-      log.error({ err }, pc.red('  Could not connect to OpenLander daemon.'));
-      log.error(pc.dim('  Make sure `openlander` is running.'));
-      process.exit(1);
-    }
-  });
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-async function resolveProjectId(base: string, nameOrId: string): Promise<string | null> {
-  try {
-    const res = await fetch(`${base}/api/projects`);
-    if (!res.ok) return null;
-    const projects = (await res.json()) as Array<{ id: string; name: string }>;
-    // Match by ID first, then by name (case-insensitive)
-    const match =
-      projects.find((p) => p.id === nameOrId) ??
-      projects.find((p) => p.name.toLowerCase() === nameOrId.toLowerCase());
-    return match?.id ?? null;
-  } catch (err) {
-    log.debug({ err, base, nameOrId }, 'Failed to resolve project');
-    return null;
-  }
-}
 
 program.parse();

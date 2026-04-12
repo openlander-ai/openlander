@@ -1,7 +1,9 @@
 import { createModuleLogger } from '../lib/logger.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Database } from '../db/index.js';
 import type { EnvScanResult } from './env-scan.js';
+import type { EnvManager } from './env.js';
 
 const log = createModuleLogger('env-inject');
 
@@ -50,6 +52,80 @@ export interface EnvInjectionResult {
   envFile: string;
   classified: ClassifiedEnvVar[];
   needsUserInput: ClassifiedEnvVar[];
+}
+
+function normalizeServiceType(serviceType: string): string {
+  const normalized = serviceType.trim().toLowerCase();
+  if (normalized === 'postgres') {
+    return 'postgresql';
+  }
+  if (normalized === 'mongo') {
+    return 'mongodb';
+  }
+  if (normalized === 'mariadb') {
+    return 'mysql';
+  }
+  return normalized;
+}
+
+function toServiceNameSuffix(serviceName: string): string {
+  return serviceName
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/_+/g, '_');
+}
+
+export function autoInjectServiceEnv(params: {
+  db: Database;
+  env: EnvManager;
+  projectId: string;
+  serviceId: string;
+  serviceName: string;
+  serviceType: string;
+  containerName: string;
+  credentials?: Record<string, string>;
+}): string[] {
+  const mapping = SERVICE_ENV_MAP[normalizeServiceType(params.serviceType)];
+  if (!mapping) {
+    return [];
+  }
+
+  const existingConnections = params.db.listServiceConnectionsByProject(params.projectId);
+  const hasSameTypeConnection = existingConnections.some((connection) => {
+    if (connection.service_id === params.serviceId) {
+      return false;
+    }
+    const connectedService = params.db.getService(connection.service_id);
+    if (!connectedService) {
+      return false;
+    }
+    return normalizeServiceType(connectedService.type) === normalizeServiceType(params.serviceType);
+  });
+
+  const envKey = hasSameTypeConnection
+    ? `${mapping.varName}_${toServiceNameSuffix(params.serviceName)}`
+    : mapping.varName;
+  const envValue = mapping.template(params.serviceName);
+
+  const allVars = params.env.getAll(params.projectId);
+  if (Object.prototype.hasOwnProperty.call(allVars, envKey)) {
+    return [];
+  }
+
+  params.env.set(params.projectId, envKey, envValue);
+  return [envKey];
+}
+
+export function cleanupAutoInjectedEnv(params: {
+  db: Database;
+  env: EnvManager;
+  projectId: string;
+  autoInjectedEnvKeys: string[];
+}): void {
+  for (const key of params.autoInjectedEnvKeys) {
+    params.env.delete(params.projectId, key);
+  }
 }
 
 export function detectEnvFile(projectPath: string): string | null {

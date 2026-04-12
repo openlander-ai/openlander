@@ -37,7 +37,7 @@ export function TerminalHeader({
           </span>
           {branchName && (
             <span
-              className="px-1.5 py-0.5 rounded text-[11px] font-medium"
+              className="px-1.5 py-0.5 rounded text-xs font-medium"
               style={{
                 backgroundColor: terminalTokens.colors.background,
                 color: terminalTokens.colors.text.secondary,
@@ -61,7 +61,7 @@ export function TerminalHeader({
                   boxShadow: status === 'active' ? terminalTokens.effects.glow : 'none',
                 }}
               />
-              <span className="text-[12px]" style={{ color: terminalTokens.colors.text.secondary }}>
+              <span className="text-xs" style={{ color: terminalTokens.colors.text.secondary }}>
                 {subtitle}
               </span>
             </div>
@@ -71,7 +71,7 @@ export function TerminalHeader({
 
       {elapsedTime && (
         <div
-          className="text-[12px] font-medium tabular-nums"
+          className="text-xs font-medium tabular-nums"
           style={{ color: terminalTokens.colors.text.muted }}
         >
           {elapsedTime}

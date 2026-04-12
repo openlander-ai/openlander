@@ -6,6 +6,7 @@ import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
 import { parseDockerfileExposePort } from '../dockerfile-gen.js';
 import { filterBuildTimeVars } from '../build-args.js';
+import { getCommitSubject } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { JobManager as JobManagerClass } from '../job-manager.js';
 import type { Docker } from '../docker.js';
@@ -44,6 +45,7 @@ export async function deployMonorepoService(
   const childId = nanoid(12);
   const imageTag = `openlander/${childName.replace('/', '-')}:latest`;
   const childStartTime = Date.now();
+  const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
   deps.db.createProject({
     id: childId,
@@ -93,6 +95,8 @@ export async function deployMonorepoService(
     };
   }
 
+  let dockerBuildOutput = '';
+
   try {
     deps.jobManager?.updatePhase(childId, 'building');
     const envVars = resolveEnvVars(
@@ -114,6 +118,7 @@ export async function deployMonorepoService(
         buildArgs: buildTimeVarsForChild,
       },
       (line) => {
+        dockerBuildOutput += line + '\n';
         const stepInfo = JobManagerClass.parseDockerBuildStep(line);
         if (stepInfo) {
           deps.jobManager?.updateBuildStep(childId, stepInfo.step, stepInfo.total, stepInfo.desc);
@@ -158,6 +163,7 @@ export async function deployMonorepoService(
       containerPort: childContainerPort,
       envVars,
       secretFiles: deps.env.getSecretFilesForDeploy(childId),
+      restartPolicy: { Name: 'unless-stopped' },
     });
     const { containerId, port, url: internalUrl } = runResult;
 
@@ -187,6 +193,7 @@ export async function deployMonorepoService(
       status: 'success',
       trigger,
       commitSha: config.commitSha,
+      commitMessage,
       buildLog: `[monorepo] ${dockerfilePath} → ${imageTag}\n`,
       durationMs: Date.now() - childStartTime,
     });
@@ -222,6 +229,10 @@ export async function deployMonorepoService(
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
+    const buildLogWithOutput = dockerBuildOutput
+      ? `--- Docker build output ---\n${dockerBuildOutput}[error] [monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`
+      : `[monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`;
+
     deps.db.updateProject(childId, { status: 'error' });
     deps.jobManager?.updatePhase(childId, 'failed', errorMsg);
 
@@ -230,6 +241,7 @@ export async function deployMonorepoService(
       parentProjectId: parentId,
       step: 'service-deploy',
       error: errorMsg,
+      buildLog: buildLogWithOutput,
       phase: 'build',
       scope: service.name,
       status: 'failed',
@@ -242,7 +254,9 @@ export async function deployMonorepoService(
       projectId: childId,
       status: 'failed',
       trigger,
-      buildLog: `[monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`,
+      commitSha: config.commitSha,
+      commitMessage,
+      buildLog: buildLogWithOutput,
       durationMs: Date.now() - childStartTime,
     });
 
@@ -283,7 +297,7 @@ export async function rollbackMonorepoService(
   if (project.container_id) {
     try {
       await deps.docker.stopContainer(project.container_id);
-      await deps.docker.removeContainer(project.container_id);
+      await deps.docker.safeRemoveContainer(project.container_id);
     } catch (error) {
       log.warn({ err: error, service: service.name }, 'Monorepo rollback container cleanup failed');
     }
@@ -306,6 +320,7 @@ export async function rollbackMonorepoService(
     projectId: service.projectId,
     status: 'failed',
     trigger,
+    commitMessage: undefined,
     buildLog: `[monorepo] ${service.name} ROLLED_BACK: dependency deployment failure\n`,
     durationMs: Date.now() - startTime,
   });

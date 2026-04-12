@@ -123,6 +123,7 @@ export class GitLabProvider implements GitProvider {
     const path = `/api/v4/projects/${projectPath}/repository/files/Dockerfile?ref=${ref}`;
     const url = `${this.baseUrl}${path}`;
     const response = await fetch(url, {
+      signal: AbortSignal.timeout(30_000),
       headers: { 'PRIVATE-TOKEN': this.token },
     });
 
@@ -140,6 +141,7 @@ export class GitLabProvider implements GitProvider {
   private async request(path: string): Promise<unknown> {
     const url = `${this.baseUrl}${path}`;
     const response = await fetch(url, {
+      signal: AbortSignal.timeout(30_000),
       headers: { 'PRIVATE-TOKEN': this.token },
     });
 
@@ -153,6 +155,7 @@ export class GitLabProvider implements GitProvider {
   private async requestWithHeaders(path: string): Promise<{ data: unknown; headers: Headers }> {
     const url = `${this.baseUrl}${path}`;
     const response = await fetch(url, {
+      signal: AbortSignal.timeout(30_000),
       headers: { 'PRIVATE-TOKEN': this.token },
     });
 

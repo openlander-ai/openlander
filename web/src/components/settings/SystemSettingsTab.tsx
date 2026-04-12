@@ -61,19 +61,19 @@ export function SystemSettingsTab() {
   };
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-4">
+    <div className="space-y-6">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
             {t('settings.system.globalSecrets')}
           </h2>
         </div>
-        <p className="text-xs font-body text-secondary-ol">{t('settings.secrets.description')}</p>
+        <p className="text-xs font-body text-muted-ol">{t('settings.secrets.description')}</p>
 
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-4">
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-4">
           {secrets.length === 0 ? (
-            <p className="text-sm font-body text-muted-ol">{t('settings.secrets.noSecrets')}</p>
+            <p className="text-xs font-body text-muted-ol">{t('settings.secrets.noSecrets')}</p>
           ) : (
             <div className="space-y-2">
               {secrets.map((s) => (
@@ -105,33 +105,49 @@ export function SystemSettingsTab() {
             </div>
           )}
 
-          <form onSubmit={handleAddSecret} className="space-y-2 pt-2 border-t border-border">
-            <div className="grid grid-cols-2 gap-2">
+          <form onSubmit={handleAddSecret} className="space-y-3 pt-3 border-t border-border">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Key
+                </label>
+                <Input
+                  placeholder={'e.g. API_KEY'}
+                  value={secretKey}
+                  onChange={(e) => setSecretKey(e.target.value)}
+                  className="font-mono text-sm bg-bg-app border-border"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Value
+                </label>
+                <Input
+                  type="password"
+                  placeholder={'••••••••'}
+                  value={secretValue}
+                  onChange={(e) => setSecretValue(e.target.value)}
+                  className="font-mono text-sm bg-bg-app border-border"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                Description{' '}
+                <span className="normal-case tracking-normal text-muted-ol">(optional)</span>
+              </label>
               <Input
-                placeholder={'KEY_NAME'}
-                value={secretKey}
-                onChange={(e) => setSecretKey(e.target.value)}
-                className="font-mono text-sm bg-bg-app border-border"
-              />
-              <Input
-                type="password"
-                placeholder={'Secret value'}
-                value={secretValue}
-                onChange={(e) => setSecretValue(e.target.value)}
-                className="font-mono text-sm bg-bg-app border-border"
+                placeholder={'What this secret is used for'}
+                value={secretDesc}
+                onChange={(e) => setSecretDesc(e.target.value)}
+                className="text-sm bg-bg-app border-border"
               />
             </div>
-            <Input
-              placeholder={'Description (optional)'}
-              value={secretDesc}
-              onChange={(e) => setSecretDesc(e.target.value)}
-              className="text-sm bg-bg-app border-border"
-            />
             <Button
               type="submit"
               disabled={secretSaving || !secretKey.trim() || !secretValue.trim()}
               size="sm"
-              className="gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+              className="gap-1.5 bg-agent text-white hover:bg-agent/90 font-body"
             >
               {secretSaving ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -144,10 +160,10 @@ export function SystemSettingsTab() {
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Cpu className="h-4 w-4 text-secondary-ol" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
             {t('settings.system.systemResources')}
           </h2>
         </div>
@@ -158,23 +174,23 @@ export function SystemSettingsTab() {
               icon={<Cpu className="h-4 w-4" />}
               label={'CPU'}
               value={`${typeof stats.cpu === 'number' ? stats.cpu.toFixed(0) : (stats.cpu?.usagePercent?.toFixed(0) ?? '—')}%`}
-              color="text-agent"
+              color="text-secondary-ol"
             />
             <StatCard
               icon={<MemoryStick className="h-4 w-4" />}
               label={'Memory'}
               value={formatMemory(stats.memory)}
-              color="text-warning"
+              color="text-secondary-ol"
             />
             <StatCard
               icon={<HardDrive className="h-4 w-4" />}
               label={'Disk'}
               value={formatDisk(stats.disk)}
-              color="text-success"
+              color="text-secondary-ol"
             />
           </div>
         ) : (
-          <p className="text-sm font-body text-muted-ol">{t('settings.system.loading')}</p>
+          <p className="text-xs font-body text-muted-ol">{t('settings.system.loading')}</p>
         )}
       </section>
     </div>

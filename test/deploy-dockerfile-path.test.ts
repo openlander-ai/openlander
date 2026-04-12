@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
+import type { OpenLanderConfig } from '../src/config/index.js';
 import { JobManager } from '../src/pipeline/job-manager.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
@@ -15,11 +16,15 @@ function createMockDocker(): Docker {
     runContainer: vi.fn().mockResolvedValue('container-abc123'),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     getLogs: vi.fn().mockResolvedValue('mock logs'),
     listContainers: vi.fn().mockResolvedValue([]),
     listAllContainers: vi.fn().mockResolvedValue([]),
+    listManagedContainers: vi.fn().mockResolvedValue([]),
     inspectContainer: vi.fn().mockResolvedValue(null),
     cleanupSecretFiles: vi.fn().mockResolvedValue(undefined),
+    tagImage: vi.fn().mockResolvedValue(undefined),
+    disconnectContainerFromNetwork: vi.fn().mockResolvedValue(undefined),
   } as unknown as Docker;
 }
 
@@ -29,6 +34,7 @@ describe('DeployPipeline — dockerfilePath persistence', () => {
   let jobManager: JobManager;
   let pipeline: DeployPipeline;
   let mockDocker: Docker;
+  const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-dockerfile-path-test-'));
@@ -42,6 +48,7 @@ describe('DeployPipeline — dockerfilePath persistence', () => {
         getEnvVars: vi.fn().mockReturnValue({}),
         getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
       } as never,
+      testConfig,
       jobManager,
     );
   });
@@ -53,6 +60,20 @@ describe('DeployPipeline — dockerfilePath persistence', () => {
   });
 
   describe('startDeploy() → createProject()', () => {
+    let deploySpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      deploySpy = vi.spyOn(pipeline, 'deploy').mockResolvedValue({
+        projectId: 'mock',
+        success: true,
+        projectName: 'mock',
+      });
+    });
+
+    afterEach(() => {
+      deploySpy.mockRestore();
+    });
+
     it('passes dockerfilePath to createProject when provided', async () => {
       const createProjectSpy = vi.spyOn(db, 'createProject');
 

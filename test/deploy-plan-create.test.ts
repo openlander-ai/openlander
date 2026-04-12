@@ -4,25 +4,30 @@ vi.mock('../src/pipeline/git.js', () => ({
   cloneRepo: vi.fn(),
 }));
 
-vi.mock('../src/lib/infra-analyzer.js', () => ({
-  analyzeInfrastructure: vi.fn(),
-}));
-
-vi.mock('node:fs', () => ({
-  existsSync: vi.fn(),
-  readFileSync: vi.fn(),
-}));
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    existsSync: vi.fn((...args: Parameters<typeof actual.existsSync>) =>
+      actual.existsSync(...args),
+    ),
+    readFileSync: vi.fn((...args: Parameters<typeof actual.readFileSync>) =>
+      actual.readFileSync(...args),
+    ),
+  };
+});
 
 import { PlanEngine } from '../src/pipeline/deploy-plan/engine.js';
 import type { PlanEngineDeps } from '../src/pipeline/deploy-plan/engine.js';
 import { cloneRepo } from '../src/pipeline/git.js';
-import { analyzeInfrastructure } from '../src/lib/infra-analyzer.js';
-import { existsSync, readFileSync } from 'node:fs';
+import * as infraAnalyzer from '../src/lib/infra-analyzer.js';
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const mockCloneRepo = cloneRepo as unknown as ReturnType<typeof vi.fn>;
-const mockAnalyzeInfra = analyzeInfrastructure as unknown as ReturnType<typeof vi.fn>;
-const mockExistsSync = existsSync as unknown as ReturnType<typeof vi.fn>;
-const mockReadFileSync = readFileSync as unknown as ReturnType<typeof vi.fn>;
+const mockExistsSync = vi.mocked(existsSync);
+const mockReadFileSync = vi.mocked(readFileSync);
 
 describe('PlanEngine.createPlan', () => {
   let engine: PlanEngine;
@@ -32,8 +37,10 @@ describe('PlanEngine.createPlan', () => {
   let mockServiceManager: any;
   let mockAutoDetector: any;
   let mockConfig: any;
+  let mockAnalyzeInfra: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    mockAnalyzeInfra = vi.spyOn(infraAnalyzer, 'analyzeInfrastructure');
     mockDb = {
       createDeployPlan: vi.fn(),
       getDeployPlan: vi.fn(),
@@ -69,12 +76,13 @@ describe('PlanEngine.createPlan', () => {
 
     mockCloneRepo.mockReset();
     mockAnalyzeInfra.mockReset();
-    mockExistsSync.mockReset();
-    mockReadFileSync.mockReset();
+    mockExistsSync.mockClear();
+    mockReadFileSync.mockClear();
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    mockAnalyzeInfra.mockRestore();
   });
 
   it('creates a simple plan when Dockerfile exists and no infra needs', async () => {
@@ -251,8 +259,12 @@ describe('PlanEngine.createPlan', () => {
   });
 
   it('marks plan as needs_input when env vars are missing', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'plan-env-app-'));
+    writeFileSync(join(repoPath, '.env.example'), 'API_KEY=\nSECRET_TOKEN=\n');
+    writeFileSync(join(repoPath, 'Dockerfile'), 'FROM node:22\n');
+
     mockCloneRepo.mockResolvedValue({
-      path: '/tmp/test-repo',
+      path: repoPath,
       commitSha: 'xyz789',
     });
 
@@ -263,15 +275,8 @@ describe('PlanEngine.createPlan', () => {
     });
 
     mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockImplementation((filePath: string, _encoding?: BufferEncoding) => {
-      if (filePath.includes('.env')) {
-        return 'API_KEY=\nSECRET_TOKEN=\n';
-      }
-      if (filePath.includes('Dockerfile')) {
-        return 'FROM node:22\n';
-      }
-      return '';
-    });
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    mockReadFileSync.mockImplementation(actualFs.readFileSync);
 
     const plan = await engine.createPlan({
       repoUrl: 'https://github.com/test/env-app',
@@ -281,6 +286,8 @@ describe('PlanEngine.createPlan', () => {
     expect(plan.status).toBe('needs_input');
     expect(plan.missing).toContain('API_KEY');
     expect(plan.missing.length).toBeGreaterThanOrEqual(1);
+
+    rmSync(repoPath, { recursive: true, force: true });
   });
 
   it('detects postgresql dependency and creates service', async () => {
@@ -424,8 +431,12 @@ describe('PlanEngine.createPlan', () => {
   });
 
   it('classifies complexity as complex with 2+ services and missing env vars', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'plan-complex-app-'));
+    writeFileSync(join(repoPath, '.env.example'), 'API_KEY=\n');
+    writeFileSync(join(repoPath, 'Dockerfile'), 'FROM node:22\n');
+
     mockCloneRepo.mockResolvedValue({
-      path: '/tmp/test-repo',
+      path: repoPath,
       commitSha: 'complex123',
     });
 
@@ -442,15 +453,8 @@ describe('PlanEngine.createPlan', () => {
     });
 
     mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockImplementation((filePath: string, _encoding?: BufferEncoding) => {
-      if (filePath.includes('.env')) {
-        return 'API_KEY=\n';
-      }
-      if (filePath.includes('Dockerfile')) {
-        return 'FROM node:22\n';
-      }
-      return '';
-    });
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    mockReadFileSync.mockImplementation(actualFs.readFileSync);
 
     const plan = await engine.createPlan({
       repoUrl: 'https://github.com/test/complex-app',
@@ -460,5 +464,7 @@ describe('PlanEngine.createPlan', () => {
     expect(plan.complexity).toBe('complex');
     expect(plan.services).toHaveLength(2);
     expect(plan.missing).toContain('API_KEY');
+
+    rmSync(repoPath, { recursive: true, force: true });
   });
 });

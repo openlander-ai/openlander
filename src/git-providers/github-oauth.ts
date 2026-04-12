@@ -76,6 +76,7 @@ export async function requestDeviceCode(
 ): Promise<DeviceCodeResponse> {
   const response = await fetch(GITHUB_DEVICE_CODE_URL, {
     method: 'POST',
+    signal: AbortSignal.timeout(30_000),
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
@@ -127,7 +128,7 @@ export async function pollForAccessToken(
     }
 
     // Wait for the interval
-    await sleep(currentInterval * 1000, signal);
+    await sleepWithSignal(currentInterval * 1000, signal);
 
     // Check again after sleep
     if (signal?.aborted) {
@@ -136,6 +137,7 @@ export async function pollForAccessToken(
 
     const response = await fetch(GITHUB_ACCESS_TOKEN_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
@@ -226,7 +228,7 @@ export function openInBrowser(url: string): void {
  * Sleep for a specified duration.
  * Supports cancellation via AbortSignal.
  */
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+function sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(new Error('Polling cancelled'));

@@ -3,7 +3,10 @@ import { Hono } from 'hono';
 import type { Duplex } from 'node:stream';
 
 import type { AppContext } from '../../app.js';
+import { AuthService } from '../../auth/auth-service.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { parseCookie } from '../middleware/cookies.js';
+import { getProjectOrThrow } from './helpers/project-helpers.js';
 
 const log = createModuleLogger('terminal');
 
@@ -16,6 +19,7 @@ export function createTerminalRoutes(
   upgradeWebSocket?: NodeWebSocket['upgradeWebSocket'],
 ): Hono {
   const api = new Hono();
+  const authService = new AuthService(ctx.db);
   const sessions = new WeakMap<
     object,
     {
@@ -66,6 +70,16 @@ export function createTerminalRoutes(
         onOpen(_evt, ws) {
           void (async () => {
             try {
+              // Auth check: validate session cookie
+              if (authService.isPasswordSet()) {
+                const cookieHeader = c.req.header('cookie');
+                const sessionToken = parseCookie(cookieHeader, 'ol_session');
+                if (!sessionToken || !authService.validateSession(sessionToken)) {
+                  closeWithError(ws, 'Unauthorized');
+                  return;
+                }
+              }
+
               const originHeader = c.req.header('origin');
               const hostHeader = c.req.header('host');
               const serverHost = ctx.config.server.host.trim().toLowerCase();
@@ -90,19 +104,15 @@ export function createTerminalRoutes(
                 }
               }
 
-              const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-              if (!project) {
-                closeWithError(ws, 'Project not found');
-                return;
-              }
+              const project = getProjectOrThrow(c, ctx);
 
               if (!project.container_id || project.status !== 'running') {
                 closeWithError(ws, 'Container is not running');
                 return;
               }
 
-              const container = ctx.docker.getClient().getContainer(project.container_id);
-              const containerInfo = await container.inspect();
+              const containerId = project.container_id;
+              const containerInfo = await ctx.docker.inspectContainer(containerId);
               if (!containerInfo.State.Running) {
                 closeWithError(ws, 'Container is not running');
                 return;
@@ -110,25 +120,8 @@ export function createTerminalRoutes(
 
               const probeShell = async (shell: string): Promise<boolean> => {
                 try {
-                  const probeExec = await container.exec({
-                    Cmd: [shell, '-c', 'exit 0'],
-                    AttachStdin: false,
-                    AttachStdout: true,
-                    AttachStderr: true,
-                    Tty: false,
-                  });
-                  const probeStream = await probeExec.start({ hijack: false, stdin: false });
-
-                  await new Promise<void>((resolve) => {
-                    probeStream.on('data', () => {});
-                    probeStream.on('end', resolve);
-                    probeStream.on('error', () => {
-                      resolve();
-                    });
-                  });
-
-                  const info = await probeExec.inspect();
-                  return info.ExitCode === 0;
+                  const result = await ctx.docker.execSimple(containerId, [shell, '-c', 'exit 0']);
+                  return result.exitCode === 0;
                 } catch (_err) {
                   return false;
                 }
@@ -148,15 +141,9 @@ export function createTerminalRoutes(
                 return;
               }
 
-              const shellExec = await container.exec({
-                Cmd: [shellCmd],
-                AttachStdin: true,
-                AttachStdout: true,
-                AttachStderr: true,
-                Tty: true,
-              });
-              const exec = shellExec as TerminalExec;
-              const stream = await shellExec.start({ hijack: true, stdin: true });
+              const terminal = await ctx.docker.execTerminal(containerId, [shellCmd]);
+              const exec: TerminalExec = terminal;
+              const stream = terminal.stream as unknown as Duplex;
 
               const idleTimer = setTimeout(() => {
                 ws.send(JSON.stringify({ type: 'error', message: 'Terminal idle timeout (30m)' }));

@@ -7,7 +7,7 @@
 Paste a Git URL. It builds, deploys, and hands you a URL — if something breaks, AI fixes it automatically.
 
 [![npm version](https://img.shields.io/npm/v/openlander.svg)](https://www.npmjs.com/package/openlander)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 </div>
 
@@ -41,7 +41,7 @@ Those are great tools. OpenLander takes a different approach.
 | When containers crash | You get an alert                | AI detects it, diagnoses the cause, and attempts a fix   |
 | Coding agent support  | None                            | MCP protocol — deploy from Cursor, Claude Code, etc.     |
 | Server awareness      | Manual configuration            | Auto-detects ports, proxies, containers before deploying |
-| Install               | `docker compose`                | `npm i -g`                                               |
+| Install               | `docker compose`                | `npx openlander`                                         |
 
 **Positioning**: Coolify's Docker foundation + Vercel's clean UX + AI auto-recovery.
 
@@ -101,24 +101,24 @@ openlander
 - **Server awareness** — Auto-detects all containers, ports, and proxies before deploying
 - **Preflight check** — Validates port availability, container names, resources before build starts
 - **Auto-redeploy** — Git push webhook triggers automatic redeployment
-- **Rollback & blue-green** — One-click rollback, zero-downtime deploys
+- **Rollback & blue-green** — One-click rollback, zero-downtime redeploy with health check (`strategy: 'blue-green' | 'force'`)
 - **Public sharing** — Instant public URL via TryCloudflare. No domain needed.
 - **Production domains** — Permanent URLs via Cloudflare Tunnel. Multi-domain mapping.
 
 ### Infrastructure
 
-- **Auto-Dockerfile** — No Dockerfile? Auto-generates one for Next.js, FastAPI, Gradio, Streamlit, Rails, Spring Boot, Laravel, ASP.NET
+- **Auto-Dockerfile** — No Dockerfile? Auto-generates one for 27+ frameworks including Next.js, Express, NestJS, Vite, Nuxt, SvelteKit, Astro, FastAPI, Django, Flask, Gradio, Streamlit, Rails, Spring Boot, Laravel, ASP.NET, Go, Rust
 - **Monorepo support** — Scan Dockerfiles, parallel builds, parent-child project model
 - **Logs & monitoring** — Container logs, health checks, system resource tracking
-- **Environment variables** — Global encrypted secrets shared across projects
-- **DB provisioning** — PostgreSQL, MySQL, Redis containers on demand
+- **Environment variables** — Project-scoped and global encrypted secrets
+- **DB provisioning** — PostgreSQL, MySQL, Redis, MongoDB, MinIO containers on demand
 
 ### Integration
 
 - **MCP server** — Deploy from Claude Code, Cursor, or any MCP client
 - **Multi-channel** — Slack, Discord, Telegram bots for remote management
 - **BYOK (Bring Your Own Key)** — Gemini Flash (free), Claude, OpenAI, OpenRouter, or Ollama (local)
-- **OAuth login** — Sign in with OpenAI or OpenRouter account (no API key needed)
+- **OAuth connect** — Link OpenRouter or OpenAI accounts for LLM access (no manual API key needed)
 - **Private repos** — SSH key auth. Works with GitHub, GitLab, Bitbucket, Gitea.
 
 ## How It Works
@@ -170,44 +170,66 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 
 ## Roadmap
 
-| Version     | Focus                        | Status | Highlights                                                                                                                                                              |
-| ----------- | ---------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **v0.1.0**  | MVP                          | Done   | Chat-driven deployment, Docker + Traefik, MCP server (23 tools)                                                                                                         |
-| **v0.2.0**  | Web Dashboard                | Done   | React SPA, Vercel-inspired UI, real-time timeline, NDJSON streaming                                                                                                     |
-| **v0.2.1**  | i18n + Bugfixes              | Done   | Korean/English i18n, build error reporting, OAuth callback fix                                                                                                          |
-| **v0.2.2**  | Deploy Controls              | Done   | Blue-green deploy UI, webhook settings, rollback button                                                                                                                 |
-| **v0.2.3**  | Domains & Visibility         | Done   | Domain CRUD UI, server scan dashboard, public URL management                                                                                                            |
-| **v0.2.4**  | Services                     | Done   | Shared infrastructure (PostgreSQL, Redis, etc.), custom Docker images                                                                                                   |
-| **v0.2.5**  | Release Preparation          | Done   | Code review fixes, Cloudflare config UI, i18n simplification                                                                                                            |
-| **v0.2.6**  | Shared Mode & Preview        | Done   | Traefik File Provider, Quick Share via Traefik, access codes (Shared mode), PR preview deploys                                                                          |
-| **v0.3.0**  | Developer Experience         | Done   | Real-time Docker build log streaming, ANSI color rendering, xterm.js web terminal, WebSocket infrastructure                                                             |
-| **v0.3.1**  | UI Polish & Stability        | Done   | Terminal shell probing for Alpine/slim images, log-first console layout, overview summary dashboard                                                                     |
-| **v0.4.0**  | Deployments UX               | Done   | Deployments filters, richer history rows, detail metadata cards, API UTC normalization                                                                                  |
-| **v0.5.1**  | Multi-Environment            | Done   | Environment schema, multi-branch deploys, environment-aware orchestration                                                                                               |
-| **v0.6.0**  | Architecture Rebuild         | Done   | Deterministic deploy pipeline, unified ToolDef registry (40+ tools), shared infra (PostgreSQL/MySQL/Redis), deploy terminal UI, AI co-pilot (7 features), webhook tools |
-| **v0.6.1**  | Env Vars Fix                 | Done   | Env vars merge (not replace), list_env_vars tool, health monitor Docker fallback                                                                                        |
-| **v0.6.2**  | Compose & Traefik            | Done   | Compose service filtering, secret file mount, env escaping, Traefik HTTP Provider, build log detail, redeploy port fix                                                  |
-| **v0.6.3**  | Port Stability               | Done   | Port preservation on redeploy, environments port tracking, public URL API fix                                                                                           |
-| **v0.6.4**  | Deploy Plan v2               | Done   | Non-blocking execute, deep repo analysis (compose/Dockerfiles/env), dockerfile_path param, estimated_seconds polling hint                                               |
-| **v0.6.5**  | Deploy Plan Bugfixes         | Done   | Compose routing fix, env redaction fix, deploy_only service selection, build log in status, auto build context, version requirements                                    |
-| **v0.6.9**  | MCP Bugfixes                 | Done   | Compose deploy completion, --progress version gating, DOCKER_HOST IP detection, service status reconciliation                                                           |
-| **v0.6.10** | Deploy Bugfixes              | Done   | Dockerfile path routing fix, container conflict recipe, env var optional detection, agent/fallback race fix, BuildDebugger i18n, question event handling                |
-| **v0.6.11** | Deploy Hardening & QA        | Done   | Monorepo routing fix, build context persistence, disk preflight, container names, service health check, env var debug, build progress                                   |
-| **v0.6.15** | Deploy UX Quick Wins         | Done   | Build step progress in status, env source tracking, deploy-plan internal URLs, MCP HTTP session cleanup, richer MCP tool descriptions                                   |
-| **v0.7.0**  | Architecture Rebuild         | Done   | Compose deploy via dockerode, override hacks removed, orphan child cleanup, compose YAML extensions, project-scoped Docker networks                                     |
-| **v0.7.1**  | MCP Response Guidance        | Done   | verify/action_required/recovery_hint in tool responses, remote Docker warnings, agent behavior correction for curl/docker CLI fallback                                  |
-| **v0.7.2**  | MCP DX Enhancement           | Done   | mcpDescription for all 64 tools, error pattern unification, agent guidance for state-changing tools, orphan tool connections                                            |
-| **v0.7.3**  | Pipeline Refactor + Bugfixes | Done   | Deploy orchestration extraction (519→251 lines), Dockerfile.\* scan, Python infra detection, Docker log header stripping                                                |
-| **v0.8.0**  | MCP-First Web Pivot          | Done   | Web dashboard monitoring-focused, LLM optional, auto-recovery dual-mode (LLM + programmatic), RecoveryCard timeline                                                     |
-| **v0.9.0**  | Web Agent Mode               | Done   | ChatGPT-style agent chat in web dashboard, NDJSON streaming, multi-session DB persistence, markdown rendering, tool call visualization                                  |
-| **v0.9.6**  | UI Polish                    | Done   | Agent Chat iMessage-style bubbles, code block syntax highlighting + copy button, session Context migration, Deployments compact Vercel-style rows, AI deploy border fix |
-| **v1.0.0**  | Stable Release               | TBD    | MCP-first platform, quality hardening, web as monitoring dashboard, auto-recovery in background                                                                         |
+| Version         | Focus                        | Status | Highlights                                                                                                                                                                          |
+| --------------- | ---------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **v0.1.0**      | MVP                          | Done   | Chat-driven deployment, Docker + Traefik, MCP server (23 tools)                                                                                                                     |
+| **v0.2.0**      | Web Dashboard                | Done   | React SPA, Vercel-inspired UI, real-time timeline, NDJSON streaming                                                                                                                 |
+| **v0.2.1**      | i18n + Bugfixes              | Done   | Korean/English i18n, build error reporting, OAuth callback fix                                                                                                                      |
+| **v0.2.2**      | Deploy Controls              | Done   | Blue-green deploy UI, webhook settings, rollback button                                                                                                                             |
+| **v0.2.3**      | Domains & Visibility         | Done   | Domain CRUD UI, server scan dashboard, public URL management                                                                                                                        |
+| **v0.2.4**      | Services                     | Done   | Shared infrastructure (PostgreSQL, Redis, etc.), custom Docker images                                                                                                               |
+| **v0.2.5**      | Release Preparation          | Done   | Code review fixes, Cloudflare config UI, i18n simplification                                                                                                                        |
+| **v0.2.6**      | Shared Mode & Preview        | Done   | Traefik File Provider, Quick Share via Traefik, access codes (Shared mode), PR preview deploys                                                                                      |
+| **v0.3.0**      | Developer Experience         | Done   | Real-time Docker build log streaming, ANSI color rendering, xterm.js web terminal, WebSocket infrastructure                                                                         |
+| **v0.3.1**      | UI Polish & Stability        | Done   | Terminal shell probing for Alpine/slim images, log-first console layout, overview summary dashboard                                                                                 |
+| **v0.4.0**      | Deployments UX               | Done   | Deployments filters, richer history rows, detail metadata cards, API UTC normalization                                                                                              |
+| **v0.5.1**      | Multi-Environment            | Done   | Environment schema (frozen in rc.6 — simplified to production-only)                                                                                                                 |
+| **v0.6.0**      | Architecture Rebuild         | Done   | Deterministic deploy pipeline, unified ToolDef registry (40+ tools), shared infra (PostgreSQL/MySQL/Redis), deploy terminal UI, AI co-pilot (7 features), webhook tools             |
+| **v0.6.1**      | Env Vars Fix                 | Done   | Env vars merge (not replace), list_env_vars tool, health monitor Docker fallback                                                                                                    |
+| **v0.6.2**      | Compose & Traefik            | Done   | Compose service filtering, secret file mount, env escaping, Traefik HTTP Provider, build log detail, redeploy port fix                                                              |
+| **v0.6.3**      | Port Stability               | Done   | Port preservation on redeploy, environments port tracking, public URL API fix                                                                                                       |
+| **v0.6.4**      | Deploy Plan v2               | Done   | Non-blocking execute, deep repo analysis (compose/Dockerfiles/env), dockerfile_path param, estimated_seconds polling hint                                                           |
+| **v0.6.5**      | Deploy Plan Bugfixes         | Done   | Compose routing fix, env redaction fix, deploy_only service selection, build log in status, auto build context, version requirements                                                |
+| **v0.6.9**      | MCP Bugfixes                 | Done   | Compose deploy completion, --progress version gating, DOCKER_HOST IP detection, service status reconciliation                                                                       |
+| **v0.6.10**     | Deploy Bugfixes              | Done   | Dockerfile path routing fix, container conflict recipe, env var optional detection, agent/fallback race fix, BuildDebugger i18n, question event handling                            |
+| **v0.6.11**     | Deploy Hardening & QA        | Done   | Monorepo routing fix, build context persistence, disk preflight, container names, service health check, env var debug, build progress                                               |
+| **v0.6.15**     | Deploy UX Quick Wins         | Done   | Build step progress in status, env source tracking, deploy-plan internal URLs, MCP HTTP session cleanup, richer MCP tool descriptions                                               |
+| **v0.7.0**      | Architecture Rebuild         | Done   | Compose deploy via dockerode, override hacks removed, orphan child cleanup, compose YAML extensions, project-scoped Docker networks                                                 |
+| **v0.7.1**      | MCP Response Guidance        | Done   | \_agent_guidance with next_steps in tool responses, remote Docker warnings, agent behavior correction for curl/docker CLI fallback                                                  |
+| **v0.7.2**      | MCP DX Enhancement           | Done   | mcpDescription for all 64 tools, error pattern unification, agent guidance for state-changing tools, orphan tool connections                                                        |
+| **v0.7.3**      | Pipeline Refactor + Bugfixes | Done   | Deploy orchestration extraction (519→251 lines), Dockerfile.\* scan, Python infra detection, Docker log header stripping                                                            |
+| **v0.8.0**      | MCP-First Web Pivot          | Done   | Web dashboard monitoring-focused, LLM optional, auto-recovery dual-mode (LLM + programmatic), RecoveryCard timeline                                                                 |
+| **v0.9.0**      | Web Agent Mode               | Done   | ChatGPT-style agent chat in web dashboard, NDJSON streaming, multi-session DB persistence, markdown rendering, tool call visualization                                              |
+| **v0.9.6**      | UI Polish                    | Done   | Agent Chat iMessage-style bubbles, code block syntax highlighting + copy button, session Context migration, Deployments compact Vercel-style rows, AI deploy border fix             |
+| **v0.9.7**      | Backend Refactor & MCP       | Done   | Service-manager adapter pattern (-42%), setup-routes domain split (-71%), project-routes dedup (-9%), MCP service external access (LAN/VPN IPs), test suite green (1462 pass)       |
+| **v0.9.9**      | Typography & Infrastructure  | Done   | Inter+Geist Mono self-hosted fonts, Docker image auto-cleanup, sslip.io dynamic IP, multi-deploy wait, Traefik restart survival                                                     |
+| **v0.9.10**     | UI Polish & Agent DX         | Done   | Deploy terminal readability, log error underline fix, container name truncation, time wrapping, xterm font consistency, no_cache timeout guidance                                   |
+| **v0.9.13**     | Platform Debug/Admin Tools   | Done   | Platform debug/admin MCP tools (11 tools, config-gated), generic RingBuffer, EventBus capture, Pino log ring buffer                                                                 |
+| **v1.0.0-rc.1** | Release Candidate            | RC     | E2E quality gate test suite (20 tests), 7 test repositories, event sequence golden path verification, quality gate coverage mapping                                                 |
+| **v1.0.0-rc.2** | Authentication               | RC     | Password login + session cookies, Bearer token auth for MCP, Settings security tab, 6-step onboarding with MCP guide, CLI password reset                                            |
+| **v1.0.0-rc.3** | Service Connectivity         | RC     | Shared network with DNS aliases, service connections CRUD, auto env injection, connected services UI, runtime incidents with LLM diagnosis, deploy connectivity check               |
+| **v1.0.0-rc.5** | UI Polish                    | RC     | Domain URL display, Traefik label detection, sidebar status aggregation                                                                                                             |
+| **v1.0.0-rc.6** | Pre-launch Hardening         | RC     | Environment freeze (production-only), redeploy/blue-green unification, security hardening (CORS, session TTL, fetch timeouts), CLI cleanup, service adapter readiness checks        |
+| **v1.0.0-rc.7** | Recovery Architecture        | RC     | RecoveryCoordinator single-owner architecture, Eligibility Gate (7 conditions), ai:invoked/completed events, recovery alerts, error-pattern fingerprinting, multi-provider LLM      |
+| **v1.0.0**      | Stable Release               | TBD    | RecoveryCoordinator (7-condition eligibility gate), multi-provider LLM (10+ providers), approval gates for high-risk recovery, AI usage dashboard, operations center, 70+ MCP tools |
 
 ## MCP Integration (AI Coding Agents)
 
 OpenLander runs as an MCP server, letting AI coding agents deploy and manage projects directly.
 
-### OpenCode
+### Transport Protocols
+
+| Transport           | Endpoint                              | Use Case                                                    |
+| ------------------- | ------------------------------------- | ----------------------------------------------------------- |
+| **stdio**           | `openlander mcp`                      | Local — agent spawns the process directly                   |
+| **Streamable HTTP** | `POST /mcp`                           | Remote — current MCP standard (2025-11-25)                  |
+| **SSE** (legacy)    | `GET /mcp/sse` + `POST /mcp/messages` | Remote — for clients that don't support Streamable HTTP yet |
+
+**Local**: Use stdio (all clients support it). **Remote**: Use Streamable HTTP if your client supports it, SSE otherwise.
+
+### Client Setup
+
+#### OpenCode
 
 ```jsonc
 // opencode.json (project root or ~/.config/opencode/config.json)
@@ -237,9 +259,11 @@ For remote servers (e.g. via Tailscale/VPN):
 }
 ```
 
+> If remote connection fails, try the SSE endpoint: `http://YOUR_SERVER_IP:10114/mcp/sse`
+
 Verify: `opencode mcp list` / `opencode mcp debug openlander`
 
-### Claude Desktop
+#### Claude Desktop / Claude Code
 
 ```jsonc
 // ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)
@@ -254,7 +278,9 @@ Verify: `opencode mcp list` / `opencode mcp debug openlander`
 }
 ```
 
-### Cursor
+For remote: `claude mcp add openlander -t http http://YOUR_SERVER_IP:10114/mcp`
+
+#### Cursor
 
 ```jsonc
 // .cursor/mcp.json (project root)
@@ -268,7 +294,20 @@ Verify: `opencode mcp list` / `opencode mcp debug openlander`
 }
 ```
 
-### Windsurf
+For remote:
+
+```jsonc
+{
+  "mcpServers": {
+    "openlander": {
+      "url": "http://YOUR_SERVER_IP:10114/mcp",
+      "type": "http",
+    },
+  },
+}
+```
+
+#### Windsurf
 
 ```jsonc
 // ~/.codeium/windsurf/mcp_config.json
@@ -282,19 +321,51 @@ Verify: `opencode mcp list` / `opencode mcp debug openlander`
 }
 ```
 
+#### Cline
+
+```jsonc
+// .vscode/mcp.json
+{
+  "servers": {
+    "openlander": {
+      "command": "openlander",
+      "args": ["mcp"],
+    },
+  },
+}
+```
+
+For remote, use the SSE endpoint: `http://YOUR_SERVER_IP:10114/mcp/sse`
+
+### Remote Authentication
+
+When a password is set, remote MCP connections require a Bearer token. Generate one from **Settings > Security** in the web dashboard, then pass it as an `Authorization` header:
+
+```
+Authorization: Bearer <your-api-token>
+```
+
+### Troubleshooting
+
+| Symptom                                    | Cause                                                                       | Fix                                                                      |
+| ------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `405 Method Not Allowed` on remote connect | Client is sending `GET` to `/mcp` (SSE handshake) but server expects `POST` | Switch client URL to `/mcp/sse`, or update client to use Streamable HTTP |
+| `401 Unauthorized`                         | Password is set but no token provided                                       | Add Bearer token to client config (see Remote Authentication above)      |
+| Connection hangs / times out               | Firewall blocking port 10114                                                | Open port 10114, or use Tailscale/VPN for direct access                  |
+
 ### Available Tools
 
-Once connected, AI agents get 60+ tools including:
+Once connected, AI agents get 70+ tools including:
 
-| Category | Tools                                                                      |
-| -------- | -------------------------------------------------------------------------- |
-| Deploy   | `create_plan`, `execute_plan`, `rollback_project`, `deploy_blue_green`     |
-| Services | `create_service`, `get_service_credentials`, `provision_database`          |
-| Config   | `set_env_vars`, `list_env_vars`, `set_global_secret`, `upload_secret_file` |
-| Monitor  | `get_deploy_status`, `get_build_log`, `debug_build_error`, `get_logs`      |
-| Projects | `list_projects`, `stop_project`, `remove_project`, `scan_project`          |
-| Domains  | `map_domain`, `list_domains`, `verify_domain`                              |
-| Webhooks | `configure_webhook`, `enable_webhook`, `disable_webhook`, `list_webhooks`  |
+| Category       | Tools                                                                                |
+| -------------- | ------------------------------------------------------------------------------------ |
+| Deploy         | `create_deploy_plan`, `execute_deploy_plan`, `rollback_project`, `deploy_blue_green` |
+| Services       | `create_service`, `get_service_credentials`, `create_service_database`               |
+| Config         | `set_env_vars`, `list_env_vars`, `set_global_secret`, `upload_secret_file`           |
+| Monitor        | `get_deploy_status`, `get_build_log`, `debug_build_error`, `get_logs`, `get_alerts`  |
+| Projects       | `list_projects`, `stop_project`, `remove_project`, `restart_project`                 |
+| Infrastructure | `analyze_infrastructure`, `map_domain`, `list_domains`                               |
+| Webhooks       | `enable_webhook`, `disable_webhook`, `get_webhook_config`                            |
 
 ## Requirements
 
@@ -365,4 +436,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, 
 
 ## License
 
-[MIT](LICENSE) © OpenLander Contributors
+[AGPL-3.0](LICENSE) © OpenLander Contributors

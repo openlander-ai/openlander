@@ -48,9 +48,9 @@ describe('deploy-flow unification integration evidence', () => {
   });
 
   it('keeps both web entry points routed to unified deploy endpoint assumptions', () => {
-    const deployDialog = readSource('web/src/components/sidebar/DeployDialog.tsx');
+    const deployDialog = readSource('web/src/components/layout/DeployDialog.tsx');
     const newProjectFlow = readSource('web/src/pages/NewProjectFlow.tsx');
-    const apiClient = readSource('web/src/lib/api.ts');
+    const apiClient = readSource('web/src/lib/api/projects.ts');
 
     expect(deployDialog).toContain("import { deployProject } from '@/lib/api';");
     expect(newProjectFlow).toContain("import { deployProject } from '@/lib/api';");

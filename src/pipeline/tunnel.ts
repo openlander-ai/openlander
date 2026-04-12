@@ -3,6 +3,7 @@ import type { ChildProcess } from 'node:child_process';
 import { hashSync } from 'bcryptjs';
 
 import { TunnelStartError, CloudflaredNotFoundError } from '../errors.js';
+import { sleep } from '../lib/sleep.js';
 
 /**
  * TryCloudflare tunnel for Quick Share mode.
@@ -39,7 +40,7 @@ export class CloudflareTunnel {
           lastError.message.includes('exited with code');
         if (!isRetryable || attempt === maxRetries) throw lastError;
         // Wait before retry (2s, 4s)
-        await new Promise((r) => setTimeout(r, attempt * 2000));
+        await sleep(attempt * 2000);
       }
     }
 

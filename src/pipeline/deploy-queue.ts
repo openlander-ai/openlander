@@ -4,8 +4,9 @@
  * Prevents concurrent agent chatStream calls from corrupting shared global state
  * (Agent.history, QuestionBridge.pendingResolve, setQuestionHandler overwrite).
  *
- * v0.1.0: Simple FIFO queue with hard timeout per job.
- * Phase 2: Replace with proper session isolation (per-session Agent state).
+ * Two-layer stale recovery:
+ * 1. Watchdog timer (STALE_JOB_MS) — self-healing for queued waiters
+ * 2. Acquire-time check — immediate cleanup when new job arrives
  *
  * @see docs/planning/v0.1.0/web-deploy-agent-mediated.md §3.4
  */
@@ -14,76 +15,59 @@ import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('deploy-queue');
 
-/** Hard timeout per deploy job — prevents stuck jobs from blocking the queue. */
-const JOB_TIMEOUT_MS = 120_000; // 2 minutes
+const STALE_JOB_MS = 30 * 60 * 1000; // 30 minutes
 
 export class DeployQueue {
   private queue: Array<{ resolve: () => void; reject: (err: Error) => void }> = [];
   private running = false;
+  private acquiredAt: number | null = null;
+  private watchdog: ReturnType<typeof setTimeout> | null = null;
 
-  /**
-   * Enqueue a deploy request. Resolves when it's this job's turn to run.
-   * If no other job is running, resolves immediately.
-   *
-   * Usage:
-   * ```typescript
-   * const release = await deployQueue.acquire();
-   * try {
-   *   await agent.chatStream(...);
-   * } finally {
-   *   release();
-   * }
-   * ```
-   */
   async acquire(): Promise<() => void> {
+    if (this.running && this.acquiredAt !== null) {
+      const elapsed = Date.now() - this.acquiredAt;
+      if (elapsed > STALE_JOB_MS) {
+        log.warn({ elapsedMs: elapsed }, 'Stale deploy job detected — force releasing');
+        this.forceReleaseCurrent();
+      }
+    }
+
     if (!this.running) {
       this.running = true;
+      this.acquiredAt = Date.now();
       log.debug('Acquired deploy lock immediately (queue empty)');
       return this.createRelease();
     }
 
-    // Another job is running — wait in queue
     log.debug({ queueLength: this.queue.length + 1 }, 'Queued deploy request');
     await new Promise<void>((resolve, reject) => {
       this.queue.push({ resolve, reject });
     });
 
+    this.acquiredAt = Date.now();
     return this.createRelease();
   }
 
-  /** Current number of waiting jobs (not including the running one). */
   getQueueLength(): number {
     return this.queue.length;
   }
 
-  /** Whether a deploy job is currently running. */
   isRunning(): boolean {
     return this.running;
   }
 
-  /** Get the position in queue (0 = next to run, -1 = not queued). */
   getPosition(): number {
     return this.running ? this.queue.length : -1;
   }
 
-  /**
-   * Create a release function with hard timeout.
-   * If the job doesn't release within JOB_TIMEOUT_MS, it's force-released.
-   */
   private createRelease(): () => void {
     let released = false;
-
-    const timer = setTimeout(() => {
-      if (!released) {
-        log.warn({ timeoutMs: JOB_TIMEOUT_MS }, 'Deploy job timed out — force releasing lock');
-        release();
-      }
-    }, JOB_TIMEOUT_MS);
+    this.startWatchdog();
 
     const release = (): void => {
       if (released) return;
       released = true;
-      clearTimeout(timer);
+      this.clearWatchdog();
 
       const next = this.queue.shift();
       if (next) {
@@ -91,10 +75,39 @@ export class DeployQueue {
         next.resolve();
       } else {
         this.running = false;
+        this.acquiredAt = null;
         log.debug('Queue empty — lock released');
       }
     };
 
     return release;
+  }
+
+  private startWatchdog(): void {
+    this.clearWatchdog();
+    this.watchdog = setTimeout(() => {
+      if (this.running) {
+        log.warn({ timeoutMs: STALE_JOB_MS }, 'Deploy job watchdog — force releasing stale lock');
+        this.forceReleaseCurrent();
+      }
+    }, STALE_JOB_MS);
+    this.watchdog.unref();
+  }
+
+  private clearWatchdog(): void {
+    if (this.watchdog !== null) {
+      clearTimeout(this.watchdog);
+      this.watchdog = null;
+    }
+  }
+
+  private forceReleaseCurrent(): void {
+    this.clearWatchdog();
+    this.running = false;
+    this.acquiredAt = null;
+    const next = this.queue.shift();
+    if (next) {
+      next.resolve();
+    }
   }
 }

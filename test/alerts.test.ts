@@ -4,12 +4,9 @@ import { AlertMonitor } from '../src/monitor/alerts.js';
 import type { Database, ProjectRow } from '../src/db/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import type { EventBus } from '../src/events/index.js';
+import * as statsModule from '../src/monitor/stats.js';
 
 let getSystemStatsMock = vi.fn();
-
-vi.mock('../src/monitor/stats.js', () => ({
-  getSystemStats: (...args: unknown[]) => getSystemStatsMock(...args),
-}));
 
 function makeStats(usagePercent: number): {
   disk: { usagePercent: number; usedGB: number; freeGB: number; totalGB: number };
@@ -49,7 +46,6 @@ function createProject(partial?: Partial<ProjectRow>): ProjectRow {
 describe('AlertMonitor', () => {
   let emit: ReturnType<typeof vi.fn>;
   let listProjects: ReturnType<typeof vi.fn>;
-  let listImages: ReturnType<typeof vi.fn>;
   let docker: Docker;
   let db: Database;
   let events: EventBus;
@@ -60,19 +56,22 @@ describe('AlertMonitor', () => {
   }
 
   beforeEach(() => {
+    vi.spyOn(statsModule, 'getSystemStats').mockImplementation((...args) =>
+      getSystemStatsMock(...args),
+    );
     emit = vi.fn().mockResolvedValue(undefined);
     listProjects = vi.fn().mockReturnValue([]);
-    listImages = vi.fn().mockResolvedValue([]);
 
     docker = {
-      getClient: vi.fn().mockReturnValue({
-        getContainer: vi.fn(),
-        listImages,
-      }),
+      inspectContainer: vi.fn(),
+      getContainerStats: vi.fn(),
     } as unknown as Docker;
 
     db = {
       listProjects,
+      listOpsIncidentsByDateRange: vi.fn().mockReturnValue([]),
+      listAllActiveOpsIncidents: vi.fn().mockReturnValue([]),
+      getProject: vi.fn().mockReturnValue(null),
     } as unknown as Database;
 
     events = {
@@ -160,7 +159,6 @@ describe('AlertMonitor', () => {
 describe('AlertMonitor - checkPortConflicts', () => {
   let emit: ReturnType<typeof vi.fn>;
   let listProjects: ReturnType<typeof vi.fn>;
-  let listImages: ReturnType<typeof vi.fn>;
   let docker: Docker;
   let db: Database;
   let events: EventBus;
@@ -173,17 +171,17 @@ describe('AlertMonitor - checkPortConflicts', () => {
   beforeEach(() => {
     emit = vi.fn().mockResolvedValue(undefined);
     listProjects = vi.fn().mockReturnValue([]);
-    listImages = vi.fn().mockResolvedValue([]);
 
     docker = {
-      getClient: vi.fn().mockReturnValue({
-        getContainer: vi.fn(),
-        listImages,
-      }),
+      inspectContainer: vi.fn(),
+      getContainerStats: vi.fn(),
     } as unknown as Docker;
 
     db = {
       listProjects,
+      listOpsIncidentsByDateRange: vi.fn().mockReturnValue([]),
+      listAllActiveOpsIncidents: vi.fn().mockReturnValue([]),
+      getProject: vi.fn().mockReturnValue(null),
     } as unknown as Database;
 
     events = {

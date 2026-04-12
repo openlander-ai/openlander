@@ -1,0 +1,36 @@
+BUG-013 Evidence: MCP ↔ HTTP env vars storage alignment
+========================================================
+
+## Root Cause
+- DB `env_vars` table uses `environment_id` as discriminator:
+  - `environment_id IS NULL` → project-level vars
+  - `environment_id = <id>` → environment-specific vars
+- MCP tools wrote/read with `environment_id IS NULL` (project-level)
+- HTTP API wrote/read with `environment_id = production_env_id`
+- These are separate DB rows — invisible to each other
+
+## Fix Applied
+File: src/tools/defs/env.ts
+
+1. Added `getProductionEnvironmentId()` helper to look up production env
+2. `list_env_vars`: uses `getAllWithInheritance(projectId, prodEnvId)` — merges project + production levels
+3. `get_env_var`: same inheritance-based read
+4. `set_env_vars`: passes `prodEnvId` to `setBulk()` and `verifyRoundTrip()`
+
+Fallback: if no production environment found (shouldn't happen), falls back to project-level (previous behavior).
+
+## Tests
+File: test/env-roundtrip.test.ts
+
+- Updated existing mock test to verify `prodEnvId` is passed to setBulk/verifyRoundTrip
+- Added 4 regression tests with real DB:
+  1. MCP set_env_vars → HTTP getAllWithInheritance shows vars ✓
+  2. HTTP setBulk(envId) → MCP list_env_vars shows vars ✓
+  3. HTTP setBulk(envId) → MCP get_env_var returns value ✓
+  4. Both paths see vars set by the other path ✓
+
+## Verification
+- ESLint: 0 errors on modified files
+- TypeScript: tsc --noEmit passes
+- Tests: 2103 passed (177 files), 0 failed
+- LSP diagnostics: 0 errors on modified files

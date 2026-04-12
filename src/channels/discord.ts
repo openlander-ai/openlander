@@ -9,6 +9,7 @@ import {
   type ChannelMessage,
 } from './base.js';
 import { createModuleLogger } from '../lib/logger.js';
+import type { OpsAlert } from '../monitor/ops-types.js';
 
 const log = createModuleLogger('discord');
 
@@ -146,6 +147,7 @@ export class DiscordChannel implements Channel {
   async sendMessage(channelId: string, text: string): Promise<string> {
     const response = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages`, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bot ${this.token}`,
         'Content-Type': 'application/json',
@@ -173,6 +175,7 @@ export class DiscordChannel implements Channel {
       `${DISCORD_API_BASE}/channels/${channelId}/messages/${messageId}`,
       {
         method: 'PATCH',
+        signal: AbortSignal.timeout(30_000),
         headers: {
           Authorization: `Bot ${this.token}`,
           'Content-Type': 'application/json',
@@ -232,6 +235,7 @@ export class DiscordChannel implements Channel {
 
     const response = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages`, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bot ${this.token}`,
         'Content-Type': 'application/json',
@@ -265,6 +269,7 @@ export class DiscordChannel implements Channel {
       `${DISCORD_API_BASE}/webhooks/${this.applicationId}/${interactionToken}`,
       {
         method: 'POST',
+        signal: AbortSignal.timeout(30_000),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -308,6 +313,19 @@ export class DiscordChannel implements Channel {
     ]);
 
     return decoded.value;
+  }
+
+  /**
+   * Formats an OpsAlert for Discord with bold and emoji formatting.
+   */
+  formatOpsAlert(alert: OpsAlert): { text: string; extra?: unknown } {
+    const icon = alert.severity === 'critical' ? '🔴' : alert.severity === 'warning' ? '🟡' : '🔵';
+    const lines = [
+      `${icon} **[${alert.severity.toUpperCase()}]** ${alert.project.name}: ${alert.title}`,
+      alert.description,
+    ];
+    if (alert.suggestion) lines.push(`💡 ${alert.suggestion}`);
+    return { text: lines.join('\n') };
   }
 }
 

@@ -17,8 +17,6 @@ import { PreflightCheckError } from '../../src/errors.js';
 import { clearPortScanCache } from '../../src/pipeline/port.js';
 import { createMockContainer, createMockDocker } from '../helpers/docker-mocks.js';
 
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-
 describe('preflightCheck', () => {
   let db: Database;
   let tmpDir: string;
@@ -382,7 +380,7 @@ describe('preflightCheck', () => {
       expect(result.pass).toBe(true);
     });
 
-    (isBunRuntime ? it.skip : it)('throws PreflightCheckError when preflight fails', async () => {
+    it('throws PreflightCheckError when preflight fails', async () => {
       docker = createMockDocker([
         createMockContainer('ol-my-project', {
           image: 'some-image:latest',
@@ -396,7 +394,7 @@ describe('preflightCheck', () => {
       );
     });
 
-    (isBunRuntime ? it.skip : it)('PreflightCheckError contains result', async () => {
+    it('PreflightCheckError contains result', async () => {
       docker = createMockDocker([
         createMockContainer('ol-my-project', {
           image: 'some-image:latest',

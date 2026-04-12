@@ -3,6 +3,7 @@ import { Copy, Check, Monitor, Key, Terminal, Network } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { type Service, type NetworkIp, getAllIps } from '@/lib/api';
+import { useCopy } from '@/hooks/use-copy';
 
 interface ServiceConnectionTabProps {
   service: Service;
@@ -24,8 +25,8 @@ function parseRecordJson(raw: string | null): Record<string, unknown> | null {
 }
 
 export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
+  const { copy, isCopied } = useCopy();
   const [networkIps, setNetworkIps] = useState<NetworkIp[]>([]);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -45,25 +46,8 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
     };
   }, []);
 
-  const handleCopy = async (text: string, fieldId: string) => {
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      setCopiedField(fieldId);
-      setTimeout(() => setCopiedField(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
+  const handleCopy = (text: string, fieldId: string) => {
+    void copy(text, fieldId);
   };
 
   const creds = parseRecordJson(service.credentials);
@@ -85,7 +69,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
   return (
     <div className="flex flex-col gap-4">
       {creds && (
-        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <h3 className="text-sm font-display font-medium text-primary-ol mb-4 flex items-center gap-2">
             <Key className="h-4 w-4 text-muted-ol" />
             Credentials
@@ -128,7 +112,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
                       className="h-7 w-7 shrink-0 hover:bg-bg-subtle"
                       onClick={() => void handleCopy(String(value), fieldId)}
                     >
-                      {copiedField === fieldId ? (
+                      {isCopied(fieldId) ? (
                         <Check className="h-3.5 w-3.5 text-success" />
                       ) : (
                         <Copy className="h-3.5 w-3.5 text-muted-ol" />
@@ -143,7 +127,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
       )}
 
       {networkIps.length > 0 && typeof creds?.connectionString === 'string' && (
-        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <h3 className="text-sm font-display font-medium text-primary-ol mb-4 flex items-center gap-2">
             <Network className="h-4 w-4 text-muted-ol" />
             External Access
@@ -174,7 +158,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
                       className="h-7 w-7 shrink-0 hover:bg-bg-subtle"
                       onClick={() => void handleCopy(externalConnStr, fieldId)}
                     >
-                      {copiedField === fieldId ? (
+                      {isCopied(fieldId) ? (
                         <Check className="h-3.5 w-3.5 text-success" />
                       ) : (
                         <Copy className="h-3.5 w-3.5 text-muted-ol" />
@@ -189,7 +173,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
       )}
 
       {!creds && parsedEnv && Object.keys(parsedEnv).length > 0 && (
-        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <h3 className="text-sm font-display font-medium text-primary-ol mb-4 flex items-center gap-2">
             <Terminal className="h-4 w-4 text-muted-ol" />
             Environment Variables
@@ -211,7 +195,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
                     className="h-7 w-7 shrink-0 hover:bg-bg-subtle"
                     onClick={() => void handleCopy(String(value), fieldId)}
                   >
-                    {copiedField === fieldId ? (
+                    {isCopied(fieldId) ? (
                       <Check className="h-3.5 w-3.5 text-success" />
                     ) : (
                       <Copy className="h-3.5 w-3.5 text-muted-ol" />

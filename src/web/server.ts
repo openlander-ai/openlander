@@ -13,12 +13,19 @@ import { createDomainRoutes } from './api/domain-routes.js';
 import { createSetupRoutes } from './api/setup-routes.js';
 import { createTerminalRoutes } from './api/terminal-routes.js';
 import { createChatRoutes } from './api/chat-routes.js';
+import { createLlmRoutes } from './api/llm-routes.js';
+import { createAuthRoutes } from './api/auth-routes.js';
+import { createAuthMiddleware } from './middleware/auth.js';
+import { AuthService } from '../auth/auth-service.js';
 import { createMcpHttpRoutes } from '../mcp/server.js';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
+import { EmailChannel } from '../channels/email.js';
 import type { AppContext } from '../app.js';
+import { OpsAgent } from '../monitor/ops-agent.js';
 import type { NodeWebSocket } from '@hono/node-ws';
+import { getLlmRuntimeStatus } from './api/setup/shared.js';
 const log = createModuleLogger('web');
 
 import { createModuleLogger } from '../lib/logger.js';
@@ -87,10 +94,13 @@ function createApp(
   app.use(
     '/api/*',
     cors({
-      origin: '*',
+      origin: ctx.config.server.corsOrigin ?? '*',
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     }),
   );
+
+  const authService = new AuthService(ctx.db);
+  app.use('*', createAuthMiddleware(authService));
 
   // Health check (enhanced with uptime)
   app.get('/health', async (c) => {
@@ -99,26 +109,31 @@ function createApp(
 
     let dockerContainers = 0;
     try {
-      const containers = await ctx.docker.getClient().listContainers({
-        filters: { label: ['openlander.managed=true'] },
-      });
+      const containers = await ctx.docker.listManagedContainers();
       dockerContainers = containers.length;
     } catch (err) {
       log.debug({ err }, 'Docker container list failed during health check');
       // Docker not accessible
     }
 
+    const llmRuntime = getLlmRuntimeStatus(ctx.config, ctx.llmVerified);
+    const llmStatus = llmRuntime.state;
+
     return c.json({
       status: 'ok',
       version: VERSION,
-      llmConfigured: ctx.agent !== null,
+      llmConfigured: llmRuntime.configured,
+      llmStatus,
       timestamp: new Date().toISOString(),
       uptime,
       dockerContainers,
+      environments: ['production', 'development'] as const,
     });
   });
 
-  // API routes
+  const authRoutes = createAuthRoutes(authService, ctx);
+  app.route('/api', authRoutes);
+
   const apiRoutes = createApiRoutes(ctx);
   app.route('/api', apiRoutes);
 
@@ -138,6 +153,9 @@ function createApp(
 
   const chatRoutes = createChatRoutes(ctx);
   app.route('/api', chatRoutes);
+
+  const llmRoutes = createLlmRoutes(ctx);
+  app.route('/api', llmRoutes);
 
   const mcpRoutes = createMcpHttpRoutes(ctx);
   app.route('/mcp', mcpRoutes);
@@ -175,6 +193,18 @@ function createApp(
     });
     ctx.channelManager.register('telegram', telegramChannel);
     app.post('/webhooks/telegram', createTelegramWebhookHandler(telegramChannel));
+  }
+
+  if (ctx.config.channels.email.enabled && ctx.config.channels.email.host) {
+    const emailChannel = new EmailChannel({
+      host: ctx.config.channels.email.host,
+      port: ctx.config.channels.email.port,
+      secure: ctx.config.channels.email.secure,
+      auth: ctx.config.channels.email.auth,
+      from: ctx.config.channels.email.from,
+      to: ctx.config.channels.email.to,
+    });
+    ctx.channelManager.register('email', emailChannel);
   }
 
   app.get('/api/info', (c) =>
@@ -265,16 +295,52 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   const server = createAdaptorServer(appWithRoutes);
 
   server.listen(options.port, options.host, () => {
-    log.info({ port: options.port }, 'Server listening');
+    log.info({ version: VERSION, port: options.port }, `OpenLander v${VERSION} listening`);
+    const host = options.host || 'localhost';
+    console.log(`\n  OpenLander v${VERSION}\n  http://${host}:${String(options.port)}\n`);
   });
   injectWebSocket(server);
 
   // v0.2: Start health monitoring
-  ctx.healthMonitor.start();
-  ctx.alertMonitor.start();
+  if (ctx.config.ai.operationalMonitoring.enabled) {
+    ctx.healthMonitor.start();
+    ctx.alertMonitor.start();
+    void startOpsAgent(ctx);
+  }
 
   // v0.4: Start channel connections
   void ctx.channelManager.start();
+
+  void verifyLlmOnStartup(ctx);
+}
+
+async function startOpsAgent(ctx: AppContext): Promise<void> {
+  if (ctx.opsAgent) {
+    return;
+  }
+
+  const opsAgent = new OpsAgent(ctx, ctx.config.ops);
+  ctx.opsAgent = opsAgent;
+  await opsAgent.start();
+  ctx.coordinator.setOpsAgent(opsAgent);
+  log.info('OpsAgent started');
+}
+
+async function verifyLlmOnStartup(ctx: AppContext): Promise<void> {
+  if (!ctx.model) return;
+  try {
+    const { generateText } = await import('ai');
+    await generateText({
+      model: ctx.model,
+      prompt: 'Respond with exactly: ok',
+      maxOutputTokens: 5,
+    });
+    ctx.llmVerified = true;
+    log.info('LLM connectivity verified');
+  } catch (err) {
+    ctx.llmVerified = false;
+    log.warn({ err }, 'LLM connectivity check failed');
+  }
 }
 
 // --- Unix Socket Daemon ---
@@ -306,18 +372,23 @@ export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<vo
 
   const ready = new Promise<void>((resolve) => {
     server.listen(options.socketPath, () => {
-      chmodSync(options.socketPath, 0o666);
+      chmodSync(options.socketPath, 0o660);
       log.debug({ socketPath: options.socketPath }, 'Daemon listening');
       resolve();
     });
   });
 
   // v0.2: Start health monitoring
-  ctx.healthMonitor.start();
-  ctx.alertMonitor.start();
+  if (ctx.config.ai.operationalMonitoring.enabled) {
+    ctx.healthMonitor.start();
+    ctx.alertMonitor.start();
+    void startOpsAgent(ctx);
+  }
 
   // v0.4: Start channel connections
   void ctx.channelManager.start();
+
+  void verifyLlmOnStartup(ctx);
 
   // Handle graceful shutdown
   const cleanup = (): void => {

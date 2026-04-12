@@ -7,10 +7,10 @@ import { envToolDefs } from '../../src/tools/defs/env.js';
 import { gitToolDefs } from '../../src/tools/defs/git.js';
 import { infraToolDefs } from '../../src/tools/defs/infra.js';
 import { monitoringToolDefs } from '../../src/tools/defs/monitoring.js';
+import { opsAutomationToolDefs } from '../../src/tools/defs/ops-automation.js';
 import { projectOpsToolDefs } from '../../src/tools/defs/project-ops.js';
 import { serviceToolDefs } from '../../src/tools/defs/service.js';
 import { webhookToolDefs } from '../../src/tools/defs/webhook.js';
-import { environmentToolDefs } from '../../src/tools/defs/environment.js';
 import type { ToolDef, ToolTarget } from '../../src/tools/defs/types.js';
 
 export interface LegacyToolSpec {
@@ -38,7 +38,7 @@ const sharedToolDefs: ToolDef[] = [
   ...serviceToolDefs,
   ...composeToolDefs,
   ...webhookToolDefs,
-  ...environmentToolDefs,
+  ...opsAutomationToolDefs,
 ];
 
 export function createSharedToolRegistry(

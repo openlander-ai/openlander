@@ -27,7 +27,7 @@ export function TerminalLine({
     >
       {time && (
         <div
-          className="shrink-0 w-16 text-[11px] pt-[2px] opacity-50 group-hover:opacity-100 transition-opacity"
+          className="shrink-0 w-16 text-xs pt-[2px] opacity-70 group-hover:opacity-100 transition-opacity"
           style={{ color: terminalTokens.colors.text.muted }}
         >
           {time}

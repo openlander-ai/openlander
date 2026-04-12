@@ -22,8 +22,8 @@ export function ConsoleTab({ projectId, isActive, projectStatus }: ConsoleTabPro
       : 'Show terminal status and availability';
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <div className="flex flex-col md:flex-row flex-1 min-h-0">
+    <div className="flex flex-col h-full min-h-0 p-6 bg-bg-app">
+      <div className="flex flex-col md:flex-row flex-1 min-h-0 bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm overflow-hidden">
         <div
           className={cn(
             'flex-1 min-w-0 min-h-0',

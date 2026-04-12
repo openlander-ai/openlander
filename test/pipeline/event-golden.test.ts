@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { DeployPipeline } from '../../src/pipeline/deploy.js';
 import { ComposePipeline } from '../../src/pipeline/compose.js';
 import { Database } from '../../src/db/index.js';
+import type { OpenLanderConfig } from '../../src/config/index.js';
 import type { Docker } from '../../src/pipeline/docker.js';
 import { clearPortScanCache, clearPortReservations } from '../../src/pipeline/port.js';
 import { eventBus } from '../../src/events/index.js';
@@ -40,7 +41,6 @@ const DEPLOY_AND_COMPOSE_EVENT_TYPES = [
   'deploy:crash',
   'deploy:success',
   'build:inform',
-  'build:dockerfile-fixed',
   'build:suggest',
   'deploy:failed',
   'deploy:rollback',
@@ -69,15 +69,18 @@ function createMockDocker(): Docker {
     listManagedContainers: vi.fn().mockResolvedValue([]),
     listAllContainers: vi.fn().mockResolvedValue([]),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     startContainer: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
+    inspectImage: vi.fn().mockResolvedValue({}),
     cleanupSecretFiles: vi.fn(),
     ensureProjectNetwork: vi.fn().mockResolvedValue('compose-network'),
     pullImage: vi.fn().mockResolvedValue(undefined),
     buildComposeService: vi.fn().mockResolvedValue(undefined),
     runComposeService: vi.fn().mockImplementation(async (config: { name: string }) => config.name),
     removeProjectNetwork: vi.fn().mockResolvedValue(undefined),
+    getNetworkName: vi.fn().mockReturnValue('openlander-prod'),
   } as unknown as Docker;
 }
 
@@ -143,6 +146,7 @@ describe('pipeline event golden snapshots', () => {
     vi.spyOn(gitPipeline, 'cloneRepo').mockResolvedValue({
       path: clonePath,
       commitSha: 'deadbeefcafebabe',
+      branch: 'main',
     });
     vi.spyOn(dockerfileGen, 'ensureDockerfile').mockReturnValue({
       generated: false,
@@ -163,7 +167,8 @@ describe('pipeline event golden snapshots', () => {
   });
 
   it('captures single deploy event sequence and payload shapes', async () => {
-    const pipeline = new DeployPipeline(docker, db, env as never);
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
+    const pipeline = new DeployPipeline(docker, db, env as never, testConfig);
     db.createProject({
       id: 'single-project',
       name: 'single-app',
@@ -194,7 +199,8 @@ describe('pipeline event golden snapshots', () => {
   });
 
   it('captures monorepo deploy event sequence and payload shapes', async () => {
-    const pipeline = new DeployPipeline(docker, db, env as never);
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
+    const pipeline = new DeployPipeline(docker, db, env as never, testConfig);
     mkdirSync(join(clonePath, 'frontend'), { recursive: true });
     mkdirSync(join(clonePath, 'backend'), { recursive: true });
     writeFileSync(join(clonePath, 'frontend', 'Dockerfile'), 'FROM node:20\nEXPOSE 3001\n', 'utf8');
@@ -216,7 +222,8 @@ describe('pipeline event golden snapshots', () => {
   });
 
   it('captures rollback event sequence and payload shapes', async () => {
-    const pipeline = new DeployPipeline(docker, db, env as never);
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
+    const pipeline = new DeployPipeline(docker, db, env as never, testConfig);
     db.createProject({
       id: 'rollback-project',
       name: 'rollback-app',
@@ -240,7 +247,8 @@ describe('pipeline event golden snapshots', () => {
   });
 
   it('captures stop/start/remove event sequence and payload shapes', async () => {
-    const pipeline = new DeployPipeline(docker, db, env as never);
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
+    const pipeline = new DeployPipeline(docker, db, env as never, testConfig);
     db.createProject({
       id: 'control-project',
       name: 'control-app',
@@ -254,11 +262,12 @@ describe('pipeline event golden snapshots', () => {
 
     const events = await capturePipelineEvents(async () => {
       await pipeline.stop('control-project');
+      // After destructive stop, container_id is cleared — start() is a no-op
       await pipeline.start('control-project');
       await pipeline.remove('control-project');
     });
 
-    expect(eventTypes(events)).toEqual(['container:stop', 'container:start', 'container:remove']);
+    expect(eventTypes(events)).toEqual(['container:stop', 'container:remove']);
     expect(events).toMatchSnapshot();
   });
 
