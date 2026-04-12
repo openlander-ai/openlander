@@ -493,8 +493,8 @@ export function MainFeedGrid({
         role="row"
         className={cn(
           ROW_GRID_CLASSES,
-          'bg-bg-panel border-y border-[hsl(var(--border))] py-2',
-          'text-[10px] font-mono tracking-wider uppercase font-semibold text-muted-ol',
+          'bg-bg-subtle/70 border-y border-[hsl(var(--border))] py-2.5',
+          'text-[10px] font-mono tracking-wider uppercase font-semibold text-secondary-ol',
         )}
       >
         <div role="columnheader" /> {/* expander col */}

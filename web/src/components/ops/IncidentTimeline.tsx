@@ -38,10 +38,10 @@ export function IncidentTimeline({ events }: IncidentTimelineProps) {
   }
 
   return (
-    <div className="relative pl-4 border-l-2 border-border/50 space-y-6">
+    <div className="relative pl-5 border-l-2 border-border space-y-6">
       {groupedEvents.map((g, idx) => (
         <div key={idx} className="relative">
-          <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-agent border-2 border-bg-subtle" />
+          <div className="absolute -left-[25px] top-1 h-3 w-3 rounded-full bg-agent border-2 border-bg-panel shadow-sm" />
           <div className="flex flex-col">
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-primary-ol">

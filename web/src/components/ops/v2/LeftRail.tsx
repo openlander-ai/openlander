@@ -414,7 +414,7 @@ export function LeftRail({
       }}
       className={cn(
         'relative flex flex-col h-full',
-        'bg-bg-panel border-r border-[hsl(var(--border))]',
+        'bg-bg-panel border-r-2 border-[hsl(var(--border))]',
         'overflow-hidden',
       )}
     >
