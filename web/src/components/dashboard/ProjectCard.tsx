@@ -47,7 +47,7 @@ export function ProjectCard({
       key={project.id}
       onClick={() => onNavigate(`/projects/${project.id}`)}
       className={cn(
-        'group relative flex flex-col rounded-lg border bg-bg-panel hover:bg-bg-panel/80 hover:shadow-md hover:border-agent/20 transition-all duration-200 cursor-pointer overflow-hidden card-hover',
+        'group relative flex flex-col rounded-lg border bg-bg-panel hover:bg-bg-panel/80 hover:shadow-md hover:border-agent/20 transition-all duration-200 cursor-pointer overflow-hidden card-hover min-h-[160px]',
         status.border,
         project.archived_at && 'opacity-60 grayscale-[0.5]',
       )}

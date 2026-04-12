@@ -105,28 +105,44 @@ export function SystemSettingsTab() {
             </div>
           )}
 
-          <form onSubmit={handleAddSecret} className="space-y-2 pt-2 border-t border-border">
-            <div className="grid grid-cols-2 gap-2">
+          <form onSubmit={handleAddSecret} className="space-y-3 pt-3 border-t border-border">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Key
+                </label>
+                <Input
+                  placeholder={'e.g. API_KEY'}
+                  value={secretKey}
+                  onChange={(e) => setSecretKey(e.target.value)}
+                  className="font-mono text-sm bg-bg-app border-border"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Value
+                </label>
+                <Input
+                  type="password"
+                  placeholder={'••••••••'}
+                  value={secretValue}
+                  onChange={(e) => setSecretValue(e.target.value)}
+                  className="font-mono text-sm bg-bg-app border-border"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                Description{' '}
+                <span className="normal-case tracking-normal text-muted-ol">(optional)</span>
+              </label>
               <Input
-                placeholder={'KEY_NAME'}
-                value={secretKey}
-                onChange={(e) => setSecretKey(e.target.value)}
-                className="font-mono text-sm bg-bg-app border-border"
-              />
-              <Input
-                type="password"
-                placeholder={'Secret value'}
-                value={secretValue}
-                onChange={(e) => setSecretValue(e.target.value)}
-                className="font-mono text-sm bg-bg-app border-border"
+                placeholder={'What this secret is used for'}
+                value={secretDesc}
+                onChange={(e) => setSecretDesc(e.target.value)}
+                className="text-sm bg-bg-app border-border"
               />
             </div>
-            <Input
-              placeholder={'Description (optional)'}
-              value={secretDesc}
-              onChange={(e) => setSecretDesc(e.target.value)}
-              className="text-sm bg-bg-app border-border"
-            />
             <Button
               type="submit"
               disabled={secretSaving || !secretKey.trim() || !secretValue.trim()}
