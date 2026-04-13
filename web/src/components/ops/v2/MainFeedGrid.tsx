@@ -488,195 +488,200 @@ export function MainFeedGrid({
         </button>
       </div>
 
-      {/* Grid Table Header */}
-      <div
-        role="row"
-        className={cn(
-          ROW_GRID_CLASSES,
-          'bg-bg-subtle/70 border-y border-[hsl(var(--border))] py-2.5',
-          'text-[10px] font-mono tracking-wider uppercase font-semibold text-secondary-ol',
-        )}
-      >
-        <div role="columnheader" /> {/* expander col */}
-        <div role="columnheader">{t('opsV2.timeline.columns.projectTarget')}</div>
-        <div role="columnheader">{t('opsV2.timeline.columns.detectedEvent')}</div>
-        <div role="columnheader">{t('opsV2.timeline.columns.severity')}</div>
-        <div role="columnheader">{t('opsV2.timeline.columns.state')}</div>
-        <div role="columnheader">{t('opsV2.timeline.columns.eventCount')}</div>
-        <div role="columnheader">{t('opsV2.timeline.columns.latest')}</div>
-      </div>
+      {/* Card Wrapper for Table */}
+      <div className="bg-bg-panel rounded-lg border border-[hsl(var(--border))] shadow-sm overflow-hidden mb-4">
+        {/* Grid Table Header */}
+        <div
+          role="row"
+          className={cn(
+            ROW_GRID_CLASSES,
+            'bg-bg-subtle/50 border-b border-[hsl(var(--border))] py-2.5',
+            'text-[10px] font-mono tracking-wider uppercase font-semibold text-secondary-ol',
+          )}
+        >
+          <div role="columnheader" /> {/* expander col */}
+          <div role="columnheader">{t('opsV2.timeline.columns.projectTarget')}</div>
+          <div role="columnheader">{t('opsV2.timeline.columns.detectedEvent')}</div>
+          <div role="columnheader">{t('opsV2.timeline.columns.severity')}</div>
+          <div role="columnheader">{t('opsV2.timeline.columns.state')}</div>
+          <div role="columnheader">{t('opsV2.timeline.columns.eventCount')}</div>
+          <div role="columnheader">{t('opsV2.timeline.columns.latest')}</div>
+        </div>
 
-      {/* Body Rows */}
-      <div className="flex flex-col bg-app border-b border-[hsl(var(--border))]" role="rowgroup">
-        {threadData.slice(0, visibleThreadCount).map((thread, index) => {
-          const isExpanded = !!expandedMap[thread.correlationId];
-          const isCritical = thread.severity === 'critical';
-          const isWarning = thread.severity === 'warning';
-          const isFocused = index === focusedIndex;
-          const maxVisibleEvents = expandedEventsMap[thread.correlationId] ?? EVENTS_PAGE_SIZE;
-          const visibleEvents = thread.events.slice(0, maxVisibleEvents);
-          const hiddenEventCount = thread.events.length - visibleEvents.length;
+        {/* Body Rows */}
+        <div className="flex flex-col" role="rowgroup">
+          {threadData.slice(0, visibleThreadCount).map((thread, index) => {
+            const isExpanded = !!expandedMap[thread.correlationId];
+            const isCritical = thread.severity === 'critical';
+            const isWarning = thread.severity === 'warning';
+            const isFocused = index === focusedIndex;
+            const maxVisibleEvents = expandedEventsMap[thread.correlationId] ?? EVENTS_PAGE_SIZE;
+            const visibleEvents = thread.events.slice(0, maxVisibleEvents);
+            const hiddenEventCount = thread.events.length - visibleEvents.length;
 
-          return (
-            <Collapsible
-              key={thread.correlationId}
-              open={isExpanded}
-              onOpenChange={() =>
-                toggleThread(
-                  thread.correlationId,
-                  thread.events.find((e) => e.incidentId)?.incidentId,
-                )
-              }
-              className={cn(
-                'group border-b border-[hsl(var(--border))]/50 last:border-0 transition-colors',
-                isCritical && 'bg-error/5',
-                isWarning && !isCritical && 'bg-warning/5',
-                thread.cascadeGroup &&
-                  thread.cascadeGroup.length > 0 &&
-                  'border-l-2 border-l-warning',
-                isFocused && 'ring-1 ring-agent/50 ring-inset',
-              )}
-            >
-              {/* Parent Row */}
-              <CollapsibleTrigger asChild>
-                <button
-                  type="button"
-                  role="row"
-                  className={cn(
-                    ROW_GRID_CLASSES,
-                    'w-full py-2 hover:bg-bg-subtle/80 transition-colors text-left outline-none focus-visible:bg-bg-subtle',
-                    isExpanded && 'bg-bg-subtle/40',
-                  )}
-                >
-                  <span role="cell" className="shrink-0 text-muted-ol">
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
+            return (
+              <Collapsible
+                key={thread.correlationId}
+                open={isExpanded}
+                onOpenChange={() =>
+                  toggleThread(
+                    thread.correlationId,
+                    thread.events.find((e) => e.incidentId)?.incidentId,
+                  )
+                }
+                className={cn(
+                  'group border-b border-[hsl(var(--border))]/50 last:border-0 transition-colors',
+                  isCritical && 'bg-error/5',
+                  isWarning && !isCritical && 'bg-warning/5',
+                  thread.cascadeGroup &&
+                    thread.cascadeGroup.length > 0 &&
+                    'border-l-2 border-l-warning',
+                  isFocused && 'ring-1 ring-agent/50 ring-inset',
+                )}
+              >
+                {/* Parent Row */}
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    role="row"
+                    className={cn(
+                      ROW_GRID_CLASSES,
+                      'w-full py-2 hover:bg-bg-subtle/80 transition-colors text-left outline-none focus-visible:bg-bg-subtle',
+                      isExpanded && 'bg-bg-subtle/40',
                     )}
-                  </span>
-
-                  <span
-                    role="cell"
-                    className="min-w-0 shrink truncate text-xs font-semibold text-primary-ol"
                   >
-                    {thread.projectName}
-                  </span>
-
-                  <div role="cell" className="min-w-0 flex flex-col justify-center">
-                    <span
-                      className="truncate text-xs font-medium text-secondary-ol"
-                      title={thread.title ? localizeTitle(thread.title, t) : undefined}
-                    >
-                      {thread.title ? localizeTitle(thread.title, t) : thread.title}
+                    <span role="cell" className="shrink-0 text-muted-ol">
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
                     </span>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {thread.triggerType && (
-                        <span className="truncate text-[10px] font-mono text-muted-ol">
-                          {humanizeEventType(thread.triggerType, t)}
-                        </span>
-                      )}
-                      {thread.cascadeGroup && thread.cascadeGroup.length > 0 && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-warning bg-warning/10 px-1.5 py-0.5 rounded">
-                          ⚡{' '}
-                          {t('opsV2.cascade.affected', {
-                            projects: thread.cascadeGroup.join(', '),
-                          })}
-                        </span>
-                      )}
-                      {thread.aiMetadata && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-agent bg-agent/10 px-1.5 py-0.5 rounded">
-                          {thread.aiMetadata.model}
-                          {thread.aiMetadata.tokensUsed
-                            ? ` · ${thread.aiMetadata.tokensUsed.toLocaleString()} ${t('opsV2.ai.tokens')}`
-                            : ''}
-                          {thread.aiMetadata.durationMs
-                            ? ` · ${formatDurationMs(thread.aiMetadata.durationMs)}`
-                            : ''}
-                        </span>
-                      )}
-                    </div>
-                  </div>
 
-                  <div role="cell">
-                    <SeverityBadge severity={thread.severity} />
-                  </div>
-
-                  <div role="cell" className="flex items-center gap-2">
                     <span
-                      className={cn(
-                        'truncate text-[11px] font-medium',
-                        thread.status === 'active' && 'text-warning',
-                        thread.status === 'resolved' && 'text-success',
-                        thread.status === 'failed' && 'text-error',
-                        thread.status === 'pending' && 'text-info',
-                        thread.status === 'recovering' && 'text-info',
-                        thread.status === 'ai-running' && 'text-agent',
-                        thread.status === 'ai-completed' && 'text-info',
-                        thread.status === 'recovery-blocked' && 'text-warning',
-                        thread.status === 'recovery-stopped' && 'text-warning',
-                      )}
+                      role="cell"
+                      className="min-w-0 shrink truncate text-xs font-semibold text-primary-ol"
                     >
-                      {t(`opsV2.status.${thread.status}`)}
+                      {thread.projectName}
                     </span>
-                    {thread.hasPendingApproval && (
-                      <AlertCircle className="h-3.5 w-3.5 text-warning animate-pulse" />
-                    )}
-                  </div>
 
-                  <span role="cell" className="text-[11px] text-muted-ol font-mono">
-                    {thread.eventCount}
-                  </span>
-
-                  <span role="cell" className="text-[11px] text-muted-ol">
-                    {relativeTime(parseTimestamp(thread.lastEventTime)?.getTime() ?? 0, language)}
-                  </span>
-                </button>
-              </CollapsibleTrigger>
-
-              {/* Inline details for 1-event thread */}
-              {thread.eventCount === 1 && !isExpanded && (
-                <EventDetailsContent event={thread.events[0]} detailsOpen={false} />
-              )}
-
-              {/* Child Events Section */}
-              <CollapsibleContent>
-                <div className="bg-bg-panel/20 shadow-inner">
-                  {visibleEvents.map((event) => (
-                    <ThreadEventDenseRow
-                      key={event.id}
-                      event={event}
-                      threadTitle={thread.title ? localizeTitle(thread.title, t) : undefined}
-                    />
-                  ))}
-
-                  {/* Load more within thread */}
-                  {hiddenEventCount > 0 && (
-                    <div className="px-10 py-2 border-b border-[hsl(var(--border))]/30">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          showMoreEvents(thread.correlationId);
-                        }}
-                        className="text-[11px] text-primary-ol hover:text-agent transition-colors font-medium border border-[hsl(var(--border))] rounded px-2 py-1 bg-bg-panel hover:bg-bg-subtle"
+                    <div role="cell" className="min-w-0 flex flex-col justify-center">
+                      <span
+                        className="truncate text-xs font-medium text-secondary-ol"
+                        title={thread.title ? localizeTitle(thread.title, t) : undefined}
                       >
-                        {t('opsV2.timeline.showOlderEvents')} ({hiddenEventCount})
-                      </button>
+                        {thread.title ? localizeTitle(thread.title, t) : thread.title}
+                      </span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {thread.triggerType && (
+                          <span className="truncate text-[10px] font-mono text-muted-ol">
+                            {humanizeEventType(thread.triggerType, t)}
+                          </span>
+                        )}
+                        {thread.cascadeGroup && thread.cascadeGroup.length > 0 && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-warning bg-warning/10 px-1.5 py-0.5 rounded">
+                            ⚡{' '}
+                            {t('opsV2.cascade.affected', {
+                              projects: thread.cascadeGroup.join(', '),
+                            })}
+                          </span>
+                        )}
+                        {thread.aiMetadata && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-agent bg-agent/10 px-1.5 py-0.5 rounded">
+                            {thread.aiMetadata.model}
+                            {thread.aiMetadata.tokensUsed
+                              ? ` · ${thread.aiMetadata.tokensUsed.toLocaleString()} ${t('opsV2.ai.tokens')}`
+                              : ''}
+                            {thread.aiMetadata.durationMs
+                              ? ` · ${formatDurationMs(thread.aiMetadata.durationMs)}`
+                              : ''}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  )}
 
-                  {/* Approvals Block */}
-                  {thread.hasPendingApproval && (
-                    <div className="pl-10 pr-4 py-3 border-b border-[hsl(var(--border))]/30 bg-warning/5">
-                      <ThreadApprovalActions events={thread.events} />
+                    <div role="cell">
+                      <SeverityBadge severity={thread.severity} />
                     </div>
-                  )}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          );
-        })}
+
+                    <div role="cell" className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          'truncate text-[11px] font-medium',
+                          thread.status === 'active' && 'text-warning',
+                          thread.status === 'resolved' && 'text-success',
+                          thread.status === 'failed' && 'text-error',
+                          thread.status === 'pending' && 'text-info',
+                          thread.status === 'recovering' && 'text-info',
+                          thread.status === 'ai-running' && 'text-agent',
+                          thread.status === 'ai-completed' && 'text-info',
+                          thread.status === 'recovery-blocked' && 'text-warning',
+                          thread.status === 'recovery-stopped' && 'text-warning',
+                        )}
+                      >
+                        {t(`opsV2.status.${thread.status}`)}
+                      </span>
+                      {thread.hasPendingApproval && (
+                        <AlertCircle className="h-3.5 w-3.5 text-warning animate-pulse" />
+                      )}
+                    </div>
+
+                    <span role="cell" className="text-[11px] text-muted-ol font-mono">
+                      {thread.eventCount}
+                    </span>
+
+                    <span role="cell" className="text-[11px] text-muted-ol">
+                      {relativeTime(parseTimestamp(thread.lastEventTime)?.getTime() ?? 0, language)}
+                    </span>
+                  </button>
+                </CollapsibleTrigger>
+
+                {/* Inline details for 1-event thread */}
+                {thread.eventCount === 1 && !isExpanded && (
+                  <EventDetailsContent event={thread.events[0]} detailsOpen={false} />
+                )}
+
+                {/* Child Events Section */}
+                <CollapsibleContent>
+                  <div className="bg-bg-panel/40 shadow-inner border-t border-[hsl(var(--border))]/50">
+                    <div className="pl-6 border-l-2 border-muted-ol/20 ml-2.5 my-1">
+                      {visibleEvents.map((event) => (
+                        <ThreadEventDenseRow
+                          key={event.id}
+                          event={event}
+                          threadTitle={thread.title ? localizeTitle(thread.title, t) : undefined}
+                        />
+                      ))}
+
+                      {/* Load more within thread */}
+                      {hiddenEventCount > 0 && (
+                        <div className="px-10 py-2 border-b border-[hsl(var(--border))]/30">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              showMoreEvents(thread.correlationId);
+                            }}
+                            className="text-[11px] text-primary-ol hover:text-agent transition-colors font-medium border border-[hsl(var(--border))] rounded px-2 py-1 bg-bg-panel hover:bg-bg-subtle"
+                          >
+                            {t('opsV2.timeline.showOlderEvents')} ({hiddenEventCount})
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Approvals Block */}
+                      {thread.hasPendingApproval && (
+                        <div className="pl-10 pr-4 py-3 border-b border-[hsl(var(--border))]/30 bg-warning/5 rounded-b-md">
+                          <ThreadApprovalActions events={thread.events} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            );
+          })}
+        </div>
       </div>
 
       {threadData.length > visibleThreadCount && (

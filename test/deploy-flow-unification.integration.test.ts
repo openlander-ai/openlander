@@ -54,6 +54,6 @@ describe('deploy-flow unification integration evidence', () => {
 
     expect(deployDialog).toContain("import { deployProject } from '@/lib/api';");
     expect(newProjectFlow).toContain("import { deployProject } from '@/lib/api';");
-    expect(apiClient).toContain("const res = await fetch('/api/projects/deploy', {");
+    expect(apiClient).toContain("return apiPost<DeployResult>('/api/projects/deploy', body);");
   });
 });

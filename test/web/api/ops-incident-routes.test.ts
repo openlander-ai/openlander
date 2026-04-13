@@ -100,6 +100,7 @@ function createHarness(): TestHarness {
       getActionRunsByProject: () => [],
       getRecentActionRuns: () => [],
       getActionRunsByApprovalStatus: () => [],
+      findActivityLogRecent: () => [],
     },
   } as unknown as AppContext;
 
@@ -246,7 +247,9 @@ describe('GET /api/incidents regression shape', () => {
         listServices: () => [],
         findAllProjectDependencies: () => [],
         getActionRunsByProject: () => [],
+        getRecentActionRuns: () => [],
         getActionRunsByApprovalStatus: () => [],
+        findActivityLogRecent: () => [],
       },
     } as unknown as AppContext;
     const errorApp = new Hono();
@@ -337,7 +340,9 @@ describe('GET /api/circuit-breakers regression shape', () => {
         listServices: () => [],
         findAllProjectDependencies: () => [],
         getActionRunsByProject: () => [],
+        getRecentActionRuns: () => [],
         getActionRunsByApprovalStatus: () => [],
+        findActivityLogRecent: () => [],
       },
     } as unknown as AppContext;
     const emptyApp = new Hono();
