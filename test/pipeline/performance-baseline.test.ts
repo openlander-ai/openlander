@@ -109,11 +109,13 @@ describe('DeployPipeline performance baseline', () => {
     return environmentId;
   }
 
-  it('measures mock deploy flow execution time and validates baseline', async () => {
+  it('measures steady-state mock deploy flow execution time and validates baseline', async () => {
     const timings: number[] = [];
-    const iterations = 3;
+    const warmupIterations = 1;
+    const measuredIterations = 3;
+    const totalIterations = warmupIterations + measuredIterations;
 
-    for (let i = 0; i < iterations; i++) {
+    for (let i = 0; i < totalIterations; i++) {
       const projectId = `perf-test-p1-${i}`;
       const environmentId = createProjectAndEnvironment(projectId, `perf-test-app-${i}`);
       const startTime = performance.now();
@@ -124,7 +126,9 @@ describe('DeployPipeline performance baseline', () => {
 
       const endTime = performance.now();
       const duration = endTime - startTime;
-      timings.push(duration);
+      if (i >= warmupIterations) {
+        timings.push(duration);
+      }
 
       expect(result).toEqual(
         expect.objectContaining({
@@ -136,11 +140,12 @@ describe('DeployPipeline performance baseline', () => {
     const averageTime = timings.reduce((a, b) => a + b, 0) / timings.length;
     const maxAllowedTime = BASELINE_TIME_MS * (1 + TOLERANCE_PERCENT / 100);
 
-    expect(cloneRepoSpy).toHaveBeenCalledTimes(iterations);
-    expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(iterations);
+    expect(cloneRepoSpy).toHaveBeenCalledTimes(totalIterations);
+    expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(totalIterations);
 
     console.log(`Performance Baseline Results:`);
-    console.log(`  Iterations: ${iterations}`);
+    console.log(`  Warmup Iterations: ${warmupIterations}`);
+    console.log(`  Measured Iterations: ${measuredIterations}`);
     console.log(`  Timings (ms): ${timings.map((t) => t.toFixed(2)).join(', ')}`);
     console.log(`  Average: ${averageTime.toFixed(2)}ms`);
     console.log(`  Baseline: ${BASELINE_TIME_MS}ms`);
