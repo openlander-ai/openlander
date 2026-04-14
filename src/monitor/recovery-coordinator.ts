@@ -299,23 +299,36 @@ export class RecoveryCoordinator {
 
       this.recordLlmCall();
 
-      if (this.opsAgent) {
-        const project = this.getProjectSnapshot(payload.projectId);
-        this.opsAgent.enqueue({
-          type: 'deploy:crash',
-          payload: {
-            projectId: payload.projectId,
-            projectName: project?.name ?? payload.projectId,
-            containerId: project?.container_id ?? '',
-          },
-          timestamp: Date.now(),
-        });
+      // OpsAgent enqueue (non-critical — failure should not block status update)
+      try {
+        if (this.opsAgent) {
+          const project = this.getProjectSnapshot(payload.projectId);
+          this.opsAgent.enqueue({
+            type: 'deploy:crash',
+            payload: {
+              projectId: payload.projectId,
+              projectName: project?.name ?? payload.projectId,
+              containerId: project?.container_id ?? '',
+            },
+            timestamp: Date.now(),
+          });
+        }
+      } catch (enqueueErr) {
+        log.warn(
+          { err: enqueueErr, projectId: payload.projectId },
+          'Failed to enqueue to OpsAgent, continuing with recovery',
+        );
       }
 
-      this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
+      try {
+        this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
+      } catch (statusErr) {
+        log.warn(
+          { err: statusErr, projectId: payload.projectId },
+          'Failed to set status to recovering, continuing with recovery event',
+        );
+      }
 
-      // When OpsAgent is unavailable (null), use projectId as fallback correlationId
-      // since no incident is created in that case
       const correlationId = this.opsAgent ? undefined : payload.projectId;
 
       await this.events.emit('recovery:started', {
@@ -353,21 +366,38 @@ export class RecoveryCoordinator {
         return;
       }
 
-      if (this.opsAgent) {
-        const project = this.getProjectSnapshot(payload.projectId);
-        this.opsAgent.enqueue({
-          type: 'deploy:crash',
-          payload: {
-            projectId: payload.projectId,
-            projectName: project?.name ?? payload.projectId,
-            containerId: payload.containerId || project?.container_id || '',
-          },
-          timestamp: Date.now(),
-        });
+      // Stage B: OpsAgent enqueue (non-critical — failure should not block status update)
+      try {
+        if (this.opsAgent) {
+          const project = this.getProjectSnapshot(payload.projectId);
+          this.opsAgent.enqueue({
+            type: 'deploy:crash',
+            payload: {
+              projectId: payload.projectId,
+              projectName: project?.name ?? payload.projectId,
+              containerId: payload.containerId || project?.container_id || '',
+            },
+            timestamp: Date.now(),
+          });
+        }
+      } catch (enqueueErr) {
+        log.warn(
+          { err: enqueueErr, projectId: payload.projectId },
+          'Failed to enqueue to OpsAgent, continuing with recovery',
+        );
       }
 
-      this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
+      // Stage C: Update status to recovering (critical — isolated so D still fires)
+      try {
+        this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
+      } catch (statusErr) {
+        log.warn(
+          { err: statusErr, projectId: payload.projectId },
+          'Failed to set status to recovering, continuing with recovery event',
+        );
+      }
 
+      // Stage D: Emit recovery:started
       // When OpsAgent is unavailable (null), use projectId as fallback correlationId
       const correlationId = this.opsAgent ? undefined : payload.projectId;
 
@@ -436,8 +466,13 @@ export class RecoveryCoordinator {
 
   private restoreStatusIfRecovering(projectId: string, nextStatus: 'running' | 'error'): void {
     const project = this.getProjectSnapshot(projectId);
-    if (project?.status === 'recovering') {
+    if (!project) return;
+
+    if (project.status === 'recovering') {
       this.projectStatusWriter.updateProject(projectId, { status: nextStatus });
+    } else if (nextStatus === 'running' && project.status === 'error') {
+      this.projectStatusWriter.updateProject(projectId, { status: nextStatus });
+      log.info({ projectId }, 'Restored project status from error to running (defensive recovery)');
     }
   }
 
