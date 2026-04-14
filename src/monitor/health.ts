@@ -1,10 +1,13 @@
 import type { Docker } from '../pipeline/docker.js';
-import type { Database } from '../db/index.js';
+import type { Database, ProjectRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import type { LanguageModel } from 'ai';
 import { createModuleLogger } from '../lib/logger.js';
 import { shouldRunCleanup, diskThresholdCleanup } from '../pipeline/cleanup.js';
 import type { RecoveryCategory } from '../pipeline/recovery-dispatch.js';
+import { createLocalProbeRunner } from '../health/probe-runner.js';
+import { resolveMonitoringProfile } from '../health/profile-resolver.js';
+import type { ProbeContext } from '../health/types.js';
 
 const log = createModuleLogger('health');
 
@@ -103,7 +106,7 @@ export class HealthMonitor {
       return result;
     }
 
-    const result = await this.checkPort(projectId, project.assigned_port);
+    const result = await this.checkPort(project);
     this.status.set(projectId, result);
 
     if (result.healthy) {
@@ -282,29 +285,59 @@ export class HealthMonitor {
     );
   }
 
-  private async checkPort(projectId: string, port: number): Promise<HealthCheckResult> {
-    let lastResult: HealthCheckResult | undefined;
-    for (let attempt = 0; attempt < this.options.maxRetries; attempt += 1) {
-      const result = await this.runSingleCheck(projectId, port);
-      lastResult = result;
-      if (result.healthy) {
-        return result;
-      }
+  private async checkPort(project: ProjectRow): Promise<HealthCheckResult> {
+    const projectId = project.id;
+
+    const profile = resolveMonitoringProfile(project);
+
+    if (profile.health.strategy === 'none') {
+      return {
+        projectId,
+        healthy: true,
+        responseTimeMs: 0,
+        checkedAt: new Date(),
+        consecutiveFailures: 0,
+      };
     }
 
-    if (!lastResult) {
-      return {
+    const probeContext: ProbeContext = {
+      projectId,
+      containerId: project.container_id ?? '',
+      assignedPort: project.assigned_port ?? undefined,
+    };
+
+    const probeRunner = createLocalProbeRunner(this.docker);
+    let lastResult: HealthCheckResult;
+
+    try {
+      const probeResult = await probeRunner.runProbe(profile.health, probeContext);
+
+      lastResult = {
+        projectId,
+        healthy: probeResult.healthy,
+        responseTimeMs: probeResult.responseTimeMs ?? 0,
+        error: probeResult.error,
+        checkedAt: new Date(),
+        consecutiveFailures: probeResult.healthy
+          ? 0
+          : (this.status.get(projectId)?.consecutiveFailures ?? 0) + 1,
+      };
+    } catch (error) {
+      lastResult = {
         projectId,
         healthy: false,
         responseTimeMs: 0,
-        error: 'Health check did not run',
+        error: error instanceof Error ? error.message : String(error),
         checkedAt: new Date(),
         consecutiveFailures: (this.status.get(projectId)?.consecutiveFailures ?? 0) + 1,
       };
     }
 
-    const project = this.db.getProject(projectId);
-    const containerId = project?.container_id;
+    if (lastResult.healthy) {
+      return lastResult;
+    }
+
+    const containerId = project.container_id;
 
     if (!containerId) {
       return lastResult;
@@ -435,56 +468,6 @@ export class HealthMonitor {
     }
 
     return lastResult;
-  }
-
-  private async runSingleCheck(projectId: string, port: number): Promise<HealthCheckResult> {
-    const startedAt = Date.now();
-    const timeoutController = new AbortController();
-    const timeoutId = setTimeout(() => {
-      timeoutController.abort();
-    }, this.options.timeoutMs);
-
-    try {
-      const response = await fetch(`http://localhost:${String(port)}/`, {
-        method: 'GET',
-        signal: timeoutController.signal,
-      });
-
-      const responseTimeMs = Date.now() - startedAt;
-      const healthy = response.ok;
-      const consecutiveFailures = healthy
-        ? 0
-        : (this.status.get(projectId)?.consecutiveFailures ?? 0) + 1;
-
-      return {
-        projectId,
-        healthy,
-        responseTimeMs,
-        statusCode: response.status,
-        error: healthy ? undefined : `HTTP ${String(response.status)}`,
-        checkedAt: new Date(),
-        consecutiveFailures,
-      };
-    } catch (error) {
-      const responseTimeMs = Date.now() - startedAt;
-      const message =
-        error instanceof Error
-          ? error.name === 'AbortError'
-            ? `Timeout after ${String(this.options.timeoutMs)}ms`
-            : error.message
-          : String(error);
-
-      return {
-        projectId,
-        healthy: false,
-        responseTimeMs,
-        error: message,
-        checkedAt: new Date(),
-        consecutiveFailures: (this.status.get(projectId)?.consecutiveFailures ?? 0) + 1,
-      };
-    } finally {
-      clearTimeout(timeoutId);
-    }
   }
 
   private resolveIncidentEnvironmentId(projectId: string, containerId: string): string | null {

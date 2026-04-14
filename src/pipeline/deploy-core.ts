@@ -1,5 +1,4 @@
 import { createModuleLogger } from '../lib/logger.js';
-import { sleep } from '../lib/sleep.js';
 const log = createModuleLogger('deploy');
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -48,6 +47,9 @@ import {
 import { ContainerLifecycle, type CoordinatorSuppressor } from './deploy/lifecycle.js';
 import { RollbackExecutor } from './deploy/rollback.js';
 import { TunnelManager } from './deploy/tunnel.js';
+import { createLocalProbeRunner } from '../health/probe-runner.js';
+import { resolveMonitoringProfile } from '../health/profile-resolver.js';
+import type { ProbeContext } from '../health/types.js';
 import { BuildExecutor } from './deploy/build-step.js';
 import { ContainerRunner } from './deploy/run-step.js';
 import { getImageExposedPort, mapPullError } from './image-utils.js';
@@ -1359,7 +1361,6 @@ export class DeployPipeline {
     options?: RedeployOptions,
   ): Promise<DeployResult> {
     const startTime = Date.now();
-    const healthCheckPath = this.normalizeHealthCheckPath(options?.healthCheckPath ?? '/');
     const healthCheckRetries = options?.healthCheckRetries ?? 10;
     const healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 2_000;
 
@@ -1499,17 +1500,31 @@ export class DeployPipeline {
         url: getProjectUrl(projectName),
       });
 
-      buildLog += `[health] Checking http://localhost:${String(newPort)}${healthCheckPath}\n`;
-      const healthy = await this.healthCheck(
-        newPort,
-        healthCheckPath,
-        healthCheckRetries,
-        healthCheckIntervalMs,
-      );
+      const probeProfile = resolveMonitoringProfile(project);
+      const probeConfig = {
+        ...probeProfile.health,
+        // Override path if explicitly provided in RedeployOptions
+        ...(options?.healthCheckPath
+          ? { path: this.normalizeHealthCheckPath(options.healthCheckPath) }
+          : {}),
+        failureThreshold: healthCheckRetries,
+        intervalMs: healthCheckIntervalMs,
+      };
 
-      if (!healthy) {
+      const probeContext: ProbeContext = {
+        projectId: project.id,
+        containerId: greenContainerId,
+        assignedPort: newPort,
+      };
+
+      const probeRunner = createLocalProbeRunner(this.docker);
+
+      buildLog += `[health] Checking ${probeConfig.strategy} on port ${String(newPort)}${probeConfig.path ?? ''}\n`;
+      const probeResult = await probeRunner.runProbe(probeConfig, probeContext);
+
+      if (!probeResult.healthy) {
         throw new Error(
-          `Health check failed for ${projectName} on port ${String(newPort)} path ${healthCheckPath}`,
+          `Health check failed for ${projectName} on port ${String(newPort)}: ${probeResult.error ?? 'no details'}`,
         );
       }
       buildLog += '[health] Passed\n';
@@ -1659,26 +1674,6 @@ export class DeployPipeline {
         await rm(clonePath, { recursive: true, force: true }).catch(() => undefined);
       }
     }
-  }
-
-  private async healthCheck(
-    port: number,
-    path: string,
-    retries: number,
-    intervalMs: number,
-  ): Promise<boolean> {
-    for (let i = 0; i < retries; i++) {
-      try {
-        const response = await fetch(`http://localhost:${String(port)}${path}`);
-        if (response.ok) return true;
-      } catch (err) {
-        log.debug({ err }, 'Health check probe failed — container not ready yet');
-      }
-      if (i < retries - 1) {
-        await sleep(intervalMs);
-      }
-    }
-    return false;
   }
 
   private normalizeHealthCheckPath(path: string): string {

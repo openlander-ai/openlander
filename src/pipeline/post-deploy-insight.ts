@@ -17,6 +17,7 @@ import { getSystemStats } from '../monitor/stats.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { pickLocale, type Locale } from '../lib/locale.js';
 import { sleep } from '../lib/sleep.js';
+import { resolveMonitoringProfile } from '../health/profile-resolver.js';
 
 const log = createModuleLogger('insight');
 
@@ -128,13 +129,29 @@ async function checkHealth(ctx: InsightContext, db: Database, locale: Locale): P
     };
   }
 
+  // Get the monitoring profile to determine health check strategy and path
+  const profile = resolveMonitoringProfile(project);
+
+  // Skip HTTP check for workers (strategy='none')
+  if (profile.health.strategy === 'none') {
+    return {
+      title: pickLocale(locale, {
+        ko: '⚠️ 헬스체크 건너뜀 - 워커 프로젝트입니다.',
+        en: '⚠️ Health check skipped - worker project.',
+      }),
+      severity: 'info',
+      actions: [],
+    };
+  }
+
   const port = project.assigned_port;
+  const path = profile.health.path ?? '/';
   const deadline = Date.now() + HEALTHCHECK_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
     try {
       const start = Date.now();
-      const res = await fetch(`http://localhost:${String(port)}/`, {
+      const res = await fetch(`http://localhost:${String(port)}${path}`, {
         method: 'GET',
         signal: AbortSignal.timeout(5_000),
       });

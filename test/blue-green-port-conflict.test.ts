@@ -11,6 +11,15 @@ import * as gitPipeline from '../src/pipeline/git.js';
 import * as portPipeline from '../src/pipeline/port.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
 
+const mockRunProbe = vi.fn();
+
+vi.mock('../src/health/probe-runner.js', () => ({
+  createLocalProbeRunner: vi.fn(() => ({
+    runProbe: mockRunProbe,
+  })),
+  LocalProbeRunner: vi.fn(),
+}));
+
 type EnvLike = {
   getGlobalSecrets: () => Record<string, string>;
   getAll: (projectId: string, environmentId?: string) => Record<string, string>;
@@ -123,9 +132,7 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
   });
 
   it('cleans green container before starting promoted container on same port', async () => {
-    const healthCheckSpy = vi
-      .spyOn(pipeline as unknown as { healthCheck: () => Promise<boolean> }, 'healthCheck')
-      .mockResolvedValue(true);
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
 
     const result = await pipeline.redeploy('p1', { strategy: 'blue-green' });
 
@@ -150,7 +157,14 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
     expect(safeRemoveContainerMock.mock.invocationCallOrder[removeBlueCallIndex]).toBeLessThan(
       renameCallOrder,
     );
-    expect(healthCheckSpy).toHaveBeenNthCalledWith(1, 12001, '/', 10, 2000);
+    expect(mockRunProbe).toHaveBeenCalledWith(
+      expect.objectContaining({ strategy: 'http', failureThreshold: 10, intervalMs: 2000 }),
+      expect.objectContaining({
+        projectId: 'p1',
+        containerId: 'container-green',
+        assignedPort: 12001,
+      }),
+    );
     expect(runContainerMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ name: 'ol-demo-app-green' }),
@@ -162,10 +176,7 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
   });
 
   it('keeps blue running when promoted container fails post-promotion health check', async () => {
-    vi.spyOn(
-      pipeline as unknown as { healthCheck: () => Promise<boolean> },
-      'healthCheck',
-    ).mockResolvedValueOnce(true);
+    mockRunProbe.mockResolvedValueOnce({ healthy: true, source: 'http' });
     dockerControls.promotedRenameMock.mockRejectedValueOnce(new Error('rename failed'));
 
     const result = await pipeline.redeploy('p1', { strategy: 'blue-green' });
@@ -191,10 +202,7 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
       assignedPort: 10010,
     });
 
-    vi.spyOn(
-      pipeline as unknown as { healthCheck: () => Promise<boolean> },
-      'healthCheck',
-    ).mockResolvedValue(true);
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
 
     const result = await pipeline.redeploy('p1', { strategy: 'blue-green' });
 
@@ -213,10 +221,7 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
     dockerControls = mockDocker.controls;
     pipeline = new DeployPipeline(docker, db, env as never, testConfig);
 
-    vi.spyOn(
-      pipeline as unknown as { healthCheck: () => Promise<boolean> },
-      'healthCheck',
-    ).mockResolvedValueOnce(true);
+    mockRunProbe.mockResolvedValueOnce({ healthy: true, source: 'http' });
     dockerControls.promotedRenameMock.mockRejectedValueOnce(new Error('rename failed'));
 
     const result = await pipeline.redeploy('p1', { strategy: 'blue-green' });
