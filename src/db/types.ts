@@ -33,6 +33,9 @@ export interface ProjectRow {
   access_code_iv: string | null;
   is_preview: 0 | 1;
   pr_number: number | null;
+  project_type: 'web' | 'worker';
+  health_check_strategy: 'http' | 'tcp' | 'exec' | 'none' | null;
+  health_check_path: string | null;
 }
 
 export interface EnvironmentRow {

@@ -115,6 +115,9 @@ export class ProjectRepo {
       isPreview: 0 | 1;
       prNumber: number | null;
       branch: string;
+      projectType: ProjectRow['project_type'];
+      healthCheckStrategy: ProjectRow['health_check_strategy'];
+      healthCheckPath: string | null;
     }>,
   ): void {
     const setValues = buildSetValues(updates, {
@@ -139,6 +142,9 @@ export class ProjectRepo {
       isPreview: 'is_preview',
       prNumber: 'pr_number',
       branch: 'branch',
+      projectType: 'project_type',
+      healthCheckStrategy: 'health_check_strategy',
+      healthCheckPath: 'health_check_path',
     });
     if (updates.imageCmd !== undefined) {
       setValues.image_cmd = updates.imageCmd === null ? null : JSON.stringify(updates.imageCmd);

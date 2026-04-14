@@ -49,6 +49,11 @@ export const projects = sqliteTable(
     access_code_iv: text('access_code_iv'),
     is_preview: integer('is_preview').default(0),
     pr_number: integer('pr_number'),
+    project_type: text('project_type', { enum: ['web', 'worker'] })
+      .notNull()
+      .default('web'),
+    health_check_strategy: text('health_check_strategy', { enum: ['http', 'tcp', 'exec', 'none'] }),
+    health_check_path: text('health_check_path'),
   },
   (table) => [
     check(
@@ -61,6 +66,11 @@ export const projects = sqliteTable(
     ),
     check('projects_build_method_check', sql`${table.build_method} IN ('dockerfile', 'compose')`),
     check('projects_is_preview_check', sql`${table.is_preview} IN (0, 1)`),
+    check('projects_project_type_check', sql`${table.project_type} IN ('web', 'worker')`),
+    check(
+      'projects_health_check_strategy_check',
+      sql`${table.health_check_strategy} IN ('http', 'tcp', 'exec', 'none')`,
+    ),
     index('idx_projects_parent').on(table.parent_project_id),
   ],
 );

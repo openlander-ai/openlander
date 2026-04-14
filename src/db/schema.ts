@@ -31,9 +31,12 @@ CREATE TABLE IF NOT EXISTS projects (
   deploy_lock_session TEXT,
   deploy_lock_at TEXT,
    access_code TEXT,
-   access_code_iv TEXT,
-   is_preview INTEGER DEFAULT 0 CHECK(is_preview IN (0, 1)),
-    pr_number INTEGER
+    access_code_iv TEXT,
+    is_preview INTEGER DEFAULT 0 CHECK(is_preview IN (0, 1)),
+     pr_number INTEGER,
+     project_type TEXT NOT NULL DEFAULT 'web' CHECK(project_type IN ('web', 'worker')),
+     health_check_strategy TEXT DEFAULT NULL CHECK(health_check_strategy IN ('http', 'tcp', 'exec', 'none')),
+     health_check_path TEXT DEFAULT NULL
 );
 
 CREATE TABLE IF NOT EXISTS environments (

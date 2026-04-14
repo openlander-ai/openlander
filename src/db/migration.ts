@@ -75,6 +75,23 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   if (!colNames.has('archived_at')) {
     sqlite.exec('ALTER TABLE projects ADD COLUMN archived_at TEXT');
   }
+  if (!colNames.has('project_type')) {
+    sqlite.exec(
+      "ALTER TABLE projects ADD COLUMN project_type TEXT NOT NULL DEFAULT 'web' CHECK(project_type IN ('web', 'worker'))",
+    );
+    // Set project_type to 'worker' for projects without assigned_port
+    sqlite.exec(
+      "UPDATE projects SET project_type = 'worker' WHERE assigned_port IS NULL AND project_type = 'web'",
+    );
+  }
+  if (!colNames.has('health_check_strategy')) {
+    sqlite.exec(
+      "ALTER TABLE projects ADD COLUMN health_check_strategy TEXT DEFAULT NULL CHECK(health_check_strategy IN ('http', 'tcp', 'exec', 'none'))",
+    );
+  }
+  if (!colNames.has('health_check_path')) {
+    sqlite.exec('ALTER TABLE projects ADD COLUMN health_check_path TEXT DEFAULT NULL');
+  }
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)');
 
   sqlite.exec(`CREATE TABLE IF NOT EXISTS environments (
