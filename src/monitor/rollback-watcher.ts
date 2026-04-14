@@ -1,5 +1,6 @@
 import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
+import type { RuntimeSignal } from '../health/types.js';
 import type { DeployPipeline } from '../pipeline/deploy.js';
 import { createModuleLogger } from '../lib/logger.js';
 
@@ -12,19 +13,30 @@ interface WatcherState {
   planId?: string;
 }
 
+export interface RollbackWatcherOptions {
+  onRegressionSignal?: (signal: RuntimeSignal) => Promise<void>;
+}
+
 export class RollbackWatcher {
   private readonly events: EventBus;
   private readonly db: Database;
   private readonly pipeline?: DeployPipeline;
+  private readonly options?: RollbackWatcherOptions;
   private readonly watchers = new Map<string, WatcherState>();
   private unsubscribers: Array<() => void> = [];
   private readonly WATCH_DURATION_MS = 60_000;
   private readonly FAILURE_THRESHOLD = 3;
 
-  constructor(events: EventBus, db: Database, pipeline?: DeployPipeline) {
+  constructor(
+    events: EventBus,
+    db: Database,
+    pipeline?: DeployPipeline,
+    options?: RollbackWatcherOptions,
+  ) {
     this.events = events;
     this.db = db;
     this.pipeline = pipeline;
+    this.options = options;
   }
 
   start(): void {
@@ -100,11 +112,21 @@ export class RollbackWatcher {
 
     if (watcher.consecutiveFailures >= this.FAILURE_THRESHOLD) {
       if (project.previous_image_tag) {
-        // If this is a plan-originated deploy and we have pipeline, auto-execute rollback
-        if (watcher.planId && this.pipeline) {
+        if (this.options?.onRegressionSignal) {
+          // Delegate recovery decision to RecoveryCoordinator via RuntimeSignal
+          const signal: RuntimeSignal = {
+            projectId,
+            kind: 'post_deploy_regression',
+            source: 'rollback-watcher',
+            failureCount: watcher.consecutiveFailures,
+            suggestedAction: 'rollback',
+          };
+          void this.options.onRegressionSignal(signal);
+        } else if (watcher.planId && this.pipeline) {
+          // Fallback: plan-originated deploy with pipeline — auto-execute rollback
           void this.executeAutoRollback(projectId, watcher.planId);
         } else {
-          // Otherwise, emit suggestion for manual rollback
+          // Fallback: emit suggestion for manual rollback
           void this.events.emit('rollback:suggested', {
             projectId,
             projectName: project.name,

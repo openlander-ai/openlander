@@ -186,6 +186,8 @@ export class HealthMonitor {
     }
   }
 
+  // TODO(refactor): Deprecated service health-check logic. Migrate callers to
+  // ServiceHealthMonitor and remove checkServiceHealth here in Task 20.
   private async checkServiceHealth(): Promise<void> {
     const services = this.db
       .listServices()

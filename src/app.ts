@@ -586,7 +586,9 @@ export async function createAppContext(
     isEligible: (projectId) => coordinator.shouldContinue(projectId),
   });
 
-  const rollbackWatcher = new RollbackWatcher(eventBus, db, pipeline);
+  const rollbackWatcher = new RollbackWatcher(eventBus, db, pipeline, {
+    onRegressionSignal: (signal) => coordinator.ingestRuntimeSignal(signal),
+  });
   rollbackWatcher.start();
   activeRollbackWatcher = rollbackWatcher;
 

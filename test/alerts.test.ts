@@ -52,7 +52,7 @@ describe('AlertMonitor', () => {
   let monitor: AlertMonitor;
 
   async function runChecks(): Promise<void> {
-    await (monitor as unknown as { runChecks: () => Promise<void> }).runChecks();
+    await monitor.infrastructureAlerter.runChecks();
   }
 
   beforeEach(() => {
@@ -165,7 +165,7 @@ describe('AlertMonitor - checkPortConflicts', () => {
   let monitor: AlertMonitor;
 
   async function runChecks(): Promise<void> {
-    await (monitor as unknown as { runChecks: () => Promise<void> }).runChecks();
+    await monitor.infrastructureAlerter.runChecks();
   }
 
   beforeEach(() => {
