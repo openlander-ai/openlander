@@ -94,7 +94,6 @@ function startMonitoring(ctx: AppContext): void {
     ctx.containerStateReconciler.start();
     ctx.serviceHealthMonitor.start();
     ctx.systemMaintenanceMonitor.start();
-    ctx.healthMonitor.start();
     ctx.alertMonitor.start();
   }
 

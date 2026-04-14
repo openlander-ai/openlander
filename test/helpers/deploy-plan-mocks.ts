@@ -114,10 +114,6 @@ export function createMockPlanContext(db?: Database): AppContext {
     modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }),
     model: null,
     deployQueue: new DeployQueue(),
-    healthMonitor: {
-      start: vi.fn(),
-      stop: vi.fn(),
-    } as unknown as AppContext['healthMonitor'],
     webhookManager: {
       triggerWebhook: vi.fn(),
     } as unknown as AppContext['webhookManager'],

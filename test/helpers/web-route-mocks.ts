@@ -90,13 +90,6 @@ export function createMockChannelManager() {
   };
 }
 
-export function createMockHealthMonitor() {
-  return {
-    start: vi.fn(),
-    stop: vi.fn(),
-  };
-}
-
 export function createMockServiceManager() {
   const baseService = {
     id: 'svc-1',
@@ -179,7 +172,6 @@ export function createMockContext(db: Database): AppContext {
     traefik: {} as unknown as AppContext['traefik'],
     env: createMockEnvManager() as unknown as AppContext['env'],
     channelManager: createMockChannelManager() as unknown as AppContext['channelManager'],
-    healthMonitor: createMockHealthMonitor() as unknown as AppContext['healthMonitor'],
     agentPool: null,
     agent: createMockAgent() as unknown as AppContext['agent'],
     modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }),

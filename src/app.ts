@@ -8,7 +8,6 @@ import { DeployQueue } from './pipeline/deploy-queue.js';
 import { QuestionBridge } from './lib/question-bridge.js';
 import { ModelRegistry } from './llm/model-registry.js';
 import { createModelProxy } from './llm/model-proxy.js';
-import { HealthMonitor } from './monitor/health.js';
 import { WebhookManager } from './webhook/index.js';
 import { CloudflareTunnelManager } from './pipeline/cloudflare.js';
 
@@ -170,7 +169,6 @@ export interface AppContext {
   model: LanguageModel | null;
   deployQueue: DeployQueue;
   // v0.2 modules
-  healthMonitor: HealthMonitor;
   projectHealthMonitor: ProjectHealthMonitor;
   containerStateReconciler: ContainerStateReconciler;
   serviceHealthMonitor: ServiceHealthMonitor;
@@ -468,9 +466,6 @@ export async function createAppContext(
 
   // v0.2: Health monitoring
   const monitorIntervalMs = config.monitoring.healthcheckIntervalSec * 1000;
-  const healthMonitor = new HealthMonitor(docker, db, eventBus, {
-    intervalMs: monitorIntervalMs,
-  });
   const projectHealthMonitor = createProjectHealthMonitor(docker, db, eventBus, {
     intervalMs: monitorIntervalMs,
   });
@@ -565,7 +560,6 @@ export async function createAppContext(
     modelRegistry,
     model,
     deployQueue,
-    healthMonitor,
     projectHealthMonitor,
     containerStateReconciler,
     serviceHealthMonitor,
@@ -665,7 +659,6 @@ export function shutdownAppContext(ctx: AppContext): void {
   ctx.serviceHealthMonitor.stop();
   ctx.containerStateReconciler.stop();
   ctx.projectHealthMonitor.stop();
-  ctx.healthMonitor.stop();
   ctx.dockerEventListener?.stop();
   ctx.coordinator.stop();
   void ctx.opsAgent?.stop();
