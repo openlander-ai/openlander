@@ -357,6 +357,76 @@ describe('RecoveryCoordinator', () => {
     expect(opsAgent.enqueue).toHaveBeenCalledTimes(2);
   });
 
+  it('still sets status to recovering when opsAgent.enqueue throws', async () => {
+    const { db, project } = createMockDb();
+    const coordinator = new RecoveryCoordinator(
+      db as unknown as Database,
+      events,
+      createMockConfig(),
+    );
+    const opsAgent: OpsAgentRef = {
+      enqueue: vi.fn(() => {
+        throw new Error('enqueue exploded');
+      }),
+    };
+    const started = vi.fn();
+
+    events.on('recovery:started', started);
+    coordinator.start({ opsAgent });
+
+    await events.emit('container:die', {
+      projectId: project.id,
+      containerId: 'container-123',
+      containerName: 'demo',
+      exitCode: 1,
+    });
+
+    expect(db.updateProject).toHaveBeenCalledWith(project.id, { status: 'recovering' });
+    expect(started).toHaveBeenCalledWith({
+      projectId: project.id,
+      trigger: 'container:die',
+    });
+  });
+
+  it('defensively restores error status to running on recovery:success', async () => {
+    const { db, project } = createMockDb({ status: 'error' });
+    const coordinator = new RecoveryCoordinator(
+      db as unknown as Database,
+      events,
+      createMockConfig(),
+    );
+
+    coordinator.start();
+
+    await events.emit('recovery:success', {
+      projectId: project.id,
+      attempt: 1,
+      durationMs: 500,
+    });
+
+    expect(project.status).toBe('running');
+  });
+
+  it('does not defensively restore error status when recovery:exhausted fires', async () => {
+    const { db, project } = createMockDb({ status: 'error' });
+    const coordinator = new RecoveryCoordinator(
+      db as unknown as Database,
+      events,
+      createMockConfig(),
+    );
+
+    coordinator.start();
+
+    await events.emit('recovery:exhausted', {
+      projectId: project.id,
+      totalAttempts: 3,
+      lastError: 'still failing',
+    });
+
+    expect(project.status).toBe('error');
+    expect(db.updateProject).not.toHaveBeenCalled();
+  });
+
   describe('ingestRuntimeSignal', () => {
     it('emits recovery:started for an eligible probe_failed signal', async () => {
       const { db } = createMockDb();
