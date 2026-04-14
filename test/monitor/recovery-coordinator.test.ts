@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenLanderConfig } from '../../src/config/index.js';
 import type { Database } from '../../src/db/index.js';
+import type { RuntimeSignal } from '../../src/health/types.js';
 import { EventBus } from '../../src/events/index.js';
 import { RecoveryCoordinator, type OpsAgentRef } from '../../src/monitor/recovery-coordinator.js';
 
@@ -60,8 +61,7 @@ describe('RecoveryCoordinator', () => {
 
   beforeEach(() => {
     events = new EventBus();
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-04-06T10:00:00.000Z'));
+    vi.useFakeTimers({ now: new Date('2026-04-06T10:00:00.000Z') });
   });
 
   afterEach(() => {
@@ -355,5 +355,143 @@ describe('RecoveryCoordinator', () => {
       containerName: 'demo',
     });
     expect(opsAgent.enqueue).toHaveBeenCalledTimes(2);
+  });
+
+  describe('ingestRuntimeSignal', () => {
+    it('emits recovery:started for an eligible probe_failed signal', async () => {
+      const { db } = createMockDb();
+      const coordinator = new RecoveryCoordinator(
+        db as unknown as Database,
+        events,
+        createMockConfig(),
+      );
+      const started = vi.fn();
+
+      events.on('recovery:started', started);
+
+      await coordinator.ingestRuntimeSignal({
+        projectId: 'proj-1',
+        kind: 'probe_failed',
+        source: 'probe-monitor',
+        error: 'connection refused',
+        failureCount: 3,
+      });
+
+      expect(db.updateProject).toHaveBeenCalledWith('proj-1', { status: 'recovering' });
+      expect(started).toHaveBeenCalledWith({
+        projectId: 'proj-1',
+        trigger: 'health:degraded',
+        correlationId: 'proj-1',
+      });
+    });
+
+    it('emits recovery:blocked for an ineligible runtime signal', async () => {
+      const { db } = createMockDb();
+      const coordinator = new RecoveryCoordinator(
+        db as unknown as Database,
+        events,
+        createMockConfig(false),
+      );
+      const blocked = vi.fn();
+
+      events.on('recovery:blocked', blocked);
+
+      await coordinator.ingestRuntimeSignal({
+        projectId: 'proj-1',
+        kind: 'probe_failed',
+        source: 'probe-monitor',
+        error: 'timeout',
+      });
+
+      expect(blocked).toHaveBeenCalledWith({
+        projectId: 'proj-1',
+        reason: 'ai_disabled',
+      });
+      expect(db.updateProject).not.toHaveBeenCalled();
+    });
+
+    it('skips duplicate runtime signals for the same project while one is in flight', async () => {
+      const { db } = createMockDb();
+      const coordinator = new RecoveryCoordinator(
+        db as unknown as Database,
+        events,
+        createMockConfig(),
+      );
+      let resolveStarted: (() => void) | undefined;
+      const gate = new Promise<void>((resolve) => {
+        resolveStarted = resolve;
+      });
+      const started = vi.fn(async () => {
+        await gate;
+      });
+      const signal: RuntimeSignal = {
+        projectId: 'proj-1',
+        kind: 'probe_failed',
+        source: 'probe-monitor',
+        error: 'timeout',
+      };
+
+      events.on('recovery:started', started);
+
+      const firstIngest = coordinator.ingestRuntimeSignal(signal);
+      await Promise.resolve();
+      await coordinator.ingestRuntimeSignal(signal);
+
+      expect(started).toHaveBeenCalledTimes(1);
+
+      resolveStarted?.();
+      await firstIngest;
+    });
+
+    it('routes post_deploy_regression through the health degradation flow', async () => {
+      const { db } = createMockDb();
+      const coordinator = new RecoveryCoordinator(
+        db as unknown as Database,
+        events,
+        createMockConfig(),
+      );
+      const started = vi.fn();
+
+      events.on('recovery:started', started);
+
+      await coordinator.ingestRuntimeSignal({
+        projectId: 'proj-1',
+        kind: 'post_deploy_regression',
+        source: 'rollback-watcher',
+        error: 'smoke test failed',
+      });
+
+      expect(started).toHaveBeenCalledWith({
+        projectId: 'proj-1',
+        trigger: 'health:degraded',
+        correlationId: 'proj-1',
+      });
+    });
+
+    it('routes container_died through the container failure flow', async () => {
+      const { db } = createMockDb();
+      const coordinator = new RecoveryCoordinator(
+        db as unknown as Database,
+        events,
+        createMockConfig(),
+      );
+      const started = vi.fn();
+
+      events.on('recovery:started', started);
+
+      await coordinator.ingestRuntimeSignal({
+        projectId: 'proj-1',
+        kind: 'container_died',
+        source: 'docker-events',
+        containerId: 'container-123',
+      });
+
+      expect(db.updateProject).toHaveBeenCalledWith('proj-1', { status: 'recovering' });
+      expect(started).toHaveBeenCalledWith({
+        projectId: 'proj-1',
+        trigger: 'container:die',
+        correlationId: 'proj-1',
+      });
+    });
   });
 });

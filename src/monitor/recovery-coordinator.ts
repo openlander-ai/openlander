@@ -1,6 +1,7 @@
 import type { OpenLanderConfig } from '../config/index.js';
 import type { Database } from '../db/index.js';
 import type { EventBus, EventPayload } from '../events/index.js';
+import type { RuntimeSignal } from '../health/types.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { consumeMcpDeploy } from '../pipeline/auto-recovery.js';
 
@@ -53,6 +54,7 @@ export class RecoveryCoordinator {
   private readonly config: OpenLanderConfig;
   private readonly maxLlmCallsPerHour: number;
   private readonly suppressions = new Map<string, number>();
+  private readonly inFlightProjects = new Set<string>();
   private llmCallTimestamps: number[] = [];
   private unsubscribers: Array<() => void> = [];
   private running = false;
@@ -229,6 +231,62 @@ export class RecoveryCoordinator {
     const hourAgo = Date.now() - 3_600_000;
     this.llmCallTimestamps = this.llmCallTimestamps.filter((timestamp) => timestamp > hourAgo);
     return this.llmCallTimestamps.length <= this.maxLlmCallsPerHour;
+  }
+
+  async ingestRuntimeSignal(signal: RuntimeSignal): Promise<void> {
+    if (this.inFlightProjects.has(signal.projectId)) {
+      log.debug(
+        { projectId: signal.projectId },
+        'Skipping duplicate RuntimeSignal — already processing',
+      );
+      return;
+    }
+
+    this.inFlightProjects.add(signal.projectId);
+
+    try {
+      const result = this.checkEligibility(signal.projectId);
+      if (!result.eligible) {
+        await this.emitBlocked(signal.projectId, result.reason);
+        return;
+      }
+
+      switch (signal.kind) {
+        case 'probe_failed':
+        case 'post_deploy_regression':
+          await this.handleHealthDegraded({
+            projectId: signal.projectId,
+            consecutiveFailures: signal.failureCount ?? 1,
+            lastError: signal.error ?? null,
+          });
+          break;
+        case 'container_died':
+          await this.handleContainerFailure('container:die', {
+            projectId: signal.projectId,
+            containerId: signal.containerId ?? '',
+            containerName: signal.projectId,
+            exitCode: 0,
+          });
+          break;
+        case 'container_oom':
+          await this.handleContainerFailure('container:oom', {
+            projectId: signal.projectId,
+            containerId: signal.containerId ?? '',
+            containerName: signal.projectId,
+          });
+          break;
+        case 'container_missing':
+          await this.handleContainerFailure('container:missing', {
+            projectId: signal.projectId,
+            containerId: signal.containerId ?? '',
+            projectName: signal.projectId,
+            suggestion: '',
+          });
+          break;
+      }
+    } finally {
+      this.inFlightProjects.delete(signal.projectId);
+    }
   }
 
   private async handleHealthDegraded(payload: EventPayload['health:degraded']): Promise<void> {

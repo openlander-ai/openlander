@@ -85,6 +85,8 @@ export class HealthMonitor {
     this.intervalId = undefined;
   }
 
+  // TODO(refactor): Deprecated project health-check scheduler logic. Migrate callers to
+  // ProjectHealthMonitor and remove checkProject/checkPort here in Task 20.
   async checkProject(projectId: string): Promise<HealthCheckResult> {
     const project = this.db.getProject(projectId);
     if (
@@ -285,6 +287,7 @@ export class HealthMonitor {
     );
   }
 
+  // TODO(refactor): Deprecated probe execution path retained temporarily for compatibility.
   private async checkPort(project: ProjectRow): Promise<HealthCheckResult> {
     const projectId = project.id;
 
