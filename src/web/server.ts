@@ -22,6 +22,7 @@ import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
 import { EmailChannel } from '../channels/email.js';
+import { shutdownAppContext } from '../app.js';
 import type { AppContext } from '../app.js';
 import { OpsAgent } from '../monitor/ops-agent.js';
 import type { NodeWebSocket } from '@hono/node-ws';
@@ -83,6 +84,22 @@ interface CreateAppOptions {
 }
 
 export type UpgradeWebSocketHandler = NodeWebSocket['upgradeWebSocket'];
+
+function startMonitoring(ctx: AppContext): void {
+  ctx.coordinator.start();
+  ctx.dockerEventListener?.start();
+
+  if (ctx.config.ai.operationalMonitoring.enabled) {
+    ctx.projectHealthMonitor.start();
+    ctx.containerStateReconciler.start();
+    ctx.serviceHealthMonitor.start();
+    ctx.systemMaintenanceMonitor.start();
+    ctx.healthMonitor.start();
+    ctx.alertMonitor.start();
+  }
+
+  ctx.rollbackWatcher.start();
+}
 
 function createApp(
   ctx: AppContext,
@@ -301,10 +318,9 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   });
   injectWebSocket(server);
 
-  // v0.2: Start health monitoring
+  startMonitoring(ctx);
+
   if (ctx.config.ai.operationalMonitoring.enabled) {
-    ctx.healthMonitor.start();
-    ctx.alertMonitor.start();
     void startOpsAgent(ctx);
   }
 
@@ -378,10 +394,9 @@ export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<vo
     });
   });
 
-  // v0.2: Start health monitoring
+  startMonitoring(ctx);
+
   if (ctx.config.ai.operationalMonitoring.enabled) {
-    ctx.healthMonitor.start();
-    ctx.alertMonitor.start();
     void startOpsAgent(ctx);
   }
 
@@ -393,6 +408,7 @@ export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<vo
   // Handle graceful shutdown
   const cleanup = (): void => {
     log.info('Daemon shutting down');
+    shutdownAppContext(ctx);
     mcpRoutes.cleanup();
     server.close();
     if (existsSync(options.socketPath)) {

@@ -967,7 +967,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       }
 
       case 'retry_healthcheck': {
-        const result = await ctx.healthMonitor.checkProject(project.id);
+        const result = await ctx.projectHealthMonitor.checkProject(project.id);
         return c.json({
           status: 'ok',
           action,

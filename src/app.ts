@@ -22,6 +22,13 @@ import { AutoDetector } from './pipeline/auto-detect.js';
 import { AlertMonitor } from './monitor/alerts.js';
 import { DockerEventListener } from './monitor/docker-events.js';
 import { IncidentReporter } from './monitor/incident-reporter.js';
+import type { ProjectHealthMonitor } from './monitor/project-health-monitor.js';
+import { createProjectHealthMonitor } from './monitor/project-health-monitor.js';
+import { ContainerStateReconciler } from './monitor/container-state-reconciler.js';
+import type { ServiceHealthMonitor } from './monitor/service-health-monitor.js';
+import { createServiceHealthMonitor } from './monitor/service-health-monitor.js';
+import type { SystemMaintenanceMonitor } from './monitor/system-maintenance-monitor.js';
+import { createSystemMaintenanceMonitor } from './monitor/system-maintenance-monitor.js';
 import {
   PostmortemGenerator,
   setPostmortemInstance,
@@ -49,7 +56,6 @@ import { resolveAutomationPolicy } from './monitor/ops-config-resolver.js';
 const log = createModuleLogger('app');
 
 let activeIncidentReporter: IncidentReporter | null = null;
-let activeRollbackWatcher: RollbackWatcher | null = null;
 let activePostmortemAutomationStop: (() => void) | null = null;
 let activeActivityLogger: ActivityLogger | null = null;
 let activeActivityLogCleanupInterval: ReturnType<typeof setInterval> | null = null;
@@ -165,6 +171,10 @@ export interface AppContext {
   deployQueue: DeployQueue;
   // v0.2 modules
   healthMonitor: HealthMonitor;
+  projectHealthMonitor: ProjectHealthMonitor;
+  containerStateReconciler: ContainerStateReconciler;
+  serviceHealthMonitor: ServiceHealthMonitor;
+  systemMaintenanceMonitor: SystemMaintenanceMonitor;
   dockerEventListener?: DockerEventListener;
   opsAgent?: OpsAgent;
   webhookManager: WebhookManager;
@@ -186,6 +196,7 @@ export interface AppContext {
   planEngine: PlanEngine;
   // v1.0: Recovery coordinator
   coordinator: RecoveryCoordinator;
+  rollbackWatcher: RollbackWatcher;
   llmVerified: boolean;
 }
 
@@ -303,7 +314,6 @@ export async function createAppContext(
 
   // v1.0: Recovery coordinator — single owner of all recovery decisions
   const coordinator = new RecoveryCoordinator(db, eventBus, config);
-  coordinator.start();
 
   const pipeline = new DeployPipeline(
     docker,
@@ -457,8 +467,21 @@ export async function createAppContext(
   });
 
   // v0.2: Health monitoring
+  const monitorIntervalMs = config.monitoring.healthcheckIntervalSec * 1000;
   const healthMonitor = new HealthMonitor(docker, db, eventBus, {
-    intervalMs: config.monitoring.healthcheckIntervalSec * 1000,
+    intervalMs: monitorIntervalMs,
+  });
+  const projectHealthMonitor = createProjectHealthMonitor(docker, db, eventBus, {
+    intervalMs: monitorIntervalMs,
+  });
+  const containerStateReconciler = new ContainerStateReconciler(docker, db, eventBus, {
+    intervalMs: monitorIntervalMs,
+  });
+  const serviceHealthMonitor = createServiceHealthMonitor(docker, db, eventBus, {
+    intervalMs: monitorIntervalMs,
+  });
+  const systemMaintenanceMonitor = createSystemMaintenanceMonitor(docker, db, eventBus, {
+    intervalMs: monitorIntervalMs,
   });
 
   // v0.2: Webhook auto-redeploy
@@ -508,6 +531,10 @@ export async function createAppContext(
     composePipeline,
   });
 
+  const rollbackWatcher = new RollbackWatcher(eventBus, db, pipeline, {
+    onRegressionSignal: (signal) => coordinator.ingestRuntimeSignal(signal),
+  });
+
   // Build partial ctx without channelManager, then compose the full AppContext
   let mutableAgentPool = agentPool;
   let mutableAgent = agent;
@@ -539,6 +566,10 @@ export async function createAppContext(
     model,
     deployQueue,
     healthMonitor,
+    projectHealthMonitor,
+    containerStateReconciler,
+    serviceHealthMonitor,
+    systemMaintenanceMonitor,
     webhookManager,
     cloudflare,
     buildDebugger,
@@ -553,6 +584,7 @@ export async function createAppContext(
     mcpClientManager,
     planEngine,
     coordinator,
+    rollbackWatcher,
     llmVerified: false,
   };
 
@@ -586,12 +618,6 @@ export async function createAppContext(
     isEligible: (projectId) => coordinator.shouldContinue(projectId),
   });
 
-  const rollbackWatcher = new RollbackWatcher(eventBus, db, pipeline, {
-    onRegressionSignal: (signal) => coordinator.ingestRuntimeSignal(signal),
-  });
-  rollbackWatcher.start();
-  activeRollbackWatcher = rollbackWatcher;
-
   // Activity log cleanup: purge records older than ACTIVITY_LOG_TTL_DAYS on startup and every 24h
   const runActivityLogCleanup = (): void => {
     try {
@@ -617,15 +643,12 @@ export async function createAppContext(
   activityLogger.start();
   activeActivityLogger = activityLogger;
 
-  dockerEventListener.start();
-
   return ctx;
 }
 
 /** Shutdown the application context. */
 export function shutdownAppContext(ctx: AppContext): void {
   activeIncidentReporter?.stop();
-  activeRollbackWatcher?.stop();
   activeActivityLogger?.stop();
   activePostmortemAutomationStop?.();
   if (activeActivityLogCleanupInterval) {
@@ -633,15 +656,19 @@ export function shutdownAppContext(ctx: AppContext): void {
     activeActivityLogCleanupInterval = null;
   }
   activeIncidentReporter = null;
-  activeRollbackWatcher = null;
   activeActivityLogger = null;
   activePostmortemAutomationStop = null;
   getPostmortemInstance()?.stop();
+  ctx.rollbackWatcher.stop();
+  ctx.alertMonitor.stop();
+  ctx.systemMaintenanceMonitor.stop();
+  ctx.serviceHealthMonitor.stop();
+  ctx.containerStateReconciler.stop();
+  ctx.projectHealthMonitor.stop();
+  ctx.healthMonitor.stop();
   ctx.dockerEventListener?.stop();
   ctx.coordinator.stop();
   void ctx.opsAgent?.stop();
-  ctx.healthMonitor.stop();
-  ctx.alertMonitor.stop();
   void ctx.channelManager.stop();
   void ctx.previewDeployer.cleanupAll();
   ctx.approvalGate.dispose();
