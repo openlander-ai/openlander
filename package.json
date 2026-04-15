@@ -42,7 +42,8 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "docs:validate": "npx tsx scripts/validate-doc-claims.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",
