@@ -118,9 +118,10 @@ function applyIdempotentBaseline(sqlite: SqliteDatabase, migrationsFolder: strin
     try {
       sqlite.exec(statement);
     } catch (error) {
-      if (!(error instanceof Error) || !error.message.includes('no such column')) {
-        throw error;
-      }
+      if (!(error instanceof Error)) throw error;
+      const msg = error.message;
+      const isExpected = msg.includes('no such column') || msg.includes('UNIQUE constraint failed');
+      if (!isExpected) throw error;
     }
   }
 }
