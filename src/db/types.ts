@@ -205,7 +205,7 @@ export interface AiUsageLogRow {
   id: string;
   project_id: string | null;
   session_id: string | null;
-  action_type: 'web_agent' | 'auto_recovery' | 'build_debugger' | 'monitor_alert';
+  action_type: 'web_agent' | 'auto_recovery' | 'build_debugger' | 'monitor_alert' | 'system';
   model_name: string;
   provider: string;
   input_tokens: number;
@@ -217,7 +217,7 @@ export interface AiUsageLogRow {
   duration_ms: number;
   user_id: string | null;
   tenant_id: string | null;
-  source: 'web' | 'mcp' | 'auto-recovery' | 'monitor' | null;
+  source: 'web' | 'mcp' | 'auto-recovery' | 'monitor' | 'auto' | null;
   created_at: string;
 }
 

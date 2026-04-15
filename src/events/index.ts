@@ -81,6 +81,7 @@ export type EventType =
   | 'agent:event'
   | 'ai:invoked'
   | 'ai:completed'
+  | 'ai:usage'
   | 'health:degraded'
   | 'recovery:blocked'
   | 'recovery:stopped'
@@ -298,6 +299,21 @@ export interface EventPayload {
     outputTokens?: number;
     success: boolean;
     correlationId?: string;
+  };
+  'ai:usage': {
+    modelName: string;
+    provider: string;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    costUsd: number | null;
+    durationMs: number;
+    result: 'success' | 'failure' | 'partial';
+    projectId?: string;
+    sessionId?: string;
+    actionType?: string;
+    source?: string;
+    toolsCalled?: string[];
   };
   'health:degraded': {
     projectId: string;

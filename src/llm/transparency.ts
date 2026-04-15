@@ -81,7 +81,13 @@ function resolvePricing(model: string): [number, number] | null {
 }
 
 function normalizeSource(source?: string): AiUsageLogRow['source'] {
-  if (source === 'web' || source === 'mcp' || source === 'auto-recovery' || source === 'monitor') {
+  if (
+    source === 'web' ||
+    source === 'mcp' ||
+    source === 'auto-recovery' ||
+    source === 'monitor' ||
+    source === 'auto'
+  ) {
     return source;
   }
   return null;
@@ -119,7 +125,7 @@ export function logAiUsage(
   params: {
     projectId?: string;
     sessionId?: string;
-    actionType: 'web_agent' | 'auto_recovery' | 'build_debugger' | 'monitor_alert';
+    actionType: 'web_agent' | 'auto_recovery' | 'build_debugger' | 'monitor_alert' | 'system';
     modelName: string;
     provider: string;
     inputTokens: number;

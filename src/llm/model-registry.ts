@@ -3,6 +3,8 @@ import type { LLMProviderConfig } from '../config/index.js';
 import { createModel } from './index.js';
 import type { LLMProviderType } from './providers.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { withTrackingMiddleware } from './tracking-middleware.js';
+import { eventBus } from '../events/index.js';
 
 const log = createModuleLogger('model-registry');
 
@@ -97,13 +99,18 @@ export class ModelRegistry {
       return cached;
     }
 
-    const model = createModel({
+    const rawModel = createModel({
       provider: providerEntry.provider,
       apiKey: providerEntry.apiKey ?? '',
       authToken: providerEntry.authToken,
       model: modelName,
     });
 
+    if (!rawModel) {
+      return null;
+    }
+
+    const model = withTrackingMiddleware(rawModel, eventBus, providerEntry.provider, modelName);
     this.modelCache.set(cacheKey, model);
     return model;
   }

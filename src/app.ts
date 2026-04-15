@@ -37,6 +37,7 @@ import {
 } from './monitor/postmortem.js';
 import { RollbackWatcher } from './monitor/rollback-watcher.js';
 import { ActivityLogger } from './monitor/activity-logger.js';
+import { AiUsageListener } from './monitor/ai-usage-listener.js';
 import { McpClientManager } from './mcp/client-manager.js';
 import { PlanEngine } from './pipeline/deploy-plan/engine.js';
 import { RecoveryCoordinator } from './monitor/recovery-coordinator.js';
@@ -59,6 +60,7 @@ const log = createModuleLogger('app');
 let activeIncidentReporter: IncidentReporter | null = null;
 let activePostmortemAutomationStop: (() => void) | null = null;
 let activeActivityLogger: ActivityLogger | null = null;
+let activeAiUsageListener: AiUsageListener | null = null;
 let activeActivityLogCleanupInterval: ReturnType<typeof setInterval> | null = null;
 
 const POSTMORTEM_STABILITY_WINDOW_MS = 5 * 60 * 1000;
@@ -262,6 +264,11 @@ export async function createAppContext(
     networkName: config.docker.networkName,
   });
 
+  activeAiUsageListener?.stop();
+  const aiUsageListener = new AiUsageListener(db, eventBus);
+  aiUsageListener.start();
+  activeAiUsageListener = aiUsageListener;
+
   const normalizedLlm = normalizeLlmConfig(config.llm);
 
   const hasLlmConfigured = (() => {
@@ -306,8 +313,6 @@ export async function createAppContext(
       buildDebugger = new BuildDebugger(
         createModelProxy(modelRegistry, 'buildDebugger'),
         config.language,
-        db,
-        config.llm.provider,
       );
     } catch (err) {
       log.debug({ err }, 'Build debugger creation failed');
@@ -649,6 +654,7 @@ export async function createAppContext(
 export function shutdownAppContext(ctx: AppContext): void {
   activeIncidentReporter?.stop();
   activeActivityLogger?.stop();
+  activeAiUsageListener?.stop();
   activePostmortemAutomationStop?.();
   if (activeActivityLogCleanupInterval) {
     clearInterval(activeActivityLogCleanupInterval);
@@ -656,6 +662,7 @@ export function shutdownAppContext(ctx: AppContext): void {
   }
   activeIncidentReporter = null;
   activeActivityLogger = null;
+  activeAiUsageListener = null;
   activePostmortemAutomationStop = null;
   getPostmortemInstance()?.stop();
   ctx.rollbackWatcher.stop();
