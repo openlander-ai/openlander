@@ -87,7 +87,8 @@ export class DeployPlanRepo {
       .run();
   }
 
-  listDeployPlans(projectName?: string): DeployPlanRow[] {
+  /** @param _serverId - Reserved for future server-side filtering. Currently ignored. */
+  listDeployPlans(projectName?: string, _serverId?: string): DeployPlanRow[] {
     if (projectName) {
       return this.db
         .select()

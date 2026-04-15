@@ -54,6 +54,7 @@ export const projects = sqliteTable(
       .default('web'),
     health_check_strategy: text('health_check_strategy', { enum: ['http', 'tcp', 'exec', 'none'] }),
     health_check_path: text('health_check_path'),
+    server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
     check(
@@ -96,6 +97,7 @@ export const environments = sqliteTable(
     container_port: integer('container_port'),
     created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
     check('environments_type_check', sql`${table.type} IN ('production', 'development')`),
@@ -148,6 +150,7 @@ export const deployLogs = sqliteTable(
     runtime_log: text('runtime_log'),
     duration_ms: integer('duration_ms'),
     created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
     check('deploy_logs_status_check', sql`${table.status} IN ('success', 'failed', 'cancelled')`),
@@ -267,6 +270,7 @@ export const services = sqliteTable(
     credentials: text('credentials'),
     created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
     check('services_status_check', sql`${table.status} IN ('running', 'stopped', 'error')`),
@@ -293,6 +297,7 @@ export const serviceConnections = sqliteTable(
     created_at: text('created_at')
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
+    server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
     uniqueIndex('service_connections_project_service_idx').on(table.project_id, table.service_id),
@@ -323,6 +328,7 @@ export const runtimeIncidents = sqliteTable(
     created_at: text('created_at')
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
+    server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
     index('idx_runtime_incidents_project').on(table.project_id),
@@ -394,6 +400,7 @@ export const deployPlans = sqliteTable(
     updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
     executed_at: text('executed_at'),
     completed_at: text('completed_at'),
+    server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
     index('idx_deploy_plans_project_name').on(table.project_name),

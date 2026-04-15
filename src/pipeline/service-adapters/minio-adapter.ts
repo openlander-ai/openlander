@@ -1,6 +1,7 @@
 import type { ServiceRow } from '../../db/index.js';
 import type { Docker } from '../docker.js';
 import { waitUntilReady } from '../lib/retry.js';
+import { resolveContainerUrl } from '../url-resolver.js';
 import { execInServiceContainer } from './shared.js';
 import type {
   ConnectionStats,
@@ -46,7 +47,7 @@ export class MinioAdapter implements ServiceAdapter {
   async waitForReady(service: ServiceRow, _docker: Docker): Promise<void> {
     await waitUntilReady(
       async () => {
-        const response = await fetch(`http://localhost:${String(service.port)}/minio/health/live`, {
+        const response = await fetch(`${resolveContainerUrl(service.port)}/minio/health/live`, {
           signal: AbortSignal.timeout(2000),
         });
         if (!response.ok) {

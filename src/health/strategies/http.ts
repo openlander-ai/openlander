@@ -1,8 +1,9 @@
 import type { HealthCheckConfig, ProbeResult } from '../types.js';
+import { resolveContainerUrl } from '../../pipeline/url-resolver.js';
 
 export async function httpProbe(config: HealthCheckConfig, port: number): Promise<ProbeResult> {
   const path = config.path ?? '/';
-  const url = `http://localhost:${String(port)}${path}`;
+  const url = `${resolveContainerUrl(port)}${path}`;
 
   const controller = new AbortController();
   const timer = setTimeout(() => {

@@ -41,7 +41,13 @@ export class DeployLogRepo {
       .run();
   }
 
-  getDeployLogs(projectId: string, limit = 20, environmentId?: string): DeployLogRow[] {
+  /** @param _serverId - Reserved for future server-side filtering. Currently ignored. */
+  getDeployLogs(
+    projectId: string,
+    limit = 20,
+    environmentId?: string,
+    _serverId?: string,
+  ): DeployLogRow[] {
     const whereClause = environmentId
       ? and(eq(deployLogs.project_id, projectId), eq(deployLogs.environment_id, environmentId))
       : eq(deployLogs.project_id, projectId);

@@ -35,8 +35,8 @@ export class Docker {
     this.infraOps = new InfraOps(this.ctx);
   }
 
-  runContainer(...args: Parameters<ContainerOps['runContainer']>) {
-    return this.containerOps.runContainer(...args);
+  runContainer(options: Parameters<ContainerOps['runContainer']>[0], _serverId?: string) {
+    return this.containerOps.runContainer(options);
   }
 
   runComposeService(...args: Parameters<ContainerOps['runComposeService']>) {
@@ -59,12 +59,18 @@ export class Docker {
     return this.containerOps.removeContainer(...args);
   }
 
-  safeRemoveContainer(...args: Parameters<ContainerOps['safeRemoveContainer']>) {
-    return this.containerOps.safeRemoveContainer(...args);
+  safeRemoveContainer(
+    containerId: Parameters<ContainerOps['safeRemoveContainer']>[0],
+    _serverId?: string,
+  ) {
+    return this.containerOps.safeRemoveContainer(containerId);
   }
 
-  inspectContainer(...args: Parameters<ContainerOps['inspectContainer']>) {
-    return this.containerOps.inspectContainer(...args);
+  inspectContainer(
+    containerId: Parameters<ContainerOps['inspectContainer']>[0],
+    _serverId?: string,
+  ) {
+    return this.containerOps.inspectContainer(containerId);
   }
 
   restartContainer(...args: Parameters<ContainerOps['restartContainer']>) {
@@ -91,16 +97,21 @@ export class Docker {
     return this.containerOps.waitForHealthy(...args);
   }
 
-  listManagedContainers(...args: Parameters<ContainerOps['listManagedContainers']>) {
-    return this.containerOps.listManagedContainers(...args);
+  listManagedContainers(_serverId?: string) {
+    return this.containerOps.listManagedContainers();
   }
 
-  listAllContainers(...args: Parameters<ContainerOps['listAllContainers']>) {
-    return this.containerOps.listAllContainers(...args);
+  listAllContainers(_serverId?: string) {
+    return this.containerOps.listAllContainers();
   }
 
-  buildImage(...args: Parameters<ImageOps['buildImage']>) {
-    return this.imageOps.buildImage(...args);
+  buildImage(
+    contextPath: Parameters<ImageOps['buildImage']>[0],
+    tag: Parameters<ImageOps['buildImage']>[1],
+    options?: Parameters<ImageOps['buildImage']>[2],
+    _serverId?: string,
+  ) {
+    return this.imageOps.buildImage(contextPath, tag, options);
   }
 
   cancelBuild(...args: Parameters<ImageOps['cancelBuild']>) {
@@ -181,8 +192,12 @@ export class Docker {
     return this.volumeOps.removeVolume(...args);
   }
 
-  execSimple(...args: Parameters<ExecOps['execSimple']>) {
-    return this.execOps.execSimple(...args);
+  execSimple(
+    containerId: Parameters<ExecOps['execSimple']>[0],
+    cmd: Parameters<ExecOps['execSimple']>[1],
+    _serverId?: string,
+  ) {
+    return this.execOps.execSimple(containerId, cmd);
   }
 
   execStream(...args: Parameters<ExecOps['execStream']>) {

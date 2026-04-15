@@ -237,6 +237,7 @@ function rebuildLegacyDeployLogs(sqlite: SqliteDatabase): void {
       runtime_log TEXT,
       duration_ms INTEGER,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      server_id TEXT NOT NULL DEFAULT 'local',
       CONSTRAINT deploy_logs_status_check CHECK(status IN ('success', 'failed', 'cancelled')),
       CONSTRAINT deploy_logs_trigger_check CHECK(trigger_source IN ('chat', 'webhook', 'api'))
     )
@@ -254,9 +255,10 @@ function rebuildLegacyDeployLogs(sqlite: SqliteDatabase): void {
       build_log,
       runtime_log,
       duration_ms,
-      created_at
+      created_at,
+      server_id
     )
-    SELECT id, project_id, NULL, status, trigger_source, NULL, commit_sha, NULL, build_log, NULL, duration_ms, created_at
+    SELECT id, project_id, NULL, status, trigger_source, NULL, commit_sha, NULL, build_log, NULL, duration_ms, created_at, 'local'
     FROM deploy_logs
   `);
   sqlite.exec('DROP TABLE deploy_logs');

@@ -1,5 +1,7 @@
 import { Database } from './db/index.js';
 import { Docker } from './pipeline/docker.js';
+import type { ServerContext } from './pipeline/server-context.js';
+import { createLocalServerContext } from './pipeline/server-context.js';
 import { DeployPipeline } from './pipeline/deploy.js';
 import { TraefikManager } from './pipeline/traefik.js';
 import { EnvManager } from './pipeline/env.js';
@@ -159,6 +161,7 @@ export interface AppContext {
   config: OpenLanderConfig;
   db: Database;
   docker: Docker;
+  serverContext: ServerContext;
   pipeline: DeployPipeline;
   composePipeline: ComposePipeline;
   traefik: TraefikManager;
@@ -249,6 +252,7 @@ export async function createAppContext(
 ): Promise<AppContext> {
   const db = new Database(dbPath);
   const docker = new Docker(config.docker.socketPath || undefined, config.docker.networkName);
+  const serverContext = createLocalServerContext(docker);
 
   await cleanupStaleBuilds(db, docker);
   const jobManager = new JobManager();
@@ -538,6 +542,7 @@ export async function createAppContext(
     config,
     db,
     docker,
+    serverContext,
     pipeline,
     composePipeline,
     traefik,

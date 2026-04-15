@@ -71,7 +71,12 @@ export class ProjectRepo {
       | undefined;
   }
 
-  listProjects(status?: ProjectRow['status'], opts?: { includeArchived?: boolean }): ProjectRow[] {
+  /** @param _serverId - Reserved for future server-side filtering. Currently ignored. */
+  listProjects(
+    status?: ProjectRow['status'],
+    opts?: { includeArchived?: boolean },
+    _serverId?: string,
+  ): ProjectRow[] {
     const conditions = [];
     if (status) {
       conditions.push(eq(projects.status, status));

@@ -166,11 +166,13 @@ export interface AllocatePortOptions {
   rangeEnd?: number;
 }
 
+/** @param _serverId - Reserved for multi-server port allocation. Currently ignored. */
 export async function allocatePort(
   db: Database,
   docker: Docker,
   options: AllocatePortOptions = {},
   _envType: OpenLanderEnv = 'production',
+  _serverId?: string,
 ): Promise<number> {
   const policy = getPolicy('production');
   const {

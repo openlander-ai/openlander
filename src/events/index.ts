@@ -106,6 +106,7 @@ export interface EventPayload {
     scope?: string;
     status?: 'pending' | 'in_progress' | 'success' | 'failed';
     message?: string;
+    serverId?: string;
   };
   'deploy:clone': {
     projectId: string;
@@ -151,6 +152,7 @@ export interface EventPayload {
     planId?: string;
     /** Deploy lock session ID — enables session-scoped lock release in event handlers. */
     sessionId?: string;
+    serverId?: string;
   };
   'deploy:failed': {
     projectId: string;
@@ -168,6 +170,7 @@ export interface EventPayload {
     source?: 'mcp' | 'dashboard' | 'webhook';
     /** Deploy lock session ID — enables session-scoped lock release in event handlers. */
     sessionId?: string;
+    serverId?: string;
   };
   'deploy:needs-user-action': {
     projectId: string;
@@ -231,8 +234,8 @@ export interface EventPayload {
       totalDuration: number;
     };
   };
-  'container:start': { projectId: string; containerId: string };
-  'container:stop': { projectId: string; containerId: string };
+  'container:start': { projectId: string; containerId: string; serverId?: string };
+  'container:stop': { projectId: string; containerId: string; serverId?: string };
   'container:remove': { projectId: string; containerId: string };
   'project:archive': { projectId: string };
   'project:unarchive': { projectId: string; port: number };
@@ -241,6 +244,7 @@ export interface EventPayload {
     projectName: string;
     containerId: string;
     suggestion: string;
+    serverId?: string;
   };
   'container:health': { projectId: string; healthy: boolean };
   'container:die': {
@@ -248,11 +252,13 @@ export interface EventPayload {
     containerId: string;
     containerName: string;
     exitCode: number;
+    serverId?: string;
   };
   'container:oom': {
     projectId: string;
     containerId: string;
     containerName: string;
+    serverId?: string;
   };
   'tunnel:start': { projectId: string; localPort: number };
   'tunnel:stop': { projectId: string };
@@ -297,20 +303,24 @@ export interface EventPayload {
     projectId: string;
     consecutiveFailures: number;
     lastError: string | null;
+    serverId?: string;
   };
   'recovery:blocked': {
     projectId: string;
     reason: string;
+    serverId?: string;
   };
   'recovery:stopped': {
     projectId: string;
     reason: string;
     correlationId?: string;
+    serverId?: string;
   };
   'recovery:started': {
     projectId: string;
     trigger: string;
     correlationId?: string;
+    serverId?: string;
   };
   'recovery:start': {
     projectId: string;
@@ -319,6 +329,7 @@ export interface EventPayload {
     source?: string;
     identity?: RequestIdentity;
     correlationId?: string;
+    serverId?: string;
   };
   'recovery:success': {
     projectId: string;
@@ -330,6 +341,7 @@ export interface EventPayload {
     tokenCount?: number;
     costUsd?: number | null;
     correlationId?: string;
+    serverId?: string;
   };
   'recovery:failed': {
     projectId: string;
@@ -338,6 +350,7 @@ export interface EventPayload {
     source?: string;
     identity?: RequestIdentity;
     correlationId?: string;
+    serverId?: string;
   };
   'recovery:exhausted': {
     projectId: string;
@@ -346,6 +359,7 @@ export interface EventPayload {
     source?: string;
     identity?: RequestIdentity;
     correlationId?: string;
+    serverId?: string;
   };
   'recovery:approval-needed': {
     projectId: string;

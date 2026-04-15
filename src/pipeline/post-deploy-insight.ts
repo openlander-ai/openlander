@@ -18,6 +18,7 @@ import { createModuleLogger } from '../lib/logger.js';
 import { pickLocale, type Locale } from '../lib/locale.js';
 import { sleep } from '../lib/sleep.js';
 import { resolveMonitoringProfile } from '../health/profile-resolver.js';
+import { resolveContainerUrl } from './url-resolver.js';
 
 const log = createModuleLogger('insight');
 
@@ -151,7 +152,7 @@ async function checkHealth(ctx: InsightContext, db: Database, locale: Locale): P
   while (Date.now() < deadline) {
     try {
       const start = Date.now();
-      const res = await fetch(`http://localhost:${String(port)}${path}`, {
+      const res = await fetch(`${resolveContainerUrl(port)}${path}`, {
         method: 'GET',
         signal: AbortSignal.timeout(5_000),
       });

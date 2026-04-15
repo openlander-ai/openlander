@@ -15,6 +15,13 @@
       "when": 1776203869423,
       "tag": "0001_env_vars_scoped_uniques",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1776217725447,
+      "tag": "0002_add_server_id",
+      "breakpoints": true
     }
   ]
 }

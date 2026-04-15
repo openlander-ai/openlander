@@ -121,6 +121,9 @@ export interface OpenLanderConfig {
 
   /** v1.1: Operations agent settings */
   ops: OpsConfig;
+
+  /** v1.2: Multi-server configuration */
+  servers?: MultiServerConfig[];
 }
 
 export interface GoogleOAuthConfig {
@@ -148,6 +151,17 @@ export interface ServerConfig {
   /** Base URL for internal access */
   baseUrl: string;
   corsOrigin?: string;
+}
+
+export interface MultiServerConfig {
+  id: string;
+  name: string;
+  host: string;
+  port?: number;
+  sshUser?: string;
+  sshKeyPath?: string;
+  dockerSocketPath?: string;
+  isDefault?: boolean;
 }
 
 export interface DockerConfig {
@@ -380,6 +394,7 @@ function buildDefaultConfig(): OpenLanderConfig {
       clientSecret: '',
     },
     ops: { ...DEFAULT_OPS_CONFIG },
+    servers: [],
   };
 }
 
@@ -442,6 +457,11 @@ export function updateConfig(partial: DeepPartial<OpenLanderConfig>): OpenLander
 /** Check if initial onboarding has been completed. */
 export function isOnboarded(): boolean {
   return existsSync(getConfigPath());
+}
+
+/** Get the default local server configuration. */
+export function getDefaultServer(): MultiServerConfig {
+  return { id: 'local', name: 'Local', host: '127.0.0.1', isDefault: true };
 }
 
 // --- LLM config normalization ---

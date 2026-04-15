@@ -11,6 +11,7 @@ import type {
   ApprovalResult,
   ApprovalGate as ApprovalGateType,
 } from '../pipeline/approval-gate.js';
+import { resolveContainerUrl } from '../pipeline/url-resolver.js';
 import type { ConfigurableRecoveryStep, RecoveryAutomationPolicy } from './ops-types.js';
 
 const log = createModuleLogger('ops-recovery');
@@ -679,7 +680,7 @@ export class RecoveryPipeline {
     }, 5_000);
 
     try {
-      const response = await fetch(`http://localhost:${String(port)}/`, {
+      const response = await fetch(`${resolveContainerUrl(port)}/`, {
         method: 'GET',
         signal: controller.signal,
       });

@@ -10,15 +10,22 @@ export function extractProjectName(repoUrl: string): string {
 
 export const CONTAINER_PREFIX = 'ol-';
 
-export function containerName(projectName: string): string {
+/** @param _serverId - Reserved for multi-server container naming. Currently ignored. */
+export function containerName(projectName: string, _serverId?: string): string {
   return `${CONTAINER_PREFIX}${projectName}`;
 }
 
-export function composeContainerName(parentName: string, serviceName: string): string {
+/** @param _serverId - Reserved for multi-server container naming. Currently ignored. */
+export function composeContainerName(
+  parentName: string,
+  serviceName: string,
+  _serverId?: string,
+): string {
   return `${CONTAINER_PREFIX}${parentName}-${serviceName}`;
 }
 
-export function serviceContainerName(serviceName: string): string {
+/** @param _serverId - Reserved for multi-server container naming. Currently ignored. */
+export function serviceContainerName(serviceName: string, _serverId?: string): string {
   return `ol-svc-${serviceName}`;
 }
 

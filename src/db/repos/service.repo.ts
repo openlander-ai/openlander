@@ -47,7 +47,8 @@ export class ServiceRepo {
       | undefined;
   }
 
-  listServices(): ServiceRow[] {
+  /** @param _serverId - Reserved for future server-side filtering. Currently ignored. */
+  listServices(_serverId?: string): ServiceRow[] {
     return this.db.select().from(services).orderBy(desc(services.updated_at)).all() as ServiceRow[];
   }
 

@@ -52,7 +52,12 @@ export class RuntimeIncidentRepo {
       | undefined;
   }
 
-  listByProject(projectId: string, opts?: { resolved?: boolean }): RuntimeIncidentRow[] {
+  /** @param _serverId - Reserved for future server-side filtering. Currently ignored. */
+  listByProject(
+    projectId: string,
+    opts?: { resolved?: boolean },
+    _serverId?: string,
+  ): RuntimeIncidentRow[] {
     if (opts?.resolved === undefined) {
       return this.db
         .select()
