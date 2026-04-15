@@ -246,6 +246,7 @@ describe('Database', () => {
 
       const legacy = createLegacySqlite(dbPath);
       legacy.exec('DROP TABLE IF EXISTS deploy_logs');
+      legacy.exec('DROP TABLE IF EXISTS __drizzle_migrations');
       legacy.exec(`CREATE TABLE deploy_logs (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,

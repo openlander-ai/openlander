@@ -3,6 +3,9 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path, { dirname } from 'node:path';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { isNotNull } from 'drizzle-orm';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('db-migration');
 import { createDrizzleDatabase, type DrizzleClient, type SqliteDatabase } from './drizzle.js';
 import { environments, projects } from './schema.drizzle.js';
 import { ProjectRepo } from './repos/project.repo.js';
@@ -117,11 +120,44 @@ function applyIdempotentBaseline(sqlite: SqliteDatabase, migrationsFolder: strin
   for (const statement of statements) {
     try {
       sqlite.exec(statement);
-    } catch (error) {
-      if (!(error instanceof Error)) throw error;
-      const msg = error.message;
-      const isExpected = msg.includes('no such column') || msg.includes('UNIQUE constraint failed');
-      if (!isExpected) throw error;
+    } catch (err) {
+      log.debug({ err, sql: statement.slice(0, 120) }, 'baseline statement skipped');
+    }
+  }
+
+  backfillMissingColumns(sqlite, statements);
+}
+
+function backfillMissingColumns(sqlite: SqliteDatabase, statements: string[]): void {
+  const createTableRegex = /CREATE TABLE IF NOT EXISTS `(\w+)`\s*\(([\s\S]+)\)/;
+  for (const statement of statements) {
+    const match = createTableRegex.exec(statement);
+    if (!match) continue;
+    const tableName = match[1];
+    const body = match[2];
+    if (!tableName || !body) continue;
+
+    const existingColumns = getTableColumns(sqlite, tableName);
+    if (existingColumns.size === 0) continue;
+
+    const columnDefs = body
+      .split('\n')
+      .map((line) => line.trim().replace(/,$/, ''))
+      .filter((line) => line.startsWith('`'));
+
+    for (const colDef of columnDefs) {
+      const colMatch = /^`(\w+)`/.exec(colDef);
+      if (!colMatch?.[1]) continue;
+      const colName = colMatch[1];
+      if (existingColumns.has(colName)) continue;
+
+      const alterSql = `ALTER TABLE \`${tableName}\` ADD COLUMN ${colDef}`;
+      try {
+        sqlite.exec(alterSql);
+        log.info({ table: tableName, column: colName }, 'backfilled missing column');
+      } catch (err) {
+        log.debug({ err, table: tableName, column: colName }, 'backfill column skipped');
+      }
     }
   }
 }
@@ -142,6 +178,7 @@ function createEnvironmentsTable(sqlite: SqliteDatabase): void {
       container_port INTEGER,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      server_id TEXT NOT NULL DEFAULT 'local',
       CONSTRAINT environments_type_check CHECK(type IN ('production', 'development')),
       CONSTRAINT environments_status_check CHECK(status IN ('running', 'stopped', 'building', 'error', 'idle'))
     )
@@ -270,15 +307,10 @@ function rebuildLegacyDeployLogs(sqlite: SqliteDatabase): void {
   );
 }
 
-function markBaselineMigrationApplied(sqlite: SqliteDatabase, migrationsFolder: string): void {
+function applyAndRecordAllMigrations(sqlite: SqliteDatabase, migrationsFolder: string): void {
   const journal = JSON.parse(
     readFileSync(path.join(migrationsFolder, 'meta/_journal.json'), 'utf8'),
   ) as MigrationJournal;
-  const baseline = journal.entries[0];
-  if (!baseline) return;
-
-  const baselineSql = readFileSync(path.join(migrationsFolder, `${baseline.tag}.sql`), 'utf8');
-  const baselineHash = createHash('sha256').update(baselineSql).digest('hex');
 
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS __drizzle_migrations (
@@ -287,9 +319,30 @@ function markBaselineMigrationApplied(sqlite: SqliteDatabase, migrationsFolder: 
       created_at numeric
     )
   `);
-  sqlite
-    .prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)')
-    .run(baselineHash, baseline.when);
+
+  const insert = sqlite.prepare(
+    'INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)',
+  );
+  for (const entry of journal.entries) {
+    const migrationSql = readFileSync(path.join(migrationsFolder, `${entry.tag}.sql`), 'utf8');
+    const hash = createHash('sha256').update(migrationSql).digest('hex');
+    const stmts = migrationSql
+      .split('--> statement-breakpoint')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    for (const stmt of stmts) {
+      try {
+        sqlite.exec(stmt);
+      } catch (err) {
+        log.debug(
+          { err, sql: stmt.slice(0, 120) },
+          'migration statement skipped (already applied)',
+        );
+      }
+    }
+    log.info({ tag: entry.tag }, 'migration recorded');
+    insert.run(hash, entry.when);
+  }
 }
 
 function bridgeLegacyDatabase(sqlite: SqliteDatabase, migrationsFolder: string): void {
@@ -298,26 +351,36 @@ function bridgeLegacyDatabase(sqlite: SqliteDatabase, migrationsFolder: string):
     return;
   }
 
+  const needsEnvVarRebuild =
+    tableNames.has('env_vars') && !getTableColumns(sqlite, 'env_vars').has('environment_id');
+  const needsDeployLogRebuild =
+    tableNames.has('deploy_logs') && !getTableColumns(sqlite, 'deploy_logs').has('environment_id');
+  const needsMigrationRecord = !tableNames.has('__drizzle_migrations');
+
+  log.info(
+    { needsEnvVarRebuild, needsDeployLogRebuild, needsMigrationRecord },
+    'bridging legacy database',
+  );
+
   sqlite.transaction(() => {
     applyIdempotentBaseline(sqlite, migrationsFolder);
     createEnvironmentsTable(sqlite);
     backfillProductionEnvironments(sqlite);
-
-    if (tableNames.has('env_vars') && !getTableColumns(sqlite, 'env_vars').has('environment_id')) {
+    if (needsEnvVarRebuild) {
+      log.info('rebuilding legacy env_vars');
       rebuildLegacyEnvVars(sqlite);
     }
-
-    if (
-      tableNames.has('deploy_logs') &&
-      !getTableColumns(sqlite, 'deploy_logs').has('environment_id')
-    ) {
+    if (needsDeployLogRebuild) {
+      log.info('rebuilding legacy deploy_logs');
       rebuildLegacyDeployLogs(sqlite);
     }
-
-    if (!getTableNames(sqlite).has('__drizzle_migrations')) {
-      markBaselineMigrationApplied(sqlite, migrationsFolder);
+    if (needsMigrationRecord) {
+      log.info('recording all migrations as applied');
+      applyAndRecordAllMigrations(sqlite, migrationsFolder);
     }
   })();
+
+  log.info('legacy bridge complete');
 }
 
 // prettier-ignore
