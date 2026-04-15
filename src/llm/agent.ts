@@ -6,7 +6,8 @@ import type { Database } from '../db/index.js';
 import { buildSystemPrompt, type ContextProvider, type LLMProvider } from './prompts.js';
 import type { ContextScope } from './context-assembler.js';
 import { createModuleLogger } from '../lib/logger.js';
-import { calculateCost, extractUsageFromResult, logAiUsage } from './transparency.js';
+import { calculateCost, extractUsageFromResult } from './transparency.js';
+import { withTracking } from './tracking-middleware.js';
 import type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-events.js';
 import { compactHistory } from './compaction.js';
 import { decisionEngine } from './decision.js';
@@ -95,17 +96,25 @@ export class Agent {
       }
 
       this.history.push({ role: 'user', content: userMessage });
-      const startedAt = Date.now();
 
-      const result = await generateText({
-        model: this.model,
-        messages: this.history.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-        tools: this.buildGuardedTools(() => Promise.resolve()),
-        stopWhen: stepCountIs(MAX_TOOL_STEPS),
-      });
+      const result = await withTracking(
+        {
+          projectId: this.currentScope?.projectId,
+          sessionId: resolvedSessionId,
+          actionType: this.actionType,
+          source: this.actionType === 'auto_recovery' ? 'auto-recovery' : 'web',
+        },
+        () =>
+          generateText({
+            model: this.model,
+            messages: this.history.map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+            tools: this.buildGuardedTools(() => Promise.resolve()),
+            stopWhen: stepCountIs(MAX_TOOL_STEPS),
+          }),
+      );
 
       // Extract tool results from all steps
       const allToolResults: ToolResult[] = [];
@@ -125,22 +134,6 @@ export class Agent {
       // Update history with the final response
       this.history.push({ role: 'assistant', content: responseText });
       await this.compactAndTrim();
-
-      const usage = extractUsageFromResult(result.usage);
-      this.logUsageSafe({
-        projectId: this.currentScope?.projectId,
-        sessionId: resolvedSessionId,
-        actionType: this.actionType,
-        modelName: this.getModelName(),
-        provider: this.provider,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        totalTokens: usage.totalTokens,
-        toolsCalled: allToolResults.map((toolResult) => toolResult.toolName),
-        result: 'success',
-        durationMs: Date.now() - startedAt,
-        source: this.actionType === 'auto_recovery' ? 'auto-recovery' : 'web',
-      });
 
       return {
         message: responseText,
@@ -232,16 +225,27 @@ export class Agent {
       }
 
       try {
-        const result = streamText({
-          model: this.model,
-          messages: this.history.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          tools: guardedTools,
-          maxRetries: 1,
-          stopWhen: stepCountIs(MAX_TOOL_STEPS),
-        });
+        const result = await withTracking(
+          {
+            projectId: scope?.projectId,
+            sessionId: resolvedSessionId,
+            actionType: this.actionType,
+            source: this.actionType === 'auto_recovery' ? 'auto-recovery' : 'web',
+          },
+          () =>
+            Promise.resolve(
+              streamText({
+                model: this.model,
+                messages: this.history.map((m) => ({
+                  role: m.role,
+                  content: m.content,
+                })),
+                tools: guardedTools,
+                maxRetries: 1,
+                stopWhen: stepCountIs(MAX_TOOL_STEPS),
+              }),
+            ),
+        );
 
         streamLoop: for await (const part of result.fullStream) {
           switch (part.type) {
@@ -340,20 +344,6 @@ export class Agent {
         if (actionRunId) {
           this.db.updateActionRunStatus(actionRunId, 'failed', 'Agent stream execution failed');
         }
-        this.logUsageSafe({
-          projectId: this.currentScope?.projectId,
-          sessionId: resolvedSessionId,
-          actionType: this.actionType,
-          modelName,
-          provider: this.provider,
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          toolsCalled: allToolResults.map((toolResult) => toolResult.toolName),
-          result: 'failure',
-          durationMs: Date.now() - startedAt,
-          source: this.actionType === 'auto_recovery' ? 'auto-recovery' : 'web',
-        });
         return;
       }
 
@@ -370,21 +360,6 @@ export class Agent {
       if (actionRunId) {
         this.db.updateActionRunStatus(actionRunId, 'succeeded');
       }
-
-      this.logUsageSafe({
-        projectId: this.currentScope?.projectId,
-        sessionId: resolvedSessionId,
-        actionType: this.actionType,
-        modelName,
-        provider: this.provider,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        totalTokens: usage.totalTokens,
-        toolsCalled: allToolResults.map((toolResult) => toolResult.toolName),
-        result: 'success',
-        durationMs: Date.now() - startedAt,
-        source: this.actionType === 'auto_recovery' ? 'auto-recovery' : 'web',
-      });
 
       const costUsd = calculateCost(
         this.provider,
@@ -566,14 +541,6 @@ export class Agent {
   private getModelName(): string {
     const modelMeta = this.model as { modelId?: string; model?: string };
     return modelMeta.modelId ?? modelMeta.model ?? 'unknown';
-  }
-
-  private logUsageSafe(params: Parameters<typeof logAiUsage>[1]): void {
-    try {
-      logAiUsage(this.db, params);
-    } catch (error) {
-      log.warn({ error }, 'Failed to persist AI usage log entry');
-    }
   }
 
   private async withLock<T>(fn: () => Promise<T>): Promise<T> {

@@ -5,6 +5,7 @@ import type { AppContext } from '../app.js';
 import type { OpsIncidentEventRow } from '../db/types.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { createModelProxy } from '../llm/model-proxy.js';
+import { withTracking } from '../llm/tracking-middleware.js';
 import { eventBus } from '../events/index.js';
 import type {
   ApprovalMetadata,
@@ -444,19 +445,27 @@ export class RecoveryPipeline {
       }
 
       this.ctx.db.updateActionRunRecoveryStrategy(context.actionRunId, 'llm');
-      const response = await generateText({
-        model,
-        messages: [
-          {
-            role: 'system',
-            content: this.msg.llmSystemPrompt,
-          },
-          {
-            role: 'user',
-            content: `Project: ${context.projectName}\nFailure: ${failureReason}\nContainer logs (tail):\n${logs.slice(-4000)}`,
-          },
-        ],
-      });
+      const response = await withTracking(
+        {
+          projectId: context.projectId,
+          actionType: 'auto_recovery',
+          source: 'auto-recovery',
+        },
+        () =>
+          generateText({
+            model,
+            messages: [
+              {
+                role: 'system',
+                content: this.msg.llmSystemPrompt,
+              },
+              {
+                role: 'user',
+                content: `Project: ${context.projectName}\nFailure: ${failureReason}\nContainer logs (tail):\n${logs.slice(-4000)}`,
+              },
+            ],
+          }),
+      );
       const diagnosis = response.text.trim();
       this.addIncidentEvent(
         context.incidentId,

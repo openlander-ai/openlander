@@ -2,7 +2,7 @@ import { generateText } from 'ai';
 import type { LanguageModel } from 'ai';
 import type { Database } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
-import { logAiUsage, extractUsageFromResult } from '../llm/transparency.js';
+import { withTracking } from '../llm/tracking-middleware.js';
 
 const log = createModuleLogger('llm-diagnosis');
 
@@ -34,7 +34,8 @@ export async function diagnoseRuntimeCrash(params: {
       return null;
     }
 
-    if (!params.aiProvider) {
+    const aiModel = params.aiProvider;
+    if (!aiModel) {
       log.info(
         {
           incidentId: params.incidentId,
@@ -53,32 +54,23 @@ Error: ${snippet.length > 0 ? snippet : '(no stderr snippet available)'}
 
 What's the likely cause and recommended fix?`;
 
-    const diagnosisStartTime = Date.now();
-    const response = await generateText({
-      model: params.aiProvider,
-      messages: [
-        { role: 'system', content: DIAGNOSIS_SYSTEM_PROMPT },
-        { role: 'user', content: prompt },
-      ],
-    });
+    const response = await withTracking(
+      {
+        projectId: existing.project_id,
+        actionType: 'monitor_alert',
+        source: 'monitor',
+      },
+      () =>
+        generateText({
+          model: aiModel,
+          messages: [
+            { role: 'system', content: DIAGNOSIS_SYSTEM_PROMPT },
+            { role: 'user', content: prompt },
+          ],
+        }),
+    );
 
     const diagnosis = response.text.trim();
-    const durationMs = Date.now() - diagnosisStartTime;
-    const usage = extractUsageFromResult(response.usage);
-
-    logAiUsage(params.db, {
-      projectId: existing.project_id,
-      actionType: 'monitor_alert',
-      modelName: '',
-      provider: 'unknown',
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      totalTokens: usage.totalTokens,
-      toolsCalled: [],
-      result: diagnosis.length > 0 ? 'success' : 'failure',
-      durationMs,
-      source: 'monitor',
-    });
 
     if (diagnosis.length === 0) {
       return null;
