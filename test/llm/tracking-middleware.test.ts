@@ -290,5 +290,30 @@ describe('createTrackingMiddleware', () => {
 
       expect(eventBus.emit).toHaveBeenCalledOnce();
     });
+
+    it('emits failure usage when stream is cancelled mid-consumption', async () => {
+      const mw = createTrackingMiddleware(eventBus as never, 'anthropic', 'claude-sonnet-4-6');
+      const wrapStream = mw.wrapStream as unknown as WrapStreamFn;
+
+      const sourceStream = new ReadableStream({
+        pull(controller) {
+          controller.enqueue({ type: 'text-delta', textDelta: 'data' });
+        },
+      });
+
+      const result = await wrapStream({
+        doStream: async () => ({ stream: sourceStream }),
+      });
+
+      const reader = result.stream.getReader();
+      await reader.read();
+      await reader.cancel('user abort');
+
+      expect(eventBus.emit).toHaveBeenCalledOnce();
+      const payload = eventBus.emit.mock.calls[0]![1];
+      expect(payload.result).toBe('failure');
+      expect(payload.inputTokens).toBe(0);
+      expect(payload.outputTokens).toBe(0);
+    });
   });
 });

@@ -145,24 +145,29 @@ export function createTrackingMiddleware(
       try {
         const streamResult = await options.doStream();
 
-        const transformedStream = streamResult.stream.pipeThrough(
-          new TransformStream({
-            transform(
-              chunk: { type: string; usage?: Record<string, unknown> },
-              controller: TransformStreamDefaultController,
-            ) {
-              if (chunk.type === 'finish') {
-                const usage = extractUsageFromResult(chunk.usage);
-                inputTokens = usage.inputTokens;
-                outputTokens = usage.outputTokens;
-              }
-              controller.enqueue(chunk);
-            },
-            flush() {
-              emitUsage('success');
-            },
-          }),
-        );
+        const transformer = {
+          transform(
+            chunk: { type: string; usage?: Record<string, unknown> },
+            controller: TransformStreamDefaultController,
+          ) {
+            if (chunk.type === 'finish') {
+              const usage = extractUsageFromResult(chunk.usage);
+              inputTokens = usage.inputTokens;
+              outputTokens = usage.outputTokens;
+            }
+            controller.enqueue(chunk);
+          },
+          flush() {
+            emitUsage('success');
+          },
+        };
+        // WHATWG Streams spec supports cancel() but TS Transformer type omits it
+        Object.assign(transformer, {
+          cancel() {
+            emitUsage('failure');
+          },
+        });
+        const transformedStream = streamResult.stream.pipeThrough(new TransformStream(transformer));
 
         return { ...streamResult, stream: transformedStream };
       } catch (error) {
