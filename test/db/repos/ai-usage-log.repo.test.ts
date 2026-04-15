@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { createDrizzleDatabase } from '../../../src/db/drizzle.js';
 import { AiUsageLogRepo } from '../../../src/db/repos/ai-usage-log.repo.js';
-import { initializeDatabase } from '../../../src/db/migration.js';
 import type { AiUsageLogRow } from '../../../src/db/types.js';
 
 describe('AiUsageLogRepo', () => {
@@ -12,7 +12,7 @@ describe('AiUsageLogRepo', () => {
     const db = createDrizzleDatabase(':memory:');
     sqlite = db.sqlite;
     repo = new AiUsageLogRepo(db.db, db.sqlite);
-    initializeDatabase(sqlite);
+    migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
   });
 
   afterEach(() => {

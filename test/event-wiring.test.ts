@@ -96,6 +96,7 @@ describe('Event wiring (static source scan)', () => {
     // Reserved for explicit env mutation events.
     'env:set',
     'env:delete',
+    'monitor:inactive',
   ]);
 
   it('every UI-subscribed event has at least one emit source', () => {

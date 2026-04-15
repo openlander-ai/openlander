@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { createDrizzleDatabase } from '../../../src/db/drizzle.js';
 import { DeploymentPatternRepo } from '../../../src/db/repos/deployment-pattern.repo.js';
-import { initializeDatabase } from '../../../src/db/migration.js';
 
 describe('DeploymentPatternRepo', () => {
   let repo: DeploymentPatternRepo;
@@ -11,7 +11,7 @@ describe('DeploymentPatternRepo', () => {
     const db = createDrizzleDatabase(':memory:');
     sqlite = db.sqlite;
     repo = new DeploymentPatternRepo(db.db, db.sqlite);
-    initializeDatabase(sqlite);
+    migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
   });
 
   afterEach(() => {

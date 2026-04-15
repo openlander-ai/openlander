@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 import { Database } from '../../src/db/index.js';
 import {
@@ -9,7 +10,6 @@ import {
   type DrizzleClient,
   type SqliteDatabase,
 } from '../../src/db/drizzle.js';
-import { initializeDatabase } from '../../src/db/migration.js';
 import { DeployConfigRepo } from '../../src/db/repos/deploy-config.repo.js';
 import { ProjectRepo } from '../../src/db/repos/project.repo.js';
 
@@ -84,7 +84,7 @@ describe('DeployConfigRepo.exists', () => {
     const dbBundle = createDrizzleDatabase(dbPath);
     sqlite = dbBundle.sqlite;
     drizzle = dbBundle.db;
-    initializeDatabase(sqlite);
+    migrate(drizzle as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
 
     projectRepo = new ProjectRepo(drizzle, sqlite);
     deployConfigRepo = new DeployConfigRepo(drizzle, sqlite);

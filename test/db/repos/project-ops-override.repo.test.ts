@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { createDrizzleDatabase } from '../../../src/db/drizzle.js';
 import { ProjectOpsOverrideRepo } from '../../../src/db/repos/project-ops-override.repo.js';
 import { ProjectRepo } from '../../../src/db/repos/project.repo.js';
-import { initializeDatabase } from '../../../src/db/migration.js';
 import type { ProjectOpsOverride } from '../../../src/monitor/ops-types.js';
 
 describe('ProjectOpsOverrideRepo', () => {
@@ -17,7 +17,7 @@ describe('ProjectOpsOverrideRepo', () => {
     db = dbInstance.db;
     repo = new ProjectOpsOverrideRepo(db, sqlite);
     projectRepo = new ProjectRepo(db, sqlite);
-    initializeDatabase(sqlite);
+    migrate(db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
 
     projectRepo.createProject({
       id: 'proj-1',

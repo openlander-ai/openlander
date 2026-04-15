@@ -71,6 +71,7 @@ export const projects = sqliteTable(
       'projects_health_check_strategy_check',
       sql`${table.health_check_strategy} IN ('http', 'tcp', 'exec', 'none')`,
     ),
+    check('projects_source_check', sql`${table.source} IN ('git', 'image')`),
     index('idx_projects_parent').on(table.parent_project_id),
   ],
 );
@@ -329,28 +330,36 @@ export const runtimeIncidents = sqliteTable(
   ],
 );
 
-export const deploy_configs = sqliteTable('deploy_configs', {
-  id: text('id').primaryKey(),
-  project_id: text('project_id')
-    .notNull()
-    .unique()
-    .references(() => projects.id, { onDelete: 'cascade' }),
-  config_json: text('config_json').notNull(),
-  config_version: integer('config_version').notNull().default(1),
-  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-  updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
-});
+export const deploy_configs = sqliteTable(
+  'deploy_configs',
+  {
+    id: text('id').primaryKey(),
+    project_id: text('project_id')
+      .notNull()
+      .unique()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    config_json: text('config_json').notNull(),
+    config_version: integer('config_version').notNull().default(1),
+    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index('idx_deploy_configs_project').on(table.project_id)],
+);
 
-export const project_ops_overrides = sqliteTable('project_ops_overrides', {
-  id: text('id').primaryKey(),
-  project_id: text('project_id')
-    .notNull()
-    .unique()
-    .references(() => projects.id, { onDelete: 'cascade' }),
-  overrides_json: text('overrides_json').notNull(),
-  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-  updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
-});
+export const project_ops_overrides = sqliteTable(
+  'project_ops_overrides',
+  {
+    id: text('id').primaryKey(),
+    project_id: text('project_id')
+      .notNull()
+      .unique()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    overrides_json: text('overrides_json').notNull(),
+    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index('idx_project_ops_overrides_project').on(table.project_id)],
+);
 
 export const secretFiles = sqliteTable(
   'secret_files',

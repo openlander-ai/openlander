@@ -15,6 +15,7 @@
   "files": [
     "dist",
     "web/dist",
+    "drizzle",
     "LICENSE",
     "README.md"
   ],
@@ -38,7 +39,10 @@
     "release": "release-it",
     "prepublishOnly": "npm run build",
     "prepare": "husky",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",

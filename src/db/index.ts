@@ -1,8 +1,9 @@
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync } from 'node:fs';
+import path, { dirname } from 'node:path';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { isNotNull } from 'drizzle-orm';
 import { createDrizzleDatabase, type DrizzleClient, type SqliteDatabase } from './drizzle.js';
-import { initializeDatabase } from './migration.js';
 import { environments, projects } from './schema.drizzle.js';
 import { ProjectRepo } from './repos/project.repo.js';
 import { EnvironmentRepo } from './repos/environment.repo.js';
@@ -54,6 +55,268 @@ export type {
   ActivityLogRow,
 } from './types.js';
 
+type MigrationJournal = {
+  entries: Array<{
+    tag: string;
+    when: number;
+  }>;
+};
+
+type SqliteTableInfoRow = { name: string };
+
+type LegacyProjectRuntimeRow = {
+  id: string;
+  branch?: string | null;
+  status?: string | null;
+  assigned_port?: number | null;
+  container_id?: string | null;
+  image_tag?: string | null;
+  previous_image_tag?: string | null;
+  public_url?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+function getTableNames(sqlite: SqliteDatabase): Set<string> {
+  return new Set(
+    (
+      sqlite
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .all() as SqliteTableInfoRow[]
+    ).map((row) => row.name),
+  );
+}
+
+function getTableColumns(sqlite: SqliteDatabase, tableName: string): Set<string> {
+  return new Set(
+    (sqlite.prepare(`PRAGMA table_info('${tableName}')`).all() as SqliteTableInfoRow[]).map(
+      (row) => row.name,
+    ),
+  );
+}
+
+function applyIdempotentBaseline(sqlite: SqliteDatabase, migrationsFolder: string): void {
+  const journal = JSON.parse(
+    readFileSync(path.join(migrationsFolder, 'meta/_journal.json'), 'utf8'),
+  ) as MigrationJournal;
+  const baseline = journal.entries[0];
+  if (!baseline) return;
+
+  const baselineSql = readFileSync(path.join(migrationsFolder, `${baseline.tag}.sql`), 'utf8');
+  const statements = baselineSql
+    .split('--> statement-breakpoint')
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0)
+    .map((statement) =>
+      statement
+        .replace('CREATE TABLE `', 'CREATE TABLE IF NOT EXISTS `')
+        .replace('CREATE UNIQUE INDEX `', 'CREATE UNIQUE INDEX IF NOT EXISTS `')
+        .replace('CREATE INDEX `', 'CREATE INDEX IF NOT EXISTS `'),
+    );
+
+  for (const statement of statements) {
+    try {
+      sqlite.exec(statement);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.includes('no such column')) {
+        throw error;
+      }
+    }
+  }
+}
+
+function createEnvironmentsTable(sqlite: SqliteDatabase): void {
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS environments (
+      id TEXT PRIMARY KEY NOT NULL,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      branch TEXT DEFAULT 'main' NOT NULL,
+      status TEXT DEFAULT 'idle',
+      assigned_port INTEGER,
+      container_id TEXT,
+      image_tag TEXT,
+      previous_image_tag TEXT,
+      public_url TEXT,
+      container_port INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT environments_type_check CHECK(type IN ('production', 'development')),
+      CONSTRAINT environments_status_check CHECK(status IN ('running', 'stopped', 'building', 'error', 'idle'))
+    )
+  `);
+  sqlite.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS environments_assigned_port_unique ON environments(assigned_port)',
+  );
+  sqlite.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS environments_project_type_unique ON environments(project_id, type)',
+  );
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id)');
+}
+
+function backfillProductionEnvironments(sqlite: SqliteDatabase): void {
+  const projectsToBackfill = sqlite
+    .prepare('SELECT * FROM projects')
+    .all() as LegacyProjectRuntimeRow[];
+  const insertEnvironment = sqlite.prepare(`
+    INSERT OR IGNORE INTO environments (
+      id,
+      project_id,
+      type,
+      branch,
+      status,
+      assigned_port,
+      container_id,
+      image_tag,
+      previous_image_tag,
+      public_url,
+      container_port,
+      created_at,
+      updated_at
+    ) VALUES (?, ?, 'production', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const project of projectsToBackfill) {
+    insertEnvironment.run(
+      `${project.id}-production`,
+      project.id,
+      project.branch ?? 'main',
+      project.status ?? 'idle',
+      project.assigned_port ?? null,
+      project.container_id ?? null,
+      project.image_tag ?? null,
+      project.previous_image_tag ?? null,
+      project.public_url ?? null,
+      null,
+      project.created_at ?? new Date().toISOString(),
+      project.updated_at ?? new Date().toISOString(),
+    );
+  }
+}
+
+function rebuildLegacyEnvVars(sqlite: SqliteDatabase): void {
+  sqlite.exec(`
+    CREATE TABLE env_vars__legacy_bridge (
+      id TEXT PRIMARY KEY NOT NULL,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      environment_id TEXT REFERENCES environments(id) ON DELETE CASCADE,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  sqlite.exec(`
+    INSERT INTO env_vars__legacy_bridge (id, project_id, environment_id, key, value, created_at)
+    SELECT id, project_id, NULL, key, value, created_at
+    FROM env_vars
+  `);
+  sqlite.exec('DROP TABLE env_vars');
+  sqlite.exec('ALTER TABLE env_vars__legacy_bridge RENAME TO env_vars');
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_env_vars_project ON env_vars(project_id)');
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_env_vars_environment ON env_vars(environment_id)');
+  sqlite.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_env_vars_project_key_global ON env_vars(project_id, key) WHERE environment_id IS NULL',
+  );
+  sqlite.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_env_vars_project_env_key ON env_vars(project_id, environment_id, key) WHERE environment_id IS NOT NULL',
+  );
+}
+
+function rebuildLegacyDeployLogs(sqlite: SqliteDatabase): void {
+  sqlite.exec(`
+    CREATE TABLE deploy_logs__legacy_bridge (
+      id TEXT PRIMARY KEY NOT NULL,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      environment_id TEXT REFERENCES environments(id) ON DELETE CASCADE,
+      status TEXT,
+      trigger_source TEXT,
+      trigger_detail TEXT,
+      commit_sha TEXT,
+      commit_message TEXT,
+      build_log TEXT,
+      runtime_log TEXT,
+      duration_ms INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT deploy_logs_status_check CHECK(status IN ('success', 'failed', 'cancelled')),
+      CONSTRAINT deploy_logs_trigger_check CHECK(trigger_source IN ('chat', 'webhook', 'api'))
+    )
+  `);
+  sqlite.exec(`
+    INSERT INTO deploy_logs__legacy_bridge (
+      id,
+      project_id,
+      environment_id,
+      status,
+      trigger_source,
+      trigger_detail,
+      commit_sha,
+      commit_message,
+      build_log,
+      runtime_log,
+      duration_ms,
+      created_at
+    )
+    SELECT id, project_id, NULL, status, trigger_source, NULL, commit_sha, NULL, build_log, NULL, duration_ms, created_at
+    FROM deploy_logs
+  `);
+  sqlite.exec('DROP TABLE deploy_logs');
+  sqlite.exec('ALTER TABLE deploy_logs__legacy_bridge RENAME TO deploy_logs');
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_deploy_logs_project ON deploy_logs(project_id)');
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_deploy_logs_environment ON deploy_logs(environment_id)',
+  );
+}
+
+function markBaselineMigrationApplied(sqlite: SqliteDatabase, migrationsFolder: string): void {
+  const journal = JSON.parse(
+    readFileSync(path.join(migrationsFolder, 'meta/_journal.json'), 'utf8'),
+  ) as MigrationJournal;
+  const baseline = journal.entries[0];
+  if (!baseline) return;
+
+  const baselineSql = readFileSync(path.join(migrationsFolder, `${baseline.tag}.sql`), 'utf8');
+  const baselineHash = createHash('sha256').update(baselineSql).digest('hex');
+
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS __drizzle_migrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hash text NOT NULL,
+      created_at numeric
+    )
+  `);
+  sqlite
+    .prepare('INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)')
+    .run(baselineHash, baseline.when);
+}
+
+function bridgeLegacyDatabase(sqlite: SqliteDatabase, migrationsFolder: string): void {
+  const tableNames = getTableNames(sqlite);
+  if (!tableNames.has('projects')) {
+    return;
+  }
+
+  sqlite.transaction(() => {
+    applyIdempotentBaseline(sqlite, migrationsFolder);
+    createEnvironmentsTable(sqlite);
+    backfillProductionEnvironments(sqlite);
+
+    if (tableNames.has('env_vars') && !getTableColumns(sqlite, 'env_vars').has('environment_id')) {
+      rebuildLegacyEnvVars(sqlite);
+    }
+
+    if (
+      tableNames.has('deploy_logs') &&
+      !getTableColumns(sqlite, 'deploy_logs').has('environment_id')
+    ) {
+      rebuildLegacyDeployLogs(sqlite);
+    }
+
+    if (!getTableNames(sqlite).has('__drizzle_migrations')) {
+      markBaselineMigrationApplied(sqlite, migrationsFolder);
+    }
+  })();
+}
+
 // prettier-ignore
 export class Database implements AuthDatabase {
   private sqlite: SqliteDatabase;
@@ -87,9 +350,13 @@ export class Database implements AuthDatabase {
   constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
     const { sqlite, db } = createDrizzleDatabase(dbPath);
+    const migrationsFolder = path.resolve(import.meta.dirname, '../../drizzle');
     this.sqlite = sqlite;
     this.db = db;
-    initializeDatabase(this.sqlite);
+    bridgeLegacyDatabase(this.sqlite, migrationsFolder);
+    migrate(this.db as Parameters<typeof migrate>[0], {
+      migrationsFolder,
+    });
     this.projectRepo = new ProjectRepo(this.db, this.sqlite);
     this.environmentRepo = new EnvironmentRepo(this.db, this.sqlite);
     this.envVarRepo = new EnvVarRepo(this.db, this.sqlite);

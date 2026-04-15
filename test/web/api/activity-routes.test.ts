@@ -17,9 +17,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 import { createDrizzleDatabase } from '../../../src/db/drizzle.js';
-import { initializeDatabase } from '../../../src/db/migration.js';
 import { ActivityLogRepo } from '../../../src/db/repos/activity-log.repo.js';
 import type { ActivityLogRow } from '../../../src/db/types.js';
 import {
@@ -29,11 +29,11 @@ import {
   mapActivityType,
 } from '../../../src/monitor/activity-event-mapper.js';
 
+type ActivityInsert = Parameters<ActivityLogRepo['insert']>[0];
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function makeEntry(
-  overrides: Partial<Omit<ActivityLogRow, 'id' | 'created_at'>> = {},
-): Omit<ActivityLogRow, 'id' | 'created_at'> {
+function makeEntry(overrides: Partial<ActivityInsert> = {}): ActivityInsert {
   return {
     event_type: 'deploy:crash',
     activity_type: 'incident',
@@ -57,7 +57,7 @@ describe('ActivityLogRepo', () => {
   beforeEach(() => {
     const db = createDrizzleDatabase(':memory:');
     sqlite = db.sqlite;
-    initializeDatabase(sqlite);
+    migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
     repo = new ActivityLogRepo(db.db, db.sqlite);
   });
 
@@ -302,16 +302,20 @@ describe('mapActivityType', () => {
 
 describe('mapActivityStatus', () => {
   it('returns active for deploy:start', () => {
-    expect(mapActivityStatus('deploy:start', { projectId: 'p1' })).toBe('active');
+    expect(mapActivityStatus('deploy:start', { projectId: 'p1' } as never)).toBe('active');
   });
 
   it('returns failed for deploy:crash', () => {
-    expect(mapActivityStatus('deploy:crash', { projectId: 'p1' })).toBe('failed');
+    expect(mapActivityStatus('deploy:crash', { projectId: 'p1' } as never)).toBe('failed');
   });
 
   it('returns resolved for recovery:success', () => {
     expect(
-      mapActivityStatus('recovery:success', { projectId: 'p1', durationMs: 100, lastError: null }),
+      mapActivityStatus('recovery:success', {
+        projectId: 'p1',
+        durationMs: 100,
+        lastError: null,
+      } as never),
     ).toBe('resolved');
   });
 
@@ -322,7 +326,7 @@ describe('mapActivityStatus', () => {
         toolName: 'rollback',
         attempt: 1,
         actionRunId: 'run-1',
-      }),
+      } as never),
     ).toBe('pending');
   });
 
@@ -333,27 +337,29 @@ describe('mapActivityStatus', () => {
         model: 'claude-3',
         action: 'diagnose',
         actionRunId: 'run-1',
-      }),
+      } as never),
     ).toBe('ai-running');
   });
 
   it('returns recovery-blocked for recovery:blocked', () => {
-    expect(mapActivityStatus('recovery:blocked', { projectId: 'p1', reason: 'circuit open' })).toBe(
-      'recovery-blocked',
-    );
+    expect(
+      mapActivityStatus('recovery:blocked', { projectId: 'p1', reason: 'circuit open' } as never),
+    ).toBe('recovery-blocked');
   });
 });
 
 describe('mapActivitySeverity', () => {
   it('returns critical for deploy:crash', () => {
-    expect(mapActivitySeverity('deploy:crash', { projectId: 'p1' }, 'failed')).toBe('critical');
+    expect(mapActivitySeverity('deploy:crash', { projectId: 'p1' } as never, 'failed')).toBe(
+      'critical',
+    );
   });
 
   it('returns critical for health:degraded', () => {
     expect(
       mapActivitySeverity(
         'health:degraded',
-        { projectId: 'p1', consecutiveFailures: 3, lastError: null },
+        { projectId: 'p1', consecutiveFailures: 3, lastError: null } as never,
         'failed',
       ),
     ).toBe('critical');
@@ -363,21 +369,23 @@ describe('mapActivitySeverity', () => {
     expect(
       mapActivitySeverity(
         'recovery:approval-needed',
-        { projectId: 'p1', toolName: 'rollback', attempt: 1, actionRunId: 'run-1' },
+        { projectId: 'p1', toolName: 'rollback', attempt: 1, actionRunId: 'run-1' } as never,
         'pending',
       ),
     ).toBe('warning');
   });
 
   it('returns info for deploy:start (non-failure, non-critical event)', () => {
-    expect(mapActivitySeverity('deploy:start', { projectId: 'p1' }, 'active')).toBe('info');
+    expect(mapActivitySeverity('deploy:start', { projectId: 'p1' } as never, 'active')).toBe(
+      'info',
+    );
   });
 
   it('returns warning for recovery-blocked status', () => {
     expect(
       mapActivitySeverity(
         'recovery:blocked',
-        { projectId: 'p1', reason: 'cb open' },
+        { projectId: 'p1', reason: 'cb open' } as never,
         'recovery-blocked',
       ),
     ).toBe('warning');
