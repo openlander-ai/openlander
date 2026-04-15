@@ -1,7 +1,11 @@
 # Recovery Architecture Redesign
 
+> **상태**: ✅ 구현 완료 (2026-04-15). Phase 1a, 1b 모두 구현됨. Phase 2 일부 진행 중.
+>
 > 2026-04-06 사고 대응 + 구조적 재설계.
 > 이 문서는 `recovery-architecture-findings-2026-04-06.md`의 후속이며, 구체적 설계를 담는다.
+>
+> **구현 후 참고**: `health.ts`는 삭제되고 `project-health-monitor.ts`로 대체됨. `test/health.test.ts`도 삭제됨. 아래 마이그레이션 체크리스트의 `health.ts` 참조는 완료된 작업의 역사적 기록.
 
 ---
 
@@ -41,7 +45,7 @@ PostmortemGenerator의 무한 LLM 호출 (~15K+ calls)로 비용 폭주. 긴급 
 ┌─────────────────────────────────────────────────────────────┐
 │                     DETECTION LAYER                          │
 │                                                              │
-│  DockerEventListener        HealthMonitor                    │
+│  DockerEventListener        ProjectHealthMonitor             │
 │  ─ container:died           ─ health:degraded (NEW)          │
 │  ─ container:oom            ─ health:recovered               │
 │                                                              │
@@ -399,7 +403,7 @@ AI 가시성 이벤트 (NEW):
   - ai:completed        (LLM 호출 완료 — final tokens, cost, result)
 ```
 
-#### HealthMonitor 변경
+#### ProjectHealthMonitor 변경
 
 ```typescript
 // ❌ 기존: runtime 문제를 deploy:failed로 발행
@@ -623,7 +627,7 @@ Coordinator Eligibility Gate의 판단 기준. **모든 AI 동작은 이 매트�
 
 ## 마이그레이션 계획
 
-### Phase 1a: Coordinator + 안전장치 (1-2일) — 세션 1
+### Phase 1a: Coordinator + 안전장치 (1-2일) — 세션 1 ✅
 
 **목표**: 사고 재발 차단. 기존 코드 구조 최소 변경.
 
@@ -637,7 +641,7 @@ Coordinator Eligibility Gate의 판단 기준. **모든 AI 동작은 이 매트�
 **이 시점에서 Coordinator는 gate만 수행하고, 통과 시 기존 auto-recovery/OpsAgent를 그대로 호출.**
 기존 guard는 아직 남겨둠 (이중 보호). 충돌 없음 — Coordinator가 먼저 거부하므로.
 
-### Phase 1b: Executor 전환 + 가시성 (1-2일) — 세션 2
+### Phase 1b: Executor 전환 + 가시성 (1-2일) — 세션 2 ✅
 
 **목표**: 기존 recovery 로직을 Executor로 전환. 직접 EventBus 구독 제거.
 
@@ -649,10 +653,10 @@ Coordinator Eligibility Gate의 판단 기준. **모든 AI 동작은 이 매트�
 6. 기존 개별 guard 제거 (Coordinator가 완전 대체)
 7. 테스트: coordinator + lifecycle integration test
 
-### Phase 2: 확장 (안정화 후)
+### Phase 2: 확장 (안정화 후) — 일부 완료
 
-- incident fingerprinting + dedup
-- ai:invoked/completed visibility events
+- ✅ incident fingerprinting + dedup
+- ✅ ai:invoked/completed visibility events
 - NotificationCenter 연동
 - PostmortemGenerator 조건부 자동 (v2)
 - `container:missing` → Coordinator 라우팅 (현재 OpsAgent 직접 구독으로 Eligibility Gate 우회 중)

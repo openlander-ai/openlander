@@ -10,10 +10,10 @@ CLI (Commander)  →  AppContext  →  Hono HTTP Server
                         ↓
         ┌───────────────┼───────────────┐
         │               │               │
-   Pipeline        Tools/MCP        Web API
-   (deploy,        (69 ToolDefs,    (routes,
-    docker,         AI SDK +         middleware,
-    traefik)        MCP adapters)    WebSocket)
+    Pipeline        Tools/MCP        Web API
+    (deploy,        (99 ToolDefs,    (routes,
+     docker,         AI SDK +         middleware,
+     traefik)        MCP adapters)    WebSocket)
         │               │               │
         └───────┬───────┘               │
                 ↓                       │
@@ -64,24 +64,40 @@ src/
 │   ├── api/                 #   Route modules (factory functions)
 │   │   ├── routes.ts        #   Main router + activity stream
 │   │   ├── project-routes.ts
+│   │   ├── overview-routes.ts   #   Overview/summary routes
 │   │   ├── deploy-stream-routes.ts
 │   │   ├── deploy-timeline-stream-routes.ts
+│   │   ├── deploy-failure-handler.ts #   Deploy failure event handler
 │   │   ├── terminal-routes.ts
 │   │   ├── chat-routes.ts
 │   │   ├── auth-routes.ts
 │   │   ├── setup-routes.ts
+│   │   ├── system-routes.ts     #   System status routes
 │   │   ├── ai-usage-routes.ts   #   AI usage tracking API
 │   │   ├── approval-routes.ts   #   Recovery approval API
 │   │   ├── llm-routes.ts        #   LLM provider management API
 │   │   ├── ops-routes.ts        #   Operations center API
 │   │   ├── domain-routes.ts     #   Domain management
 │   │   ├── webhook-routes.ts    #   Webhook management
-│   │   └── ...
+│   │   ├── helpers/             #   Route helper utilities
+│   │   └── setup/               #   Setup flow handlers
 │   └── middleware/
 │       └── auth.ts          #   Auth middleware
 ├── pipeline/                # Core deployment logic
 │   ├── deploy-core.ts       #   DeployPipeline class
-│   ├── docker.ts            #   Docker abstraction layer (single entry point for all Docker operations)
+│   ├── docker.ts            #   Docker entry point (re-exports from docker/)
+│   ├── docker/              #   Docker abstraction layer (modular)
+│   │   ├── facade.ts        #   Public API (single import point for all Docker ops)
+│   │   ├── container.ts     #   Container lifecycle (run, stop, start, remove, inspect)
+│   │   ├── image.ts         #   Image operations (build, pull, remove)
+│   │   ├── exec.ts          #   Container command execution
+│   │   ├── network.ts       #   Network management
+│   │   ├── volume.ts        #   Volume management
+│   │   ├── stream.ts        #   Log and event streaming
+│   │   ├── infra.ts         #   Infrastructure operations
+│   │   ├── context.ts       #   DockerContext creation (dockerode init)
+│   │   ├── helpers.ts       #   Utilities (socket path, cleanup)
+│   │   └── types.ts         #   Docker type definitions
 │   ├── traefik.ts           #   Traefik manager
 │   ├── compose.ts           #   Docker Compose pipeline
 │   ├── deploy-plan/         #   Plan engine (create → update → execute)
@@ -89,7 +105,7 @@ src/
 │   ├── service-manager.ts   #   Infrastructure services
 │   └── service-adapters/    #   DB adapters (postgres, mysql, redis)
 ├── tools/                   # MCP Tool System
-│   ├── defs/                #   ToolDef definitions (14 categories, 69 tools)
+│   ├── defs/                #   ToolDef definitions (20 files, 99 tools)
 │   │   ├── types.ts         #   ToolDef interface
 │   │   └── index.ts         #   Registry exports
 │   └── adapters/            #   Protocol adapters
@@ -112,13 +128,31 @@ src/
 │   └── ...
 ├── events/                  # EventBus (decoupled communication)
 ├── monitor/                 # Health monitoring, recovery & operations
-│   ├── alerts.ts            #   Container/health alert detection
-│   ├── recovery-coordinator.ts #   Single-owner recovery (Eligibility Gate, 7 conditions)
-│   ├── ops-recovery.ts      #   Recovery planner (recipe fast-path + LLM fallback)
-│   ├── ops-agent.ts         #   Operations agent
-│   ├── incident-reporter.ts #   Incident dedup (error-pattern fingerprinting)
-│   ├── postmortem.ts        #   PostmortemGenerator (auto after recovery success)
-│   └── ...
+│   ├── activity-event-mapper.ts #   Maps EventBus events to activity_log schema
+│   ├── activity-logger.ts   #   Persists EventBus events to activity_log table
+│   ├── alerts.ts            #   Alert aggregation coordinator
+│   ├── container-alert-handler.ts #   Handles container events (die, oom, missing)
+│   ├── container-state-reconciler.ts #   Reconciles Docker state vs database
+│   ├── docker-events.ts     #   Real-time Docker event stream listener
+│   ├── incident-reporter.ts #   Multi-channel incident notification
+│   ├── infrastructure-alerter.ts #   Disk, inactive, restart loop checks
+│   ├── llm-diagnosis.ts     #   LLM-based crash root cause analysis
+│   ├── ops-agent.ts         #   Event-driven operations agent
+│   ├── ops-alerting.ts      #   OpsAgent alerting subsystem
+│   ├── ops-cascade.ts       #   Multi-project cascade failure detector
+│   ├── ops-config-resolver.ts #   Resolves recovery automation policy
+│   ├── ops-digest.ts        #   Daily/weekly incident digest generator
+│   ├── ops-drift.ts         #   Config drift detection
+│   ├── ops-incidents.ts     #   Incident lifecycle manager
+│   ├── ops-recovery.ts      #   Recovery pipeline executor
+│   ├── ops-types.ts         #   OpsAgent type definitions
+│   ├── postmortem.ts        #   Post-recovery analysis generator
+│   ├── project-health-monitor.ts #   Probe-based project health checking
+│   ├── recovery-coordinator.ts #   Single-owner recovery (7-condition eligibility gate)
+│   ├── rollback-watcher.ts  #   Monitors rollback operations
+│   ├── service-health-monitor.ts #   Shared infrastructure service health
+│   ├── stats.ts             #   System statistics collection
+│   └── system-maintenance-monitor.ts #   Periodic system cleanup
 ├── mcp/                     # MCP server (stdio + HTTP)
 ├── auth/                    # Authentication service
 ├── config/                  # Config management (~/.openlander/)
@@ -137,9 +171,14 @@ web/src/                     # React 19 Frontend
 ├── pages/                   # Page components
 │   ├── ProjectsGrid.tsx     #   Dashboard
 │   ├── ProjectDetail.tsx    #   Project detail
+│   ├── DeploymentsList.tsx  #   Deployments list
+│   ├── DeploymentDetail.tsx #   Deployment detail view
 │   ├── NewProjectFlow.tsx   #   New project wizard
 │   ├── SettingsPage.tsx     #   Settings
 │   ├── ServicesPage.tsx     #   Services list
+│   ├── ServiceDetail.tsx    #   Service detail view
+│   ├── OpsCenterV2.tsx      #   Operations center
+│   ├── Overview.tsx         #   System overview
 │   └── LoginPage.tsx        #   Login
 ├── components/
 │   ├── ui/                  #   shadcn/ui primitives (button, dialog, select...)
@@ -152,16 +191,20 @@ web/src/                     # React 19 Frontend
 │   ├── logs/                #   LogViewer components
 │   ├── agent/               #   AI agent panel
 │   ├── config/              #   DomainsPanel, EnvVarsTable
+│   ├── command/             #   Command palette
+│   ├── deploy-terminal/     #   Build/deploy terminal UI
+│   ├── ops/                 #   Operations center components
+│   ├── service/             #   Service management components
 │   └── ...
 ├── contexts/                # React Context providers
 │   ├── auth.tsx             #   Authentication state
-│   ├── environment.tsx      #   Environment selection
 │   └── agent-panel.tsx      #   AI agent panel state
 ├── hooks/                   # Custom hooks (data fetching with polling)
 ├── i18n/                    # i18n (context.tsx, en.ts, ko.ts)
 ├── lib/
 │   ├── api/                 #   API layer (native fetch, no axios)
 │   │   ├── auth.ts, projects.ts, services.ts, system.ts, chat.ts
+│   │   ├── client.ts, index.ts, operations.ts, usage.ts
 │   └── utils.ts             #   cn() class merger
 └── types/                   # Frontend types
 
@@ -233,7 +276,7 @@ interface ToolDef {
 }
 ```
 
-14 tool categories, 69 tools. Two adapters convert ToolDefs to:
+20 tool definition files, 99 tools. Two adapters convert ToolDefs to:
 
 - `src/tools/adapters/mcp.ts` — MCP protocol format (4 composite tools)
 - `src/tools/adapters/ai-sdk.ts` — Vercel AI SDK format
@@ -247,9 +290,21 @@ MCP exposes 4 composite tools, each accepting an `action` parameter (`action="he
 
 ### Docker Abstraction Layer
 
-`src/pipeline/docker.ts` is the **single entry point** for all Docker operations. All new code MUST use docker.ts methods, never raw `getClient()` calls.
+`src/pipeline/docker.ts` is a thin re-export shim pointing to `src/pipeline/docker/facade.ts`. The full implementation lives in the `src/pipeline/docker/` subdirectory (11 files):
 
-**Method categories**:
+- `facade.ts` — Public API (single import point for all Docker ops)
+- `container.ts` — Container lifecycle (run, stop, start, remove, inspect)
+- `image.ts` — Image operations (build, pull, remove)
+- `exec.ts` — Container command execution
+- `network.ts` — Network management
+- `volume.ts` — Volume management
+- `stream.ts` — Log and event streaming
+- `infra.ts` — Infrastructure operations
+- `context.ts` — DockerContext creation (dockerode init)
+- `helpers.ts` — Utilities (socket path, cleanup)
+- `types.ts` — Docker type definitions
+
+All new code MUST import from `docker.ts` (or `docker/facade.ts`), never raw dockerode calls. **Method categories** (now distributed across modules):
 
 - **Container lifecycle**: `runContainer`, `safeRemoveContainer`, `restartContainer`, `stopContainer`, `startContainer`
 - **Network management**: `connectContainerToNetwork`, `disconnectContainerFromNetwork`, `getNetworkInfo`
@@ -257,7 +312,7 @@ MCP exposes 4 composite tools, each accepting an `action` parameter (`action="he
 - **Inspection**: `inspectContainer`, `listContainers`, `getContainerInfo`
 - **Image operations**: `buildImage`, `pullImage`, `removeImage`
 
-**Status**: `getClient()` has been removed. The only remaining callers are in PR3-deferred special cases (traefik.ts createNetwork, deploy-core.ts markRollbackImage), which will be migrated in a future PR.
+**Status**: `getClient()` has been fully removed from the codebase.
 
 **Why**: Centralizing Docker operations in one module enables:
 
@@ -268,7 +323,7 @@ MCP exposes 4 composite tools, each accepting an `action` parameter (`action="he
 
 ### EventBus
 
-`src/events/index.ts` — Decouples modules. 40+ event types (`deploy:start`, `deploy:success`, `container:crash`, etc.).
+`src/events/index.ts` — Decouples modules. 66 event types (`deploy:start`, `deploy:success`, `container:crash`, etc.).
 
 ### Deploy Pipeline (3-Step Flow)
 
@@ -291,7 +346,7 @@ Convenience tool `deploy` combines all 3 steps into one call.
 - **No external state library** — React Context + custom hooks only
 - **No data fetching library** — Native `fetch` with `fetchWithAuth()` wrapper
 - **Polling-based updates** — hooks use `setInterval` (10s idle, 3s active)
-- Contexts: `AuthContext`, `EnvironmentContext`, `LanguageContext`, `AgentPanelContext`
+- Contexts: `AuthContext`, `AgentPanelContext` (in `contexts/`), `LanguageContext` (in `i18n/context.tsx`)
 
 ### Styling
 
@@ -325,6 +380,8 @@ API calls organized by domain in `web/src/lib/api/`:
 | `services.ts`   | Service management                           |
 | `system.ts`     | System status                                |
 | `chat.ts`       | AI agent chat                                |
+| `client.ts`     | fetchWithAuth wrapper, base fetch utilities  |
+| `index.ts`      | Barrel export for all API modules            |
 | `operations.ts` | Operations center, recovery monitoring       |
 | `usage.ts`      | AI usage tracking, cost summary              |
 

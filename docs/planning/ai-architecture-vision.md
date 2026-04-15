@@ -79,9 +79,9 @@ AppContext (src/app.ts)
   │     ├── 14개 카테고리, 60+ 도구
   │     ├── MCP 어댑터 (src/tools/adapters/mcp.ts)
   │     └── AI SDK 어댑터 (src/tools/adapters/ai-sdk.ts)
-  ├── EventBus (40+ 이벤트 타입)
-  ├── HealthMonitor + AlertMonitor
-  ├── AutoRecovery (src/pipeline/auto-recovery.ts)          ← Phase 1 안정화 완료
+   ├── EventBus (40+ 이벤트 타입)
+   ├── ProjectHealthMonitor + AlertMonitor
+   ├── AutoRecovery (src/pipeline/auto-recovery.ts)          ← Phase 1 안정화 완료
   │     ├── 레시피 기반 fast-path (20+ 패턴)
   │     ├── LLM fallback + gate checks
   │     └── 고위험 도구 감지 → ApprovalGate 연동
@@ -746,9 +746,9 @@ Phase 2의 Memory Store를 Recovery Planner와 연결한다.
   → Decision Engine (위험도 + 가역성 체크)
   → 자동 실행 또는 유저 승인 대기
 
-메모리 누수 감지 (HealthMonitor)
-  → 알림: "hotdeal-api 메모리 사용량 87% — 재시작을 권장합니다"
-  → Medium risk: 알림 + 5분 후 자동 재시작
+메모리 누수 감지 (ProjectHealthMonitor)
+   → 알림: "hotdeal-api 메모리 사용량 87% — 재시작을 권장합니다"
+   → Medium risk: 알림 + 5분 후 자동 재시작
 ```
 
 **범용 Action Executor**:
@@ -878,17 +878,17 @@ API Key 관리
 
 ### 이미 있는 것
 
-| 컴포넌트                     | 위치                            | 상태 |
-| ---------------------------- | ------------------------------- | ---- |
-| AppContext + 의존성 주입     | `src/app.ts`                    | 완료 |
-| ToolDef 60+ 도구             | `src/tools/defs/`               | 완료 |
-| MCP / AI SDK 어댑터          | `src/tools/adapters/`           | 완료 |
-| Agent 클래스 (기본 루프)     | `src/llm/agent.ts`              | 완료 |
-| EventBus (40+ 이벤트)        | `src/events/index.ts`           | 완료 |
-| HealthMonitor + AlertMonitor | `src/monitor/`                  | 완료 |
-| AutoRecovery                 | `src/pipeline/auto-recovery.ts` | 완료 |
-| 웹 에이전트 채팅             | `src/web/api/chat-routes.ts`    | 완료 |
-| 세션 DB 저장                 | `src/db/repos/chat.repo.ts`     | 완료 |
+| 컴포넌트                            | 위치                            | 상태 |
+| ----------------------------------- | ------------------------------- | ---- |
+| AppContext + 의존성 주입            | `src/app.ts`                    | 완료 |
+| ToolDef 60+ 도구                    | `src/tools/defs/`               | 완료 |
+| MCP / AI SDK 어댑터                 | `src/tools/adapters/`           | 완료 |
+| Agent 클래스 (기본 루프)            | `src/llm/agent.ts`              | 완료 |
+| EventBus (40+ 이벤트)               | `src/events/index.ts`           | 완료 |
+| ProjectHealthMonitor + AlertMonitor | `src/monitor/`                  | 완료 |
+| AutoRecovery                        | `src/pipeline/auto-recovery.ts` | 완료 |
+| 웹 에이전트 채팅                    | `src/web/api/chat-routes.ts`    | 완료 |
+| 세션 DB 저장                        | `src/db/repos/chat.repo.ts`     | 완료 |
 
 ### Phase 1에서 필요한 것
 
