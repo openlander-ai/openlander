@@ -466,9 +466,20 @@ export function createApiRoutes(ctx: AppContext): Hono {
         }
       }
     }
-    for (const [, { projectName, domains }] of projectDomains) {
+    for (const [projectId, { projectName, domains }] of projectDomains) {
       const svcName = `svc-${projectName}`;
-      if (!services[svcName]) continue;
+      if (!services[svcName]) {
+        const project = ctx.db.getProject(projectId);
+        const internalPort = project?.container_port ?? project?.assigned_port;
+        if (!internalPort) continue;
+        services[svcName] = {
+          loadBalancer: {
+            servers: [
+              { url: `http://${projectContainerName(projectName)}:${String(internalPort)}` },
+            ],
+          },
+        };
+      }
       const routeRule = domains.map((d) => `Host(\`${d}\`)`).join(' || ');
       routers[`prod-${projectName}`] = {
         rule: routeRule,
