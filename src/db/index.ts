@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path, { dirname } from 'node:path';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { isNotNull } from 'drizzle-orm';
@@ -352,7 +352,14 @@ export class Database implements AuthDatabase {
   constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
     const { sqlite, db } = createDrizzleDatabase(dbPath);
-    const migrationsFolder = path.resolve(import.meta.dirname, '../../drizzle');
+    const candidates = [
+      path.resolve(import.meta.dirname, '../../drizzle'),
+      path.resolve(import.meta.dirname, '../drizzle'),
+      path.resolve(process.cwd(), 'drizzle'),
+    ];
+    const cwdFallback = path.resolve(process.cwd(), 'drizzle');
+    const migrationsFolder = candidates.find((p) => existsSync(path.join(p, 'meta/_journal.json')))
+      ?? cwdFallback;
     this.sqlite = sqlite;
     this.db = db;
     bridgeLegacyDatabase(this.sqlite, migrationsFolder);
