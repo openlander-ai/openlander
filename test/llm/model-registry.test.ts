@@ -5,12 +5,17 @@ import {
   type ModelRoutingConfig,
 } from '../../src/llm/model-registry.js';
 import { createModel } from '../../src/llm/index.js';
+import type { EventBus } from '../../src/events/index.js';
 
 vi.mock('../../src/llm/index.js', () => ({
   createModel: vi.fn((config: { model?: string }) => ({
     modelId: config.model ?? 'unknown-model',
   })),
 }));
+
+function createMockEventBus(): EventBus {
+  return { emit: vi.fn().mockResolvedValue(undefined) } as unknown as EventBus;
+}
 
 function createBaseConfig(): ModelRoutingConfig {
   return {
@@ -28,12 +33,15 @@ function createBaseConfig(): ModelRoutingConfig {
 }
 
 describe('ModelRegistry', () => {
+  let mockEventBus: EventBus;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mockEventBus = createMockEventBus();
   });
 
   it('resolves model from default route', () => {
-    const registry = new ModelRegistry(createBaseConfig());
+    const registry = new ModelRegistry(createBaseConfig(), mockEventBus);
 
     const model = registry.getModel('default');
 
@@ -55,7 +63,7 @@ describe('ModelRegistry', () => {
         model: 'gpt-4.1',
       },
     };
-    const registry = new ModelRegistry(config);
+    const registry = new ModelRegistry(config, mockEventBus);
 
     const model = registry.getModel('buildDebugger');
 
@@ -70,10 +78,13 @@ describe('ModelRegistry', () => {
   });
 
   it('returns null when route provider does not exist', () => {
-    const registry = new ModelRegistry({
-      providers: {},
-      defaultRoute: { providerId: 'missing-provider' },
-    });
+    const registry = new ModelRegistry(
+      {
+        providers: {},
+        defaultRoute: { providerId: 'missing-provider' },
+      },
+      mockEventBus,
+    );
 
     const model = registry.getModel('default');
 
@@ -82,7 +93,7 @@ describe('ModelRegistry', () => {
   });
 
   it('updateConfig increments version, clears cache, and rebuilds model', () => {
-    const registry = new ModelRegistry(createBaseConfig());
+    const registry = new ModelRegistry(createBaseConfig(), mockEventBus);
 
     const firstModel = registry.getModel('default');
     expect(registry.getVersion()).toBe(0);
@@ -109,7 +120,7 @@ describe('ModelRegistry', () => {
   });
 
   it('reuses cached model instance for the same provider/model key', () => {
-    const registry = new ModelRegistry(createBaseConfig());
+    const registry = new ModelRegistry(createBaseConfig(), mockEventBus);
 
     const first = registry.getModel('webAgent');
     const second = registry.getModel('webAgent');

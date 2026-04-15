@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 
 import type { AppContext } from '../../app.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { withTracking } from '../../llm/tracking-middleware.js';
 
 const log = createModuleLogger('llm-routes');
 
@@ -11,7 +12,8 @@ export function createLlmRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   api.post('/llm/suggest', async (c) => {
-    if (!ctx.model) {
+    const activeModel = ctx.model;
+    if (!activeModel) {
       return c.json({ error: 'LLM not configured' }, 503);
     }
 
@@ -28,10 +30,12 @@ export function createLlmRoutes(ctx: AppContext): Hono {
     }
 
     try {
-      const response = await generateText({
-        model: ctx.model,
-        messages: [{ role: 'user', content: prompt }],
-      });
+      const response = await withTracking({ actionType: 'system', source: 'auto' }, () =>
+        generateText({
+          model: activeModel,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      );
 
       const suggestion = response.text.trim();
       const eventId = nanoid(16);

@@ -120,12 +120,20 @@ export function extractUsageFromResult(usage: UsageShape | undefined | null): Us
   return { inputTokens, outputTokens, totalTokens };
 }
 
+/** @deprecated Use tracking middleware (wrapLanguageModel + withTracking) instead. Retained for non-AI-SDK paths. */
 export function logAiUsage(
   db: Database,
   params: {
     projectId?: string;
     sessionId?: string;
-    actionType: 'web_agent' | 'auto_recovery' | 'build_debugger' | 'monitor_alert' | 'system';
+    actionType:
+      | 'web_agent'
+      | 'auto_recovery'
+      | 'build_debugger'
+      | 'monitor_alert'
+      | 'system'
+      | 'auto_detect'
+      | 'history_compaction';
     modelName: string;
     provider: string;
     inputTokens: number;

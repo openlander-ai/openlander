@@ -4,7 +4,7 @@ import { createModel } from './index.js';
 import type { LLMProviderType } from './providers.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { withTrackingMiddleware } from './tracking-middleware.js';
-import { eventBus } from '../events/index.js';
+import type { EventBus } from '../events/index.js';
 
 const log = createModuleLogger('model-registry');
 
@@ -71,9 +71,11 @@ export class ModelRegistry {
   private config: ModelRoutingConfig;
   private version: number;
   private readonly modelCache = new Map<string, LanguageModel>();
+  private readonly eventBus: EventBus;
 
-  constructor(config: ModelRoutingConfig) {
+  constructor(config: ModelRoutingConfig, eventBus: EventBus) {
     this.config = config;
+    this.eventBus = eventBus;
     this.version = 0;
   }
 
@@ -110,7 +112,12 @@ export class ModelRegistry {
       return null;
     }
 
-    const model = withTrackingMiddleware(rawModel, eventBus, providerEntry.provider, modelName);
+    const model = withTrackingMiddleware(
+      rawModel,
+      this.eventBus,
+      providerEntry.provider,
+      modelName,
+    );
     this.modelCache.set(cacheKey, model);
     return model;
   }

@@ -199,12 +199,22 @@ export async function reloadAgent(
     language: 'en' | 'ko';
   },
 ): Promise<LanguageModel> {
-  const llmModel = createModel({
+  const reloadedLlm = normalizeLlmConfig({
     provider: options.provider,
     apiKey: options.apiKey,
-    authToken: options.authToken,
     model: options.model,
+    authToken: options.authToken ?? '',
+    providers: ctx.config.llm.providers,
+    defaultRoute: ctx.config.llm.defaultRoute,
+    routes: ctx.config.llm.routes,
   });
+  ctx.modelRegistry.updateConfig({
+    providers: reloadedLlm.providers,
+    defaultRoute: reloadedLlm.defaultRoute,
+    routes: reloadedLlm.routes,
+  });
+
+  const llmModel = createModelProxy(ctx.modelRegistry, 'default');
 
   const agent = new Agent(
     llmModel,
@@ -219,21 +229,6 @@ export async function reloadAgent(
   agent.setQuestionBridge(ctx.questionBridge);
 
   ctx.agent = agent;
-
-  const updatedLlm = normalizeLlmConfig({
-    provider: options.provider,
-    apiKey: options.apiKey,
-    model: options.model,
-    authToken: options.authToken ?? '',
-    providers: ctx.config.llm.providers,
-    defaultRoute: ctx.config.llm.defaultRoute,
-    routes: ctx.config.llm.routes,
-  });
-  ctx.modelRegistry.updateConfig({
-    providers: updatedLlm.providers,
-    defaultRoute: updatedLlm.defaultRoute,
-    routes: updatedLlm.routes,
-  });
 
   return llmModel;
 }

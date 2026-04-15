@@ -3,6 +3,7 @@ import type { AppContext } from '../../src/app.js';
 import type { Database } from '../../src/db/index.js';
 import { ModelRegistry } from '../../src/llm/model-registry.js';
 import { DeployQueue } from '../../src/pipeline/deploy-queue.js';
+import type { EventBus } from '../../src/events/index.js';
 
 // ---------------------------------------------------------------------------
 // Shared mock factories for deploy-plan tests (T5-T10)
@@ -111,7 +112,9 @@ export function createMockPlanContext(db?: Database): AppContext {
     } as unknown as AppContext['env'],
     agentPool: null,
     agent: null,
-    modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }),
+    modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }, {
+      emit: vi.fn().mockResolvedValue(undefined),
+    } as unknown as EventBus),
     model: null,
     deployQueue: new DeployQueue(),
     webhookManager: {

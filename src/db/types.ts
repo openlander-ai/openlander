@@ -205,7 +205,14 @@ export interface AiUsageLogRow {
   id: string;
   project_id: string | null;
   session_id: string | null;
-  action_type: 'web_agent' | 'auto_recovery' | 'build_debugger' | 'monitor_alert' | 'system';
+  action_type:
+    | 'web_agent'
+    | 'auto_recovery'
+    | 'build_debugger'
+    | 'monitor_alert'
+    | 'system'
+    | 'auto_detect'
+    | 'history_compaction';
   model_name: string;
   provider: string;
   input_tokens: number;

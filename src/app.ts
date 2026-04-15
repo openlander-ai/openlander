@@ -292,6 +292,7 @@ export async function createAppContext(
           routes: normalizedLlm.routes,
         }
       : { providers: {}, defaultRoute: { providerId: '__none__' } },
+    eventBus,
   );
 
   const model: LanguageModel | null = hasLlmConfigured

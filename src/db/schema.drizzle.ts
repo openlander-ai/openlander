@@ -429,7 +429,15 @@ export const aiUsageLog = sqliteTable(
     project_id: text('project_id'),
     session_id: text('session_id'),
     action_type: text('action_type', {
-      enum: ['web_agent', 'auto_recovery', 'build_debugger', 'monitor_alert', 'system'],
+      enum: [
+        'web_agent',
+        'auto_recovery',
+        'build_debugger',
+        'monitor_alert',
+        'system',
+        'auto_detect',
+        'history_compaction',
+      ],
     }).notNull(),
     model_name: text('model_name').notNull().default(''),
     provider: text('provider').notNull().default(''),

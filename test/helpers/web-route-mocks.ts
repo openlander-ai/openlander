@@ -3,6 +3,7 @@ import type { AppContext } from '../../src/app.js';
 import type { Database } from '../../src/db/index.js';
 import { ModelRegistry } from '../../src/llm/model-registry.js';
 import { DeployQueue } from '../../src/pipeline/deploy-queue.js';
+import type { EventBus } from '../../src/events/index.js';
 
 // ---------------------------------------------------------------------------
 // Shared mock factories for web-routes.test.ts
@@ -174,7 +175,9 @@ export function createMockContext(db: Database): AppContext {
     channelManager: createMockChannelManager() as unknown as AppContext['channelManager'],
     agentPool: null,
     agent: createMockAgent() as unknown as AppContext['agent'],
-    modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }),
+    modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }, {
+      emit: vi.fn().mockResolvedValue(undefined),
+    } as unknown as EventBus),
     model: null,
     deployQueue: new DeployQueue(),
     serviceManager: createMockServiceManager() as unknown as AppContext['serviceManager'],

@@ -5,6 +5,7 @@ import { createModuleLogger } from '../lib/logger.js';
 import { generateText } from 'ai';
 import type { LanguageModel } from 'ai';
 import type { ChatMessage } from '../llm/index.js';
+import { withTracking } from '../llm/tracking-middleware.js';
 
 const log = createModuleLogger('auto-detect');
 
@@ -97,7 +98,8 @@ export class AutoDetector {
   }
 
   async generateDockerfile(projectPath: string): Promise<AutoDetectResult | null> {
-    if (!this.model) {
+    const activeModel = this.model;
+    if (!activeModel) {
       return null;
     }
 
@@ -116,13 +118,15 @@ export class AutoDetector {
         },
       ];
 
-      const response = await generateText({
-        model: this.model,
-        messages: messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-      });
+      const response = await withTracking({ actionType: 'auto_detect', source: 'auto' }, () =>
+        generateText({
+          model: activeModel,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
+      );
       const content = this.extractDockerfileContent(response.text);
       if (!content) {
         return null;
