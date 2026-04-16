@@ -71,9 +71,7 @@ export class ServiceHealthMonitor {
 
     this.checking = true;
     try {
-      const services = this.db
-        .listServices()
-        .filter((service) => service.container_id !== null || service.container_name.length > 0);
+      const services = this.db.listServices().filter((service) => service.container_id !== null);
 
       await Promise.all(services.map((service) => this.runServiceCheck(service)));
     } finally {
@@ -99,6 +97,7 @@ export class ServiceHealthMonitor {
   }
 
   private async runServiceCheck(service: ServiceRow): Promise<void> {
+    // Filter ensures container_id is not null, but we keep the fallback for defensive safety
     const containerRef = service.container_id ?? service.container_name;
 
     try {

@@ -19,6 +19,7 @@ type SqliteStatement = {
 export interface SqliteDatabase {
   exec: (sql: string) => unknown;
   prepare: (sql: string) => SqliteStatement;
+  pragma: (source: string, options?: { simple?: boolean }) => unknown;
   transaction: <T>(fn: () => T) => () => T;
   close: () => void;
 }

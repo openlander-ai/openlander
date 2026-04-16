@@ -3,15 +3,22 @@ import { DOCKER_LABELS } from '../../config/index.js';
 import { isDockerNotFoundError } from '../../errors.js';
 import type Dockerode from 'dockerode';
 import { createModuleLogger } from '../../lib/logger.js';
+import { withTimeout } from './helpers.js';
 
 const log = createModuleLogger('docker:volume');
+
+const VOLUME_INSPECT_TIMEOUT_MS = 15_000;
 
 export class VolumeOps {
   constructor(private readonly ctx: DockerContext) {}
 
   /** Inspect a volume. Throws the raw Docker 404 error if not found (use isDockerNotFoundError to check). */
   async inspectVolume(name: string): Promise<Dockerode.VolumeInspectInfo> {
-    return await this.ctx.client.getVolume(name).inspect();
+    return await withTimeout(
+      this.ctx.client.getVolume(name).inspect(),
+      VOLUME_INSPECT_TIMEOUT_MS,
+      `Volume inspect (${name})`,
+    );
   }
 
   /** List volumes with optional filters. */

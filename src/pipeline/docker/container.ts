@@ -12,6 +12,7 @@ import {
   isContainerAlreadyRunning,
   isContainerNotRunning,
   resolveExtraHosts,
+  withTimeout,
   writeSecretFiles,
 } from './helpers.js';
 import { createModuleLogger } from '../../lib/logger.js';
@@ -276,7 +277,7 @@ export class ContainerOps {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         const container = this.ctx.client.getContainer(containerId);
-        await container.inspect();
+        await withTimeout(container.inspect(), 10_000, 'safeRemoveContainer inspect');
         await new Promise<void>((resolve) => setTimeout(resolve, intervalMs));
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
@@ -413,11 +414,14 @@ export class ContainerOps {
   async waitForHealthy(containerId: string, timeoutMs = 15000): Promise<WaitForHealthyResult> {
     const startTime = Date.now();
     const checkInterval = 2000;
+    const inspectTimeoutMs = 10_000;
 
     while (Date.now() - startTime < timeoutMs) {
       try {
         const container = this.ctx.client.getContainer(containerId);
-        const info = await container.inspect();
+        const info = await container.inspect({
+          abortSignal: AbortSignal.timeout(inspectTimeoutMs),
+        });
 
         if (info.State.Restarting) {
           return {
@@ -454,7 +458,9 @@ export class ContainerOps {
 
     try {
       const container = this.ctx.client.getContainer(containerId);
-      const info = await container.inspect();
+      const info = await container.inspect({
+        abortSignal: AbortSignal.timeout(inspectTimeoutMs),
+      });
       if (info.State.Restarting) {
         return {
           healthy: false,

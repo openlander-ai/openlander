@@ -12,9 +12,11 @@ const INACTIVE_DAYS_THRESHOLD = 14;
 const RESTART_COUNT_THRESHOLD = 3;
 const DANGLING_IMAGES_THRESHOLD = 3;
 const CONTAINER_MEMORY_THRESHOLD = 90;
+const INITIAL_STAGGER_MS = 8000;
 
 export class InfrastructureAlerter {
   private intervalId: ReturnType<typeof setInterval> | undefined;
+  private initialTimerId: ReturnType<typeof setTimeout> | undefined;
   private checking = false;
 
   constructor(
@@ -34,10 +36,19 @@ export class InfrastructureAlerter {
       void this.runChecks();
     }, interval);
 
-    void this.runChecks();
+    // Stagger first check to avoid Docker API thundering herd at startup.
+    this.initialTimerId = setTimeout(() => {
+      this.initialTimerId = undefined;
+      void this.runChecks();
+    }, INITIAL_STAGGER_MS);
   }
 
   stop(): void {
+    if (this.initialTimerId) {
+      clearTimeout(this.initialTimerId);
+      this.initialTimerId = undefined;
+    }
+
     if (!this.intervalId) {
       return;
     }

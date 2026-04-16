@@ -4,7 +4,9 @@ import { isDockerNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { containerName } from '../helpers.js';
 import type { DockerContext } from './context.js';
-import { isAlreadyConnectedError, isNotConnectedToNetwork } from './helpers.js';
+import { isAlreadyConnectedError, isNotConnectedToNetwork, withTimeout } from './helpers.js';
+
+const NETWORK_INSPECT_TIMEOUT_MS = 15_000;
 
 const log = createModuleLogger('docker:network');
 
@@ -79,7 +81,11 @@ export class NetworkOps {
   async getNetworkInfo(networkName: string): Promise<Dockerode.NetworkInspectInfo> {
     try {
       const network = this.ctx.client.getNetwork(networkName);
-      return await network.inspect();
+      return await withTimeout(
+        network.inspect(),
+        NETWORK_INSPECT_TIMEOUT_MS,
+        `Network inspect (${networkName})`,
+      );
     } catch (error) {
       if (isDockerNotFoundError(error)) {
         throw new Error(`Network not found: ${networkName}`);
@@ -93,7 +99,11 @@ export class NetworkOps {
     const networkName = containerName(projectName);
 
     try {
-      await this.ctx.client.getNetwork(networkName).inspect();
+      await withTimeout(
+        this.ctx.client.getNetwork(networkName).inspect(),
+        NETWORK_INSPECT_TIMEOUT_MS,
+        `Network inspect (${networkName})`,
+      );
       return networkName;
     } catch (error) {
       if (!isDockerNotFoundError(error)) {
@@ -138,7 +148,11 @@ export class NetworkOps {
   /** Ensure a Docker network exists, creating it if missing. Returns the network name. */
   async ensureNetwork(name: string): Promise<string> {
     try {
-      await this.ctx.client.getNetwork(name).inspect();
+      await withTimeout(
+        this.ctx.client.getNetwork(name).inspect(),
+        NETWORK_INSPECT_TIMEOUT_MS,
+        `Network inspect (${name})`,
+      );
       return name;
     } catch (error) {
       if (!isDockerNotFoundError(error)) {

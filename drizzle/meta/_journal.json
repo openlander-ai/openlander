@@ -29,6 +29,13 @@
       "when": 1776332000000,
       "tag": "0003_fix_check_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1776350000000,
+      "tag": "0004_restore_ai_usage_result_check",
+      "breakpoints": true
     }
   ]
 }

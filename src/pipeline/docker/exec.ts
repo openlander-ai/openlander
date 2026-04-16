@@ -1,5 +1,6 @@
 import { PassThrough } from 'node:stream';
 import type { DockerContext } from './context.js';
+import { withTimeout } from './helpers.js';
 import { createModuleLogger } from '../../lib/logger.js';
 
 const log = createModuleLogger('docker:exec');
@@ -39,7 +40,7 @@ export class ExecOps {
       stream.on('end', resolve);
     });
 
-    const info = await exec.inspect();
+    const info = await withTimeout(exec.inspect(), 10_000, 'exec inspect');
     log.debug({ containerId, cmd, exitCode: info.ExitCode }, 'exec completed');
     return {
       exitCode: info.ExitCode ?? 0,

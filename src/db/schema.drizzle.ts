@@ -454,6 +454,7 @@ export const aiUsageLog = sqliteTable(
     created_at: text('created_at').notNull().default(''),
   },
   (table) => [
+    check('ai_usage_log_result_check', sql`${table.result} IN ('success', 'failure', 'partial')`),
     index('idx_ai_usage_log_project').on(table.project_id),
     index('idx_ai_usage_log_created_at').on(table.created_at),
   ],

@@ -9,6 +9,32 @@ import type { DockerStatus, SecretFileMount } from './types.js';
 
 const log = createModuleLogger('docker');
 
+/**
+ * Race a promise against a timeout. Cleans up the timer in `finally` so the
+ * event loop isn't held open by an orphan `setTimeout` once the real work
+ * resolves or rejects.
+ */
+export async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`${label} timeout (${String(ms)}ms)`));
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Ping the Docker daemon with a timeout. Clears the timer on resolve. */
+export async function pingWithTimeout(client: Dockerode, ms: number): Promise<void> {
+  await withTimeout(client.ping(), ms, 'Docker ping');
+}
+
 export function isAlreadyConnectedError(msg: string): boolean {
   return msg.includes('already exists') || msg.includes('already connected');
 }
@@ -128,7 +154,11 @@ export async function resolveExtraHosts(client: Dockerode, networkName: string):
   }
 
   try {
-    const network = (await client.getNetwork(networkName).inspect()) as {
+    const network = (await withTimeout(
+      client.getNetwork(networkName).inspect(),
+      10_000,
+      'resolveExtraHosts network inspect',
+    )) as {
       IPAM?: { Config?: Array<{ Gateway?: string }> };
     };
     const gateway = network.IPAM?.Config?.[0]?.Gateway;
@@ -162,14 +192,7 @@ export async function dockerStatus(client: Dockerode): Promise<DockerStatus> {
   }
 
   try {
-    await Promise.race([
-      client.ping(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => {
-          reject(new Error('Docker ping timeout (5s)'));
-        }, 5_000),
-      ),
-    ]);
+    await pingWithTimeout(client, 5_000);
     return { state: 'running' };
   } catch (err) {
     log.debug({ err }, 'Dockerode ping failed — trying sg docker');

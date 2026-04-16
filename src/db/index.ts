@@ -435,6 +435,20 @@ export class Database implements AuthDatabase {
     } finally {
       this.sqlite.exec('PRAGMA foreign_keys = ON');
     }
+
+    const fkViolations = this.sqlite.pragma('foreign_key_check') as unknown[];
+    if (fkViolations.length > 0) {
+      log.error(
+        { violations: fkViolations },
+        'Foreign key violations detected after migration',
+      );
+      throw new Error(
+        `Foreign key violations detected after migration (${String(fkViolations.length)} rows). ` +
+          `This indicates a migration caused orphaned references. Aborting startup. ` +
+          `Run PRAGMA foreign_key_check manually to inspect: ${JSON.stringify(fkViolations.slice(0, 5))}`,
+      );
+    }
+
     this.projectRepo = new ProjectRepo(this.db, this.sqlite);
     this.environmentRepo = new EnvironmentRepo(this.db, this.sqlite);
     this.envVarRepo = new EnvVarRepo(this.db, this.sqlite);

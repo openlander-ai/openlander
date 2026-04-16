@@ -1,6 +1,7 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { DockerNotRunningError } from '../../errors.js';
 import type { DockerContext } from './context.js';
+import { pingWithTimeout } from './helpers.js';
 
 const log = createModuleLogger('docker:infra');
 
@@ -10,7 +11,7 @@ export class InfraOps {
   /** Verify Docker daemon is accessible. */
   async ping(): Promise<boolean> {
     try {
-      await this.ctx.client.ping();
+      await pingWithTimeout(this.ctx.client, 5_000);
       return true;
     } catch (err) {
       log.debug({ err }, 'Docker ping failed');

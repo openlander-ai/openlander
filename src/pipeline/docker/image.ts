@@ -4,8 +4,11 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { DockerBuildError, isDockerNotFoundError } from '../../errors.js';
 import type { DockerContext } from './context.js';
 import type { BuildImageOptions, BuildComposeServiceOptions } from './types.js';
+import { withTimeout } from './helpers.js';
 
 const log = createModuleLogger('docker:image');
+
+const IMAGE_INSPECT_TIMEOUT_MS = 15_000;
 
 export class ImageOps {
   private readonly activeBuilds = new Map<string, Readable>();
@@ -172,7 +175,11 @@ export class ImageOps {
     } catch (err) {
       // Check if image exists locally — if so, swallow the pull error
       try {
-        await this.ctx.client.getImage(imageTag).inspect();
+        await withTimeout(
+          this.ctx.client.getImage(imageTag).inspect(),
+          IMAGE_INSPECT_TIMEOUT_MS,
+          `Image inspect (${imageTag})`,
+        );
         log.debug({ err, imageTag }, 'Image pull failed but image exists locally');
       } catch (_inspectErr) {
         throw new Error(
@@ -185,7 +192,11 @@ export class ImageOps {
   /** Inspect a Docker image. Throws if not found. */
   async inspectImage(tag: string): Promise<Dockerode.ImageInspectInfo> {
     try {
-      return await this.ctx.client.getImage(tag).inspect();
+      return await withTimeout(
+        this.ctx.client.getImage(tag).inspect(),
+        IMAGE_INSPECT_TIMEOUT_MS,
+        `Image inspect (${tag})`,
+      );
     } catch (error) {
       if (isDockerNotFoundError(error)) throw new Error(`Image not found: ${tag}`);
       throw error;
@@ -210,7 +221,11 @@ export class ImageOps {
   async getImageExposedPort(imageTag: string): Promise<number | undefined> {
     try {
       const image = this.ctx.client.getImage(imageTag);
-      const info = await image.inspect();
+      const info = await withTimeout(
+        image.inspect(),
+        IMAGE_INSPECT_TIMEOUT_MS,
+        `Image inspect (${imageTag})`,
+      );
       const keys = Object.keys(info.Config.ExposedPorts);
       const first = keys[0]; // e.g. "80/tcp"
       if (!first) return undefined;
