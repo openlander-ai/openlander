@@ -426,10 +426,15 @@ export class Database implements AuthDatabase {
       ?? cwdFallback;
     this.sqlite = sqlite;
     this.db = db;
-    bridgeLegacyDatabase(this.sqlite, migrationsFolder);
-    migrate(this.db as Parameters<typeof migrate>[0], {
-      migrationsFolder,
-    });
+    this.sqlite.exec('PRAGMA foreign_keys = OFF');
+    try {
+      bridgeLegacyDatabase(this.sqlite, migrationsFolder);
+      migrate(this.db as Parameters<typeof migrate>[0], {
+        migrationsFolder,
+      });
+    } finally {
+      this.sqlite.exec('PRAGMA foreign_keys = ON');
+    }
     this.projectRepo = new ProjectRepo(this.db, this.sqlite);
     this.environmentRepo = new EnvironmentRepo(this.db, this.sqlite);
     this.envVarRepo = new EnvVarRepo(this.db, this.sqlite);
