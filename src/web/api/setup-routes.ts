@@ -101,10 +101,36 @@ export function createSetupRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   api.get('/setup/status', async (c) => {
+    const reqStart = Date.now();
+    log.info('[perf] /setup/status: start');
+    const dockerStart = Date.now();
+    const traefikStart = Date.now();
     const [dockerStatus, traefikOk] = await Promise.all([
-      ctx.docker.status(),
-      ctx.traefik.isRunning().catch(() => false),
+      ctx.docker.status().then((r) => {
+        log.info(
+          { ms: Date.now() - dockerStart, state: r.state },
+          '[perf] /setup/status: docker.status done',
+        );
+        return r;
+      }),
+      ctx.traefik
+        .isRunning()
+        .then((r) => {
+          log.info(
+            { ms: Date.now() - traefikStart, running: r },
+            '[perf] /setup/status: traefik.isRunning done',
+          );
+          return r;
+        })
+        .catch((err: unknown) => {
+          log.info(
+            { ms: Date.now() - traefikStart, err },
+            '[perf] /setup/status: traefik.isRunning failed',
+          );
+          return false;
+        }),
     ]);
+    log.info({ ms: Date.now() - reqStart }, '[perf] /setup/status: all awaits done');
 
     const config = loadConfig();
     const dockerOk = dockerStatus.state === 'running';
@@ -128,6 +154,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         'Docker is installed but your user lacks permission. Add yourself to the docker group.';
     }
 
+    log.info({ ms: Date.now() - reqStart }, '[perf] /setup/status: responding');
     return c.json({
       ready,
       hasPassword,

@@ -154,18 +154,22 @@ function isUserInDockerGroup(): boolean {
 }
 
 export async function dockerStatus(client: Dockerode): Promise<DockerStatus> {
+  const t0 = Date.now();
   try {
     execSync('docker --version', { stdio: 'pipe' });
+    log.info({ ms: Date.now() - t0 }, '[perf] dockerStatus: docker --version ok');
   } catch (err) {
-    log.debug({ err }, 'Docker binary check failed');
+    log.info({ ms: Date.now() - t0, err }, '[perf] dockerStatus: docker --version failed');
     return { state: 'not_installed' };
   }
 
+  const t1 = Date.now();
   try {
     await client.ping();
+    log.info({ ms: Date.now() - t1, totalMs: Date.now() - t0 }, '[perf] dockerStatus: ping ok');
     return { state: 'running' };
   } catch (err) {
-    log.debug({ err }, 'Dockerode ping failed — trying sg docker');
+    log.info({ ms: Date.now() - t1, err }, '[perf] dockerStatus: ping failed — trying sg docker');
   }
 
   if (process.platform !== 'darwin') {

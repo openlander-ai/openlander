@@ -489,8 +489,10 @@ export class ContainerOps {
   }
 
   async listAllContainers(): Promise<AllContainerInfo[]> {
+    const t0 = Date.now();
     try {
       const containers = await this.ctx.client.listContainers({ all: true });
+      log.info({ ms: Date.now() - t0, count: containers.length }, '[perf] listAllContainers ok');
 
       return containers.map((c) => {
         const labels = (c.Labels as Record<string, string> | undefined) ?? {};
@@ -513,7 +515,7 @@ export class ContainerOps {
         };
       });
     } catch (error) {
-      log.warn({ error }, 'Failed to list all containers, returning empty array');
+      log.warn({ ms: Date.now() - t0, error }, '[perf] listAllContainers failed');
       return [];
     }
   }
