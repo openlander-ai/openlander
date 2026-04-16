@@ -165,7 +165,14 @@ export async function dockerStatus(client: Dockerode): Promise<DockerStatus> {
 
   const t1 = Date.now();
   try {
-    await client.ping();
+    await Promise.race([
+      client.ping(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => {
+          reject(new Error('Docker ping timeout (5s)'));
+        }, 5_000),
+      ),
+    ]);
     log.info({ ms: Date.now() - t1, totalMs: Date.now() - t0 }, '[perf] dockerStatus: ping ok');
     return { state: 'running' };
   } catch (err) {

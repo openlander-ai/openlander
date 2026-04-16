@@ -14,8 +14,11 @@ const RECONCILE_ELIGIBLE_STATUSES: ReadonlySet<ProjectRow['status']> = new Set([
   'recovering',
 ]);
 
+const INITIAL_STAGGER_MS = 3_000;
+
 export class ContainerStateReconciler {
   private intervalId?: ReturnType<typeof setInterval>;
+  private initialTimerId?: ReturnType<typeof setTimeout>;
   private orphanCount = 0;
   private reconciling = false;
 
@@ -35,10 +38,20 @@ export class ContainerStateReconciler {
       void this.reconcile();
     }, this.options.intervalMs ?? DEFAULT_INTERVAL_MS);
 
-    void this.reconcile();
+    // Stagger the first reconcile so concurrent monitors don't pile on
+    // Docker's API at startup (prevents the listContainers thundering herd).
+    this.initialTimerId = setTimeout(() => {
+      this.initialTimerId = undefined;
+      void this.reconcile();
+    }, INITIAL_STAGGER_MS);
   }
 
   stop(): void {
+    if (this.initialTimerId) {
+      clearTimeout(this.initialTimerId);
+      this.initialTimerId = undefined;
+    }
+
     if (!this.intervalId) {
       return;
     }

@@ -27,9 +27,12 @@ const DEFAULT_OPTIONS: Required<ProjectHealthMonitorOptions> = {
   failureThreshold: 3,
 };
 
+const INITIAL_STAGGER_MS = 7_000;
+
 export class ProjectHealthMonitor {
   private readonly options: Required<ProjectHealthMonitorOptions>;
   private intervalId?: ReturnType<typeof setInterval>;
+  private initialTimerId?: ReturnType<typeof setTimeout>;
   private readonly consecutiveFailures = new Map<string, number>();
   private readonly probeRunner;
   private checking = false;
@@ -53,10 +56,19 @@ export class ProjectHealthMonitor {
       void this.checkAllProjects();
     }, this.options.intervalMs);
 
-    void this.checkAllProjects();
+    // Stagger first check to avoid Docker API thundering herd at startup.
+    this.initialTimerId = setTimeout(() => {
+      this.initialTimerId = undefined;
+      void this.checkAllProjects();
+    }, INITIAL_STAGGER_MS);
   }
 
   stop(): void {
+    if (this.initialTimerId) {
+      clearTimeout(this.initialTimerId);
+      this.initialTimerId = undefined;
+    }
+
     if (!this.intervalId) {
       return;
     }

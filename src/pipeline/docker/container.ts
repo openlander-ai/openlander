@@ -299,7 +299,7 @@ export class ContainerOps {
   async inspectContainer(containerId: string): Promise<Dockerode.ContainerInspectInfo> {
     try {
       const container = this.ctx.client.getContainer(containerId);
-      return await container.inspect();
+      return await container.inspect({ abortSignal: AbortSignal.timeout(15_000) });
     } catch (error) {
       if (isDockerNotFoundError(error)) {
         throw new ContainerNotFoundError(containerId);
@@ -476,6 +476,7 @@ export class ContainerOps {
     const containers = await this.ctx.client.listContainers({
       all: true,
       filters: { label: [`${DOCKER_LABELS.MANAGED}=true`] },
+      abortSignal: AbortSignal.timeout(15_000),
     });
 
     return containers.map((c) => ({
@@ -491,7 +492,10 @@ export class ContainerOps {
   async listAllContainers(): Promise<AllContainerInfo[]> {
     const t0 = Date.now();
     try {
-      const containers = await this.ctx.client.listContainers({ all: true });
+      const containers = await this.ctx.client.listContainers({
+        all: true,
+        abortSignal: AbortSignal.timeout(15_000),
+      });
       log.info({ ms: Date.now() - t0, count: containers.length }, '[perf] listAllContainers ok');
 
       return containers.map((c) => {

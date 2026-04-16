@@ -627,10 +627,13 @@ describeDocker('Docker core operations', () => {
     const docker = new Docker();
     const managed = await docker.listManagedContainers();
 
-    expect(mockListContainers).toHaveBeenCalledWith({
-      all: true,
-      filters: { label: ['openlander.managed=true'] },
-    });
+    expect(mockListContainers).toHaveBeenCalledWith(
+      expect.objectContaining({
+        all: true,
+        filters: { label: ['openlander.managed=true'] },
+        abortSignal: expect.any(AbortSignal),
+      }),
+    );
     expect(managed).toEqual([
       {
         id: 'abc123',
@@ -681,7 +684,9 @@ describeDocker('listAllContainers', () => {
 
     const result = await docker.listAllContainers();
 
-    expect(mockListContainers).toHaveBeenCalledWith({ all: true });
+    expect(mockListContainers).toHaveBeenCalledWith(
+      expect.objectContaining({ all: true, abortSignal: expect.any(AbortSignal) }),
+    );
     expect(result).toHaveLength(2);
   });
 

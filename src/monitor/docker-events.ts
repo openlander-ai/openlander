@@ -27,6 +27,7 @@ const MAX_BACKOFF_MS = 60_000;
 /** OOM event always fires before die — suppress die within this window */
 const OOM_DIE_DEDUP_MS = 5_000;
 const TTL_PRUNE_INTERVAL_MS = 60_000;
+const INITIAL_STAGGER_MS = 10_000;
 
 interface DockerEvent {
   Type: string;
@@ -50,6 +51,7 @@ export class DockerEventListener {
   private readonly recentOoms = new Map<string, number>();
   private lineBuf = '';
   private lastPruneAt = Date.now();
+  private initialTimerId?: ReturnType<typeof setTimeout>;
 
   constructor(docker: Docker, db: Database, events: EventBus) {
     this.docker = docker;
@@ -60,12 +62,20 @@ export class DockerEventListener {
   start(): void {
     if (this.running) return;
     this.running = true;
-    void this.watch();
+    // Stagger first connection to avoid Docker API thundering herd at startup.
+    this.initialTimerId = setTimeout(() => {
+      this.initialTimerId = undefined;
+      if (this.running) void this.watch();
+    }, INITIAL_STAGGER_MS);
     log.info('DockerEventListener started');
   }
 
   stop(): void {
     this.running = false;
+    if (this.initialTimerId) {
+      clearTimeout(this.initialTimerId);
+      this.initialTimerId = undefined;
+    }
     this.destroyStream();
     log.info('DockerEventListener stopped');
   }

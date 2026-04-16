@@ -1,6 +1,7 @@
 import type { Database, ServiceRow } from '../db/index.js';
 import type { Docker } from '../pipeline/docker.js';
 import type { EventBus } from '../events/index.js';
+import { ContainerNotFoundError, isDockerNotFoundError } from '../errors.js';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('service-health-monitor');
@@ -15,10 +16,12 @@ export interface ServiceCheckResult {
 }
 
 const DEFAULT_INTERVAL_MS = 30_000;
+const INITIAL_STAGGER_MS = 5_000;
 
 export class ServiceHealthMonitor {
   private readonly intervalMs: number;
   private intervalId?: ReturnType<typeof setInterval>;
+  private initialTimerId?: ReturnType<typeof setTimeout>;
   private checking = false;
 
   constructor(
@@ -40,10 +43,19 @@ export class ServiceHealthMonitor {
       void this.checkAllServices();
     }, this.intervalMs);
 
-    void this.checkAllServices();
+    // Stagger first check to avoid Docker API thundering herd at startup.
+    this.initialTimerId = setTimeout(() => {
+      this.initialTimerId = undefined;
+      void this.checkAllServices();
+    }, INITIAL_STAGGER_MS);
   }
 
   stop(): void {
+    if (this.initialTimerId) {
+      clearTimeout(this.initialTimerId);
+      this.initialTimerId = undefined;
+    }
+
     if (!this.intervalId) {
       return;
     }
@@ -117,6 +129,29 @@ export class ServiceHealthMonitor {
         this.db.updateService(service.id, { status: 'running' });
       }
     } catch (error) {
+      // Check if container is gone (vs transient docker error)
+      const isContainerMissing =
+        error instanceof ContainerNotFoundError || isDockerNotFoundError(error);
+
+      if (isContainerMissing) {
+        // Clear stale container_id — the container is truly gone
+        if (service.container_id !== null) {
+          this.db.updateService(service.id, { status: 'stopped', containerId: null });
+          log.info(
+            { serviceId: service.id, serviceName: service.name, containerRef },
+            'Service container missing — cleared stale reference',
+          );
+          // Record incident only on transition (status was 'running' before)
+          if (service.status === 'running') {
+            const projects = this.db.listServiceConnectionsByService(service.id);
+            const affectedProjects = [...new Set(projects.map((p) => p.project_id))];
+            this.recordServiceDownIncident(service, affectedProjects);
+          }
+        }
+        return;
+      }
+
+      // Transient error — existing behavior
       log.warn(
         {
           serviceId: service.id,
