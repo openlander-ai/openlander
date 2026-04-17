@@ -96,6 +96,14 @@ export class ContainerOps {
         NetworkMode: networkMode,
         RestartPolicy: options.restartPolicy ?? { Name: 'on-failure', MaximumRetryCount: 5 },
         LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
+        ...(options.resourceLimits
+          ? {
+              Memory: options.resourceLimits.memoryLimitBytes,
+              MemorySwap: options.resourceLimits.memorySwapBytes,
+              MemoryReservation: options.resourceLimits.memoryReservationBytes,
+              CpuShares: options.resourceLimits.cpuShares,
+            }
+          : {}),
         ...(extraHosts.length > 0 ? { ExtraHosts: extraHosts } : {}),
       },
     });
@@ -110,6 +118,7 @@ export class ContainerOps {
   }
 
   async runComposeService(opts: RunComposeServiceOptions): Promise<string> {
+    // TODO v1.1.0: compose resource limits
     const envArray = Object.entries(opts.envVars).map(([k, v]) => `${k}=${v}`);
     const cPort = opts.containerPort ?? opts.port;
     const extraHosts = await resolveExtraHosts(this.ctx.client, this.ctx.networkName);
@@ -222,7 +231,14 @@ export class ContainerOps {
   }
 
   async runInfraContainer(options: Dockerode.ContainerCreateOptions): Promise<string> {
-    const container = await this.ctx.client.createContainer(options);
+    const container = await this.ctx.client.createContainer({
+      ...options,
+      HostConfig: {
+        ...options.HostConfig,
+        Memory: 268435456,
+        MemorySwap: 268435456,
+      },
+    });
     await container.start();
     return container.id;
   }
@@ -355,6 +371,8 @@ export class ContainerOps {
     envVars: Record<string, string>;
     serviceName: string;
     volumeBinds?: string[];
+    memoryLimitBytes?: number;
+    cpuShares?: number;
     healthcheck?: {
       test: string[];
       interval: number;
@@ -404,6 +422,14 @@ export class ContainerOps {
           [`${String(containerPort)}/tcp`]: [{ HostPort: String(hostPort) }],
         },
         LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
+        ...(opts.memoryLimitBytes
+          ? {
+              Memory: opts.memoryLimitBytes,
+              MemorySwap: opts.memoryLimitBytes,
+              MemoryReservation: Math.floor(opts.memoryLimitBytes * 0.5),
+              CpuShares: opts.cpuShares,
+            }
+          : {}),
       },
     });
 
