@@ -93,8 +93,8 @@ const PROVIDER_MODEL_TIERS: Record<string, Record<ModelTier, string>> = {
     balanced: 'mistral-medium-latest',
     lite: 'mistral-small-latest',
   },
-  zai: { flagship: 'glm-5', balanced: 'glm-4.7', lite: 'glm-4.7-flash' },
-  'zai-coding': { flagship: 'glm-5', balanced: 'glm-4.7', lite: 'glm-4.7-flash' },
+  zai: { flagship: 'glm-5.1', balanced: 'glm-4.7', lite: 'glm-4.7-flash' },
+  'zai-coding': { flagship: 'glm-5.1', balanced: 'glm-4.7', lite: 'glm-4.7-flash' },
 };
 
 export function createSetupRoutes(ctx: AppContext): Hono {

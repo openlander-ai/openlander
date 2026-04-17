@@ -19,8 +19,24 @@ export const PROVIDER_MODELS: Record<string, string[]> = {
     'mistral-small-latest',
     'codestral-latest',
   ],
-  zai: ['glm-5', 'glm-4.7', 'glm-4.7-flash', 'glm-4.6', 'glm-4.6-flash', 'glm-z1-flash'],
-  'zai-coding': ['glm-5', 'glm-4.7', 'glm-4.7-flash', 'glm-4.6', 'glm-4.6-flash', 'glm-z1-flash'],
+  zai: [
+    'glm-5.1',
+    'glm-5 (deprecated)',
+    'glm-4.7',
+    'glm-4.7-flash',
+    'glm-4.6',
+    'glm-4.6-flash',
+    'glm-z1-flash',
+  ],
+  'zai-coding': [
+    'glm-5.1',
+    'glm-5 (deprecated)',
+    'glm-4.7',
+    'glm-4.7-flash',
+    'glm-4.6',
+    'glm-4.6-flash',
+    'glm-z1-flash',
+  ],
 };
 
 export const PROVIDER_DEFS = [
