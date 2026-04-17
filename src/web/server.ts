@@ -10,6 +10,7 @@ import { VERSION } from '../version.js';
 import { createApiRoutes } from './api/routes.js';
 import { createWebhookRoutes } from './api/webhook-routes.js';
 import { createDomainRoutes } from './api/domain-routes.js';
+import { createResourceRoutes } from './api/resource-routes.js';
 import { createSetupRoutes } from './api/setup-routes.js';
 import { createTerminalRoutes } from './api/terminal-routes.js';
 import { createChatRoutes } from './api/chat-routes.js';
@@ -166,6 +167,10 @@ function createApp(
   // v0.2: Domain management routes
   const domainRoutes = createDomainRoutes(ctx);
   app.route('/api', domainRoutes);
+
+  // Resource limits management routes
+  const resourceRoutes = createResourceRoutes(ctx);
+  app.route('/api', resourceRoutes);
 
   const chatRoutes = createChatRoutes(ctx);
   app.route('/api', chatRoutes);

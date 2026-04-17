@@ -6,6 +6,7 @@ import type {
   Project,
 } from '../../types';
 import type { BuildStreamEvent } from '../event-types';
+import { fetchWithAuth } from './auth.js';
 import { apiDelete, apiGet, apiPost, apiPostVoid } from './client';
 
 interface BackendEnvironment {
@@ -623,4 +624,47 @@ export async function scanProjectEnvVars(
   return apiPost<ProjectEnvScanResult>(`/api/projects/${projectId}/env/scan`, {
     environment,
   });
+}
+
+export interface ResourceLimitsResponse {
+  profile: 'micro' | 'small' | 'medium' | 'large' | 'custom' | null;
+  memory: {
+    limitBytes: number;
+    reservationBytes: number;
+    swapBytes: number;
+  } | null;
+  cpu: {
+    shares: number;
+  } | null;
+  warnings?: string[];
+}
+
+export interface UpdateResourceLimitsRequest {
+  profile: 'micro' | 'small' | 'medium' | 'large' | 'custom';
+  memoryMb?: number;
+}
+
+export async function getProjectResources(projectId: string): Promise<ResourceLimitsResponse> {
+  const res = await fetchWithAuth(`/api/projects/${projectId}/resources`);
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to fetch project resources');
+  }
+  return res.json();
+}
+
+export async function updateProjectResources(
+  projectId: string,
+  data: UpdateResourceLimitsRequest,
+): Promise<ResourceLimitsResponse> {
+  const res = await fetchWithAuth(`/api/projects/${projectId}/resources`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to update project resources');
+  }
+  return res.json();
 }

@@ -1,4 +1,29 @@
 export const translations = {
+  resources: {
+    title: '리소스 제한',
+    description:
+      '메모리 및 CPU 제한을 설정하여 cascade failure를 방지합니다. 변경사항은 다음 배포 시 적용됩니다.',
+    profile: '메모리 프로필',
+    profiles: {
+      micro: 'Micro (256 MB)',
+      small: 'Small (512 MB)',
+      medium: 'Medium (1 GB)',
+      large: 'Large (2 GB)',
+      custom: '직접 입력',
+    },
+    customMemory: '커스텀 메모리 (MB)',
+    customMemoryHint: '최소 64 MB',
+    save: '저장',
+    saving: '저장 중...',
+    saved: '저장됨',
+    appliesOnRedeploy: '변경사항은 다음 배포 시 적용됩니다',
+    noLimit: '메모리 제한이 설정되지 않았습니다',
+    noLimitWarning: '메모리 제한을 설정하면 cascade failure를 방지할 수 있습니다.',
+    warning: {
+      hostMemory:
+        '호스트 메모리 사용률이 {percent}%입니다. 컨테이너 제한을 줄이거나 호스트 리소스를 늘려보세요.',
+    },
+  },
   nav: {
     overview: '개요',
     deployments: '배포',

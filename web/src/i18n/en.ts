@@ -1,4 +1,29 @@
 export const translations = {
+  resources: {
+    title: 'Resource Limits',
+    description:
+      'Set memory and CPU limits to prevent cascade failures. Changes apply on next deployment.',
+    profile: 'Memory Profile',
+    profiles: {
+      micro: 'Micro (256 MB)',
+      small: 'Small (512 MB)',
+      medium: 'Medium (1 GB)',
+      large: 'Large (2 GB)',
+      custom: 'Custom',
+    },
+    customMemory: 'Custom Memory (MB)',
+    customMemoryHint: 'Minimum 64 MB',
+    save: 'Save',
+    saving: 'Saving...',
+    saved: 'Saved',
+    appliesOnRedeploy: 'Changes apply on next deployment',
+    noLimit: 'No memory limit configured',
+    noLimitWarning: 'We recommend setting a memory limit to prevent cascade failures.',
+    warning: {
+      hostMemory:
+        'Host memory usage is at {percent}%. Consider reducing container limits or increasing host resources.',
+    },
+  },
   nav: {
     overview: 'Overview',
     deployments: 'Deployments',

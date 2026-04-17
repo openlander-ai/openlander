@@ -20,6 +20,8 @@ export const PERSISTED_FIELDS = [
   'dockerTarget',
   'buildContext',
   'imageCmd',
+  'resourceProfile',
+  'memoryLimitBytes',
 ] as const;
 
 /**
@@ -44,6 +46,10 @@ export interface DeployConfigSnapshot {
   buildContext?: string;
   /** Command override array for container entrypoint */
   imageCmd?: string[];
+  /** Resource profile for memory/CPU limits */
+  resourceProfile?: 'micro' | 'small' | 'medium' | 'large' | 'custom' | null;
+  /** Memory limit in bytes */
+  memoryLimitBytes?: number | null;
 }
 
 /**
@@ -90,6 +96,12 @@ export function createSnapshot(config: ProjectConfig): DeployConfigSnapshot {
   }
   if (config.imageCmd !== undefined) {
     snapshot.imageCmd = config.imageCmd;
+  }
+  if (config.resourceProfile !== undefined) {
+    snapshot.resourceProfile = config.resourceProfile;
+  }
+  if (config.memoryLimitBytes !== undefined) {
+    snapshot.memoryLimitBytes = config.memoryLimitBytes;
   }
 
   return snapshot;

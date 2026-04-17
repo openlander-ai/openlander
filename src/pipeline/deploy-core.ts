@@ -139,6 +139,10 @@ export interface ProjectConfig {
   imageCmd?: string[];
   /** Port the application listens on inside the container */
   containerPort?: number;
+  /** Resource profile for memory/CPU limits */
+  resourceProfile?: 'micro' | 'small' | 'medium' | 'large' | 'custom' | null;
+  /** Memory limit in bytes */
+  memoryLimitBytes?: number | null;
 }
 
 /**
