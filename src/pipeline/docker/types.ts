@@ -53,8 +53,6 @@ export interface RunComposeServiceOptions {
   };
   network?: string;
   networks?: string[];
-  memoryLimitBytes?: number;
-  cpuShares?: number;
 }
 
 export interface ContainerInfo {

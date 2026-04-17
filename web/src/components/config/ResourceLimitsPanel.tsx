@@ -24,6 +24,8 @@ export function ResourceLimitsPanel({ projectId }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   useEffect(() => {
     getProjectResources(projectId)
@@ -32,6 +34,7 @@ export function ResourceLimitsPanel({ projectId }: Props) {
         if (data.profile === 'custom' && data.memory) {
           setCustomMb(String(Math.floor(data.memory.limitBytes / 1024 / 1024)));
         }
+        if (data.warnings?.length) setWarnings(data.warnings);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -39,27 +42,41 @@ export function ResourceLimitsPanel({ projectId }: Props) {
 
   const handleSave = async () => {
     if (!profile) return;
+    if (profile === 'custom') {
+      const mb = parseInt(customMb, 10);
+      if (isNaN(mb) || mb < 64) return;
+    }
     setSaving(true);
     try {
       await updateProjectResources(projectId, {
         profile: profile as 'micro' | 'small' | 'medium' | 'large' | 'custom',
         ...(profile === 'custom' ? { memoryMb: parseInt(customMb, 10) } : {}),
       });
+      setError(null);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {
-      // error silently — user can retry
+      setError(t('resources.saveFailed'));
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return <div className="p-4 text-sm text-secondary-ol">Loading...</div>;
+    return <div className="p-4 text-sm text-secondary-ol">{t('resources.loading')}</div>;
   }
 
   return (
     <div className="space-y-4">
+      {warnings.map((w, i) => (
+        <div
+          key={i}
+          className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200"
+        >
+          {w}
+        </div>
+      ))}
+
       {!profile && (
         <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200">
           {t('resources.noLimitWarning')}
@@ -113,6 +130,7 @@ export function ResourceLimitsPanel({ projectId }: Props) {
       >
         {saving ? t('resources.saving') : saved ? t('resources.saved') : t('resources.save')}
       </Button>
+      {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
   );
 }

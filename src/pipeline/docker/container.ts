@@ -118,7 +118,7 @@ export class ContainerOps {
   }
 
   async runComposeService(opts: RunComposeServiceOptions): Promise<string> {
-    // TODO v1.1.0: compose resource limits
+    // TODO v1.1.0: compose resource limits — RunComposeServiceOptions will need memoryLimitBytes/cpuShares fields added back when implemented
     const envArray = Object.entries(opts.envVars).map(([k, v]) => `${k}=${v}`);
     const cPort = opts.containerPort ?? opts.port;
     const extraHosts = await resolveExtraHosts(this.ctx.client, this.ctx.networkName);
@@ -422,12 +422,12 @@ export class ContainerOps {
           [`${String(containerPort)}/tcp`]: [{ HostPort: String(hostPort) }],
         },
         LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
+        ...(opts.cpuShares ? { CpuShares: opts.cpuShares } : {}),
         ...(opts.memoryLimitBytes
           ? {
               Memory: opts.memoryLimitBytes,
               MemorySwap: opts.memoryLimitBytes,
               MemoryReservation: Math.floor(opts.memoryLimitBytes * 0.5),
-              CpuShares: opts.cpuShares,
             }
           : {}),
       },

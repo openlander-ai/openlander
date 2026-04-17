@@ -7,6 +7,19 @@ const containerNames = ['cascade-test-a', 'cascade-test-b'];
 const testImage = 'alpine:latest';
 const oomCommand =
   'awk \'BEGIN { chunk = sprintf("%1048576s", "x"); gsub(/ /, "x", chunk); while (length(payload) < 200 * 1024 * 1024) payload = payload chunk; print length(payload); system("sleep 600"); }\'';
+const skipReason = process.env.CI
+  ? 'Requires real local Docker and is disabled in CI'
+  : 'Docker not available';
+const shouldRunDockerTest =
+  !process.env.CI &&
+  (await docker
+    .ping()
+    .then(() => true)
+    .catch(() => false));
+const describeCascadeIsolation = shouldRunDockerTest ? describe : describe.skip;
+const suiteName = shouldRunDockerTest
+  ? 'Cascade Isolation: Memory limits prevent OOM cascade'
+  : `Cascade Isolation: Memory limits prevent OOM cascade (${skipReason})`;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -57,19 +70,12 @@ async function waitForOomKill(container: Dockerode.Container, timeoutMs: number)
   return false;
 }
 
-describe('Cascade Isolation: Memory limits prevent OOM cascade', () => {
+describeCascadeIsolation(suiteName, () => {
   afterAll(async () => {
     await cleanupContainers();
   });
 
-  it('OOM-killed container does not affect sibling container', async () => {
-    try {
-      await docker.ping();
-    } catch {
-      console.log('Docker not available, skipping cascade isolation test');
-      return;
-    }
-
+  it('OOM-killed container does not affect sibling container', { timeout: 30000 }, async () => {
     await cleanupContainers();
     await ensureImageAvailable(testImage);
 
@@ -117,5 +123,5 @@ describe('Cascade Isolation: Memory limits prevent OOM cascade', () => {
     });
     const streamB = await execB.start({ Detach: false });
     expect(streamB).toBeTruthy();
-  }, 30000);
+  });
 });

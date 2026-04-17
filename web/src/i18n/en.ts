@@ -19,6 +19,8 @@ export const translations = {
     appliesOnRedeploy: 'Changes apply on next deployment',
     noLimit: 'No memory limit configured',
     noLimitWarning: 'We recommend setting a memory limit to prevent cascade failures.',
+    saveFailed: 'Failed to save resource limits',
+    loading: 'Loading...',
     warning: {
       hostMemory:
         'Host memory usage is at {percent}%. Consider reducing container limits or increasing host resources.',

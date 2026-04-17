@@ -19,6 +19,8 @@ export const translations = {
     appliesOnRedeploy: '변경사항은 다음 배포 시 적용됩니다',
     noLimit: '메모리 제한이 설정되지 않았습니다',
     noLimitWarning: '메모리 제한을 설정하면 cascade failure를 방지할 수 있습니다.',
+    saveFailed: '리소스 제한 저장에 실패했습니다',
+    loading: '로딩 중...',
     warning: {
       hostMemory:
         '호스트 메모리 사용률이 {percent}%입니다. 컨테이너 제한을 줄이거나 호스트 리소스를 늘려보세요.',

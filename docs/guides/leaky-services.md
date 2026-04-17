@@ -27,7 +27,7 @@ Without a memory limit:
 
 A memory limit caps how much RAM the container can use. When it hits the cap, Docker kills just that container, not the host or other services. This is the most important protection.
 
-Set it in OpenLander: **Service Detail** → **Settings** → **Resources** → Memory Limit.
+Set it in OpenLander: **Project Settings** → **Resources** → Memory Limit.
 
 A reasonable starting point for flaresolverr is **512MB to 1GB**, depending on your workload. If you see frequent OOM kills, increase the limit or reduce the restart interval (see below).
 
@@ -56,7 +56,7 @@ flaresolverr is a proxy server that solves Cloudflare challenges using a headles
 **Recommended setup in OpenLander:**
 
 1. Create a custom service with image `ghcr.io/flaresolverr/flaresolverr:latest`
-2. Set memory limit to **512MB** (Service Settings → Resources)
+2. Set memory limit to **512MB** (Project Settings → Resources)
 3. Confirm restart policy is `unless-stopped` (default)
 4. Expose port `8191`
 
@@ -87,9 +87,9 @@ If you see repeated OOM alerts for the same service, the service is leaky. Apply
 
 ## Quick Reference
 
-| Step             | Where                                 | What to set                             |
-| ---------------- | ------------------------------------- | --------------------------------------- |
-| Memory limit     | Service Detail → Settings → Resources | 512MB to 1GB for browser-based services |
-| Restart policy   | Set by default                        | `unless-stopped`                        |
-| OOM alerts       | Operations Center                     | Check for "No memory limit configured"  |
-| Periodic restart | Host cron or scheduler container      | `docker restart ol-svc-{name}` nightly  |
+| Step             | Where                            | What to set                             |
+| ---------------- | -------------------------------- | --------------------------------------- |
+| Memory limit     | Project Settings → Resources     | 512MB to 1GB for browser-based services |
+| Restart policy   | Set by default                   | `unless-stopped`                        |
+| OOM alerts       | Operations Center                | Check for "No memory limit configured"  |
+| Periodic restart | Host cron or scheduler container | `docker restart ol-svc-{name}` nightly  |

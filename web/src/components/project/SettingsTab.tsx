@@ -4,6 +4,7 @@ import { DomainsPanel } from '@/components/config/DomainsPanel';
 import { WebhookPanel } from '@/components/config/WebhookPanel';
 import { DeploymentSourcePanel } from '@/components/project/DeploymentSourcePanel';
 import { ResourceLimitsPanel } from '@/components/config/ResourceLimitsPanel';
+import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 
 type SettingsSection = 'source' | 'env' | 'domains' | 'webhooks' | 'resources';
@@ -13,16 +14,17 @@ interface SettingsTabProps {
   projectStatus?: string;
 }
 
-const NAV_ITEMS: { id: SettingsSection; label: string }[] = [
-  { id: 'source', label: 'Deployment Source' },
-  { id: 'env', label: 'Environment Variables' },
-  { id: 'domains', label: 'Domains' },
-  { id: 'webhooks', label: 'Webhooks' },
-  { id: 'resources', label: 'Resource Limits' },
-];
-
 export function SettingsTab({ projectId, projectStatus }: SettingsTabProps) {
+  const { t } = useLanguage();
   const [activeSection, setActiveSection] = useState<SettingsSection>('source');
+
+  const navItems: { id: SettingsSection; label: string }[] = [
+    { id: 'source', label: 'Deployment Source' },
+    { id: 'env', label: 'Environment Variables' },
+    { id: 'domains', label: 'Domains' },
+    { id: 'webhooks', label: 'Webhooks' },
+    { id: 'resources', label: t('resources.title') },
+  ];
 
   return (
     <div className="flex flex-col md:flex-row h-full min-h-0 overflow-hidden">
@@ -30,7 +32,7 @@ export function SettingsTab({ projectId, projectStatus }: SettingsTabProps) {
       <div className="shrink-0 md:w-48 border-b md:border-b-0 md:border-r border-[hsl(var(--border))] bg-bg-panel">
         {/* Mobile: horizontal scroll row */}
         <div className="flex md:hidden overflow-x-auto px-3 py-2 gap-1">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveSection(item.id)}
@@ -48,7 +50,7 @@ export function SettingsTab({ projectId, projectStatus }: SettingsTabProps) {
 
         {/* Desktop: vertical list */}
         <div className="hidden md:flex flex-col p-3 gap-1">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveSection(item.id)}
