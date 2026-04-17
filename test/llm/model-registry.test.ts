@@ -6,6 +6,8 @@ import {
 } from '../../src/llm/model-registry.js';
 import { createModel } from '../../src/llm/index.js';
 import type { EventBus } from '../../src/events/index.js';
+import { LlmCircuitBreaker } from '../../src/llm/llm-circuit-breaker.js';
+import { LlmErrorType } from '../../src/llm/llm-error-types.js';
 
 vi.mock('../../src/llm/index.js', () => ({
   createModel: vi.fn((config: { model?: string }) => ({
@@ -128,6 +130,19 @@ describe('ModelRegistry', () => {
     expect(first).not.toBeNull();
     expect(second).toBe(first);
     expect(createModel).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null when provider circuit is open', () => {
+    const breaker = new LlmCircuitBreaker();
+    breaker.recordFailure('primary', LlmErrorType.PROVIDER_ERROR);
+    breaker.recordFailure('primary', LlmErrorType.PROVIDER_ERROR);
+    breaker.recordFailure('primary', LlmErrorType.PROVIDER_ERROR);
+    const registry = new ModelRegistry(createBaseConfig(), mockEventBus, breaker);
+
+    const model = registry.getModel('default');
+
+    expect(model).toBeNull();
+    expect(createModel).not.toHaveBeenCalled();
   });
 });
 

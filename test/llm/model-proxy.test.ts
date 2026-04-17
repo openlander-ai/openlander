@@ -21,7 +21,10 @@ type MockModelBundle = {
 class MockRegistry {
   private version = 0;
   private model: LanguageModel | null;
-  readonly getModelMock = vi.fn((feature: AIModelFeature | 'default') => this.model);
+  private circuitStatus: { state: 'closed' | 'open' | 'half_open'; failureCount: number } | null =
+    null;
+  readonly getModelMock = vi.fn((_feature: AIModelFeature | 'default') => this.model);
+  readonly getCircuitBreakerStatusMock = vi.fn(() => this.circuitStatus);
 
   constructor(model: LanguageModel | null) {
     this.model = model;
@@ -35,9 +38,25 @@ class MockRegistry {
     return this.getModelMock(feature);
   }
 
+  getCircuitBreakerStatus(): {
+    state: 'closed' | 'open' | 'half_open';
+    failureCount: number;
+  } | null {
+    return this.getCircuitBreakerStatusMock();
+  }
+
   setModel(model: LanguageModel | null): void {
     this.model = model;
     this.version += 1;
+  }
+
+  setCircuitStatus(
+    status: {
+      state: 'closed' | 'open' | 'half_open';
+      failureCount: number;
+    } | null,
+  ): void {
+    this.circuitStatus = status;
   }
 }
 
@@ -134,8 +153,21 @@ describe('createModelProxy', () => {
       'webAgent',
     ) as unknown as MinimalLanguageModelShape;
 
-    expect(() => proxy.modelId).toThrowError(
+    expect(() => proxy.modelId).toThrow(
       'LLM not configured for feature "webAgent". Add a provider in Settings → AI Model.',
+    );
+  });
+
+  it('throws circuit breaker error when provider is temporarily blocked', () => {
+    const registry = new MockRegistry(null);
+    registry.setCircuitStatus({ state: 'open', failureCount: 3 });
+    const proxy = createModelProxy(
+      registry as unknown as ModelRegistry,
+      'webAgent',
+    ) as unknown as MinimalLanguageModelShape;
+
+    expect(() => proxy.modelId).toThrow(
+      'LLM provider for feature "webAgent" is temporarily unavailable (open).',
     );
   });
 

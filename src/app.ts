@@ -10,6 +10,8 @@ import { DeployQueue } from './pipeline/deploy-queue.js';
 import { QuestionBridge } from './lib/question-bridge.js';
 import { ModelRegistry } from './llm/model-registry.js';
 import { createModelProxy } from './llm/model-proxy.js';
+import { LlmCircuitBreaker } from './llm/llm-circuit-breaker.js';
+import { ProviderHealthMonitor } from './llm/provider-health-monitor.js';
 import { WebhookManager } from './webhook/index.js';
 import { CloudflareTunnelManager } from './pipeline/cloudflare.js';
 
@@ -38,6 +40,7 @@ import {
 import { RollbackWatcher } from './monitor/rollback-watcher.js';
 import { ActivityLogger } from './monitor/activity-logger.js';
 import { AiUsageListener } from './monitor/ai-usage-listener.js';
+import { ProjectStateManager } from './monitor/project-state-manager.js';
 import { McpClientManager } from './mcp/client-manager.js';
 import { PlanEngine } from './pipeline/deploy-plan/engine.js';
 import { RecoveryCoordinator } from './monitor/recovery-coordinator.js';
@@ -162,6 +165,7 @@ export function setupRecoveryPostmortemAutomation({
 export interface AppContext {
   config: OpenLanderConfig;
   db: Database;
+  eventBus: EventBus;
   docker: Docker;
   serverContext: ServerContext;
   pipeline: DeployPipeline;
@@ -171,6 +175,7 @@ export interface AppContext {
   agentPool: AgentPool | null;
   agent: Agent | null;
   modelRegistry: ModelRegistry;
+  llmCircuitBreaker: LlmCircuitBreaker;
   model: LanguageModel | null;
   deployQueue: DeployQueue;
   // v0.2 modules
@@ -200,6 +205,8 @@ export interface AppContext {
   // v1.0: Recovery coordinator
   coordinator: RecoveryCoordinator;
   rollbackWatcher: RollbackWatcher;
+  stateManager: ProjectStateManager;
+  providerHealth: ProviderHealthMonitor;
   llmVerified: boolean;
 }
 
@@ -270,6 +277,7 @@ export async function createAppContext(
   activeAiUsageListener = aiUsageListener;
 
   const normalizedLlm = normalizeLlmConfig(config.llm);
+  const llmCircuitBreaker = new LlmCircuitBreaker();
 
   const hasLlmConfigured = (() => {
     if (Object.keys(normalizedLlm.providers).length === 0) {
@@ -293,6 +301,7 @@ export async function createAppContext(
         }
       : { providers: {}, defaultRoute: { providerId: '__none__' } },
     eventBus,
+    llmCircuitBreaker,
   );
 
   const model: LanguageModel | null = hasLlmConfigured
@@ -540,6 +549,8 @@ export async function createAppContext(
     onRegressionSignal: (signal) => coordinator.ingestRuntimeSignal(signal),
   });
 
+  const providerHealth = new ProviderHealthMonitor();
+
   // Build partial ctx without channelManager, then compose the full AppContext
   let mutableAgentPool = agentPool;
   let mutableAgent = agent;
@@ -547,6 +558,7 @@ export async function createAppContext(
   const partialCtx = {
     config,
     db,
+    eventBus,
     docker,
     serverContext,
     pipeline,
@@ -569,6 +581,8 @@ export async function createAppContext(
       mutableAgent = value;
     },
     modelRegistry,
+    llmCircuitBreaker,
+    providerHealth,
     model,
     deployQueue,
     projectHealthMonitor,
@@ -596,7 +610,9 @@ export async function createAppContext(
   // v0.4: ChannelManager needs AppContext but never self-references channelManager.
   // We cast partialCtx which is structurally complete for ChannelManager's actual usage.
   const channelManager = new ChannelManager(partialCtx as AppContext);
-  const ctx: AppContext = { ...partialCtx, channelManager };
+  const ctx = { ...partialCtx, channelManager } as AppContext;
+  ctx.stateManager = new ProjectStateManager(ctx);
+  ctx.providerHealth.start(ctx);
   coordinator.setConfigGetter(() => ctx.config);
 
   if (ctx.agentPool) {
@@ -604,6 +620,8 @@ export async function createAppContext(
     ctx.agentPool.setTools(tools);
     ctx.agentPool.setQuestionBridge(ctx.questionBridge);
   }
+
+  ctx.providerHealth.start(ctx);
 
   const incidentReporter = new IncidentReporter(channelManager, eventBus, db, config);
   incidentReporter.start();
@@ -666,6 +684,7 @@ export function shutdownAppContext(ctx: AppContext): void {
   activeAiUsageListener = null;
   activePostmortemAutomationStop = null;
   getPostmortemInstance()?.stop();
+  ctx.providerHealth.stop();
   ctx.rollbackWatcher.stop();
   ctx.alertMonitor.stop();
   ctx.systemMaintenanceMonitor.stop();

@@ -13,6 +13,7 @@ import { compactHistory } from './compaction.js';
 import { decisionEngine } from './decision.js';
 import type { ApprovalGate } from '../pipeline/approval-gate.js';
 import { eventBus } from '../events/index.js';
+import { classifyLlmError, LlmErrorType } from './llm-error-types.js';
 
 /**
  * OpenLander AI Agent.
@@ -318,7 +319,9 @@ export class Agent {
         }
       } catch (error) {
         const rawMsg = error instanceof Error ? error.message : String(error);
-        const isRateLimit = /rate.limit|too many|429|quota|exceeded/i.test(rawMsg);
+        const errorType = classifyLlmError(error);
+        const isRateLimit =
+          errorType === LlmErrorType.RATE_LIMIT || errorType === LlmErrorType.QUOTA_EXHAUSTED;
         const errMsg = isRateLimit
           ? `LLM rate limit exceeded. Please wait a moment and try again. (${rawMsg})`
           : rawMsg;

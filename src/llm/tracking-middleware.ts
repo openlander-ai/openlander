@@ -9,6 +9,8 @@ import type {
 } from '@ai-sdk/provider';
 import type { EventBus } from '../events/index.js';
 import { extractUsageFromResult, calculateCost } from './transparency.js';
+import { classifyLlmError, sanitizeLlmErrorMessage } from './llm-error-types.js';
+import type { LlmErrorType } from './llm-error-types.js';
 
 export interface TrackingContext {
   projectId?: string;
@@ -32,6 +34,8 @@ interface AiUsagePayload {
   actionType?: string;
   source?: string;
   toolsCalled?: string[];
+  errorMessage?: string;
+  errorType?: LlmErrorType;
 }
 
 const trackingStore = new AsyncLocalStorage<TrackingContext>();
@@ -82,6 +86,10 @@ export function createTrackingMiddleware(
 
         return result;
       } catch (error) {
+        const errorType = classifyLlmError(error);
+        const rawMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = sanitizeLlmErrorMessage(rawMessage);
+
         const payload: AiUsagePayload = {
           modelName,
           provider,
@@ -96,6 +104,8 @@ export function createTrackingMiddleware(
           actionType: ctx?.actionType ?? 'system',
           source: ctx?.source ?? 'auto',
           toolsCalled: ctx?.toolsCalled,
+          errorMessage,
+          errorType,
         };
 
         void eventBus.emit('ai:usage' as never, payload as never);
@@ -116,7 +126,7 @@ export function createTrackingMiddleware(
       let outputTokens = 0;
       let usageEmitted = false;
 
-      const emitUsage = (result: 'success' | 'failure') => {
+      const emitUsage = (result: 'success' | 'failure', error?: unknown) => {
         if (usageEmitted) return;
         usageEmitted = true;
 
@@ -138,6 +148,17 @@ export function createTrackingMiddleware(
           source: ctx?.source ?? 'auto',
           toolsCalled: ctx?.toolsCalled,
         };
+
+        if (error) {
+          payload.errorType = classifyLlmError(error);
+          const rawMessage =
+            error instanceof Error
+              ? error.message
+              : typeof error === 'string'
+                ? error
+                : JSON.stringify(error);
+          payload.errorMessage = sanitizeLlmErrorMessage(rawMessage);
+        }
 
         void eventBus.emit('ai:usage' as never, payload as never);
       };
@@ -171,7 +192,7 @@ export function createTrackingMiddleware(
 
         return { ...streamResult, stream: transformedStream };
       } catch (error) {
-        emitUsage('failure');
+        emitUsage('failure', error);
         throw error;
       }
     },

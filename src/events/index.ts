@@ -15,6 +15,7 @@ import type { ChatStreamEvent } from '../types/agent-events.js';
 import type { Question } from '../lib/question-bridge.js';
 import type { Alert } from '../monitor/alerts.js';
 import type { RequestIdentity } from '../types/identity.js';
+import type { LlmErrorType } from '../llm/llm-error-types.js';
 
 const log = createModuleLogger('events');
 
@@ -48,6 +49,7 @@ export type EventType =
   | 'container:start'
   | 'container:stop'
   | 'container:remove'
+  | 'project:status-changed'
   | 'project:archive'
   | 'project:unarchive'
   | 'container:missing'
@@ -238,6 +240,12 @@ export interface EventPayload {
   'container:start': { projectId: string; containerId: string; serverId?: string };
   'container:stop': { projectId: string; containerId: string; serverId?: string };
   'container:remove': { projectId: string; containerId: string };
+  'project:status-changed': {
+    projectId: string;
+    from: string;
+    to: string;
+    reason: string;
+  };
   'project:archive': { projectId: string };
   'project:unarchive': { projectId: string; port: number };
   'container:missing': {
@@ -314,6 +322,8 @@ export interface EventPayload {
     actionType?: string;
     source?: string;
     toolsCalled?: string[];
+    errorMessage?: string;
+    errorType?: LlmErrorType;
   };
   'health:degraded': {
     projectId: string;

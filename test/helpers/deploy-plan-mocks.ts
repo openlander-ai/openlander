@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import type { Database } from '../../src/db/index.js';
+import { LlmCircuitBreaker } from '../../src/llm/llm-circuit-breaker.js';
 import { ModelRegistry } from '../../src/llm/model-registry.js';
 import { DeployQueue } from '../../src/pipeline/deploy-queue.js';
 import type { EventBus } from '../../src/events/index.js';
@@ -30,7 +31,7 @@ export function createMockPlanEngine(overrides?: Record<string, unknown>) {
     getPlan: vi.fn().mockResolvedValue(null),
     listPlans: vi.fn().mockResolvedValue([]),
     ...overrides,
-  };
+  } as unknown as AppContext;
 }
 
 /**
@@ -84,6 +85,7 @@ export function createMockDeployPlan(overrides?: Record<string, unknown>) {
 export function createMockPlanContext(db?: Database): AppContext {
   // Create a minimal mock database if not provided
   const mockDb = db || ({} as Database);
+  const llmCircuitBreaker = new LlmCircuitBreaker();
 
   return {
     config: {
@@ -112,9 +114,14 @@ export function createMockPlanContext(db?: Database): AppContext {
     } as unknown as AppContext['env'],
     agentPool: null,
     agent: null,
-    modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }, {
-      emit: vi.fn().mockResolvedValue(undefined),
-    } as unknown as EventBus),
+    modelRegistry: new ModelRegistry(
+      { providers: {}, defaultRoute: { providerId: 'none' } },
+      {
+        emit: vi.fn().mockResolvedValue(undefined),
+      } as unknown as EventBus,
+      llmCircuitBreaker,
+    ),
+    llmCircuitBreaker,
     model: null,
     deployQueue: new DeployQueue(),
     webhookManager: {
@@ -173,8 +180,15 @@ export function createMockPlanContext(db?: Database): AppContext {
     approvalGate: {
       dispose: vi.fn(),
     } as unknown as AppContext['approvalGate'],
+    providerHealth: {
+      start: vi.fn(),
+      stop: vi.fn(),
+      checkAll: vi.fn(),
+      getHealth: vi.fn().mockReturnValue(null),
+      getAllHealth: vi.fn().mockReturnValue(new Map()),
+    } as unknown as AppContext['providerHealth'],
     llmVerified: false,
-  };
+  } as unknown as AppContext;
 }
 
 /**

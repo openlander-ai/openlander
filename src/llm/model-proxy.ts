@@ -16,6 +16,13 @@ export function createModelProxy(
     }
 
     if (cachedModel === null) {
+      const circuitStatus = registry.getCircuitBreakerStatus(feature);
+      if (circuitStatus && circuitStatus.state !== 'closed') {
+        throw new Error(
+          `LLM provider for feature "${feature}" is temporarily unavailable (${circuitStatus.state}).`,
+        );
+      }
+
       throw new Error(
         `LLM not configured for feature "${feature}". Add a provider in Settings → AI Model.`,
       );

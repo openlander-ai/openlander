@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import type { Database } from '../../src/db/index.js';
+import { LlmCircuitBreaker } from '../../src/llm/llm-circuit-breaker.js';
 import { ModelRegistry } from '../../src/llm/model-registry.js';
 import { DeployQueue } from '../../src/pipeline/deploy-queue.js';
 import type { EventBus } from '../../src/events/index.js';
@@ -23,7 +24,7 @@ export function createMockDocker() {
     }),
     startContainer: vi.fn(),
     getLogs: vi.fn().mockResolvedValue(''),
-  };
+  } as unknown as AppContext;
 }
 
 export function createMockPipeline() {
@@ -156,6 +157,8 @@ export function createMockAgent() {
 }
 
 export function createMockContext(db: Database): AppContext {
+  const llmCircuitBreaker = new LlmCircuitBreaker();
+
   return {
     config: {
       git: { sshKeyPath: '', cloneDir: '' },
@@ -175,9 +178,14 @@ export function createMockContext(db: Database): AppContext {
     channelManager: createMockChannelManager() as unknown as AppContext['channelManager'],
     agentPool: null,
     agent: createMockAgent() as unknown as AppContext['agent'],
-    modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }, {
-      emit: vi.fn().mockResolvedValue(undefined),
-    } as unknown as EventBus),
+    modelRegistry: new ModelRegistry(
+      { providers: {}, defaultRoute: { providerId: 'none' } },
+      {
+        emit: vi.fn().mockResolvedValue(undefined),
+      } as unknown as EventBus,
+      llmCircuitBreaker,
+    ),
+    llmCircuitBreaker,
     model: null,
     deployQueue: new DeployQueue(),
     serviceManager: createMockServiceManager() as unknown as AppContext['serviceManager'],
@@ -218,6 +226,13 @@ export function createMockContext(db: Database): AppContext {
     approvalGate: {
       dispose: vi.fn(),
     } as unknown as AppContext['approvalGate'],
+    providerHealth: {
+      start: vi.fn(),
+      stop: vi.fn(),
+      checkAll: vi.fn(),
+      getHealth: vi.fn().mockReturnValue(null),
+      getAllHealth: vi.fn().mockReturnValue(new Map()),
+    } as unknown as AppContext['providerHealth'],
     llmVerified: false,
-  };
+  } as unknown as AppContext;
 }

@@ -554,18 +554,31 @@ export function createSetupRoutes(ctx: AppContext): Hono {
   api.get('/setup/providers', (c) => {
     const config = loadConfig();
     const providers = config.llm.providers ?? {};
+    const allHealth = ctx.providerHealth.getAllHealth();
 
-    const masked = Object.entries(providers).map(([id, entry]) => ({
-      id,
-      provider: entry.provider,
-      defaultModel: entry.defaultModel,
-      hasApiKey: !!(entry.apiKey || entry.authToken),
-      apiKeyPreview: entry.apiKey
-        ? entry.apiKey.substring(0, 6) + '······'
-        : entry.authToken
-          ? '(oauth)'
-          : '',
-    }));
+    const masked = Object.entries(providers).map(([id, entry]) => {
+      const health = allHealth.get(id);
+      return {
+        id,
+        provider: entry.provider,
+        defaultModel: entry.defaultModel,
+        hasApiKey: !!(entry.apiKey || entry.authToken),
+        apiKeyPreview: entry.apiKey
+          ? entry.apiKey.substring(0, 6) + '······'
+          : entry.authToken
+            ? '(oauth)'
+            : '',
+        createdAt: entry.createdAt ?? null,
+        health: health
+          ? {
+              ok: health.ok,
+              latencyMs: health.latencyMs,
+              error: health.error,
+              checkedAt: health.checkedAt.toISOString(),
+            }
+          : null,
+      };
+    });
 
     return c.json({ providers: masked });
   });
@@ -601,6 +614,14 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'MISSING_FIELD', message: 'apiKey or authToken is required' }, 400);
     }
 
+    const existingConfig = loadConfig();
+    if (existingConfig.llm.providers?.[body.id]) {
+      return c.json(
+        { error: 'DUPLICATE_PROVIDER_ID', message: 'Provider with this ID already exists' },
+        400,
+      );
+    }
+
     const testResult = await runLlmConnectivityTest({
       provider: body.provider,
       model: body.defaultModel,
@@ -630,6 +651,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         apiKey: body.apiKey,
         authToken: body.authToken,
         defaultModel: body.defaultModel,
+        createdAt: new Date().toISOString(),
       },
     };
 
@@ -705,6 +727,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         {
           error: 'DEFAULT_PROVIDER',
           message: 'Cannot delete the default provider. Reassign defaultRoute first.',
+          suggestion: '다른 제공자를 기본으로 먼저 지정한 후 삭제하세요.',
         },
         400,
       );

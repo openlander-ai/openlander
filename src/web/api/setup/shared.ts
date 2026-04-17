@@ -115,6 +115,7 @@ export async function runLlmConnectivityTest(
       model,
       prompt: 'Respond with exactly: ok',
       maxOutputTokens: 5,
+      abortSignal: AbortSignal.timeout(10_000),
     });
 
     return { ok: true, latencyMs: Date.now() - start };

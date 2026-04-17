@@ -12,6 +12,18 @@
 
 import type { LlmErrorType } from './llm-error-types.js';
 
+interface ProviderState {
+  state: LlmCircuitBreakerState;
+  failures: number[];
+  openedAt?: number;
+}
+
+const DEFAULT_CONFIG: Required<LlmCircuitBreakerConfig> = {
+  failureThreshold: 3,
+  windowMs: 300_000,
+  cooldownMs: 600_000,
+};
+
 /**
  * Circuit breaker state machine.
  */
@@ -71,13 +83,19 @@ export interface LlmCircuitBreakerStatus {
  *   }
  */
 export class LlmCircuitBreaker {
+  private readonly config: Required<LlmCircuitBreakerConfig>;
+  private readonly state = new Map<string, ProviderState>();
+
   /**
    * Create a new circuit breaker with optional config.
    *
    * @param config - Optional configuration overrides
    */
   constructor(config?: Partial<LlmCircuitBreakerConfig>) {
-    void config; // Stub: implementation in T8
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...config,
+    };
   }
 
   /**
@@ -91,10 +109,24 @@ export class LlmCircuitBreaker {
    * @param options - Optional call options
    */
   recordFailure(providerId: string, errorType: LlmErrorType, options?: LlmCallOptions): void {
-    void providerId;
     void errorType;
-    void options;
-    // Stub: implementation in T8
+
+    if (options?.isHealthCheck) {
+      return;
+    }
+
+    const providerState = this.getOrCreateState(providerId);
+    const now = Date.now();
+    providerState.failures.push(now);
+    this.pruneFailures(providerState, now);
+
+    if (
+      providerState.state === 'half_open' ||
+      providerState.failures.length >= this.config.failureThreshold
+    ) {
+      providerState.state = 'open';
+      providerState.openedAt = now;
+    }
   }
 
   /**
@@ -105,8 +137,10 @@ export class LlmCircuitBreaker {
    * @param providerId - Provider identifier
    */
   recordSuccess(providerId: string): void {
-    void providerId;
-    // Stub: implementation in T8
+    this.state.set(providerId, {
+      state: 'closed',
+      failures: [],
+    });
   }
 
   /**
@@ -118,8 +152,25 @@ export class LlmCircuitBreaker {
    * @returns true if calls are allowed, false if circuit is open
    */
   canCall(providerId: string): boolean {
-    void providerId;
-    return true; // Stub: always allow in interface
+    const providerState = this.getOrCreateState(providerId);
+    const now = Date.now();
+    this.pruneFailures(providerState, now);
+
+    if (providerState.state === 'closed' || providerState.state === 'half_open') {
+      return true;
+    }
+
+    if (providerState.openedAt === undefined) {
+      providerState.openedAt = now;
+    }
+
+    if (now - providerState.openedAt >= this.config.cooldownMs) {
+      providerState.state = 'half_open';
+      providerState.openedAt = undefined;
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -129,11 +180,46 @@ export class LlmCircuitBreaker {
    * @returns Status snapshot
    */
   getStatus(providerId: string): LlmCircuitBreakerStatus {
-    void providerId;
-    // Stub: implementation in T8
-    return {
-      state: 'closed',
-      failureCount: 0,
+    const providerState = this.getOrCreateState(providerId);
+    const now = Date.now();
+    this.pruneFailures(providerState, now);
+
+    const status: LlmCircuitBreakerStatus = {
+      state: providerState.state,
+      failureCount: providerState.failures.length,
     };
+
+    if (providerState.state === 'open' && providerState.openedAt !== undefined) {
+      status.cooldownRemainingMs = Math.max(
+        0,
+        this.config.cooldownMs - (now - providerState.openedAt),
+      );
+    }
+
+    return status;
+  }
+
+  private getOrCreateState(providerId: string): ProviderState {
+    const existing = this.state.get(providerId);
+    if (existing) {
+      return existing;
+    }
+
+    const initialState: ProviderState = {
+      state: 'closed',
+      failures: [],
+    };
+    this.state.set(providerId, initialState);
+    return initialState;
+  }
+
+  private pruneFailures(providerState: ProviderState, now: number): void {
+    providerState.failures = providerState.failures.filter(
+      (timestamp) => now - timestamp <= this.config.windowMs,
+    );
+
+    if (providerState.state === 'closed' && providerState.failures.length === 0) {
+      providerState.openedAt = undefined;
+    }
   }
 }
