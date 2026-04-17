@@ -56,7 +56,7 @@ export interface ProviderInfo {
     checkedAt?: string;
   };
   circuitBreaker?: {
-    state: 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+    state: 'closed' | 'open' | 'half_open';
     failures: number;
     lastFailureTime?: number;
     nextRetryTime?: number;

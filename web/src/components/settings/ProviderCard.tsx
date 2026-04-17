@@ -67,14 +67,14 @@ export function ProviderCard({ provider, isDeleting, onDelete }: ProviderCardPro
 
       <div className="flex flex-wrap items-center gap-4 text-xs text-muted-ol">
         <div className="flex items-center gap-1.5">
-          {provider.circuitBreaker?.state === 'OPEN' ? (
+          {provider.circuitBreaker?.state === 'open' ? (
             <>
               <XCircle className="h-3.5 w-3.5 text-error" />
               <span className="text-error font-medium">
                 {t('llmSettings.circuitBreaker.open') || 'Blocked (Waiting for retry)'}
               </span>
             </>
-          ) : provider.circuitBreaker?.state === 'HALF_OPEN' ? (
+          ) : provider.circuitBreaker?.state === 'half_open' ? (
             <>
               <Loader2 className="h-3.5 w-3.5 text-warning animate-spin" />
               <span className="text-warning font-medium">
