@@ -130,6 +130,15 @@ export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
   },
 };
 
+const SERVICE_MEMORY_LIMITS: Record<string, { memoryLimitBytes: number; cpuShares: number }> = {
+  postgresql: { memoryLimitBytes: 536870912, cpuShares: 512 }, // 512MB
+  mysql: { memoryLimitBytes: 536870912, cpuShares: 512 }, // 512MB
+  redis: { memoryLimitBytes: 134217728, cpuShares: 256 }, // 128MB
+  mongodb: { memoryLimitBytes: 1073741824, cpuShares: 1024 }, // 1GB
+  minio: { memoryLimitBytes: 268435456, cpuShares: 512 }, // 256MB
+  rabbitmq: { memoryLimitBytes: 268435456, cpuShares: 512 }, // 256MB
+};
+
 /**
  * Standard env var key for each built-in service type.
  * First service of a type gets the standard key; subsequent ones are prefixed.
@@ -427,6 +436,11 @@ export class ServiceManager {
       }
     }
 
+    const memLimits = SERVICE_MEMORY_LIMITS[type] ?? {
+      memoryLimitBytes: 536870912,
+      cpuShares: 512,
+    };
+
     const containerId = await this.docker.runServiceContainer({
       imageTag: image,
       name: containerName,
@@ -435,6 +449,8 @@ export class ServiceManager {
       envVars: envRecord,
       serviceName: opts.name,
       volumeBinds: [`${volumeName}:${dataMountPath}`],
+      memoryLimitBytes: memLimits.memoryLimitBytes,
+      cpuShares: memLimits.cpuShares,
       ...(containerHealthcheck ? { healthcheck: containerHealthcheck } : {}),
       ...(containerCmd ? { cmd: containerCmd } : {}),
     });
