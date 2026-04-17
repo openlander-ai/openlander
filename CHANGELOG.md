@@ -57,6 +57,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Coordinator exception handling**: try/catch added to all async event handlers (deploy:failed, compose:failed, container failure, health:degraded)
 - **Container recovery blocked path**: Sets status='error' when recovery is blocked (prevents stale 'running' status with dead container)
 
+## [1.0.0-rc.9] — 2026-04-18
+
+### Added
+
+- **Docker memory management policy**: Resource profiles (micro/small/medium/large/custom) for all containers
+- **Memory limits enforcement**: Applied to all container creation paths (runContainer, runServiceContainer, runInfraContainer)
+- **Hardcoded infrastructure service limits**: postgres 512MB, mysql 512MB, redis 128MB, mongodb 1GB, minio 256MB, rabbitmq 256MB
+- **CpuShares per profile**: Soft CPU weight to prevent CPU monopolization
+- **Resource limit API**: `GET/PATCH /api/projects/:id/resources` endpoints for runtime memory management
+- **ResourceLimitsPanel**: Project settings UI for configuring memory profiles
+- **OOM alert enhancement**: Memory limit context in alert messages
+- **Host memory usage warning**: 85% threshold monitoring
+- **One-time migration**: Existing projects assigned small (512MB) default profile
+- **Cascade isolation integration test**: Validates memory limits across multi-project deployments
+- **Leaky service recipe documentation**: `docs/guides/leaky-services.md` with troubleshooting guide
+
+### Changed
+
+- **Container creation**: All Docker operations now enforce memory limits via resource profiles
+
+### Fixed
+
+- **Memory leak prevention**: Proper resource cleanup on container removal
+- **OOM recovery**: Enhanced diagnostics with memory limit context
+
 ## [Unreleased]
 
 ### Added
