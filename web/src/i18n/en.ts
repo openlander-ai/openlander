@@ -1113,6 +1113,31 @@ export const translations = {
     verifying: 'Verifying connection...',
     verified: 'Connected! ({ms}ms)',
     verifyFailed: 'Connection failed. Check your API key.',
+    healthy: 'Healthy',
+    unhealthy: 'Unhealthy',
+    untested: 'Untested',
+    registeredAt: 'Registered',
+    latency: 'Latency',
+    deleteDefaultGuide:
+      'This is the default provider. Please set another provider as default first.',
+    circuitBreaker: {
+      open: 'Blocked (Waiting for retry)',
+      halfOpen: 'Testing recovery...',
+    },
+    errorTypeLabels: {
+      RATE_LIMIT: 'Rate Limit',
+      QUOTA_EXHAUSTED: 'Quota Exceeded',
+      AUTH_FAILURE: 'Auth Error',
+      MODEL_INVALID: 'Model Error',
+      UNKNOWN: 'Error',
+    },
+    errorTypes: {
+      RATE_LIMIT: 'API rate limit exceeded. Please wait a moment before trying again.',
+      QUOTA_EXHAUSTED: 'API usage quota exceeded. Please check your billing details.',
+      AUTH_FAILURE: 'API authentication failed. Please check your API key.',
+      MODEL_INVALID: 'The selected model is invalid or unavailable.',
+      CIRCUIT_BREAKER: 'Too many failures. Waiting for automatic retry...',
+    },
   },
   project: {
     tabs: {

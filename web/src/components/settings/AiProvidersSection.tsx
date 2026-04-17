@@ -11,6 +11,14 @@ import { Button } from '@/components/ui/button.js';
 import { useLanguage } from '@/i18n/context.js';
 import { emitLlmChanged } from '@/lib/llm-events.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog.js';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog.js';
 import { LlmProviderOAuth } from './LlmProviderOAuth.js';
 import { ProviderCard } from './ProviderCard.js';
 import { AddProviderForm } from './AddProviderForm.js';
@@ -28,6 +36,7 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
 
   const [providerToDelete, setProviderToDelete] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showDefaultProviderGuide, setShowDefaultProviderGuide] = useState(false);
 
   const [googleConnected, setGoogleConnected] = useState(false);
   const [checkingGoogle, setCheckingGoogle] = useState(true);
@@ -48,11 +57,12 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
       await onProvidersChange();
       emitLlmChanged();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : t('llmSettings.errorDelete') || 'Failed to delete provider',
-      );
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete provider';
+      if (errorMessage.includes('DEFAULT_PROVIDER') || errorMessage.includes('default provider')) {
+        setShowDefaultProviderGuide(true);
+      } else {
+        setError(t('llmSettings.errorDelete') || errorMessage);
+      }
     } finally {
       setDeletingId(null);
       setProviderToDelete(null);
@@ -190,6 +200,21 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
         variant="destructive"
         onConfirm={executeDeleteProvider}
       />
+
+      <Dialog open={showDefaultProviderGuide} onOpenChange={setShowDefaultProviderGuide}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('llmSettings.deleteConfirmTitle') || 'Delete Provider'}</DialogTitle>
+            <DialogDescription>
+              {t('llmSettings.deleteDefaultGuide') ||
+                'This is the default provider. Please set another provider as default first.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setShowDefaultProviderGuide(false)}>OK</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

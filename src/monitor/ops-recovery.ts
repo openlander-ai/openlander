@@ -4,6 +4,7 @@ import { generateText } from 'ai';
 import type { AppContext } from '../app.js';
 import type { OpsIncidentEventRow } from '../db/types.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { classifyLlmError } from '../llm/llm-error-types.js';
 import { createModelProxy } from '../llm/model-proxy.js';
 import { withTracking } from '../llm/tracking-middleware.js';
 import { eventBus } from '../events/index.js';
@@ -430,6 +431,15 @@ export class RecoveryPipeline {
     failureReason: string,
     logs: string,
   ): Promise<string | null> {
+    const providerId = this.ctx.config.llm.defaultRoute?.providerId ?? 'default';
+    if (!this.ctx.llmCircuitBreaker.canCall(providerId)) {
+      log.warn(
+        { projectId: context.projectId, providerId },
+        'LLM circuit breaker open — skipping recovery diagnosis',
+      );
+      return null;
+    }
+
     try {
       let model;
       try {
@@ -467,6 +477,7 @@ export class RecoveryPipeline {
           }),
       );
       const diagnosis = response.text.trim();
+      this.ctx.llmCircuitBreaker.recordSuccess(providerId);
       this.addIncidentEvent(
         context.incidentId,
         'diagnosed',
@@ -474,6 +485,7 @@ export class RecoveryPipeline {
       );
       return diagnosis.length > 0 ? diagnosis : null;
     } catch (error) {
+      this.ctx.llmCircuitBreaker.recordFailure(providerId, classifyLlmError(error));
       log.warn({ error, projectId: context.projectId }, 'LLM diagnosis failed during recovery');
       return null;
     }

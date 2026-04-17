@@ -36,6 +36,9 @@ function createProjectRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
     access_code_iv: null,
     is_preview: 0,
     pr_number: null,
+    project_type: 'web',
+    health_check_strategy: null,
+    health_check_path: null,
     ...overrides,
   };
 }

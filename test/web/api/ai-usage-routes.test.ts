@@ -43,6 +43,8 @@ function insertUsageLog(
     cost_usd: overrides.cost_usd ?? 0.01,
     tools_called: overrides.tools_called ?? '[]',
     result: overrides.result ?? 'success',
+    error_message: null,
+    error_type: null,
     duration_ms: overrides.duration_ms ?? 500,
     user_id: null,
     tenant_id: null,

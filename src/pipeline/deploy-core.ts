@@ -68,6 +68,37 @@ import {
   type MonorepoOrchestrationDeps,
 } from './deploy/monorepo-orchestrator.js';
 import { detectMonorepoDependencies } from './deploy/monorepo-deps.js';
+import type { ProjectStatus, StateTransitionOptions } from '../monitor/project-state-manager.js';
+
+interface ProjectStateTransitioner {
+  transition: (
+    projectId: string,
+    targetStatus: ProjectStatus,
+    reason: string,
+    options?: StateTransitionOptions,
+  ) => Promise<boolean>;
+}
+
+function createFallbackStateTransitioner(db: Database): ProjectStateTransitioner {
+  return {
+    transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
+      if (targetStatus === 'failed') {
+        return Promise.resolve(false);
+      }
+
+      db.updateProject(projectId, { status: targetStatus });
+      return Promise.resolve(true);
+    },
+  };
+}
+
+function isProjectStateTransitioner(value: unknown): value is ProjectStateTransitioner {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    typeof (value as { transition?: unknown }).transition === 'function',
+  );
+}
 
 /**
  * Project configuration for a deployment.
@@ -229,6 +260,11 @@ export class DeployPipeline {
   private readonly rollbackExecutor: RollbackExecutor;
   private readonly buildExecutor: BuildExecutor;
   private readonly containerRunner: ContainerRunner;
+  private readonly stateManager: ProjectStateTransitioner;
+  private readonly jobManager?: JobManager;
+  private readonly composePipeline?: ComposePipeline;
+  private readonly autoDetector?: AutoDetector;
+  private readonly coordinator?: CoordinatorSuppressor;
 
   private get detectFailStep(): (buildLog: string) => string {
     return detectFailStep;
@@ -239,14 +275,32 @@ export class DeployPipeline {
     private readonly db: Database,
     private readonly env: EnvManager,
     private readonly config: OpenLanderConfig,
-    private readonly jobManager?: JobManager,
-    private readonly composePipeline?: ComposePipeline,
-    private readonly autoDetector?: AutoDetector,
-    private readonly coordinator?: CoordinatorSuppressor,
+    stateManagerOrJobManager?: ProjectStateTransitioner | JobManager,
+    jobManagerOrComposePipeline?: JobManager | ComposePipeline,
+    composePipelineOrAutoDetector?: ComposePipeline | AutoDetector,
+    autoDetectorOrCoordinator?: AutoDetector | CoordinatorSuppressor,
+    coordinator?: CoordinatorSuppressor,
   ) {
+    const hasExplicitStateManager = isProjectStateTransitioner(stateManagerOrJobManager);
+    this.stateManager = hasExplicitStateManager
+      ? stateManagerOrJobManager
+      : createFallbackStateTransitioner(this.db);
+    this.jobManager = hasExplicitStateManager
+      ? (jobManagerOrComposePipeline as JobManager | undefined)
+      : (stateManagerOrJobManager as JobManager);
+    this.composePipeline = hasExplicitStateManager
+      ? (composePipelineOrAutoDetector as ComposePipeline | undefined)
+      : (jobManagerOrComposePipeline as ComposePipeline | undefined);
+    this.autoDetector = hasExplicitStateManager
+      ? (autoDetectorOrCoordinator as AutoDetector | undefined)
+      : (composePipelineOrAutoDetector as AutoDetector | undefined);
+    this.coordinator = hasExplicitStateManager
+      ? coordinator
+      : (autoDetectorOrCoordinator as CoordinatorSuppressor | undefined);
+
     this.tunnelManager = new TunnelManager(this.db);
     this.lifecycle = new ContainerLifecycle(this.docker, this.db, this.coordinator);
-    this.rollbackExecutor = new RollbackExecutor(this.docker, this.db);
+    this.rollbackExecutor = new RollbackExecutor(this.docker, this.db, this.stateManager);
     this.buildExecutor = new BuildExecutor(this.docker);
     this.containerRunner = new ContainerRunner(this.docker, this.db);
     this.cleanupStaleTunnels();
@@ -292,6 +346,18 @@ export class DeployPipeline {
     const PROJECT_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
     if (!PROJECT_NAME_REGEX.test(name)) {
       throw new InvalidProjectNameError(name);
+    }
+  }
+
+  private async transitionProjectState(
+    projectId: string,
+    targetStatus: ProjectStatus,
+    reason: string,
+    updates: Record<string, unknown> = {},
+  ): Promise<void> {
+    await this.stateManager.transition(projectId, targetStatus, reason);
+    if (Object.keys(updates).length > 0) {
+      this.db.updateProject(projectId, updates);
     }
   }
 
@@ -404,8 +470,7 @@ export class DeployPipeline {
           dockerTarget: config.dockerTarget ?? null,
         });
       }
-      this.db.updateProject(existing.id, {
-        status: 'building',
+      await this.transitionProjectState(existing.id, 'building', 'deploy-started', {
         ...(config.buildContext ? { buildContext: config.buildContext } : {}),
         ...(config.dockerfilePath ? { dockerfilePath: config.dockerfilePath } : {}),
         ...(config.dockerTarget ? { dockerTarget: config.dockerTarget } : {}),
@@ -447,7 +512,7 @@ export class DeployPipeline {
           }
         : {}),
     });
-    this.db.updateProject(projectId, { status: 'building' });
+    await this.transitionProjectState(projectId, 'building', 'deploy-started');
     this.jobManager?.trackJob(projectId, projectName);
 
     this.fireAndForgetDeploy(
@@ -490,7 +555,7 @@ export class DeployPipeline {
   ): void {
     log.error({ projectId, error: errMsg }, 'Background deploy failed');
     this.jobManager?.updatePhase(projectId, 'failed', errMsg);
-    this.db.updateProject(projectId, { status: 'error' });
+    void this.stateManager.transition(projectId, 'error', 'deploy-failed');
     for (const env of this.db.getEnvironmentsByProject(projectId)) {
       this.db.updateEnvironment(env.id, { status: 'error' });
     }
@@ -526,7 +591,7 @@ export class DeployPipeline {
       repoUrl: config.repoUrl,
       branch: config.branch,
     });
-    this.db.updateProject(parentId, { status: 'building' });
+    void this.stateManager.transition(parentId, 'building', 'deploy-started');
     this.jobManager?.trackJob(parentId, parentName);
 
     // Fire-and-forget: run the monorepo deploy in background
@@ -564,7 +629,7 @@ export class DeployPipeline {
             }
           : {}),
       });
-      this.db.updateProject(projectId, { status: 'building' });
+      await this.transitionProjectState(projectId, 'building', 'deploy-started');
       this.jobManager?.trackJob(projectId, projectName);
     } else if (config.branch) {
       this.db.updateProject(projectId, {
@@ -596,7 +661,7 @@ export class DeployPipeline {
           preflightResult.warnings.length > 0 ? preflightResult.warnings : undefined;
       } catch (error) {
         if (error instanceof PreflightCheckError) {
-          this.db.updateProject(projectId, { status: 'error' });
+          await this.transitionProjectState(projectId, 'error', 'deploy-build-error');
           this.jobManager?.updatePhase(projectId, 'failed', error.message);
           return {
             success: false,
@@ -709,8 +774,7 @@ export class DeployPipeline {
       imageTag: null,
       assignedPort: null,
     });
-    this.db.updateProject(projectId, {
-      status: 'building',
+    await this.transitionProjectState(projectId, 'building', 'deploy-started', {
       containerId: null,
       imageTag: null,
       assignedPort: null,
@@ -897,7 +961,7 @@ export class DeployPipeline {
         log.warn({ err: classifyError, projectId }, 'Build failure classification failed');
       }
       this.db.updateEnvironment(environmentId, { status: 'error' });
-      this.db.updateProject(projectId, { status: 'error' });
+      await this.transitionProjectState(projectId, 'error', 'deploy-failed');
       this.db.createDeployLog({
         id: nanoid(12),
         projectId,
@@ -945,6 +1009,7 @@ export class DeployPipeline {
       docker: this.docker,
       db: this.db,
       env: this.env,
+      stateManager: this.stateManager,
       buildExecutor: this.buildExecutor,
       containerRunner: this.containerRunner,
       composePipeline: this.composePipeline,
@@ -962,6 +1027,7 @@ export class DeployPipeline {
       docker: this.docker,
       db: this.db,
       env: this.env,
+      stateManager: this.stateManager,
       buildExecutor: this.buildExecutor,
       containerRunner: this.containerRunner,
       jobManager: this.jobManager,
@@ -983,7 +1049,7 @@ export class DeployPipeline {
         repoUrl: config.repoUrl,
         branch: config.branch,
       });
-      this.db.updateProject(parentId, { status: 'building' });
+      await this.transitionProjectState(parentId, 'building', 'deploy-started');
       this.jobManager?.trackJob(parentId, parentName);
     }
 
@@ -1048,7 +1114,9 @@ export class DeployPipeline {
             /* best effort */
           }
         }
-        this.db.updateProject(child.id, { status: 'stopped', containerId: null });
+        await this.transitionProjectState(child.id, 'stopped', 'deploy-failed', {
+          containerId: null,
+        });
         log.info(
           { childId: child.id, oldName: child.name },
           'Cleaned up legacy "main" child (renamed to "app")',
@@ -1068,7 +1136,7 @@ export class DeployPipeline {
       );
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      this.db.updateProject(parentId, { status: 'error' });
+      await this.transitionProjectState(parentId, 'error', 'deploy-failed');
       this.jobManager?.updatePhase(parentId, 'failed', errorMsg);
       await eventBus.emit('deploy:failed', {
         projectId: parentId,
@@ -1099,7 +1167,7 @@ export class DeployPipeline {
     const validation = orchestrator.validateTopology(topology, usedPorts);
     if (!validation.valid) {
       const validationError = validation.errors.join('; ');
-      this.db.updateProject(parentId, { status: 'error' });
+      await this.transitionProjectState(parentId, 'error', 'deploy-failed');
       this.jobManager?.updatePhase(parentId, 'failed', validationError);
       await eventBus.emit('deploy:failed', {
         projectId: parentId,
@@ -1197,7 +1265,11 @@ export class DeployPipeline {
     });
 
     const allSuccess = orchestration.success && childResults.every((r) => r.success);
-    this.db.updateProject(parentId, { status: allSuccess ? 'running' : 'error' });
+    await this.transitionProjectState(
+      parentId,
+      allSuccess ? 'running' : 'error',
+      allSuccess ? 'deploy-success' : 'deploy-failed',
+    );
     this.jobManager?.updatePhase(parentId, allSuccess ? 'done' : 'failed');
 
     if (allSuccess) {
@@ -1320,8 +1392,7 @@ export class DeployPipeline {
 
       const previousPort = project.assigned_port ?? undefined;
 
-      this.db.updateProject(projectId, {
-        status: 'building',
+      await this.transitionProjectState(projectId, 'building', 'deploy-started', {
         containerId: null,
         imageTag: null,
         assignedPort: null,
@@ -1426,7 +1497,7 @@ export class DeployPipeline {
       });
 
       this.jobManager?.trackJob(projectId, projectName);
-      this.db.updateProject(projectId, { status: 'building' });
+      await this.transitionProjectState(projectId, 'building', 'deploy-started');
       if (prodEnv) {
         this.db.updateEnvironment(prodEnv.id, { status: 'building' });
       }
@@ -1540,8 +1611,7 @@ export class DeployPipeline {
       await this.docker.renameContainer(greenContainerId, canonicalName);
       shouldCleanupGreen = false;
 
-      this.db.updateProject(projectId, {
-        status: 'running',
+      await this.transitionProjectState(projectId, 'running', 'deploy-success', {
         containerId: greenContainerId,
         assignedPort: newPort,
         containerPort,
@@ -1617,7 +1687,7 @@ export class DeployPipeline {
       }
 
       if (blueStillServing) {
-        this.db.updateProject(projectId, { status: 'running' });
+        await this.transitionProjectState(projectId, 'running', 'deploy-running');
         if (environmentId) {
           const prodEnvErr = this.db.getEnvironment(environmentId);
           if (prodEnvErr) {
@@ -1625,7 +1695,7 @@ export class DeployPipeline {
           }
         }
       } else {
-        this.db.updateProject(projectId, { status: 'error' });
+        await this.transitionProjectState(projectId, 'error', 'deploy-runtime-error');
         if (environmentId) {
           const prodEnvErr = this.db.getEnvironment(environmentId);
           if (prodEnvErr) {

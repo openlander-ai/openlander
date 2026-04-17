@@ -109,6 +109,8 @@ function mapLogToCamelCase(log: {
   cost_usd: number | null;
   tools_called: string | null;
   result: string | null;
+  error_message: string | null;
+  error_type: string | null;
   duration_ms: number | null;
   source: string | null;
   created_at: string;
@@ -126,6 +128,8 @@ function mapLogToCamelCase(log: {
     costUsd: log.cost_usd,
     toolsCalled: log.tools_called,
     result: log.result,
+    errorMessage: log.error_message,
+    errorType: log.error_type,
     durationMs: log.duration_ms,
     source: log.source,
     createdAt: log.created_at,

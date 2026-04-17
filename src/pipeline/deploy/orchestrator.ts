@@ -26,6 +26,7 @@ import { checkDeployConnectivity } from './connectivity-check.js';
 import type { BuildExecutor } from './build-step.js';
 import type { ContainerRunner } from './run-step.js';
 import type { DeployResult, ProjectConfig } from '../deploy-core.js';
+import type { ProjectStatus, StateTransitionOptions } from '../../monitor/project-state-manager.js';
 
 const log = createModuleLogger('deploy');
 
@@ -33,6 +34,14 @@ export interface DeployOrchestrationDeps {
   docker: Docker;
   db: Database;
   env: EnvManager;
+  stateManager: {
+    transition: (
+      projectId: string,
+      targetStatus: ProjectStatus,
+      reason: string,
+      options?: StateTransitionOptions,
+    ) => Promise<boolean>;
+  };
   buildExecutor: BuildExecutor;
   containerRunner: ContainerRunner;
   composePipeline?: ComposePipeline;
@@ -41,6 +50,19 @@ export interface DeployOrchestrationDeps {
   applyPendingFix: (projectId: string, clonePath: string) => string | null;
   exposeTunnel: (projectId: string, port: number) => Promise<string>;
   secretScanEnabled: boolean;
+}
+
+async function transitionProjectState(
+  deps: DeployOrchestrationDeps,
+  projectId: string,
+  targetStatus: ProjectStatus,
+  reason: string,
+  updates: Record<string, unknown> = {},
+): Promise<void> {
+  await deps.stateManager.transition(projectId, targetStatus, reason);
+  if (Object.keys(updates).length > 0) {
+    deps.db.updateProject(projectId, updates);
+  }
 }
 
 export async function cloneAndAnalyze(
@@ -524,8 +546,7 @@ export async function runAndVerify(
     });
 
     if (shouldSyncProjectState) {
-      deps.db.updateProject(projectId, {
-        status: 'error',
+      await transitionProjectState(deps, projectId, 'error', 'deploy-runtime-error', {
         assignedPort: port,
         containerId,
         imageTag,
@@ -586,8 +607,7 @@ export async function runAndVerify(
   });
 
   if (shouldSyncProjectState) {
-    deps.db.updateProject(projectId, {
-      status: 'running',
+    await transitionProjectState(deps, projectId, 'running', 'deploy-success', {
       assignedPort: port,
       ...(containerPort != null ? { containerPort } : {}),
       containerId,

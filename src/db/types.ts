@@ -221,6 +221,8 @@ export interface AiUsageLogRow {
   cost_usd: number | null;
   tools_called: string;
   result: 'success' | 'failure' | 'partial';
+  error_message: string | null;
+  error_type: string | null;
   duration_ms: number;
   user_id: string | null;
   tenant_id: string | null;

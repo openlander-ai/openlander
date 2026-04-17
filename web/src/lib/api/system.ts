@@ -49,6 +49,18 @@ export interface ProviderInfo {
   defaultModel: string;
   hasApiKey: boolean;
   apiKeyPreview: string;
+  createdAt?: string;
+  health?: {
+    ok: boolean;
+    latencyMs?: number;
+    checkedAt?: string;
+  };
+  circuitBreaker?: {
+    state: 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+    failures: number;
+    lastFailureTime?: number;
+    nextRetryTime?: number;
+  };
 }
 
 export interface ProvidersResponse {

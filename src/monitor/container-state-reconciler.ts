@@ -3,6 +3,7 @@ import { isDockerNotFoundError } from '../errors.js';
 import type { EventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { Docker } from '../pipeline/docker.js';
+import type { ProjectStateManager } from './project-state-manager.js';
 
 const log = createModuleLogger('container-state-reconciler');
 
@@ -21,6 +22,7 @@ export class ContainerStateReconciler {
   private initialTimerId?: ReturnType<typeof setTimeout>;
   private orphanCount = 0;
   private reconciling = false;
+  private stateManager?: ProjectStateManager;
 
   constructor(
     private readonly docker: Docker,
@@ -28,6 +30,10 @@ export class ContainerStateReconciler {
     private readonly events: EventBus,
     private readonly options: { intervalMs?: number } = {},
   ) {}
+
+  setStateManager(sm: ProjectStateManager): void {
+    this.stateManager = sm;
+  }
 
   start(): void {
     if (this.intervalId) {
@@ -106,6 +112,10 @@ export class ContainerStateReconciler {
           containerId,
           suggestion: MISSING_CONTAINER_SUGGESTION,
         });
+
+        if (this.stateManager) {
+          await this.stateManager.transition(project.id, 'stopped', 'container-missing');
+        }
 
         log.warn(
           { err: error, containerId, projectId: project.id },

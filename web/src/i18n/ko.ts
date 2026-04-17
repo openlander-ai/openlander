@@ -1111,6 +1111,30 @@ export const translations = {
     verifying: '연결 확인 중...',
     verified: '연결됨! ({ms}ms)',
     verifyFailed: '연결 실패. API 키를 확인하세요.',
+    healthy: '정상',
+    unhealthy: '오류',
+    untested: '확인 안됨',
+    registeredAt: '등록일',
+    latency: '응답시간',
+    deleteDefaultGuide: '이 제공자는 기본 제공자입니다. 다른 제공자를 기본으로 지정하세요.',
+    circuitBreaker: {
+      open: '차단됨 (재시도 대기 중)',
+      halfOpen: '복구 테스트 중...',
+    },
+    errorTypeLabels: {
+      RATE_LIMIT: '레이트 리밋',
+      QUOTA_EXHAUSTED: '한도 초과',
+      AUTH_FAILURE: '인증 오류',
+      MODEL_INVALID: '모델 오류',
+      UNKNOWN: '오류',
+    },
+    errorTypes: {
+      RATE_LIMIT: 'API 호출 빈도 제한에 걸렸습니다. 잠시 후 다시 시도해주세요.',
+      QUOTA_EXHAUSTED: 'API 사용량 한도를 초과했습니다. 결제 정보를 확인해주세요.',
+      AUTH_FAILURE: 'API 인증에 실패했습니다. API 키를 확인해주세요.',
+      MODEL_INVALID: '선택한 모델을 사용할 수 없습니다.',
+      CIRCUIT_BREAKER: '오류가 반복되어 자동 재시도 대기 중입니다...',
+    },
   },
   project: {
     tabs: {

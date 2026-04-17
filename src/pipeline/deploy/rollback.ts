@@ -11,6 +11,7 @@ import type { Docker } from '../docker.js';
 import { getRouteName } from './helpers.js';
 import { containerName as projectContainerName } from '../helpers.js';
 import { isDockerNotFoundError } from '../../errors.js';
+import type { ProjectStatus, StateTransitionOptions } from '../../monitor/project-state-manager.js';
 
 const log = createModuleLogger('deploy:rollback');
 
@@ -31,11 +32,50 @@ type RollbackTarget =
   | { project: ProjectRow; environment: EnvironmentRow }
   | { project: ProjectRow; environment?: undefined };
 
+function createFallbackStateManager(db: Database): {
+  transition: (
+    projectId: string,
+    targetStatus: ProjectStatus,
+    reason: string,
+    options?: StateTransitionOptions,
+  ) => Promise<boolean>;
+} {
+  return {
+    transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
+      if (targetStatus === 'failed') {
+        return Promise.resolve(false);
+      }
+
+      db.updateProject(projectId, { status: targetStatus });
+      return Promise.resolve(true);
+    },
+  };
+}
+
 export class RollbackExecutor {
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
-  ) {}
+    stateManager?: {
+      transition: (
+        projectId: string,
+        targetStatus: ProjectStatus,
+        reason: string,
+        options?: StateTransitionOptions,
+      ) => Promise<boolean>;
+    },
+  ) {
+    this.stateManager = stateManager ?? createFallbackStateManager(db);
+  }
+
+  private readonly stateManager: {
+    transition: (
+      projectId: string,
+      targetStatus: ProjectStatus,
+      reason: string,
+      options?: StateTransitionOptions,
+    ) => Promise<boolean>;
+  };
 
   async rollbackToImage(projectId: string, environmentId?: string): Promise<RollbackResult> {
     const startTime = Date.now();
@@ -87,6 +127,7 @@ export class RollbackExecutor {
     }
 
     try {
+      await this.stateManager.transition(projectId, 'recovering', 'deploy-started');
       await this.cleanupRunningContainer(target.target);
 
       const { port, containerName } = await this.resolveContainerRuntime(target.target);
@@ -103,8 +144,8 @@ export class RollbackExecutor {
         network: getPolicy(envType).networkName,
       });
 
+      await this.stateManager.transition(projectId, 'running', 'deploy-success');
       this.db.updateProject(projectId, {
-        status: 'running',
         assignedPort: port,
         containerPort,
         containerId,
@@ -164,7 +205,7 @@ export class RollbackExecutor {
         };
       }
 
-      this.db.updateProject(projectId, { status: 'error' });
+      await this.stateManager.transition(projectId, 'error', 'deploy-runtime-error');
       if (productionEnvironment) {
         this.db.updateEnvironment(productionEnvironment.id, { status: 'error' });
       }

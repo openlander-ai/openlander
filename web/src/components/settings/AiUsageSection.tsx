@@ -21,6 +21,41 @@ export function AiUsageSection() {
   const { t } = useLanguage();
   const { summary, recent, isLoading, error } = useAiUsage();
   const [projects, setProjects] = useState<Record<string, string>>({});
+  const [expandedErrors, setExpandedErrors] = useState<Record<string, boolean>>({});
+
+  const toggleError = (id: string) => {
+    setExpandedErrors((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const getErrorBadge = (errorType?: string | null) => {
+    switch (errorType) {
+      case 'RATE_LIMIT':
+        return {
+          color: 'text-orange-500 bg-orange-500/10 border-orange-500/20',
+          label: t('llmSettings.errorTypeLabels.RATE_LIMIT') || 'Rate Limit',
+        };
+      case 'AUTH_FAILURE':
+        return {
+          color: 'text-red-500 bg-red-500/10 border-red-500/20',
+          label: t('llmSettings.errorTypeLabels.AUTH_FAILURE') || 'Auth Error',
+        };
+      case 'QUOTA_EXHAUSTED':
+        return {
+          color: 'text-purple-500 bg-purple-500/10 border-purple-500/20',
+          label: t('llmSettings.errorTypeLabels.QUOTA_EXHAUSTED') || 'Quota Exceeded',
+        };
+      case 'MODEL_INVALID':
+        return {
+          color: 'text-gray-500 bg-gray-500/10 border-gray-500/20',
+          label: t('llmSettings.errorTypeLabels.MODEL_INVALID') || 'Model Error',
+        };
+      default:
+        return {
+          color: 'text-error bg-error/10 border-error/20',
+          label: t('llmSettings.errorTypeLabels.UNKNOWN') || 'Error',
+        };
+    }
+  };
 
   useEffect(() => {
     void listProjects(false)
@@ -105,100 +140,138 @@ export function AiUsageSection() {
             ) : (
               <div className="rounded-lg border border-border bg-bg-subtle/50 divide-y divide-border">
                 {recent.slice(0, 10).map((log) => (
-                  <div
-                    key={log.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between p-3 gap-4"
-                  >
-                    <div className="flex items-start sm:items-center gap-3">
-                      <div
-                        className={cn(
-                          'flex items-center justify-center h-8 w-8 rounded-full shrink-0 mt-0.5 sm:mt-0',
-                          log.result === 'failure' ? 'bg-error/10' : 'bg-bg-subtle',
-                        )}
-                      >
-                        <Brain
+                  <div key={log.id} className="flex flex-col">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 gap-4">
+                      <div className="flex items-start sm:items-center gap-3">
+                        <div
                           className={cn(
-                            'h-4 w-4',
-                            log.result === 'failure' ? 'text-error' : 'text-agent',
+                            'flex items-center justify-center h-8 w-8 rounded-full shrink-0 mt-0.5 sm:mt-0',
+                            log.result === 'failure' ? 'bg-error/10' : 'bg-bg-subtle',
                           )}
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-primary-ol flex flex-wrap items-center gap-1.5">
-                          {log.projectId && (
-                            <span className="text-xs font-normal text-agent border border-agent/20 bg-agent/5 px-1.5 py-0.5 rounded">
-                              {projects[log.projectId] || log.projectId.slice(0, 12)}
-                            </span>
-                          )}
-                          {!log.projectId && (
-                            <span className="text-xs font-normal text-muted-ol border border-border bg-bg-subtle px-1.5 py-0.5 rounded">
-                              {t('settings.ai.usage.noProject') || 'Global'}
-                            </span>
-                          )}
-                          {t(`settings.ai.usage.actionType.${log.actionType}`) || log.actionType}
-                          <span className="text-xs font-normal text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
-                            {log.modelName}
-                          </span>
-                        </p>
-                        <p className="text-xs text-secondary-ol flex flex-wrap items-center gap-1.5 mt-1">
-                          <span className="flex items-center gap-1 whitespace-nowrap">
-                            <Clock className="h-3 w-3" />
-                            {formatRelativeTime(log.createdAt, t)}
-                          </span>
-                          {log.durationMs && (
-                            <span className="whitespace-nowrap flex items-center gap-1">
-                              <span className="text-border">|</span>
-                              {(log.durationMs / 1000).toFixed(1)}s
-                            </span>
-                          )}
-                          {log.source && (
-                            <span className="whitespace-nowrap flex items-center gap-1">
-                              <span className="text-border">|</span>
-                              <span className="font-mono text-[10px] bg-bg-subtle px-1 rounded">
-                                {t(`settings.ai.usage.source.${log.source}`) || log.source}
+                        >
+                          <Brain
+                            className={cn(
+                              'h-4 w-4',
+                              log.result === 'failure' ? 'text-error' : 'text-agent',
+                            )}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-primary-ol flex flex-wrap items-center gap-1.5">
+                            {log.projectId && (
+                              <span className="text-xs font-normal text-agent border border-agent/20 bg-agent/5 px-1.5 py-0.5 rounded">
+                                {projects[log.projectId] || log.projectId.slice(0, 12)}
                               </span>
+                            )}
+                            {!log.projectId && (
+                              <span className="text-xs font-normal text-muted-ol border border-border bg-bg-subtle px-1.5 py-0.5 rounded">
+                                {t('settings.ai.usage.noProject') || 'Global'}
+                              </span>
+                            )}
+                            {t(`settings.ai.usage.actionType.${log.actionType}`) || log.actionType}
+                            <span className="text-xs font-normal text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
+                              {log.modelName}
                             </span>
-                          )}
-                          {log.result && (
-                            <span className="whitespace-nowrap flex items-center gap-1">
-                              <span className="text-border">|</span>
+                          </p>
+                          <p className="text-xs text-secondary-ol flex flex-wrap items-center gap-1.5 mt-1">
+                            <span className="flex items-center gap-1 whitespace-nowrap">
+                              <Clock className="h-3 w-3" />
+                              {formatRelativeTime(log.createdAt, t)}
+                            </span>
+                            {log.durationMs && (
+                              <span className="whitespace-nowrap flex items-center gap-1">
+                                <span className="text-border">|</span>
+                                {(log.durationMs / 1000).toFixed(1)}s
+                              </span>
+                            )}
+                            {log.source && (
+                              <span className="whitespace-nowrap flex items-center gap-1">
+                                <span className="text-border">|</span>
+                                <span className="font-mono text-[10px] bg-bg-subtle px-1 rounded">
+                                  {t(`settings.ai.usage.source.${log.source}`) || log.source}
+                                </span>
+                              </span>
+                            )}
+                            {log.result && (
+                              <span className="whitespace-nowrap flex items-center gap-1">
+                                <span className="text-border">|</span>
+                                <span
+                                  className={cn(
+                                    'font-mono text-[10px] px-1 rounded',
+                                    log.result === 'success'
+                                      ? 'text-success bg-success/10'
+                                      : log.result === 'failure'
+                                        ? 'text-error bg-error/10'
+                                        : 'text-warning bg-warning/10',
+                                  )}
+                                >
+                                  {t(`settings.ai.usage.result.${log.result}`) || log.result}
+                                </span>
+                              </span>
+                            )}
+                            {log.toolsCalled && (
                               <span
-                                className={cn(
-                                  'font-mono text-[10px] px-1 rounded',
-                                  log.result === 'success'
-                                    ? 'text-success bg-success/10'
-                                    : log.result === 'failure'
-                                      ? 'text-error bg-error/10'
-                                      : 'text-warning bg-warning/10',
-                                )}
+                                className="truncate max-w-[200px] flex items-center gap-1"
+                                title={log.toolsCalled}
                               >
-                                {t(`settings.ai.usage.result.${log.result}`) || log.result}
+                                <span className="text-border">|</span>
+                                <span className="font-mono text-[10px] bg-bg-subtle px-1 rounded truncate">
+                                  {log.toolsCalled.split(',').length} tools
+                                </span>
                               </span>
-                            </span>
-                          )}
-                          {log.toolsCalled && (
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-left sm:text-right shrink-0 ml-11 sm:ml-0">
+                        {log.result === 'failure' ? (
+                          <div className="flex flex-col items-start sm:items-end gap-1">
                             <span
-                              className="truncate max-w-[200px] flex items-center gap-1"
-                              title={log.toolsCalled}
+                              className={cn(
+                                'text-[10px] font-medium px-1.5 py-0.5 rounded border',
+                                getErrorBadge(log.errorType).color,
+                              )}
                             >
-                              <span className="text-border">|</span>
-                              <span className="font-mono text-[10px] bg-bg-subtle px-1 rounded truncate">
-                                {log.toolsCalled.split(',').length} tools
-                              </span>
+                              {getErrorBadge(log.errorType).label}
                             </span>
-                          )}
-                        </p>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-sm font-medium text-primary-ol">
+                              {((log.inputTokens || 0) + (log.outputTokens || 0)).toLocaleString()}{' '}
+                              {t('settings.ai.usage.tokenUnit') || 'tokens'}
+                            </p>
+                            {log.costUsd != null && log.costUsd > 0 && (
+                              <p className="text-xs text-muted-ol">${log.costUsd.toFixed(4)}</p>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
-                    <div className="text-left sm:text-right shrink-0 ml-11 sm:ml-0">
-                      <p className="text-sm font-medium text-primary-ol">
-                        {((log.inputTokens || 0) + (log.outputTokens || 0)).toLocaleString()}{' '}
-                        {t('settings.ai.usage.tokenUnit') || 'tokens'}
-                      </p>
-                      {log.costUsd != null && log.costUsd > 0 && (
-                        <p className="text-xs text-muted-ol">${log.costUsd.toFixed(4)}</p>
-                      )}
-                    </div>
+                    {log.result === 'failure' && (log.errorMessage || log.errorType) && (
+                      <div className="px-3 pb-3 ml-11 sm:ml-14 space-y-2">
+                        {log.errorMessage && (
+                          <div
+                            className={cn(
+                              'text-xs font-mono text-error bg-error/5 border border-error/10 rounded p-2 cursor-pointer hover:bg-error/10 transition-colors',
+                              !expandedErrors[log.id] && 'line-clamp-2',
+                            )}
+                            onClick={() => toggleError(log.id)}
+                            title={
+                              !expandedErrors[log.id] ? 'Click to expand' : 'Click to collapse'
+                            }
+                          >
+                            {log.errorMessage}
+                          </div>
+                        )}
+                        {log.errorType && t(`llmSettings.errorTypes.${log.errorType}`) && (
+                          <div className="text-xs text-muted-ol flex items-start gap-1.5">
+                            <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                            <span>{t(`llmSettings.errorTypes.${log.errorType}`)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

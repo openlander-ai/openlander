@@ -16,6 +16,7 @@ import type { BuildExecutor } from './build-step.js';
 import type { ContainerRunner } from './run-step.js';
 import type { DeployResult, MonorepoConfig } from '../deploy-core.js';
 import type { OrchestrationResult, ServiceNode } from '../orchestrator.js';
+import type { ProjectStatus, StateTransitionOptions } from '../../monitor/project-state-manager.js';
 
 const log = createModuleLogger('deploy');
 
@@ -23,9 +24,30 @@ export interface MonorepoOrchestrationDeps {
   docker: Docker;
   db: Database;
   env: EnvManager;
+  stateManager: {
+    transition: (
+      projectId: string,
+      targetStatus: ProjectStatus,
+      reason: string,
+      options?: StateTransitionOptions,
+    ) => Promise<boolean>;
+  };
   buildExecutor: BuildExecutor;
   containerRunner: ContainerRunner;
   jobManager?: JobManager;
+}
+
+async function transitionProjectState(
+  deps: MonorepoOrchestrationDeps,
+  projectId: string,
+  targetStatus: ProjectStatus,
+  reason: string,
+  updates: Record<string, unknown> = {},
+): Promise<void> {
+  await deps.stateManager.transition(projectId, targetStatus, reason);
+  if (Object.keys(updates).length > 0) {
+    deps.db.updateProject(projectId, updates);
+  }
 }
 
 export async function deployMonorepoService(
@@ -55,7 +77,7 @@ export async function deployMonorepoService(
     parentProjectId: parentId,
     dockerfilePath,
   });
-  deps.db.updateProject(childId, { status: 'building' });
+  await transitionProjectState(deps, childId, 'building', 'deploy-started');
   deps.jobManager?.trackJob(childId, childName);
 
   await eventBus.emit('deploy:start', {
@@ -179,8 +201,7 @@ export async function deployMonorepoService(
       message: `[${service.name}] Service running on port ${String(port)}`,
     });
 
-    deps.db.updateProject(childId, {
-      status: 'running',
+    await transitionProjectState(deps, childId, 'running', 'deploy-success', {
       assignedPort: port,
       containerId,
       imageTag,
@@ -233,7 +254,7 @@ export async function deployMonorepoService(
       ? `--- Docker build output ---\n${dockerBuildOutput}[error] [monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`
       : `[monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`;
 
-    deps.db.updateProject(childId, { status: 'error' });
+    await transitionProjectState(deps, childId, 'error', 'deploy-build-error');
     deps.jobManager?.updatePhase(childId, 'failed', errorMsg);
 
     await eventBus.emit('deploy:failed', {
@@ -303,8 +324,7 @@ export async function rollbackMonorepoService(
     }
   }
 
-  deps.db.updateProject(service.projectId, {
-    status: 'error',
+  await transitionProjectState(deps, service.projectId, 'error', 'deploy-failed', {
     containerId: null,
     assignedPort: null,
   });

@@ -3,9 +3,23 @@ import type { Database } from '../db/index.js';
 import type { EventBus, EventPayload } from '../events/index.js';
 import type { RuntimeSignal } from '../health/types.js';
 import { createModuleLogger } from '../lib/logger.js';
+import type { ProjectStateManager, ProjectStatus } from './project-state-manager.js';
 import { consumeMcpDeploy } from '../pipeline/auto-recovery.js';
 
 const log = createModuleLogger('recovery-coordinator');
+
+function createFallbackStateManager(db: Database): Pick<ProjectStateManager, 'transition'> {
+  return {
+    transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
+      if (targetStatus === 'failed') {
+        return Promise.resolve(false);
+      }
+
+      db.updateProject(projectId, { status: targetStatus });
+      return Promise.resolve(true);
+    },
+  };
+}
 
 type EligibilityReason =
   | 'project_not_found'
@@ -22,10 +36,6 @@ interface ProjectSnapshot {
   status: string;
   archived_at: string | null;
   container_id: string | null;
-}
-
-interface ProjectStatusWriter {
-  updateProject(projectId: string, updates: { status?: string }): void;
 }
 
 export interface EligibilityResult {
@@ -58,10 +68,10 @@ export class RecoveryCoordinator {
   private llmCallTimestamps: number[] = [];
   private unsubscribers: Array<() => void> = [];
   private running = false;
-  private readonly projectStatusWriter: ProjectStatusWriter;
   private opsAgent: OpsAgentRef | undefined;
   private configGetter: (() => OpenLanderConfig) | null = null;
   private deploymentRecovery: DeploymentRecoveryFn | undefined;
+  private stateManager: Pick<ProjectStateManager, 'transition'>;
 
   constructor(
     db: Database,
@@ -73,7 +83,7 @@ export class RecoveryCoordinator {
     this.events = events;
     this.config = config;
     this.maxLlmCallsPerHour = options?.maxLlmCallsPerHour ?? 10;
-    this.projectStatusWriter = db;
+    this.stateManager = createFallbackStateManager(db);
   }
 
   start(opts?: { opsAgent?: OpsAgentRef }): void {
@@ -114,11 +124,11 @@ export class RecoveryCoordinator {
       this.events.on('ai:invoked', () => {
         this.recordLlmCall();
       }),
-      this.events.on('recovery:success', (payload) => {
-        this.restoreStatusIfRecovering(payload.projectId, 'running');
+      this.events.on('recovery:success', async (payload) => {
+        await this.restoreStatusIfRecovering(payload.projectId, 'running');
       }),
-      this.events.on('recovery:exhausted', (payload) => {
-        this.restoreStatusIfRecovering(payload.projectId, 'error');
+      this.events.on('recovery:exhausted', async (payload) => {
+        await this.restoreStatusIfRecovering(payload.projectId, 'error');
       }),
     );
 
@@ -182,6 +192,10 @@ export class RecoveryCoordinator {
 
   setConfigGetter(getter: () => OpenLanderConfig): void {
     this.configGetter = getter;
+  }
+
+  setStateManager(stateManager: Pick<ProjectStateManager, 'transition'>): void {
+    this.stateManager = stateManager;
   }
 
   setDeploymentRecovery(handler: DeploymentRecoveryFn): void {
@@ -321,7 +335,7 @@ export class RecoveryCoordinator {
       }
 
       try {
-        this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
+        await this.transitionProjectStatus(payload.projectId, 'recovering', 'recovery-started');
       } catch (statusErr) {
         log.warn(
           { err: statusErr, projectId: payload.projectId },
@@ -360,7 +374,7 @@ export class RecoveryCoordinator {
           'circuit_breaker_open',
         ];
         if (result.reason && unhandledReasons.includes(result.reason)) {
-          this.projectStatusWriter.updateProject(payload.projectId, { status: 'error' });
+          await this.transitionProjectStatus(payload.projectId, 'error', 'recovery-failed');
         }
         await this.emitBlocked(payload.projectId, result.reason);
         return;
@@ -389,7 +403,7 @@ export class RecoveryCoordinator {
 
       // Stage C: Update status to recovering (critical — isolated so D still fires)
       try {
-        this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
+        await this.transitionProjectStatus(payload.projectId, 'recovering', 'recovery-started');
       } catch (statusErr) {
         log.warn(
           { err: statusErr, projectId: payload.projectId },
@@ -464,16 +478,43 @@ export class RecoveryCoordinator {
     });
   }
 
-  private restoreStatusIfRecovering(projectId: string, nextStatus: 'running' | 'error'): void {
+  private async restoreStatusIfRecovering(
+    projectId: string,
+    nextStatus: 'running' | 'error',
+  ): Promise<void> {
     const project = this.getProjectSnapshot(projectId);
     if (!project) return;
 
     if (project.status === 'recovering') {
-      this.projectStatusWriter.updateProject(projectId, { status: nextStatus });
+      await this.transitionProjectStatus(
+        projectId,
+        nextStatus,
+        nextStatus === 'running' ? 'recovery-success' : 'recovery-failed',
+      );
     } else if (nextStatus === 'running' && project.status === 'error') {
-      this.projectStatusWriter.updateProject(projectId, { status: nextStatus });
+      await this.transitionProjectStatus(projectId, nextStatus, 'recovery-success');
       log.info({ projectId }, 'Restored project status from error to running (defensive recovery)');
     }
+  }
+
+  private async transitionProjectStatus(
+    projectId: string,
+    nextStatus: 'recovering' | 'running' | 'error',
+    reason: 'recovery-started' | 'recovery-success' | 'recovery-failed',
+  ): Promise<void> {
+    const didTransition = await this.stateManager.transition(projectId, nextStatus, reason);
+    if (didTransition) {
+      return;
+    }
+
+    const project = this.getProjectSnapshot(projectId);
+    if (project?.status === nextStatus) {
+      return;
+    }
+
+    throw new Error(
+      `RecoveryCoordinator state transition rejected: ${project?.status ?? 'unknown'} -> ${nextStatus}`,
+    );
   }
 
   private getProjectSnapshot(projectId: string): ProjectSnapshot | undefined {

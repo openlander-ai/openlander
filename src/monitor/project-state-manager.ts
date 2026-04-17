@@ -41,7 +41,7 @@ export const VALID_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
   building: ['running', 'failed', 'error'],
   running: ['recovering', 'stopped', 'building'],
   recovering: ['running', 'error'],
-  error: ['building', 'stopped', 'recovering'],
+  error: ['building', 'stopped', 'recovering', 'running'],
   failed: ['building', 'stopped'],
 };
 
@@ -82,7 +82,8 @@ export class ProjectStateManager {
     reason: string,
     options?: StateTransitionOptions,
   ): Promise<boolean> {
-    const currentStatus = await this.getState(projectId);
+    const project = this.ctx.db.getProject(projectId);
+    const currentStatus = (project?.status as ProjectStatus | undefined) ?? null;
     if (!currentStatus) {
       return false;
     }
@@ -167,6 +168,11 @@ export class ProjectStateManager {
       }
     }
 
+    const runningContainerIds = new Set(
+      containers.filter((c) => c.status === 'running').map((c) => c.id),
+    );
+    reconciled += this.reconcileStaleEnvironments(projects, runningContainerIds);
+
     return { reconciled, skipped };
   }
 
@@ -202,13 +208,42 @@ export class ProjectStateManager {
       });
     }
 
-    if (!container && project.status === 'running') {
+    if (!container && (project.status === 'running' || project.status === 'building')) {
       return this.transition(project.id, 'stopped', 'docker reconciliation: container missing', {
         skipEvents: true,
       });
     }
 
     return false;
+  }
+
+  private reconcileStaleEnvironments(
+    projects: { id: string }[],
+    runningContainerIds: Set<string>,
+  ): number {
+    if (typeof this.ctx.db.getEnvironmentsByProject !== 'function') {
+      return 0;
+    }
+
+    let count = 0;
+
+    for (const project of projects) {
+      const envs = this.ctx.db.getEnvironmentsByProject(project.id);
+      for (const env of envs) {
+        if (env.status !== 'building') continue;
+        const isContainerRunning =
+          env.container_id != null && runningContainerIds.has(env.container_id);
+        const newStatus = isContainerRunning ? 'running' : 'stopped';
+        this.ctx.db.updateEnvironment(env.id, { status: newStatus });
+        count += 1;
+        log.info(
+          { envId: env.id, type: env.type, from: 'building', to: newStatus },
+          'Stale environment status reconciled',
+        );
+      }
+    }
+
+    return count;
   }
 
   private buildContainerIndex(containers: ContainerInfo[]): Map<string, ContainerInfo> {

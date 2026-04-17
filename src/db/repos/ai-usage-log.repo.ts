@@ -40,6 +40,8 @@ export class AiUsageLogRepo {
         cost_usd: data.cost_usd ?? null,
         tools_called: data.tools_called,
         result: data.result,
+        error_message: data.error_message ?? null,
+        error_type: data.error_type ?? null,
         duration_ms: data.duration_ms,
         user_id: data.user_id ?? null,
         tenant_id: data.tenant_id ?? null,

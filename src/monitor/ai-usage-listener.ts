@@ -45,6 +45,8 @@ export class AiUsageListener {
             session_id: payload.sessionId ?? null,
             tools_called: JSON.stringify(payload.toolsCalled ?? []),
             result: payload.result,
+            error_message: payload.errorMessage ?? null,
+            error_type: payload.errorType ?? null,
             duration_ms: payload.durationMs,
             user_id: null,
             tenant_id: null,

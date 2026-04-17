@@ -164,6 +164,8 @@ export function logAiUsage(
     cost_usd: costUsd,
     tools_called: JSON.stringify(params.toolsCalled ?? []),
     result: params.result,
+    error_message: null,
+    error_type: null,
     duration_ms: params.durationMs,
     user_id: null,
     tenant_id: null,

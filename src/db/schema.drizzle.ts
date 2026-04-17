@@ -447,6 +447,8 @@ export const aiUsageLog = sqliteTable(
     cost_usd: real('cost_usd'),
     tools_called: text('tools_called').notNull().default('[]'),
     result: text('result', { enum: ['success', 'failure', 'partial'] }).notNull(),
+    error_message: text('error_message'),
+    error_type: text('error_type'),
     duration_ms: integer('duration_ms').notNull().default(0),
     user_id: text('user_id'),
     tenant_id: text('tenant_id'),

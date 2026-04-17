@@ -164,6 +164,10 @@ export class ModelRegistry {
     return this.circuitBreaker.getStatus(route.providerId);
   }
 
+  getCircuitBreakerStatusByProvider(providerId: string): LlmCircuitBreakerStatus {
+    return this.circuitBreaker.getStatus(providerId);
+  }
+
   updateConfig(config: ModelRoutingConfig): void {
     this.config = config;
     this.version += 1;

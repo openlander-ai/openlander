@@ -210,50 +210,6 @@ export interface AppContext {
   llmVerified: boolean;
 }
 
-/** Reset projects and environments stuck in 'building' status from a previous server run. */
-async function cleanupStaleBuilds(db: Database, docker: Docker): Promise<void> {
-  const staleProjects = db.listProjects('building', { includeArchived: true });
-  if (staleProjects.length === 0) return;
-
-  log.info({ count: staleProjects.length }, 'Found stale building projects — cleaning up');
-
-  let runningContainerIds: Set<string>;
-  try {
-    const containers = await docker.listManagedContainers();
-    runningContainerIds = new Set(
-      containers.filter((c) => c.status === 'running').map((c) => c.id),
-    );
-  } catch (err) {
-    log.warn({ err }, 'Docker unreachable during stale build cleanup — deferring reconciliation');
-    return;
-  }
-
-  for (const project of staleProjects) {
-    if (project.status !== 'building') continue;
-    const isContainerRunning =
-      project.container_id != null && runningContainerIds.has(project.container_id);
-    const newStatus = isContainerRunning ? 'running' : 'stopped';
-    db.updateProject(project.id, { status: newStatus });
-    log.info(
-      { projectId: project.id, name: project.name, from: 'building', to: newStatus },
-      'Stale build status reset',
-    );
-
-    const envs = db.getEnvironmentsByProject(project.id);
-    for (const env of envs) {
-      if (env.status !== 'building') continue;
-      const envContainerRunning =
-        env.container_id != null && runningContainerIds.has(env.container_id);
-      const envNewStatus = envContainerRunning ? 'running' : 'stopped';
-      db.updateEnvironment(env.id, { status: envNewStatus });
-      log.info(
-        { envId: env.id, type: env.type, from: 'building', to: envNewStatus },
-        'Stale environment status reset',
-      );
-    }
-  }
-}
-
 /** Create the application context from config. */
 export async function createAppContext(
   config: OpenLanderConfig,
@@ -263,7 +219,6 @@ export async function createAppContext(
   const docker = new Docker(config.docker.socketPath || undefined, config.docker.networkName);
   const serverContext = createLocalServerContext(docker);
 
-  await cleanupStaleBuilds(db, docker);
   const jobManager = new JobManager();
   const env = new EnvManager(db);
   const composePipeline = new ComposePipeline(docker, db, eventBus, jobManager, env);
@@ -331,12 +286,21 @@ export async function createAppContext(
 
   // v1.0: Recovery coordinator — single owner of all recovery decisions
   const coordinator = new RecoveryCoordinator(db, eventBus, config);
+  let pipelineCtx: AppContext | null = null;
 
   const pipeline = new DeployPipeline(
     docker,
     db,
     env,
     config,
+    {
+      transition: async (projectId, targetStatus, reason, options) => {
+        if (!pipelineCtx) {
+          throw new Error('ProjectStateManager is not ready');
+        }
+        return pipelineCtx.stateManager.transition(projectId, targetStatus, reason, options);
+      },
+    },
     jobManager,
     composePipeline,
     autoDetector,
@@ -612,6 +576,19 @@ export async function createAppContext(
   const channelManager = new ChannelManager(partialCtx as AppContext);
   const ctx = { ...partialCtx, channelManager } as AppContext;
   ctx.stateManager = new ProjectStateManager(ctx);
+  pipelineCtx = ctx;
+  coordinator.setStateManager(ctx.stateManager);
+  ctx.containerStateReconciler.setStateManager(ctx.stateManager);
+
+  try {
+    const reconcileResult = await ctx.stateManager.reconcileAll();
+    if (reconcileResult.reconciled > 0) {
+      log.info(reconcileResult, 'Startup reconciliation completed');
+    }
+  } catch (err) {
+    log.warn({ err }, 'Startup reconciliation failed — deferring to periodic reconciler');
+  }
+
   ctx.providerHealth.start(ctx);
   coordinator.setConfigGetter(() => ctx.config);
 

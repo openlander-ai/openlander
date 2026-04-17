@@ -20,6 +20,8 @@ export interface AiUsageLog {
   costUsd: number | null;
   toolsCalled: string | null;
   result: string | null;
+  errorMessage?: string | null;
+  errorType?: string | null;
   durationMs: number | null;
   source: string | null;
   createdAt: string;

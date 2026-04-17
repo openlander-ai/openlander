@@ -558,6 +558,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
 
     const masked = Object.entries(providers).map(([id, entry]) => {
       const health = allHealth.get(id);
+      const cbStatus = ctx.modelRegistry.getCircuitBreakerStatusByProvider(id);
       return {
         id,
         provider: entry.provider,
@@ -577,6 +578,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
               checkedAt: health.checkedAt.toISOString(),
             }
           : null,
+        circuitBreaker: cbStatus,
       };
     });
 
