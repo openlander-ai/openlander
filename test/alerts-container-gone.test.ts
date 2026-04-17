@@ -31,7 +31,7 @@ describe('ContainerAlertHandler — container missing', () => {
     } as unknown as Database;
 
     alertMonitor = new AlertMonitor(docker, db, events);
-    handler = new ContainerAlertHandler(db, events, alertMonitor);
+    handler = new ContainerAlertHandler(docker, db, events, alertMonitor);
     handler.start();
   });
 
@@ -71,6 +71,7 @@ describe('ContainerAlertHandler — container missing', () => {
   });
 
   it('creates alert with correct details on container:die event', async () => {
+    eventHandlers.clear();
     const db = {
       listProjects: vi.fn().mockReturnValue([]),
       listAllActiveOpsIncidents: vi.fn().mockReturnValue([]),
@@ -88,7 +89,7 @@ describe('ContainerAlertHandler — container missing', () => {
     const docker = {} as unknown as Docker;
 
     const monitor = new AlertMonitor(docker, db, events);
-    const h = new ContainerAlertHandler(db, events, monitor);
+    const h = new ContainerAlertHandler(docker, db, events, monitor);
     h.start();
 
     const dieHandler = eventHandlers.get('container:die');
@@ -109,6 +110,7 @@ describe('ContainerAlertHandler — container missing', () => {
   });
 
   it('creates alert with OOM details on container:oom event', async () => {
+    eventHandlers.clear();
     const db = {
       listProjects: vi.fn().mockReturnValue([]),
       listAllActiveOpsIncidents: vi.fn().mockReturnValue([]),
@@ -123,10 +125,14 @@ describe('ContainerAlertHandler — container missing', () => {
       };
     });
     const events = { emit, on } as unknown as EventBus;
-    const docker = {} as unknown as Docker;
+    const docker = {
+      inspectContainer: vi.fn().mockResolvedValue({
+        HostConfig: { Memory: 536870912 },
+      }),
+    } as unknown as Docker;
 
     const monitor = new AlertMonitor(docker, db, events);
-    const h = new ContainerAlertHandler(db, events, monitor);
+    const h = new ContainerAlertHandler(docker, db, events, monitor);
     h.start();
 
     const oomHandler = eventHandlers.get('container:oom');
@@ -138,9 +144,13 @@ describe('ContainerAlertHandler — container missing', () => {
       containerName: 'ol-myapp',
     });
 
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     const alert = monitor.getActiveAlerts().find((a) => a.type === 'container-crash');
     expect(alert).toBeDefined();
     expect(alert?.message).toContain('OOM killed');
+    expect(alert?.message).toContain('Memory limit: 512MB');
     expect(alert?.details['reason']).toBe('out_of_memory');
+    expect(alert?.details['memoryLimit']).toBe(536870912);
   });
 });

@@ -1,3 +1,4 @@
+import type { Docker } from '../pipeline/docker.js';
 import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
@@ -9,6 +10,7 @@ export class ContainerAlertHandler {
   private unsubscribers: (() => void)[] = [];
 
   constructor(
+    private readonly docker: Docker,
     private readonly db: Database,
     private readonly events: EventBus,
     private readonly alertMonitor: AlertMonitor,
@@ -101,17 +103,29 @@ export class ContainerAlertHandler {
     if (!project) return;
 
     const key = `container-crash:${payload.containerId}`;
-    const suggestion = `Container ran out of memory. Consider increasing memory limits or optimizing the application's memory usage. Check logs with "get_logs ${project.name}".`;
+    const info = await this.docker.inspectContainer(payload.containerId).catch(() => null);
+    const memoryLimitBytes: number = info ? (info.HostConfig.Memory ?? 0) : 0;
+    const memoryLimitMB = memoryLimitBytes > 0 ? Math.floor(memoryLimitBytes / 1024 / 1024) : 0;
+    const memoryInfo =
+      memoryLimitBytes > 0
+        ? `Memory limit: ${String(memoryLimitMB)}MB. `
+        : 'No memory limit configured. ';
+
+    const suggestion =
+      memoryLimitBytes > 0
+        ? `Container ran out of memory (limit: ${String(memoryLimitMB)}MB). Consider increasing memory limits in Settings → Resources or optimizing the application's memory usage. Check logs with "get_logs ${project.name}".`
+        : `Container ran out of memory. Set a memory limit in Settings → Resources or optimize the application's memory usage. Check logs with "get_logs ${project.name}".`;
 
     await this.alertMonitor.upsertAlert(key, {
       type: 'container-crash',
       severity: 'critical',
-      message: `Container OOM killed: ${project.name}`,
+      message: `Container OOM killed: ${project.name}. ${memoryInfo}`,
       details: {
         projectId: project.id,
         projectName: project.name,
         containerId: payload.containerId,
         reason: 'out_of_memory',
+        memoryLimit: memoryLimitBytes,
       },
       suggestion,
     });

@@ -2,6 +2,7 @@ import { Database } from './db/index.js';
 import { Docker } from './pipeline/docker.js';
 import type { ServerContext } from './pipeline/server-context.js';
 import { createLocalServerContext } from './pipeline/server-context.js';
+import { serializeConfig, deserializeConfig, CONFIG_VERSION } from './pipeline/config-snapshot.js';
 import { DeployPipeline } from './pipeline/deploy.js';
 import { TraefikManager } from './pipeline/traefik.js';
 import { EnvManager } from './pipeline/env.js';
@@ -210,12 +211,44 @@ export interface AppContext {
   llmVerified: boolean;
 }
 
+/**
+ * One-time data migration: set resourceProfile='small' as default for all
+ * existing projects that have no resource config in deploy_configs.
+ * Idempotent — safe to run on every startup.
+ */
+function migrateDefaultResourceProfile(db: Database): void {
+  const allProjects = db.listProjects(undefined, { includeArchived: true });
+  let migratedCount = 0;
+
+  for (const project of allProjects) {
+    const configRow = db.loadDeployConfig(project.id);
+    if (!configRow) {
+      const json = serializeConfig({ resourceProfile: 'small' });
+      db.saveDeployConfig(project.id, json, CONFIG_VERSION);
+      migratedCount++;
+    } else {
+      const stored = deserializeConfig(configRow.config_json);
+      if (stored && !stored.snapshot.resourceProfile) {
+        const updatedSnapshot = { ...stored.snapshot, resourceProfile: 'small' as const };
+        const json = serializeConfig(updatedSnapshot);
+        db.saveDeployConfig(project.id, json, CONFIG_VERSION);
+        migratedCount++;
+      }
+    }
+  }
+
+  if (migratedCount > 0) {
+    log.info({ migratedCount }, 'Migration: applied default resource profile to existing projects');
+  }
+}
+
 /** Create the application context from config. */
 export async function createAppContext(
   config: OpenLanderConfig,
   dbPath: string,
 ): Promise<AppContext> {
   const db = new Database(dbPath);
+  migrateDefaultResourceProfile(db);
   const docker = new Docker(config.docker.socketPath || undefined, config.docker.networkName);
   const serverContext = createLocalServerContext(docker);
 
