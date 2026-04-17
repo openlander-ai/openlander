@@ -5,6 +5,7 @@ import { containerName as projectContainerName } from '../helpers.js';
 import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
 import { ContainerNotFoundError, OpenLanderError } from '../../errors.js';
+import type { ProjectStatus, StateTransitionOptions } from '../../monitor/project-state-manager.js';
 import type { Docker } from '../docker.js';
 import { allocatePort, clearPortScanCache } from '../port.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
@@ -16,12 +17,46 @@ export interface CoordinatorSuppressor {
   suppressProject(projectId: string, durationMs: number): void;
 }
 
+interface ProjectStateTransitioner {
+  transition: (
+    projectId: string,
+    targetStatus: ProjectStatus,
+    reason: string,
+    options?: StateTransitionOptions,
+  ) => Promise<boolean>;
+}
+
+function createFallbackStateManager(db: Database): ProjectStateTransitioner {
+  return {
+    transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
+      db.updateProject(projectId, { status: targetStatus });
+      return Promise.resolve(true);
+    },
+  };
+}
+
 export class ContainerLifecycle {
+  private readonly stateManager: ProjectStateTransitioner;
+
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
+    stateManagerOrCoordinator?: ProjectStateTransitioner | CoordinatorSuppressor,
     private readonly coordinator?: CoordinatorSuppressor,
-  ) {}
+  ) {
+    const hasStateManager = Boolean(
+      stateManagerOrCoordinator &&
+      typeof stateManagerOrCoordinator === 'object' &&
+      typeof (stateManagerOrCoordinator as ProjectStateTransitioner).transition === 'function',
+    );
+
+    this.stateManager = hasStateManager
+      ? (stateManagerOrCoordinator as ProjectStateTransitioner)
+      : createFallbackStateManager(db);
+    this.coordinator = hasStateManager
+      ? coordinator
+      : (stateManagerOrCoordinator as CoordinatorSuppressor | undefined);
+  }
 
   async start(projectId: string): Promise<void> {
     const children = this.db
@@ -35,7 +70,7 @@ export class ContainerLifecycle {
     const project = this.db.getProject(projectId);
     if (!project?.container_id) {
       if (hasChildren) {
-        this.db.updateProject(projectId, { status: 'running' });
+        await this.stateManager.transition(projectId, 'running', 'container-healthy');
       }
       return;
     }
@@ -48,7 +83,7 @@ export class ContainerLifecycle {
           { projectId },
           'Container not found during start — may have been removed externally',
         );
-        this.db.updateProject(projectId, { status: 'error' });
+        await this.stateManager.transition(projectId, 'error', 'container-unhealthy');
         for (const env of this.db.getEnvironmentsByProject(projectId)) {
           this.db.updateEnvironment(env.id, { status: 'error' });
         }
@@ -57,7 +92,7 @@ export class ContainerLifecycle {
       throw err;
     }
 
-    this.db.updateProject(projectId, { status: 'running' });
+    await this.stateManager.transition(projectId, 'running', 'container-restart-success');
     for (const env of this.db.getEnvironmentsByProject(projectId)) {
       this.db.updateEnvironment(env.id, { status: 'running' });
     }
@@ -76,7 +111,7 @@ export class ContainerLifecycle {
 
     const project = this.db.getProject(projectId);
     if (!project?.container_id) {
-      this.db.updateProject(projectId, { status: 'stopped' });
+      await this.stateManager.transition(projectId, 'stopped', 'container-manual-stop');
       await eventBus.emit('container:stop', { projectId, containerId: '' });
       return;
     }
@@ -96,7 +131,8 @@ export class ContainerLifecycle {
       log.debug({ err, projectId }, 'Stop remove container skipped (already removed)');
     }
 
-    this.db.updateProject(projectId, { status: 'stopped', containerId: null });
+    await this.stateManager.transition(projectId, 'stopped', 'container-remove');
+    this.db.updateProject(projectId, { containerId: null });
     for (const env of this.db.getEnvironmentsByProject(projectId)) {
       this.db.updateEnvironment(env.id, { status: 'stopped' });
     }

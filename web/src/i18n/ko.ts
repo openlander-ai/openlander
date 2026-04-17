@@ -1117,6 +1117,11 @@ export const translations = {
     registeredAt: '등록일',
     latency: '응답시간',
     deleteDefaultGuide: '이 제공자는 기본 제공자입니다. 다른 제공자를 기본으로 지정하세요.',
+    switchDefaultProvider: '기본 제공자 전환',
+    switchingDefaultProvider: '전환 중...',
+    selectReplacementProvider: '새 기본 제공자를 선택하세요',
+    noAlternativeProviders: '기본 제공자로 전환할 다른 제공자가 없습니다.',
+    errorSwitchDefault: '기본 제공자 전환에 실패했습니다',
     circuitBreaker: {
       open: '차단됨 (재시도 대기 중)',
       halfOpen: '복구 테스트 중...',

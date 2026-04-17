@@ -100,6 +100,19 @@ export async function deleteProvider(id: string): Promise<{ status: string }> {
   return res.json();
 }
 
+export async function setDefaultProvider(providerId: string): Promise<{ status: string }> {
+  const res = await fetch('/api/setup/providers/default', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ providerId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message ?? 'Failed to switch default provider');
+  }
+  return res.json();
+}
+
 export async function configureLLM(
   provider: string,
   apiKey = '',

@@ -60,6 +60,18 @@ export function classifyLlmError(error: unknown): LlmErrorType {
     return LlmErrorType.RATE_LIMIT;
   }
 
+  if (statusCode === 1302) {
+    return LlmErrorType.RATE_LIMIT;
+  }
+
+  if (statusCode === 1211) {
+    return LlmErrorType.MODEL_INVALID;
+  }
+
+  if (statusCode === 1311) {
+    return LlmErrorType.QUOTA_EXHAUSTED;
+  }
+
   if (statusCode !== undefined && statusCode >= 500) {
     return LlmErrorType.PROVIDER_ERROR;
   }

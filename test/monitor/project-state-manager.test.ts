@@ -108,7 +108,7 @@ describe('ProjectStateManager', () => {
   it('rejects an invalid transition without changing the DB', async () => {
     getProject.mockReturnValue(createProject({ status: 'running' }));
 
-    const transitioned = await manager.transition('project-1', 'failed', 'unexpected state jump');
+    const transitioned = await manager.transition('project-1', 'error', 'unexpected state jump');
 
     expect(transitioned).toBe(false);
     expect(updateProject).not.toHaveBeenCalled();

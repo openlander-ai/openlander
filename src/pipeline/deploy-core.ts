@@ -82,10 +82,6 @@ interface ProjectStateTransitioner {
 function createFallbackStateTransitioner(db: Database): ProjectStateTransitioner {
   return {
     transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
-      if (targetStatus === 'failed') {
-        return Promise.resolve(false);
-      }
-
       db.updateProject(projectId, { status: targetStatus });
       return Promise.resolve(true);
     },
@@ -299,7 +295,12 @@ export class DeployPipeline {
       : (autoDetectorOrCoordinator as CoordinatorSuppressor | undefined);
 
     this.tunnelManager = new TunnelManager(this.db);
-    this.lifecycle = new ContainerLifecycle(this.docker, this.db, this.coordinator);
+    this.lifecycle = new ContainerLifecycle(
+      this.docker,
+      this.db,
+      this.stateManager,
+      this.coordinator,
+    );
     this.rollbackExecutor = new RollbackExecutor(this.docker, this.db, this.stateManager);
     this.buildExecutor = new BuildExecutor(this.docker);
     this.containerRunner = new ContainerRunner(this.docker, this.db);

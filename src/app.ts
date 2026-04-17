@@ -576,6 +576,7 @@ export async function createAppContext(
   const channelManager = new ChannelManager(partialCtx as AppContext);
   const ctx = { ...partialCtx, channelManager } as AppContext;
   ctx.stateManager = new ProjectStateManager(ctx);
+  composePipeline.setStateManager(ctx.stateManager);
   pipelineCtx = ctx;
   coordinator.setStateManager(ctx.stateManager);
   ctx.containerStateReconciler.setStateManager(ctx.stateManager);
@@ -597,8 +598,6 @@ export async function createAppContext(
     ctx.agentPool.setTools(tools);
     ctx.agentPool.setQuestionBridge(ctx.questionBridge);
   }
-
-  ctx.providerHealth.start(ctx);
 
   const incidentReporter = new IncidentReporter(channelManager, eventBus, db, config);
   incidentReporter.start();

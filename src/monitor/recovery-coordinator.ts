@@ -11,10 +11,6 @@ const log = createModuleLogger('recovery-coordinator');
 function createFallbackStateManager(db: Database): Pick<ProjectStateManager, 'transition'> {
   return {
     transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
-      if (targetStatus === 'failed') {
-        return Promise.resolve(false);
-      }
-
       db.updateProject(projectId, { status: targetStatus });
       return Promise.resolve(true);
     },

@@ -20,6 +20,7 @@ import { extractProjectName, composeContainerName } from './helpers.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
+import type { ProjectStatus, StateTransitionOptions } from '../monitor/project-state-manager.js';
 import type { EnvManager } from './env.js';
 import type { JobManager } from './job-manager.js';
 import { isDockerNotFoundError } from '../errors.js';
@@ -32,6 +33,15 @@ const COMPOSE_FILES = [
   'compose.yml',
   'compose.yaml',
 ] as const;
+
+interface ProjectStateTransitioner {
+  transition: (
+    projectId: string,
+    targetStatus: ProjectStatus,
+    reason: string,
+    options?: StateTransitionOptions,
+  ) => Promise<boolean>;
+}
 
 export interface ComposeService {
   name: string;
@@ -142,6 +152,8 @@ function sanitizeComposeProjectName(name: string): string {
 }
 
 export class ComposePipeline {
+  private stateManager?: ProjectStateTransitioner;
+
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
@@ -149,6 +161,23 @@ export class ComposePipeline {
     private readonly jobManager?: JobManager,
     private readonly env?: EnvManager,
   ) {}
+
+  setStateManager(stateManager: ProjectStateTransitioner): void {
+    this.stateManager = stateManager;
+  }
+
+  private async transitionProjectStatus(
+    projectId: string,
+    targetStatus: ProjectStatus,
+    reason: string,
+  ): Promise<void> {
+    if (this.stateManager) {
+      await this.stateManager.transition(projectId, targetStatus, reason);
+      return;
+    }
+
+    this.db.updateProject(projectId, { status: targetStatus });
+  }
 
   detectComposeFile(projectPath: string): string | null {
     for (const filename of COMPOSE_FILES) {
@@ -554,7 +583,7 @@ export class ComposePipeline {
       }
 
       childrenByService.set(service.name, childId);
-      this.db.updateProject(childId, { status: 'building' });
+      await this.transitionProjectStatus(childId, 'building', 'compose-build-start');
       this.jobManager?.trackJob(childId, childName);
     }
 
@@ -1026,7 +1055,7 @@ export class ComposePipeline {
         }
       }
 
-      this.db.updateProject(parentProjectId, { status: 'error' });
+      await this.transitionProjectStatus(parentProjectId, 'error', 'compose-orchestration-error');
       for (const childId of childrenByService.values()) {
         this.db.updateProject(childId, {
           status: 'error',
@@ -1089,11 +1118,11 @@ export class ComposePipeline {
         }
       }
 
-      this.db.updateProject(child.id, { status: 'stopped' });
+      await this.transitionProjectStatus(child.id, 'stopped', 'compose-service-stop');
     }
 
     await this.docker.removeProjectNetwork(parent.name);
-    this.db.updateProject(parent.id, { status: 'stopped' });
+    await this.transitionProjectStatus(parent.id, 'stopped', 'compose-parent-stop');
 
     await this.events.emit('compose:down', { projectId: parent.id });
   }

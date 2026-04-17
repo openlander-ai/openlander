@@ -10,7 +10,7 @@ const log = createModuleLogger('project-state-manager');
  * Extracted from ProjectRow.status in src/db/types.ts.
  * Schema: src/db/schema.drizzle.ts:20-22
  */
-export type ProjectStatus = 'stopped' | 'building' | 'running' | 'recovering' | 'error' | 'failed';
+export type ProjectStatus = 'stopped' | 'building' | 'running' | 'recovering' | 'error';
 
 /**
  * Options for state transitions.
@@ -38,11 +38,10 @@ export interface StateTransition {
  */
 export const VALID_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
   stopped: ['building'],
-  building: ['running', 'failed', 'error'],
+  building: ['running', 'error'],
   running: ['recovering', 'stopped', 'building'],
   recovering: ['running', 'error'],
   error: ['building', 'stopped', 'recovering', 'running'],
-  failed: ['building', 'stopped'],
 };
 
 /**
@@ -51,7 +50,7 @@ export const VALID_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
  */
 export const RECONCILIATION_TRANSITIONS: ProjectStatus[] = ['running', 'stopped'];
 
-type PersistedProjectStatus = Exclude<ProjectStatus, 'failed'>;
+type PersistedProjectStatus = ProjectStatus;
 
 /**
  * ProjectStateManager — centralized state machine for project lifecycle.
@@ -278,10 +277,6 @@ export class ProjectStateManager {
   }
 
   private toPersistedStatus(status: ProjectStatus): PersistedProjectStatus | null {
-    if (status === 'failed') {
-      return null;
-    }
-
     return status;
   }
 }

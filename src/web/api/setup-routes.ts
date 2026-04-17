@@ -585,6 +585,33 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     return c.json({ providers: masked });
   });
 
+  api.post('/setup/providers/default', async (c) => {
+    const body = await c.req.json<{ providerId?: string }>();
+    const providerId = typeof body.providerId === 'string' ? body.providerId.trim() : '';
+
+    if (!providerId) {
+      return c.json({ error: 'MISSING_FIELD', message: 'providerId is required' }, 400);
+    }
+
+    const config = loadConfig();
+    const providers = config.llm.providers ?? {};
+    if (!(providerId in providers)) {
+      return c.json({ error: 'NOT_FOUND', message: `Provider "${providerId}" not found` }, 404);
+    }
+
+    const previousDefaultProviderId = normalizeLlmConfig(config.llm).defaultRoute.providerId;
+    const updated = updateConfig({ llm: { defaultRoute: { providerId } } });
+    ctx.config = updated;
+
+    if (providerId !== previousDefaultProviderId) {
+      ctx.llmVerified = false;
+    }
+
+    await syncLlmRuntime(ctx);
+
+    return c.json({ status: 'updated', providerId });
+  });
+
   api.post('/setup/providers', async (c) => {
     const body = await c.req.json<{
       id: string;

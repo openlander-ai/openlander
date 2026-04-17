@@ -42,10 +42,6 @@ function createFallbackStateManager(db: Database): {
 } {
   return {
     transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
-      if (targetStatus === 'failed') {
-        return Promise.resolve(false);
-      }
-
       db.updateProject(projectId, { status: targetStatus });
       return Promise.resolve(true);
     },

@@ -15,9 +15,9 @@ import {
 import { cn } from '@/lib/utils.js';
 import { useLanguage } from '@/i18n/context.js';
 import {
-  PROVIDER_MODELS,
   PROVIDER_DEFS,
   MODEL_SELECTOR_FEATURES,
+  getProviderModels,
 } from './ai-settings-constants.js';
 
 interface AiFeaturesSectionProps {
@@ -304,18 +304,18 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
                             {t('settings.ai.modelDefault') || 'Default'}
                           </SelectItem>
                           {providers.flatMap((p) => {
-                            const models = PROVIDER_MODELS[p.provider] ?? [];
+                            const models = getProviderModels(p.provider);
                             const label =
                               PROVIDER_DEFS.find((def) => def.id === p.provider)?.label ??
                               p.provider;
 
                             return models.map((m) => (
                               <SelectItem
-                                key={`${p.id}:${m}`}
-                                value={`${p.id}:${m}`}
+                                key={`${p.id}:${m.id}`}
+                                value={`${p.id}:${m.id}`}
                                 className="text-xs font-mono"
                               >
-                                {label} — {m}
+                                {label} — {m.label}
                               </SelectItem>
                             ));
                           })}

@@ -200,14 +200,14 @@ async function recoverProject(
     const container = await containerExists(ctx, cName);
     if (container.exists && container.running) {
       if (project.status !== 'running') {
-        ctx.db.updateProject(project.id, { status: 'running' });
+        await ctx.stateManager.transition(project.id, 'running', 'manual-recovery');
       }
       return { name: project.name, status: 'running' };
     }
     if (container.exists && !container.running) {
       if (!dryRun) {
         await ctx.docker.startContainer(cName);
-        ctx.db.updateProject(project.id, { status: 'running' });
+        await ctx.stateManager.transition(project.id, 'running', 'manual-recovery');
       }
       return { name: project.name, status: 'started' };
     }

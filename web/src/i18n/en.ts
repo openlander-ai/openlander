@@ -1120,6 +1120,11 @@ export const translations = {
     latency: 'Latency',
     deleteDefaultGuide:
       'This is the default provider. Please set another provider as default first.',
+    switchDefaultProvider: 'Switch Default Provider',
+    switchingDefaultProvider: 'Switching...',
+    selectReplacementProvider: 'Select a new default provider',
+    noAlternativeProviders: 'No other providers are available to become the default.',
+    errorSwitchDefault: 'Failed to switch default provider',
     circuitBreaker: {
       open: 'Blocked (Waiting for retry)',
       halfOpen: 'Testing recovery...',

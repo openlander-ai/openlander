@@ -3,8 +3,9 @@ import { Key, ShieldCheck, Bot, Plus } from 'lucide-react';
 import {
   addProvider,
   deleteProvider,
-  startGoogleOAuth,
   getGoogleAuthStatus,
+  setDefaultProvider,
+  startGoogleOAuth,
   type ProviderInfo,
 } from '@/lib/api/index.js';
 import { Button } from '@/components/ui/button.js';
@@ -19,6 +20,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog.js';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select.js';
 import { LlmProviderOAuth } from './LlmProviderOAuth.js';
 import { ProviderCard } from './ProviderCard.js';
 import { AddProviderForm } from './AddProviderForm.js';
@@ -37,6 +45,9 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
   const [providerToDelete, setProviderToDelete] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showDefaultProviderGuide, setShowDefaultProviderGuide] = useState(false);
+  const [defaultProviderTarget, setDefaultProviderTarget] = useState<string | null>(null);
+  const [replacementProviderId, setReplacementProviderId] = useState('');
+  const [switchingDefault, setSwitchingDefault] = useState(false);
 
   const [googleConnected, setGoogleConnected] = useState(false);
   const [checkingGoogle, setCheckingGoogle] = useState(true);
@@ -59,6 +70,7 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to delete provider';
       if (errorMessage.includes('DEFAULT_PROVIDER') || errorMessage.includes('default provider')) {
+        setDefaultProviderTarget(providerToDelete);
         setShowDefaultProviderGuide(true);
       } else {
         setError(t('llmSettings.errorDelete') || errorMessage);
@@ -66,6 +78,43 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
     } finally {
       setDeletingId(null);
       setProviderToDelete(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!showDefaultProviderGuide) {
+      setReplacementProviderId('');
+      return;
+    }
+
+    const firstAlternative = providers.find((provider) => provider.id !== defaultProviderTarget);
+    setReplacementProviderId(firstAlternative?.id ?? '');
+  }, [defaultProviderTarget, providers, showDefaultProviderGuide]);
+
+  const alternativeProviders = providers.filter(
+    (provider) => provider.id !== defaultProviderTarget,
+  );
+
+  const handleSwitchDefaultProvider = async () => {
+    if (!replacementProviderId) return;
+
+    setSwitchingDefault(true);
+    setError(null);
+    try {
+      await setDefaultProvider(replacementProviderId);
+      await onProvidersChange();
+      emitLlmChanged();
+      setShowDefaultProviderGuide(false);
+      setDefaultProviderTarget(null);
+      setReplacementProviderId('');
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('llmSettings.errorSwitchDefault') || 'Failed to switch default provider',
+      );
+    } finally {
+      setSwitchingDefault(false);
     }
   };
 
@@ -201,7 +250,16 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
         onConfirm={executeDeleteProvider}
       />
 
-      <Dialog open={showDefaultProviderGuide} onOpenChange={setShowDefaultProviderGuide}>
+      <Dialog
+        open={showDefaultProviderGuide}
+        onOpenChange={(open) => {
+          setShowDefaultProviderGuide(open);
+          if (!open) {
+            setDefaultProviderTarget(null);
+            setReplacementProviderId('');
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t('llmSettings.deleteConfirmTitle') || 'Delete Provider'}</DialogTitle>
@@ -210,8 +268,48 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
                 'This is the default provider. Please set another provider as default first.'}
             </DialogDescription>
           </DialogHeader>
+          {alternativeProviders.length > 0 ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-ol">
+                {t('llmSettings.selectReplacementProvider') || 'Select a new default provider'}
+              </p>
+              <Select value={replacementProviderId} onValueChange={setReplacementProviderId}>
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      t('llmSettings.selectReplacementProvider') || 'Select a new default provider'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {alternativeProviders.map((provider) => (
+                    <SelectItem key={provider.id} value={provider.id}>
+                      {provider.id} — {provider.provider}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-ol">
+              {t('llmSettings.noAlternativeProviders') ||
+                'No other providers are available to become the default.'}
+            </p>
+          )}
           <DialogFooter>
-            <Button onClick={() => setShowDefaultProviderGuide(false)}>OK</Button>
+            {alternativeProviders.length > 0 && (
+              <Button
+                disabled={!replacementProviderId || switchingDefault}
+                onClick={handleSwitchDefaultProvider}
+              >
+                {switchingDefault
+                  ? t('llmSettings.switchingDefaultProvider') || 'Switching...'
+                  : t('llmSettings.switchDefaultProvider') || 'Switch Default Provider'}
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setShowDefaultProviderGuide(false)}>
+              OK
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

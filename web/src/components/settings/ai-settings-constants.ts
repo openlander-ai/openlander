@@ -1,41 +1,52 @@
-export const PROVIDER_MODELS: Record<string, string[]> = {
+export interface ProviderModelOption {
+  id: string;
+  label: string;
+}
+
+const model = (id: string, label = id): ProviderModelOption => ({ id, label });
+
+export const PROVIDER_MODELS: Record<string, ProviderModelOption[]> = {
   openai: [
-    'gpt-4o',
-    'gpt-4o-mini',
-    'gpt-4.1',
-    'gpt-4.1-mini',
-    'gpt-4.1-nano',
-    'o3',
-    'o3-mini',
-    'o4-mini',
+    model('gpt-4o'),
+    model('gpt-4o-mini'),
+    model('gpt-4.1'),
+    model('gpt-4.1-mini'),
+    model('gpt-4.1-nano'),
+    model('o3'),
+    model('o3-mini'),
+    model('o4-mini'),
   ],
-  anthropic: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-haiku-4-5-20251001'],
-  gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
-  xai: ['grok-3-mini-fast', 'grok-3-fast', 'grok-3-mini', 'grok-3'],
-  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  anthropic: [
+    model('claude-sonnet-4-20250514'),
+    model('claude-opus-4-20250514'),
+    model('claude-haiku-4-5-20251001'),
+  ],
+  gemini: [model('gemini-2.5-flash'), model('gemini-2.5-pro'), model('gemini-2.0-flash')],
+  xai: [model('grok-3-mini-fast'), model('grok-3-fast'), model('grok-3-mini'), model('grok-3')],
+  deepseek: [model('deepseek-chat'), model('deepseek-reasoner')],
   mistral: [
-    'mistral-large-latest',
-    'mistral-medium-latest',
-    'mistral-small-latest',
-    'codestral-latest',
+    model('mistral-large-latest'),
+    model('mistral-medium-latest'),
+    model('mistral-small-latest'),
+    model('codestral-latest'),
   ],
   zai: [
-    'glm-5.1',
-    'glm-5 (deprecated)',
-    'glm-4.7',
-    'glm-4.7-flash',
-    'glm-4.6',
-    'glm-4.6-flash',
-    'glm-z1-flash',
+    model('glm-5.1'),
+    model('glm-5', 'GLM-5 (deprecated)'),
+    model('glm-4.7'),
+    model('glm-4.7-flash'),
+    model('glm-4.6'),
+    model('glm-4.6-flash'),
+    model('glm-z1-flash'),
   ],
   'zai-coding': [
-    'glm-5.1',
-    'glm-5 (deprecated)',
-    'glm-4.7',
-    'glm-4.7-flash',
-    'glm-4.6',
-    'glm-4.6-flash',
-    'glm-z1-flash',
+    model('glm-5.1'),
+    model('glm-5', 'GLM-5 (deprecated)'),
+    model('glm-4.7'),
+    model('glm-4.7-flash'),
+    model('glm-4.6'),
+    model('glm-4.6-flash'),
+    model('glm-z1-flash'),
   ],
 };
 
@@ -63,7 +74,11 @@ export const PROVIDER_DEFS = [
 export type ProviderDefId = (typeof PROVIDER_DEFS)[number]['id'];
 
 export function getDefaultModel(providerId: string): string {
-  return PROVIDER_MODELS[providerId]?.[0] ?? '';
+  return PROVIDER_MODELS[providerId]?.[0]?.id ?? '';
+}
+
+export function getProviderModels(providerId: string): ProviderModelOption[] {
+  return PROVIDER_MODELS[providerId] ?? [];
 }
 
 export function getProviderDef(providerId: string) {
