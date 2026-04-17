@@ -3,9 +3,10 @@ import { EnvVarsTable } from '@/components/config/EnvVarsTable';
 import { DomainsPanel } from '@/components/config/DomainsPanel';
 import { WebhookPanel } from '@/components/config/WebhookPanel';
 import { DeploymentSourcePanel } from '@/components/project/DeploymentSourcePanel';
+import { ResourceLimitsPanel } from '@/components/config/ResourceLimitsPanel';
 import { cn } from '@/lib/utils';
 
-type SettingsSection = 'source' | 'env' | 'domains' | 'webhooks';
+type SettingsSection = 'source' | 'env' | 'domains' | 'webhooks' | 'resources';
 
 interface SettingsTabProps {
   projectId: string;
@@ -17,6 +18,7 @@ const NAV_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'env', label: 'Environment Variables' },
   { id: 'domains', label: 'Domains' },
   { id: 'webhooks', label: 'Webhooks' },
+  { id: 'resources', label: 'Resource Limits' },
 ];
 
 export function SettingsTab({ projectId, projectStatus }: SettingsTabProps) {
@@ -71,6 +73,7 @@ export function SettingsTab({ projectId, projectStatus }: SettingsTabProps) {
           <DomainsPanel projectId={projectId} projectStatus={projectStatus} />
         )}
         {activeSection === 'webhooks' && <WebhookPanel projectId={projectId} />}
+        {activeSection === 'resources' && <ResourceLimitsPanel projectId={projectId} />}
       </div>
     </div>
   );
