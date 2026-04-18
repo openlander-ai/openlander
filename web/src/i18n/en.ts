@@ -283,6 +283,12 @@ export const translations = {
   settings: {
     title: 'Settings',
     description: 'Manage your AI provider, connections, and system configuration.',
+    nav: {
+      source: 'Deployment Source',
+      env: 'Environment Variables',
+      domains: 'Domains',
+      webhooks: 'Webhooks',
+    },
     tabs: {
       system: 'System',
       security: 'Security',

@@ -6,6 +6,7 @@ import { containerName as projectContainerName } from '../helpers.js';
 import { allocatePort, clearPortScanCache, releasePortReservation } from '../port.js';
 import { buildTraefikLabels, getEnvironmentProjectHostname } from '../traefik.js';
 import {
+  deserializeConfig,
   loadResourceLimitsForProject,
   serializeConfig,
   CONFIG_VERSION,
@@ -47,9 +48,13 @@ export class ContainerRunner {
     let resourceLimits = loadResourceLimitsForProject(this.db, config.projectId);
     if (!resourceLimits) {
       resourceLimits = buildResourceLimitConfig('small', null);
+      const configRow = this.db.loadDeployConfig(config.projectId);
+      const existingSnapshot = configRow
+        ? (deserializeConfig(configRow.config_json)?.snapshot ?? {})
+        : {};
       this.db.saveDeployConfig(
         config.projectId,
-        serializeConfig({ resourceProfile: 'small' as const }),
+        serializeConfig({ ...existingSnapshot, resourceProfile: 'small' as const }),
         CONFIG_VERSION,
       );
     }

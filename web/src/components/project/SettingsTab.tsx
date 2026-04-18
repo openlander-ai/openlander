@@ -19,10 +19,10 @@ export function SettingsTab({ projectId, projectStatus }: SettingsTabProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>('source');
 
   const navItems: { id: SettingsSection; label: string }[] = [
-    { id: 'source', label: 'Deployment Source' },
-    { id: 'env', label: 'Environment Variables' },
-    { id: 'domains', label: 'Domains' },
-    { id: 'webhooks', label: 'Webhooks' },
+    { id: 'source', label: t('settings.nav.source') },
+    { id: 'env', label: t('settings.nav.env') },
+    { id: 'domains', label: t('settings.nav.domains') },
+    { id: 'webhooks', label: t('settings.nav.webhooks') },
     { id: 'resources', label: t('resources.title') },
   ];
 

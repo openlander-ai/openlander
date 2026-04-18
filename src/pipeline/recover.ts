@@ -13,7 +13,6 @@ import { allocatePort } from './port.js';
 import { getPolicy } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { loadResourceLimitsForProject } from './config-snapshot.js';
-import type { ResourceLimitConfig } from './docker/types.js';
 
 const log = createModuleLogger('recover');
 
@@ -152,37 +151,26 @@ async function recoverService(
     const template = SERVICE_TEMPLATES[service.type];
     const containerPort = getServiceContainerPort(service);
     const dataMountPath = getDataMountPath(service.type);
-    const memLimits = SERVICE_MEMORY_LIMITS[service.type];
-    const serviceResourceLimits: ResourceLimitConfig | undefined = memLimits
-      ? {
-          profile: 'small',
-          memoryLimitBytes: memLimits.memoryLimitBytes,
-          memoryReservationBytes: Math.floor(memLimits.memoryLimitBytes * 0.5),
-          memorySwapBytes: memLimits.memoryLimitBytes,
-          cpuShares: memLimits.cpuShares,
-        }
-      : undefined;
+    const memLimits = SERVICE_MEMORY_LIMITS[service.type] ?? {
+      memoryLimitBytes: 536870912,
+      cpuShares: 512,
+    };
 
     await ctx.docker.safeRemoveContainer(cName);
 
-    const containerId = await ctx.docker.runContainer({
+    const containerId = await ctx.docker.runServiceContainer({
       imageTag: service.image,
       name: cName,
       port: service.port,
+      hostPort: service.port,
       containerPort,
       envVars,
+      serviceName: service.name,
       cmd: template?.cmd,
-      labels: {
-        [DOCKER_LABELS.MANAGED]: 'true',
-        [DOCKER_LABELS.ROLE]: 'service',
-        [DOCKER_LABELS.SERVICE]: service.name,
-      },
-      traefikLabels: {},
-      network: SHARED_NETWORK_NAME,
-      restartPolicy: { Name: 'unless-stopped' },
-      extraBinds: [`${vName}:${dataMountPath}`],
+      volumeBinds: [`${vName}:${dataMountPath}`],
       healthcheck: template?.healthcheck,
-      resourceLimits: serviceResourceLimits,
+      memoryLimitBytes: memLimits.memoryLimitBytes,
+      cpuShares: memLimits.cpuShares,
     });
 
     ctx.db.updateService(service.id, { status: 'running', containerId });

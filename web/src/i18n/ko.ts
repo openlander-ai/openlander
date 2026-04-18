@@ -282,6 +282,12 @@ export const translations = {
   settings: {
     title: '설정',
     description: 'AI 제공자, 연결 및 시스템 구성을 관리합니다.',
+    nav: {
+      source: '배포 소스',
+      env: '환경 변수',
+      domains: '도메인',
+      webhooks: '웹훅',
+    },
     tabs: {
       system: '시스템',
       security: '보안',
