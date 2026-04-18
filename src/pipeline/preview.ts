@@ -11,6 +11,7 @@ import { buildTraefikLabels, getProjectUrl } from './traefik.js';
 import { cloneRepo } from './git.js';
 import { ensureDockerfile } from './dockerfile-gen.js';
 import { getPolicy } from '../config/index.js';
+import { buildResourceLimitConfig } from './docker/types.js';
 
 const DEFAULT_PREVIEW_TTL_MS = 86_400_000;
 
@@ -110,6 +111,7 @@ export class PreviewDeployer {
       const port = await this.allocatePreviewPort();
       const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? port;
       const traefikLabels = buildTraefikLabels(previewName, containerPort);
+      const previewLimits = buildResourceLimitConfig('small', null);
 
       const containerId = await this.docker.runContainer({
         imageTag,
@@ -119,6 +121,7 @@ export class PreviewDeployer {
         envVars: {},
         traefikLabels,
         network: getPolicy('production').networkName,
+        resourceLimits: previewLimits ?? undefined,
       });
 
       const url = getProjectUrl(previewName);

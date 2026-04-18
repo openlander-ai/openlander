@@ -130,7 +130,10 @@ export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
   },
 };
 
-const SERVICE_MEMORY_LIMITS: Record<string, { memoryLimitBytes: number; cpuShares: number }> = {
+export const SERVICE_MEMORY_LIMITS: Record<
+  string,
+  { memoryLimitBytes: number; cpuShares: number }
+> = {
   postgresql: { memoryLimitBytes: 536870912, cpuShares: 512 }, // 512MB
   mysql: { memoryLimitBytes: 536870912, cpuShares: 512 }, // 512MB
   redis: { memoryLimitBytes: 134217728, cpuShares: 256 }, // 128MB

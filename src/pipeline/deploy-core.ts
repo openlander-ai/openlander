@@ -53,6 +53,7 @@ import type { ProbeContext } from '../health/types.js';
 import { BuildExecutor } from './deploy/build-step.js';
 import { ContainerRunner } from './deploy/run-step.js';
 import { getImageExposedPort, mapPullError } from './image-utils.js';
+import { loadResourceLimitsForProject } from './config-snapshot.js';
 
 import {
   buildProject,
@@ -1556,6 +1557,7 @@ export class DeployPipeline {
 
       const greenName = projectContainerName(`${projectName}-green`);
       await this.removeStaleGreenContainer(greenName);
+      const resourceLimits = loadResourceLimitsForProject(this.db, projectId);
 
       greenContainerId = await this.docker.runContainer({
         imageTag,
@@ -1566,6 +1568,7 @@ export class DeployPipeline {
         traefikLabels: { 'traefik.enable': 'false' },
         network: networkName,
         secretFiles,
+        resourceLimits: resourceLimits ?? undefined,
       });
       shouldCleanupGreen = true;
 

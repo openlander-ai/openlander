@@ -8,8 +8,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { allocatePort } from '../port.js';
 import { buildTraefikLabels, getProjectUrl } from '../traefik.js';
 import type { Docker } from '../docker.js';
-import { buildResourceLimitConfig } from '../docker/types.js';
-import { deserializeConfig } from '../config-snapshot.js';
+import { loadResourceLimitsForProject } from '../config-snapshot.js';
 import { getRouteName } from './helpers.js';
 import { containerName as projectContainerName } from '../helpers.js';
 import { isDockerNotFoundError } from '../../errors.js';
@@ -133,13 +132,7 @@ export class RollbackExecutor {
 
       const envType: OpenLanderEnv = 'production';
 
-      // Load CURRENT resource limits from deploy_configs (rollback reverts image, not settings)
-      const configRow = this.db.loadDeployConfig(projectId);
-      const snapshot = configRow ? deserializeConfig(configRow.config_json)?.snapshot : undefined;
-      const resourceLimits = buildResourceLimitConfig(
-        snapshot?.resourceProfile ?? null,
-        snapshot?.memoryLimitBytes ?? null,
-      );
+      const resourceLimits = loadResourceLimitsForProject(this.db, projectId);
 
       const containerId = await this.docker.runContainer({
         imageTag: rollbackImageTag,

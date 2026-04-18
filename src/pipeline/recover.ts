@@ -6,12 +6,14 @@ import {
   serviceContainerName,
   serviceVolumeName,
 } from './helpers.js';
-import { SERVICE_TEMPLATES } from './service-manager.js';
+import { SERVICE_MEMORY_LIMITS, SERVICE_TEMPLATES } from './service-manager.js';
 import { getServiceAdapter } from './service-adapters/index.js';
 import { buildTraefikLabels } from './traefik.js';
 import { allocatePort } from './port.js';
 import { getPolicy } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { loadResourceLimitsForProject } from './config-snapshot.js';
+import type { ResourceLimitConfig } from './docker/types.js';
 
 const log = createModuleLogger('recover');
 
@@ -150,6 +152,16 @@ async function recoverService(
     const template = SERVICE_TEMPLATES[service.type];
     const containerPort = getServiceContainerPort(service);
     const dataMountPath = getDataMountPath(service.type);
+    const memLimits = SERVICE_MEMORY_LIMITS[service.type];
+    const serviceResourceLimits: ResourceLimitConfig | undefined = memLimits
+      ? {
+          profile: 'small',
+          memoryLimitBytes: memLimits.memoryLimitBytes,
+          memoryReservationBytes: Math.floor(memLimits.memoryLimitBytes * 0.5),
+          memorySwapBytes: memLimits.memoryLimitBytes,
+          cpuShares: memLimits.cpuShares,
+        }
+      : undefined;
 
     await ctx.docker.safeRemoveContainer(cName);
 
@@ -170,6 +182,7 @@ async function recoverService(
       restartPolicy: { Name: 'unless-stopped' },
       extraBinds: [`${vName}:${dataMountPath}`],
       healthcheck: template?.healthcheck,
+      resourceLimits: serviceResourceLimits,
     });
 
     ctx.db.updateService(service.id, { status: 'running', containerId });
@@ -255,6 +268,7 @@ async function recoverProject(
 
     // Remove any stale container with same name
     await ctx.docker.safeRemoveContainer(cName);
+    const resourceLimits = loadResourceLimitsForProject(ctx.db, project.id);
 
     // Create and start container
     const containerId = await ctx.docker.runContainer({
@@ -268,6 +282,7 @@ async function recoverProject(
       network: getPolicy('production').networkName,
       secretFiles,
       restartPolicy: { Name: 'unless-stopped' },
+      resourceLimits: resourceLimits ?? undefined,
     });
 
     ctx.db.updateProject(project.id, {

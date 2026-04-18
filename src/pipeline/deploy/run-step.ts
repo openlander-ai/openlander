@@ -5,9 +5,12 @@ import type { Docker } from '../docker.js';
 import { containerName as projectContainerName } from '../helpers.js';
 import { allocatePort, clearPortScanCache, releasePortReservation } from '../port.js';
 import { buildTraefikLabels, getEnvironmentProjectHostname } from '../traefik.js';
-import { deserializeConfig, serializeConfig, CONFIG_VERSION } from '../config-snapshot.js';
+import {
+  loadResourceLimitsForProject,
+  serializeConfig,
+  CONFIG_VERSION,
+} from '../config-snapshot.js';
 import { buildResourceLimitConfig } from '../docker/types.js';
-import type { ResourceLimitConfig } from '../docker/types.js';
 
 export interface RunConfig {
   imageTag: string;
@@ -41,19 +44,13 @@ export class ContainerRunner {
       envType,
     );
 
-    const configRow = this.db.loadDeployConfig(config.projectId);
-    let resourceLimits: ResourceLimitConfig | null = null;
-    if (!configRow) {
-      // New project with no config row — apply small default (existing projects keep no limit for backward compat)
+    let resourceLimits = loadResourceLimitsForProject(this.db, config.projectId);
+    if (!resourceLimits) {
       resourceLimits = buildResourceLimitConfig('small', null);
-      const defaultSnapshot = { resourceProfile: 'small' as const };
-      this.db.saveDeployConfig(config.projectId, serializeConfig(defaultSnapshot), CONFIG_VERSION);
-    } else {
-      const stored = deserializeConfig(configRow.config_json);
-      const snapshot = stored?.snapshot;
-      resourceLimits = buildResourceLimitConfig(
-        snapshot?.resourceProfile ?? null,
-        snapshot?.memoryLimitBytes ?? null,
+      this.db.saveDeployConfig(
+        config.projectId,
+        serializeConfig({ resourceProfile: 'small' as const }),
+        CONFIG_VERSION,
       );
     }
 
