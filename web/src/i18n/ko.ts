@@ -21,6 +21,8 @@ export const translations = {
     noLimitWarning: '메모리 제한을 설정하면 cascade failure를 방지할 수 있습니다.',
     saveFailed: '리소스 제한 저장에 실패했습니다',
     loading: '로딩 중...',
+    composeNotSupported:
+      'docker-compose 프로젝트에는 아직 리소스 제한이 적용되지 않습니다. v1.1.0에서 지원 예정입니다.',
     warning: {
       hostMemory:
         '호스트 메모리 사용률이 {percent}%입니다. 컨테이너 제한을 줄이거나 호스트 리소스를 늘려보세요.',

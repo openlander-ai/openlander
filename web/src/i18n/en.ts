@@ -21,6 +21,8 @@ export const translations = {
     noLimitWarning: 'We recommend setting a memory limit to prevent cascade failures.',
     saveFailed: 'Failed to save resource limits',
     loading: 'Loading...',
+    composeNotSupported:
+      'Resource limits are not yet applied to docker-compose projects in this release. Tracked for v1.1.0.',
     warning: {
       hostMemory:
         'Host memory usage is at {percent}%. Consider reducing container limits or increasing host resources.',

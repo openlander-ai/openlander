@@ -15,9 +15,10 @@ import {
 
 interface Props {
   projectId: string;
+  isCompose?: boolean;
 }
 
-export function ResourceLimitsPanel({ projectId }: Props) {
+export function ResourceLimitsPanel({ projectId, isCompose }: Props) {
   const { t } = useLanguage();
   const [profile, setProfile] = useState<string | null>(null);
   const [customMb, setCustomMb] = useState<string>('');
@@ -64,6 +65,17 @@ export function ResourceLimitsPanel({ projectId }: Props) {
 
   if (loading) {
     return <div className="p-4 text-sm text-secondary-ol">{t('resources.loading')}</div>;
+  }
+
+  if (isCompose) {
+    return (
+      <div
+        className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-200"
+        data-testid="resource-limits-compose-unsupported"
+      >
+        {t('resources.composeNotSupported')}
+      </div>
+    );
   }
 
   return (

@@ -124,7 +124,11 @@ export function ProjectDetailTabs({
 
       <TabsContent value="settings" className="flex-1 min-h-0 mt-0">
         {id && displayProject && (
-          <SettingsTab projectId={id} projectStatus={displayProject.status} />
+          <SettingsTab
+            projectId={id}
+            projectStatus={displayProject.status}
+            isCompose={displayProject.isCompose}
+          />
         )}
       </TabsContent>
     </Tabs>

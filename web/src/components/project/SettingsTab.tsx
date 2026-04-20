@@ -12,9 +12,10 @@ type SettingsSection = 'source' | 'env' | 'domains' | 'webhooks' | 'resources';
 interface SettingsTabProps {
   projectId: string;
   projectStatus?: string;
+  isCompose?: boolean;
 }
 
-export function SettingsTab({ projectId, projectStatus }: SettingsTabProps) {
+export function SettingsTab({ projectId, projectStatus, isCompose }: SettingsTabProps) {
   const { t } = useLanguage();
   const [activeSection, setActiveSection] = useState<SettingsSection>('source');
 
@@ -75,7 +76,9 @@ export function SettingsTab({ projectId, projectStatus }: SettingsTabProps) {
           <DomainsPanel projectId={projectId} projectStatus={projectStatus} />
         )}
         {activeSection === 'webhooks' && <WebhookPanel projectId={projectId} />}
-        {activeSection === 'resources' && <ResourceLimitsPanel projectId={projectId} />}
+        {activeSection === 'resources' && (
+          <ResourceLimitsPanel projectId={projectId} isCompose={isCompose} />
+        )}
       </div>
     </div>
   );
