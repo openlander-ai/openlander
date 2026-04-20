@@ -288,6 +288,44 @@ export class SetupRequiredError extends OpenLanderError {
   }
 }
 
+// --- Project state eligibility errors ---
+
+export class ProjectArchivedError extends OpenLanderError {
+  constructor(projectId: string) {
+    super(
+      `Project ${projectId} is archived and cannot be modified. Restore it first.`,
+      'PROJECT_ARCHIVED',
+      409,
+      { projectId },
+    );
+    this.name = 'ProjectArchivedError';
+  }
+}
+
+export class CircuitBreakerOpenError extends OpenLanderError {
+  constructor(projectId: string) {
+    super(
+      `Project ${projectId} has an open circuit breaker due to repeated failures. Wait for cooldown before retrying.`,
+      'CIRCUIT_BREAKER_OPEN',
+      409,
+      { projectId },
+    );
+    this.name = 'CircuitBreakerOpenError';
+  }
+}
+
+export class ProjectRecoveringError extends OpenLanderError {
+  constructor(projectId: string) {
+    super(
+      `Project ${projectId} is currently recovering. Wait for recovery to complete before making changes.`,
+      'PROJECT_RECOVERING',
+      409,
+      { projectId },
+    );
+    this.name = 'ProjectRecoveringError';
+  }
+}
+
 // --- Deploy lock errors ---
 
 export class DeployLockedError extends OpenLanderError {

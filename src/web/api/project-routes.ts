@@ -3,7 +3,13 @@ import { stream } from 'hono/streaming';
 import { rm } from 'node:fs/promises';
 
 import type { AppContext } from '../../app.js';
-import { DeployLockedError, TunnelStartError } from '../../errors.js';
+import {
+  CircuitBreakerOpenError,
+  DeployLockedError,
+  ProjectArchivedError,
+  ProjectRecoveringError,
+  TunnelStartError,
+} from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { encrypt } from '../../env/crypto.js';
 import {
@@ -27,6 +33,25 @@ import {
 } from './helpers/project-helpers.js';
 
 const log = createModuleLogger('api');
+
+/**
+ * Guard that throws a typed 409 error when a project cannot accept mutating
+ * operations (redeploy / rollback / blue-green).
+ *
+ * Call this immediately after `getProjectOrThrow` in any route that modifies
+ * deployment state.
+ */
+function assertProjectMutable(project: ProjectRow, ctx: AppContext): void {
+  if (project.archived_at) {
+    throw new ProjectArchivedError(project.id);
+  }
+  if (project.status === 'recovering') {
+    throw new ProjectRecoveringError(project.id);
+  }
+  if (ctx.db.isCircuitBreakerOpen(project.id)) {
+    throw new CircuitBreakerOpenError(project.id);
+  }
+}
 
 function mapEnvironment(projectName: string, environment: EnvironmentRow) {
   const ips = getAllIps();
@@ -704,6 +729,20 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   api.post('/projects/:id/redeploy', async (c) => {
     const project = getProjectOrThrow(c, ctx);
+
+    try {
+      assertProjectMutable(project, ctx);
+    } catch (err) {
+      if (
+        err instanceof ProjectArchivedError ||
+        err instanceof ProjectRecoveringError ||
+        err instanceof CircuitBreakerOpenError
+      ) {
+        return c.json(err.toJSON(), 409);
+      }
+      throw err;
+    }
+
     const strategy = (c.req.query('strategy') ?? 'force') as 'blue-green' | 'force';
 
     // If caller provides env_vars, merge them into existing vars before redeploying
@@ -751,6 +790,19 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // v0.3: Rollback
   api.post('/projects/:id/rollback', async (c) => {
     const project = getProjectOrThrow(c, ctx);
+
+    try {
+      assertProjectMutable(project, ctx);
+    } catch (err) {
+      if (
+        err instanceof ProjectArchivedError ||
+        err instanceof ProjectRecoveringError ||
+        err instanceof CircuitBreakerOpenError
+      ) {
+        return c.json(err.toJSON(), 409);
+      }
+      throw err;
+    }
 
     const environmentResolution = resolveEnvironmentByType(c, ctx, project);
     if ('response' in environmentResolution) {
@@ -816,6 +868,20 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // v0.3: Blue-green deployment
   api.post('/projects/:id/blue-green', async (c) => {
     const project = getProjectOrThrow(c, ctx);
+
+    try {
+      assertProjectMutable(project, ctx);
+    } catch (err) {
+      if (
+        err instanceof ProjectArchivedError ||
+        err instanceof ProjectRecoveringError ||
+        err instanceof CircuitBreakerOpenError
+      ) {
+        return c.json(err.toJSON(), 409);
+      }
+      throw err;
+    }
+
     const body = await c.req
       .json<{ health_check_path?: string }>()
       .catch((): { health_check_path?: string } => ({}));
