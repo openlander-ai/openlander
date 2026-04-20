@@ -2,6 +2,7 @@ import { and, asc, between, desc, eq, gt, lt } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { activityLog } from '../schema.drizzle.js';
 import type { ActivityLogRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 // ── Inline ULID generator (Crockford Base32, 26 chars, monotonic) ──
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -86,7 +87,7 @@ export class ActivityLogRepo {
       | ActivityLogRow
       | undefined;
 
-    if (!created) throw new Error(`Failed to create activity log entry ${id}`);
+    if (!created) throw new RepoPersistenceError('activity log entry', id);
     return created;
   }
 

@@ -3,6 +3,7 @@ import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { buildSetValues } from '../helpers.js';
 import { environments } from '../schema.drizzle.js';
 import type { EnvironmentRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 export class EnvironmentRepo {
   constructor(
@@ -41,7 +42,7 @@ export class EnvironmentRepo {
       .run();
 
     const created = this.getEnvironment(environment.id);
-    if (!created) throw new Error(`Failed to create environment ${environment.id}`);
+    if (!created) throw new RepoPersistenceError('environment', environment.id);
     return created;
   }
 

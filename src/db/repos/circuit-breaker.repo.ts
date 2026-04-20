@@ -3,6 +3,7 @@ import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { pickDefined } from '../helpers.js';
 import { circuitBreakerState } from '../schema.drizzle.js';
 import type { CircuitBreakerRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 const FAILURE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const HALF_OPEN_DELAY_MS = 30 * 60 * 1000;
@@ -88,7 +89,7 @@ export class CircuitBreakerRepo {
     }
 
     const updated = this.getState(projectId);
-    if (!updated) throw new Error(`Failed to increment failure for ${projectId}`);
+    if (!updated) throw new RepoPersistenceError('circuit breaker state', projectId);
     return updated;
   }
 

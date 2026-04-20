@@ -3,6 +3,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { serviceConnections } from '../schema.drizzle.js';
 import type { ServiceConnectionRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 export class ServiceConnectionRepo {
   constructor(
@@ -27,7 +28,8 @@ export class ServiceConnectionRepo {
       .run();
 
     const created = this.getConnectionByProjectAndService(opts.projectId, opts.serviceId);
-    if (!created) throw new Error(`Failed to create service connection`);
+    if (!created)
+      throw new RepoPersistenceError('service connection', `${opts.projectId}:${opts.serviceId}`);
     return created;
   }
 

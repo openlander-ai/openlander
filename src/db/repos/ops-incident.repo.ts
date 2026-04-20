@@ -3,6 +3,7 @@ import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { pickDefined } from '../helpers.js';
 import { opsIncidents } from '../schema.drizzle.js';
 import type { OpsIncidentRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 function escapeLikePattern(text: string): string {
   return text.replace(/%/g, '\\%').replace(/_/g, '\\_');
@@ -36,7 +37,7 @@ export class OpsIncidentRepo {
       .run();
 
     const created = this.findById(data.id);
-    if (!created) throw new Error(`Failed to create ops incident ${data.id}`);
+    if (!created) throw new RepoPersistenceError('ops incident', data.id);
     return created;
   }
 

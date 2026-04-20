@@ -3,6 +3,7 @@ import { desc, eq, sql } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { services } from '../schema.drizzle.js';
 import type { ServiceRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 export class ServiceRepo {
   constructor(
@@ -37,7 +38,7 @@ export class ServiceRepo {
       .run();
 
     const created = this.getService(service.id);
-    if (!created) throw new Error(`Failed to create service ${service.id}`);
+    if (!created) throw new RepoPersistenceError('service', service.id);
     return created;
   }
 

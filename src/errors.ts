@@ -209,6 +209,85 @@ export class ProjectAlreadyExistsError extends OpenLanderError {
   }
 }
 
+// --- Repo not-found / persistence errors ---
+//
+// Each repo's mutating + post-insert verification paths throw a typed 404 (or
+// 500 for create-failures) so callers can distinguish "no such row" from
+// generic infrastructure errors. Plain `get*` lookups still return
+// `undefined` — only mutations and post-insert verification throw.
+
+export class EnvironmentNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Environment not found: ${identifier}`, 'ENVIRONMENT_NOT_FOUND', 404, { identifier });
+    this.name = 'EnvironmentNotFoundError';
+  }
+}
+
+export class ServiceNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Service not found: ${identifier}`, 'SERVICE_NOT_FOUND', 404, { identifier });
+    this.name = 'ServiceNotFoundError';
+  }
+}
+
+export class RuntimeIncidentNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Runtime incident not found: ${identifier}`, 'RUNTIME_INCIDENT_NOT_FOUND', 404, {
+      identifier,
+    });
+    this.name = 'RuntimeIncidentNotFoundError';
+  }
+}
+
+export class DeployPlanNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Deploy plan not found: ${identifier}`, 'DEPLOY_PLAN_NOT_FOUND', 404, { identifier });
+    this.name = 'DeployPlanNotFoundError';
+  }
+}
+
+export class OpsIncidentNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Ops incident not found: ${identifier}`, 'OPS_INCIDENT_NOT_FOUND', 404, { identifier });
+    this.name = 'OpsIncidentNotFoundError';
+  }
+}
+
+export class ServiceConnectionNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Service connection not found: ${identifier}`, 'SERVICE_CONNECTION_NOT_FOUND', 404, {
+      identifier,
+    });
+    this.name = 'ServiceConnectionNotFoundError';
+  }
+}
+
+export class ProjectDependencyNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Project dependency not found: ${identifier}`, 'PROJECT_DEPENDENCY_NOT_FOUND', 404, {
+      identifier,
+    });
+    this.name = 'ProjectDependencyNotFoundError';
+  }
+}
+
+/**
+ * Generic persistence failure raised when an `INSERT` succeeds but the
+ * subsequent verification read returns no row. Indicates DB corruption or
+ * concurrent deletion mid-flight.
+ */
+export class RepoPersistenceError extends OpenLanderError {
+  constructor(entity: string, identifier: string) {
+    super(
+      `Failed to persist ${entity} ${identifier}: insert succeeded but verification read returned no row`,
+      'REPO_PERSISTENCE_FAILED',
+      500,
+      { entity, identifier },
+    );
+    this.name = 'RepoPersistenceError';
+  }
+}
+
 // --- LLM errors ---
 
 export class LLMProviderError extends OpenLanderError {

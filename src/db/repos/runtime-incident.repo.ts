@@ -3,6 +3,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { runtimeIncidents } from '../schema.drizzle.js';
 import type { RuntimeIncidentRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 export class RuntimeIncidentRepo {
   constructor(
@@ -42,7 +43,7 @@ export class RuntimeIncidentRepo {
       .run();
 
     const created = this.getIncident(id);
-    if (!created) throw new Error(`Failed to create runtime incident ${id}`);
+    if (!created) throw new RepoPersistenceError('runtime incident', id);
     return created;
   }
 

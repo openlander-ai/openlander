@@ -1,5 +1,10 @@
 import { and, asc, count, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
-import { OpenLanderError, ProjectAlreadyExistsError, ProjectNotFoundError } from '../../errors.js';
+import {
+  OpenLanderError,
+  ProjectAlreadyExistsError,
+  ProjectNotFoundError,
+  RepoPersistenceError,
+} from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { buildSetValues } from '../helpers.js';
@@ -55,7 +60,7 @@ export class ProjectRepo {
     }
 
     const created = this.getProject(project.id);
-    if (!created) throw new Error(`Failed to create project ${project.id}`);
+    if (!created) throw new RepoPersistenceError('project', project.id);
     return created;
   }
 

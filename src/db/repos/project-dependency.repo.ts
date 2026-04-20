@@ -5,6 +5,7 @@ import {
   type ProjectDependencyRow,
   type NewProjectDependency,
 } from '../schema.drizzle.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 export class ProjectDependencyRepo {
   constructor(
@@ -34,7 +35,7 @@ export class ProjectDependencyRepo {
       .from(projectDependencies)
       .where(eq(projectDependencies.id, id))
       .get();
-    if (!row) throw new Error(`Failed to create dependency ${id}`);
+    if (!row) throw new RepoPersistenceError('project dependency', id);
     return row as ProjectDependencyRow;
   }
 

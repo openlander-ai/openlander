@@ -4,6 +4,7 @@ import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { buildSetValues } from '../helpers.js';
 import { deployPlans } from '../schema.drizzle.js';
 import type { DeployPlanRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 export class DeployPlanRepo {
   constructor(
@@ -36,7 +37,7 @@ export class DeployPlanRepo {
       .run();
 
     const created = this.getDeployPlan(plan.id);
-    if (!created) throw new Error(`Failed to create deploy plan ${plan.id}`);
+    if (!created) throw new RepoPersistenceError('deploy plan', plan.id);
     return created;
   }
 
