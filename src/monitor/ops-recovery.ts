@@ -15,6 +15,7 @@ import type {
 } from '../pipeline/approval-gate.js';
 import { resolveContainerUrl } from '../pipeline/url-resolver.js';
 import type { ConfigurableRecoveryStep, RecoveryAutomationPolicy } from './ops-types.js';
+import { checkRecoveryEligibility } from './recovery-policy.js';
 
 const log = createModuleLogger('ops-recovery');
 
@@ -201,31 +202,23 @@ export class RecoveryPipeline {
 
   private async runRecoverySequence(context: RecoveryContext): Promise<RecoveryOutcome> {
     const { projectId, containerId, incidentId } = context;
-    const project = this.ctx.db.getProject(projectId);
 
-    if (!project || project.archived_at || project.status === 'stopped') {
+    // Single source of truth for eligibility — same invariants as
+    // RecoveryCoordinator. Stale deploy locks (>30 min) are now treated as
+    // expired here too, matching the policy applied elsewhere.
+    const eligibility = checkRecoveryEligibility(projectId, 'ops_sequence', {
+      db: this.ctx.db,
+    });
+    if (!eligibility.eligible) {
+      const description =
+        eligibility.reason === 'deploy_in_progress'
+          ? 'Deploy lock is held by another process — recovery skipped'
+          : 'Project not found or inactive — recovery skipped';
       log.info(
-        { projectId, status: project?.status },
-        'Project not found or inactive — skipping recovery',
+        { projectId, reason: eligibility.reason, message: eligibility.message },
+        'Ops recovery skipped by eligibility policy',
       );
-      this.addIncidentEvent(
-        incidentId,
-        'interrupted',
-        'Project not found or inactive — recovery skipped',
-      );
-      return 'skipped';
-    }
-
-    if (project.deploy_lock_session) {
-      this.addIncidentEvent(
-        incidentId,
-        'interrupted',
-        'Deploy lock is held by another process — recovery skipped',
-      );
-      log.info(
-        { projectId, lockSession: project.deploy_lock_session },
-        'Deploy lock held — skipping',
-      );
+      this.addIncidentEvent(incidentId, 'interrupted', description);
       return 'skipped';
     }
 
@@ -578,7 +571,12 @@ export class RecoveryPipeline {
       return await this.escalate(context, `${reason}; no previous image available for rollback`);
     }
 
-    if (project.deploy_lock_session) {
+    // Use the unified policy so rollback honours the same stale-lock window as
+    // every other recovery entry point.
+    const lockEligibility = checkRecoveryEligibility(context.projectId, 'ops_sequence', {
+      db: this.ctx.db,
+    });
+    if (!lockEligibility.eligible && lockEligibility.reason === 'deploy_in_progress') {
       return await this.escalate(context, `${reason}; deploy lock held during rollback`);
     }
 

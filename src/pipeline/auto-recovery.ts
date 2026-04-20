@@ -18,6 +18,7 @@ import { decisionEngine } from '../llm/decision.js';
 import type { PendingFixPatch } from './deploy/helpers.js';
 import { findMatchingPatterns, saveRecoveryPattern } from '../llm/memory.js';
 import type { ConfigurableRecoveryStep, RecoveryAutomationPolicy } from '../monitor/ops-types.js';
+import { withRecoveryStage } from '../monitor/recovery-policy.js';
 
 const log = createModuleLogger('auto-recovery');
 
@@ -353,12 +354,17 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     const normalizedError = normalizeError(error);
     const recoveryStartTime = Date.now();
 
-    let matchingPatterns: ReturnType<typeof findMatchingPatterns> = [];
-    try {
-      matchingPatterns = findMatchingPatterns(db, projectId, error);
-    } catch (patternErr) {
-      log.warn({ err: patternErr, projectId }, 'Failed to lookup recovery patterns');
-    }
+    // U-P0-9 — surface lookup failures via recovery:degraded so they're
+    // visible in metrics, not silently swallowed. Default fallback is empty
+    // matches so the rest of the pipeline proceeds with the LLM/recipe path.
+    const lookupResult = await withRecoveryStage(
+      'execute',
+      { events: eventBus, projectId, metadata: { phase: 'pattern-lookup' } },
+      () => Promise.resolve(findMatchingPatterns(db, projectId, error)),
+    );
+    const matchingPatterns: ReturnType<typeof findMatchingPatterns> = lookupResult.ok
+      ? lookupResult.value
+      : [];
 
     if (matchingPatterns.length > 0) {
       log.info(
@@ -378,12 +384,18 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     const fixActionStr = recipe
       ? JSON.stringify({ strategy, recipe: recipe.title })
       : JSON.stringify({ strategy });
+    // U-P0-10 — wrap save so persistence failures are surfaced via
+    // recovery:degraded rather than silently swallowed. Caller (success/fail
+    // branches below) is fire-and-forget by design.
     const trySavePattern = (success: boolean): void => {
-      try {
-        saveRecoveryPattern(db, projectId, error, fixActionStr, success, plan.category);
-      } catch (patternErr) {
-        log.warn({ err: patternErr, projectId }, 'Failed to save recovery pattern');
-      }
+      void withRecoveryStage(
+        'execute',
+        { events: eventBus, projectId, metadata: { phase: 'pattern-save', success } },
+        () => {
+          saveRecoveryPattern(db, projectId, error, fixActionStr, success, plan.category);
+          return Promise.resolve();
+        },
+      );
     };
     const actionRunId = db.createActionRun({
       projectId,

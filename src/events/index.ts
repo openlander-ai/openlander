@@ -86,6 +86,7 @@ export type EventType =
   | 'ai:usage'
   | 'health:degraded'
   | 'recovery:blocked'
+  | 'recovery:degraded'
   | 'recovery:stopped'
   | 'recovery:started'
   | 'recovery:start'
@@ -334,6 +335,13 @@ export interface EventPayload {
   'recovery:blocked': {
     projectId: string;
     reason: string;
+    serverId?: string;
+  };
+  'recovery:degraded': {
+    projectId: string;
+    stage: 'enqueue' | 'transition' | 'emit' | 'execute';
+    reason: string;
+    metadata?: Record<string, unknown>;
     serverId?: string;
   };
   'recovery:stopped': {
