@@ -247,7 +247,13 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       }
     })();
 
-    return c.json({ success: true, projectId, projectName, status: 'building' });
+    return c.json({
+      success: true,
+      projectId,
+      projectName,
+      status: 'building',
+      statusUrl: `/api/projects/${projectId}`,
+    });
   });
 
   api.post('/deploy/start', async (c) => {
