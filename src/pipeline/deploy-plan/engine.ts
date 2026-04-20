@@ -30,7 +30,7 @@ import type { AutoDetector } from '../auto-detect.js';
 import type { OpenLanderConfig } from '../../config/index.js';
 import type { EventBus } from '../../events/index.js';
 import type { ComposePipeline } from '../compose.js';
-import { DeployLockedError } from '../../errors.js';
+import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
 
 const log = createModuleLogger('plan-engine');
 
@@ -797,11 +797,13 @@ export class PlanEngine {
 
     if (existingProject) {
       const lockSession = lockSessionId ?? `plan-${planId}`;
-      const locked = this.db.acquireDeployLock(existingProject.id, lockSession);
-      if (!locked) {
-        const lockInfo = this.db.getDeployLockInfo(existingProject.id);
-        throw new DeployLockedError(existingProject.id, lockInfo?.session ?? 'unknown');
-      }
+      // Release happens asynchronously in event listeners (deploy:success /
+      // deploy:failed / compose:up / compose:failed) via `safeReleaseDeployLock`,
+      // so we use the bare acquire helper instead of `withDeployLock`.
+      acquireDeployLockOrThrow(this.db, {
+        projectId: existingProject.id,
+        sessionId: lockSession,
+      });
       lockProjectId = existingProject.id;
     }
 

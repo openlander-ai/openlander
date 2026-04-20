@@ -20,7 +20,6 @@ import { resolveEnvVars } from './resolve-env.js';
 
 import {
   ContainerNotFoundError,
-  DeployLockedError,
   InvalidProjectNameError,
   PreflightCheckError,
   isDockerNotFoundError,
@@ -32,6 +31,8 @@ import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
 import { getPolicy, type OpenLanderConfig } from '../config/index.js';
+import { withDeployLock } from '../db/repos/deploy-lock-helper.js';
+import { assertProjectMutable } from './mutation-policy.js';
 
 import {
   extractProjectName,
@@ -465,6 +466,11 @@ export class DeployPipeline {
     // Check if project with this name already exists
     const existing = this.db.getProjectByName(projectName);
     if (existing) {
+      // Pipeline boundary policy: blocks archived/recovering/circuit-open projects
+      // for callers that bypass the API route (e.g. webhook branch-target,
+      // /api/deploy/start, plan engine, AI-approved fix flow).
+      assertProjectMutable(existing, { db: this.db });
+
       const isStale = existing.status === 'error';
       if (isStale) {
         this.db.updateProject(existing.id, {
@@ -725,6 +731,9 @@ export class DeployPipeline {
         buildDurationMs: Date.now() - startTime,
       };
     }
+    // Pipeline boundary policy: blocks archived/recovering/circuit-open projects.
+    // Throws ProjectArchivedError / ProjectRecoveringError / CircuitBreakerOpenError (409).
+    assertProjectMutable(project, { db: this.db });
     const environment = this.db.getEnvironment(environmentId);
     if (!environment || environment.project_id !== projectId) {
       return {
@@ -1329,23 +1338,12 @@ export class DeployPipeline {
 
     this.validateProjectName(project.name);
 
-    if (project.archived_at) {
-      return {
-        success: false,
-        projectId,
-        projectName: project.name,
-        error: `Project "${project.name}" is archived. Use unarchive_project first, then redeploy.`,
-      };
-    }
+    // Pipeline boundary policy: blocks archived/recovering/circuit-open projects.
+    // Throws ProjectArchivedError / ProjectRecoveringError / CircuitBreakerOpenError (409).
+    assertProjectMutable(project, { db: this.db });
 
     const lockSession = options?.lockSessionId ?? nanoid(12);
-    const locked = this.db.acquireDeployLock(projectId, lockSession);
-    if (!locked) {
-      const lockInfo = this.db.getDeployLockInfo(projectId);
-      throw new DeployLockedError(projectId, lockInfo?.session ?? 'unknown');
-    }
-
-    try {
+    return withDeployLock(this.db, { projectId, sessionId: lockSession }, async () => {
       const targetEnvironment = this.db
         .getEnvironmentsByProject(projectId)
         .find((environment) => environment.type === 'production');
@@ -1428,9 +1426,7 @@ export class DeployPipeline {
       });
 
       return await this.deploy(config);
-    } finally {
-      this.db.releaseDeployLock(projectId, lockSession);
-    }
+    });
   }
 
   private async blueGreenRedeploy(
@@ -1836,18 +1832,13 @@ export class DeployPipeline {
       return this.rollbackExecutor.rollbackToImage(projectId, environmentId);
     }
 
-    const lockSession = lockSessionId ?? nanoid(12);
-    const locked = this.db.acquireDeployLock(projectId, lockSession);
-    if (!locked) {
-      const lockInfo = this.db.getDeployLockInfo(projectId);
-      throw new DeployLockedError(projectId, lockInfo?.session ?? 'unknown');
-    }
+    // Pipeline boundary policy: blocks archived/recovering/circuit-open projects.
+    assertProjectMutable(project, { db: this.db });
 
-    try {
-      return await this.rollbackExecutor.rollbackToImage(projectId, environmentId);
-    } finally {
-      this.db.releaseDeployLock(projectId, lockSession);
-    }
+    const lockSession = lockSessionId ?? nanoid(12);
+    return withDeployLock(this.db, { projectId, sessionId: lockSession }, () =>
+      this.rollbackExecutor.rollbackToImage(projectId, environmentId),
+    );
   }
 
   private async cleanupProjectContainers(
