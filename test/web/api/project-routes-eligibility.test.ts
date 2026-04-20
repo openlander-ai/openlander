@@ -234,3 +234,77 @@ describe('POST /projects/:id/blue-green - eligibility guard', () => {
     expect(body.error).toBe('PROJECT_RECOVERING');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Race-window: pipeline boundary throws typed 409 AFTER the route-level
+// `assertProjectMutable` check passed (project archived between the two
+// checks while the deploy was queued). Pre-fix this manifested as a 500.
+// ---------------------------------------------------------------------------
+
+describe('POST /projects/:id/redeploy - race-window typed-error mapping', () => {
+  function buildRaceCtx(typedError: Error): AppContext {
+    const project = makeProject();
+    return {
+      ...createCtx(project),
+      pipeline: {
+        redeploy: vi.fn().mockRejectedValue(typedError),
+        rollback: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      },
+    } as unknown as AppContext;
+  }
+
+  it('returns 409 PROJECT_ARCHIVED when pipeline rejects after sync check passes', async () => {
+    const { ProjectArchivedError } = await import('../../../src/errors.js');
+    const ctx = buildRaceCtx(new ProjectArchivedError('proj-1'));
+    const res = await buildApp(ctx).request('/api/projects/proj-1/redeploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('PROJECT_ARCHIVED');
+  });
+
+  it('returns 409 PROJECT_RECOVERING when pipeline rejects mid-flight', async () => {
+    const { ProjectRecoveringError } = await import('../../../src/errors.js');
+    const ctx = buildRaceCtx(new ProjectRecoveringError('proj-1'));
+    const res = await buildApp(ctx).request('/api/projects/proj-1/redeploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('PROJECT_RECOVERING');
+  });
+
+  it('returns 409 CIRCUIT_BREAKER_OPEN when pipeline rejects mid-flight', async () => {
+    const { CircuitBreakerOpenError } = await import('../../../src/errors.js');
+    const ctx = buildRaceCtx(new CircuitBreakerOpenError('proj-1'));
+    const res = await buildApp(ctx).request('/api/projects/proj-1/redeploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('CIRCUIT_BREAKER_OPEN');
+  });
+
+  it('still returns 500 for unknown errors (regression)', async () => {
+    const ctx = buildRaceCtx(new Error('unexpected docker failure'));
+    const res = await buildApp(ctx).request('/api/projects/proj-1/redeploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(500);
+  });
+});

@@ -1,6 +1,11 @@
 import type { ToolDef } from './types.js';
 import { getProjectByName, getProductionEnvironmentId } from './helpers.js';
 import {
+  CircuitBreakerOpenError,
+  ProjectArchivedError,
+  ProjectRecoveringError,
+} from '../../errors.js';
+import {
   getEnvVarSchema,
   listEnvVarsSchema,
   listGlobalSecretsSchema,
@@ -78,6 +83,21 @@ export const envToolDefs: ToolDef[] = [
         const release = await appCtx.deployQueue.acquire();
         try {
           await appCtx.pipeline.redeploy(project.id);
+        } catch (err) {
+          if (
+            err instanceof ProjectArchivedError ||
+            err instanceof ProjectRecoveringError ||
+            err instanceof CircuitBreakerOpenError
+          ) {
+            return {
+              status: 'updated_redeploy_skipped',
+              project: projectName,
+              keys: Object.keys(vars),
+              reason: err.code,
+              message: `Env vars saved but redeploy was skipped: ${err.message}`,
+            };
+          }
+          throw err;
         } finally {
           release();
         }

@@ -6,6 +6,7 @@ import type { AppContext } from '../../app.js';
 import {
   CircuitBreakerOpenError,
   DeployLockedError,
+  OpenLanderError,
   ProjectArchivedError,
   ProjectRecoveringError,
   TunnelStartError,
@@ -779,6 +780,20 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       if (err instanceof DeployLockedError) {
         return c.json(err.toJSON(), 409);
       }
+      // Race-window: project may have been archived / sent to recovering /
+      // tripped its circuit breaker between the route-level
+      // `assertProjectMutable` check and the pipeline boundary check.
+      // Surface those as the typed 409 they are instead of a generic 500.
+      if (
+        err instanceof ProjectArchivedError ||
+        err instanceof ProjectRecoveringError ||
+        err instanceof CircuitBreakerOpenError
+      ) {
+        return c.json(err.toJSON(), 409);
+      }
+      if (err instanceof OpenLanderError) {
+        return c.json(err.toJSON(), err.statusCode as 400);
+      }
       ctx.db.updateProject(project.id, { status: 'error' });
       const errMsg = err instanceof Error ? err.message : String(err);
       return c.json({ success: false, error: errMsg }, 500);
@@ -861,8 +876,27 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       }
     }
 
-    const result = await ctx.pipeline.rollback(project.id);
-    return c.json(result, result.success ? 200 : 500);
+    try {
+      const result = await ctx.pipeline.rollback(project.id);
+      return c.json(result, result.success ? 200 : 500);
+    } catch (err) {
+      if (err instanceof DeployLockedError) {
+        return c.json(err.toJSON(), 409);
+      }
+      // Race-window: pipeline boundary may reject after the route-level
+      // assertProjectMutable passed.
+      if (
+        err instanceof ProjectArchivedError ||
+        err instanceof ProjectRecoveringError ||
+        err instanceof CircuitBreakerOpenError
+      ) {
+        return c.json(err.toJSON(), 409);
+      }
+      if (err instanceof OpenLanderError) {
+        return c.json(err.toJSON(), err.statusCode as 400);
+      }
+      throw err;
+    }
   });
 
   // v0.3: Blue-green deployment
@@ -892,6 +926,24 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         healthCheckPath: body.health_check_path,
       });
       return c.json(result, result.success ? 200 : 500);
+    } catch (err) {
+      if (err instanceof DeployLockedError) {
+        return c.json(err.toJSON(), 409);
+      }
+      // Race-window: pipeline boundary may reject after the route-level
+      // assertProjectMutable passed (project archived / recovering / circuit
+      // tripped between the two checks). Surface as the typed 409 they are.
+      if (
+        err instanceof ProjectArchivedError ||
+        err instanceof ProjectRecoveringError ||
+        err instanceof CircuitBreakerOpenError
+      ) {
+        return c.json(err.toJSON(), 409);
+      }
+      if (err instanceof OpenLanderError) {
+        return c.json(err.toJSON(), err.statusCode as 400);
+      }
+      throw err;
     } finally {
       release();
     }

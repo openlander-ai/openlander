@@ -1,12 +1,23 @@
 import { nanoid } from 'nanoid';
-import { DeployLockedError, ProjectNotFoundError } from '../../errors.js';
+import {
+  CircuitBreakerOpenError,
+  DeployLockedError,
+  ProjectArchivedError,
+  ProjectNotFoundError,
+  ProjectRecoveringError,
+} from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { parseDBTimestamp } from '../../lib/parse-db-timestamp.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getProjectUrls } from '../../pipeline/traefik.js';
-import { buildDeployLockedResponse, tryAcquireDeployLockOrResponse } from './helpers.js';
+import {
+  buildDeployLockedResponse,
+  buildPolicyRejectionResponse,
+  tryAcquireDeployLockOrResponse,
+  tryRejectIfNotMutable,
+} from './helpers.js';
 import type { ToolDef } from './types.js';
 import {
   cleanupPreviewSchema,
@@ -60,6 +71,10 @@ export const deployToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
+      const policyRejection = tryRejectIfNotMutable(project, context);
+      if (policyRejection) {
+        return policyRejection;
+      }
       const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
       if (lockResult) {
         return lockResult;
@@ -71,6 +86,15 @@ export const deployToolDefs: ToolDef[] = [
       } catch (err) {
         if (err instanceof DeployLockedError) {
           return buildDeployLockedResponse(err);
+        }
+        // Race-window: project was archived / sent to recovering / circuit
+        // tripped between the sync pre-check and the pipeline boundary check.
+        if (
+          err instanceof ProjectArchivedError ||
+          err instanceof ProjectRecoveringError ||
+          err instanceof CircuitBreakerOpenError
+        ) {
+          return buildPolicyRejectionResponse(err, project.name);
         }
         throw err;
       } finally {
@@ -111,6 +135,13 @@ export const deployToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
+      // Fire-and-forget pre-check: surface archived/recovering/circuit-open
+      // immediately instead of returning a fake "deploying" success while
+      // the pipeline boundary silently rejects in the background.
+      const policyRejection = tryRejectIfNotMutable(project, context);
+      if (policyRejection) {
+        return policyRejection;
+      }
       const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
       if (lockResult) {
         return lockResult;
@@ -127,6 +158,17 @@ export const deployToolDefs: ToolDef[] = [
             log.warn(
               { err, projectId: project.id },
               'Blue-green deploy skipped: project lock is held',
+            );
+            return;
+          }
+          if (
+            err instanceof ProjectArchivedError ||
+            err instanceof ProjectRecoveringError ||
+            err instanceof CircuitBreakerOpenError
+          ) {
+            log.warn(
+              { err, projectId: project.id, code: err.code },
+              'Blue-green deploy rejected by mutation policy mid-flight',
             );
             return;
           }

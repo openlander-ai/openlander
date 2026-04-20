@@ -4,6 +4,11 @@ import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import type { DeployPipeline } from '../pipeline/deploy.js';
 import { createModuleLogger } from '../lib/logger.js';
+import {
+  CircuitBreakerOpenError,
+  ProjectArchivedError,
+  ProjectRecoveringError,
+} from '../errors.js';
 
 const log = createModuleLogger('webhook');
 
@@ -38,6 +43,39 @@ export interface ParsedPREvent {
 }
 
 const textEncoder = new TextEncoder();
+
+/**
+ * Map a pipeline mutation-policy error to a graceful "skipped" webhook result.
+ *
+ * Returns `null` for non-policy errors so the caller can rethrow / log.
+ * Push events MUST NOT crash a webhook just because the project is archived,
+ * recovering, or under an open circuit breaker — those are operator-set states
+ * and the push itself is still a valid event.
+ */
+function mapPolicySkip(err: unknown, projectId: string): WebhookResult | null {
+  if (err instanceof ProjectArchivedError) {
+    return {
+      accepted: true,
+      projectId,
+      message: 'Project is archived; webhook redeploy skipped.',
+    };
+  }
+  if (err instanceof ProjectRecoveringError) {
+    return {
+      accepted: true,
+      projectId,
+      message: 'Project is recovering; webhook redeploy skipped.',
+    };
+  }
+  if (err instanceof CircuitBreakerOpenError) {
+    return {
+      accepted: true,
+      projectId,
+      message: 'Circuit breaker open; webhook redeploy skipped.',
+    };
+  }
+  return null;
+}
 
 export class WebhookManager {
   constructor(
@@ -153,38 +191,52 @@ export class WebhookManager {
     });
 
     if (targetEnvironment) {
-      const deployResult = await this.pipeline.deployEnvironment(projectId, targetEnvironment.id, {
-        trigger: 'webhook',
-      });
-      if (!deployResult.success) {
+      try {
+        const deployResult = await this.pipeline.deployEnvironment(
+          projectId,
+          targetEnvironment.id,
+          { trigger: 'webhook' },
+        );
+        if (!deployResult.success) {
+          return {
+            accepted: false,
+            projectId,
+            message: deployResult.error ?? 'Environment deploy failed.',
+          };
+        }
+
+        return {
+          accepted: true,
+          projectId,
+          message: `Deploy triggered for ${targetEnvironment.type} environment (${parsed.branch}@${parsed.commitSha}).`,
+        };
+      } catch (err) {
+        const skipResult = mapPolicySkip(err, projectId);
+        if (skipResult) return skipResult;
+        throw err;
+      }
+    }
+
+    try {
+      const redeploy = await this.pipeline.redeploy(projectId);
+      if (!redeploy.success) {
         return {
           accepted: false,
           projectId,
-          message: deployResult.error ?? 'Environment deploy failed.',
+          message: redeploy.error ?? 'Redeploy failed.',
         };
       }
 
       return {
         accepted: true,
         projectId,
-        message: `Deploy triggered for ${targetEnvironment.type} environment (${parsed.branch}@${parsed.commitSha}).`,
+        message: `Redeploy triggered for ${parsed.branch}@${parsed.commitSha}.`,
       };
+    } catch (err) {
+      const skipResult = mapPolicySkip(err, projectId);
+      if (skipResult) return skipResult;
+      throw err;
     }
-
-    const redeploy = await this.pipeline.redeploy(projectId);
-    if (!redeploy.success) {
-      return {
-        accepted: false,
-        projectId,
-        message: redeploy.error ?? 'Redeploy failed.',
-      };
-    }
-
-    return {
-      accepted: true,
-      projectId,
-      message: `Redeploy triggered for ${parsed.branch}@${parsed.commitSha}.`,
-    };
   }
 
   private resolvePushEnvironment(

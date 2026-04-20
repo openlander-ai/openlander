@@ -1,10 +1,16 @@
 import { nanoid } from 'nanoid';
-import { DeployLockedError, ProjectNotFoundError } from '../../errors.js';
+import {
+  CircuitBreakerOpenError,
+  DeployLockedError,
+  ProjectArchivedError,
+  ProjectNotFoundError,
+  ProjectRecoveringError,
+} from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
-import { tryAcquireDeployLockOrResponse } from './helpers.js';
+import { tryAcquireDeployLockOrResponse, tryRejectIfNotMutable } from './helpers.js';
 import {
   emptySchema,
   archiveProjectSchema,
@@ -150,6 +156,13 @@ export const projectOpsToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
+      // Fire-and-forget pre-check: surface archived/recovering/circuit-open
+      // immediately instead of stopping the project + returning a fake
+      // "restarting" success while the pipeline boundary silently rejects.
+      const policyRejection = tryRejectIfNotMutable(project, context);
+      if (policyRejection) {
+        return policyRejection;
+      }
 
       await context.appCtx.pipeline.stop(project.id);
 
@@ -157,6 +170,18 @@ export const projectOpsToolDefs: ToolDef[] = [
       void context.appCtx.pipeline
         .redeploy(project.id, { noCache })
         .catch((err: unknown) => {
+          if (
+            err instanceof ProjectArchivedError ||
+            err instanceof ProjectRecoveringError ||
+            err instanceof CircuitBreakerOpenError ||
+            err instanceof DeployLockedError
+          ) {
+            log.warn(
+              { err, projectId: project.id, code: err.code },
+              'Restart redeploy rejected mid-flight',
+            );
+            return;
+          }
           log.error({ err, projectId: project.id }, 'Restart redeploy failed');
         })
         .finally(() => {
@@ -217,6 +242,13 @@ export const projectOpsToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
+      // Fire-and-forget pre-check: surface archived/recovering/circuit-open
+      // immediately instead of returning a fake "redeploying" success while
+      // the pipeline boundary silently rejects in the background.
+      const policyRejection = tryRejectIfNotMutable(project, context);
+      if (policyRejection) {
+        return policyRejection;
+      }
       const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
       if (lockResult) {
         return lockResult;
@@ -233,6 +265,17 @@ export const projectOpsToolDefs: ToolDef[] = [
         .catch((err: unknown) => {
           if (err instanceof DeployLockedError) {
             log.warn({ err, projectId: project.id }, 'Redeploy skipped: project lock is held');
+            return;
+          }
+          if (
+            err instanceof ProjectArchivedError ||
+            err instanceof ProjectRecoveringError ||
+            err instanceof CircuitBreakerOpenError
+          ) {
+            log.warn(
+              { err, projectId: project.id, code: err.code },
+              'Redeploy rejected by mutation policy mid-flight',
+            );
             return;
           }
           log.error({ err, projectId: project.id }, 'Redeploy failed');

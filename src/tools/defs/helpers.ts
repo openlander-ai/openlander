@@ -1,4 +1,12 @@
-import { DeployLockedError, ProjectNotFoundError } from '../../errors.js';
+import {
+  CircuitBreakerOpenError,
+  DeployLockedError,
+  ProjectArchivedError,
+  ProjectNotFoundError,
+  ProjectRecoveringError,
+} from '../../errors.js';
+import type { ProjectRow } from '../../db/index.js';
+import { assertProjectMutable } from '../../pipeline/mutation-policy.js';
 import type { ToolDef } from './types.js';
 
 export function getProjectByName(
@@ -43,4 +51,64 @@ export function tryAcquireDeployLockOrResponse(
   const lockInfo = context.appCtx.db.getDeployLockInfo(projectId);
   const error = new DeployLockedError(projectId, lockInfo?.session ?? 'unknown');
   return buildDeployLockedResponse(error);
+}
+
+/**
+ * Mutation-policy rejection response shape used by MCP / agent tools when
+ * the pipeline boundary refuses to deploy / redeploy / rollback because the
+ * project is archived, recovering, or under an open circuit breaker.
+ *
+ * Tools that fire-and-forget should call `tryRejectIfNotMutable` BEFORE
+ * launching the background task, so users get an immediate clear response
+ * instead of a fake "deploying" success.
+ */
+export function buildPolicyRejectionResponse(
+  err: ProjectArchivedError | ProjectRecoveringError | CircuitBreakerOpenError,
+  projectName: string,
+) {
+  return {
+    success: false,
+    status: 'rejected_by_policy' as const,
+    error: err.code,
+    project: projectName,
+    message: err.message,
+    _agent_guidance: {
+      message: 'Project state does not allow this operation right now.',
+      next_steps: [
+        err instanceof ProjectArchivedError
+          ? 'Unarchive the project first via unarchive_project.'
+          : err instanceof ProjectRecoveringError
+            ? 'Wait for recovery to complete, then try again.'
+            : 'Wait for the circuit breaker cooldown to pass before retrying.',
+      ],
+    },
+  };
+}
+
+/**
+ * Sync mutation-policy pre-check for tools that intend to fire-and-forget the
+ * pipeline call. Returns a typed rejection response when the policy blocks
+ * the project; returns `null` otherwise so the caller can proceed.
+ *
+ * Without this guard, fire-and-forget tools (deploy_blue_green,
+ * restart_project, redeploy_project) would tell the user "deploying" while
+ * the pipeline silently rejects in the background catch handler.
+ */
+export function tryRejectIfNotMutable(
+  project: ProjectRow,
+  context: Parameters<ToolDef['execute']>[1],
+) {
+  try {
+    assertProjectMutable(project, { db: context.appCtx.db });
+    return null;
+  } catch (err) {
+    if (
+      err instanceof ProjectArchivedError ||
+      err instanceof ProjectRecoveringError ||
+      err instanceof CircuitBreakerOpenError
+    ) {
+      return buildPolicyRejectionResponse(err, project.name);
+    }
+    throw err;
+  }
 }
