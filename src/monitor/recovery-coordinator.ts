@@ -25,13 +25,17 @@ type EligibilityReason =
   | 'operator_suppressed'
   | 'global_budget_exceeded'
   | 'circuit_breaker_open'
-  | 'incident_active';
+  | 'incident_active'
+  | 'deploy_in_progress'
+  | 'partial_failure_state_transition';
 
 interface ProjectSnapshot {
   name: string;
   status: string;
   archived_at: string | null;
   container_id: string | null;
+  deploy_lock_session: string | null;
+  deploy_lock_at: string | null;
 }
 
 export interface EligibilityResult {
@@ -173,6 +177,13 @@ export class RecoveryCoordinator {
 
     if (this.db.isCircuitBreakerOpen(projectId)) {
       return { eligible: false, reason: 'circuit_breaker_open' };
+    }
+
+    if (project.deploy_lock_session && project.deploy_lock_at) {
+      const lockAge = Date.now() - new Date(project.deploy_lock_at).getTime();
+      if (lockAge < 1_800_000) {
+        return { eligible: false, reason: 'deploy_in_progress' };
+      }
     }
 
     return { eligible: true };
@@ -335,8 +346,10 @@ export class RecoveryCoordinator {
       } catch (statusErr) {
         log.warn(
           { err: statusErr, projectId: payload.projectId },
-          'Failed to set status to recovering, continuing with recovery event',
+          'Failed to set status to recovering, aborting recovery to prevent state mismatch',
         );
+        await this.emitBlocked(payload.projectId, 'partial_failure_state_transition');
+        return;
       }
 
       const correlationId = this.opsAgent ? undefined : payload.projectId;
@@ -397,14 +410,16 @@ export class RecoveryCoordinator {
         );
       }
 
-      // Stage C: Update status to recovering (critical — isolated so D still fires)
+      // Stage C: Update status to recovering (critical — failure blocks Stage D)
       try {
         await this.transitionProjectStatus(payload.projectId, 'recovering', 'recovery-started');
       } catch (statusErr) {
         log.warn(
           { err: statusErr, projectId: payload.projectId },
-          'Failed to set status to recovering, continuing with recovery event',
+          'Failed to set status to recovering, aborting recovery to prevent state mismatch',
         );
+        await this.emitBlocked(payload.projectId, 'partial_failure_state_transition');
+        return;
       }
 
       // Stage D: Emit recovery:started
