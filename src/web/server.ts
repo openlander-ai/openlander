@@ -19,6 +19,7 @@ import { createAuthRoutes } from './api/auth-routes.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { AuthService } from '../auth/auth-service.js';
 import { createMcpHttpRoutes } from '../mcp/server.js';
+import { OpenLanderError } from '../errors.js';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
@@ -106,6 +107,16 @@ function createApp(
   options: CreateAppOptions = {},
 ): { app: Hono; mcpRoutes: ReturnType<typeof createMcpHttpRoutes> } {
   const app = options.app ?? new Hono();
+
+  // Global error handler — fallback for any router that doesn't define its own onError.
+  // Sub-routers (e.g. createApiRoutes) may register their own onError; those take precedence.
+  app.onError((err, c) => {
+    if (err instanceof OpenLanderError) {
+      return c.json(err.toJSON(), err.statusCode as 400);
+    }
+    log.error({ err, path: c.req.path, method: c.req.method }, 'Unhandled route error');
+    return c.json({ error: 'INTERNAL_ERROR', message: 'An unexpected error occurred' }, 500);
+  });
 
   app.use('*', logger());
   app.use(
