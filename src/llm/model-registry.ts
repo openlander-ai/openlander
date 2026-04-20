@@ -212,13 +212,31 @@ function createCircuitBreakerMiddleware(
     wrapStream: async (options) => {
       try {
         const result = await options.doStream();
-        const transformedStream = result.stream.pipeThrough(
-          new TransformStream({
-            flush() {
+        // Wrap the stream so we can observe both normal completion (flush →
+        // recordSuccess) and cancellation (cancel → recordFailure).
+        // We use a ReadableStream wrapper instead of TransformStream because the
+        // TypeScript DOM lib's Transformer interface does not include `cancel`.
+        const sourceReader = result.stream.getReader();
+        const transformedStream = new ReadableStream<
+          typeof result.stream extends ReadableStream<infer T> ? T : never
+        >({
+          async pull(controller) {
+            const { done, value } = await sourceReader.read();
+            if (done) {
+              controller.close();
               circuitBreaker.recordSuccess(providerId);
-            },
-          }),
-        );
+            } else {
+              controller.enqueue(value);
+            }
+          },
+          cancel(reason) {
+            // Stream was cancelled (e.g. user aborted). Do not record success —
+            // treat as a transient failure so the circuit breaker can open if
+            // a provider is repeatedly unreachable before the stream starts.
+            void sourceReader.cancel(reason);
+            circuitBreaker.recordFailure(providerId, classifyLlmError(reason));
+          },
+        });
 
         return {
           ...result,
