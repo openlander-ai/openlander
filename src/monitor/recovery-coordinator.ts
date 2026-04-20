@@ -156,8 +156,8 @@ export class RecoveryCoordinator {
     log.info('RecoveryCoordinator stopped');
   }
 
-  checkEligibility(projectId: string): EligibilityResult {
-    return this.evaluateEligibility(projectId, 'container_failure');
+  checkEligibility(projectId: string, trigger?: RecoveryTrigger): EligibilityResult {
+    return this.evaluateEligibility(projectId, trigger ?? 'container_failure');
   }
 
   suppressProject(projectId: string, durationMs: number): void {
@@ -269,6 +269,23 @@ export class RecoveryCoordinator {
     return { eligible: true };
   }
 
+  /**
+   * Map a RuntimeSignal kind to the appropriate RecoveryTrigger so that
+   * eligibility is evaluated with the correct policy (e.g. health_degraded
+   * for probe/regression signals, container_failure for container events).
+   */
+  private static signalTrigger(kind: RuntimeSignal['kind']): RecoveryTrigger {
+    switch (kind) {
+      case 'probe_failed':
+      case 'post_deploy_regression':
+        return 'health_degraded';
+      case 'container_died':
+      case 'container_oom':
+      case 'container_missing':
+        return 'container_failure';
+    }
+  }
+
   async ingestRuntimeSignal(signal: RuntimeSignal): Promise<void> {
     if (this.inFlightProjects.has(signal.projectId)) {
       log.debug(
@@ -281,7 +298,8 @@ export class RecoveryCoordinator {
     this.inFlightProjects.add(signal.projectId);
 
     try {
-      const result = this.checkEligibility(signal.projectId);
+      const trigger = RecoveryCoordinator.signalTrigger(signal.kind);
+      const result = this.checkEligibility(signal.projectId, trigger);
       if (!result.eligible) {
         await this.emitBlocked(signal.projectId, result.reason);
         return;

@@ -388,14 +388,16 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     // recovery:degraded rather than silently swallowed. Caller (success/fail
     // branches below) is fire-and-forget by design.
     const trySavePattern = (success: boolean): void => {
-      void withRecoveryStage(
+      withRecoveryStage(
         'execute',
         { events: eventBus, projectId, metadata: { phase: 'pattern-save', success } },
         () => {
           saveRecoveryPattern(db, projectId, error, fixActionStr, success, plan.category);
           return Promise.resolve();
         },
-      );
+      ).catch((err: unknown) => {
+        log.error({ err, projectId }, 'unhandled rejection in trySavePattern');
+      });
     };
     const actionRunId = db.createActionRun({
       projectId,

@@ -24,6 +24,7 @@ export interface ActivityEvent {
     | 'ai:invoked'
     | 'ai:completed'
     | 'recovery:blocked'
+    | 'recovery:degraded'
     | 'recovery:stopped'
     | 'recovery:started';
   severity: 'critical' | 'warning' | 'info';
@@ -118,6 +119,7 @@ export function mapActivityType(eventType: EventType): ActivityEvent['type'] {
     eventType === 'ai:invoked' ||
     eventType === 'ai:completed' ||
     eventType === 'recovery:blocked' ||
+    eventType === 'recovery:degraded' ||
     eventType === 'recovery:stopped' ||
     eventType === 'recovery:started'
   ) {
@@ -154,6 +156,7 @@ export function mapActivityStatus<T extends EventType>(
     return completedPayload.success ? 'ai-completed' : 'failed';
   }
   if (eventType === 'recovery:blocked') return 'recovery-blocked';
+  if (eventType === 'recovery:degraded') return 'failed';
   if (eventType === 'recovery:stopped') return 'recovery-stopped';
   if (eventType === 'recovery:started' || eventType === 'recovery:start') return 'recovering';
   if (eventType === 'recovery:success') return 'resolved';
@@ -230,6 +233,9 @@ export function extractEventDetail<T extends EventType>(
   }
   if (eventType === 'recovery:blocked') {
     return (payload as EventPayload['recovery:blocked']).reason;
+  }
+  if (eventType === 'recovery:degraded') {
+    return (payload as EventPayload['recovery:degraded']).reason;
   }
   if (eventType === 'recovery:stopped') {
     return (payload as EventPayload['recovery:stopped']).reason;
@@ -351,6 +357,14 @@ export function describeActivityEvent<T extends EventType>(
       title: 'Recovery blocked',
       description: blockedPayload.reason,
       reason: blockedPayload.reason,
+    };
+  }
+  if (eventType === 'recovery:degraded') {
+    const degradedPayload = payload as EventPayload['recovery:degraded'];
+    return {
+      title: `Recovery partial failure (stage: ${degradedPayload.stage})`,
+      description: degradedPayload.reason,
+      reason: degradedPayload.reason,
     };
   }
   if (eventType === 'recovery:stopped') {
