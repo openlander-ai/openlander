@@ -78,6 +78,11 @@ openlander
 
 `openlander` runs in the foreground. Use a process supervisor for background lifecycle.
 
+> **1.0 deployment constraints**
+>
+> - **Single-process only.** OpenLander 1.0 is not safe under PM2 cluster mode (or any other multi-worker supervisor). The first-boot setup secret, the OAuth PKCE verifier map, and the agent pool live in process memory — workers would each see a different secret and fail to share session state. Stick to a single instance.
+> - **Single-tenant LLM pool.** The agent pool has a hard cap of 5 concurrent LLM sessions and is not partitioned per user. Concurrent operation by multiple users will surface as `429 LLM_CONCURRENCY_EXCEEDED` once the cap is hit. Per-tenant fairness is planned for v1.1.
+
 ### systemd
 
 ```ini

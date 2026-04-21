@@ -117,6 +117,8 @@ brew install --cask docker
 
 > **1.0 change**: OpenLander runs in the foreground only. Use systemd / pm2 / docker for background lifecycle (see the [Running as a Service](../../README.md#running-as-a-service) section in README).
 
+> **Single-process only**: OpenLander 1.0 must run as a single process. Do **not** enable PM2 cluster mode (`exec_mode: 'cluster'` / `instances > 1`) or run multiple `openlander` workers behind a load balancer. The first-boot setup secret, the OAuth PKCE verifier map, and the agent pool are in-process state — workers would each generate a different setup secret and fail to share OAuth/session state. Multi-process support is tracked for a future minor release.
+
 ---
 
 ## Configuration

@@ -86,6 +86,8 @@ If a chat or recovery LLM call is cancelled mid-stream (user abort, client disco
 
 If you script automated calls that legitimately cancel often, expect the breaker to open faster than in `rc.7`. Reset is via the Operations dashboard or the same `/ops/circuit-breaker` endpoints.
 
+> **Single-tenant LLM pool**: 1.0 ships with a hard cap of 5 concurrent LLM sessions across the entire process and is not partitioned per user. Multi-user concurrent operation will surface as `429 LLM_CONCURRENCY_EXCEEDED` once the cap is hit. Per-tenant fairness is planned for v1.1.
+
 ### 4.4 Webhook auto-redeploy degrades gracefully
 
 When a push event lands for an archived / recovering / circuit-broken project, the webhook handler now responds `{ accepted: true, message: "...skipped" }` (HTTP 200). Previously the same situation either errored or attempted a deploy that the policy rejected.
