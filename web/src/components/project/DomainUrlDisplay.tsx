@@ -77,7 +77,7 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
         </a>
         <button
           onClick={() => copy(primaryUrl.url, primaryUrl.url)}
-          className="p-1.5 text-muted-foreground hover:text-primary hover:bg-subtle rounded-md transition-colors"
+          className="p-1.5 text-muted-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
           title="Copy URL"
         >
           {isCopied(primaryUrl.url) ? (

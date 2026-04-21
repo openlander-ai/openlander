@@ -70,7 +70,7 @@ export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
           <select
             value={lines}
             onChange={(e) => setLines(Number(e.target.value))}
-            className="bg-transparent text-xs font-mono text-primary-ol focus:outline-none border border-[hsl(var(--border))] rounded px-2 py-1 cursor-pointer hover:border-muted-ol"
+            className="bg-transparent text-xs font-mono text-primary-ol focus:outline-none border border-[hsl(var(--border))] rounded px-2 py-1 cursor-pointer hover:border-muted-foreground"
           >
             <option value={100} className="bg-bg-panel">
               100 lines

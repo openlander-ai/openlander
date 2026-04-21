@@ -306,7 +306,10 @@ const ThreadEventDenseRow = memo(function ThreadEventDenseRow({
         {/* Empty left gap for alignment with parent chevron */}
         <div className="flex justify-end">
           <div
-            className={cn('h-1.5 w-1.5 rounded-full mr-2', isAiEvent ? 'bg-agent' : 'bg-muted-ol')}
+            className={cn(
+              'h-1.5 w-1.5 rounded-full mr-2',
+              isAiEvent ? 'bg-agent' : 'bg-muted-foreground/40',
+            )}
           />
         </div>
 
@@ -650,7 +653,7 @@ export function MainFeedGrid({
                 {/* Child Events Section */}
                 <CollapsibleContent>
                   <div className="bg-bg-panel/40 shadow-inner border-t border-[hsl(var(--border))]/50">
-                    <div className="pl-6 border-l-2 border-muted-ol/20 ml-2.5 my-1">
+                    <div className="pl-6 border-l-2 border-muted-foreground/20 ml-2.5 my-1">
                       {visibleEvents.map((event) => (
                         <ThreadEventDenseRow
                           key={event.id}
@@ -696,7 +699,7 @@ export function MainFeedGrid({
           onClick={() => setVisibleThreadCount((n) => n + THREADS_PAGE_SIZE)}
           className={cn(
             'mt-4 w-full rounded-md border border-dashed border-[hsl(var(--border))] bg-bg-panel',
-            'py-2.5 text-[11px] font-medium text-muted-ol hover:text-primary-ol hover:border-primary-ol/40 hover:bg-bg-subtle',
+            'py-2.5 text-[11px] font-medium text-muted-ol hover:text-primary-ol hover:border-foreground/40 hover:bg-bg-subtle',
             'transition-colors focus:outline-none focus:ring-1 focus:ring-agent shadow-sm',
           )}
         >

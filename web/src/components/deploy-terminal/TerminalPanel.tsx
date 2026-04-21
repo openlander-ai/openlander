@@ -145,9 +145,9 @@ export function TerminalPanel({ projectId, isConsoleActive, projectStatus }: Ter
       case 'error':
         return 'bg-error';
       case 'disconnected':
-        return 'bg-muted-ol';
+        return 'bg-muted-foreground/40';
       default:
-        return 'bg-muted-ol';
+        return 'bg-muted-foreground/40';
     }
   };
 

@@ -24,7 +24,7 @@ export function SettingsPage() {
   }
 
   const triggerClass =
-    'flex items-center gap-2 px-3 py-2.5 font-body text-sm rounded-md md:rounded-l-none md:rounded-r-md border-l-2 border-transparent data-[state=active]:bg-bg-subtle data-[state=active]:text-primary-ol data-[state=active]:font-medium data-[state=active]:border-primary-ol text-secondary-ol shadow-none transition-all hover:text-primary-ol hover:bg-bg-subtle/50 whitespace-nowrap w-full !justify-start';
+    'flex items-center gap-2 px-3 py-2.5 font-body text-sm rounded-md md:rounded-l-none md:rounded-r-md border-l-2 border-transparent data-[state=active]:bg-bg-subtle data-[state=active]:text-primary-ol data-[state=active]:font-medium data-[state=active]:border-foreground text-secondary-ol shadow-none transition-all hover:text-primary-ol hover:bg-bg-subtle/50 whitespace-nowrap w-full !justify-start';
 
   return (
     <div className="w-full max-w-[1200px] p-4 md:p-8 space-y-8">

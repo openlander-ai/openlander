@@ -274,7 +274,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
                     : status === 'degraded' || status === 'broken'
                       ? 'bg-warning animate-pulse'
                       : !(config?.enabled ?? true)
-                        ? 'bg-muted-ol'
+                        ? 'bg-muted-foreground/40'
                         : 'bg-success',
               )}
             />
