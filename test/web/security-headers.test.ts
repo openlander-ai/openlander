@@ -21,6 +21,7 @@ function makeApp(opts: { extraConnectSrc?: string } = {}): Hono {
     : "connect-src 'self'";
   const cspHeader =
     "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; " +
+    "font-src 'self' data:; " +
     `script-src 'self'; ${connectSrcDirective}; frame-ancestors 'none'; ` +
     "base-uri 'self'; form-action 'self'";
 
@@ -80,6 +81,10 @@ describe('Day 13 M1: security response headers', () => {
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("script-src 'self'");
     expect(csp).toContain("frame-ancestors 'none'");
+    // Self-hosted fontsource bundles ship as base64-inlined data: URLs; the
+    // font-src directive must allow them or body/display fonts fail to
+    // render and the UI falls back to system fonts silently.
+    expect(csp).toContain("font-src 'self' data:");
     // Ensure script-src does not allow inline/eval, which is the regression
     // we are guarding against once dangerouslySetInnerHTML is present in
     // the React tree.

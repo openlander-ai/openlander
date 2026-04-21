@@ -184,6 +184,7 @@ function createApp(
     : "connect-src 'self'";
   const cspHeader =
     "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; " +
+    "font-src 'self' data:; " +
     `script-src 'self'; ${connectSrcDirective}; frame-ancestors 'none'; ` +
     "base-uri 'self'; form-action 'self'";
 
