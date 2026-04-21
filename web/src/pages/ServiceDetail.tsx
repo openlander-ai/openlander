@@ -106,7 +106,7 @@ export function ServiceDetail() {
     service.type === 'postgresql' || service.type === 'mysql' || service.type === 'mongodb';
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full max-w-8xl mx-auto w-full">
       <ServiceHeader
         service={service}
         actionLoading={actionLoading}

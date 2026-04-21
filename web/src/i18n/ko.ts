@@ -30,7 +30,14 @@ export const translations = {
   },
   nav: {
     overview: '개요',
+    projects: '프로젝트',
     deployments: '배포',
+  },
+  login: {
+    signInPrompt: '로그인하여 계속하기',
+    password: '비밀번호',
+    signingIn: '로그인 중...',
+    signIn: '로그인',
   },
   sidebar: {
     collapse: '사이드바 접기',
@@ -173,6 +180,17 @@ export const translations = {
     noReposFound: '검색 결과가 없습니다:',
     githubNotConnected: 'GitHub가 연결되지 않았습니다. 설정에서 계정을 추가하세요.',
     fetchFailed: '레포지토리를 가져오는데 실패했습니다',
+    title: '새 프로젝트',
+    myRepos: '내 레포지토리',
+    search: '검색',
+    dockerImage: '도커 이미지',
+    searchPlaceholder: '레포지토리 검색...',
+    imagePlaceholder: '예: nginx:latest 또는 ghcr.io/user/app:v1',
+    portLabel: '포트 (선택)',
+    portPlaceholder: '80',
+    commandLabel: '명령어 (선택)',
+    commandPlaceholder: '예: --model-id BAAI/bge-m3',
+    deployImage: '이미지 배포',
   },
   projects: {
     noProjects: '프로젝트가 없습니다',
@@ -218,6 +236,12 @@ export const translations = {
       noFixes: '구체적인 해결책이 반환되지 않았습니다.',
       fixFailed: 'AI로 수정 실패',
     },
+    redeploySuccess: '프로젝트 리디플로이 중...',
+    stopSuccess: '프로젝트 중지됨',
+    startSuccess: '프로젝트 시작됨',
+    archiveSuccess: '프로젝트 아카이브됨',
+    deleteSuccess: '프로젝트 삭제됨',
+    goBack: '돌아가기',
   },
   rollback: {
     title: '롤백',
@@ -290,6 +314,17 @@ export const translations = {
       varsMatched: '개 변수 매칭됨',
       varsMissing: '개 변수 누락됨',
       varsExtra: '개 추가 변수',
+    },
+    detail: {
+      goBack: '돌아가기',
+      deployment: '배포',
+      status: '상태',
+      trigger: '트리거',
+      started: '시작',
+      duration: '소요 시간',
+      buildLogs: '빌드 로그',
+      runtimeLogs: '런타임 로그',
+      runtimeLogsHint: '(리디플로이 전 최근 500줄)',
     },
   },
   settings: {
@@ -850,6 +885,13 @@ export const translations = {
     },
   },
   ops: {
+    live: '라이브',
+    incidents: '인시던트',
+    approvals: '승인',
+    postmortems: '사후 분석',
+    patterns: '패턴',
+    usage: '사용량',
+    incidentsComingSoon: '인시던트 뷰 준비 중',
     ai: {
       invoked: 'AI 호출 시작',
       completed: 'AI 호출 완료',
@@ -975,6 +1017,16 @@ export const translations = {
         stop: '중지',
         delete: '삭제',
       },
+      loadingDatabases: '데이터베이스 로딩 중...',
+      serviceIsStopped: '서비스가 중지되었습니다',
+      showingLast: '최근',
+      noProjectsUsing: '이 서비스를 사용하는 프로젝트가 없습니다',
+      selectDatabase: '데이터베이스 선택',
+      selectVersion: '버전 선택',
+    },
+    empty: {
+      title: '서비스가 없습니다',
+      description: '데이터베이스, 캐시 또는 기타 인프라 서비스를 생성하세요',
     },
   },
   timeline: {
@@ -1238,6 +1290,8 @@ export const translations = {
         exposed: '공개됨',
       },
     },
+    disconnectService: '서비스 연결 해제',
+    copyUrl: 'URL 복사',
   },
   approval: {
     banner: {
@@ -1288,6 +1342,7 @@ export const translations = {
     failed: '실패',
     building: '빌드 중',
     manual: '수동',
+    changeFilterHint: '위의 필터를 변경해 보세요.',
   },
   recoveryTab: {
     retry: '다시 시도',

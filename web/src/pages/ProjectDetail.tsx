@@ -326,7 +326,7 @@ export function ProjectDetail() {
 
   return (
     <>
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full max-w-8xl mx-auto w-full">
         <ProjectHeader
           project={project}
           actionLoading={actionLoading}

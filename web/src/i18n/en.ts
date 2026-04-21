@@ -30,7 +30,14 @@ export const translations = {
   },
   nav: {
     overview: 'Overview',
+    projects: 'Projects',
     deployments: 'Deployments',
+  },
+  login: {
+    signInPrompt: 'Sign in to continue',
+    password: 'Password',
+    signingIn: 'Signing in...',
+    signIn: 'Sign In',
   },
   sidebar: {
     collapse: 'Collapse sidebar',
@@ -173,6 +180,17 @@ export const translations = {
     noReposFound: 'No repositories found for',
     githubNotConnected: 'GitHub not connected. Go to Settings to add your account.',
     fetchFailed: 'Failed to fetch repos',
+    title: 'New Project',
+    myRepos: 'My Repos',
+    search: 'Search',
+    dockerImage: 'Docker Image',
+    searchPlaceholder: 'Search repositories...',
+    imagePlaceholder: 'e.g., nginx:latest or ghcr.io/user/app:v1',
+    portLabel: 'Port (Optional)',
+    portPlaceholder: '80',
+    commandLabel: 'Command (Optional)',
+    commandPlaceholder: 'e.g., --model-id BAAI/bge-m3',
+    deployImage: 'Deploy Image',
   },
   projects: {
     noProjects: 'No projects found',
@@ -218,6 +236,12 @@ export const translations = {
       noFixes: 'No specific fix suggestions were returned.',
       fixFailed: 'Fix with AI failed',
     },
+    redeploySuccess: 'Project redeploying...',
+    stopSuccess: 'Project stopped',
+    startSuccess: 'Project started',
+    archiveSuccess: 'Project archived',
+    deleteSuccess: 'Project deleted',
+    goBack: 'Go back',
   },
   rollback: {
     title: 'Rollback',
@@ -291,6 +315,17 @@ export const translations = {
       varsMatched: 'variables matched',
       varsMissing: 'variables missing',
       varsExtra: 'extra variables',
+    },
+    detail: {
+      goBack: 'Go back',
+      deployment: 'Deployment',
+      status: 'Status',
+      trigger: 'Trigger',
+      started: 'Started',
+      duration: 'Duration',
+      buildLogs: 'Build Logs',
+      runtimeLogs: 'Runtime Logs',
+      runtimeLogsHint: '(last 500 lines before redeploy)',
     },
   },
   settings: {
@@ -854,6 +889,13 @@ export const translations = {
     },
   },
   ops: {
+    live: 'Live',
+    incidents: 'Incidents',
+    approvals: 'Approvals',
+    postmortems: 'Postmortems',
+    patterns: 'Patterns',
+    usage: 'Usage',
+    incidentsComingSoon: 'Incidents view coming soon',
     ai: {
       invoked: 'AI Invoked',
       completed: 'AI Completed',
@@ -979,6 +1021,16 @@ export const translations = {
         stop: 'Stop',
         delete: 'Delete',
       },
+      loadingDatabases: 'Loading databases...',
+      serviceIsStopped: 'Service is stopped',
+      showingLast: 'Showing last',
+      noProjectsUsing: 'No projects are using this service',
+      selectDatabase: 'Select a database',
+      selectVersion: 'Select a version',
+    },
+    empty: {
+      title: 'No services yet',
+      description: 'Create a database, cache, or other infrastructure service',
     },
   },
   timeline: {
@@ -1242,6 +1294,8 @@ export const translations = {
         exposed: 'Exposed',
       },
     },
+    disconnectService: 'Disconnect service',
+    copyUrl: 'Copy URL',
   },
   approval: {
     banner: {
@@ -1292,6 +1346,7 @@ export const translations = {
     failed: 'Failed',
     building: 'Building',
     manual: 'manual',
+    changeFilterHint: 'Try changing the filter above.',
   },
   recoveryTab: {
     retry: 'Retry',

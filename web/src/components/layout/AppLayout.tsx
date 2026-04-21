@@ -4,7 +4,6 @@ import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { AgentPanel } from '@/components/agent/AgentPanel';
 import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
-import { useProjects } from '@/hooks/use-projects';
 import { useSystemStats } from '@/hooks/use-system-stats';
 import { useNotifications } from '@/hooks/use-notifications';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
@@ -13,7 +12,6 @@ import { CommandPalette } from '@/components/command/CommandPalette';
 import { cn } from '@/lib/utils';
 
 export function AppLayout() {
-  const { projects, loading } = useProjects();
   const { stats } = useSystemStats();
   const { notifications, unreadCount, dismiss: dismissNotification } = useNotifications();
   const navigate = useNavigate();
@@ -92,12 +90,7 @@ export function AppLayout() {
               sidebarCollapsed ? 'md:w-16' : 'md:w-16 lg:w-[260px]',
             )}
           >
-            <Sidebar
-              projects={projects}
-              loading={loading}
-              collapsed={sidebarCollapsed}
-              onToggleCollapse={handleToggleCollapse}
-            />
+            <Sidebar collapsed={sidebarCollapsed} onToggleCollapse={handleToggleCollapse} />
           </aside>
 
           {/* Mobile Sidebar Sheet */}
@@ -108,7 +101,7 @@ export function AppLayout() {
               aria-describedby={undefined}
             >
               <SheetTitle className="sr-only">Navigation</SheetTitle>
-              <Sidebar projects={projects} loading={loading} />
+              <Sidebar />
             </SheetContent>
           </Sheet>
 
