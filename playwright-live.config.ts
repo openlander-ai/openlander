@@ -15,6 +15,8 @@ export default defineConfig({
   testMatch: [
     'concurrent-deploy.spec.ts',
     'c1-newproject.spec.ts',
+    'c3-recovery-rollback-bluegreen.spec.ts',
+    'c4-danger-actions.spec.ts',
     'c5-opscenter.spec.ts',
     'c7-dashboard-list.spec.ts',
   ],
