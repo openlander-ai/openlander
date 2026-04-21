@@ -648,8 +648,11 @@ export class DeployPipeline {
     // otherwise create a new one (synchronous callers like redeploy, CLI)
     const projectId = config._projectId ?? nanoid(12);
 
+    // Day 12 (MAJOR #1): bootstrap the DB row before acquiring the lock.
+    // `acquireDeployLock` runs an UPDATE WHERE id = projectId — without the
+    // row, changes() returns 0 and we'd spuriously throw DeployLockedError
+    // on the very first top-level call.
     if (!config._projectId) {
-      // Create project record in DB (skipped when called from startDeploy)
       this.db.createProject({
         id: projectId,
         name: projectName,
@@ -666,7 +669,49 @@ export class DeployPipeline {
       });
       await this.transitionProjectState(projectId, 'building', 'deploy-started');
       this.jobManager?.trackJob(projectId, projectName);
-    } else if (config.branch) {
+    }
+
+    // Day 12 (MAJOR #1): every entry point is now lock-protected. When the
+    // caller (redeploy, plan-engine, blue-green MCP tool) already holds the
+    // lock it surfaces the session via `_lockSessionId` and we run inline
+    // so the outer caller keeps owning the release lifecycle. Otherwise we
+    // mint a session and wrap the body in `withDeployLock` so the explicit
+    // POST /api/projects/deploy → pipeline.deploy fallback path (no agent)
+    // and CLI / fire-and-forget callers cannot overlap with another deploy.
+    return this.runWithDeployLockIfTopLevel(projectId, config._lockSessionId, (sessionId) =>
+      this.deployInner({ ...config, _lockSessionId: sessionId }, projectId, projectName, trigger),
+    );
+  }
+
+  /**
+   * Wraps `fn` in `withDeployLock` only when `existingSessionId` is undefined
+   * (top-level entry). Otherwise re-uses the caller's session and skips the
+   * acquire/release pair so the outer `withDeployLock` keeps owning the lock.
+   */
+  private async runWithDeployLockIfTopLevel<T>(
+    projectId: string,
+    existingSessionId: string | undefined,
+    fn: (sessionId: string) => Promise<T>,
+  ): Promise<T> {
+    if (existingSessionId) {
+      return fn(existingSessionId);
+    }
+    const sessionId = `deploy-${nanoid(12)}`;
+    return withDeployLock(this.db, { projectId, sessionId }, () => fn(sessionId));
+  }
+
+  private async deployInner(
+    config: ProjectConfig,
+    projectId: string,
+    projectName: string,
+    trigger: 'chat' | 'webhook' | 'api',
+  ): Promise<DeployResult> {
+    const source = config.source ?? 'git';
+
+    // Project row creation now lives in deploy() so we can acquire the lock
+    // immediately after. Here we only apply caller overrides for existing
+    // rows (config._projectId set by startDeploy or by an outer pipeline call).
+    if (config._projectId && config.branch) {
       this.db.updateProject(projectId, {
         branch: config.branch,
         ...(source === 'image'
@@ -678,7 +723,7 @@ export class DeployPipeline {
             }
           : {}),
       });
-    } else if (source === 'image') {
+    } else if (config._projectId && source === 'image') {
       this.db.updateProject(projectId, {
         source,
         imageUrl: config.imageUrl,
@@ -1492,6 +1537,21 @@ export class DeployPipeline {
   }
 
   private async blueGreenRedeploy(
+    projectId: string,
+    options?: RedeployOptions,
+  ): Promise<DeployResult> {
+    // Day 12 (MAJOR #1): wrap with the same top-level lock guard as deploy().
+    // Today the only caller (redeploy with strategy='blue-green') already
+    // holds the lock and forwards `lockSessionId`, so this is a no-op
+    // re-entry. The wrapper guarantees that any future direct entry point
+    // (Day 5 design doc: "every entry point protected") cannot bypass the
+    // serialization invariant.
+    return this.runWithDeployLockIfTopLevel(projectId, options?.lockSessionId, (sessionId) =>
+      this.blueGreenRedeployInner(projectId, { ...options, lockSessionId: sessionId }),
+    );
+  }
+
+  private async blueGreenRedeployInner(
     projectId: string,
     options?: RedeployOptions,
   ): Promise<DeployResult> {
