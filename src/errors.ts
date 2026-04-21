@@ -446,3 +446,66 @@ export class InvalidProjectNameError extends OpenLanderError {
     this.name = 'InvalidProjectNameError';
   }
 }
+
+// --- Service errors ---
+//
+// Day 8 Bug #6: typed errors replacing raw `throw new Error('…')` in
+// service-manager.ts and tools/defs/service.ts. Lets HTTP / MCP / CLI
+// callers pattern-match on `instanceof` instead of parsing message strings.
+
+/** Service input/config validation failed (400). */
+export class ServiceConfigError extends OpenLanderError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super(message, 'SERVICE_CONFIG_INVALID', 400, details);
+    this.name = 'ServiceConfigError';
+  }
+}
+
+/** A service runtime/operation failed at the infra boundary (500). */
+export class ServiceOperationError extends OpenLanderError {
+  constructor(operation: string, message: string, details?: Record<string, unknown>) {
+    super(message, 'SERVICE_OPERATION_FAILED', 500, { operation, ...details });
+    this.name = 'ServiceOperationError';
+  }
+}
+
+/** Operation isn't supported for the given service type (e.g. createDatabase on redis). */
+export class ServiceOperationUnsupportedError extends OpenLanderError {
+  constructor(operation: string, serviceType: string) {
+    super(
+      `${operation} is not supported for service type: ${serviceType}`,
+      'SERVICE_OPERATION_UNSUPPORTED',
+      400,
+      { operation, serviceType },
+    );
+    this.name = 'ServiceOperationUnsupportedError';
+  }
+}
+
+/** Service container is in a state that blocks the requested operation (e.g. stopped, missing). */
+export class ServiceContainerStateError extends OpenLanderError {
+  constructor(serviceId: string, state: string, message?: string) {
+    super(
+      message ?? `Service container ${serviceId} is in state '${state}' — operation not allowed`,
+      'SERVICE_CONTAINER_STATE_INVALID',
+      409,
+      { serviceId, state },
+    );
+    this.name = 'ServiceContainerStateError';
+  }
+}
+
+/** A service is referenced by other projects and cannot be removed without `force`. */
+export class ServiceInUseError extends OpenLanderError {
+  constructor(serviceName: string, connectedProjects: Array<{ id: string; name: string }>) {
+    const projectNames = connectedProjects.map((p) => p.name).join(', ');
+    const count = connectedProjects.length;
+    super(
+      `Service "${serviceName}" is referenced by ${String(count)} project(s): ${projectNames}. Remove the service references from their environment variables first, or use force to remove anyway.`,
+      'SERVICE_IN_USE',
+      409,
+      { serviceName, connectedProjects },
+    );
+    this.name = 'ServiceInUseError';
+  }
+}

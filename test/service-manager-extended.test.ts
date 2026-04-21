@@ -557,3 +557,83 @@ describe('ServiceManager remove with connected projects warning', () => {
     expect(db.deleteService).toHaveBeenCalledWith('svc-redis');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Day 8 Bug #6: ServiceManager raw `throw new Error(...)` replacement.
+// All public methods that previously threw raw Errors should now throw
+// typed OpenLanderError subclasses so HTTP / MCP error handlers can
+// pattern-match on the class.
+// ---------------------------------------------------------------------------
+describe('ServiceManager typed error contract (Day 8 Bug #6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('start() throws ServiceNotFoundError when id is missing', async () => {
+    const { ServiceNotFoundError } = await import('../src/errors.js');
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([]));
+
+    await expect(manager.start('missing-svc')).rejects.toBeInstanceOf(ServiceNotFoundError);
+  });
+
+  it('stop() throws ServiceNotFoundError when id is missing', async () => {
+    const { ServiceNotFoundError } = await import('../src/errors.js');
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([]));
+
+    await expect(manager.stop('missing-svc')).rejects.toBeInstanceOf(ServiceNotFoundError);
+  });
+
+  it('remove() throws ServiceInUseError when projects reference the service (no force)', async () => {
+    const { ServiceInUseError } = await import('../src/errors.js');
+    const service = createService({
+      id: 'svc-pg',
+      name: 'shared-pg',
+      container_name: 'ol-svc-shared-pg',
+    });
+    const db = createDbMock([service], [{ id: 'proj-1', name: 'my-app' }]);
+    db.getEnvVars = vi.fn(() => ({ DATABASE_URL: 'postgresql://ol-svc-shared-pg:5432/db' }));
+
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    await expect(manager.remove('svc-pg')).rejects.toBeInstanceOf(ServiceInUseError);
+  });
+
+  it('create() throws ServiceConfigError when neither template nor image provided', async () => {
+    const { ServiceConfigError } = await import('../src/errors.js');
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([]));
+
+    await expect(manager.create({ name: 'foo' })).rejects.toBeInstanceOf(ServiceConfigError);
+  });
+
+  it('create() throws ServiceConfigError for unsupported template', async () => {
+    const { ServiceConfigError } = await import('../src/errors.js');
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([]));
+
+    await expect(
+      manager.create({ name: 'foo', template: 'nonexistent-db' }),
+    ).rejects.toBeInstanceOf(ServiceConfigError);
+  });
+
+  it('listDatabases() throws ServiceContainerStateError when container is stopped', async () => {
+    const { ServiceContainerStateError } = await import('../src/errors.js');
+    const postgres = createService({
+      id: 'svc-pg',
+      name: 'shared-pg',
+      type: 'postgresql',
+      container_id: 'svc-pg-container',
+    });
+
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.setContainerRunning('svc-pg-container', false);
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([postgres]));
+
+    await expect(manager.listDatabases('svc-pg')).rejects.toBeInstanceOf(
+      ServiceContainerStateError,
+    );
+  });
+});

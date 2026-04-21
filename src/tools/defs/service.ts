@@ -180,23 +180,22 @@ export const serviceToolDefs: ToolDef[] = [
       const services = await appCtx.serviceManager.list();
       const service = services.find((item) => item.name === serviceName);
       if (!service) {
-        throw new Error(`Service not found: ${serviceName}`);
+        throw new ServiceNotFoundError(serviceName);
       }
 
-      try {
-        const databases = await appCtx.serviceManager.listDatabases(service.id);
-        return {
-          service: service.name,
-          count: databases.length,
-          databases: databases.map((database) => ({
-            name: database.name,
-            sizeBytes: database.sizeBytes,
-          })),
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(message);
-      }
+      // Let typed errors from serviceManager (ServiceOperationUnsupportedError,
+      // ServiceContainerStateError, etc.) propagate to the caller — wrapping
+      // them in raw Error loses the structured `code` / `statusCode` and
+      // breaks `instanceof` matching in HTTP / MCP error handlers.
+      const databases = await appCtx.serviceManager.listDatabases(service.id);
+      return {
+        service: service.name,
+        count: databases.length,
+        databases: databases.map((database) => ({
+          name: database.name,
+          sizeBytes: database.sizeBytes,
+        })),
+      };
     },
     targets: ['agent'],
   },
@@ -213,23 +212,18 @@ export const serviceToolDefs: ToolDef[] = [
       const services = await appCtx.serviceManager.list();
       const service = services.find((item) => item.name === serviceName);
       if (!service) {
-        throw new Error(`Service not found: ${serviceName}`);
+        throw new ServiceNotFoundError(serviceName);
       }
 
-      try {
-        const result = await appCtx.serviceManager.createDatabase(service.id, databaseName);
-        return {
-          status: 'created',
-          service: service.name,
-          database: result.database,
-          user: result.user,
-          password: result.password,
-          connectionString: result.connectionString,
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(message);
-      }
+      const result = await appCtx.serviceManager.createDatabase(service.id, databaseName);
+      return {
+        status: 'created',
+        service: service.name,
+        database: result.database,
+        user: result.user,
+        password: result.password,
+        connectionString: result.connectionString,
+      };
     },
     targets: ['agent'],
   },
