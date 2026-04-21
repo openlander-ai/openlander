@@ -105,7 +105,7 @@ export function Header({
           <div className="bg-agent/10 p-1 rounded-md shrink-0">
             <Logo className="h-4 w-4 text-agent" />
           </div>
-          <span className="font-display font-bold text-sm text-primary-ol tracking-tight">
+          <span className="font-display font-bold text-sm text-foreground tracking-tight">
             OpenLander
           </span>
           {version && (

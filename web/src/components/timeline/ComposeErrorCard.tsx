@@ -62,7 +62,9 @@ export function ComposeErrorCard({
           </div>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-body text-muted-ol">{t('timeline.composeError.answered')}</p>
+          <p className="text-sm font-body text-muted-foreground">
+            {t('timeline.composeError.answered')}
+          </p>
         </div>
       </div>
     );
@@ -95,7 +97,7 @@ export function ComposeErrorCard({
               </span>
             )}
           </div>
-          <p className="text-sm font-body text-primary-ol leading-snug">{q.question}</p>
+          <p className="text-sm font-body text-foreground leading-snug">{q.question}</p>
         </div>
 
         {errorType === 'env_file_missing' && (
@@ -110,7 +112,7 @@ export function ComposeErrorCard({
               placeholder="KEY=VALUE&#10;ANOTHER_KEY=VALUE"
               className={cn(
                 'w-full h-24 px-3 py-2 rounded-md text-xs font-mono',
-                'bg-bg-terminal border border-agent/20 placeholder:text-muted-ol/50',
+                'bg-bg-terminal border border-agent/20 placeholder:text-muted-foreground/50',
                 'focus:outline-none focus:ring-1 focus:ring-agent/40 focus:border-agent/40',
                 'transition-colors resize-none',
                 isSubmitting && 'opacity-50 cursor-not-allowed',
@@ -143,14 +145,14 @@ export function ComposeErrorCard({
                   <div className="flex items-start justify-between gap-2 w-full">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-primary-ol">{pattern.name}</span>
+                        <span className="text-sm font-medium text-foreground">{pattern.name}</span>
                         {pattern.recommended && (
                           <span className="text-xs font-mono text-success px-1.5 py-0.5 bg-success/10 rounded border border-success/20">
                             {t('timeline.composeError.recommended')}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-secondary-ol">{pattern.description}</p>
+                      <p className="text-xs text-foreground/80">{pattern.description}</p>
                       {(pattern.pros || pattern.cons) && (
                         <div className="mt-1.5 space-y-1">
                           {pattern.pros && (

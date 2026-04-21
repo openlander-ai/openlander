@@ -12,25 +12,25 @@ export function ServiceSettingsTab({ service, onDeleteClick }: ServiceSettingsTa
     <div className="max-w-3xl space-y-8">
       {/* Read-only Info */}
       <div className="space-y-4">
-        <h3 className="text-sm font-display font-semibold text-primary-ol">Service Information</h3>
+        <h3 className="text-sm font-display font-semibold text-foreground">Service Information</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="p-4 rounded-lg border border-[hsl(var(--border))] bg-bg-panel space-y-1">
-            <div className="text-xs font-body text-secondary-ol">Image</div>
-            <div className="text-sm font-mono text-primary-ol">{service.image}</div>
+            <div className="text-xs font-body text-foreground/80">Image</div>
+            <div className="text-sm font-mono text-foreground">{service.image}</div>
           </div>
           <div className="p-4 rounded-lg border border-[hsl(var(--border))] bg-bg-panel space-y-1">
-            <div className="text-xs font-body text-secondary-ol">Port</div>
-            <div className="text-sm font-mono text-primary-ol">{service.port || 'N/A'}</div>
+            <div className="text-xs font-body text-foreground/80">Port</div>
+            <div className="text-sm font-mono text-foreground">{service.port || 'N/A'}</div>
           </div>
           <div className="p-4 rounded-lg border border-[hsl(var(--border))] bg-bg-panel space-y-1">
-            <div className="text-xs font-body text-secondary-ol">Container Name</div>
-            <div className="text-sm font-mono text-primary-ol">
+            <div className="text-xs font-body text-foreground/80">Container Name</div>
+            <div className="text-sm font-mono text-foreground">
               {service.container_name || 'N/A'}
             </div>
           </div>
           <div className="p-4 rounded-lg border border-[hsl(var(--border))] bg-bg-panel space-y-1">
-            <div className="text-xs font-body text-secondary-ol">Created At</div>
-            <div className="text-sm font-mono text-primary-ol">
+            <div className="text-xs font-body text-foreground/80">Created At</div>
+            <div className="text-sm font-mono text-foreground">
               {parseTimestamp(String(service.created_at))?.toLocaleString()}
             </div>
           </div>
@@ -42,8 +42,8 @@ export function ServiceSettingsTab({ service, onDeleteClick }: ServiceSettingsTa
         <h3 className="text-sm font-display font-semibold text-error">Danger Zone</h3>
         <div className="p-4 rounded-lg border border-error/30 bg-error/5 space-y-4">
           <div>
-            <h4 className="text-sm font-medium text-primary-ol">Delete Service</h4>
-            <p className="text-sm font-body text-secondary-ol mt-1">
+            <h4 className="text-sm font-medium text-foreground">Delete Service</h4>
+            <p className="text-sm font-body text-foreground/80 mt-1">
               Permanently delete this service and all its data. This action cannot be undone.
             </p>
           </div>

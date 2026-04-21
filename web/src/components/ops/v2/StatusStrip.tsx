@@ -48,7 +48,7 @@ const HEALTH_CONFIG = {
   },
   unknown: {
     icon: HelpCircle,
-    color: 'text-muted-ol',
+    color: 'text-muted-foreground',
     bg: 'bg-muted/10',
     labelKey: 'opsV2.statusStrip.unknown',
   },
@@ -85,7 +85,7 @@ export function StatusStrip({
           type="button"
           onClick={onMenuClick}
           aria-label={t('opsV2.nav.openNavigation')}
-          className="flex md:hidden items-center justify-center h-6 w-6 rounded-md text-muted-ol hover:text-secondary-ol hover:bg-bg-subtle transition-colors shrink-0"
+          className="flex md:hidden items-center justify-center h-6 w-6 rounded-md text-muted-foreground hover:text-foreground/80 hover:bg-bg-subtle transition-colors shrink-0"
         >
           <Menu className="h-4 w-4" />
         </button>
@@ -115,7 +115,7 @@ export function StatusStrip({
         disabled={!onIncidentClick}
         className={cn(
           'flex items-center gap-1.5 transition-colors',
-          activeIncidentCount > 0 ? 'text-error hover:text-error/80' : 'text-muted-ol',
+          activeIncidentCount > 0 ? 'text-error hover:text-error/80' : 'text-muted-foreground',
           onIncidentClick && 'cursor-pointer hover:underline',
           !onIncidentClick && 'cursor-default',
         )}
@@ -132,7 +132,7 @@ export function StatusStrip({
         disabled={!onApprovalClick}
         className={cn(
           'hidden sm:flex items-center gap-1.5 transition-colors',
-          pendingApprovalCount > 0 ? 'text-warning hover:text-warning/80' : 'text-muted-ol',
+          pendingApprovalCount > 0 ? 'text-warning hover:text-warning/80' : 'text-muted-foreground',
           onApprovalClick && 'cursor-pointer hover:underline',
           !onApprovalClick && 'cursor-default',
         )}

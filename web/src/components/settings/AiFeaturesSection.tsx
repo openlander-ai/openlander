@@ -168,7 +168,7 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <AISparkle className="h-5 w-5" />
-          <h2 className="font-display text-sm font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-foreground">
             {t('settings.ai.title') || 'AI Features'}
           </h2>
         </div>
@@ -234,13 +234,13 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
                     <p
                       className={cn(
                         'text-sm font-body font-medium',
-                        feature.available ? 'text-primary-ol' : 'text-muted-ol',
+                        feature.available ? 'text-foreground' : 'text-muted-foreground',
                       )}
                     >
                       {t(`settings.ai.${key}.label`) || key}
                     </p>
                     {!feature.available && (
-                      <span className="text-[10px] uppercase tracking-wider font-semibold bg-bg-subtle text-muted-ol px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] uppercase tracking-wider font-semibold bg-bg-subtle text-muted-foreground px-1.5 py-0.5 rounded">
                         {t('settings.ai.unavailable') || 'UNAVAILABLE'}
                       </span>
                     )}
@@ -250,20 +250,20 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
                       </span>
                     )}
                     {MODEL_SELECTOR_FEATURES.has(key) ? (
-                      <span className="text-[10px] font-body text-muted-ol">
+                      <span className="text-[10px] font-body text-muted-foreground">
                         {t('settings.ai.appliedImmediately') || 'Applied immediately'}
                       </span>
                     ) : (
-                      <span className="text-[10px] font-body text-muted-ol">
+                      <span className="text-[10px] font-body text-muted-foreground">
                         {t('settings.ai.restartRequired') || 'Restart required'}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs font-body text-secondary-ol">
+                  <p className="text-xs font-body text-foreground/80">
                     {t(`settings.ai.${key}.description`) || ''}
                   </p>
                   {key === 'autoRecovery' && (
-                    <p className="text-xs font-body text-muted-ol mt-0.5">
+                    <p className="text-xs font-body text-muted-foreground mt-0.5">
                       {(() => {
                         const note = t('settings.ai.autoRecoveryNote') || '';
                         const linkText =
@@ -323,7 +323,9 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
                       </Select>
                     </div>
                   )}
-                  {isUpdating && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-ol" />}
+                  {isUpdating && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  )}
                   <Switch
                     checked={feature.enabled}
                     onCheckedChange={(checked) => handleToggle(key, checked)}
@@ -335,7 +337,7 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
           })}
       </div>
 
-      <p className="text-xs font-body text-muted-ol flex items-center gap-1.5">
+      <p className="text-xs font-body text-muted-foreground flex items-center gap-1.5">
         <Info className="h-3.5 w-3.5" />
         {t('settings.ai.requiresRestart') || 'Changes to AI features may require a restart.'}
       </p>

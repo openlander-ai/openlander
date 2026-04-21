@@ -70,7 +70,7 @@ export function RepoListStep({
             <Loader2 className="h-5 w-5 animate-spin text-agent" />
           </div>
         ) : displayedRepos.length === 0 && tab === 'search' && searchQuery ? (
-          <div className="text-center py-12 text-secondary-ol text-sm font-body">
+          <div className="text-center py-12 text-foreground/80 text-sm font-body">
             {t('newProject.noReposFound')} "{searchQuery}"
           </div>
         ) : (
@@ -85,21 +85,21 @@ export function RepoListStep({
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-body text-sm text-primary-ol truncate font-medium">
+                    <span className="font-body text-sm text-foreground truncate font-medium">
                       {repo.fullName}
                     </span>
                     {repo.isPrivate ? (
-                      <Lock className="h-3 w-3 text-muted-ol shrink-0" />
+                      <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
                     ) : (
-                      <Globe className="h-3 w-3 text-muted-ol shrink-0" />
+                      <Globe className="h-3 w-3 text-muted-foreground shrink-0" />
                     )}
                   </div>
                   {repo.description && (
-                    <p className="text-xs text-secondary-ol font-body truncate mt-0.5">
+                    <p className="text-xs text-foreground/80 font-body truncate mt-0.5">
                       {repo.description}
                     </p>
                   )}
-                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-ol font-body">
+                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground font-body">
                     {repo.language && (
                       <span className="flex items-center gap-1">
                         <span
@@ -142,7 +142,7 @@ export function RepoListStep({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-xs font-body text-secondary-ol"
+                  className="text-xs font-body text-foreground/80"
                   onClick={() => {
                     const nextPage = page + 1;
                     onPageChange(nextPage);

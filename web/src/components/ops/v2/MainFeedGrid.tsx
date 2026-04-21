@@ -256,7 +256,7 @@ const EventDetailsContent = memo(function EventDetailsContent({
           <p className="text-[10px] font-semibold text-agent mb-1 uppercase tracking-wider">
             {t('ops.aiDiagnosisSummary')}
           </p>
-          <p className="text-[11px] text-primary-ol leading-relaxed">
+          <p className="text-[11px] text-foreground leading-relaxed">
             {event.aiMetadata!.diagnosisSummary}
           </p>
         </div>
@@ -264,7 +264,7 @@ const EventDetailsContent = memo(function EventDetailsContent({
 
       {(hasShortDescription || (detailsOpen && hasLongDescription)) && (
         <div className="w-full overflow-hidden mt-0.5">
-          <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-[11px] text-secondary-ol prose-p:text-[11px] prose-p:leading-relaxed prose-headings:text-primary-ol prose-headings:text-xs prose-headings:font-semibold prose-a:text-agent prose-a:no-underline hover:prose-a:underline prose-code:bg-bg-subtle prose-code:text-primary-ol prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/50 prose-pre:text-[11px] prose-ul:pl-4 prose-ol:pl-4 prose-li:my-0.5">
+          <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-[11px] text-foreground/80 prose-p:text-[11px] prose-p:leading-relaxed prose-headings:text-foreground prose-headings:text-xs prose-headings:font-semibold prose-a:text-agent prose-a:no-underline hover:prose-a:underline prose-code:bg-bg-subtle prose-code:text-foreground prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/50 prose-pre:text-[11px] prose-ul:pl-4 prose-ol:pl-4 prose-li:my-0.5">
             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
               {event.description}
             </ReactMarkdown>
@@ -314,7 +314,7 @@ const ThreadEventDenseRow = memo(function ThreadEventDenseRow({
         </div>
 
         {/* Time */}
-        <div className="text-muted-ol whitespace-nowrap">
+        <div className="text-muted-foreground whitespace-nowrap">
           {parseTimestamp(event.timestamp)?.toLocaleTimeString(language, {
             hour12: false,
             hour: '2-digit',
@@ -327,7 +327,7 @@ const ThreadEventDenseRow = memo(function ThreadEventDenseRow({
         <div className="flex items-center gap-2 min-w-0">
           {!isDuplicateTitle && (
             <span
-              className={cn('truncate font-medium', isAiEvent ? 'text-agent' : 'text-primary-ol')}
+              className={cn('truncate font-medium', isAiEvent ? 'text-agent' : 'text-foreground')}
               title={titleText}
             >
               {titleText}
@@ -340,7 +340,7 @@ const ThreadEventDenseRow = memo(function ThreadEventDenseRow({
                 e.stopPropagation();
                 setDetailsOpen(!detailsOpen);
               }}
-              className="shrink-0 inline-flex items-center gap-1 bg-bg-panel hover:bg-bg-subtle border border-[hsl(var(--border))] rounded px-1.5 py-0.5 text-[9px] text-muted-ol font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-agent"
+              className="shrink-0 inline-flex items-center gap-1 bg-bg-panel hover:bg-bg-subtle border border-[hsl(var(--border))] rounded px-1.5 py-0.5 text-[9px] text-muted-foreground font-medium transition-colors focus:outline-none focus:ring-1 focus:ring-agent"
             >
               <FileText className="w-3 h-3" />
               {detailsOpen ? t('opsV2.timeline.detailsHide') : t('opsV2.timeline.detailsShow')}
@@ -354,13 +354,13 @@ const ThreadEventDenseRow = memo(function ThreadEventDenseRow({
         </div>
 
         {/* Status */}
-        <div className="truncate text-muted-ol">{t(`opsV2.status.${event.status}`)}</div>
+        <div className="truncate text-muted-foreground">{t(`opsV2.status.${event.status}`)}</div>
 
         {/* Actions empty cell */}
         <div />
 
         {/* Metadata */}
-        <div className="text-muted-ol text-[10px] truncate">
+        <div className="text-muted-foreground text-[10px] truncate">
           {event.aiMetadata?.model && <span>{event.aiMetadata.model} </span>}
           {event.aiMetadata?.durationMs && (
             <span>({(event.aiMetadata.durationMs / 1000).toFixed(1)}s)</span>
@@ -455,15 +455,15 @@ export function MainFeedGrid({
     if (isFiltered) {
       return (
         <div className="flex flex-col items-center justify-center py-16 text-center border rounded border-dashed border-[hsl(var(--border))]">
-          <Clock className="mb-3 h-8 w-8 text-muted-ol/50" />
-          <h3 className="text-sm font-semibold text-primary-ol mb-1">
+          <Clock className="mb-3 h-8 w-8 text-muted-foreground/50" />
+          <h3 className="text-sm font-semibold text-foreground mb-1">
             {t('opsV2.empty.filteredTitle')}
           </h3>
-          <p className="text-sm text-muted-ol mb-4">{t('opsV2.empty.filteredDesc')}</p>
+          <p className="text-sm text-muted-foreground mb-4">{t('opsV2.empty.filteredDesc')}</p>
           {onClearFilters && (
             <button
               onClick={onClearFilters}
-              className="text-xs font-medium text-primary-ol bg-bg-panel hover:bg-bg-subtle border border-[hsl(var(--border))] px-3 py-1.5 rounded transition-colors"
+              className="text-xs font-medium text-foreground bg-bg-panel hover:bg-bg-subtle border border-[hsl(var(--border))] px-3 py-1.5 rounded transition-colors"
             >
               {t('opsV2.timeline.clearFilters')}
             </button>
@@ -474,11 +474,11 @@ export function MainFeedGrid({
 
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center border rounded border-dashed border-[hsl(var(--border))]">
-        <Clock className="mb-3 h-8 w-8 text-muted-ol/50" />
-        <h3 className="text-sm font-semibold text-primary-ol mb-1">
+        <Clock className="mb-3 h-8 w-8 text-muted-foreground/50" />
+        <h3 className="text-sm font-semibold text-foreground mb-1">
           {t('opsV2.empty.noActivityTitle')}
         </h3>
-        <p className="text-sm text-muted-ol">{t('opsV2.empty.noActivityDesc')}</p>
+        <p className="text-sm text-muted-foreground">{t('opsV2.empty.noActivityDesc')}</p>
       </div>
     );
   }
@@ -487,11 +487,11 @@ export function MainFeedGrid({
     <div className="flex flex-col" role="table" aria-label={t('opsV2.timeline.eventLog')}>
       {/* List Header */}
       <div className="flex justify-between items-center mb-2 px-1">
-        <h2 className="text-sm font-semibold text-primary-ol">{t('opsV2.timeline.eventLog')}</h2>
+        <h2 className="text-sm font-semibold text-foreground">{t('opsV2.timeline.eventLog')}</h2>
         <button
           type="button"
           onClick={toggleAll}
-          className="text-[11px] bg-bg-panel hover:bg-bg-subtle border border-[hsl(var(--border))] px-2 py-1 flex items-center gap-1.5 focus:outline-none focus:ring-1 focus:ring-agent text-secondary-ol font-medium transition-colors rounded shadow-sm"
+          className="text-[11px] bg-bg-panel hover:bg-bg-subtle border border-[hsl(var(--border))] px-2 py-1 flex items-center gap-1.5 focus:outline-none focus:ring-1 focus:ring-agent text-foreground/80 font-medium transition-colors rounded shadow-sm"
         >
           {allExpanded ? t('opsV2.timeline.collapseAll') : t('opsV2.timeline.expandAll')}
         </button>
@@ -505,7 +505,7 @@ export function MainFeedGrid({
           className={cn(
             ROW_GRID_CLASSES,
             'bg-bg-subtle/50 border-b border-[hsl(var(--border))] py-2.5',
-            'text-[10px] font-mono tracking-wider uppercase font-semibold text-secondary-ol',
+            'text-[10px] font-mono tracking-wider uppercase font-semibold text-foreground/80',
           )}
         >
           <div role="columnheader" /> {/* expander col */}
@@ -559,7 +559,7 @@ export function MainFeedGrid({
                       isExpanded && 'bg-bg-subtle/40',
                     )}
                   >
-                    <span role="cell" className="shrink-0 text-muted-ol">
+                    <span role="cell" className="shrink-0 text-muted-foreground">
                       {isExpanded ? (
                         <ChevronDown className="h-4 w-4" />
                       ) : (
@@ -569,21 +569,21 @@ export function MainFeedGrid({
 
                     <span
                       role="cell"
-                      className="min-w-0 shrink truncate text-xs font-semibold text-primary-ol"
+                      className="min-w-0 shrink truncate text-xs font-semibold text-foreground"
                     >
                       {thread.projectName}
                     </span>
 
                     <div role="cell" className="min-w-0 flex flex-col justify-center">
                       <span
-                        className="truncate text-xs font-medium text-secondary-ol"
+                        className="truncate text-xs font-medium text-foreground/80"
                         title={thread.title ? localizeTitle(thread.title, t) : undefined}
                       >
                         {thread.title ? localizeTitle(thread.title, t) : thread.title}
                       </span>
                       <div className="flex items-center gap-2 mt-0.5">
                         {thread.triggerType && (
-                          <span className="truncate text-[10px] font-mono text-muted-ol">
+                          <span className="truncate text-[10px] font-mono text-muted-foreground">
                             {humanizeEventType(thread.triggerType, t)}
                           </span>
                         )}
@@ -635,11 +635,11 @@ export function MainFeedGrid({
                       )}
                     </div>
 
-                    <span role="cell" className="text-[11px] text-muted-ol font-mono">
+                    <span role="cell" className="text-[11px] text-muted-foreground font-mono">
                       {thread.eventCount}
                     </span>
 
-                    <span role="cell" className="text-[11px] text-muted-ol">
+                    <span role="cell" className="text-[11px] text-muted-foreground">
                       {relativeTime(parseTimestamp(thread.lastEventTime)?.getTime() ?? 0, language)}
                     </span>
                   </button>
@@ -671,7 +671,7 @@ export function MainFeedGrid({
                               e.stopPropagation();
                               showMoreEvents(thread.correlationId);
                             }}
-                            className="text-[11px] text-primary-ol hover:text-agent transition-colors font-medium border border-[hsl(var(--border))] rounded px-2 py-1 bg-bg-panel hover:bg-bg-subtle"
+                            className="text-[11px] text-foreground hover:text-agent transition-colors font-medium border border-[hsl(var(--border))] rounded px-2 py-1 bg-bg-panel hover:bg-bg-subtle"
                           >
                             {t('opsV2.timeline.showOlderEvents')} ({hiddenEventCount})
                           </button>
@@ -699,7 +699,7 @@ export function MainFeedGrid({
           onClick={() => setVisibleThreadCount((n) => n + THREADS_PAGE_SIZE)}
           className={cn(
             'mt-4 w-full rounded-md border border-dashed border-[hsl(var(--border))] bg-bg-panel',
-            'py-2.5 text-[11px] font-medium text-muted-ol hover:text-primary-ol hover:border-foreground/40 hover:bg-bg-subtle',
+            'py-2.5 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-foreground/40 hover:bg-bg-subtle',
             'transition-colors focus:outline-none focus:ring-1 focus:ring-agent shadow-sm',
           )}
         >

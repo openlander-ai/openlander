@@ -69,8 +69,8 @@ export function PatternsTab() {
     return (
       <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
         <TrendingUp className="h-14 w-14 text-muted-foreground/60 mb-4" />
-        <h3 className="text-lg font-medium text-primary-ol mb-2">{t('patternsTab.noPatterns')}</h3>
-        <p className="text-sm text-muted-ol max-w-md">{t('patternsTab.emptyMessage')}</p>
+        <h3 className="text-lg font-medium text-foreground mb-2">{t('patternsTab.noPatterns')}</h3>
+        <p className="text-sm text-muted-foreground max-w-md">{t('patternsTab.emptyMessage')}</p>
       </div>
     );
   }
@@ -80,7 +80,7 @@ export function PatternsTab() {
       <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-muted-ol uppercase bg-bg-subtle border-b border-[hsl(var(--border))]">
+            <thead className="text-xs text-muted-foreground uppercase bg-bg-subtle border-b border-[hsl(var(--border))]">
               <tr>
                 <th className="px-4 py-3 font-medium">{t('patternsTab.patternType')}</th>
                 <th className="px-4 py-3 font-medium">{t('patternsTab.errorSignature')}</th>
@@ -98,13 +98,13 @@ export function PatternsTab() {
                 return (
                   <tr key={pattern.id} className="hover:bg-bg-subtle/50 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="px-2 py-1 rounded-md bg-bg-subtle border border-[hsl(var(--border))] text-xs font-medium text-primary-ol">
+                      <span className="px-2 py-1 rounded-md bg-bg-subtle border border-[hsl(var(--border))] text-xs font-medium text-foreground">
                         {humanizeSnakeCase(pattern.pattern_type)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div
-                        className="max-w-[300px] truncate font-mono text-xs text-secondary-ol"
+                        className="max-w-[300px] truncate font-mono text-xs text-foreground/80"
                         title={pattern.error_signature}
                       >
                         {pattern.error_signature}
@@ -112,7 +112,7 @@ export function PatternsTab() {
                     </td>
                     <td className="px-4 py-3">
                       <div
-                        className="max-w-[250px] truncate text-secondary-ol"
+                        className="max-w-[250px] truncate text-foreground/80"
                         title={pattern.fix_action}
                       >
                         {humanizeFixAction(pattern.fix_action)}
@@ -121,11 +121,11 @@ export function PatternsTab() {
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <span className="text-success font-medium">{pattern.success_count}</span>
-                        <span className="text-muted-ol">/</span>
+                        <span className="text-muted-foreground">/</span>
                         <span className="text-error font-medium">{pattern.failure_count}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right text-muted-ol whitespace-nowrap">
+                    <td className="px-4 py-3 text-right text-muted-foreground whitespace-nowrap">
                       {formatRelativeTime(String(pattern.last_seen_at)) ||
                         (date ? date.toLocaleDateString() : t('patternsTab.unknown'))}
                     </td>

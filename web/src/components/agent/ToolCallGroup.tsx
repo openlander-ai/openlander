@@ -48,13 +48,13 @@ function ToolCallGroupItem({ group }: { group: ToolCallInfo[] }) {
       data-testid="tool-call-group"
     >
       <CollapsibleTrigger className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-bg-subtle">
-        <span className="font-medium flex-1 text-left text-muted-ol">
+        <span className="font-medium flex-1 text-left text-muted-foreground">
           ⚡ {group.length} tools · {truncatedNames}
         </span>
         {isOpen ? (
-          <ChevronDown className="h-3 w-3 text-muted-ol" />
+          <ChevronDown className="h-3 w-3 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-3 w-3 text-muted-ol" />
+          <ChevronRight className="h-3 w-3 text-muted-foreground" />
         )}
       </CollapsibleTrigger>
       <CollapsibleContent className="px-2 pb-1 bg-bg-subtle/30">

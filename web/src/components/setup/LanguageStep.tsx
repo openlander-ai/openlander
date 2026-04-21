@@ -27,10 +27,10 @@ export function LanguageStep({ language, setLanguage, onNext }: LanguageStepProp
           <Globe className="h-8 w-8 text-agent" />
         </div>
         <div className="space-y-2">
-          <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
+          <h2 className="font-display text-2xl font-bold text-foreground tracking-tight">
             {t('setup.language.title')}
           </h2>
-          <p className="text-sm font-body text-secondary-ol">{t('setup.language.subtitle')}</p>
+          <p className="text-sm font-body text-foreground/80">{t('setup.language.subtitle')}</p>
         </div>
 
         <Select value={language} onValueChange={(val) => setLanguage(val as Language)}>

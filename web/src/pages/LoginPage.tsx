@@ -31,10 +31,10 @@ export function LoginPage() {
     <div className="flex h-screen items-center justify-center bg-bg-app">
       <div className="w-full max-w-sm space-y-6 px-4">
         <div className="text-center space-y-2">
-          <h1 className="font-display text-3xl font-bold text-primary-ol tracking-tight">
+          <h1 className="font-display text-3xl font-bold text-foreground tracking-tight">
             OpenLander
           </h1>
-          <p className="text-sm font-body text-secondary-ol">{t('login.signInPrompt')}</p>
+          <p className="text-sm font-body text-foreground/80">{t('login.signInPrompt')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

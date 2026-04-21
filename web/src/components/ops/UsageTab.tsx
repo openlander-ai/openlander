@@ -46,9 +46,9 @@ export function UsageTab() {
   if (!summary || summary.callCount === 0) {
     return (
       <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
-        <BarChart3 className="h-12 w-12 text-muted-ol mb-4" />
-        <h3 className="text-lg font-medium text-primary-ol mb-2">{t('usageTab.noUsage')}</h3>
-        <p className="text-sm text-muted-ol max-w-md">{t('usageTab.emptyMessage')}</p>
+        <BarChart3 className="h-12 w-12 text-muted-foreground mb-4" />
+        <h3 className="text-lg font-medium text-foreground mb-2">{t('usageTab.noUsage')}</h3>
+        <p className="text-sm text-muted-foreground max-w-md">{t('usageTab.emptyMessage')}</p>
       </div>
     );
   }
@@ -57,24 +57,30 @@ export function UsageTab() {
     <div className="p-6 space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="p-4 rounded-lg border border-[hsl(var(--border))] bg-bg-panel">
-          <p className="text-sm font-medium text-muted-ol mb-1">{t('usageTab.totalCost')}</p>
-          <p className="text-2xl font-semibold text-primary-ol">
+          <p className="text-sm font-medium text-muted-foreground mb-1">
+            {t('usageTab.totalCost')}
+          </p>
+          <p className="text-2xl font-semibold text-foreground">
             ${summary.totalCostUsd ? summary.totalCostUsd.toFixed(2) : '0.00'}
           </p>
         </div>
         <div className="p-4 rounded-lg border border-[hsl(var(--border))] bg-bg-panel">
-          <p className="text-sm font-medium text-muted-ol mb-1">{t('usageTab.totalTokens')}</p>
-          <p className="text-2xl font-semibold text-primary-ol">
+          <p className="text-sm font-medium text-muted-foreground mb-1">
+            {t('usageTab.totalTokens')}
+          </p>
+          <p className="text-2xl font-semibold text-foreground">
             {(summary.totalInputTokens + summary.totalOutputTokens).toLocaleString()}
           </p>
-          <p className="text-xs text-muted-ol mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             {summary.totalInputTokens.toLocaleString()} {t('usageTab.in')} /{' '}
             {summary.totalOutputTokens.toLocaleString()} {t('usageTab.out')}
           </p>
         </div>
         <div className="p-4 rounded-lg border border-[hsl(var(--border))] bg-bg-panel">
-          <p className="text-sm font-medium text-muted-ol mb-1">{t('usageTab.totalCalls')}</p>
-          <p className="text-2xl font-semibold text-primary-ol">
+          <p className="text-sm font-medium text-muted-foreground mb-1">
+            {t('usageTab.totalCalls')}
+          </p>
+          <p className="text-2xl font-semibold text-foreground">
             {summary.callCount.toLocaleString()}
           </p>
         </div>
@@ -82,11 +88,11 @@ export function UsageTab() {
 
       <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
         <div className="px-4 py-3 border-b border-[hsl(var(--border))] bg-bg-subtle">
-          <h3 className="font-medium text-primary-ol">{t('usageTab.recentActivity')}</h3>
+          <h3 className="font-medium text-foreground">{t('usageTab.recentActivity')}</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-muted-ol uppercase bg-bg-subtle border-b border-[hsl(var(--border))]">
+            <thead className="text-xs text-muted-foreground uppercase bg-bg-subtle border-b border-[hsl(var(--border))]">
               <tr>
                 <th className="px-4 py-3 font-medium">{t('usageTab.time')}</th>
                 <th className="px-4 py-3 font-medium">{t('usageTab.action')}</th>
@@ -101,21 +107,21 @@ export function UsageTab() {
 
                 return (
                   <tr key={log.id} className="hover:bg-bg-subtle/50 transition-colors">
-                    <td className="px-4 py-3 whitespace-nowrap text-muted-ol">
+                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
                       {date ? date.toLocaleString() : 'Unknown'}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="px-2 py-1 rounded-md bg-bg-subtle border border-[hsl(var(--border))] text-xs font-medium text-primary-ol">
+                      <span className="px-2 py-1 rounded-md bg-bg-subtle border border-[hsl(var(--border))] text-xs font-medium text-foreground">
                         {log.actionType}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-secondary-ol">
+                    <td className="px-4 py-3 text-foreground/80">
                       {log.modelName || t('usageTab.unknown')}
                     </td>
-                    <td className="px-4 py-3 text-right text-secondary-ol">
+                    <td className="px-4 py-3 text-right text-foreground/80">
                       {log.totalTokens.toLocaleString()}
                     </td>
-                    <td className="px-4 py-3 text-right text-secondary-ol">
+                    <td className="px-4 py-3 text-right text-foreground/80">
                       {log.costUsd ? `$${log.costUsd.toFixed(4)}` : '-'}
                     </td>
                   </tr>
@@ -123,7 +129,7 @@ export function UsageTab() {
               })}
               {recentLogs.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-muted-ol">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     {t('usageTab.noRecentActivity')}
                   </td>
                 </tr>

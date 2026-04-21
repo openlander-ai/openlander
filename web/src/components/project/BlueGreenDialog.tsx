@@ -53,7 +53,7 @@ export function BlueGreenDialog({
         <div className="space-y-2 pt-2">
           <label
             htmlFor="blue-green-health-check"
-            className="text-xs font-medium text-secondary-ol"
+            className="text-xs font-medium text-foreground/80"
           >
             {t('blueGreen.healthCheckPath')}
           </label>
@@ -71,7 +71,7 @@ export function BlueGreenDialog({
             className="h-8 text-sm"
             autoFocus
           />
-          <p className="text-xs text-muted-ol">{projectName}</p>
+          <p className="text-xs text-muted-foreground">{projectName}</p>
         </div>
 
         <DialogFooter>

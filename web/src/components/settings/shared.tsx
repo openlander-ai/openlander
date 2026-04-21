@@ -19,12 +19,12 @@ export function StatCard({
 }) {
   return (
     <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-2">
-      <div className={cn('flex items-center gap-2 text-muted-ol', color)}>
+      <div className={cn('flex items-center gap-2 text-muted-foreground', color)}>
         {icon}
         <span className="text-xs font-body uppercase tracking-wider">{label}</span>
       </div>
       <p
-        className="text-lg font-mono font-bold text-primary-ol leading-tight line-clamp-2"
+        className="text-lg font-mono font-bold text-foreground leading-tight line-clamp-2"
         title={value}
       >
         {value}

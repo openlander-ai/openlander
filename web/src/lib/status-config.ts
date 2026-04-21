@@ -43,7 +43,7 @@ const STATUS_MAP: Record<AppStatus, StatusDisplay> = {
     dot: 'bg-muted-foreground/40',
     badge: 'bg-muted text-muted-foreground border border-border',
     badgeVariant: 'neutral',
-    textClass: 'text-muted-ol',
+    textClass: 'text-muted-foreground',
     border: 'border-[hsl(var(--border))]',
   },
   building: {
@@ -67,7 +67,7 @@ const STATUS_MAP: Record<AppStatus, StatusDisplay> = {
     dot: 'bg-muted-foreground/40',
     badge: 'bg-muted text-muted-foreground border border-border',
     badgeVariant: 'neutral',
-    textClass: 'text-muted-ol',
+    textClass: 'text-muted-foreground',
     border: 'border-[hsl(var(--border))]',
   },
 };

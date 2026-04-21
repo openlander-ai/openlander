@@ -226,7 +226,7 @@ export function RollbackDialog({
             </DialogHeader>
 
             <div className="mt-4 rounded-lg border border-border bg-bg-app/70">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-border text-xs font-body text-muted-ol">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-border text-xs font-body text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <History className="h-3.5 w-3.5" />
                   {projectName}
@@ -236,7 +236,7 @@ export function RollbackDialog({
 
               <div className="max-h-[320px] overflow-y-auto p-2 space-y-2">
                 {loading && (
-                  <div className="flex items-center justify-center py-10 text-sm text-muted-ol gap-2">
+                  <div className="flex items-center justify-center py-10 text-sm text-muted-foreground gap-2">
                     <Spinner className="h-4 w-4" />
                     <span>Loading deployments...</span>
                   </div>
@@ -250,7 +250,7 @@ export function RollbackDialog({
                 )}
 
                 {!loading && !loadError && deployments.length === 0 && (
-                  <div className="py-10 text-center text-sm text-muted-ol">
+                  <div className="py-10 text-center text-sm text-muted-foreground">
                     {t('rollback.noDeployments')}
                   </div>
                 )}
@@ -279,18 +279,18 @@ export function RollbackDialog({
                             <span className="shrink-0 text-sm">
                               {getStatusGlyph(deployment.status)}
                             </span>
-                            <span className="min-w-0 inline-flex items-center gap-1.5 text-xs text-secondary-ol">
+                            <span className="min-w-0 inline-flex items-center gap-1.5 text-xs text-foreground/80">
                               <GitCommit className="h-3.5 w-3.5" />
                               <span className="font-mono truncate">
                                 {deployment.commitSha?.slice(0, 7) ?? 'unknown'}
                               </span>
                             </span>
                           </div>
-                          <span className="shrink-0 text-xs text-muted-ol">
+                          <span className="shrink-0 text-xs text-muted-foreground">
                             {formatRelativeTime(deployment.createdAt)}
                           </span>
                         </div>
-                        <div className="mt-1 text-xs text-muted-ol">{triggerText}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{triggerText}</div>
                       </button>
                     );
                   })}
@@ -322,7 +322,7 @@ export function RollbackDialog({
 
               {showAiLoading && (
                 <>
-                  <p className="mt-2 text-sm text-secondary-ol">{t('rollback.aiAnalyzing')}</p>
+                  <p className="mt-2 text-sm text-foreground/80">{t('rollback.aiAnalyzing')}</p>
                   <div className="mt-4 space-y-3">
                     <Skeleton className="h-4 w-[85%]" />
                     <Skeleton className="h-3 w-full" />
@@ -333,12 +333,12 @@ export function RollbackDialog({
               )}
 
               {!showAiLoading && aiError && (
-                <p className="mt-3 text-sm text-muted-ol">AI suggestion unavailable</p>
+                <p className="mt-3 text-sm text-muted-foreground">AI suggestion unavailable</p>
               )}
 
               {!showAiLoading && !aiError && aiSuggestion && (
                 <div className="mt-3 space-y-4">
-                  <p className="text-sm leading-relaxed text-secondary-ol whitespace-pre-line">
+                  <p className="text-sm leading-relaxed text-foreground/80 whitespace-pre-line">
                     {aiSuggestion.text}
                   </p>
                   {aiSuggestion.suggestedDeploymentId && (

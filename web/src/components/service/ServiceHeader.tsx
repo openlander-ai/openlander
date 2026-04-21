@@ -51,7 +51,7 @@ export function ServiceHeader({
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate('/services')}
-            className="shrink-0 p-1 rounded hover:bg-muted text-secondary-ol hover:text-primary-ol transition-colors"
+            className="shrink-0 p-1 rounded hover:bg-muted text-foreground/80 hover:text-foreground transition-colors"
             title={t('services.detail.header.backToServices')}
           >
             <ArrowLeft className="h-4 w-4" />
@@ -59,15 +59,15 @@ export function ServiceHeader({
           <div className={cn('h-3 w-3 rounded-full shrink-0', status.dot)} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate">
+              <h1 className="font-display font-bold text-lg text-foreground tracking-tight truncate">
                 {service.name}
               </h1>
-              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted border border-border text-xs font-mono text-secondary-ol">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted border border-border text-xs font-mono text-foreground/80">
                 <Database className="h-3 w-3" />
                 {service.image}
               </div>
             </div>
-            <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-secondary-ol">
+            <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-foreground/80">
               <span className={status.color}>{status.label}</span>
             </div>
           </div>

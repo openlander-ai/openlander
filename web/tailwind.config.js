@@ -79,11 +79,6 @@ export default {
         warning: 'var(--color-warning)',
         error: 'var(--color-error)',
       },
-      textColor: {
-        'primary-ol': 'var(--text-primary)',
-        'secondary-ol': 'var(--text-secondary)',
-        'muted-ol': 'var(--text-muted)',
-      },
       fontFamily: {
         display: ['Inter Variable', 'Inter', 'system-ui', 'sans-serif'],
         body: ['Inter Variable', 'Inter', 'system-ui', 'sans-serif'],

@@ -103,8 +103,8 @@ export function StatusHeroCard({
           <h2 className={cn('text-xl font-bold', currentStatus.color)}>
             {t(currentStatus.titleKey)}
           </h2>
-          <p className="text-sm text-secondary-ol mt-1">{t(currentStatus.descKey)}</p>
-          <div className="flex items-center gap-4 mt-3 text-xs text-muted-ol font-medium">
+          <p className="text-sm text-foreground/80 mt-1">{t(currentStatus.descKey)}</p>
+          <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground font-medium">
             <CircuitBreakerBadge state={cbState} failures={cbFailures} />
             <span className="flex items-center gap-1.5">
               <Activity className="h-3.5 w-3.5" />
@@ -142,7 +142,7 @@ export function StatusHeroCard({
           </Button>
         )}
         <div className="flex items-center gap-3 bg-bg-panel px-4 py-2 rounded-lg border border-[hsl(var(--border))] w-full sm:w-auto justify-between sm:justify-start">
-          <span className="text-sm font-medium text-primary-ol">{t('ops.autoRecovery')}</span>
+          <span className="text-sm font-medium text-foreground">{t('ops.autoRecovery')}</span>
           <Switch
             checked={autoRecoveryEnabled}
             onCheckedChange={onToggleAutoRecovery}

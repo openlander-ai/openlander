@@ -73,7 +73,7 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
       >
         {isLoading ? (
           <div className="flex-1 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-ol" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : error ? (
           <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
@@ -86,10 +86,10 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
               <SheetHeader className="space-y-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1">
-                    <SheetTitle className="text-lg font-display font-semibold text-primary-ol">
+                    <SheetTitle className="text-lg font-display font-semibold text-foreground">
                       {humanizeEventType(incident.title, t)}
                     </SheetTitle>
-                    <SheetDescription className="text-sm text-secondary-ol">
+                    <SheetDescription className="text-sm text-foreground/80">
                       {incident.projectName || incident.project_id}
                     </SheetDescription>
                   </div>
@@ -103,7 +103,7 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
                         ? 'bg-warning/10 text-warning border-warning/20'
                         : incident.status === 'resolved'
                           ? 'bg-success/10 text-success border-success/20'
-                          : 'bg-bg-subtle text-secondary-ol border-[hsl(var(--border))]',
+                          : 'bg-bg-subtle text-foreground/80 border-[hsl(var(--border))]',
                     )}
                   >
                     {t(`opsV2.status.${incident.status}`)}
@@ -123,15 +123,15 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
                 {/* Trigger Info */}
                 {incident.triggerType && (
                   <div className="space-y-2">
-                    <h3 className="text-sm font-semibold text-primary-ol">
+                    <h3 className="text-sm font-semibold text-foreground">
                       {t('opsV2.incident.trigger')}
                     </h3>
                     <div className="bg-bg-subtle/50 rounded-md p-3 border border-[hsl(var(--border))]">
-                      <p className="text-sm text-secondary-ol font-medium">
+                      <p className="text-sm text-foreground/80 font-medium">
                         {humanizeEventType(incident.triggerType ?? 'unknown', t)}
                       </p>
                       {incident.triggerDetails && (
-                        <p className="text-xs text-muted-ol mt-1 font-mono break-all">
+                        <p className="text-xs text-muted-foreground mt-1 font-mono break-all">
                           {incident.triggerDetails}
                         </p>
                       )}
@@ -142,7 +142,7 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
                 {/* Diagnosis & Root Cause */}
                 {(incident.diagnosis || incident.root_cause) && (
                   <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-primary-ol">
+                    <h3 className="text-sm font-semibold text-foreground">
                       {t('opsV2.incident.diagnosis')}
                     </h3>
                     <div className="bg-agent/5 border border-agent/20 rounded-md p-4 space-y-4">
@@ -151,7 +151,7 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
                           <h4 className="text-xs font-semibold text-agent mb-1 uppercase tracking-wider">
                             {t('opsV2.incident.rootCause')}
                           </h4>
-                          <p className="text-sm text-primary-ol leading-relaxed">
+                          <p className="text-sm text-foreground leading-relaxed">
                             {incident.root_cause}
                           </p>
                         </div>
@@ -161,7 +161,7 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
                           <h4 className="text-xs font-semibold text-agent mb-1 uppercase tracking-wider">
                             {t('opsV2.incident.diagnosis')}
                           </h4>
-                          <p className="text-sm text-primary-ol leading-relaxed">
+                          <p className="text-sm text-foreground leading-relaxed">
                             {incident.diagnosis}
                           </p>
                         </div>
@@ -173,11 +173,11 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
                 {/* Actions Taken */}
                 {incident.actions_taken && (
                   <div className="space-y-2">
-                    <h3 className="text-sm font-semibold text-primary-ol">
+                    <h3 className="text-sm font-semibold text-foreground">
                       {t('opsV2.incident.actionsTaken')}
                     </h3>
                     <div className="bg-bg-subtle/50 rounded-md p-4 border border-[hsl(var(--border))]">
-                      <p className="text-sm text-secondary-ol leading-relaxed whitespace-pre-wrap">
+                      <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
                         {incident.actions_taken}
                       </p>
                     </div>
@@ -186,18 +186,18 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
 
                 {/* Timeline */}
                 <div className="space-y-4">
-                  <h3 className="text-sm font-semibold text-primary-ol">
+                  <h3 className="text-sm font-semibold text-foreground">
                     {t('opsV2.incident.timeline')}
                   </h3>
                   {events.length > 0 ? (
                     <IncidentTimeline events={events} />
                   ) : (
                     <div className="flex flex-col items-center justify-center py-8 text-center border rounded border-dashed border-[hsl(var(--border))]">
-                      <Clock className="mb-2 h-6 w-6 text-muted-ol/50" />
-                      <p className="text-sm font-medium text-primary-ol">
+                      <Clock className="mb-2 h-6 w-6 text-muted-foreground/50" />
+                      <p className="text-sm font-medium text-foreground">
                         {t('opsV2.incident.noEventsTitle')}
                       </p>
-                      <p className="text-xs text-muted-ol mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         {t('opsV2.incident.noEventsDesc')}
                       </p>
                     </div>

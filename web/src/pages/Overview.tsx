@@ -124,7 +124,7 @@ export function Overview() {
   return (
     <div className="p-6 xl:p-8 max-w-8xl mx-auto w-full space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="font-display font-bold text-2xl text-primary-ol tracking-tight">
+        <h1 className="font-display font-bold text-2xl text-foreground tracking-tight">
           {t('overview.title')}
         </h1>
       </div>
@@ -174,8 +174,8 @@ export function Overview() {
 
       {projects.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center border-2 border-dashed border-[hsl(var(--border))] rounded-lg bg-bg-panel">
-          <Rocket className="h-12 w-12 text-muted-ol mb-4" />
-          <p className="text-secondary-ol max-w-md">{t('overview.empty')}</p>
+          <Rocket className="h-12 w-12 text-muted-foreground mb-4" />
+          <p className="text-foreground/80 max-w-md">{t('overview.empty')}</p>
         </div>
       ) : (
         <>
@@ -183,12 +183,12 @@ export function Overview() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left: Live Activity */}
             <div className="lg:col-span-2 space-y-4">
-              <h2 className="font-display font-semibold text-lg text-primary-ol">
+              <h2 className="font-display font-semibold text-lg text-foreground">
                 {t('overview.activity.title')}
               </h2>
               <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg overflow-hidden">
                 {activities.length === 0 ? (
-                  <div className="p-8 text-center text-muted-ol">
+                  <div className="p-8 text-center text-muted-foreground">
                     {t('overview.activity.empty')}
                   </div>
                 ) : (
@@ -203,18 +203,18 @@ export function Overview() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-medium text-primary-ol truncate">
+                            <p className="text-sm font-medium text-foreground truncate">
                               {activity.title}
                             </p>
-                            <span className="text-xs text-muted-ol whitespace-nowrap">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
                               {t('overview.activity.timeAgo').replace(
                                 '{time}',
                                 formatRelativeTime(activity.timestamp, t),
                               )}
                             </span>
                           </div>
-                          <p className="text-xs text-secondary-ol mt-1 truncate">
-                            <span className="font-medium text-primary-ol mr-2">
+                          <p className="text-xs text-foreground/80 mt-1 truncate">
+                            <span className="font-medium text-foreground mr-2">
                               {activity.projectName}
                             </span>
                             {activity.description}
@@ -229,14 +229,14 @@ export function Overview() {
 
             {/* Right: Needs Attention */}
             <div className="space-y-4">
-              <h2 className="font-display font-semibold text-lg text-primary-ol">
+              <h2 className="font-display font-semibold text-lg text-foreground">
                 {t('overview.attention.title')}
               </h2>
               <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg overflow-hidden">
                 {!hasNeedsAttention ? (
                   <div className="p-8 flex flex-col items-center justify-center text-center">
                     <ShieldCheck className="h-8 w-8 text-success mb-2" />
-                    <p className="text-sm text-secondary-ol">{t('overview.attention.empty')}</p>
+                    <p className="text-sm text-foreground/80">{t('overview.attention.empty')}</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-[hsl(var(--border))]/50">
@@ -247,7 +247,7 @@ export function Overview() {
                         onClick={() => navigate(`/projects/${project.id}`)}
                       >
                         <div className="h-2 w-2 rounded-full bg-error shrink-0" />
-                        <p className="text-sm text-secondary-ol truncate">
+                        <p className="text-sm text-foreground/80 truncate">
                           {t('overview.attention.projectError').replace('{name}', project.name)}
                         </p>
                       </div>
@@ -258,7 +258,7 @@ export function Overview() {
                         onClick={() => navigate('/operations?tab=approvals')}
                       >
                         <div className="h-2 w-2 rounded-full bg-warning shrink-0" />
-                        <p className="text-sm text-secondary-ol truncate">
+                        <p className="text-sm text-foreground/80 truncate">
                           {t('overview.attention.pendingApprovals').replace(
                             '{count}',
                             String(stats?.pending_approvals),
@@ -272,7 +272,7 @@ export function Overview() {
                         onClick={() => navigate('/services')}
                       >
                         <div className="h-2 w-2 rounded-full bg-error shrink-0" />
-                        <p className="text-sm text-secondary-ol truncate">
+                        <p className="text-sm text-foreground/80 truncate">
                           {t('overview.attention.unhealthyServices').replace(
                             '{count}',
                             String(stats?.unhealthy_services),
@@ -288,7 +288,7 @@ export function Overview() {
 
           {/* Lower Grid: Project Health */}
           <div className="space-y-4">
-            <h2 className="font-display font-semibold text-lg text-primary-ol">
+            <h2 className="font-display font-semibold text-lg text-foreground">
               {t('overview.health.title')}
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 gap-5">
@@ -337,7 +337,7 @@ function KpiCard({
     >
       <div className="flex items-center justify-between">
         <div className={cn('p-2 bg-bg-subtle rounded-md', iconColor)}>{icon}</div>
-        <span className="font-display font-bold text-xl text-primary-ol">{value}</span>
+        <span className="font-display font-bold text-xl text-foreground">{value}</span>
       </div>
       <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
         {label}

@@ -122,12 +122,12 @@ export function TerminalPanel({ projectId, isConsoleActive, projectStatus }: Ter
     return (
       <div className="h-full min-h-[14rem] bg-[#0a0a0a] rounded-lg overflow-hidden border border-[hsl(var(--border))]">
         <div className="flex h-full flex-col justify-center gap-3 px-5 py-6 text-sm">
-          <span className="inline-flex w-fit rounded-full border border-[hsl(var(--border))] bg-bg-panel/60 px-2.5 py-1 text-xs font-mono uppercase tracking-[0.18em] text-muted-ol">
+          <span className="inline-flex w-fit rounded-full border border-[hsl(var(--border))] bg-bg-panel/60 px-2.5 py-1 text-xs font-mono uppercase tracking-[0.18em] text-muted-foreground">
             {availability.badge}
           </span>
           <div className="space-y-1.5">
-            <p className="font-body text-primary-ol">{availability.title}</p>
-            <p className="max-w-sm font-body text-xs leading-5 text-muted-ol">
+            <p className="font-body text-foreground">{availability.title}</p>
+            <p className="max-w-sm font-body text-xs leading-5 text-muted-foreground">
               {availability.detail}
             </p>
           </div>
@@ -184,13 +184,13 @@ export function TerminalPanel({ projectId, isConsoleActive, projectStatus }: Ter
       <div className="shrink-0 flex items-center justify-between gap-3 border-b border-[hsl(var(--border))] bg-bg-panel/80 px-3 py-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className={cn('w-2 h-2 rounded-full shrink-0', getStatusColor())} />
-          <span className="text-xs font-mono text-secondary-ol truncate">{getStatusText()}</span>
+          <span className="text-xs font-mono text-foreground/80 truncate">{getStatusText()}</span>
         </div>
         <div className="flex items-center gap-2">
           {(connectionState === 'disconnected' || connectionState === 'error') && (
             <button
               onClick={() => setReconnectKey((k) => k + 1)}
-              className="p-1 hover:bg-bg-subtle rounded text-muted-ol hover:text-primary-ol transition-colors"
+              className="p-1 hover:bg-bg-subtle rounded text-muted-foreground hover:text-foreground transition-colors"
               title={t('logs.terminalReconnect')}
             >
               <RefreshCw className="w-3 h-3" />
@@ -203,13 +203,13 @@ export function TerminalPanel({ projectId, isConsoleActive, projectStatus }: Ter
         {connectionState !== 'connected' && (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
             <div className="pointer-events-auto w-full max-w-sm rounded-lg border border-[hsl(var(--border))] bg-bg-panel/85 p-4 text-center shadow-lg backdrop-blur-sm">
-              <p className="text-sm font-mono text-secondary-ol">{getStatusText()}</p>
-              <p className="mt-2 text-sm font-body text-muted-ol">{getStatusBody()}</p>
+              <p className="text-sm font-mono text-foreground/80">{getStatusText()}</p>
+              <p className="mt-2 text-sm font-body text-muted-foreground">{getStatusBody()}</p>
               {(connectionState === 'disconnected' || connectionState === 'error') && (
                 <button
                   type="button"
                   onClick={() => setReconnectKey((k) => k + 1)}
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-bg-subtle px-3 py-1.5 text-xs font-body text-primary-ol transition-colors hover:bg-bg-subtle/80"
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-bg-subtle px-3 py-1.5 text-xs font-body text-foreground transition-colors hover:bg-bg-subtle/80"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   {t('logs.terminalReconnect')}

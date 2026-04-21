@@ -43,17 +43,17 @@ export function ConfigureDeployStep({
     <div className="flex-1 p-6 flex flex-col">
       <div className="max-w-xl mx-auto w-full bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-6 space-y-6">
         <div>
-          <h2 className="text-base font-display font-bold text-primary-ol flex items-center gap-2">
+          <h2 className="text-base font-display font-bold text-foreground flex items-center gap-2">
             <Rocket className="h-4 w-4" />
             Deploy {selectedRepo.name}
           </h2>
-          <p className="text-xs text-secondary-ol font-body mt-1">{selectedRepo.fullName}</p>
+          <p className="text-xs text-foreground/80 font-body mt-1">{selectedRepo.fullName}</p>
         </div>
 
         {envScan.envStep === 'scanning' && (
           <div className="py-8 flex flex-col items-center justify-center space-y-3">
             <Loader2 className="h-6 w-6 animate-spin text-agent" />
-            <p className="text-xs text-secondary-ol font-body">
+            <p className="text-xs text-foreground/80 font-body">
               Scanning for environment variables...
             </p>
           </div>
@@ -61,11 +61,11 @@ export function ConfigureDeployStep({
 
         {envScan.envStep === 'paste' && (
           <div className="space-y-4">
-            <div className="text-xs text-secondary-ol font-body">
+            <div className="text-xs text-foreground/80 font-body">
               {`Found ${String(envScan.envVars.length)} environment variable${envScan.envVars.length !== 1 ? 's' : ''} used in this project.`}
             </div>
             <textarea
-              className="w-full rounded-md px-3 py-2 text-xs font-mono bg-bg-app border border-[hsl(var(--border))] text-primary-ol placeholder:text-muted-ol resize-none focus:outline-none focus:ring-1 focus:ring-agent/40"
+              className="w-full rounded-md px-3 py-2 text-xs font-mono bg-bg-app border border-[hsl(var(--border))] text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-agent/40"
               rows={8}
               placeholder={t('deploy.dialog.pasteEnvPlaceholder')}
               value={envScan.pasteText}
@@ -74,7 +74,7 @@ export function ConfigureDeployStep({
             <div className="flex items-center justify-between pt-2">
               <button
                 type="button"
-                className="text-xs text-secondary-ol hover:text-primary-ol transition-colors font-body"
+                className="text-xs text-foreground/80 hover:text-foreground transition-colors font-body"
                 onClick={() => void onDeployWithVars({})}
               >
                 {t('deploy.dialog.skipEnvVars')}
@@ -117,7 +117,7 @@ export function ConfigureDeployStep({
                   </div>
                   {envScan.matchedVars.map((v) => (
                     <div key={v.key} className="flex items-center gap-2">
-                      <label className="text-xs font-mono text-secondary-ol min-w-0 shrink-0 max-w-[140px] truncate">
+                      <label className="text-xs font-mono text-foreground/80 min-w-0 shrink-0 max-w-[140px] truncate">
                         {v.key}
                       </label>
                       <Input
@@ -145,7 +145,7 @@ export function ConfigureDeployStep({
                   </div>
                   {envScan.missingVars.map((v) => (
                     <div key={v.key} className="flex items-center gap-2">
-                      <label className="text-xs font-mono text-secondary-ol min-w-0 shrink-0 max-w-[140px] truncate">
+                      <label className="text-xs font-mono text-foreground/80 min-w-0 shrink-0 max-w-[140px] truncate">
                         {v.key}
                       </label>
                       <Input
@@ -166,7 +166,7 @@ export function ConfigureDeployStep({
 
               {envScan.extraVars.length > 0 && (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-secondary-ol">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-foreground/80">
                     <span>+</span>
                     <span>
                       {envScan.extraVars.length} {t('deploy.dialog.varsExtra')}
@@ -174,15 +174,15 @@ export function ConfigureDeployStep({
                   </div>
                   {envScan.extraVars.map((v) => (
                     <div key={v.key} className="flex items-center gap-2">
-                      <label className="text-xs font-mono text-secondary-ol min-w-0 shrink-0 max-w-[140px] truncate">
+                      <label className="text-xs font-mono text-foreground/80 min-w-0 shrink-0 max-w-[140px] truncate">
                         {v.key}
                       </label>
-                      <span className="text-xs font-mono text-secondary-ol truncate flex-1">
+                      <span className="text-xs font-mono text-foreground/80 truncate flex-1">
                         {v.value || '(empty)'}
                       </span>
                       <button
                         type="button"
-                        className="text-xs text-secondary-ol hover:text-error transition-colors shrink-0"
+                        className="text-xs text-foreground/80 hover:text-error transition-colors shrink-0"
                         onClick={() => envScan.removeExtra(v.key)}
                       >
                         &#x2715;
@@ -215,7 +215,7 @@ export function ConfigureDeployStep({
           <>
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-xs font-medium text-primary-ol">Branch</label>
+                <label className="text-xs font-medium text-foreground">Branch</label>
                 <Input
                   value={branch}
                   onChange={(e) => onBranchChange(e.target.value)}

@@ -57,7 +57,7 @@ function DialogTitle({
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>) {
   return (
     <DialogPrimitive.Title
-      className={cn('text-sm font-display font-semibold text-primary-ol', className)}
+      className={cn('text-sm font-display font-semibold text-foreground', className)}
       {...props}
     />
   );
@@ -69,7 +69,7 @@ function DialogDescription({
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>) {
   return (
     <DialogPrimitive.Description
-      className={cn('text-sm font-body text-secondary-ol', className)}
+      className={cn('text-sm font-body text-foreground/80', className)}
       {...props}
     />
   );

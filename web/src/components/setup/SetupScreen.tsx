@@ -178,7 +178,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-mono transition-all duration-300 ${
                   s < step ? 'bg-agent text-white' : ''
                 } ${s === step ? 'bg-agent/20 text-agent border border-agent/50' : ''} ${
-                  s > step ? 'bg-bg-subtle text-muted-ol border border-border' : ''
+                  s > step ? 'bg-bg-subtle text-muted-foreground border border-border' : ''
                 }`}
               >
                 {s < step ? <Check className="h-4 w-4" /> : s + 1}

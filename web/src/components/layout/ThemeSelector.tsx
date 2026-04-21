@@ -40,7 +40,7 @@ export function ThemeSelector() {
       variant="ghost"
       size="icon"
       onClick={toggleTheme}
-      className="h-7 w-7 transition-all text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle"
+      className="h-7 w-7 transition-all text-foreground/80 hover:text-foreground hover:bg-bg-subtle"
       title={currentTheme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
     >
       {currentTheme === 'light' ? (

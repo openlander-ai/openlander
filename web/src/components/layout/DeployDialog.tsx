@@ -349,7 +349,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
               {`Found ${String(envVars.length)} environment variable${envVars.length !== 1 ? 's' : ''} used in this project.`}
             </div>
             <textarea
-              className="w-full rounded-md px-3 py-2 text-xs font-mono bg-bg-app border border-border text-primary-ol placeholder:text-muted-ol resize-none focus:outline-none focus:ring-1 focus:ring-agent/40"
+              className="w-full rounded-md px-3 py-2 text-xs font-mono bg-bg-app border border-border text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-agent/40"
               rows={8}
               placeholder={t('deploy.dialog.pasteEnvPlaceholder')}
               value={pasteText}
@@ -358,7 +358,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
             <DialogFooter className="flex items-center justify-between">
               <button
                 type="button"
-                className="text-xs text-muted-foreground hover:text-primary-ol transition-colors"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 onClick={() => void doDeploy({})}
               >
                 {t('deploy.dialog.skipEnvVars')}

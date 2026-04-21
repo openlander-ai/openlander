@@ -88,16 +88,16 @@ export function ProjectsGrid() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display font-bold text-xl text-primary-ol tracking-tight">
+          <h1 className="font-display font-bold text-xl text-foreground tracking-tight">
             Project Overview
           </h1>
-          <p className="text-sm font-body text-secondary-ol mt-0.5">
+          <p className="text-sm font-body text-foreground/80 mt-0.5">
             {filteredProjects.length}{' '}
             {filteredProjects.length === 1 ? 'project monitored' : 'projects monitored'}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm font-body text-secondary-ol cursor-pointer">
+          <label className="flex items-center gap-2 text-sm font-body text-foreground/80 cursor-pointer">
             <input
               type="checkbox"
               checked={showArchived}
@@ -112,8 +112,8 @@ export function ProjectsGrid() {
               className={cn(
                 'p-1.5 rounded-md transition-colors',
                 viewMode === 'grid'
-                  ? 'bg-bg-panel shadow-sm text-primary-ol'
-                  : 'text-muted-ol hover:text-secondary-ol',
+                  ? 'bg-bg-panel shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground/80',
               )}
             >
               <LayoutGrid className="h-4 w-4" />
@@ -123,8 +123,8 @@ export function ProjectsGrid() {
               className={cn(
                 'p-1.5 rounded-md transition-colors',
                 viewMode === 'table'
-                  ? 'bg-bg-panel shadow-sm text-primary-ol'
-                  : 'text-muted-ol hover:text-secondary-ol',
+                  ? 'bg-bg-panel shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground/80',
               )}
             >
               <List className="h-4 w-4" />
@@ -149,10 +149,10 @@ export function ProjectsGrid() {
             <Plus className="h-8 w-8 text-agent" />
           </div>
           <div className="text-center">
-            <p className="font-display font-semibold text-primary-ol">
+            <p className="font-display font-semibold text-foreground">
               {t('projects.deployFirstApp')}
             </p>
-            <p className="text-sm font-body text-secondary-ol mt-1">
+            <p className="text-sm font-body text-foreground/80 mt-1">
               {t('projects.connectGithub')}
             </p>
           </div>

@@ -51,10 +51,10 @@ export function PasswordStep({ onNext, onBack }: PasswordStepProps) {
           <Lock className="h-8 w-8 text-agent" />
         </div>
         <div className="space-y-2">
-          <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
+          <h2 className="font-display text-2xl font-bold text-foreground tracking-tight">
             {t('setup.password.title')}
           </h2>
-          <p className="text-sm font-body text-secondary-ol">{t('setup.password.subtitle')}</p>
+          <p className="text-sm font-body text-foreground/80">{t('setup.password.subtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-left">
@@ -69,7 +69,9 @@ export function PasswordStep({ onNext, onBack }: PasswordStepProps) {
               autoComplete="off"
               spellCheck={false}
             />
-            <p className="text-xs font-body text-muted-ol">{t('setup.password.secretHint')}</p>
+            <p className="text-xs font-body text-muted-foreground">
+              {t('setup.password.secretHint')}
+            </p>
             <Input
               type="password"
               placeholder={t('setup.password.placeholder')}

@@ -116,8 +116,8 @@ function App() {
         <ErrorBoundary>
           <Toaster
             toastOptions={{
-              className: 'bg-bg-panel border-border text-primary-ol font-body',
-              descriptionClassName: 'text-muted-ol',
+              className: 'bg-bg-panel border-border text-foreground font-body',
+              descriptionClassName: 'text-muted-foreground',
             }}
           />
           <BrowserRouter>

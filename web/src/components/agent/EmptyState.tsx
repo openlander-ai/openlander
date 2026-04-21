@@ -19,10 +19,10 @@ export function EmptyState({ onSendMessage }: EmptyStateProps) {
     >
       <div className="text-center space-y-2">
         <div className="mx-auto h-12 w-12 rounded-full bg-bg-subtle flex items-center justify-center">
-          <Bot className="h-6 w-6 text-muted-ol" />
+          <Bot className="h-6 w-6 text-muted-foreground" />
         </div>
-        <h3 className="text-sm font-medium text-primary-ol">Start a conversation</h3>
-        <p className="text-xs text-muted-ol">Ask your deployment agent anything</p>
+        <h3 className="text-sm font-medium text-foreground">Start a conversation</h3>
+        <p className="text-xs text-muted-foreground">Ask your deployment agent anything</p>
       </div>
       <div className="flex flex-wrap gap-2.5 justify-center max-w-md">
         {suggestions.map((s) => (
@@ -30,7 +30,7 @@ export function EmptyState({ onSendMessage }: EmptyStateProps) {
             key={s}
             data-testid="suggestion-chip"
             onClick={() => onSendMessage(s)}
-            className="px-4 py-2 rounded-full border border-border bg-bg-app shadow-sm text-sm text-secondary-ol hover:border-border/80 hover:bg-bg-subtle hover:text-primary-ol hover:shadow transition-all"
+            className="px-4 py-2 rounded-full border border-border bg-bg-app shadow-sm text-sm text-foreground/80 hover:border-border/80 hover:bg-bg-subtle hover:text-foreground hover:shadow transition-all"
           >
             {s}
           </button>

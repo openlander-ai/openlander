@@ -105,7 +105,7 @@ export function SystemHealthCards({
         </div>
         <button
           onClick={() => setDismissed(true)}
-          className="p-1 rounded-md text-muted-ol hover:text-primary-ol hover:bg-bg-subtle transition-colors"
+          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-bg-subtle transition-colors"
           title="Dismiss"
         >
           <X className="h-3.5 w-3.5" />
@@ -125,11 +125,11 @@ export function SystemHealthCards({
                 issue.icon === 'error' ? 'bg-error' : 'bg-warning',
               )}
             />
-            <span className="text-xs font-body text-secondary-ol flex-1 truncate">
+            <span className="text-xs font-body text-foreground/80 flex-1 truncate">
               {issue.label}
             </span>
             {issue.action && (
-              <span className="text-[10px] font-medium text-muted-ol group-hover:text-agent flex items-center gap-0.5 shrink-0 transition-colors">
+              <span className="text-[10px] font-medium text-muted-foreground group-hover:text-agent flex items-center gap-0.5 shrink-0 transition-colors">
                 {issue.action}
                 <ChevronRight className="h-3 w-3" />
               </span>

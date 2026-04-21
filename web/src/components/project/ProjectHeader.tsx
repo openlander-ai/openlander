@@ -186,14 +186,14 @@ export function ProjectHeader({
           <div className={cn('h-3 w-3 rounded-full shrink-0', status.dot)} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate">
+              <h1 className="font-display font-bold text-lg text-foreground tracking-tight truncate">
                 {project.name}
               </h1>
             </div>
-            <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-secondary-ol">
+            <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-foreground/80">
               <span className={status.color}>{status.label}</span>
               {displayBranch && (
-                <span className="flex items-center gap-1 text-muted-ol">
+                <span className="flex items-center gap-1 text-muted-foreground">
                   <GitBranch className="h-3 w-3" />
                   {displayBranch}
                 </span>

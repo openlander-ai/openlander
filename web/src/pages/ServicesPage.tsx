@@ -86,7 +86,7 @@ export function ServicesPage() {
   if (loading) {
     return (
       <div className="p-6 xl:p-8 max-w-8xl mx-auto space-y-6">
-        <h2 className="text-lg font-semibold text-primary-ol">{t('services.title')}</h2>
+        <h2 className="text-lg font-semibold text-foreground">{t('services.title')}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
             <div
@@ -106,7 +106,7 @@ export function ServicesPage() {
   if (services.length === 0) {
     return (
       <div className="p-6 xl:p-8 max-w-8xl mx-auto space-y-6">
-        <h2 className="text-lg font-semibold text-primary-ol">{t('services.title')}</h2>
+        <h2 className="text-lg font-semibold text-foreground">{t('services.title')}</h2>
         <PageEmptyState
           icon={Database}
           title={t('services.empty.title')}
@@ -130,7 +130,7 @@ export function ServicesPage() {
 
   return (
     <div className="p-6 xl:p-8 max-w-8xl mx-auto space-y-6">
-      <h2 className="text-lg font-semibold text-primary-ol">{t('services.title')}</h2>
+      <h2 className="text-lg font-semibold text-foreground">{t('services.title')}</h2>
 
       <CreateServiceDialog
         open={showCreate}
@@ -143,7 +143,7 @@ export function ServicesPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <button
           onClick={openCreate}
-          className="rounded-xl border-2 border-dashed border-[hsl(var(--border))] bg-bg-panel/30 p-5 min-h-[144px] flex flex-col items-center justify-center gap-2 text-secondary-ol hover:border-foreground/40 hover:text-primary-ol hover:bg-bg-panel/60 transition-all cursor-pointer group"
+          className="rounded-xl border-2 border-dashed border-[hsl(var(--border))] bg-bg-panel/30 p-5 min-h-[144px] flex flex-col items-center justify-center gap-2 text-foreground/80 hover:border-foreground/40 hover:text-foreground hover:bg-bg-panel/60 transition-all cursor-pointer group"
         >
           <div className="h-10 w-10 rounded-full border-2 border-dashed border-current flex items-center justify-center group-hover:border-solid transition-all">
             <Plus className="h-5 w-5" />
@@ -175,7 +175,7 @@ export function ServicesPage() {
                               : 'bg-[var(--text-muted)]',
                         )}
                       />
-                      <h3 className="text-sm font-display font-semibold text-primary-ol truncate">
+                      <h3 className="text-sm font-display font-semibold text-foreground truncate">
                         {service.name}
                       </h3>
                     </div>
@@ -190,10 +190,12 @@ export function ServicesPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs font-mono text-muted-ol truncate">{service.image}</p>
+                  <p className="text-xs font-mono text-muted-foreground truncate">
+                    {service.image}
+                  </p>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-muted-ol">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span
                     className={cn(
                       'font-body',
@@ -211,28 +213,28 @@ export function ServicesPage() {
 
                 <div className="grid grid-cols-3 gap-2 text-[11px]">
                   <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-ol">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                       {t('services.metrics.health')}
                     </div>
-                    <div className="font-mono text-primary-ol">
+                    <div className="font-mono text-foreground">
                       {healthLabel(service.summary?.healthStatus ?? null)}
                     </div>
                   </div>
                   <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-ol">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                       {t('services.metrics.uptime')}
                     </div>
-                    <div className="font-mono text-primary-ol">
+                    <div className="font-mono text-foreground">
                       {service.summary?.uptimeSeconds != null
                         ? formatUptime(service.summary.uptimeSeconds)
                         : '—'}
                     </div>
                   </div>
                   <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-ol">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                       {t('services.metrics.restarts')}
                     </div>
-                    <div className="font-mono text-primary-ol">
+                    <div className="font-mono text-foreground">
                       {service.summary?.restartCount != null ? service.summary.restartCount : '—'}
                     </div>
                   </div>
@@ -240,7 +242,7 @@ export function ServicesPage() {
               </div>
 
               {service.updated_at && getRelativeTime(service.updated_at) && (
-                <div className="mt-3 pt-3 border-t border-[hsl(var(--border))]/50 flex items-center text-[11px] text-muted-ol font-body">
+                <div className="mt-3 pt-3 border-t border-[hsl(var(--border))]/50 flex items-center text-[11px] text-muted-foreground font-body">
                   {t('services.updatedAgo', { time: getRelativeTime(service.updated_at) })}
                 </div>
               )}

@@ -58,7 +58,7 @@ export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
                 ? item.title
                 : `${t('timeline.buildFailed')}: ${item.title.replace(/^빌드 실패:\s*/, '')}`}
             </p>
-            <span className="text-xs font-mono text-muted-ol shrink-0 mt-0.5 opacity-70">
+            <span className="text-xs font-mono text-muted-foreground shrink-0 mt-0.5 opacity-70">
               {formatTime(item.timestamp)}
             </span>
           </div>

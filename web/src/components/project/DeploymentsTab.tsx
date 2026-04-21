@@ -23,8 +23,8 @@ export function DeploymentsTab({ projectId, projectStatus, projectBranch }: Depl
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body transition-colors capitalize',
               statusFilter === item
-                ? 'bg-bg-subtle text-primary-ol font-medium'
-                : 'text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle/50',
+                ? 'bg-bg-subtle text-foreground font-medium'
+                : 'text-foreground/80 hover:text-foreground hover:bg-bg-subtle/50',
             )}
           >
             {item === 'in_progress' ? 'In Progress' : item}

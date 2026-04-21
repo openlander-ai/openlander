@@ -44,13 +44,13 @@ export function ProjectCard({
       <div className="flex items-center justify-between p-5 pb-3 border-b border-[hsl(var(--border))]/50">
         <div className="flex items-center gap-3 min-w-0">
           <div className={cn('h-2 w-2 rounded-full shrink-0', status.dot)} />
-          <h3 className="font-display font-semibold text-base text-primary-ol truncate">
+          <h3 className="font-display font-semibold text-base text-foreground truncate">
             {project.name}
           </h3>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {project.archived_at && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-bg-subtle text-muted-ol border border-border">
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-bg-subtle text-muted-foreground border border-border">
               {t('projects.card.archivedBadge')}
             </span>
           )}
@@ -79,7 +79,7 @@ export function ProjectCard({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-primary-ol truncate transition-colors"
+            className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-foreground truncate transition-colors"
           >
             <ExternalLink className="h-3.5 w-3.5 shrink-0" />
             {project.url.replace(/^https?:\/\//, '')}
@@ -93,7 +93,7 @@ export function ProjectCard({
             void onRedeploy(event, project.id);
           }}
           disabled={redeployingIds.has(project.id)}
-          className="p-1.5 rounded text-secondary-ol hover:text-agent hover:bg-agent/10 transition-colors disabled:opacity-50"
+          className="p-1.5 rounded text-foreground/80 hover:text-agent hover:bg-agent/10 transition-colors disabled:opacity-50"
           title="Redeploy"
         >
           {redeployingIds.has(project.id) ? (
@@ -107,7 +107,7 @@ export function ProjectCard({
             event.stopPropagation();
             onNavigate(`/projects/${project.id}`);
           }}
-          className="p-1.5 rounded text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle transition-colors"
+          className="p-1.5 rounded text-foreground/80 hover:text-foreground hover:bg-bg-subtle transition-colors"
           title="Settings"
         >
           <Settings className="h-4 w-4" />

@@ -40,8 +40,8 @@ export function SettingsTab({ projectId, projectStatus, isCompose }: SettingsTab
               className={cn(
                 'shrink-0 px-3 py-1.5 rounded-md text-xs font-body transition-colors whitespace-nowrap',
                 activeSection === item.id
-                  ? 'bg-bg-subtle text-primary-ol font-medium'
-                  : 'text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle/50',
+                  ? 'bg-bg-subtle text-foreground font-medium'
+                  : 'text-foreground/80 hover:text-foreground hover:bg-bg-subtle/50',
               )}
             >
               {item.label}
@@ -58,8 +58,8 @@ export function SettingsTab({ projectId, projectStatus, isCompose }: SettingsTab
               className={cn(
                 'w-full text-left px-3 py-2 rounded-md text-xs font-body transition-colors',
                 activeSection === item.id
-                  ? 'bg-bg-subtle text-primary-ol font-medium'
-                  : 'text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle/50',
+                  ? 'bg-bg-subtle text-foreground font-medium'
+                  : 'text-foreground/80 hover:text-foreground hover:bg-bg-subtle/50',
               )}
             >
               {item.label}

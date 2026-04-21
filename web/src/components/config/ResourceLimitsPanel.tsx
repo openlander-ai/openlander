@@ -64,7 +64,7 @@ export function ResourceLimitsPanel({ projectId, isCompose }: Props) {
   };
 
   if (loading) {
-    return <div className="p-4 text-sm text-secondary-ol">{t('resources.loading')}</div>;
+    return <div className="p-4 text-sm text-foreground/80">{t('resources.loading')}</div>;
   }
 
   if (isCompose) {
@@ -96,7 +96,7 @@ export function ResourceLimitsPanel({ projectId, isCompose }: Props) {
       )}
 
       <div className="space-y-2">
-        <label className="text-sm font-medium text-primary-ol">{t('resources.profile')}</label>
+        <label className="text-sm font-medium text-foreground">{t('resources.profile')}</label>
         <Select
           value={profile ?? ''}
           onValueChange={setProfile}
@@ -117,7 +117,7 @@ export function ResourceLimitsPanel({ projectId, isCompose }: Props) {
 
       {profile === 'custom' && (
         <div className="space-y-2">
-          <label className="text-sm font-medium text-primary-ol">
+          <label className="text-sm font-medium text-foreground">
             {t('resources.customMemory')}
           </label>
           <Input
@@ -128,11 +128,11 @@ export function ResourceLimitsPanel({ projectId, isCompose }: Props) {
             placeholder="512"
             data-testid="custom-memory-input"
           />
-          <p className="text-xs text-secondary-ol">{t('resources.customMemoryHint')}</p>
+          <p className="text-xs text-foreground/80">{t('resources.customMemoryHint')}</p>
         </div>
       )}
 
-      <p className="text-xs text-secondary-ol">{t('resources.appliesOnRedeploy')}</p>
+      <p className="text-xs text-foreground/80">{t('resources.appliesOnRedeploy')}</p>
 
       <Button
         onClick={handleSave}

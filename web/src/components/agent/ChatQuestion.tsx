@@ -37,10 +37,10 @@ export function ChatQuestion({ request, onReply, onDismiss }: ChatQuestionProps)
     >
       {request.questions.map((q, qi) => (
         <div key={qi} className="space-y-3">
-          {q.header && <p className="text-xs font-medium text-muted-ol">{q.header}</p>}
+          {q.header && <p className="text-xs font-medium text-muted-foreground">{q.header}</p>}
           <div className="flex items-start gap-2">
             <HelpCircle className="h-4 w-4 text-agent shrink-0 mt-0.5" />
-            <p className="text-sm font-medium text-primary-ol">{q.question}</p>
+            <p className="text-sm font-medium text-foreground">{q.question}</p>
           </div>
           {q.options.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -55,8 +55,8 @@ export function ChatQuestion({ request, onReply, onDismiss }: ChatQuestionProps)
                     answered && selectedAnswer === opt.label
                       ? 'bg-agent text-white border-agent'
                       : answered
-                        ? 'opacity-50 cursor-not-allowed border-border text-muted-ol'
-                        : 'border-border text-primary-ol hover:bg-bg-subtle hover:border-agent/50',
+                        ? 'opacity-50 cursor-not-allowed border-border text-muted-foreground'
+                        : 'border-border text-foreground hover:bg-bg-subtle hover:border-agent/50',
                   )}
                 >
                   {answered && selectedAnswer === opt.label && (
@@ -73,13 +73,13 @@ export function ChatQuestion({ request, onReply, onDismiss }: ChatQuestionProps)
         <button
           data-testid="question-skip"
           onClick={handleSkip}
-          className="mt-3 text-xs text-muted-ol hover:text-secondary-ol flex items-center gap-1"
+          className="mt-3 text-xs text-muted-foreground hover:text-foreground/80 flex items-center gap-1"
         >
           <SkipForward className="h-3 w-3" /> Skip
         </button>
       )}
       {answered && selectedAnswer === 'Skipped' && (
-        <p className="mt-2 text-xs text-muted-ol italic">Skipped</p>
+        <p className="mt-2 text-xs text-muted-foreground italic">Skipped</p>
       )}
     </div>
   );

@@ -130,7 +130,7 @@ export function CreateServiceDialog({
 
         <div className="space-y-6 mt-4">
           <div>
-            <h3 className="text-sm font-medium text-primary-ol mb-3">Templates</h3>
+            <h3 className="text-sm font-medium text-foreground mb-3">Templates</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {templates.map((tmpl) => (
                 <button
@@ -143,8 +143,8 @@ export function CreateServiceDialog({
                       : 'border-[hsl(var(--border))] hover:border-foreground/50 hover:bg-bg-subtle',
                   )}
                 >
-                  <Database className="h-6 w-6 mb-2 text-secondary-ol" />
-                  <span className="text-sm font-medium text-primary-ol">{tmpl.name}</span>
+                  <Database className="h-6 w-6 mb-2 text-foreground/80" />
+                  <span className="text-sm font-medium text-foreground">{tmpl.name}</span>
                 </button>
               ))}
             </div>
@@ -155,14 +155,14 @@ export function CreateServiceDialog({
               <span className="w-full border-t border-[hsl(var(--border))]" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-bg-panel px-2 text-secondary-ol">or Custom</span>
+              <span className="bg-bg-panel px-2 text-foreground/80">or Custom</span>
             </div>
           </div>
 
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-primary-ol mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   {'Service Name'}
                 </label>
                 <Input
@@ -179,7 +179,7 @@ export function CreateServiceDialog({
                 selectedTemplate.versions &&
                 selectedTemplate.versions.length > 0 && (
                   <div>
-                    <label className="block text-sm font-medium text-primary-ol mb-1">
+                    <label className="block text-sm font-medium text-foreground mb-1">
                       {'Version'}
                     </label>
                     <div className="max-w-md">
@@ -203,7 +203,7 @@ export function CreateServiceDialog({
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
                     <div>
-                      <label className="block text-sm font-medium text-primary-ol mb-1">
+                      <label className="block text-sm font-medium text-foreground mb-1">
                         {'Docker Image'}
                       </label>
                       <Input
@@ -214,7 +214,7 @@ export function CreateServiceDialog({
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-primary-ol mb-1">
+                      <label className="block text-sm font-medium text-foreground mb-1">
                         {'Port'}
                       </label>
                       <Input
@@ -228,7 +228,7 @@ export function CreateServiceDialog({
 
                   <div>
                     <div className="flex items-center justify-between max-w-2xl mb-2">
-                      <label className="block text-sm font-medium text-primary-ol">
+                      <label className="block text-sm font-medium text-foreground">
                         {'Environment Variables'}
                       </label>
                       <Button type="button" variant="outline" size="sm" onClick={addEnvVar}>

@@ -48,10 +48,10 @@ export function PostmortemsTab() {
     return (
       <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
         <FileText className="h-14 w-14 text-muted-foreground/60 mb-4" />
-        <h3 className="text-lg font-medium text-primary-ol mb-2">
+        <h3 className="text-lg font-medium text-foreground mb-2">
           {t('postmortemsTab.noPostmortems')}
         </h3>
-        <p className="text-sm text-muted-ol max-w-md">{t('postmortemsTab.emptyMessage')}</p>
+        <p className="text-sm text-muted-foreground max-w-md">{t('postmortemsTab.emptyMessage')}</p>
       </div>
     );
   }
@@ -73,19 +73,19 @@ export function PostmortemsTab() {
             >
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="font-medium text-primary-ol">{postmortem.project_name}</span>
-                  <span className="text-xs text-muted-ol px-2 py-0.5 rounded-full bg-bg-subtle border border-[hsl(var(--border))]">
+                  <span className="font-medium text-foreground">{postmortem.project_name}</span>
+                  <span className="text-xs text-muted-foreground px-2 py-0.5 rounded-full bg-bg-subtle border border-[hsl(var(--border))]">
                     {t('postmortemsTab.postmortem')}
                   </span>
                 </div>
-                <p className="text-sm text-muted-ol">
+                <p className="text-sm text-muted-foreground">
                   {t('postmortemsTab.generated')} {date ? date.toLocaleString() : 'Unknown time'}
                 </p>
               </div>
               {isExpanded ? (
-                <ChevronUp className="h-5 w-5 text-muted-ol" />
+                <ChevronUp className="h-5 w-5 text-muted-foreground" />
               ) : (
-                <ChevronDown className="h-5 w-5 text-muted-ol" />
+                <ChevronDown className="h-5 w-5 text-muted-foreground" />
               )}
             </button>
 
@@ -93,15 +93,15 @@ export function PostmortemsTab() {
               <div className="p-4 border-t border-[hsl(var(--border))] bg-bg-subtle/30">
                 <div
                   className="prose prose-sm max-w-none
-                  prose-headings:text-primary-ol
-                  prose-p:text-secondary-ol
+                  prose-headings:text-foreground
+                  prose-p:text-foreground/80
                   prose-a:text-ai prose-a:no-underline hover:prose-a:underline
-                  prose-strong:text-primary-ol
+                  prose-strong:text-foreground
                   prose-code:text-ai/80 prose-code:bg-bg-subtle prose-code:px-1 prose-code:py-0.5 prose-code:rounded
                   prose-pre:bg-bg-terminal prose-pre:text-zinc-100 prose-pre:border-0
                   [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-inherit
-                  prose-td:text-secondary-ol prose-th:text-primary-ol
-                  prose-blockquote:border-ai/30 prose-blockquote:text-secondary-ol
+                  prose-td:text-foreground/80 prose-th:text-foreground
+                  prose-blockquote:border-ai/30 prose-blockquote:text-foreground/80
                 "
                 >
                   <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>

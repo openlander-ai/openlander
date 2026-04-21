@@ -329,18 +329,18 @@ export function DeployTerminalSession({
                       {isError ? (
                         <XCircle className="h-8 w-8 text-error/50" />
                       ) : isStopped ? (
-                        <Square className="h-8 w-8 text-muted-ol/50" />
+                        <Square className="h-8 w-8 text-muted-foreground/50" />
                       ) : (
                         <CheckCircle2 className="h-8 w-8 text-success/50" />
                       )}
-                      <p className="text-sm text-muted-ol">
+                      <p className="text-sm text-muted-foreground">
                         {isError
                           ? 'Deployment failed'
                           : isStopped
                             ? 'Container stopped'
                             : 'All stages completed'}
                       </p>
-                      <p className="text-xs text-muted-ol/60">
+                      <p className="text-xs text-muted-foreground/60">
                         {isError
                           ? 'Check logs for details'
                           : isStopped

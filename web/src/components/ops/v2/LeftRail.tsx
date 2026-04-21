@@ -60,7 +60,7 @@ function SectionHeader({ icon, label, count, collapsed, active, onClick }: Secti
       className={cn(
         'w-full flex items-center gap-2.5 rounded-md px-2 py-2 transition-colors duration-150',
         'hover:bg-bg-subtle',
-        active ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
+        active ? 'bg-bg-subtle text-foreground' : 'text-foreground/80',
         collapsed ? 'justify-center' : 'justify-start',
       )}
     >
@@ -126,7 +126,7 @@ function IncidentRow({
               ? 'border-error text-error bg-error/10'
               : incident.severity === 'warning'
                 ? 'border-warning text-warning bg-warning/10'
-                : 'border-muted-foreground text-muted-ol bg-muted-foreground/10',
+                : 'border-muted-foreground text-muted-foreground bg-muted-foreground/10',
           )}
         >
           <span className="text-[10px] font-bold">{projectName.charAt(0).toUpperCase()}</span>
@@ -149,12 +149,14 @@ function IncidentRow({
         <div className="flex items-center gap-2 min-w-0">
           <span className={cn('h-2 w-2 rounded-full shrink-0', severityColor)} />
           <SeverityBadge severity={incident.severity} />
-          <span className="text-xs font-semibold text-primary-ol truncate">{projectName}</span>
+          <span className="text-xs font-semibold text-foreground truncate">{projectName}</span>
         </div>
-        <span className="text-[10px] text-muted-ol shrink-0 ml-2">{timeStr}</span>
+        <span className="text-[10px] text-muted-foreground shrink-0 ml-2">{timeStr}</span>
       </div>
       <div className="pl-4 mt-0.5 w-full">
-        <span className="text-xs font-body text-secondary-ol truncate block">{titleWithCount}</span>
+        <span className="text-xs font-body text-foreground/80 truncate block">
+          {titleWithCount}
+        </span>
       </div>
     </button>
   );
@@ -178,7 +180,7 @@ function ApprovalRow({ approval, collapsed }: { approval: ActionRun; collapsed: 
   return (
     <div className="flex items-start gap-2 px-2 py-1.5 rounded-md hover:bg-bg-subtle transition-colors">
       <span className="h-2 w-2 rounded-full shrink-0 mt-1 bg-warning" />
-      <span className="text-xs font-body text-primary-ol truncate" title={label}>
+      <span className="text-xs font-body text-foreground truncate" title={label}>
         {label}
       </span>
     </div>
@@ -230,13 +232,13 @@ function CircuitBreakerRow({
       <div className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-bg-subtle transition-colors group">
         <div className="flex items-center gap-2 min-w-0">
           <span className={cn('h-2 w-2 rounded-full shrink-0', dotColor)} />
-          <span className="text-xs font-body text-primary-ol truncate">{label}</span>
+          <span className="text-xs font-body text-foreground truncate">{label}</span>
         </div>
         {isOpen && (
           <button
             type="button"
             onClick={() => setShowConfirm(true)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-bg-panel rounded text-muted-ol hover:text-primary-ol"
+            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-bg-panel rounded text-muted-foreground hover:text-foreground"
             title={t('opsV2.widgets.circuitBreakers.reset')}
           >
             <RefreshCw className="h-3 w-3" />
@@ -432,7 +434,7 @@ export function LeftRail({
             title={
               effectivelyCollapsed ? t('opsV2.rail.expandSidebar') : t('opsV2.rail.collapseSidebar')
             }
-            className="flex items-center justify-center h-6 w-6 rounded-md text-muted-ol hover:text-secondary-ol hover:bg-bg-subtle transition-colors"
+            className="flex items-center justify-center h-6 w-6 rounded-md text-muted-foreground hover:text-foreground/80 hover:bg-bg-subtle transition-colors"
           >
             {effectivelyCollapsed ? (
               <ChevronRight className="h-4 w-4" />
@@ -456,7 +458,7 @@ export function LeftRail({
               onClick={() => handleSectionClick('approval')}
             />
             {!effectivelyCollapsed && approvalItems.length === 0 && (
-              <p className="px-2 py-1 text-xs text-muted-ol">
+              <p className="px-2 py-1 text-xs text-muted-foreground">
                 {t('opsV2.empty.noPendingApprovals')}
               </p>
             )}
@@ -479,7 +481,7 @@ export function LeftRail({
             {!effectivelyCollapsed && (
               <div className="px-2 py-2">
                 <div className="relative">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-ol" />
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <Input
                     ref={searchInputRef}
                     data-testid="incident-search-input"
@@ -489,7 +491,7 @@ export function LeftRail({
                     className="h-7 pl-7 text-xs bg-bg-app border-[hsl(var(--border))] focus-visible:ring-1"
                   />
                   {isSearching && (
-                    <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 animate-spin text-muted-ol" />
+                    <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 animate-spin text-muted-foreground" />
                   )}
                 </div>
               </div>
@@ -497,8 +499,8 @@ export function LeftRail({
 
             {!effectivelyCollapsed && groupedIncidents.length === 0 && (
               <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
-                <AlertCircle className="mb-2 h-6 w-6 text-muted-ol/50" />
-                <p className="text-xs font-medium text-primary-ol">
+                <AlertCircle className="mb-2 h-6 w-6 text-muted-foreground/50" />
+                <p className="text-xs font-medium text-foreground">
                   {searchResults !== null ? (
                     <span data-testid="incident-search-empty">
                       {t('opsV2.empty.noSearchResults')}
@@ -507,7 +509,7 @@ export function LeftRail({
                     t('opsV2.empty.noActiveIssues')
                   )}
                 </p>
-                <p className="text-[11px] text-muted-ol mt-1">
+                <p className="text-[11px] text-muted-foreground mt-1">
                   {searchResults !== null
                     ? t('opsV2.empty.noSearchResultsDesc')
                     : t('opsV2.empty.noActiveIssuesDesc')}
@@ -537,7 +539,9 @@ export function LeftRail({
               onClick={() => handleSectionClick('circuit_breaker')}
             />
             {!effectivelyCollapsed && openBreakers.length === 0 && (
-              <p className="px-2 py-1 text-xs text-muted-ol">{t('opsV2.empty.allSystemsNormal')}</p>
+              <p className="px-2 py-1 text-xs text-muted-foreground">
+                {t('opsV2.empty.allSystemsNormal')}
+              </p>
             )}
             {openBreakers.map((cb, i) => (
               <CircuitBreakerRow

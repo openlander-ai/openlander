@@ -66,18 +66,22 @@ export function LlmStep({
           <div className="mx-auto w-16 h-16 rounded-2xl bg-agent/10 flex items-center justify-center">
             <Key className="h-8 w-8 text-agent" />
           </div>
-          <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
+          <h2 className="font-display text-2xl font-bold text-foreground tracking-tight">
             {t('setup.llmStep.title')}
           </h2>
-          <p className="text-sm font-body text-secondary-ol">{t('setup.llmStep.subtitle')}</p>
+          <p className="text-sm font-body text-foreground/80">{t('setup.llmStep.subtitle')}</p>
         </div>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-3">
-          <p className="text-sm font-body text-muted-ol">{t('setup.llmStep.description')}</p>
+          <p className="text-sm font-body text-muted-foreground">
+            {t('setup.llmStep.description')}
+          </p>
 
           <form onSubmit={onSaveApiKey} className="space-y-3">
             <div className="space-y-1.5">
-              <p className="text-xs font-body text-muted-ol">{t('setup.llmStep.provider')}</p>
+              <p className="text-xs font-body text-muted-foreground">
+                {t('setup.llmStep.provider')}
+              </p>
               <Select value={llmProvider} onValueChange={onSetLlmProvider}>
                 <SelectTrigger className="w-full bg-bg-app border-border font-mono text-sm">
                   <SelectValue placeholder="Choose provider..." />
@@ -95,7 +99,9 @@ export function LlmStep({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <p className="text-xs font-body text-muted-ol">{t('setup.llmStep.apiKeyLabel')}</p>
+              <p className="text-xs font-body text-muted-foreground">
+                {t('setup.llmStep.apiKeyLabel')}
+              </p>
               <Input
                 type="password"
                 placeholder={status?.llm?.ok ? '••••••••••••' : 'sk-...'}
@@ -123,7 +129,7 @@ export function LlmStep({
 
         {/* Summary */}
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-2">
-          <p className="text-xs font-body text-muted-ol uppercase tracking-wider">
+          <p className="text-xs font-body text-muted-foreground uppercase tracking-wider">
             {t('setup.llmStep.setupSummary')}
           </p>
           <StatusRow

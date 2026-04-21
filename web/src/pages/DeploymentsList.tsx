@@ -125,7 +125,7 @@ export function DeploymentsList() {
         <div className="mx-auto w-full max-w-8xl space-y-6">
           <div className="flex items-center gap-3">
             <Rocket className="h-5 w-5 text-muted-foreground" />
-            <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-primary-ol">
+            <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-foreground">
               {t('deploymentsList.title')}
             </h1>
           </div>
@@ -140,8 +140,8 @@ export function DeploymentsList() {
                   className={cn(
                     'px-3 py-1 text-xs font-medium rounded-md transition-colors capitalize',
                     statusFilter === s
-                      ? 'bg-bg-panel text-primary-ol shadow-sm'
-                      : 'text-muted-foreground hover:text-secondary-ol',
+                      ? 'bg-bg-panel text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground/80',
                   )}
                 >
                   {s === 'all' ? t('deploymentsList.all') : t(`deploymentsList.${s}`)}
@@ -152,7 +152,7 @@ export function DeploymentsList() {
               <select
                 value={projectFilter}
                 onChange={(e) => setProjectFilter(e.target.value)}
-                className="text-xs rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 py-1.5 text-primary-ol"
+                className="text-xs rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 py-1.5 text-foreground"
               >
                 <option value="all">{t('deploymentsList.allProjects')}</option>
                 {projects.map((p) => (
@@ -180,7 +180,7 @@ export function DeploymentsList() {
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <Rocket className="h-10 w-10 text-muted-foreground mb-3 opacity-40" />
-                <p className="text-sm font-medium text-primary-ol">
+                <p className="text-sm font-medium text-foreground">
                   {deployments.length === 0
                     ? t('deploymentsList.noDeployments')
                     : t('deploymentsList.noDeploymentsFilter')}
@@ -207,7 +207,7 @@ export function DeploymentsList() {
                     className="w-full grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-4 py-3 text-left hover:bg-bg-subtle transition-colors items-center"
                   >
                     <div className="min-w-0">
-                      <span className="text-sm font-medium text-primary-ol truncate block">
+                      <span className="text-sm font-medium text-foreground truncate block">
                         {d.projectName}
                       </span>
                       {d.commitSha && (

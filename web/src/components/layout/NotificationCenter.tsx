@@ -93,12 +93,12 @@ export function NotificationCenter({
     return (
       <div className="absolute right-0 top-full mt-2 w-80 rounded-lg border border-[hsl(var(--border))] bg-bg-panel shadow-xl z-[60]">
         <div className="px-4 py-3 border-b border-[hsl(var(--border))]">
-          <h3 className="text-xs font-display font-semibold text-primary-ol">
+          <h3 className="text-xs font-display font-semibold text-foreground">
             {t('notifications.title')}
           </h3>
         </div>
         <div className="px-4 py-8 text-center">
-          <p className="text-xs text-muted-ol font-body">{t('notifications.empty')}</p>
+          <p className="text-xs text-muted-foreground font-body">{t('notifications.empty')}</p>
         </div>
       </div>
     );
@@ -109,10 +109,10 @@ export function NotificationCenter({
       {/* Header */}
       <div className="px-4 py-3 border-b border-[hsl(var(--border))] shrink-0">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-display font-semibold text-primary-ol">
+          <h3 className="text-xs font-display font-semibold text-foreground">
             {t('notifications.title')}
           </h3>
-          <span className="text-xs font-mono text-muted-ol">{notifications.length}</span>
+          <span className="text-xs font-mono text-muted-foreground">{notifications.length}</span>
         </div>
       </div>
 
@@ -146,7 +146,7 @@ export function NotificationCenter({
                     <button
                       onClick={() => void handleDismiss(notification.id)}
                       disabled={dismissingId !== null}
-                      className="shrink-0 p-0.5 rounded hover:bg-bg-subtle transition-colors text-muted-ol hover:text-secondary-ol"
+                      className="shrink-0 p-0.5 rounded hover:bg-bg-subtle transition-colors text-muted-foreground hover:text-foreground/80"
                       title="Dismiss"
                     >
                       {dismissingId === notification.id ? (
@@ -159,7 +159,7 @@ export function NotificationCenter({
 
                   {/* Suggestion */}
                   {notification.suggestion && (
-                    <p className="mt-1 text-sm font-body text-secondary-ol leading-relaxed">
+                    <p className="mt-1 text-sm font-body text-foreground/80 leading-relaxed">
                       {notification.suggestion}
                     </p>
                   )}
@@ -180,7 +180,7 @@ export function NotificationCenter({
                       </button>
                     ))}
 
-                    <span className="ml-auto text-xs font-mono text-muted-ol">
+                    <span className="ml-auto text-xs font-mono text-muted-foreground">
                       {formatTime(notification.createdAt)}
                     </span>
                   </div>

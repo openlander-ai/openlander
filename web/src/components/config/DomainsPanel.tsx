@@ -364,8 +364,8 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
         {/* Internal URL */}
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-2">
           <div className="flex items-center gap-2">
-            <Wifi className="h-3.5 w-3.5 text-muted-ol" />
-            <span className="text-sm font-display font-semibold text-primary-ol">
+            <Wifi className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-sm font-display font-semibold text-foreground">
               {'Internal URL'}
             </span>
           </div>
@@ -382,7 +382,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               </a>
               <button
                 onClick={() => copyToClipboard(internalUrl, 'internal')}
-                className="p-1 rounded text-muted-ol hover:text-secondary-ol transition-colors"
+                className="p-1 rounded text-muted-foreground hover:text-foreground/80 transition-colors"
               >
                 {isCopied('internal') ? (
                   <Check className="h-3.5 w-3.5 text-success" />
@@ -392,17 +392,17 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               </button>
             </div>
           ) : (
-            <p className="text-xs font-body text-muted-ol">{t('domains.notAvailable')}</p>
+            <p className="text-xs font-body text-muted-foreground">{t('domains.notAvailable')}</p>
           )}
-          <p className="text-xs font-body text-muted-ol">{t('domains.accessibleFrom')}</p>
+          <p className="text-xs font-body text-muted-foreground">{t('domains.accessibleFrom')}</p>
         </div>
 
         {/* Direct Port Access */}
         {assignedPort && networkIps.length > 0 && (
           <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-2">
             <div className="flex items-center gap-2">
-              <Monitor className="h-3.5 w-3.5 text-muted-ol" />
-              <span className="text-sm font-display font-semibold text-primary-ol">
+              <Monitor className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-sm font-display font-semibold text-foreground">
                 {'Direct Access'}
               </span>
             </div>
@@ -421,12 +421,12 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                       {directUrl}
                       <ExternalLink className="h-3 w-3" />
                     </a>
-                    <span className="text-xs font-body text-muted-ol px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))]">
+                    <span className="text-xs font-body text-muted-foreground px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))]">
                       {label}
                     </span>
                     <button
                       onClick={() => copyToClipboard(directUrl, ip.address)}
-                      className="p-1 rounded text-muted-ol hover:text-secondary-ol transition-colors"
+                      className="p-1 rounded text-muted-foreground hover:text-foreground/80 transition-colors"
                     >
                       {isCopied(ip.address) ? (
                         <Check className="h-3.5 w-3.5 text-success" />
@@ -438,7 +438,9 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                 );
               })}
             </div>
-            <p className="text-xs font-body text-muted-ol">{t('domains.directPortAccess')}</p>
+            <p className="text-xs font-body text-muted-foreground">
+              {t('domains.directPortAccess')}
+            </p>
           </div>
         )}
 
@@ -446,8 +448,8 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Globe className="h-3.5 w-3.5 text-muted-ol" />
-              <span className="text-sm font-display font-semibold text-primary-ol">
+              <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-sm font-display font-semibold text-foreground">
                 {'Custom Domains'}
               </span>
             </div>
@@ -472,7 +474,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 w-6 p-0 text-muted-ol hover:text-error shrink-0"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-error shrink-0"
                     onClick={() => handleRemoveDomain(d.domain)}
                     disabled={removingDomain === d.domain}
                   >
@@ -486,7 +488,9 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               ))}
             </div>
           ) : (
-            <p className="text-xs font-body text-muted-ol">{t('domains.noCustomDomains')}</p>
+            <p className="text-xs font-body text-muted-foreground">
+              {t('domains.noCustomDomains')}
+            </p>
           )}
 
           {/* Add domain form */}
@@ -516,7 +520,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                     if (e.key === 'Enter') handleAddDomain();
                   }}
                   placeholder="example.com"
-                  className="flex-1 h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 text-xs font-mono text-primary-ol placeholder:text-muted-ol"
+                  className="flex-1 h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 text-xs font-mono text-foreground placeholder:text-muted-foreground"
                 />
                 <Button
                   variant="outline"
@@ -550,13 +554,15 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                       }}
                     />
                   )}
-                  <p className="text-xs font-mono text-muted-ol">
+                  <p className="text-xs font-mono text-muted-foreground">
                     {`domain: ${domainAiProgress.domain}`}
                   </p>
                 </div>
               )}
 
-              <p className="text-xs font-body text-muted-ol">{t('domains.customDomainsHelp')}</p>
+              <p className="text-xs font-body text-muted-foreground">
+                {t('domains.customDomainsHelp')}
+              </p>
             </>
           )}
         </div>
@@ -565,8 +571,8 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Globe className="h-3.5 w-3.5 text-muted-ol" />
-              <span className="text-sm font-display font-semibold text-primary-ol">
+              <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-sm font-display font-semibold text-foreground">
                 {'Public URL'}
               </span>
             </div>
@@ -616,7 +622,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               </a>
               <button
                 onClick={() => copyToClipboard(publicUrl, 'public')}
-                className="p-1 rounded text-muted-ol hover:text-secondary-ol transition-colors"
+                className="p-1 rounded text-muted-foreground hover:text-foreground/80 transition-colors"
               >
                 {isCopied('public') ? (
                   <Check className="h-3.5 w-3.5 text-success" />
@@ -626,10 +632,10 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               </button>
             </div>
           ) : (
-            <p className="text-xs font-body text-muted-ol">{t('domains.notExposed')}</p>
+            <p className="text-xs font-body text-muted-foreground">{t('domains.notExposed')}</p>
           )}
 
-          <p className="text-xs font-body text-muted-ol">
+          <p className="text-xs font-body text-muted-foreground">
             {publicUrl ? t('domains.anyoneWithUrl') : t('domains.requiresRunning')}
           </p>
         </div>

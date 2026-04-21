@@ -173,7 +173,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
       <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-panel">
         {/* Left: Search */}
         <div className="flex items-center gap-1.5 flex-1 max-w-md">
-          <Search className="h-3.5 w-3.5 text-muted-ol shrink-0" />
+          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <input
             type="text"
             value={filters.searchQuery}
@@ -185,8 +185,8 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
             }
             placeholder={CONSOLE_LABELS.searchPlaceholder}
             className={cn(
-              'flex-1 bg-transparent text-xs font-mono text-primary-ol',
-              'placeholder:text-muted-ol focus:outline-none',
+              'flex-1 bg-transparent text-xs font-mono text-foreground',
+              'placeholder:text-muted-foreground focus:outline-none',
             )}
           />
           <button
@@ -202,7 +202,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
               'px-1.5 py-0.5 rounded text-xs font-mono transition-colors',
               isRegex
                 ? 'bg-agent/15 text-agent border border-agent/30'
-                : 'text-muted-ol hover:text-secondary-ol border border-transparent',
+                : 'text-muted-foreground hover:text-foreground/80 border border-transparent',
             )}
           >
             .*
@@ -216,10 +216,10 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                 logLevel: e.target.value as ConsoleLogLevelFilter,
               }))
             }
-            className="bg-transparent text-xs font-mono text-muted-ol focus:outline-none border-none cursor-pointer hover:text-primary-ol appearance-none pr-2"
+            className="bg-transparent text-xs font-mono text-muted-foreground focus:outline-none border-none cursor-pointer hover:text-foreground appearance-none pr-2"
           >
             {Object.entries(CONSOLE_LABELS.logLevel).map(([value, label]) => (
-              <option key={value} value={value} className="bg-bg-panel text-primary-ol">
+              <option key={value} value={value} className="bg-bg-panel text-foreground">
                 {label}
               </option>
             ))}
@@ -240,13 +240,13 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
               </span>
             )}
             {isInitialLoading && !isConnected && (
-              <span className="text-muted-ol">{CONSOLE_LABELS.connecting}</span>
+              <span className="text-muted-foreground">{CONSOLE_LABELS.connecting}</span>
             )}
             {isDisconnected && <span className="text-warning">{CONSOLE_LABELS.disconnected}</span>}
-            <span className="text-muted-ol border-l border-[hsl(var(--border))] pl-2">
+            <span className="text-muted-foreground border-l border-[hsl(var(--border))] pl-2">
               {hasActiveFilters ? (
                 <>
-                  <span className="text-primary-ol font-medium">
+                  <span className="text-foreground font-medium">
                     {filteredEntries.length.toLocaleString()}
                   </span>{' '}
                   / {entries.length.toLocaleString()} {CONSOLE_LABELS.lines}
@@ -280,7 +280,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
             <button
               type="button"
               onClick={clear}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-body text-muted-ol hover:text-secondary-ol hover:bg-bg-subtle/50 transition-colors"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-body text-muted-foreground hover:text-foreground/80 hover:bg-bg-subtle/50 transition-colors"
             >
               <Trash2 className="h-3.5 w-3.5" />
               {CONSOLE_LABELS.clear}
@@ -308,14 +308,14 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                 <p className={cn('text-sm font-body', error ? 'text-error' : 'text-warning')}>
                   {error ? t('logs.errorTitle') : t('logs.disconnectedTitle')}
                 </p>
-                <p className="text-sm font-body text-muted-ol">
+                <p className="text-sm font-body text-muted-foreground">
                   {error ? error : t('logs.disconnectedInlineBody')}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={scrollToBottom}
-                className="inline-flex items-center gap-1.5 self-start rounded-md border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-body text-secondary-ol transition-colors hover:bg-bg-subtle hover:text-primary-ol"
+                className="inline-flex items-center gap-1.5 self-start rounded-md border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-body text-foreground/80 transition-colors hover:bg-bg-subtle hover:text-foreground"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
                 {t('logs.retryStream')}
@@ -332,8 +332,8 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
               className={cn(
                 'rounded-full border border-[hsl(var(--border))] px-3 py-1 text-xs font-body transition-colors',
                 isLoadingOlder
-                  ? 'text-muted-ol bg-bg-panel/60 cursor-wait'
-                  : 'text-secondary-ol bg-bg-panel hover:text-primary-ol',
+                  ? 'text-muted-foreground bg-bg-panel/60 cursor-wait'
+                  : 'text-foreground/80 bg-bg-panel hover:text-foreground',
               )}
             >
               {isLoadingOlder ? CONSOLE_LABELS.loadingOlder : CONSOLE_LABELS.loadOlder}
@@ -343,14 +343,14 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
         {surfaceState !== 'ready' ? (
           <div className="flex h-full items-center justify-center p-6">
             <div className="w-full max-w-md rounded-xl border border-[hsl(var(--border))] bg-bg-panel/60 p-5 text-center shadow-sm">
-              <p className="text-sm font-body font-medium text-primary-ol">
+              <p className="text-sm font-body font-medium text-foreground">
                 {surfaceState === 'loading' && t('logs.loadingTitle')}
                 {surfaceState === 'empty' && t('logs.emptyTitle')}
                 {surfaceState === 'error' && t('logs.errorTitle')}
                 {surfaceState === 'disconnected' && t('logs.disconnectedTitle')}
                 {surfaceState === 'noMatch' && t('logs.noMatchingTitle')}
               </p>
-              <p className="mt-2 text-sm font-body text-muted-ol">
+              <p className="mt-2 text-sm font-body text-muted-foreground">
                 {surfaceState === 'loading' && t('logs.loadingBody')}
                 {surfaceState === 'empty' && t('logs.emptyBody')}
                 {surfaceState === 'error' && (error ?? t('logs.errorBody'))}
@@ -361,7 +361,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                 <button
                   type="button"
                   onClick={scrollToBottom}
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-bg-subtle px-3 py-1.5 text-xs font-body text-primary-ol transition-colors hover:bg-bg-subtle/80"
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-bg-subtle px-3 py-1.5 text-xs font-body text-foreground transition-colors hover:bg-bg-subtle/80"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   {t('logs.retryStream')}
@@ -371,7 +371,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                 <button
                   type="button"
                   onClick={resetFilters}
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-bg-subtle px-3 py-1.5 text-xs font-body text-primary-ol transition-colors hover:bg-bg-subtle/80"
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-bg-subtle px-3 py-1.5 text-xs font-body text-foreground transition-colors hover:bg-bg-subtle/80"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   {t('logs.clearFilters')}
@@ -421,12 +421,12 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                   )}
                 >
                   {/* Line number */}
-                  <span className="shrink-0 w-12 text-right pr-3 text-muted-ol/40 group-hover:text-muted-ol select-none tabular-nums text-xs leading-5">
+                  <span className="shrink-0 w-12 text-right pr-3 text-muted-foreground/40 group-hover:text-muted-foreground select-none tabular-nums text-xs leading-5">
                     {virtualItem.index + 1}
                   </span>
                   {/* Timestamp */}
                   {entry.time && (
-                    <span className="shrink-0 pr-3 text-muted-ol/50 group-hover:text-muted-ol/70 select-none tabular-nums text-xs leading-5 font-mono">
+                    <span className="shrink-0 pr-3 text-muted-foreground/50 group-hover:text-muted-foreground/70 select-none tabular-nums text-xs leading-5 font-mono">
                       {formatLogTime(entry.time)}
                     </span>
                   )}
@@ -452,7 +452,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
               'flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg transition-all duration-200',
               unseenCount > 0
                 ? 'bg-foreground text-primary-foreground font-medium hover:scale-105 hover:shadow-xl'
-                : 'bg-bg-panel border border-[hsl(var(--border))] text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle',
+                : 'bg-bg-panel border border-[hsl(var(--border))] text-foreground/80 hover:text-foreground hover:bg-bg-subtle',
             )}
           >
             <ArrowDown className={cn('h-4 w-4', unseenCount > 0 && 'animate-bounce')} />

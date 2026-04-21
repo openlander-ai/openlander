@@ -84,22 +84,22 @@ export function GithubStep({
           <div className="mx-auto w-16 h-16 rounded-2xl bg-agent/10 flex items-center justify-center">
             <Rocket className="h-8 w-8 text-agent" />
           </div>
-          <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
+          <h2 className="font-display text-2xl font-bold text-foreground tracking-tight">
             {t('setup.github.title')}
           </h2>
-          <p className="text-sm font-body text-secondary-ol">{t('setup.github.subtitle')}</p>
+          <p className="text-sm font-body text-foreground/80">{t('setup.github.subtitle')}</p>
         </div>
 
         {/* GitHub connection (optional) */}
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <Github className="h-4 w-4 text-secondary-ol" />
-            <span className="text-sm font-body font-medium text-primary-ol">{'GitHub Access'}</span>
+            <Github className="h-4 w-4 text-foreground/80" />
+            <span className="text-sm font-body font-medium text-foreground">{'GitHub Access'}</span>
             <Badge variant="outline" className="text-xs py-0">
               Optional
             </Badge>
           </div>
-          <p className="text-sm font-body text-muted-ol">{t('setup.github.description')}</p>
+          <p className="text-sm font-body text-muted-foreground">{t('setup.github.description')}</p>
 
           {status?.github?.ok ? (
             <div className="space-y-3">
@@ -185,8 +185,8 @@ function DeviceFlowUI({
   return (
     <div className="space-y-4">
       <div className="text-center space-y-3">
-        <p className="text-sm font-body text-secondary-ol">{t('settings.github.enterCode')}</p>
-        <p className="font-mono text-2xl tracking-[0.3em] text-primary-ol font-bold">
+        <p className="text-sm font-body text-foreground/80">{t('settings.github.enterCode')}</p>
+        <p className="font-mono text-2xl tracking-[0.3em] text-foreground font-bold">
           {deviceFlow.userCode}
         </p>
       </div>
@@ -216,7 +216,7 @@ function DeviceFlowUI({
           {copiedCode ? 'Copied' : 'Copy Code'}
         </Button>
       </div>
-      <div className="flex items-center justify-center gap-2 text-muted-ol">
+      <div className="flex items-center justify-center gap-2 text-muted-foreground">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         <span className="text-xs font-body">{t('settings.github.waiting')}</span>
       </div>
@@ -226,7 +226,7 @@ function DeviceFlowUI({
           variant="ghost"
           size="sm"
           onClick={onCancelDeviceFlow}
-          className="text-xs font-body text-muted-ol"
+          className="text-xs font-body text-muted-foreground"
         >
           {'Cancel'}
         </Button>
@@ -269,7 +269,7 @@ function GithubConnectionUI({
           <span className="w-full border-t border-[hsl(var(--border))]" />
         </div>
         <div className="relative flex justify-center text-xs">
-          <span className="bg-bg-panel px-2 text-muted-ol font-body">{'or'}</span>
+          <span className="bg-bg-panel px-2 text-muted-foreground font-body">{'or'}</span>
         </div>
       </div>
 

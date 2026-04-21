@@ -136,7 +136,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
     return (
       <div className="flex flex-col items-center justify-center h-full p-6 bg-bg-app">
         <AlertTriangle className="h-8 w-8 mb-3 text-error" />
-        <p className="text-sm font-medium text-primary-ol">{t(error)}</p>
+        <p className="text-sm font-medium text-foreground">{t(error)}</p>
         <Button variant="outline" className="mt-4" onClick={fetchData}>
           <RefreshCw className="h-4 w-4 mr-2" />
           {t('Retry')}
@@ -192,7 +192,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
       {fromOpsCenter && (
         <button
           onClick={() => navigate('/operations')}
-          className="flex items-center gap-1.5 text-sm text-muted-ol hover:text-primary-ol transition-colors mb-4 font-body"
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4 font-body"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           <span>{t('operations.backToCenter') ?? 'Back to Operations Center'}</span>
@@ -216,9 +216,11 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
       {/* SECTION 2: Triage Strip */}
       <Card className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x border-border bg-bg-panel/40 shadow-sm overflow-hidden rounded-xl">
         <div className="p-4 flex flex-col justify-center">
-          <span className="text-xs font-medium text-muted-ol mb-1">{t('ops.openIssues')}</span>
+          <span className="text-xs font-medium text-muted-foreground mb-1">
+            {t('ops.openIssues')}
+          </span>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-primary-ol">{activeGroups.length}</span>
+            <span className="text-2xl font-bold text-foreground">{activeGroups.length}</span>
             {activeGroups.length > 0 && (
               <div className="flex gap-1">
                 {activeGroups.filter((g) => g.severity === 'critical').length > 0 && (
@@ -240,27 +242,27 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
 
         {noiseSuppressed > 0 ? (
           <div className="p-4 flex flex-col justify-center">
-            <span className="text-xs font-medium text-muted-ol mb-1">
+            <span className="text-xs font-medium text-muted-foreground mb-1">
               {t('ops.noiseSuppressed')}
             </span>
-            <span className="text-sm font-medium text-secondary-ol">
-              <strong className="text-primary-ol">{noiseSuppressed}</strong>{' '}
+            <span className="text-sm font-medium text-foreground/80">
+              <strong className="text-foreground">{noiseSuppressed}</strong>{' '}
               {t('ops.repeatedIncidentsGrouped')}
             </span>
           </div>
         ) : (
           <div className="p-4 flex flex-col justify-center opacity-60">
-            <span className="text-xs font-medium text-muted-ol mb-1">
+            <span className="text-xs font-medium text-muted-foreground mb-1">
               {t('ops.noiseSuppressed')}
             </span>
-            <span className="text-sm font-medium text-secondary-ol">
+            <span className="text-sm font-medium text-foreground/80">
               {t('ops.zeroRepeatedIncidents')}
             </span>
           </div>
         )}
 
         <div className="p-4 flex flex-col justify-center">
-          <span className="text-xs font-medium text-muted-ol mb-1">
+          <span className="text-xs font-medium text-muted-foreground mb-1">
             {t('ops.recoveryStatusLabel')}
           </span>
           <div className="flex items-center gap-2">
@@ -278,7 +280,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
                         : 'bg-success',
               )}
             />
-            <span className="text-sm font-medium text-primary-ol">
+            <span className="text-sm font-medium text-foreground">
               {status === 'blocked'
                 ? t('ops.blocked')
                 : status === 'attention'
@@ -293,8 +295,10 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
         </div>
 
         <div className="p-4 flex flex-col justify-center">
-          <span className="text-xs font-medium text-muted-ol mb-1">{t('ops.lastAlert')}</span>
-          <div className="flex items-center gap-2 text-muted-ol">
+          <span className="text-xs font-medium text-muted-foreground mb-1">
+            {t('ops.lastAlert')}
+          </span>
+          <div className="flex items-center gap-2 text-muted-foreground">
             <BellOff className="h-4 w-4" />
             <span className="text-sm font-medium">{t('ops.noAlertsConfigured')}</span>
           </div>
@@ -303,26 +307,30 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
 
       {/* SECTION 3: Active Issue Groups */}
       <div className="flex-1 space-y-4">
-        <h3 className="text-sm font-semibold text-primary-ol flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
           {t('operations.activeIncidents')}
-          <span className="bg-bg-subtle text-muted-ol px-2 rounded-full text-xs font-mono">
+          <span className="bg-bg-subtle text-muted-foreground px-2 rounded-full text-xs font-mono">
             {activeGroups.length}
           </span>
         </h3>
 
         {activeGroups.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-secondary-ol bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm">
+          <div className="flex flex-col items-center justify-center py-12 text-foreground/80 bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm">
             {status === 'attention' ? (
               <>
                 <AlertTriangle className="h-8 w-8 mb-3 text-warning/70" />
-                <p className="text-sm font-medium text-primary-ol">{t('ops.noRuntimeIncidents')}</p>
-                <p className="text-xs text-muted-ol mt-1">{t('ops.deploymentFailedEarlier')}</p>
+                <p className="text-sm font-medium text-foreground">{t('ops.noRuntimeIncidents')}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('ops.deploymentFailedEarlier')}
+                </p>
               </>
             ) : (
               <>
                 <CheckCircle2 className="h-8 w-8 mb-3 text-success/50" />
-                <p className="text-sm font-medium text-primary-ol">{t('ops.allClear')}</p>
-                <p className="text-xs text-muted-ol mt-1">{t('ops.noActiveIssuesDetected')}</p>
+                <p className="text-sm font-medium text-foreground">{t('ops.allClear')}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('ops.noActiveIssuesDetected')}
+                </p>
               </>
             )}
           </div>
@@ -344,7 +352,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
       {pastIncidents.length > 0 && (
         <div className="pt-4">
           <Collapsible>
-            <CollapsibleTrigger className="flex items-center gap-2 text-sm font-semibold text-primary-ol hover:text-agent transition-colors">
+            <CollapsibleTrigger className="flex items-center gap-2 text-sm font-semibold text-foreground hover:text-agent transition-colors">
               <ChevronDown className="h-4 w-4" />
               {t('operations.incidentHistory')} ({pastIncidents.length})
             </CollapsibleTrigger>
@@ -356,11 +364,11 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
                 >
                   <div className="flex items-center gap-3">
                     <SeverityBadge severity={incident.severity} />
-                    <span className="text-sm font-medium text-secondary-ol">
+                    <span className="text-sm font-medium text-foreground/80">
                       {incident.title || `Incident ${incident.id.slice(0, 16)}`}
                     </span>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-muted-ol">
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
                     <span className="capitalize">{t(incident.status)}</span>
                     <span>{parseTimestamp(String(incident.created_at))?.toLocaleString()}</span>
                   </div>

@@ -24,15 +24,15 @@ export function SettingsPage() {
   }
 
   const triggerClass =
-    'flex items-center gap-2 px-3 py-2.5 font-body text-sm rounded-md md:rounded-l-none md:rounded-r-md border-l-2 border-transparent data-[state=active]:bg-bg-subtle data-[state=active]:text-primary-ol data-[state=active]:font-medium data-[state=active]:border-foreground text-secondary-ol shadow-none transition-all hover:text-primary-ol hover:bg-bg-subtle/50 whitespace-nowrap w-full !justify-start';
+    'flex items-center gap-2 px-3 py-2.5 font-body text-sm rounded-md md:rounded-l-none md:rounded-r-md border-l-2 border-transparent data-[state=active]:bg-bg-subtle data-[state=active]:text-foreground data-[state=active]:font-medium data-[state=active]:border-foreground text-foreground/80 shadow-none transition-all hover:text-foreground hover:bg-bg-subtle/50 whitespace-nowrap w-full !justify-start';
 
   return (
     <div className="w-full max-w-8xl p-4 md:p-8 space-y-8">
       <div className="border-b border-[hsl(var(--border))] pb-6">
-        <h1 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
+        <h1 className="font-display text-2xl font-bold text-foreground tracking-tight">
           {t('settings.title')}
         </h1>
-        <p className="text-sm font-body text-secondary-ol mt-1">{t('settings.description')}</p>
+        <p className="text-sm font-body text-foreground/80 mt-1">{t('settings.description')}</p>
       </div>
 
       <Tabs

@@ -71,7 +71,7 @@ export function AiUsageSection() {
     <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
       <div className="flex items-center gap-2">
         <Activity className="h-4 w-4 text-agent" />
-        <h2 className="font-display text-sm font-semibold text-primary-ol">
+        <h2 className="font-display text-sm font-semibold text-foreground">
           {t('settings.ai.usage.title') || 'Usage & Statistics'}
         </h2>
       </div>
@@ -86,7 +86,7 @@ export function AiUsageSection() {
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-agent" />
-          <span className="ml-2 text-sm text-muted-ol">
+          <span className="ml-2 text-sm text-muted-foreground">
             {t('settings.ai.usage.loading') || 'Loading...'}
           </span>
         </div>
@@ -128,12 +128,12 @@ export function AiUsageSection() {
           </div>
 
           <div className="mt-6 space-y-3">
-            <h3 className="text-sm font-medium text-primary-ol">
+            <h3 className="text-sm font-medium text-foreground">
               {t('settings.ai.usage.recentCalls') || 'Recent Calls'}
             </h3>
             {recent.length === 0 ? (
               <div className="rounded-lg border border-border bg-bg-panel shadow-sm p-8 text-center">
-                <p className="text-xs font-body text-muted-ol">
+                <p className="text-xs font-body text-muted-foreground">
                   {t('settings.ai.usage.empty') || 'No recent calls.'}
                 </p>
               </div>
@@ -157,23 +157,23 @@ export function AiUsageSection() {
                           />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-primary-ol flex flex-wrap items-center gap-1.5">
+                          <p className="text-sm font-medium text-foreground flex flex-wrap items-center gap-1.5">
                             {log.projectId && (
                               <span className="text-xs font-normal text-agent border border-agent/20 bg-agent/5 px-1.5 py-0.5 rounded">
                                 {projects[log.projectId] || log.projectId.slice(0, 12)}
                               </span>
                             )}
                             {!log.projectId && (
-                              <span className="text-xs font-normal text-muted-ol border border-border bg-bg-subtle px-1.5 py-0.5 rounded">
+                              <span className="text-xs font-normal text-muted-foreground border border-border bg-bg-subtle px-1.5 py-0.5 rounded">
                                 {t('settings.ai.usage.noProject') || 'Global'}
                               </span>
                             )}
                             {t(`settings.ai.usage.actionType.${log.actionType}`) || log.actionType}
-                            <span className="text-xs font-normal text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
+                            <span className="text-xs font-normal text-muted-foreground bg-bg-subtle px-1.5 py-0.5 rounded">
                               {log.modelName}
                             </span>
                           </p>
-                          <p className="text-xs text-secondary-ol flex flex-wrap items-center gap-1.5 mt-1">
+                          <p className="text-xs text-foreground/80 flex flex-wrap items-center gap-1.5 mt-1">
                             <span className="flex items-center gap-1 whitespace-nowrap">
                               <Clock className="h-3 w-3" />
                               {formatRelativeTime(log.createdAt, t)}
@@ -237,12 +237,14 @@ export function AiUsageSection() {
                           </div>
                         ) : (
                           <>
-                            <p className="text-sm font-medium text-primary-ol">
+                            <p className="text-sm font-medium text-foreground">
                               {((log.inputTokens || 0) + (log.outputTokens || 0)).toLocaleString()}{' '}
                               {t('settings.ai.usage.tokenUnit') || 'tokens'}
                             </p>
                             {log.costUsd != null && log.costUsd > 0 && (
-                              <p className="text-xs text-muted-ol">${log.costUsd.toFixed(4)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                ${log.costUsd.toFixed(4)}
+                              </p>
                             )}
                           </>
                         )}
@@ -265,7 +267,7 @@ export function AiUsageSection() {
                           </div>
                         )}
                         {log.errorType && t(`llmSettings.errorTypes.${log.errorType}`) && (
-                          <div className="text-xs text-muted-ol flex items-start gap-1.5">
+                          <div className="text-xs text-muted-foreground flex items-start gap-1.5">
                             <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                             <span>{t(`llmSettings.errorTypes.${log.errorType}`)}</span>
                           </div>

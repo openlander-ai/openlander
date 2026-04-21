@@ -247,7 +247,7 @@ export function OpsCenterV2() {
                   type="button"
                   onClick={closeDrawer}
                   aria-label={t('opsV2.nav.closeNavigation')}
-                  className="flex items-center justify-center h-6 w-6 rounded-md text-muted-ol hover:text-secondary-ol hover:bg-bg-subtle transition-colors"
+                  className="flex items-center justify-center h-6 w-6 rounded-md text-muted-foreground hover:text-foreground/80 hover:bg-bg-subtle transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -273,7 +273,7 @@ export function OpsCenterV2() {
           <div className="mx-auto w-full min-w-0 max-w-8xl space-y-6">
             {/* Page header */}
             <div className="flex items-center justify-between">
-              <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-primary-ol">
+              <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-foreground">
                 {t('opsV2.page.title')}
               </h1>
               <KeyboardShortcutsHelp helpButtonRef={helpButtonRef} />
@@ -302,7 +302,7 @@ export function OpsCenterV2() {
                 </div>
                 <button
                   onClick={retry}
-                  className="flex items-center gap-2 rounded bg-bg-panel px-3 py-1.5 text-xs font-medium text-primary-ol hover:bg-bg-subtle border border-[hsl(var(--border))] transition-colors"
+                  className="flex items-center gap-2 rounded bg-bg-panel px-3 py-1.5 text-xs font-medium text-foreground hover:bg-bg-subtle border border-[hsl(var(--border))] transition-colors"
                 >
                   <RefreshCw className="h-3 w-3" />
                   {t('opsV2.errors.retry')}
@@ -364,7 +364,7 @@ export function OpsCenterV2() {
                     <Suspense
                       fallback={
                         <div className="flex items-center justify-center h-full w-full bg-bg-panel rounded-lg border border-[hsl(var(--border))]">
-                          <Loader2 className="h-8 w-8 animate-spin text-muted-ol" />
+                          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                         </div>
                       }
                     >

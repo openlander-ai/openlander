@@ -65,15 +65,19 @@ export function SystemSettingsTab() {
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-sm font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-foreground">
             {t('settings.system.globalSecrets')}
           </h2>
         </div>
-        <p className="text-xs font-body text-muted-ol">{t('settings.secrets.description')}</p>
+        <p className="text-xs font-body text-muted-foreground">
+          {t('settings.secrets.description')}
+        </p>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-4">
           {secrets.length === 0 ? (
-            <p className="text-xs font-body text-muted-ol">{t('settings.secrets.noSecrets')}</p>
+            <p className="text-xs font-body text-muted-foreground">
+              {t('settings.secrets.noSecrets')}
+            </p>
           ) : (
             <div className="space-y-2">
               {secrets.map((s) => (
@@ -83,11 +87,13 @@ export function SystemSettingsTab() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm text-primary-ol">{s.key}</span>
-                      <span className="font-mono text-xs text-muted-ol">{s.maskedValue}</span>
+                      <span className="font-mono text-sm text-foreground">{s.key}</span>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {s.maskedValue}
+                      </span>
                     </div>
                     {s.description && (
-                      <p className="text-xs font-body text-muted-ol mt-0.5 truncate">
+                      <p className="text-xs font-body text-muted-foreground mt-0.5 truncate">
                         {s.description}
                       </p>
                     )}
@@ -95,7 +101,7 @@ export function SystemSettingsTab() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 w-7 p-0 text-muted-ol hover:text-error shrink-0"
+                    className="h-7 w-7 p-0 text-muted-foreground hover:text-error shrink-0"
                     onClick={() => handleDeleteSecret(s.key)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -134,7 +140,9 @@ export function SystemSettingsTab() {
             <div className="space-y-1">
               <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                 Description{' '}
-                <span className="normal-case tracking-normal text-muted-ol">(optional)</span>
+                <span className="normal-case tracking-normal text-muted-foreground">
+                  (optional)
+                </span>
               </label>
               <Input
                 placeholder={'What this secret is used for'}
@@ -162,8 +170,8 @@ export function SystemSettingsTab() {
 
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
-          <Cpu className="h-4 w-4 text-secondary-ol" />
-          <h2 className="font-display text-sm font-semibold text-primary-ol">
+          <Cpu className="h-4 w-4 text-foreground/80" />
+          <h2 className="font-display text-sm font-semibold text-foreground">
             {t('settings.system.systemResources')}
           </h2>
         </div>
@@ -174,23 +182,23 @@ export function SystemSettingsTab() {
               icon={<Cpu className="h-4 w-4" />}
               label={'CPU'}
               value={`${typeof stats.cpu === 'number' ? stats.cpu.toFixed(0) : (stats.cpu?.usagePercent?.toFixed(0) ?? '—')}%`}
-              color="text-secondary-ol"
+              color="text-foreground/80"
             />
             <StatCard
               icon={<MemoryStick className="h-4 w-4" />}
               label={'Memory'}
               value={formatMemory(stats.memory)}
-              color="text-secondary-ol"
+              color="text-foreground/80"
             />
             <StatCard
               icon={<HardDrive className="h-4 w-4" />}
               label={'Disk'}
               value={formatDisk(stats.disk)}
-              color="text-secondary-ol"
+              color="text-foreground/80"
             />
           </div>
         ) : (
-          <p className="text-xs font-body text-muted-ol">{t('settings.system.loading')}</p>
+          <p className="text-xs font-body text-muted-foreground">{t('settings.system.loading')}</p>
         )}
       </section>
     </div>

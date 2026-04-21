@@ -92,7 +92,7 @@ export default function DependencyGraph() {
             data: {
               label: (
                 <div className="flex flex-col items-center justify-center h-full">
-                  <div className="font-medium text-sm text-primary-ol truncate w-full text-center px-2">
+                  <div className="font-medium text-sm text-foreground truncate w-full text-center px-2">
                     {n.name}
                   </div>
                   <div className={`text-xs mt-1 ${textColor}`}>
@@ -151,7 +151,7 @@ export default function DependencyGraph() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full w-full bg-bg-panel rounded-lg border border-[hsl(var(--border))]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-ol" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -168,11 +168,11 @@ export default function DependencyGraph() {
   if (nodes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full w-full bg-bg-panel rounded-lg border border-[hsl(var(--border))] text-center p-6">
-        <Share2 className="mb-3 h-8 w-8 text-muted-ol/50" />
-        <h3 className="text-sm font-semibold text-primary-ol mb-1">
+        <Share2 className="mb-3 h-8 w-8 text-muted-foreground/50" />
+        <h3 className="text-sm font-semibold text-foreground mb-1">
           {t('opsV2.graph.emptyTitle')}
         </h3>
-        <p className="text-sm text-muted-ol">{t('opsV2.graph.emptyDesc')}</p>
+        <p className="text-sm text-muted-foreground">{t('opsV2.graph.emptyDesc')}</p>
       </div>
     );
   }
@@ -188,7 +188,7 @@ export default function DependencyGraph() {
         attributionPosition="bottom-right"
       >
         <Background color="hsl(var(--border))" gap={16} />
-        <Controls className="bg-bg-panel border-[hsl(var(--border))] fill-primary-ol" />
+        <Controls className="bg-bg-panel border-[hsl(var(--border))] fill-foreground" />
         <MiniMap
           nodeColor={(n) => {
             const status = (n.data as { status?: string })?.status;

@@ -88,7 +88,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       title={message.createdAt ? new Date(message.createdAt).toLocaleString() : undefined}
     >
       {isUser ? (
-        <p className="text-xs text-muted-ol mb-1 text-right">You</p>
+        <p className="text-xs text-muted-foreground mb-1 text-right">You</p>
       ) : (
         <div className="flex items-center gap-1.5 mb-1">
           <Bot className="h-3 w-3 text-ai" />
@@ -100,7 +100,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           'max-w-[80%] w-fit px-4 shadow-sm',
           isUser
             ? 'rounded-[18px_18px_4px_18px] py-2.5 bg-agent text-white'
-            : 'rounded-[18px_18px_18px_4px] py-3 bg-bg-subtle border border-zinc-200 text-primary-ol',
+            : 'rounded-[18px_18px_18px_4px] py-3 bg-bg-subtle border border-zinc-200 text-foreground',
         )}
       >
         {isUser ? (
@@ -111,15 +111,15 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             {message.content && (
               <div
                 className="prose prose-sm max-w-none
-                prose-headings:text-primary-ol
-                prose-p:text-secondary-ol
+                prose-headings:text-foreground
+                prose-p:text-foreground/80
                 prose-a:text-ai prose-a:no-underline hover:prose-a:underline
-                prose-strong:text-primary-ol
+                prose-strong:text-foreground
                 prose-code:text-ai/80 prose-code:bg-bg-subtle prose-code:px-1 prose-code:py-0.5 prose-code:rounded
                 prose-pre:bg-bg-terminal prose-pre:text-zinc-100 prose-pre:border-0
                 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-inherit
-                prose-td:text-secondary-ol prose-th:text-primary-ol
-                prose-blockquote:border-ai/30 prose-blockquote:text-secondary-ol
+                prose-td:text-foreground/80 prose-th:text-foreground
+                prose-blockquote:border-ai/30 prose-blockquote:text-foreground/80
               "
               >
                 <ReactMarkdown

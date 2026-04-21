@@ -100,10 +100,10 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
       <div className="p-4 lg:p-5">
         <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-y-2 gap-x-4">
           <div className="flex shrink-0 items-center gap-2 text-[13px]">
-            <span className="font-medium text-secondary-ol">{projectName}</span>
-            <span className="text-muted-ol/50">/</span>
+            <span className="font-medium text-foreground/80">{projectName}</span>
+            <span className="text-muted-foreground/50">/</span>
             <span
-              className="max-w-[120px] sm:max-w-none truncate font-mono text-[12px] text-muted-ol/80"
+              className="max-w-[120px] sm:max-w-none truncate font-mono text-[12px] text-muted-foreground/80"
               title={incidentProjectId}
             >
               {incidentProjectId}
@@ -120,8 +120,8 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
             </Badge>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-2 text-[12px] font-mono text-muted-ol">
-            <span className="text-secondary-ol">
+          <div className="flex flex-wrap items-center gap-x-2 text-[12px] font-mono text-muted-foreground">
+            <span className="text-foreground/80">
               {t('ops.occurrences', { count: String(group.count) })}
             </span>
             <span className="opacity-40">&middot;</span>
@@ -147,7 +147,7 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
               {formatIncidentTitle(t(group.label))}
             </h4>
             <div className="w-full">
-              <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-[13px] text-secondary-ol/90 font-body prose-p:leading-relaxed prose-p:mb-3 last:prose-p:mb-0 prose-headings:text-primary-ol prose-headings:text-[14px] prose-headings:font-bold prose-headings:mb-2 prose-headings:mt-4 first:prose-headings:mt-0 prose-a:text-agent prose-a:no-underline hover:prose-a:underline prose-code:bg-bg-subtle prose-code:text-primary-ol prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded pt-1 prose-code:before:content-none prose-code:after:content-none prose-code:font-mono prose-code:text-[11.5px] prose-strong:text-primary-ol prose-strong:font-semibold prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/40 prose-pre:text-[11.5px] prose-pre:rounded-md prose-pre:p-3 prose-ul:pl-4 prose-ol:pl-4 prose-li:my-0.5 prose-li:leading-relaxed">
+              <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-[13px] text-foreground/80/90 font-body prose-p:leading-relaxed prose-p:mb-3 last:prose-p:mb-0 prose-headings:text-foreground prose-headings:text-[14px] prose-headings:font-bold prose-headings:mb-2 prose-headings:mt-4 first:prose-headings:mt-0 prose-a:text-agent prose-a:no-underline hover:prose-a:underline prose-code:bg-bg-subtle prose-code:text-foreground prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded pt-1 prose-code:before:content-none prose-code:after:content-none prose-code:font-mono prose-code:text-[11.5px] prose-strong:text-foreground prose-strong:font-semibold prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/40 prose-pre:text-[11.5px] prose-pre:rounded-md prose-pre:p-3 prose-ul:pl-4 prose-ol:pl-4 prose-li:my-0.5 prose-li:leading-relaxed">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{formattedDescription}</ReactMarkdown>
               </div>
             </div>
@@ -159,7 +159,7 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-7 px-3 bg-transparent text-xs text-secondary-ol hover:bg-bg-subtle font-medium border-border/60 hover:text-primary-ol"
+                      className="h-7 px-3 bg-transparent text-xs text-foreground/80 hover:bg-bg-subtle font-medium border-border/60 hover:text-foreground"
                     >
                       {t('ops.viewTimeline')}
                       <ChevronDown
@@ -173,7 +173,7 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 px-3 text-xs text-muted-ol hover:text-secondary-ol hover:bg-bg-subtle"
+                    className="h-7 px-3 text-xs text-muted-foreground hover:text-foreground/80 hover:bg-bg-subtle"
                     onClick={() => toast.info(t('ops.featureNotReady'))}
                   >
                     {t('ops.acknowledge')}
@@ -182,14 +182,14 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
 
                 <CollapsibleContent className="mt-3 overflow-hidden data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=open]:animate-in data-[state=open]:fade-in">
                   <div className="rounded-lg border border-border bg-bg-panel/50 p-4 shadow-sm">
-                    <h5 className="mb-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-muted-ol">
+                    <h5 className="mb-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                       <RefreshCw className="h-3 w-3" />
                       {t('ops.latestTimeline')}
                     </h5>
 
                     {loadingEvents ? (
                       <div className="flex items-center justify-center py-4">
-                        <RefreshCw className="h-4 w-4 animate-spin text-muted-ol" />
+                        <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
                       </div>
                     ) : (
                       <IncidentTimeline events={events} />

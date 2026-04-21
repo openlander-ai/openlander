@@ -55,6 +55,6 @@ export const levelColors: Record<ConsoleLogLevel, string> = {
   error: 'text-error',
   warn: 'text-warning',
   info: '',
-  debug: 'text-muted-ol',
+  debug: 'text-muted-foreground',
   plain: '',
 };

@@ -97,7 +97,7 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
       <div
         className={cn('flex flex-col items-center justify-center h-full p-6 bg-bg-app', className)}
       >
-        <div className="flex flex-col items-center gap-3 text-muted-ol">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <Terminal className="h-8 w-8" />
           <p className="text-sm font-body">{t('deploy.noBuildLog')}</p>
         </div>
@@ -110,7 +110,7 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
       <div
         className={cn('flex flex-col items-center justify-center h-full p-6 bg-bg-app', className)}
       >
-        <div className="flex flex-col items-center gap-3 text-muted-ol">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
           <Terminal className="h-8 w-8" />
           <p className="text-sm font-body">{t('logs.emptyTitle')}</p>
         </div>
@@ -124,7 +124,7 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
       <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-panel">
         {/* Left: Search */}
         <div className="flex items-center gap-1.5 flex-1 max-w-md">
-          <Search className="h-3.5 w-3.5 text-muted-ol shrink-0" />
+          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <input
             type="text"
             value={filters.searchQuery}
@@ -136,8 +136,8 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
             }
             placeholder={CONSOLE_LABELS.searchPlaceholder}
             className={cn(
-              'flex-1 bg-transparent text-xs font-mono text-primary-ol',
-              'placeholder:text-muted-ol focus:outline-none',
+              'flex-1 bg-transparent text-xs font-mono text-foreground',
+              'placeholder:text-muted-foreground focus:outline-none',
             )}
           />
           <button
@@ -153,7 +153,7 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
               'px-1.5 py-0.5 rounded text-xs font-mono transition-colors',
               isRegex
                 ? 'bg-agent/15 text-agent border border-agent/30'
-                : 'text-muted-ol hover:text-secondary-ol border border-transparent',
+                : 'text-muted-foreground hover:text-foreground/80 border border-transparent',
             )}
           >
             .*
@@ -167,10 +167,10 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
                 logLevel: e.target.value as ConsoleLogLevelFilter,
               }))
             }
-            className="bg-transparent text-xs font-mono text-muted-ol focus:outline-none border-none cursor-pointer hover:text-primary-ol appearance-none pr-2"
+            className="bg-transparent text-xs font-mono text-muted-foreground focus:outline-none border-none cursor-pointer hover:text-foreground appearance-none pr-2"
           >
             {Object.entries(CONSOLE_LABELS.logLevel).map(([value, label]) => (
-              <option key={value} value={value} className="bg-bg-panel text-primary-ol">
+              <option key={value} value={value} className="bg-bg-panel text-foreground">
                 {label}
               </option>
             ))}
@@ -181,10 +181,10 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
         <div className="flex items-center gap-3">
           {/* Status Indicators */}
           <div className="flex items-center gap-2 text-xs font-mono">
-            <span className="text-muted-ol">
+            <span className="text-muted-foreground">
               {hasActiveFilters ? (
                 <>
-                  <span className="text-primary-ol font-medium">
+                  <span className="text-foreground font-medium">
                     {filteredEntries.length.toLocaleString()}
                   </span>{' '}
                   / {entries.length.toLocaleString()} {CONSOLE_LABELS.lines}
@@ -206,15 +206,17 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
         {filteredEntries.length === 0 ? (
           <div className="flex h-full items-center justify-center p-6">
             <div className="w-full max-w-md rounded-xl border border-[hsl(var(--border))] bg-bg-panel/60 p-5 text-center shadow-sm">
-              <p className="text-sm font-body font-medium text-primary-ol">
+              <p className="text-sm font-body font-medium text-foreground">
                 {t('logs.noMatchingTitle')}
               </p>
-              <p className="mt-2 text-sm font-body text-muted-ol">{t('logs.noMatchingBody')}</p>
+              <p className="mt-2 text-sm font-body text-muted-foreground">
+                {t('logs.noMatchingBody')}
+              </p>
               {hasActiveFilters && (
                 <button
                   type="button"
                   onClick={resetFilters}
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-bg-subtle px-3 py-1.5 text-xs font-body text-primary-ol transition-colors hover:bg-bg-subtle/80"
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-bg-subtle px-3 py-1.5 text-xs font-body text-foreground transition-colors hover:bg-bg-subtle/80"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   {t('logs.clearFilters')}
@@ -259,7 +261,7 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
                       'bg-bg-subtle/20',
                   )}
                 >
-                  <span className="shrink-0 w-12 text-right pr-3 text-muted-ol/40 group-hover:text-muted-ol select-none tabular-nums text-xs leading-5">
+                  <span className="shrink-0 w-12 text-right pr-3 text-muted-foreground/40 group-hover:text-muted-foreground select-none tabular-nums text-xs leading-5">
                     {entry.id + 1}
                   </span>
                   <span

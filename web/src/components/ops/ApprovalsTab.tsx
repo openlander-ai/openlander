@@ -64,11 +64,11 @@ export function ApprovalsTab() {
   if (approvals.length === 0) {
     return (
       <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
-        <ShieldCheck className="h-12 w-12 text-muted-ol mb-4" />
-        <h3 className="text-lg font-medium text-primary-ol mb-2">
+        <ShieldCheck className="h-12 w-12 text-muted-foreground mb-4" />
+        <h3 className="text-lg font-medium text-foreground mb-2">
           {t('approvalsTab.noPendingApprovals')}
         </h3>
-        <p className="text-sm text-muted-ol max-w-md">{t('approvalsTab.emptyMessage')}</p>
+        <p className="text-sm text-muted-foreground max-w-md">{t('approvalsTab.emptyMessage')}</p>
       </div>
     );
   }
@@ -87,12 +87,12 @@ export function ApprovalsTab() {
           >
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className="font-medium text-primary-ol">{projectName}</span>
-                <span className="text-xs text-muted-ol px-2 py-0.5 rounded-full bg-bg-subtle">
+                <span className="font-medium text-foreground">{projectName}</span>
+                <span className="text-xs text-muted-foreground px-2 py-0.5 rounded-full bg-bg-subtle">
                   {toolName}
                 </span>
               </div>
-              <p className="text-sm text-muted-ol">
+              <p className="text-sm text-muted-foreground">
                 {t('approvalsTab.requested')}{' '}
                 {formatRelativeTime(String(createdAt), t) ||
                   (date ? date.toLocaleString() : 'Unknown time')}

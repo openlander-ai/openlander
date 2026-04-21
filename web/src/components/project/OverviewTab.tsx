@@ -86,7 +86,7 @@ function TriggerIcon({ trigger }: { trigger: DeployLogSummary['trigger'] }) {
   const iconName = getDeploymentTriggerIcon(trigger);
   const Icon =
     iconName === 'Bot' ? Bot : iconName === 'Webhook' ? Webhook : iconName === 'Zap' ? Zap : Rocket;
-  return <Icon className="h-3.5 w-3.5 text-muted-ol shrink-0" />;
+  return <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
 }
 
 // ── Props ───────────────────────────────────────────────────────────────────
@@ -314,25 +314,25 @@ export function OverviewTab({
             <div className="flex items-center justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-3 text-sm">
-                  <span className="text-muted-ol">Latest Deploy</span>
+                  <span className="text-muted-foreground">Latest Deploy</span>
                   {activeProject?.source === 'image' ? (
-                    <span className="font-mono text-secondary-ol">Image pulled</span>
+                    <span className="font-mono text-foreground/80">Image pulled</span>
                   ) : latestDeploy.commitSha ? (
-                    <span className="font-mono text-secondary-ol">
+                    <span className="font-mono text-foreground/80">
                       {latestDeploy.commitSha.substring(0, 7)}
                     </span>
                   ) : null}
-                  <span className="text-muted-ol">
+                  <span className="text-muted-foreground">
                     {formatRelativeTime(latestDeploy.createdAt)}
                   </span>
                   {latestDeploy.durationMs && (
-                    <span className="text-muted-ol">
+                    <span className="text-muted-foreground">
                       {(latestDeploy.durationMs / 1000).toFixed(0)}s
                     </span>
                   )}
                 </div>
                 {activeProject?.source !== 'image' && latestDeploy.commitMessage && (
-                  <p className="text-xs text-secondary-ol truncate mt-1">
+                  <p className="text-xs text-foreground/80 truncate mt-1">
                     {latestDeploy.commitMessage}
                   </p>
                 )}
@@ -355,7 +355,7 @@ export function OverviewTab({
           )}
 
           {lastEvent && !isBuilding && (
-            <p className="text-xs text-muted-ol">
+            <p className="text-xs text-muted-foreground">
               Last event: {lastEvent.title} — {formatRelativeTime(lastEvent.timestamp)}
             </p>
           )}
@@ -365,7 +365,7 @@ export function OverviewTab({
             <div className="pt-4 border-t border-[hsl(var(--border))]">
               <button
                 onClick={() => setPipelineOpen(!pipelineOpen)}
-                className="w-full flex items-center justify-between px-0 py-3 text-sm text-secondary-ol hover:text-primary-ol transition-colors"
+                className="w-full flex items-center justify-between px-0 py-3 text-sm text-foreground/80 hover:text-foreground transition-colors"
               >
                 <div className="flex items-center gap-2">
                   {pipelineOpen ? (
@@ -413,14 +413,14 @@ export function OverviewTab({
             {/* Left: Connected Services */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-medium text-muted-ol tracking-wider">
+                <h3 className="text-xs font-medium text-muted-foreground tracking-wider">
                   Connected Services
                 </h3>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       disabled={isConnecting || unconnectedServices.length === 0}
-                      className="flex items-center gap-1 text-xs font-medium text-secondary-ol hover:text-primary-ol transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1 text-xs font-medium text-foreground/80 hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isConnecting ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -437,12 +437,14 @@ export function OverviewTab({
                           key={service.id}
                           onClick={() => void handleConnectService(service.id)}
                         >
-                          <Database className="h-3.5 w-3.5 mr-2 text-muted-ol" />
+                          <Database className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
                           {service.name}
                         </DropdownMenuItem>
                       ))
                     ) : (
-                      <div className="px-2 py-1.5 text-xs text-muted-ol">No available services</div>
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        No available services
+                      </div>
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -462,8 +464,8 @@ export function OverviewTab({
                                 : 'bg-[var(--text-muted)]',
                           )}
                         />
-                        <span className="text-primary-ol font-medium truncate">{service.name}</span>
-                        <span className="text-muted-ol font-mono text-xs shrink-0">
+                        <span className="text-foreground font-medium truncate">{service.name}</span>
+                        <span className="text-muted-foreground font-mono text-xs shrink-0">
                           :{service.port}
                         </span>
                         {service.autoInjectedEnvKeys && service.autoInjectedEnvKeys.length > 0 && (
@@ -475,7 +477,7 @@ export function OverviewTab({
                       <button
                         onClick={() => void handleDisconnectService(service.id)}
                         disabled={disconnectingId === service.id}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-muted-ol hover:text-error disabled:opacity-50"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-error disabled:opacity-50"
                         title={t('project.disconnectService')}
                       >
                         {disconnectingId === service.id ? (
@@ -488,7 +490,7 @@ export function OverviewTab({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-ol flex items-center gap-1.5">
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <Database className="h-3.5 w-3.5" />
                   No connected services
                 </p>
@@ -497,16 +499,16 @@ export function OverviewTab({
 
             {/* Right: Project Info */}
             <div>
-              <h3 className="text-xs font-medium text-muted-ol tracking-wider mb-3">
+              <h3 className="text-xs font-medium text-muted-foreground tracking-wider mb-3">
                 Project Info
               </h3>
               <div className="space-y-2.5 text-sm">
                 {/* Env var count */}
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-ol">Environment Variables</span>
+                  <span className="text-muted-foreground">Environment Variables</span>
                   <button
                     onClick={onOpenSettings}
-                    className="flex items-center gap-1 text-secondary-ol hover:text-primary-ol transition-colors"
+                    className="flex items-center gap-1 text-foreground/80 hover:text-foreground transition-colors"
                   >
                     <span className="font-medium">{envVarCount} configured</span>
                     <ArrowRight className="h-3 w-3" />
@@ -516,17 +518,17 @@ export function OverviewTab({
                 {/* Uptime */}
                 {uptime && (
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-ol">Uptime</span>
-                    <span className="text-secondary-ol font-medium">{uptime}</span>
+                    <span className="text-muted-foreground">Uptime</span>
+                    <span className="text-foreground/80 font-medium">{uptime}</span>
                   </div>
                 )}
 
                 {/* Container image */}
                 {activeProject?.source === 'image' ? (
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-ol">Image</span>
+                    <span className="text-muted-foreground">Image</span>
                     <span
-                      className="text-xs font-mono text-secondary-ol truncate max-w-[300px]"
+                      className="text-xs font-mono text-foreground/80 truncate max-w-[300px]"
                       title={activeProject.imageUrl}
                     >
                       {activeProject.imageUrl}
@@ -534,9 +536,9 @@ export function OverviewTab({
                   </div>
                 ) : imageTag ? (
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-ol">Container</span>
+                    <span className="text-muted-foreground">Container</span>
                     <span
-                      className="text-xs font-mono text-secondary-ol truncate max-w-[300px]"
+                      className="text-xs font-mono text-foreground/80 truncate max-w-[300px]"
                       title={imageTag}
                     >
                       {imageTag}
@@ -549,16 +551,16 @@ export function OverviewTab({
                   (activeProject.containerPort !== undefined ||
                     activeProject.port !== undefined) && (
                     <div className="flex items-center justify-between">
-                      <span className="text-muted-ol">Port</span>
-                      <span className="text-secondary-ol font-mono">
+                      <span className="text-muted-foreground">Port</span>
+                      <span className="text-foreground/80 font-mono">
                         {activeProject.containerPort ?? activeProject.port}
                       </span>
                     </div>
                   )
                 ) : activeProject?.port !== undefined ? (
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-ol">Port</span>
-                    <span className="text-secondary-ol font-mono">{activeProject.port}</span>
+                    <span className="text-muted-foreground">Port</span>
+                    <span className="text-foreground/80 font-mono">{activeProject.port}</span>
                   </div>
                 ) : null}
 
@@ -567,9 +569,9 @@ export function OverviewTab({
                   activeProject.imageCmd &&
                   activeProject.imageCmd.length > 0 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-muted-ol">Command</span>
+                      <span className="text-muted-foreground">Command</span>
                       <span
-                        className="text-xs font-mono text-secondary-ol truncate max-w-[300px]"
+                        className="text-xs font-mono text-foreground/80 truncate max-w-[300px]"
                         title={activeProject.imageCmd.join(' ')}
                       >
                         {activeProject.imageCmd.join(' ')}
@@ -585,7 +587,9 @@ export function OverviewTab({
         <section className="bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm p-5 flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2.5">
-              <h3 className="text-xs font-medium text-muted-ol tracking-wider">Error Logs</h3>
+              <h3 className="text-xs font-medium text-muted-foreground tracking-wider">
+                Error Logs
+              </h3>
               {recentErrorCount > 0 && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-error/10 text-error">
                   <AlertCircle className="h-3 w-3" />
@@ -595,7 +599,7 @@ export function OverviewTab({
             </div>
             <button
               onClick={onOpenLogs}
-              className="text-xs text-muted-ol hover:text-primary-ol transition-colors flex items-center gap-1"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
             >
               <SquareTerminal className="h-3 w-3" />
               View all logs <ArrowRight className="h-3 w-3" />
@@ -603,7 +607,9 @@ export function OverviewTab({
           </div>
 
           {!isRunning ? (
-            <p className="text-xs text-muted-ol py-4 text-center">Container is not running</p>
+            <p className="text-xs text-muted-foreground py-4 text-center">
+              Container is not running
+            </p>
           ) : displayErrors.length > 0 ? (
             <div className="rounded-lg border border-error/20 bg-bg-terminal overflow-hidden">
               <div className="divide-y divide-border/30">
@@ -625,10 +631,12 @@ export function OverviewTab({
         {/* ── Recent Deployments ───────────────────────────────────────────── */}
         <section className="bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm p-5 flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-medium text-muted-ol tracking-wider">Recent Deployments</h3>
+            <h3 className="text-xs font-medium text-muted-foreground tracking-wider">
+              Recent Deployments
+            </h3>
             <button
               onClick={onOpenDeployments}
-              className="text-xs text-muted-ol hover:text-primary-ol transition-colors flex items-center gap-1"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
             >
               View all <ArrowRight className="h-3 w-3" />
             </button>
@@ -654,10 +662,12 @@ export function OverviewTab({
                       {statusMeta.label}
                     </span>
                     {shortSha && (
-                      <span className="text-xs font-mono text-muted-ol shrink-0">{shortSha}</span>
+                      <span className="text-xs font-mono text-muted-foreground shrink-0">
+                        {shortSha}
+                      </span>
                     )}
                     {deploy.commitMessage && (
-                      <span className="text-xs font-body text-muted-ol truncate min-w-0">
+                      <span className="text-xs font-body text-muted-foreground truncate min-w-0">
                         {deploy.commitMessage}
                       </span>
                     )}
@@ -670,7 +680,7 @@ export function OverviewTab({
 
                     <div className="flex-1" />
 
-                    <div className="flex items-center gap-3 text-xs font-body text-muted-ol shrink-0">
+                    <div className="flex items-center gap-3 text-xs font-body text-muted-foreground shrink-0">
                       {deploy.durationMs && (
                         <span className="flex items-center gap-1">
                           <Activity className="h-3 w-3" />
@@ -687,7 +697,7 @@ export function OverviewTab({
               })}
             </div>
           ) : (
-            <p className="text-xs text-muted-ol py-4 text-center">No deployments yet</p>
+            <p className="text-xs text-muted-foreground py-4 text-center">No deployments yet</p>
           )}
         </section>
       </div>

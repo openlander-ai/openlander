@@ -121,7 +121,7 @@ export function ThreadApprovalActions({ events }: ThreadApprovalActionsProps) {
                 {riskTone === 'destructive' && (
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-error" />
                 )}
-                <span className="truncate text-xs font-medium text-primary-ol">{event.title}</span>
+                <span className="truncate text-xs font-medium text-foreground">{event.title}</span>
                 {timedOut && (
                   <Badge
                     variant="outline"
@@ -136,7 +136,7 @@ export function ThreadApprovalActions({ events }: ThreadApprovalActionsProps) {
               {!timedOut && (
                 <div className="flex shrink-0 items-center gap-1.5">
                   {isSubmitting ? (
-                    <span className="text-[11px] text-muted-ol">
+                    <span className="text-[11px] text-muted-foreground">
                       {t('opsV2.approvals.submitting')}
                     </span>
                   ) : riskTone === 'destructive' ? (

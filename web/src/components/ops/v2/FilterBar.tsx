@@ -144,7 +144,9 @@ export function FilterBar({ filters, projects, onFilterChange }: FilterBarProps)
     >
       {/* Density */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-muted-ol whitespace-nowrap">{t('opsV2.filters.density.label')}</span>
+        <span className="text-muted-foreground whitespace-nowrap">
+          {t('opsV2.filters.density.label')}
+        </span>
         <Select value={filters.density} onValueChange={handleDensityChange}>
           <SelectTrigger className="h-7 min-w-[110px] text-xs">
             <SelectValue />
@@ -161,7 +163,9 @@ export function FilterBar({ filters, projects, onFilterChange }: FilterBarProps)
 
       {/* Severity */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-muted-ol whitespace-nowrap">{t('opsV2.filters.severity')}</span>
+        <span className="text-muted-foreground whitespace-nowrap">
+          {t('opsV2.filters.severity')}
+        </span>
         <Select value={filters.severity ?? '_all'} onValueChange={handleSeverityChange}>
           <SelectTrigger className="h-7 min-w-[100px] text-xs">
             <SelectValue />
@@ -181,7 +185,9 @@ export function FilterBar({ filters, projects, onFilterChange }: FilterBarProps)
 
       {/* Project */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-muted-ol whitespace-nowrap">{t('opsV2.filters.project')}</span>
+        <span className="text-muted-foreground whitespace-nowrap">
+          {t('opsV2.filters.project')}
+        </span>
         <Select value={filters.projectId ?? '_all'} onValueChange={handleProjectChange}>
           <SelectTrigger className="h-7 min-w-[130px] text-xs">
             <SelectValue />
@@ -201,7 +207,9 @@ export function FilterBar({ filters, projects, onFilterChange }: FilterBarProps)
 
       {/* Time range */}
       <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-muted-ol whitespace-nowrap">{t('opsV2.filters.timeRange')}</span>
+        <span className="text-muted-foreground whitespace-nowrap">
+          {t('opsV2.filters.timeRange')}
+        </span>
         <Select value={filters.timeRange ?? '_all'} onValueChange={handleTimeRangeChange}>
           <SelectTrigger className="h-7 min-w-[110px] text-xs" data-testid="time-range-trigger">
             <SelectValue />

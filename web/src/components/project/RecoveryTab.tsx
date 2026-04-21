@@ -123,7 +123,7 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-6 bg-bg-app">
         <AlertTriangle className="h-8 w-8 mb-3 text-error" />
-        <p className="text-sm font-medium text-primary-ol">{t(error)}</p>
+        <p className="text-sm font-medium text-foreground">{t(error)}</p>
         <Button variant="outline" className="mt-4" onClick={fetchData}>
           {t('recoveryTab.retry')}
         </Button>
@@ -150,11 +150,11 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
               <Loader2 className="h-5 w-5 text-agent animate-spin" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-primary-ol">
+              <h3 className="text-sm font-semibold text-foreground">
                 {t('recovery.activeRecovery')}
               </h3>
               {agentState.startedAt && (
-                <p className="text-xs text-muted-ol">
+                <p className="text-xs text-muted-foreground">
                   {t('recovery.agentStarted').replace(
                     '{time}',
                     parseTimestamp(agentState.startedAt)?.toLocaleTimeString() ?? '',
@@ -166,7 +166,7 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
           <div className="flex items-center gap-3">
             <RefreshCw className="h-4 w-4 text-agent shrink-0" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-secondary-ol">
+              <p className="text-sm font-medium text-foreground/80">
                 {agentState.currentStepNumber && agentState.totalSteps
                   ? t('recovery.agentStep')
                       .replace('{current}', String(agentState.currentStepNumber))
@@ -193,11 +193,11 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
       <section>
         <div className="flex items-center gap-2 mb-4">
           <History className="h-5 w-5 text-agent" />
-          <h2 className="text-lg font-semibold text-primary-ol">{t('recovery.incidentHistory')}</h2>
+          <h2 className="text-lg font-semibold text-foreground">{t('recovery.incidentHistory')}</h2>
         </div>
         {incidents.length === 0 ? (
           <Card className="p-8 text-center border-dashed bg-bg-panel/50">
-            <p className="text-sm text-muted-ol">{t('recovery.noIncidents')}</p>
+            <p className="text-sm text-muted-foreground">{t('recovery.noIncidents')}</p>
           </Card>
         ) : (
           <div className="space-y-2">
@@ -208,11 +208,11 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
               >
                 <div className="flex items-center gap-3">
                   <SeverityBadge severity={incident.severity} />
-                  <span className="text-sm font-medium text-secondary-ol">
+                  <span className="text-sm font-medium text-foreground/80">
                     {incident.title || `Incident ${incident.id.slice(0, 16)}`}
                   </span>
                 </div>
-                <div className="flex items-center gap-4 text-xs text-muted-ol">
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
                   <span className="capitalize">{t(incident.status)}</span>
                   <span>{parseTimestamp(String(incident.created_at))?.toLocaleString()}</span>
                 </div>
@@ -226,25 +226,25 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
       <section>
         <div className="flex items-center gap-2 mb-4">
           <FileText className="h-5 w-5 text-agent" />
-          <h2 className="text-lg font-semibold text-primary-ol">{t('recovery.postmortems')}</h2>
+          <h2 className="text-lg font-semibold text-foreground">{t('recovery.postmortems')}</h2>
         </div>
         {postmortems.length === 0 ? (
           <Card className="p-8 text-center border-dashed bg-bg-panel/50">
-            <p className="text-sm text-muted-ol">{t('recovery.noPostmortems')}</p>
+            <p className="text-sm text-muted-foreground">{t('recovery.noPostmortems')}</p>
           </Card>
         ) : (
           <div className="space-y-2">
             {postmortems.map((pm) => (
               <Card key={pm.id} className="p-4 bg-bg-panel">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium text-primary-ol">
+                  <span className="text-sm font-medium text-foreground">
                     {t('recoveryTab.postmortemReport')}
                   </span>
-                  <span className="text-xs text-muted-ol">
+                  <span className="text-xs text-muted-foreground">
                     {parseTimestamp(String(pm.created_at))?.toLocaleString()}
                   </span>
                 </div>
-                <pre className="text-xs text-secondary-ol whitespace-pre-wrap bg-bg-app p-3 rounded border border-[hsl(var(--border))]">
+                <pre className="text-xs text-foreground/80 whitespace-pre-wrap bg-bg-app p-3 rounded border border-[hsl(var(--border))]">
                   {pm.content}
                 </pre>
               </Card>
@@ -257,13 +257,13 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
       <section>
         <div className="flex items-center gap-2 mb-4">
           <ShieldAlert className="h-5 w-5 text-agent" />
-          <h2 className="text-lg font-semibold text-primary-ol">
+          <h2 className="text-lg font-semibold text-foreground">
             {t('recovery.pendingApprovals')}
           </h2>
         </div>
         {approvals.length === 0 ? (
           <Card className="p-8 text-center border-dashed bg-bg-panel/50">
-            <p className="text-sm text-muted-ol">{t('recovery.noApprovals')}</p>
+            <p className="text-sm text-muted-foreground">{t('recovery.noApprovals')}</p>
           </Card>
         ) : (
           <div className="space-y-3">
@@ -273,10 +273,10 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
                 className="p-4 bg-bg-panel flex items-center justify-between"
               >
                 <div>
-                  <h3 className="text-sm font-medium text-primary-ol mb-1">
+                  <h3 className="text-sm font-medium text-foreground mb-1">
                     {approval.metadata.toolName}
                   </h3>
-                  <p className="text-xs text-muted-ol">
+                  <p className="text-xs text-muted-foreground">
                     {t('recoveryTab.attempt')} {approval.metadata.attempt} •{' '}
                     {parseTimestamp(String(approval.createdAt))?.toLocaleString()}
                   </p>

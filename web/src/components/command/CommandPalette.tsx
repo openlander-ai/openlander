@@ -322,16 +322,16 @@ export function CommandPalette() {
         <div className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel shadow-2xl shadow-black/10 overflow-hidden flex flex-col">
           {/* Search input */}
           <div className="flex items-center gap-3 px-4 border-b border-[hsl(var(--border))]">
-            <Search className="h-4 w-4 text-muted-ol shrink-0" />
+            <Search className="h-4 w-4 text-muted-foreground shrink-0" />
             <input
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={t('command.searchPlaceholder')}
-              className="flex-1 py-3 bg-transparent text-sm font-body text-primary-ol placeholder:text-muted-ol focus:outline-none"
+              className="flex-1 py-3 bg-transparent text-sm font-body text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-mono text-muted-ol bg-bg-subtle border border-border">
+            <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-mono text-muted-foreground bg-bg-subtle border border-border">
               <Command className="h-2.5 w-2.5" />K
             </kbd>
           </div>
@@ -349,29 +349,29 @@ export function CommandPalette() {
                   className={cn(
                     'w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors',
                     selectedIndex === 0
-                      ? 'bg-agent/10 text-primary-ol'
-                      : 'text-secondary-ol hover:bg-bg-subtle/50',
+                      ? 'bg-agent/10 text-foreground'
+                      : 'text-foreground/80 hover:bg-bg-subtle/50',
                   )}
                 >
                   <Bot className={cn('h-4 w-4', selectedIndex === 0 ? 'text-agent' : 'text-ai')} />
                   <div className="flex-1">
                     <p className="text-sm">Ask AI: "{query}"</p>
-                    <p className="text-xs text-muted-ol">Open Agent Chat with this query</p>
+                    <p className="text-xs text-muted-foreground">Open Agent Chat with this query</p>
                   </div>
                   {selectedIndex === 0 && (
-                    <span className="text-xs font-mono text-muted-ol">↵</span>
+                    <span className="text-xs font-mono text-muted-foreground">↵</span>
                   )}
                 </button>
               </div>
             ) : flatFiltered.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <p className="text-sm font-body text-muted-ol">{t('command.noResults')}</p>
+                <p className="text-sm font-body text-muted-foreground">{t('command.noResults')}</p>
               </div>
             ) : (
               groups.map((group) =>
                 group.items.length > 0 ? (
                   <div key={group.id}>
-                    <p className="px-4 py-1.5 text-xs uppercase tracking-[0.08em] font-mono text-muted-ol">
+                    <p className="px-4 py-1.5 text-xs uppercase tracking-[0.08em] font-mono text-muted-foreground">
                       {group.heading}
                     </p>
                     {group.items.map((item) => {
@@ -384,14 +384,16 @@ export function CommandPalette() {
                           className={cn(
                             'w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors',
                             currentIndex === selectedIndex
-                              ? 'bg-agent/10 text-primary-ol'
-                              : 'text-secondary-ol hover:bg-bg-subtle/50',
+                              ? 'bg-agent/10 text-foreground'
+                              : 'text-foreground/80 hover:bg-bg-subtle/50',
                           )}
                         >
                           <span
                             className={cn(
                               'shrink-0',
-                              currentIndex === selectedIndex ? 'text-agent' : 'text-muted-ol',
+                              currentIndex === selectedIndex
+                                ? 'text-agent'
+                                : 'text-muted-foreground',
                             )}
                           >
                             {item.icon}
@@ -399,13 +401,15 @@ export function CommandPalette() {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-body truncate">{item.label}</p>
                             {item.description && (
-                              <p className="text-xs font-body text-muted-ol truncate">
+                              <p className="text-xs font-body text-muted-foreground truncate">
                                 {item.description}
                               </p>
                             )}
                           </div>
                           {currentIndex === selectedIndex && (
-                            <span className="text-xs font-mono text-muted-ol shrink-0">↵</span>
+                            <span className="text-xs font-mono text-muted-foreground shrink-0">
+                              ↵
+                            </span>
                           )}
                         </button>
                       );
@@ -417,7 +421,7 @@ export function CommandPalette() {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center gap-4 px-4 py-2 border-t border-[hsl(var(--border))] text-xs font-mono text-muted-ol bg-bg-panel">
+          <div className="flex items-center gap-4 px-4 py-2 border-t border-[hsl(var(--border))] text-xs font-mono text-muted-foreground bg-bg-panel">
             <span className="flex items-center gap-1">
               <kbd className="px-1 py-0.5 rounded bg-bg-subtle border border-border">↑↓</kbd>{' '}
               navigate

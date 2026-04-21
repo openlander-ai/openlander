@@ -22,15 +22,19 @@ export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectT
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[hsl(var(--border))] bg-bg-subtle/50">
-            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol">Name</th>
-            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol">Status</th>
-            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden md:table-cell">
+            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
+              Name
+            </th>
+            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
+              Status
+            </th>
+            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">
               Branch
             </th>
-            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden md:table-cell">
+            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">
               Last Deploy
             </th>
-            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden lg:table-cell">
+            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden lg:table-cell">
               Endpoint
             </th>
           </tr>
@@ -45,17 +49,17 @@ export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectT
                 onClick={() => onNavigate(`/projects/${project.id}`)}
                 className="border-b border-[hsl(var(--border))] last:border-0 hover:bg-bg-subtle/50 cursor-pointer transition-colors"
               >
-                <td className="px-4 py-3 font-medium text-primary-ol">{project.name}</td>
+                <td className="px-4 py-3 font-medium text-foreground">{project.name}</td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-1.5">
                     <span className={cn('h-2 w-2 rounded-full', status.dot)} />
-                    <span className="text-xs font-medium text-secondary-ol">{status.label}</span>
+                    <span className="text-xs font-medium text-foreground/80">{status.label}</span>
                   </span>
                 </td>
-                <td className="px-4 py-3 text-secondary-ol hidden md:table-cell">
+                <td className="px-4 py-3 text-foreground/80 hidden md:table-cell">
                   <span className="text-xs font-mono">{project.branch || 'main'}</span>
                 </td>
-                <td className="px-4 py-3 text-secondary-ol hidden md:table-cell">
+                <td className="px-4 py-3 text-foreground/80 hidden md:table-cell">
                   <span className="text-xs">{formatRelativeTime(project.updatedAt, t)}</span>
                 </td>
                 <td className="px-4 py-3 hidden lg:table-cell">
@@ -78,7 +82,7 @@ export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectT
                             href={vpn.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-muted-foreground hover:text-primary-ol hover:underline truncate max-w-[200px] flex items-center gap-1"
+                            className="text-xs text-muted-foreground hover:text-foreground hover:underline truncate max-w-[200px] flex items-center gap-1"
                             onClick={(event) => event.stopPropagation()}
                           >
                             <span className="text-[9px] px-1 rounded bg-muted text-muted-foreground border border-border">

@@ -319,7 +319,7 @@ export function ProjectDetail() {
   if (!project) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm font-body text-secondary-ol">{t('projectDetail.notFound')}</p>
+        <p className="text-sm font-body text-foreground/80">{t('projectDetail.notFound')}</p>
       </div>
     );
   }

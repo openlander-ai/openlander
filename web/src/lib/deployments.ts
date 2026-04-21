@@ -24,7 +24,7 @@ export function getDeploymentStatusMeta(status: DeployLogSummary['status']) {
     default:
       return {
         dotClass: 'bg-[var(--text-muted)]',
-        textClass: 'text-muted-ol',
+        textClass: 'text-muted-foreground',
         label: 'Cancelled',
       };
   }

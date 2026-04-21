@@ -39,7 +39,7 @@ export function RedeployEnvDialog({
         </DialogHeader>
         <div className="space-y-4 py-4">
           <textarea
-            className="w-full rounded-md px-3 py-2 text-xs font-mono bg-bg-app border border-border text-primary-ol placeholder:text-muted-ol resize-none focus:outline-none focus:ring-1 focus:ring-agent/40"
+            className="w-full rounded-md px-3 py-2 text-xs font-mono bg-bg-app border border-border text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-agent/40"
             rows={10}
             placeholder={redeployVars.map((v) => v.key + '=').join('\n')}
             value={redeployPasteText}
@@ -52,7 +52,7 @@ export function RedeployEnvDialog({
           </Button>
           <button
             type="button"
-            className="text-xs text-muted-foreground hover:text-primary-ol transition-colors"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
             onClick={onSkip}
           >
             {'Skip'}

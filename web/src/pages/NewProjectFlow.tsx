@@ -172,15 +172,15 @@ export function NewProjectFlow() {
         <div className="flex items-center gap-3 mb-3">
           <button
             onClick={() => navigate('/projects')}
-            className="p-1 rounded hover:bg-bg-subtle transition-colors text-secondary-ol hover:text-primary-ol"
+            className="p-1 rounded hover:bg-bg-subtle transition-colors text-foreground/80 hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div>
-            <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight">
+            <h1 className="font-display font-bold text-lg text-foreground tracking-tight">
               {t('newProject.title')}
             </h1>
-            <p className="text-sm font-body text-secondary-ol">{t('newProject.selectRepo')}</p>
+            <p className="text-sm font-body text-foreground/80">{t('newProject.selectRepo')}</p>
           </div>
         </div>
 
@@ -191,8 +191,8 @@ export function NewProjectFlow() {
               className={cn(
                 'px-3 py-1 rounded text-xs font-body transition-colors',
                 tab === 'repos'
-                  ? 'bg-bg-panel text-primary-ol'
-                  : 'text-secondary-ol hover:text-primary-ol',
+                  ? 'bg-bg-panel text-foreground'
+                  : 'text-foreground/80 hover:text-foreground',
               )}
             >
               {t('newProject.myRepos')}
@@ -202,8 +202,8 @@ export function NewProjectFlow() {
               className={cn(
                 'px-3 py-1 rounded text-xs font-body transition-colors',
                 tab === 'search'
-                  ? 'bg-bg-panel text-primary-ol'
-                  : 'text-secondary-ol hover:text-primary-ol',
+                  ? 'bg-bg-panel text-foreground'
+                  : 'text-foreground/80 hover:text-foreground',
               )}
             >
               {t('newProject.search')}
@@ -213,8 +213,8 @@ export function NewProjectFlow() {
               className={cn(
                 'px-3 py-1 rounded text-xs font-body transition-colors flex items-center gap-1.5',
                 tab === 'docker'
-                  ? 'bg-bg-panel text-primary-ol'
-                  : 'text-secondary-ol hover:text-primary-ol',
+                  ? 'bg-bg-panel text-foreground'
+                  : 'text-foreground/80 hover:text-foreground',
               )}
             >
               <Container className="h-3.5 w-3.5" />
@@ -224,7 +224,7 @@ export function NewProjectFlow() {
 
           {tab === 'search' && (
             <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-ol" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 placeholder={t('newProject.searchPlaceholder')}
                 value={searchQuery}
@@ -269,7 +269,7 @@ export function NewProjectFlow() {
               <div className="space-y-2">
                 <label
                   htmlFor="image-url"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-foreground"
                 >
                   {t('newProject.dockerImage')}
                 </label>
@@ -288,14 +288,14 @@ export function NewProjectFlow() {
                     }
                   }}
                   required
-                  className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
+                  className="bg-bg-subtle border-[hsl(var(--border))] text-foreground"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label
                     htmlFor="port"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-foreground"
                   >
                     {t('newProject.portLabel')}
                   </label>
@@ -305,14 +305,14 @@ export function NewProjectFlow() {
                     placeholder={t('newProject.portPlaceholder')}
                     value={port}
                     onChange={(e) => setPort(e.target.value)}
-                    className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
+                    className="bg-bg-subtle border-[hsl(var(--border))] text-foreground"
                   />
                 </div>
               </div>
               <div className="space-y-2">
                 <label
                   htmlFor="image-cmd"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-foreground"
                 >
                   {t('newProject.commandLabel')}
                 </label>
@@ -321,13 +321,13 @@ export function NewProjectFlow() {
                   placeholder={t('newProject.commandPlaceholder')}
                   value={imageCmd}
                   onChange={(e) => setImageCmd(e.target.value)}
-                  className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
+                  className="bg-bg-subtle border-[hsl(var(--border))] text-foreground"
                 />
               </div>
               <div className="space-y-2">
                 <label
                   htmlFor="name-image"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-foreground"
                 >
                   {t('deploy.dialog.projectName')}
                 </label>
@@ -336,7 +336,7 @@ export function NewProjectFlow() {
                   placeholder={t('deploy.dialog.autoDetected')}
                   value={imageName}
                   onChange={(e) => setImageName(e.target.value)}
-                  className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
+                  className="bg-bg-subtle border-[hsl(var(--border))] text-foreground"
                 />
               </div>
               <div className="pt-4">

@@ -50,7 +50,7 @@ export function ActivityPulse() {
         className={cn(
           'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
           stats.active_deploys > 0
-            ? 'bg-foreground/10 text-primary-ol hover:bg-foreground/20'
+            ? 'bg-foreground/10 text-foreground hover:bg-foreground/20'
             : 'text-muted-foreground bg-muted/50 hover:bg-muted',
         )}
         title="Active Deployments"
