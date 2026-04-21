@@ -2,7 +2,7 @@ import { Spinner } from '@/components/ui/spinner';
 import type { Project } from '@/types';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import { Clock, ExternalLink, RotateCw, Settings } from 'lucide-react';
+import { Clock, ExternalLink, GitBranch, RotateCw, Settings } from 'lucide-react';
 import type { MouseEvent } from 'react';
 
 interface StatusDisplay {
@@ -60,10 +60,18 @@ export function ProjectCard({
         </div>
       </div>
 
-      <div className="p-5 space-y-3">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Clock className="h-3.5 w-3.5" />
-          {formatRelativeTime(project.updatedAt, t)}
+      <div className="p-5 space-y-2.5">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {formatRelativeTime(project.updatedAt, t)}
+          </span>
+          {project.branch && (
+            <span className="flex items-center gap-1 font-mono truncate max-w-[140px]">
+              <GitBranch className="h-3 w-3 shrink-0" />
+              {project.branch}
+            </span>
+          )}
         </div>
         {project.url && (
           <a

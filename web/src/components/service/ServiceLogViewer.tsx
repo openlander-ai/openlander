@@ -56,7 +56,7 @@ export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
             {t('services.detail.serviceIsStopped')}
           </p>
           <p className="mt-2 text-sm font-body text-muted-ol">
-            Start the service to view its logs.
+            {t('services.detail.serviceStoppedHint')}
           </p>
         </div>
       </div>
@@ -91,7 +91,9 @@ export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-xs font-mono text-muted-ol">{logLines.length} lines</span>
+          <span className="text-xs font-mono text-muted-ol">
+            {t('services.detail.linesCount', { count: String(logLines.length) })}
+          </span>
           <div className="w-px h-4 bg-[hsl(var(--border))]" />
           <button
             type="button"
@@ -100,7 +102,7 @@ export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-body text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-            Refresh
+            {t('services.detail.refresh')}
           </button>
         </div>
       </div>
@@ -109,13 +111,13 @@ export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
       <div ref={scrollRef} className="flex-1 overflow-auto font-mono text-xs leading-5 p-4">
         {loading && !logs ? (
           <div className="flex items-center justify-center h-full text-muted-ol">
-            Loading logs...
+            {t('services.detail.loadingLogs')}
           </div>
         ) : error ? (
           <div className="flex items-center justify-center h-full text-error">{error}</div>
         ) : logLines.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-ol">
-            No logs available
+            {t('services.detail.noLogsAvailable')}
           </div>
         ) : (
           <div className="flex flex-col">

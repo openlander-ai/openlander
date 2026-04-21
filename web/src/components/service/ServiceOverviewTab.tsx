@@ -29,11 +29,15 @@ interface ServiceOverviewTabProps {
 
 type StatusConfig = { label: string; color: string; dot: string };
 
-function getStatusConfig(): Record<string, StatusConfig> {
+function buildStatusConfig(t: (key: string) => string): Record<string, StatusConfig> {
   return {
-    running: { label: 'Running', color: 'text-success', dot: 'bg-success' },
-    stopped: { label: 'Stopped', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
-    error: { label: 'Error', color: 'text-error', dot: 'bg-error' },
+    running: { label: t('services.status.running'), color: 'text-success', dot: 'bg-success' },
+    stopped: {
+      label: t('services.status.stopped'),
+      color: 'text-muted-ol',
+      dot: 'bg-muted-foreground/40',
+    },
+    error: { label: t('services.status.error'), color: 'text-error', dot: 'bg-error' },
   };
 }
 
@@ -80,7 +84,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
     };
   }, [service.id]);
 
-  const statusConfig = getStatusConfig();
+  const statusConfig = buildStatusConfig(t);
   const status = statusConfig[service.status] ?? statusConfig.stopped;
 
   return (
@@ -90,7 +94,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
         <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
             <Activity className="h-3.5 w-3.5" />
-            Status
+            {t('services.detail.overview.status')}
           </div>
           <div className="flex items-center gap-2 mb-2">
             <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', status.dot)} />
@@ -108,7 +112,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
         <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
             <Box className="h-3.5 w-3.5" />
-            Container
+            {t('services.detail.overview.container')}
           </div>
           <div className="text-sm font-mono text-primary-ol mb-1">{service.image}</div>
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol">
@@ -121,15 +125,17 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
         <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
             <Cpu className="h-3.5 w-3.5" />
-            CPU
+            {t('services.detail.overview.cpu')}
           </div>
           <div className="text-lg font-mono font-medium text-primary-ol">
             {loadingStats ? (
-              <span className="text-sm animate-pulse text-muted-ol">...</span>
+              <span className="text-sm animate-pulse text-muted-ol">
+                {t('services.detail.overview.loading')}
+              </span>
             ) : stats?.cpuPercent != null ? (
               `${stats.cpuPercent}%`
             ) : (
-              <span className="text-sm text-muted-ol">N/A</span>
+              <span className="text-sm text-muted-ol">{t('services.detail.overview.na')}</span>
             )}
           </div>
         </div>
@@ -138,15 +144,17 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
         <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
             <MemoryStick className="h-3.5 w-3.5" />
-            Memory
+            {t('services.detail.overview.memory')}
           </div>
           <div className="text-lg font-mono font-medium text-primary-ol">
             {loadingStats ? (
-              <span className="text-sm animate-pulse text-muted-ol">...</span>
+              <span className="text-sm animate-pulse text-muted-ol">
+                {t('services.detail.overview.loading')}
+              </span>
             ) : stats?.memoryUsageBytes != null ? (
               formatBytes(stats.memoryUsageBytes)
             ) : (
-              <span className="text-sm text-muted-ol">N/A</span>
+              <span className="text-sm text-muted-ol">{t('services.detail.overview.na')}</span>
             )}
           </div>
           {stats?.memoryLimitBytes != null && (
@@ -160,9 +168,11 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
         <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
             <Network className="h-3.5 w-3.5" />
-            Network
+            {t('services.detail.overview.network')}
           </div>
-          <div className="text-sm font-mono text-primary-ol">Port {service.port}</div>
+          <div className="text-sm font-mono text-primary-ol">
+            {t('services.detail.overview.portLabel', { port: String(service.port) })}
+          </div>
           <div className="text-xs font-body text-muted-ol mt-1">{service.container_name}</div>
         </div>
 
@@ -170,15 +180,17 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
         <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
             <HardDrive className="h-3.5 w-3.5" />
-            Volume
+            {t('services.detail.overview.volume')}
           </div>
           <div className="text-lg font-mono font-medium text-primary-ol">
             {loadingStats ? (
-              <span className="text-sm animate-pulse text-muted-ol">...</span>
+              <span className="text-sm animate-pulse text-muted-ol">
+                {t('services.detail.overview.loading')}
+              </span>
             ) : stats?.diskUsageBytes != null ? (
               formatBytes(stats.diskUsageBytes)
             ) : (
-              <span className="text-sm text-muted-ol">N/A</span>
+              <span className="text-sm text-muted-ol">{t('services.detail.overview.na')}</span>
             )}
           </div>
         </div>
@@ -188,19 +200,23 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
       <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
         <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
           <Plug className="h-3.5 w-3.5" />
-          Connections
+          {t('services.detail.overview.connections')}
         </div>
         <div className="text-lg font-mono font-medium text-primary-ol">
           {loadingStats ? (
-            <span className="text-sm animate-pulse text-muted-ol">...</span>
+            <span className="text-sm animate-pulse text-muted-ol">
+              {t('services.detail.overview.loading')}
+            </span>
           ) : stats?.activeConnections != null ? (
             stats.activeConnections
           ) : (
-            <span className="text-sm text-muted-ol">N/A</span>
+            <span className="text-sm text-muted-ol">{t('services.detail.overview.na')}</span>
           )}
         </div>
         {stats?.maxConnections != null && (
-          <div className="text-xs font-body text-muted-ol mt-1">/ {stats.maxConnections} max</div>
+          <div className="text-xs font-body text-muted-ol mt-1">
+            {t('services.detail.overview.maxSuffix', { count: String(stats.maxConnections) })}
+          </div>
         )}
       </div>
 
@@ -208,10 +224,12 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
       <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
         <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
           <FolderGit2 className="h-3.5 w-3.5" />
-          Connected Projects
+          {t('services.detail.overview.connectedProjects')}
         </div>
         {loadingProjects ? (
-          <div className="text-sm text-muted-ol animate-pulse">Loading...</div>
+          <div className="text-sm text-muted-ol animate-pulse">
+            {t('services.detail.overview.loading')}
+          </div>
         ) : connectedProjects.length === 0 ? (
           <div className="text-sm text-muted-ol">{t('services.detail.noProjectsUsing')}</div>
         ) : (
