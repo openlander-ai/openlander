@@ -55,3 +55,12 @@ runtime_err.txt
 # Stale artifacts
 references/
 web/@/test-results/
+
+# Local agent state (oh-my-claudecode + Claude Code)
+.omc/
+.claude/
+
+# Playwright run artifacts
+test-results/
+playwright-report/
+/playwright/.cache/
