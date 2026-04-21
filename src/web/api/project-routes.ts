@@ -27,7 +27,10 @@ import {
   generateEnvExample,
 } from '../../pipeline/env-inject.js';
 import type { EnvironmentRow, ProjectRow } from '../../db/index.js';
-import { assertProjectMutable } from '../../pipeline/mutation-policy.js';
+import {
+  assertProjectLifecycleMutable,
+  assertProjectMutable,
+} from '../../pipeline/mutation-policy.js';
 import {
   getEnvironmentByIdOrThrow,
   getProjectOrThrow,
@@ -696,6 +699,19 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.post('/projects/:id/start', async (c) => {
     const project = getProjectOrThrow(c, ctx);
 
+    try {
+      assertProjectLifecycleMutable(project, 'start', ctx);
+    } catch (err) {
+      if (
+        err instanceof ProjectArchivedError ||
+        err instanceof ProjectRecoveringError ||
+        err instanceof CircuitBreakerOpenError
+      ) {
+        return c.json(err.toJSON(), 409);
+      }
+      throw err;
+    }
+
     if (!project.container_id) {
       return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
     }
@@ -706,6 +722,19 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   api.post('/projects/:id/stop', async (c) => {
     const project = getProjectOrThrow(c, ctx);
+
+    try {
+      assertProjectLifecycleMutable(project, 'stop', ctx);
+    } catch (err) {
+      if (
+        err instanceof ProjectArchivedError ||
+        err instanceof ProjectRecoveringError ||
+        err instanceof CircuitBreakerOpenError
+      ) {
+        return c.json(err.toJSON(), 409);
+      }
+      throw err;
+    }
 
     ctx.coordinator.suppressProject(project.id, 60_000);
     await ctx.pipeline.stop(project.id);
@@ -1087,6 +1116,20 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   api.post('/projects/:id/archive', async (c) => {
     const project = getProjectOrThrow(c, ctx);
+
+    try {
+      assertProjectLifecycleMutable(project, 'archive', ctx);
+    } catch (err) {
+      if (
+        err instanceof ProjectArchivedError ||
+        err instanceof ProjectRecoveringError ||
+        err instanceof CircuitBreakerOpenError
+      ) {
+        return c.json(err.toJSON(), 409);
+      }
+      throw err;
+    }
+
     ctx.coordinator.suppressProject(project.id, 60_000);
     await ctx.pipeline.archive(project.id);
     const updated = ctx.db.getProject(project.id);
@@ -1109,6 +1152,20 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
     const project = getProjectOrThrow(c, ctx);
+
+    try {
+      assertProjectLifecycleMutable(project, 'purge', ctx);
+    } catch (err) {
+      if (
+        err instanceof ProjectArchivedError ||
+        err instanceof ProjectRecoveringError ||
+        err instanceof CircuitBreakerOpenError
+      ) {
+        return c.json(err.toJSON(), 409);
+      }
+      throw err;
+    }
+
     ctx.coordinator.suppressProject(project.id, 60_000);
     await ctx.pipeline.remove(project.id, ctx.cloudflare);
     return c.json({ success: true, message: 'Project permanently deleted' });
@@ -1116,6 +1173,19 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   api.delete('/projects/:id', async (c) => {
     const project = getProjectOrThrow(c, ctx);
+
+    try {
+      assertProjectLifecycleMutable(project, 'archive', ctx);
+    } catch (err) {
+      if (
+        err instanceof ProjectArchivedError ||
+        err instanceof ProjectRecoveringError ||
+        err instanceof CircuitBreakerOpenError
+      ) {
+        return c.json(err.toJSON(), 409);
+      }
+      throw err;
+    }
 
     ctx.coordinator.suppressProject(project.id, 60_000);
     await ctx.pipeline.archive(project.id);

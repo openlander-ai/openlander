@@ -89,7 +89,10 @@ function createCtx(
       rollback: vi.fn().mockResolvedValue(rollbackResult),
       start: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(undefined),
+      archive: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
     },
+    cloudflare: undefined,
     jobManager: { trackJob: vi.fn() },
     questionBridge: { setActiveProject: vi.fn() },
     eventBus: { emit: vi.fn().mockResolvedValue(undefined) },
@@ -306,5 +309,156 @@ describe('POST /projects/:id/redeploy - race-window typed-error mapping', () => 
     });
 
     expect(res.status).toBe(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Lifecycle eligibility — start / stop / archive (DELETE /:id) / purge
+//
+// `assertProjectLifecycleMutable` is the lifecycle counterpart of
+// `assertProjectMutable`. The matrix below mirrors the policy doc:
+//
+// | action  | archived | recovering | circuit_open |
+// | ------- | -------- | ---------- | ------------ |
+// | start   | reject   | reject     | reject       |
+// | stop    | reject   | allow      | allow        |
+// | archive | reject   | reject     | reject       |
+// | purge   | allow    | reject     | reject       |
+// ---------------------------------------------------------------------------
+
+describe('POST /projects/:id/start - lifecycle eligibility', () => {
+  it('returns 409 PROJECT_ARCHIVED when project is archived', async () => {
+    const project = makeProject({ archived_at: '2024-06-01T00:00:00Z' });
+    const app = buildApp(createCtx(project));
+    const res = await app.request('/api/projects/proj-1/start', { method: 'POST' });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('PROJECT_ARCHIVED');
+  });
+
+  it('returns 409 PROJECT_RECOVERING when project is recovering', async () => {
+    const project = makeProject({ status: 'recovering' });
+    const app = buildApp(createCtx(project));
+    const res = await app.request('/api/projects/proj-1/start', { method: 'POST' });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('PROJECT_RECOVERING');
+  });
+
+  it('returns 409 CIRCUIT_BREAKER_OPEN when circuit breaker is open', async () => {
+    const project = makeProject();
+    const app = buildApp(createCtx(project, { circuitBreakerOpen: true }));
+    const res = await app.request('/api/projects/proj-1/start', { method: 'POST' });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('CIRCUIT_BREAKER_OPEN');
+  });
+
+  it('proceeds for healthy project with container_id', async () => {
+    const project = makeProject();
+    const app = buildApp(createCtx(project));
+    const res = await app.request('/api/projects/proj-1/start', { method: 'POST' });
+    expect(res.status).not.toBe(409);
+  });
+});
+
+describe('POST /projects/:id/stop - lifecycle eligibility', () => {
+  it('returns 409 PROJECT_ARCHIVED when project is archived', async () => {
+    const project = makeProject({ archived_at: '2024-06-01T00:00:00Z' });
+    const app = buildApp(createCtx(project));
+    const res = await app.request('/api/projects/proj-1/stop', { method: 'POST' });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('PROJECT_ARCHIVED');
+  });
+
+  it('allows stop on a recovering project (operator escape hatch)', async () => {
+    const project = makeProject({ status: 'recovering' });
+    const app = buildApp(createCtx(project));
+    const res = await app.request('/api/projects/proj-1/stop', { method: 'POST' });
+    expect(res.status).not.toBe(409);
+    const body = (await res.json()) as { status?: string };
+    expect(body.status).toBe('stopped');
+  });
+
+  it('allows stop when circuit breaker is open (operator escape hatch)', async () => {
+    const project = makeProject();
+    const app = buildApp(createCtx(project, { circuitBreakerOpen: true }));
+    const res = await app.request('/api/projects/proj-1/stop', { method: 'POST' });
+    expect(res.status).not.toBe(409);
+    const body = (await res.json()) as { status?: string };
+    expect(body.status).toBe('stopped');
+  });
+});
+
+describe('DELETE /projects/:id - archive lifecycle eligibility', () => {
+  it('returns 409 PROJECT_ARCHIVED when project is already archived', async () => {
+    const project = makeProject({ archived_at: '2024-06-01T00:00:00Z' });
+    const app = buildApp(createCtx(project));
+    const res = await app.request('/api/projects/proj-1', { method: 'DELETE' });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('PROJECT_ARCHIVED');
+  });
+
+  it('returns 409 PROJECT_RECOVERING when project is recovering', async () => {
+    const project = makeProject({ status: 'recovering' });
+    const app = buildApp(createCtx(project));
+    const res = await app.request('/api/projects/proj-1', { method: 'DELETE' });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('PROJECT_RECOVERING');
+  });
+
+  it('returns 409 CIRCUIT_BREAKER_OPEN when circuit breaker is open', async () => {
+    const project = makeProject();
+    const app = buildApp(createCtx(project, { circuitBreakerOpen: true }));
+    const res = await app.request('/api/projects/proj-1', { method: 'DELETE' });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('CIRCUIT_BREAKER_OPEN');
+  });
+});
+
+describe('DELETE /projects/:id/purge - lifecycle eligibility', () => {
+  it('allows purge on archived projects (the documented removal path)', async () => {
+    const project = makeProject({ archived_at: '2024-06-01T00:00:00Z' });
+    const app = buildApp(createCtx(project));
+    const res = await app.request('/api/projects/proj-1/purge?confirm=true', {
+      method: 'DELETE',
+    });
+    expect(res.status).not.toBe(409);
+  });
+
+  it('returns 409 PROJECT_RECOVERING for an archived+recovering project', async () => {
+    const project = makeProject({
+      archived_at: '2024-06-01T00:00:00Z',
+      status: 'recovering',
+    });
+    const app = buildApp(createCtx(project));
+    const res = await app.request('/api/projects/proj-1/purge?confirm=true', {
+      method: 'DELETE',
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('PROJECT_RECOVERING');
+  });
+
+  it('returns 409 CIRCUIT_BREAKER_OPEN even when project is archived', async () => {
+    const project = makeProject({ archived_at: '2024-06-01T00:00:00Z' });
+    const app = buildApp(createCtx(project, { circuitBreakerOpen: true }));
+    const res = await app.request('/api/projects/proj-1/purge?confirm=true', {
+      method: 'DELETE',
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('CIRCUIT_BREAKER_OPEN');
+  });
+
+  it('still requires ?confirm=true (route-level guard not bypassed by policy)', async () => {
+    const project = makeProject({ archived_at: '2024-06-01T00:00:00Z' });
+    const app = buildApp(createCtx(project));
+    const res = await app.request('/api/projects/proj-1/purge', { method: 'DELETE' });
+    expect(res.status).toBe(400);
   });
 });

@@ -12,7 +12,7 @@
 
 | 영역                     | 상태                         | 증거                                                            |
 | ------------------------ | ---------------------------- | --------------------------------------------------------------- |
-| Backend unit/integration | ✅ 2689 PASS, 4 skip, 0 fail | `npm test`                                                      |
+| Backend unit/integration | ✅ 2727 PASS, 4 skip, 0 fail | `npm test` (Day 11 기준)                                        |
 | TypeScript               | ✅ 0 errors                  | `npx tsc --noEmit`                                              |
 | ESLint                   | ✅ 0 warnings                | `npm run lint`                                                  |
 | Build                    | ✅ tsup + vite               | `npm run build`                                                 |
@@ -20,6 +20,50 @@
 | MIG smoke (fresh DB)     | ✅ MIG1 PASS                 | `docs/launchpad/reports/2026-04-20/MIG-migration-boot-smoke.md` |
 | Verifier 독립 검증       | ✅ GO with caveats           | `docs/launchpad/reports/2026-04-21/day7-report.md`              |
 | Doc/code 일치 (Codex)    | ✅ Day 7 fix 후              | (Day 7 doc fix executor 결과)                                   |
+
+---
+
+## 🆕 Day 8-11 추가 검증 항목 (5월 1일 launch 직전 critical)
+
+### Auth & Security (Day 10-11 변경)
+
+- [ ] **Setup Secret 흐름**: 첫 부팅 → 콘솔에 노란색 secret 노출 → setup 화면에 secret + password 입력 → 정상 진입 → 두 번째 secret 시도 → 거부
+- [ ] **Setup Secret LAN 보안**: 콘솔에 "Note: ... plain HTTP ... HTTPS or SSH tunnel" 경고 표시
+- [ ] **Google OAuth 흐름** (Day 11 fix): Settings → GitHub/Google Connect → 정상 토큰 저장 (이전엔 broken)
+- [ ] **`/auth/setup-password` 보호**: 잘못된 setup secret → 401, 잘못된 LAN 사용자 takeover 불가
+- [ ] **다른 LAN 사용자가 직접 URL 접근**: 401 redirect
+
+### CLI Lifecycle (Day 10 breaking change)
+
+- [ ] `openlander start` → foreground 실행 (background 안 됨 명시 메시지)
+- [ ] `openlander stop` → exit 0 + supervisor 안내 메시지
+- [ ] `openlander restart` → exit 0 + supervisor 안내
+- [ ] README "Running as a Service" 섹션 systemd/pm2/docker example 정확
+- [ ] Installation.md CLI 표 1.0 동작 반영
+
+### Performance (Day 10)
+
+- [ ] **`/api/projects` 빠름**: 프로젝트 100개 시 응답 < 50ms (이전 300ms)
+- [ ] **AgentPool cap**: 동시에 6 distinct chat session → 6번째 429 응답 (`LLM_CONCURRENCY_EXCEEDED`)
+- [ ] **chat 429 UX** (Day 11 fix): 429 받았을 때 사용자에게 raw JSON이 아닌 message만 표시
+
+### Mobile (Day 10)
+
+- [ ] **모바일에서 deploy 가능**: NewProjectFlow → Deploy 버튼 → 정상 진입
+- [ ] **모바일 ProjectDetail 5탭**: horizontal scroll로 5탭 모두 접근 가능
+- [ ] **모바일 redeploy/rollback/blue-green**: 모두 차단 없이 동작
+
+### i18n (Day 10-11)
+
+- [ ] **한국어 mode 신규 status 키 표시**: `recovery_degraded`, `rollback_skipped` 등이 raw key가 아닌 한국어로 표시
+- [ ] **PasswordStep**: setup secret placeholder/hint 정확히 표시 (raw key 노출 안 됨)
+- [ ] **ProjectHeader 한국어**: '실행 중', '중지', '재배포' 등 자연스러운 표시
+
+### 신기능 가시성
+
+- [ ] **recovery:degraded 이벤트**: 강제 partial failure 시뮬 → Operations Live feed에 "Recovery partially failed" 표시
+- [ ] **webhook:skipped 이벤트**: archived 프로젝트로 webhook 호출 → Live feed에 "Webhook skipped (project state)" 표시
+- [ ] **rollback_failed_due_to_policy**: archived 프로젝트 rollback 시도 → 명확한 정책 사유 표시
 
 ---
 

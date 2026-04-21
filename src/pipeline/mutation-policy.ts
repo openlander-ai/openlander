@@ -11,6 +11,11 @@
  * - archived → `ProjectArchivedError`
  * - recovering → `ProjectRecoveringError`
  * - circuit breaker open → `CircuitBreakerOpenError`
+ *
+ * The lifecycle variant `assertProjectLifecycleMutable` enforces the same
+ * invariant for `start`/`stop`/`archive`/`purge` routes with action-specific
+ * relaxations so operators retain an escape hatch (e.g. `stop` is allowed on
+ * a recovering project so a stuck recovery loop can be broken).
  */
 import {
   CircuitBreakerOpenError,
@@ -42,6 +47,64 @@ export function assertProjectMutable(project: ProjectRow, ctx: MutationPolicyCtx
     throw new ProjectRecoveringError(project.id);
   }
   if (ctx.db.isCircuitBreakerOpen(project.id)) {
+    throw new CircuitBreakerOpenError(project.id);
+  }
+}
+
+/**
+ * Lifecycle action enforced by `assertProjectLifecycleMutable`.
+ *
+ * - `start`: bring a previously-stopped container up.
+ * - `stop`: take the container down (operator escape hatch).
+ * - `archive`: soft-delete (preserves history, blocks future deploys).
+ * - `purge`: hard-delete (permanent removal of an archived project).
+ */
+export type LifecycleAction = 'start' | 'stop' | 'archive' | 'purge';
+
+/**
+ * Throw a typed 409 error when `project` cannot accept the requested
+ * lifecycle action.
+ *
+ * Policy matrix (✅ allowed / ❌ rejected):
+ *
+ * | action  | archived | recovering | circuit_open |
+ * | ------- | -------- | ---------- | ------------ |
+ * | start   | ❌       | ❌          | ❌            |
+ * | stop    | ❌       | ✅          | ✅            |
+ * | archive | ❌       | ❌          | ❌            |
+ * | purge   | ✅       | ❌          | ❌            |
+ *
+ * Rationale:
+ * - `start`: bringing a project back online while archived would silently
+ *   bypass the unarchive flow; while recovering would race the recovery
+ *   loop; while the breaker is open would defeat the breaker.
+ * - `stop`: operators must always be able to halt a project. `recovering`
+ *   and `circuit_open` are explicitly allowed so a stuck recovery loop
+ *   or open breaker can be broken without unarchiving first.
+ * - `archive`: requires a clean state. Re-archiving an already-archived
+ *   project is rejected so the operator notices the no-op; recovering /
+ *   circuit_open are rejected so we don't archive mid-recovery.
+ * - `purge`: only valid for archived projects, and only when no recovery
+ *   or breaker activity is in flight. The route also gates on
+ *   `?confirm=true` separately.
+ */
+export function assertProjectLifecycleMutable(
+  project: ProjectRow,
+  action: LifecycleAction,
+  ctx: MutationPolicyCtx,
+): void {
+  // Archived gate — action-specific.
+  if (project.archived_at && action !== 'purge') {
+    throw new ProjectArchivedError(project.id);
+  }
+
+  // Recovering gate — `stop` is the operator escape hatch.
+  if (project.status === 'recovering' && action !== 'stop') {
+    throw new ProjectRecoveringError(project.id);
+  }
+
+  // Circuit-breaker gate — `stop` is the operator escape hatch.
+  if (action !== 'stop' && ctx.db.isCircuitBreakerOpen(project.id)) {
     throw new CircuitBreakerOpenError(project.id);
   }
 }
