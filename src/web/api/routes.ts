@@ -35,6 +35,8 @@ const ACTIVITY_TYPES = [
   'recovery:degraded',
   'recovery:stopped',
   'recovery:started',
+  // Day 9 F5: webhook silently-skipped activity row.
+  'webhook:skipped',
 ] as const;
 
 function isActivityType(value: string): value is ActivityEvent['type'] {
@@ -187,6 +189,8 @@ export function createApiRoutes(ctx: AppContext): Hono {
     'ai:completed',
     'alert:new',
     'alert:resolved',
+    // Day 9 F5: stream webhook policy-skips to UI activity feed.
+    'webhook:skipped',
   ];
 
   // Auto-release deploy locks on completion/failure (session-scoped to prevent lock stealing)

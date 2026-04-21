@@ -26,7 +26,8 @@ export interface ActivityEvent {
     | 'recovery:blocked'
     | 'recovery:degraded'
     | 'recovery:stopped'
-    | 'recovery:started';
+    | 'recovery:started'
+    | 'webhook:skipped';
   severity: 'critical' | 'warning' | 'info';
   projectId: string;
   projectName: string;
@@ -121,7 +122,8 @@ export function mapActivityType(eventType: EventType): ActivityEvent['type'] {
     eventType === 'recovery:blocked' ||
     eventType === 'recovery:degraded' ||
     eventType === 'recovery:stopped' ||
-    eventType === 'recovery:started'
+    eventType === 'recovery:started' ||
+    eventType === 'webhook:skipped'
   ) {
     return eventType;
   }
@@ -159,6 +161,10 @@ export function mapActivityStatus<T extends EventType>(
   if (eventType === 'recovery:degraded') return 'failed';
   if (eventType === 'recovery:stopped') return 'recovery-stopped';
   if (eventType === 'recovery:started' || eventType === 'recovery:start') return 'recovering';
+  // F5: webhook deliberately refused to deploy due to project policy. The
+  // webhook itself succeeded; nothing is "active". Use 'resolved' so the row
+  // looks closed in the activity feed.
+  if (eventType === 'webhook:skipped') return 'resolved';
   if (eventType === 'recovery:success') return 'resolved';
   if (eventType === 'recovery:failed' || eventType === 'recovery:exhausted') return 'failed';
   if (eventType === 'recovery:approval-needed') return 'pending';
@@ -242,6 +248,10 @@ export function extractEventDetail<T extends EventType>(
   }
   if (eventType === 'recovery:started') {
     return (payload as EventPayload['recovery:started']).trigger;
+  }
+  if (eventType === 'webhook:skipped') {
+    const skipped = payload as EventPayload['webhook:skipped'];
+    return skipped.message ?? `${skipped.source} push skipped (${skipped.reason})`;
   }
   if (eventType === 'alert:new') {
     return (payload as EventPayload['alert:new']).alert.message;
@@ -380,6 +390,20 @@ export function describeActivityEvent<T extends EventType>(
     return {
       title: 'Recovery started',
       description: startedPayload.trigger,
+    };
+  }
+  if (eventType === 'webhook:skipped') {
+    const skipped = payload as EventPayload['webhook:skipped'];
+    const reasonLabel =
+      skipped.reason === 'archived'
+        ? 'project archived'
+        : skipped.reason === 'recovering'
+          ? 'project recovering'
+          : 'circuit breaker open';
+    return {
+      title: `Webhook skipped (${reasonLabel})`,
+      description: skipped.message ?? `${skipped.source} push received but redeploy was refused.`,
+      reason: skipped.reason,
     };
   }
   if (eventType === 'recovery:approval-needed') {

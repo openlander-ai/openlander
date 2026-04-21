@@ -101,6 +101,11 @@ function eventCategory(type: string): string {
   if (type === 'deploy' || type === 'build') {
     return 'deploy';
   }
+  // Day 9 F5: surface webhook policy-skips as their own thread bucket so
+  // operators can scan for "I pushed but nothing happened" events.
+  if (type === 'webhook:skipped') {
+    return 'webhook';
+  }
   return type;
 }
 

@@ -51,27 +51,42 @@ const textEncoder = new TextEncoder();
  * Push events MUST NOT crash a webhook just because the project is archived,
  * recovering, or under an open circuit breaker — those are operator-set states
  * and the push itself is still a valid event.
+ *
+ * Day 9 F5: also returns the structured `reason` so the caller can emit a
+ * `webhook:skipped` activity event.
  */
-function mapPolicySkip(err: unknown, projectId: string): WebhookResult | null {
+function mapPolicySkip(
+  err: unknown,
+  projectId: string,
+): { result: WebhookResult; reason: 'archived' | 'recovering' | 'circuit_broken' } | null {
   if (err instanceof ProjectArchivedError) {
     return {
-      accepted: true,
-      projectId,
-      message: 'Project is archived; webhook redeploy skipped.',
+      result: {
+        accepted: true,
+        projectId,
+        message: 'Project is archived; webhook redeploy skipped.',
+      },
+      reason: 'archived',
     };
   }
   if (err instanceof ProjectRecoveringError) {
     return {
-      accepted: true,
-      projectId,
-      message: 'Project is recovering; webhook redeploy skipped.',
+      result: {
+        accepted: true,
+        projectId,
+        message: 'Project is recovering; webhook redeploy skipped.',
+      },
+      reason: 'recovering',
     };
   }
   if (err instanceof CircuitBreakerOpenError) {
     return {
-      accepted: true,
-      projectId,
-      message: 'Circuit breaker open; webhook redeploy skipped.',
+      result: {
+        accepted: true,
+        projectId,
+        message: 'Circuit breaker open; webhook redeploy skipped.',
+      },
+      reason: 'circuit_broken',
     };
   }
   return null;
@@ -81,15 +96,12 @@ export class WebhookManager {
   constructor(
     private readonly pipeline: DeployPipeline,
     private readonly db: Database,
-    // EventBus is retained on the constructor signature so existing callers
-    // (src/app.ts, src/web/api/webhook-routes.ts, tests) keep wiring it.
-    // After Day 8 Bug #4 the webhook itself no longer emits deploy:start
-    // (the pipeline owns that emit), so this dependency is currently unused
-    // — kept for forthcoming PR-event emits.
-    private readonly _events: EventBus,
-  ) {
-    void this._events;
-  }
+    // Day 8 Bug #4: webhook no longer emits deploy:start (the pipeline owns
+    // that emit). Day 9 F5: webhook does emit `webhook:skipped` when policy
+    // gracefully refuses the redeploy so operators see the push event in the
+    // activity feed instead of "I pushed but nothing happened".
+    private readonly events: EventBus,
+  ) {}
 
   generateSecret(projectId: string): string {
     return `${projectId}.${randomBytes(32).toString('hex')}`;
@@ -219,8 +231,11 @@ export class WebhookManager {
           message: `Deploy triggered for ${targetEnvironment.type} environment (${parsed.branch}@${parsed.commitSha}).`,
         };
       } catch (err) {
-        const skipResult = mapPolicySkip(err, projectId);
-        if (skipResult) return skipResult;
+        const skip = mapPolicySkip(err, projectId);
+        if (skip) {
+          await this.emitWebhookSkipped(projectId, skip.reason, source, skip.result.message);
+          return skip.result;
+        }
         throw err;
       }
     }
@@ -241,9 +256,38 @@ export class WebhookManager {
         message: `Redeploy triggered for ${parsed.branch}@${parsed.commitSha}.`,
       };
     } catch (err) {
-      const skipResult = mapPolicySkip(err, projectId);
-      if (skipResult) return skipResult;
+      const skip = mapPolicySkip(err, projectId);
+      if (skip) {
+        await this.emitWebhookSkipped(projectId, skip.reason, source, skip.result.message);
+        return skip.result;
+      }
       throw err;
+    }
+  }
+
+  /**
+   * Day 9 F5: emit `webhook:skipped` so the activity feed surfaces the
+   * silently-refused webhook. Without this, operators see "I pushed but
+   * nothing happened" with zero trace.
+   */
+  private async emitWebhookSkipped(
+    projectId: string,
+    reason: 'archived' | 'recovering' | 'circuit_broken',
+    source: WebhookSource,
+    message?: string,
+  ): Promise<void> {
+    try {
+      await this.events.emit('webhook:skipped', {
+        projectId,
+        reason,
+        source,
+        ...(message ? { message } : {}),
+      });
+    } catch (err) {
+      log.warn(
+        { err, projectId, reason, source },
+        'Failed to emit webhook:skipped event (non-fatal)',
+      );
     }
   }
 

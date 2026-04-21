@@ -651,3 +651,186 @@ describe('webhook deploy:start ordering (Day 8 Bug #4)', () => {
     expect(startEmits).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Day 9 F5: webhook MUST emit `webhook:skipped` when policy gracefully refuses
+// the deploy. Without this, archived/recovering/circuit-open projects produce
+// silent push events ("I pushed but nothing happened") with zero activity-feed
+// trace.
+// ---------------------------------------------------------------------------
+describe('webhook:skipped emit (Day 9 F5)', () => {
+  it('emits webhook:skipped with reason=archived when redeploy is policy-rejected', async () => {
+    const emit = vi.fn(async () => undefined);
+    const redeploy = vi.fn(async () => {
+      throw new ProjectArchivedError('project-1');
+    });
+
+    const db = {
+      getProject: vi.fn(() => ({
+        id: 'project-1',
+        name: 'archived-app',
+        repo_url: 'https://github.com/example/repo.git',
+      })),
+      getWebhookConfig: vi.fn(() => ({
+        enabled: 1,
+        secret: 'test-secret',
+        branch_filter: 'main',
+      })),
+      getEnvironmentsByProject: vi.fn(() => []),
+      getPreviewProjects: vi.fn(() => []),
+    };
+
+    const pipeline = {
+      deployEnvironment: vi.fn(),
+      redeploy,
+      deployPreview: vi.fn(),
+      remove: vi.fn(),
+    };
+
+    const manager = new WebhookManager(
+      pipeline as unknown as ConstructorParameters<typeof WebhookManager>[0],
+      db as unknown as ConstructorParameters<typeof WebhookManager>[1],
+      { emit } as unknown as ConstructorParameters<typeof WebhookManager>[2],
+    );
+
+    const body = githubPushBody('main');
+    const result = await manager.handleWebhook(
+      'github',
+      {
+        'x-openlander-project-id': 'project-1',
+        'x-github-event': 'push',
+        'x-hub-signature-256': githubSignature(body, 'test-secret'),
+      },
+      body,
+    );
+
+    expect(result.accepted).toBe(true);
+    const skippedEmits = emit.mock.calls.filter(([eventName]) => eventName === 'webhook:skipped');
+    expect(skippedEmits).toHaveLength(1);
+    const [, payload] = skippedEmits[0]!;
+    expect(payload).toMatchObject({
+      projectId: 'project-1',
+      reason: 'archived',
+      source: 'github',
+    });
+  });
+
+  it('emits webhook:skipped with reason=recovering when env deploy is policy-rejected', async () => {
+    const emit = vi.fn(async () => undefined);
+    const { ProjectRecoveringError } = await import('../src/errors.js');
+    const deployEnvironment = vi.fn(async () => {
+      throw new ProjectRecoveringError('project-1');
+    });
+
+    const db = {
+      getProject: vi.fn(() => ({
+        id: 'project-1',
+        name: 'recovering-app',
+        repo_url: 'https://github.com/example/repo.git',
+      })),
+      getWebhookConfig: vi.fn(() => ({
+        enabled: 1,
+        secret: 'test-secret',
+        branch_filter: 'main',
+      })),
+      getEnvironmentsByProject: vi.fn(() => [
+        {
+          id: 'env-prod',
+          type: 'production',
+          branch: 'main',
+          project_id: 'project-1',
+          status: 'idle',
+          assigned_port: null,
+          container_id: null,
+          image_tag: null,
+          previous_image_tag: null,
+          public_url: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ]),
+      getPreviewProjects: vi.fn(() => []),
+    };
+
+    const pipeline = {
+      deployEnvironment,
+      redeploy: vi.fn(),
+      deployPreview: vi.fn(),
+      remove: vi.fn(),
+    };
+
+    const manager = new WebhookManager(
+      pipeline as unknown as ConstructorParameters<typeof WebhookManager>[0],
+      db as unknown as ConstructorParameters<typeof WebhookManager>[1],
+      { emit } as unknown as ConstructorParameters<typeof WebhookManager>[2],
+    );
+
+    const body = githubPushBody('main');
+    const result = await manager.handleWebhook(
+      'github',
+      {
+        'x-openlander-project-id': 'project-1',
+        'x-github-event': 'push',
+        'x-hub-signature-256': githubSignature(body, 'test-secret'),
+      },
+      body,
+    );
+
+    expect(result.accepted).toBe(true);
+    const skippedEmits = emit.mock.calls.filter(([eventName]) => eventName === 'webhook:skipped');
+    expect(skippedEmits).toHaveLength(1);
+    const [, payload] = skippedEmits[0]!;
+    expect(payload).toMatchObject({
+      projectId: 'project-1',
+      reason: 'recovering',
+      source: 'github',
+    });
+  });
+
+  it('does NOT emit webhook:skipped on the success path', async () => {
+    const emit = vi.fn(async () => undefined);
+    const redeploy = vi.fn(async () => ({ success: true }));
+
+    const db = {
+      getProject: vi.fn(() => ({
+        id: 'project-1',
+        name: 'happy-app',
+        repo_url: 'https://github.com/example/repo.git',
+      })),
+      getWebhookConfig: vi.fn(() => ({
+        enabled: 1,
+        secret: 'test-secret',
+        branch_filter: 'main',
+      })),
+      getEnvironmentsByProject: vi.fn(() => []),
+      getPreviewProjects: vi.fn(() => []),
+    };
+
+    const pipeline = {
+      deployEnvironment: vi.fn(),
+      redeploy,
+      deployPreview: vi.fn(),
+      remove: vi.fn(),
+    };
+
+    const manager = new WebhookManager(
+      pipeline as unknown as ConstructorParameters<typeof WebhookManager>[0],
+      db as unknown as ConstructorParameters<typeof WebhookManager>[1],
+      { emit } as unknown as ConstructorParameters<typeof WebhookManager>[2],
+    );
+
+    const body = githubPushBody('main');
+    await manager.handleWebhook(
+      'github',
+      {
+        'x-openlander-project-id': 'project-1',
+        'x-github-event': 'push',
+        'x-hub-signature-256': githubSignature(body, 'test-secret'),
+      },
+      body,
+    );
+
+    const skippedEmits = emit.mock.calls.filter(([eventName]) => eventName === 'webhook:skipped');
+    expect(skippedEmits).toHaveLength(0);
+  });
+});

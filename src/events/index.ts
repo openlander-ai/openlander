@@ -99,7 +99,11 @@ export type EventType =
   | 'env:new-keys-detected'
   | 'rollback:suggested'
   | 'secret:detected'
-  | 'deploy:diff-analyzed';
+  | 'deploy:diff-analyzed'
+  // Day 9 F5: webhook gracefully skipped due to project policy
+  // (archived / recovering / circuit-open). Surfaces in the activity
+  // feed so operators stop seeing silent push events.
+  | 'webhook:skipped';
 
 export interface EventPayload {
   'deploy:start': {
@@ -235,7 +239,8 @@ export interface EventPayload {
           | 'rolled_back'
           | 'skipped'
           | 'rollback_skipped'
-          | 'rollback_failed_due_to_policy';
+          | 'rollback_failed_due_to_policy'
+          | 'rollback_failed';
         projectId?: string;
         url?: string;
         error?: string;
@@ -449,6 +454,15 @@ export interface EventPayload {
     envTemplateChanged: boolean;
     dockerChanged: boolean;
     depsChanged: boolean;
+  };
+  'webhook:skipped': {
+    projectId: string;
+    /** Why the deploy was skipped — one of the policy boundary errors. */
+    reason: 'archived' | 'recovering' | 'circuit_broken';
+    /** Webhook source ('github' | 'gitlab' | 'bitbucket'). */
+    source: 'github' | 'gitlab' | 'bitbucket';
+    /** Optional human-readable detail (e.g., the underlying error message). */
+    message?: string;
   };
 }
 

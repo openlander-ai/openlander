@@ -57,6 +57,8 @@ const PERSISTED_EVENT_TYPES: EventType[] = [
   'ai:completed',
   'alert:new',
   'alert:resolved',
+  // Day 9 F5: surface webhook policy-skips so operators see the inbound push.
+  'webhook:skipped',
 ];
 
 export class ActivityLogger {
