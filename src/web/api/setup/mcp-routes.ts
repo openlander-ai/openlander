@@ -5,6 +5,7 @@ import { loadConfig, saveConfig } from '../../../config/index.js';
 import type { McpServerEntry } from '../../../config/index.js';
 import { createTools } from '../../../tools/index.js';
 import { mergeToolsIfMcpEnabled } from './shared.js';
+import { checkUrlSafety, MCP_ALLOWED_SCHEMES } from '../../../lib/url-safety.js';
 
 export function createMcpSetupRoutes(ctx: AppContext): Hono {
   const api = new Hono();
@@ -50,6 +51,19 @@ export function createMcpSetupRoutes(ctx: AppContext): Hono {
         { error: 'MISSING_FIELD', message: 'url is required for sse/http transport' },
         400,
       );
+    }
+
+    // Day 13 M4 (SSRF): refuse to register an MCP endpoint that targets
+    // localhost / RFC1918 / cloud metadata. Same allow-list as the git
+    // clone path, minus ssh (MCP HTTP transports only).
+    if (body.url) {
+      const safety = checkUrlSafety(body.url.trim(), { allowedSchemes: MCP_ALLOWED_SCHEMES });
+      if (!safety.ok) {
+        return c.json(
+          { error: 'UNSAFE_URL', message: `Refusing MCP server URL: ${safety.reason ?? 'unsafe'}` },
+          400,
+        );
+      }
     }
 
     const { nanoid } = await import('nanoid');
@@ -100,6 +114,20 @@ export function createMcpSetupRoutes(ctx: AppContext): Hono {
 
     if (!server) {
       return c.json({ error: 'NOT_FOUND', message: 'Server not found' }, 404);
+    }
+
+    // Day 13 M4: re-check the stored URL even though POST already validated
+    // it — config files can be edited out-of-band, and a connection test
+    // hitting an internal endpoint is exactly the SSRF primitive we want to
+    // refuse.
+    if (server.url && (server.transport === 'sse' || server.transport === 'http')) {
+      const safety = checkUrlSafety(server.url, { allowedSchemes: MCP_ALLOWED_SCHEMES });
+      if (!safety.ok) {
+        return c.json(
+          { error: 'UNSAFE_URL', message: `Refusing MCP server URL: ${safety.reason ?? 'unsafe'}` },
+          400,
+        );
+      }
     }
 
     try {

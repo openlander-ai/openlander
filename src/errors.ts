@@ -77,6 +77,22 @@ export class GitAuthError extends OpenLanderError {
   }
 }
 
+/**
+ * Day 13 M3 (SSRF): refused to clone or fetch a repository because the URL
+ * targets an internal/loopback host or uses a non-network scheme. The agent
+ * surfaces this as a plain validation error rather than a generic clone
+ * failure so the UI can prompt the user for a real upstream URL.
+ */
+export class UnsafeRepoUrlError extends OpenLanderError {
+  constructor(repoUrl: string, reason: string) {
+    super(`Refusing to use repository URL "${repoUrl}": ${reason}`, 'UNSAFE_REPO_URL', 400, {
+      repoUrl,
+      reason,
+    });
+    this.name = 'UnsafeRepoUrlError';
+  }
+}
+
 // --- Docker errors ---
 
 export class DockerNotRunningError extends OpenLanderError {
