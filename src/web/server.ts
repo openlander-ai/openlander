@@ -16,7 +16,7 @@ import { createTerminalRoutes } from './api/terminal-routes.js';
 import { createChatRoutes } from './api/chat-routes.js';
 import { createLlmRoutes } from './api/llm-routes.js';
 import { createAuthRoutes } from './api/auth-routes.js';
-import { createAuthMiddleware } from './middleware/auth.js';
+import { createAuthMiddleware, isAuthenticated } from './middleware/auth.js';
 import { createCorsOriginPolicy } from './middleware/cors-policy.js';
 import { AuthService } from '../auth/auth-service.js';
 import { createMcpHttpRoutes } from '../mcp/server.js';
@@ -158,6 +158,43 @@ function createApp(
   });
 
   app.use('*', logger());
+
+  // Security response headers (Day 13 M1).
+  // Applied to every response so static HTML, JSON APIs, and webhook
+  // endpoints all share the same baseline. CSP intentionally omits
+  // 'unsafe-eval' and 'unsafe-inline' for scripts; styles allow inline
+  // because Vite's build emits a small inline style for hashed asset
+  // preloads. WebSocket origins are reachable via ws/wss for the dev
+  // terminal stream. HSTS is only emitted when the request was forwarded
+  // over HTTPS — bare HTTP installs (the default) must not strict-pin
+  // browsers to a scheme they cannot serve.
+  app.use('*', async (c, next) => {
+    await next();
+    if (!c.res.headers.has('X-Content-Type-Options')) {
+      c.res.headers.set('X-Content-Type-Options', 'nosniff');
+    }
+    if (!c.res.headers.has('X-Frame-Options')) {
+      c.res.headers.set('X-Frame-Options', 'DENY');
+    }
+    if (!c.res.headers.has('Referrer-Policy')) {
+      c.res.headers.set('Referrer-Policy', 'no-referrer');
+    }
+    if (!c.res.headers.has('Content-Security-Policy')) {
+      c.res.headers.set(
+        'Content-Security-Policy',
+        "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; " +
+          "script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; " +
+          "base-uri 'self'; form-action 'self'",
+      );
+    }
+    const forwardedProto = c.req.header('x-forwarded-proto');
+    if (forwardedProto && forwardedProto.split(',')[0]?.trim().toLowerCase() === 'https') {
+      if (!c.res.headers.has('Strict-Transport-Security')) {
+        c.res.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+      }
+    }
+  });
+
   app.use(
     '/api/*',
     cors({
@@ -279,15 +316,21 @@ function createApp(
     ctx.channelManager.register('email', emailChannel);
   }
 
-  app.get('/api/info', (c) =>
-    c.json({
-      name: 'OpenLander',
-      version: VERSION,
-      mode: 'headless',
-      docs: '/health',
-      api: '/api',
-    }),
-  );
+  // /api/info exposes server name to anonymous callers but withholds
+  // version/mode until the request is authenticated. Day 13 M5: a public
+  // version banner makes CVE targeting trivial.
+  app.get('/api/info', (c) => {
+    if (isAuthenticated(c)) {
+      return c.json({
+        name: 'OpenLander',
+        version: VERSION,
+        mode: 'headless',
+        docs: '/health',
+        api: '/api',
+      });
+    }
+    return c.json({ name: 'OpenLander' });
+  });
 
   const WEB_DIST = join(dirname(new URL(import.meta.url).pathname), '../web/dist');
 
