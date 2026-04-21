@@ -32,6 +32,18 @@
 - **현재**: oauth.repo.ts 만 defensive. 같은 race가 project.repo.ts (`getProject`, `getProjectByName`), env.repo.ts 등 20+ 다른 read site에 영향 있을 가능성 (가설 미검증).
 - **Fix**: (a) repro test 작성 → 다른 repo도 영향 확인 → (b) 영향 있으면 shared helper로 추출.
 
+### 4a. Security review (Day 16) 발견 — multi-tenant 가능 시 P0 격상
+
+Day 16 security-reviewer 결과 (single-tenant 1.0 ship-safe, 그러나 multi-user 1.0.x 시 필수):
+
+- **B1 (MED)**: `src/errors.ts:375-385` `LLMUnreachableError.message` 가 raw cause string (hostname/port/code) 노출. → cause를 class label (`'connection_refused'`, `'dns_failed'`, `'timeout'`)로 sanitize.
+- **B2 (MED)**: `DeployLockedError.details.lockedBySession` 이 sessionId 형식 (`${verb}-${projectId}-${timestamp}`) 노출 → admin 활동 leak. → hash 또는 `{lockedAt}` 만으로 좁힘.
+- **E1 (LOW)**: `src/web/api/project-routes.ts:745, 801, 919, 970, 1174, 1222, 1254` lock sessionId 포맷에 cryptographic random 없음. Node single-thread 라 이론적 collision. → `crypto.randomBytes(4).toString('hex')` 추가.
+- **E3 (LOW)**: `src/web/api/project-routes.ts:1189-1194` `/unarchive` 만 lock 누락. archive↔unarchive flap race 가능. → 다른 7곳과 같은 패턴.
+- **G2 (LOW)**: 60min watchdog가 active deploy lock 존중 → genuinely stuck recovery 풀 admin 경로 없음. → admin-only `POST /api/projects/:id/force-reset-recovery`.
+- **B3 (NIT)**: `DockerBuildError` 가 build log 마지막 2KB 노출 — secret-shaped token 가능성. → 정규식 redaction.
+- **B4 (NIT)**: 마이그레이션 backfill 결과 audit 안 됨. → migration_audit 테이블.
+
 ### 5. 첫 24h ops 알림 hook
 
 - **현재**: GA 첫 24h 사용자가 problem 생기면 알 방법 없음 (dashboard 봐야 함).
