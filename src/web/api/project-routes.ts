@@ -27,6 +27,7 @@ import {
   generateEnvExample,
 } from '../../pipeline/env-inject.js';
 import type { EnvironmentRow, ProjectRow } from '../../db/index.js';
+import { assertProjectMutable } from '../../pipeline/mutation-policy.js';
 import {
   getEnvironmentByIdOrThrow,
   getProjectOrThrow,
@@ -34,25 +35,6 @@ import {
 } from './helpers/project-helpers.js';
 
 const log = createModuleLogger('api');
-
-/**
- * Guard that throws a typed 409 error when a project cannot accept mutating
- * operations (redeploy / rollback / blue-green).
- *
- * Call this immediately after `getProjectOrThrow` in any route that modifies
- * deployment state.
- */
-function assertProjectMutable(project: ProjectRow, ctx: AppContext): void {
-  if (project.archived_at) {
-    throw new ProjectArchivedError(project.id);
-  }
-  if (project.status === 'recovering') {
-    throw new ProjectRecoveringError(project.id);
-  }
-  if (ctx.db.isCircuitBreakerOpen(project.id)) {
-    throw new CircuitBreakerOpenError(project.id);
-  }
-}
 
 function mapEnvironment(projectName: string, environment: EnvironmentRow) {
   const ips = getAllIps();

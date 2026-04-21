@@ -27,7 +27,7 @@ import {
 import type { ContainerExecResult } from './service-adapters/types.js';
 import type { Docker } from './docker.js';
 import { allocatePort } from './port.js';
-import { isDockerNotFoundError } from '../errors.js';
+import { isDockerNotFoundError, RepoPersistenceError } from '../errors.js';
 
 const log = createModuleLogger('service-manager');
 const SERVICE_CARD_SUMMARY_CACHE_TTL_MS = 15_000;
@@ -489,7 +489,7 @@ export class ServiceManager {
     this.invalidateServiceCardSummaryCache();
     const created = this.db.getService(id);
     if (!created) {
-      throw new Error(`Failed to create service: ${id}`);
+      throw new RepoPersistenceError('service', id);
     }
     return created;
   }

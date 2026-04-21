@@ -142,6 +142,20 @@ export class ImageNotFoundError extends OpenLanderError {
   }
 }
 
+export class MissingImageUrlError extends OpenLanderError {
+  constructor() {
+    super('Missing image URL for image deployment source', 'MISSING_IMAGE_URL', 400);
+    this.name = 'MissingImageUrlError';
+  }
+}
+
+export class ImagePullError extends OpenLanderError {
+  constructor(cause: string) {
+    super(cause, 'IMAGE_PULL_FAILED', 502, { cause });
+    this.name = 'ImagePullError';
+  }
+}
+
 export class CloudflareNotFoundError extends OpenLanderError {
   constructor(resource: string) {
     super(`Cloudflare resource not found: ${resource}`, 'CLOUDFLARE_NOT_FOUND', 404, { resource });

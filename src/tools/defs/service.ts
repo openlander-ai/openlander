@@ -1,7 +1,7 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { getAllIps } from '../../pipeline/traefik.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
-import { isDockerNotFoundError } from '../../errors.js';
+import { isDockerNotFoundError, ServiceNotFoundError } from '../../errors.js';
 import type { ToolDef } from './types.js';
 import {
   backupServiceSchema,
@@ -74,7 +74,7 @@ async function getServiceByName(
   const services = await appCtx.serviceManager.list();
   const service = services.find((item) => item.name === serviceName);
   if (!service) {
-    throw new Error(`Service not found: ${serviceName}`);
+    throw new ServiceNotFoundError(serviceName);
   }
   return service;
 }

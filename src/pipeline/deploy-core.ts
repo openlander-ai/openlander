@@ -20,7 +20,9 @@ import { resolveEnvVars } from './resolve-env.js';
 
 import {
   ContainerNotFoundError,
+  ImagePullError,
   InvalidProjectNameError,
+  MissingImageUrlError,
   PreflightCheckError,
   isDockerNotFoundError,
 } from '../errors.js';
@@ -829,7 +831,7 @@ export class DeployPipeline {
       if (source === 'image') {
         const imageUrl = deployConfig.imageUrl;
         if (!imageUrl) {
-          throw new Error('Missing image URL for image deployment source');
+          throw new MissingImageUrlError();
         }
 
         await (
@@ -842,7 +844,7 @@ export class DeployPipeline {
           await this.docker.pullImage(imageUrl);
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
-          throw new Error(mapPullError(err));
+          throw new ImagePullError(mapPullError(err));
         }
         await (
           eventBus as unknown as {
