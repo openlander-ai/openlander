@@ -333,7 +333,7 @@ function KpiCard({
   return (
     <div
       onClick={onClick}
-      className="group bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex flex-col gap-2 cursor-pointer hover:bg-bg-panel/80 hover:border-agent/30 transition-all duration-200"
+      className="group bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-5 min-h-[120px] flex flex-col justify-between gap-3 cursor-pointer hover:bg-bg-panel/80 hover:border-agent/30 transition-all duration-200"
     >
       <div className="flex items-center justify-between">
         <div className={cn('p-2 bg-bg-subtle rounded-md', iconColor)}>{icon}</div>

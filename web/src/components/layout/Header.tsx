@@ -96,7 +96,7 @@ export function Header({
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-12 border-b border-[hsl(var(--border))] bg-bg-app z-50 flex items-center justify-between px-4">
+    <header className="fixed top-0 left-0 right-0 h-12 border-b border-[hsl(var(--border))] bg-bg-app/80 backdrop-blur-md z-50 flex items-center justify-between px-4">
       <div className="flex items-center gap-3">
         <div
           className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity"
