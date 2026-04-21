@@ -291,10 +291,7 @@ export function ProjectHeader({
 
               {/* Rollback */}
               <DropdownMenuItem onClick={onRollback} disabled={!!actionLoading}>
-                <div className="flex items-center gap-2">
-                  {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
-                  <History className="h-3.5 w-3.5" />
-                </div>
+                <History className="h-3.5 w-3.5 mr-2" />
                 {t('project.header.action.rollback')}
               </DropdownMenuItem>
 
@@ -304,10 +301,7 @@ export function ProjectHeader({
                   onClick={onOpenBlueGreenDialog}
                   disabled={!isRunning || !!actionLoading}
                 >
-                  <div className="flex items-center gap-2">
-                    {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
-                    <Zap className="h-3.5 w-3.5" />
-                  </div>
+                  <Zap className="h-3.5 w-3.5 mr-2" />
                   {t('project.header.action.blueGreen')}
                 </DropdownMenuItem>
               </Tooltip>
