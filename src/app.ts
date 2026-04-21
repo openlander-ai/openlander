@@ -431,6 +431,14 @@ export async function createAppContext(
       const override = db.getProjectOpsOverride(projectId);
       return resolveAutomationPolicy(opsConfig, override ?? undefined);
     },
+    // 1.0 GA: route recovery through the per-project lock so two different
+    // projects can recover concurrently. Same-project recovery still
+    // serializes through this lock + pipeline boundary.
+    acquireProjectLock: (projectId, sessionId) =>
+      ctx.agentPool ? ctx.agentPool.acquireProjectLock(projectId, sessionId) : true,
+    releaseProjectLock: (projectId, sessionId) => {
+      ctx.agentPool?.releaseProjectLock(projectId, sessionId);
+    },
   });
   coordinator.setDeploymentRecovery((projectId, error, step, buildLog) =>
     recoveryHandlers.handleDeploymentRecovery(projectId, error, step, buildLog),
@@ -496,7 +504,9 @@ export async function createAppContext(
   });
 
   // v0.2: Webhook auto-redeploy
-  const webhookManager = new WebhookManager(pipeline, db, eventBus);
+  // 1.0 GA: pass the agent pool so webhook redeploys participate in the
+  // per-project lock alongside UI / agent / MCP triggers.
+  const webhookManager = new WebhookManager(pipeline, db, eventBus, agentPool ?? undefined);
 
   // v0.2: Cloudflare production tunnels
   const cloudflare = new CloudflareTunnelManager(config.cloudflare, db, eventBus);

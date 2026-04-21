@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 
 import type { Agent } from '../../llm/agent.js';
+import type { AgentPool } from '../../llm/agent-pool.js';
 import type { QuestionAnswer, QuestionBridge } from '../../lib/question-bridge.js';
 import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
@@ -24,6 +25,7 @@ interface DomainRouteContext {
   env: EnvManager;
   pipeline: DeployPipeline;
   deployQueue: DeployQueue;
+  agentPool?: AgentPool | null;
   questionBridge: QuestionBridge;
 }
 
@@ -325,26 +327,41 @@ async function requestEnvUpdateApprovalAndRedeploy(
     message: `Updated ${String(updates.length)} env var(s). Triggering redeploy...`,
   });
 
-  void ctx.deployQueue
-    .acquire()
-    .then(async (release) => {
-      try {
-        await ctx.pipeline.redeploy(projectId);
-      } catch (err: unknown) {
-        log.error({ err, projectId, domain }, 'Domain env update redeploy failed');
-        createTimelineEvent(ctx.db, {
-          projectId,
-          type: 'error',
-          message: `Redeploy failed after domain env update: ${err instanceof Error ? err.message : String(err)}`,
-          severity: 'error',
-        });
-      } finally {
-        release();
-      }
-    })
-    .catch((err: unknown) => {
-      log.error({ err, projectId }, 'Failed to acquire deploy lock for domain redeploy');
+  // Per-project lock (1.0 GA): different projects can redeploy concurrently;
+  // a same-project redeploy already in flight is rejected with a logged error.
+  const lockSessionId = `domain-redeploy-${projectId}-${Date.now().toString(36)}`;
+  const acquired = ctx.agentPool
+    ? ctx.agentPool.acquireProjectLock(projectId, lockSessionId)
+    : true;
+  if (!acquired) {
+    const lock = ctx.agentPool?.getProjectLock(projectId);
+    log.warn(
+      { projectId, lockSessionId: lock?.sessionId },
+      'Skipping domain env redeploy: project lock already held',
+    );
+    createTimelineEvent(ctx.db, {
+      projectId,
+      type: 'status',
+      message: 'Domain env redeploy skipped: project is already deploying',
+      severity: 'warning',
     });
+    return;
+  }
+  void (async () => {
+    try {
+      await ctx.pipeline.redeploy(projectId);
+    } catch (err: unknown) {
+      log.error({ err, projectId, domain }, 'Domain env update redeploy failed');
+      createTimelineEvent(ctx.db, {
+        projectId,
+        type: 'error',
+        message: `Redeploy failed after domain env update: ${err instanceof Error ? err.message : String(err)}`,
+        severity: 'error',
+      });
+    } finally {
+      ctx.agentPool?.releaseProjectLock(projectId, lockSessionId);
+    }
+  })();
 }
 
 function createTimelineEvent(

@@ -2,6 +2,7 @@ import { generateText, streamText, stepCountIs } from 'ai';
 import type { LanguageModel, ToolSet } from 'ai';
 import type { ChatMessage } from './index.js';
 import type { QuestionRequest, QuestionBridge } from '../lib/question-bridge.js';
+import { runWithQuestionHandler } from '../lib/question-bridge.js';
 import type { Database } from '../db/index.js';
 import { buildSystemPrompt, type ContextProvider, type LLMProvider } from './prompts.js';
 import type { ContextScope } from './context-assembler.js';
@@ -68,6 +69,11 @@ export class Agent {
   /** Set the question bridge for ask_user_question tool support. */
   setQuestionBridge(bridge: QuestionBridge): void {
     this.questionBridge = bridge;
+  }
+
+  /** Expose the agent's QuestionBridge (or null when not wired). */
+  getQuestionBridge(): QuestionBridge | null {
+    return this.questionBridge;
   }
 
   /** Register tools for the agent to use. */
@@ -195,12 +201,15 @@ export class Agent {
 
       await onEvent({ type: 'thinking' });
 
-      // Wire question bridge to emit through this stream's onEvent callback.
-      if (this.questionBridge) {
-        this.questionBridge.setQuestionHandler((request: QuestionRequest) => {
-          void onEvent({ type: 'question', request });
-        });
-      }
+      // 1.0 GA: install a STREAM-SCOPED question handler so two concurrent
+      // chatStream calls do not trample each other. The handler propagates
+      // through async tool execution via AsyncLocalStorage and the
+      // `ask_user_question` tool reads it (`getActiveQuestionHandler`) at
+      // ask-time. The legacy global `setQuestionHandler` is only used by
+      // non-agent flows (deploy-failure-handler, domain-routes) now.
+      const streamQuestionHandler = (request: QuestionRequest): void => {
+        void onEvent({ type: 'question', request });
+      };
 
       const allToolResults: ToolResult[] = [];
       let responseText = '';
@@ -234,17 +243,22 @@ export class Agent {
             source: this.actionType === 'auto_recovery' ? 'auto-recovery' : 'web',
           },
           () =>
-            Promise.resolve(
-              streamText({
-                model: this.model,
-                messages: this.history.map((m) => ({
-                  role: m.role,
-                  content: m.content,
-                })),
-                tools: guardedTools,
-                maxRetries: 1,
-                stopWhen: stepCountIs(MAX_TOOL_STEPS),
-              }),
+            // Bind the per-stream UI handler into AsyncLocalStorage so the
+            // `ask_user_question` tool — which is shared across all streams
+            // — can pick THIS stream's callback when it calls bridge.ask().
+            runWithQuestionHandler(streamQuestionHandler, () =>
+              Promise.resolve(
+                streamText({
+                  model: this.model,
+                  messages: this.history.map((m) => ({
+                    role: m.role,
+                    content: m.content,
+                  })),
+                  tools: guardedTools,
+                  maxRetries: 1,
+                  stopWhen: stepCountIs(MAX_TOOL_STEPS),
+                }),
+              ),
             ),
         );
 

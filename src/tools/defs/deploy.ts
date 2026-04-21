@@ -79,7 +79,19 @@ export const deployToolDefs: ToolDef[] = [
       if (lockResult) {
         return lockResult;
       }
-      const release = await context.appCtx.deployQueue.acquire();
+      // 1.0 GA: replaced global DeployQueue with per-project lock so two
+      // different projects can rollback concurrently. The DB lock acquired
+      // above by `tryAcquireDeployLockOrResponse` plus this in-memory lock
+      // both reject same-project concurrent rollback.
+      const memLockAcquired = context.appCtx.agentPool
+        ? context.appCtx.agentPool.acquireProjectLock(project.id, toolSessionId)
+        : true;
+      if (!memLockAcquired) {
+        const lock = context.appCtx.agentPool?.getProjectLock(project.id);
+        return buildDeployLockedResponse(
+          new DeployLockedError(project.id, lock?.sessionId ?? 'unknown'),
+        );
+      }
       let result;
       try {
         result = await context.appCtx.pipeline.rollback(project.id, undefined, toolSessionId);
@@ -98,7 +110,7 @@ export const deployToolDefs: ToolDef[] = [
         }
         throw err;
       } finally {
-        release();
+        context.appCtx.agentPool?.releaseProjectLock(project.id, toolSessionId);
       }
       return {
         ...result,

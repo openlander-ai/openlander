@@ -779,7 +779,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       return c.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
     }
 
-    const release = await ctx.deployQueue.acquire();
+    // Per-project lock instead of a global deploy queue (1.0 GA): two
+    // different projects can deploy concurrently. Same-project double-click
+    // is still rejected with a 409 because the in-memory lock + pipeline
+    // boundary's `withDeployLock` both refuse a second concurrent attempt.
+    const lockSessionId = `redeploy-${project.id}-${Date.now().toString(36)}`;
+    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(project.id, lockSessionId)) {
+      const lock = ctx.agentPool.getProjectLock(project.id);
+      return c.json(new DeployLockedError(project.id, lock?.sessionId ?? 'unknown').toJSON(), 409);
+    }
     try {
       ctx.coordinator.suppressProject(project.id, 120_000);
       ctx.db.updateProject(project.id, { status: 'building' });
@@ -811,7 +819,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       const errMsg = err instanceof Error ? err.message : String(err);
       return c.json({ success: false, error: errMsg }, 500);
     } finally {
-      release();
+      ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
     }
   });
 
@@ -932,7 +940,12 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const body = await c.req
       .json<{ health_check_path?: string }>()
       .catch((): { health_check_path?: string } => ({}));
-    const release = await ctx.deployQueue.acquire();
+    // Per-project lock (see comment on /projects/:id/redeploy above)
+    const lockSessionId = `bluegreen-${project.id}-${Date.now().toString(36)}`;
+    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(project.id, lockSessionId)) {
+      const lock = ctx.agentPool.getProjectLock(project.id);
+      return c.json(new DeployLockedError(project.id, lock?.sessionId ?? 'unknown').toJSON(), 409);
+    }
     try {
       const result = await ctx.pipeline.redeploy(project.id, {
         strategy: 'blue-green',
@@ -958,7 +971,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       }
       throw err;
     } finally {
-      release();
+      ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
     }
   });
 

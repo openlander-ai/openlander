@@ -14,8 +14,11 @@ describe('deploy-flow unification integration evidence', () => {
 
     expect(source).toContain('const QUESTION_SESSION_TIMEOUT_MS = 5 * 60 * 1000;');
     expect(source).toContain('Session timed out — user did not respond within 5 minutes');
-    expect(source).toContain('this.pendingTimeout = timerApi.setTimeout(() => {');
-    expect(source).toContain('this.clearPendingTimeout();');
+    // 1.0 GA refactor: pending entries are tracked per requestId so concurrent
+    // agent streams cannot trample each other. Each entry still arms a
+    // timeout via timerApi.setTimeout and clears it via clearPendingTimeout.
+    expect(source).toContain('entry.timeout = timerApi.setTimeout(() => {');
+    expect(source).toContain('this.clearPendingTimeout(entry);');
   });
 
   it('keeps scan_project adapter wiring and scan-first prompt guidance aligned', () => {

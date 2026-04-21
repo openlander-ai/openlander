@@ -1,7 +1,10 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
+import { nanoid } from 'nanoid';
+
 import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
+import type { AgentPool } from '../llm/agent-pool.js';
 import type { DeployPipeline } from '../pipeline/deploy.js';
 import { createModuleLogger } from '../lib/logger.js';
 import {
@@ -101,6 +104,13 @@ export class WebhookManager {
     // gracefully refuses the redeploy so operators see the push event in the
     // activity feed instead of "I pushed but nothing happened".
     private readonly events: EventBus,
+    // 1.0 GA: optional agent pool so webhook redeploys go through the same
+    // per-project lock as UI / agent / MCP triggers. Without this, a webhook
+    // push during an in-flight UI redeploy bypassed the in-memory lock and
+    // raced through to the DB-level `withDeployLock` (which would silently
+    // skip without a typed 409). Optional so existing tests can keep
+    // instantiating without the dependency.
+    private readonly agentPool?: AgentPool,
   ) {}
 
   generateSecret(projectId: string): string {
@@ -211,6 +221,23 @@ export class WebhookManager {
     // in the activity feed whenever the policy short-circuited (archived /
     // recovering / circuit-open).
     if (targetEnvironment) {
+      // 1.0 GA: same per-project lock as the redeploy branch below, so a
+      // webhook environment deploy that races with another mutation is
+      // rejected at the in-memory boundary with a typed `webhook:skipped`.
+      const envLockSessionId = `webhook-env-${source}-${projectId}-${nanoid(6)}`;
+      const envLockAcquired = this.agentPool
+        ? this.agentPool.acquireProjectLock(projectId, envLockSessionId)
+        : true;
+      if (!envLockAcquired) {
+        const lock = this.agentPool?.getProjectLock(projectId);
+        const message = `Project is busy (held by ${lock?.sessionId ?? 'another session'}); webhook environment deploy queued/skipped.`;
+        await this.emitWebhookSkipped(projectId, 'recovering', source, message);
+        return {
+          accepted: true,
+          projectId,
+          message,
+        };
+      }
       try {
         const deployResult = await this.pipeline.deployEnvironment(
           projectId,
@@ -237,7 +264,30 @@ export class WebhookManager {
           return skip.result;
         }
         throw err;
+      } finally {
+        if (this.agentPool) {
+          this.agentPool.releaseProjectLock(projectId, envLockSessionId);
+        }
       }
+    }
+
+    // 1.0 GA: take the per-project lock so a webhook push during an in-flight
+    // UI / agent / MCP redeploy is rejected at the in-memory boundary instead
+    // of silently colliding at the DB layer. Without an agent pool (legacy
+    // tests, headless mode) we fall through unchanged.
+    const lockSessionId = `webhook-${source}-${projectId}-${nanoid(6)}`;
+    const lockAcquired = this.agentPool
+      ? this.agentPool.acquireProjectLock(projectId, lockSessionId)
+      : true;
+    if (!lockAcquired) {
+      const lock = this.agentPool?.getProjectLock(projectId);
+      const message = `Project is busy (held by ${lock?.sessionId ?? 'another session'}); webhook redeploy queued/skipped.`;
+      await this.emitWebhookSkipped(projectId, 'recovering', source, message);
+      return {
+        accepted: true,
+        projectId,
+        message,
+      };
     }
 
     try {
@@ -262,6 +312,10 @@ export class WebhookManager {
         return skip.result;
       }
       throw err;
+    } finally {
+      if (this.agentPool) {
+        this.agentPool.releaseProjectLock(projectId, lockSessionId);
+      }
     }
   }
 

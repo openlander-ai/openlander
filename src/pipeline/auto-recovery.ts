@@ -67,6 +67,15 @@ export interface SetupAutoRecoveryParams {
   config: OpenLanderConfig;
   shouldContinue?: (projectId: string) => boolean;
   getAutomationPolicy?: (projectId: string) => RecoveryAutomationPolicy | null;
+  /**
+   * Optional per-project lock provider. 1.0 GA replaces the global
+   * DeployQueue with `AgentPool.acquireProjectLock` so two different
+   * projects can recover in parallel. Recovery for the same project still
+   * serializes through this lock (and the pipeline boundary's
+   * `withDeployLock`).
+   */
+  acquireProjectLock?: (projectId: string, sessionId: string) => boolean;
+  releaseProjectLock?: (projectId: string, sessionId: string) => void;
 }
 
 export interface AutoRecoveryHandlers {
@@ -287,7 +296,13 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     config,
     shouldContinue: providedShouldContinue,
     getAutomationPolicy,
+    acquireProjectLock,
+    releaseProjectLock,
   } = params;
+  // `deployQueue` is retained for backward compatibility with the
+  // SetupAutoRecoveryParams shape — it's no longer the primary lock since
+  // 1.0 GA. The per-project `acquireProjectLock` parameter is preferred.
+  void deployQueue;
 
   const approvalGate = providedApprovalGate ?? new ApprovalGate();
   const shouldContinue =
@@ -745,7 +760,28 @@ ${plan.agentGuidance}
         );
       }
 
-      const release = await deployQueue.acquire();
+      // 1.0 GA: per-project lock instead of global queue. If another
+      // session is already deploying this project (e.g. a manual user
+      // redeploy raced ahead) we surface that as a recovery failure rather
+      // than queue-waiting indefinitely.
+      const recoveryLockSession = `auto-recovery-${projectId}-${Date.now().toString(36)}`;
+      const memLockAcquired = acquireProjectLock
+        ? acquireProjectLock(projectId, recoveryLockSession)
+        : true;
+      if (!memLockAcquired) {
+        log.warn(
+          { projectId },
+          'Auto-recovery skipped: project lock already held by another session',
+        );
+        db.updateActionRunStatus(actionRunId, 'failed', 'Project lock already held');
+        await eventBus.emit('recovery:failed', {
+          projectId,
+          error: 'Project lock held by another session — recovery deferred',
+          attempt,
+        });
+        trySavePattern(false);
+        return;
+      }
       let redeploySuccess = false;
       let redeployError = error;
       try {
@@ -756,7 +792,9 @@ ${plan.agentGuidance}
         redeploySuccess = retryResult.success;
         redeployError = retryResult.error ?? error;
       } finally {
-        release();
+        if (releaseProjectLock) {
+          releaseProjectLock(projectId, recoveryLockSession);
+        }
       }
 
       const durationMs = Date.now() - recoveryStartTime;

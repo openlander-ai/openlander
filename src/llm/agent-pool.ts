@@ -1,7 +1,7 @@
 import type { LanguageModel, ToolSet } from 'ai';
 import type { Database } from '../db/index.js';
 import { LLMConcurrencyExceededError } from '../errors.js';
-import type { QuestionBridge } from '../lib/question-bridge.js';
+import type { QuestionAnswer, QuestionBridge } from '../lib/question-bridge.js';
 import type { ApprovalGate } from '../pipeline/approval-gate.js';
 import { Agent } from './agent.js';
 import type { ContextProvider, LLMProvider } from './prompts.js';
@@ -153,6 +153,77 @@ export class AgentPool {
     if (this.recoveryAgent) {
       this.recoveryAgent.setQuestionBridge(bridge);
     }
+  }
+
+  /**
+   * Reply to a pending question on whichever active Agent has it.
+   *
+   * The shared QuestionBridge now multiplexes pending entries by `requestId`,
+   * so concurrent agent streams no longer trample each other's resolve
+   * handler. Walks every pooled Agent's bridge (plus the recovery agent and
+   * the shared fallback) and asks each to deliver the answer if it matches
+   * its own pending state. Returns true if any bridge accepted it.
+   */
+  replyToQuestion(requestId: string, answers: QuestionAnswer[]): boolean {
+    let delivered = false;
+    const tryDeliver = (bridge: QuestionBridge | null): void => {
+      if (!bridge || !bridge.hasPending(requestId)) return;
+      bridge.reply(requestId, answers);
+      delivered = true;
+    };
+
+    for (const entry of this.pool.values()) {
+      tryDeliver(entry.agent.getQuestionBridge());
+    }
+    if (this.recoveryAgent) {
+      tryDeliver(this.recoveryAgent.getQuestionBridge());
+    }
+    tryDeliver(this.questionBridge);
+    return delivered;
+  }
+
+  /**
+   * Reject a pending question on whichever active Agent has it. With no
+   * `requestId`, walks every Agent's bridge and the shared bridge to clear
+   * all pending entries (preserves legacy single-slot dismiss semantics).
+   */
+  rejectQuestion(requestId?: string): boolean {
+    let touched = false;
+    const reject = (bridge: QuestionBridge | null): void => {
+      if (!bridge) return;
+      if (requestId === undefined) {
+        if (bridge.hasPending()) {
+          bridge.reject();
+          touched = true;
+        }
+        return;
+      }
+      if (bridge.hasPending(requestId)) {
+        bridge.reject(requestId);
+        touched = true;
+      }
+    };
+
+    for (const entry of this.pool.values()) {
+      reject(entry.agent.getQuestionBridge());
+    }
+    if (this.recoveryAgent) {
+      reject(this.recoveryAgent.getQuestionBridge());
+    }
+    reject(this.questionBridge);
+    return touched;
+  }
+
+  /** True if any Agent (or the shared fallback bridge) has a pending question. */
+  hasPendingQuestion(requestId?: string): boolean {
+    for (const entry of this.pool.values()) {
+      if (entry.agent.getQuestionBridge()?.hasPending(requestId)) return true;
+    }
+    if (this.recoveryAgent?.getQuestionBridge()?.hasPending(requestId)) {
+      return true;
+    }
+    if (this.questionBridge?.hasPending(requestId)) return true;
+    return false;
   }
 
   private createAgent(): Agent {

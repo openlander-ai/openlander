@@ -70,32 +70,73 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
 
     // Fallback: no agent (LLM not configured) → direct pipeline call
     if (!ctx.agent) {
-      if (source === 'image' && imageUrl) {
-        const result = await ctx.pipeline.deploy({
-          repoUrl: '',
-          source: 'image',
-          imageUrl,
-          containerPort: body.port,
-          imageCmd: typeof body.image_cmd === 'string' ? body.image_cmd.split(' ') : body.image_cmd,
-          name: body.name,
-          envVars: body.env_vars,
-          visibility: body.visibility,
-          trigger: 'api',
-          environment,
-        });
-        return c.json(result, result.success ? 200 : 500);
-      } else if (repoUrl) {
-        const result = await ctx.pipeline.deploy({
-          repoUrl,
-          branch: body.branch,
-          name: body.name,
-          envVars: body.env_vars,
-          visibility: body.visibility,
-          sshKeyPath: ctx.config.git.sshKeyPath || undefined,
-          trigger: 'api',
-          environment,
-        });
-        return c.json(result, result.success ? 200 : 500);
+      // 1.0 GA: route the no-agent fallback through the per-project lock so
+      // it participates in the same BUG-002 regression guard as the
+      // agent-driven path. New-project deploys (no existing project row) get
+      // a synthetic lock id from the requested name.
+      const fallbackLockKey =
+        ctx.db.getProjectByName(
+          body.name ??
+            (source === 'image' && imageUrl
+              ? extractProjectName(imageUrl)
+              : repoUrl
+                ? extractProjectName(repoUrl)
+                : 'unknown'),
+        )?.id ??
+        body.name ??
+        (source === 'image' && imageUrl
+          ? extractProjectName(imageUrl)
+          : repoUrl
+            ? extractProjectName(repoUrl)
+            : 'unknown');
+      const fallbackSessionId = `deploy-fallback-${Date.now().toString(36)}-${nanoid(6)}`;
+      const fallbackAcquired = ctx.agentPool
+        ? ctx.agentPool.acquireProjectLock(fallbackLockKey, fallbackSessionId)
+        : true;
+      if (!fallbackAcquired) {
+        const lock = ctx.agentPool?.getProjectLock(fallbackLockKey);
+        return c.json(
+          {
+            success: false,
+            error: 'DEPLOY_LOCKED',
+            message: `Project is busy (held by ${lock?.sessionId ?? 'another session'})`,
+          },
+          409,
+        );
+      }
+      try {
+        if (source === 'image' && imageUrl) {
+          const result = await ctx.pipeline.deploy({
+            repoUrl: '',
+            source: 'image',
+            imageUrl,
+            containerPort: body.port,
+            imageCmd:
+              typeof body.image_cmd === 'string' ? body.image_cmd.split(' ') : body.image_cmd,
+            name: body.name,
+            envVars: body.env_vars,
+            visibility: body.visibility,
+            trigger: 'api',
+            environment,
+          });
+          return c.json(result, result.success ? 200 : 500);
+        } else if (repoUrl) {
+          const result = await ctx.pipeline.deploy({
+            repoUrl,
+            branch: body.branch,
+            name: body.name,
+            envVars: body.env_vars,
+            visibility: body.visibility,
+            sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+            trigger: 'api',
+            environment,
+          });
+          return c.json(result, result.success ? 200 : 500);
+        }
+      } finally {
+        if (ctx.agentPool) {
+          ctx.agentPool.releaseProjectLock(fallbackLockKey, fallbackSessionId);
+        }
       }
     }
 
@@ -187,7 +228,29 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         isKorean,
       );
 
-      const release = await ctx.deployQueue.acquire();
+      // Per-project lock (1.0 GA): different projects deploy concurrently.
+      // Same-project double-deploy still blocks via the in-memory lock and
+      // the pipeline boundary's `withDeployLock` second check.
+      const lockSessionId = `deploy-${projectId}-${Date.now().toString(36)}`;
+      const acquired = ctx.agentPool
+        ? ctx.agentPool.acquireProjectLock(projectId, lockSessionId)
+        : true;
+      if (!acquired) {
+        const lock = ctx.agentPool?.getProjectLock(projectId);
+        await emitTerminalMessage(
+          projectId,
+          isKorean
+            ? `❌ 같은 프로젝트가 이미 배포 중입니다 (세션: ${lock?.sessionId ?? 'unknown'})`
+            : `❌ Project is already deploying (session: ${lock?.sessionId ?? 'unknown'})`,
+          isKorean,
+        );
+        return;
+      }
+      const release = (): void => {
+        if (ctx.agentPool) {
+          ctx.agentPool.releaseProjectLock(projectId, lockSessionId);
+        }
+      };
 
       const retryState = { hasRetriedAfterTerminalFailure: false };
       const write = (message: string): Promise<void> =>
@@ -269,17 +332,44 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'MISSING_FIELD', message: 'repo_url is required' }, 400);
     }
 
-    const result = await ctx.pipeline.startDeploy({
-      repoUrl: body.repo_url,
-      branch: body.branch,
-      name: body.name,
-      dockerTarget: body.docker_target,
-      sshKeyPath: ctx.config.git.sshKeyPath || undefined,
-      trigger: 'api',
-      environment: 'production',
-    });
+    // 1.0 GA: same per-project lock as the main /projects/deploy path so
+    // /deploy/start does not bypass the BUG-002 regression guard.
+    const startLockKey =
+      ctx.db.getProjectByName(body.name ?? extractProjectName(body.repo_url))?.id ??
+      body.name ??
+      extractProjectName(body.repo_url);
+    const startSessionId = `deploy-start-${Date.now().toString(36)}-${nanoid(6)}`;
+    const startAcquired = ctx.agentPool
+      ? ctx.agentPool.acquireProjectLock(startLockKey, startSessionId)
+      : true;
+    if (!startAcquired) {
+      const lock = ctx.agentPool?.getProjectLock(startLockKey);
+      return c.json(
+        {
+          success: false,
+          error: 'DEPLOY_LOCKED',
+          message: `Project is busy (held by ${lock?.sessionId ?? 'another session'})`,
+        },
+        409,
+      );
+    }
+    try {
+      const result = await ctx.pipeline.startDeploy({
+        repoUrl: body.repo_url,
+        branch: body.branch,
+        name: body.name,
+        dockerTarget: body.docker_target,
+        sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+        trigger: 'api',
+        environment: 'production',
+      });
 
-    return c.json(result, 200);
+      return c.json(result, 200);
+    } finally {
+      if (ctx.agentPool) {
+        ctx.agentPool.releaseProjectLock(startLockKey, startSessionId);
+      }
+    }
   });
 
   registerDeployTimelineStreamRoutes(api, ctx);

@@ -164,9 +164,38 @@ export const projectOpsToolDefs: ToolDef[] = [
         return policyRejection;
       }
 
-      await context.appCtx.pipeline.stop(project.id);
+      // 1.0 GA: acquire BEFORE stop so a lock-rejected restart does not leave
+      // the project in `stopped` state. Lock failure now keeps the container
+      // running and surfaces a typed `PROJECT_BUSY` response. Same lock then
+      // guards stop + redeploy together.
+      const restartSessionId = `mcp-restart-${nanoid(12)}`;
+      const memLockAcquired = context.appCtx.agentPool
+        ? context.appCtx.agentPool.acquireProjectLock(project.id, restartSessionId)
+        : true;
+      if (!memLockAcquired) {
+        const lock = context.appCtx.agentPool?.getProjectLock(project.id);
+        log.warn(
+          { projectId: project.id, lockedBy: lock?.sessionId },
+          'Restart skipped: project lock already held',
+        );
+        return {
+          status: 'rejected',
+          project: projectName,
+          reason: 'PROJECT_BUSY',
+          message: 'Another deploy is already in progress for this project.',
+        };
+      }
 
-      const release = await context.appCtx.deployQueue.acquire();
+      // Stop is now inside the same lock as the redeploy below. Run it
+      // synchronously (and release the lock if it fails) so we don't leave
+      // the project in the awkward "stopped, lock held, no redeploy" state.
+      try {
+        await context.appCtx.pipeline.stop(project.id);
+      } catch (err) {
+        context.appCtx.agentPool?.releaseProjectLock(project.id, restartSessionId);
+        throw err;
+      }
+
       void context.appCtx.pipeline
         .redeploy(project.id, { noCache })
         .catch((err: unknown) => {
@@ -185,7 +214,7 @@ export const projectOpsToolDefs: ToolDef[] = [
           log.error({ err, projectId: project.id }, 'Restart redeploy failed');
         })
         .finally(() => {
-          release();
+          context.appCtx.agentPool?.releaseProjectLock(project.id, restartSessionId);
         });
 
       return {

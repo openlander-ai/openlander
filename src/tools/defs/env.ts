@@ -80,7 +80,21 @@ export const envToolDefs: ToolDef[] = [
       }
 
       if (changed && project.status === 'running') {
-        const release = await appCtx.deployQueue.acquire();
+        // 1.0 GA: per-project lock instead of global DeployQueue.
+        const envSessionId = `mcp-set-env-${project.id}-${Date.now().toString(36)}`;
+        const memLockAcquired = appCtx.agentPool
+          ? appCtx.agentPool.acquireProjectLock(project.id, envSessionId)
+          : true;
+        if (!memLockAcquired) {
+          const lock = appCtx.agentPool?.getProjectLock(project.id);
+          return {
+            status: 'updated_redeploy_skipped',
+            project: projectName,
+            keys: Object.keys(vars),
+            reason: 'PROJECT_BUSY',
+            message: `Env vars saved but redeploy was skipped: another deploy is in progress (session ${lock?.sessionId ?? 'unknown'}).`,
+          };
+        }
         try {
           await appCtx.pipeline.redeploy(project.id);
         } catch (err) {
@@ -99,7 +113,7 @@ export const envToolDefs: ToolDef[] = [
           }
           throw err;
         } finally {
-          release();
+          appCtx.agentPool?.releaseProjectLock(project.id, envSessionId);
         }
         return {
           status: 'updated_and_redeployed',
