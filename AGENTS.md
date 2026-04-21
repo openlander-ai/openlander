@@ -244,7 +244,28 @@ class OpenLanderError extends Error {
 }
 ```
 
-20+ specific error classes: `GitCloneError`, `DockerBuildError`, `ProjectNotFoundError`, etc. Global error handler in `routes.ts` catches and serializes these.
+30+ specific error classes covering git, docker, deploy, project lifecycle, mutation policy, and repo persistence failures. The Hono server registers a global `onError` in `src/web/server.ts` (and `routes.ts` for the `/api` sub-router) that recognizes `OpenLanderError instanceof` and serializes via `toJSON()`. Anything else falls through to a generic `INTERNAL_ERROR` 500.
+
+**Boundary handlers (where each layer's policy lives)**
+
+| Layer           | Boundary                                                                 | Responsibility                                                                                                                                            |
+| --------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP            | `app.onError` (server.ts) + `api.onError` (routes.ts)                    | Serialize typed errors to JSON, log unhandled                                                                                                             |
+| Pipeline        | `assertProjectMutable` in `src/pipeline/mutation-policy.ts`              | Reject mutations on archived / recovering / circuit-broken projects. Called at the top of `pipeline.{startDeploy, redeploy, rollback, deployEnvironment}` |
+| Deploy lock     | `withDeployLock` / `acquireDeployLockOrThrow` in `deploy-lock-helper.ts` | Acquire/release deploy lock; throw `DeployLockedError` on contention. Use the helper instead of hand-rolled `try/finally`                                 |
+| Recovery        | `checkRecoveryEligibility` + `withRecoveryStage` in `recovery-policy.ts` | Single eligibility decision for all recovery entry points; emit `recovery:degraded` on partial stage failure instead of swallowing                        |
+| MCP / CLI tools | `tryRejectIfNotMutable` in `tools/defs/helpers.ts`                       | Synchronous pre-check so fire-and-forget tools return a clear `rejected_by_policy` response instead of fake "deploying"                                   |
+
+**Hard rules (enforced via review)**
+
+1. **No silent swallow.** `try { …; } catch { /* nothing */ }` and `catch (e) { log.warn(…) }` followed by continuing the same logical operation are both banned. Use `withRecoveryStage` for stages with downstream consequences, or rethrow.
+2. **No raw `throw new Error('…')` in domain code.** Use a named class from `src/errors.ts`. Add a new typed error if none fits.
+3. **Mutating routes go through pipeline boundary.** Don't invent a new redeploy/rollback path that calls Docker directly. Add the entry to `pipeline.*` so `assertProjectMutable` and `withDeployLock` apply automatically.
+4. **Cross-cutting checks have one owner.** `deploy_lock_session`, `circuit_breaker_state`, `archived_at` are evaluated by `RecoveryPolicy` / `mutation-policy`. If you need the same predicate, import the helper — don't reimplement.
+5. **Fire-and-forget rejections must be visible.** When you spawn a background task whose policy decision is synchronous (e.g. archived project, circuit open), check before returning success to the caller. The user has to see the rejection.
+6. **`recovery:degraded` is the partial-failure signal.** Emit it from `withRecoveryStage` (free) or directly when a stage fails but the recovery loop continues. Listeners (`incident-reporter`, `activity-logger`) record it; missing it = invisible regression.
+
+When in doubt, grep for the helper before adding inline logic — duplicating the policy is how Day 1-2's web-only fix had to be expanded to the full pipeline boundary in Day 5.
 
 ### Repository Pattern (Database)
 

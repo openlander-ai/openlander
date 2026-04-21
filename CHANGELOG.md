@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] — 2026-04-21
+
+The 1.0.0 release closes the eight GA-blocking issues identified in the rc.9 audit and lands two architectural extractions (`RecoveryPolicy`, mutation policy + `withDeployLock`) that turn one-off fixes into reusable cross-cutting layers. Mutation eligibility, recovery partial-failure visibility, and LLM-cost runaway protection are now enforced at a single boundary instead of repeated per call site.
+
+### Breaking
+
+- **`409 Conflict` typed responses on mutating routes**: `POST /api/projects/:id/{redeploy,rollback,blue-green}` and the matching MCP tools (`redeploy_project`, `rollback_project`, `deploy_blue_green`, `restart_project`) now reject archived, currently-recovering, or circuit-breaker-open projects with a typed 409 (codes: `PROJECT_ARCHIVED`, `PROJECT_RECOVERING`, `CIRCUIT_BREAKER_OPEN`, `DEPLOY_LOCKED`). Previously these cases silently became fake "deploying" responses, generic 500s, or — for tools — the policy rejection was logged and the user saw a success-shaped reply.
+- **`pipeline.{startDeploy, redeploy, rollback, deployEnvironment}` now throw typed errors instead of returning `{ success: false }` for policy violations.** Direct callers must catch `ProjectArchivedError` / `ProjectRecoveringError` / `CircuitBreakerOpenError` (or use the `tryRejectIfNotMutable` helper). All in-tree callers were migrated; out-of-tree forks need to update their catch blocks.
+- **Repo persistence helpers throw `RepoPersistenceError` (code `REPO_PERSISTENCE_FAILED`, 500)** instead of generic `Error('Failed to create X')` from 11 repos. The class extends `OpenLanderError`, so `instanceof Error` catches still match, but message-based routing should be replaced with `instanceof RepoPersistenceError`.
+- **LLM stream cancellation now records as a circuit breaker failure.** Repeated user aborts / client disconnects / `AbortSignal.timeout` will trip the breaker after the threshold, bounding cost-runaway loops. Scripted automations that legitimately cancel often will hit the breaker faster than in rc.7/rc.8.
+
+### Added
+
+- **`recovery:degraded` event + listeners**: Partial recovery failures now emit a typed event consumed by `incident-reporter` (warn log) and `activity-logger` (DB persist), so the previously silent `try/catch + warn` pattern is observable in the Operations Live feed.
+- **`statusUrl` field on deploy responses**: `POST /api/projects/deploy` and `/api/deploy/start` now return the polling endpoint clients can hit for status, removing the need to construct the URL client-side.
+- **Hono global `onError` handler** (`src/web/server.ts`) as a fallback for sub-routers (webhook, terminal, domain, resource, chat, llm, auth, setup, mcp) that didn't define their own, ensuring every uncaught throw gets a JSON response instead of hanging the request.
+- **`RecoveryPolicy` module** (`src/monitor/recovery-policy.ts`): single source of truth for recovery eligibility (5 triggers × 7 invariants) and `withRecoveryStage` wrapper that auto-emits `recovery:degraded` on stage failure. Replaces inline try/catch + warn patterns in `recovery-coordinator`, `ops-recovery`, and `auto-recovery`.
+- **Mutation policy + lock helpers** (`src/pipeline/mutation-policy.ts`, `src/db/repos/deploy-lock-helper.ts`): `assertProjectMutable` and `withDeployLock` / `acquireDeployLockOrThrow` enforce mutation eligibility and lock ordering at the pipeline boundary; tools use `tryRejectIfNotMutable` for synchronous pre-checks.
+- **Typed not-found errors** for environments, services, runtime incidents, deploy plans, ops incidents, service connections, and project dependencies (all 404, all extend `OpenLanderError`).
+- **`ResourceLimitsPanel` correctly disabled for compose projects** with an explicit "v1.1.0" message instead of letting users save a value that wouldn't reach `runComposeService`'s `HostConfig`.
+- **rc.7 → 1.0.0 migration guide** at `docs/migration-rc7-to-rc9.md`, including a pre-upgrade SQL safety check for the new `ai_usage_log.result` CHECK constraint.
+
+### Fixed
+
+- **U-P0-2**: `RecoveryCoordinator` no longer emits `recovery:started` after a stage C (PSM transition) failure. Previously the outer `try/catch` swallowed the throw and the loop continued, leaving `status='running'` paired with a recovery event flowing through the system.
+- **U-P0-4**: `checkEligibility`, `shouldContinue`, and `OpsRecovery.runRecoverySequence` now share a single deploy-lock predicate (30-minute stale window) via `RecoveryPolicy`. Three previously divergent definitions of "is this project deployable right now" are unified.
+- **U-P0-5**: LLM stream `cancel()` is now recorded as a circuit breaker failure (see Breaking).
+- **U-P0-6**: Hono global error handler added (see Added).
+- **U-P0-7**: `statusUrl` field on deploy responses lets clients reliably poll for status (see Added).
+- **U-P0-8**: All four pipeline mutation entry points (`startDeploy` existing-project branch, `redeploy`, `rollback`, `deployEnvironment`) now enforce `assertProjectMutable`, closing the bypass that previously allowed MCP / webhook / domain / env / compose paths to mutate archived or recovering projects.
+- **Webhook auto-redeploy** now responds `{ accepted: true, message: 'skipped' }` (200) when policy rejects the target project, instead of attempting a deploy that the pipeline will reject.
+- **`set_env_vars` tool**: env mutation completes successfully even when the follow-up redeploy is blocked by policy. Previously the env update appeared to fail when the project was non-mutable.
+
+### Tests
+
+- Added 153+ new tests across recovery policy, mutation boundary, eligibility race windows, tool policy mapping, repo persistence errors, deploy-lock helper, model-registry stream cancel, and Hono onError. Full suite: 2689 passed / 4 skipped (1.0.x backlog: kill-mid-migration recovery, rc.7 baseline migration row count).
+
+### Followups deferred to 1.0.x
+
+- `pipeline.rollback` project-not-found short-circuit bypasses lock/policy
+- `deploy-plan/engine.ts` async lock release lacks self-healing on `fireAndForget` failures (relies on 30-min stale window)
+- Webhook skip path emits `deploy:start` without a terminal event, leaving `questionBridge` active project stale
+- `compose` rollback may report `rolled_back` while partial deployment remains when policy rejects the rollback
+- Test isolation flakes in `compose.test.ts` / `event-golden.test.ts` / `performance-baseline.test.ts` (all pass solo; surface only under full parallel run)
+
 ## [1.0.0-rc.8] — 2026-04-11
 
 ### Added

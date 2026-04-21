@@ -140,6 +140,20 @@ Test files are located in the `test/` directory. Follow existing patterns:
 - Use descriptive test names
 - Test files mirror src/ structure
 
+## Error Handling Conventions
+
+OpenLander has a typed error hierarchy (`src/errors.ts`) and a layered policy for where checks live. Before adding error handling code, read AGENTS.md → "Error Handling" — it's the source of truth.
+
+The short version:
+
+- **Throw a named class.** `throw new Error('…')` is rejected at review. Use `ProjectNotFoundError`, `DeployLockedError`, `RepoPersistenceError`, etc., or add a new typed error to `src/errors.ts`.
+- **Don't swallow.** A `catch` that only logs and then keeps running is the pattern that produced the GA-blocking partial-failure bug. Use `withRecoveryStage` (recovery code) or rethrow.
+- **Mutate through the pipeline boundary.** Do not call Docker / DB writes directly from a route or tool. Add or extend an entry on `pipeline.*` so `assertProjectMutable` and `withDeployLock` apply automatically.
+- **Reuse cross-cutting helpers.** `checkRecoveryEligibility`, `assertProjectMutable`, `withDeployLock`, `tryRejectIfNotMutable` — import them. Reimplementing is how invariants drift.
+- **Make rejections visible.** Fire-and-forget tools (`redeploy_project`, `restart_project`, etc.) must do a synchronous policy check via `tryRejectIfNotMutable` before returning success — otherwise the user sees fake "redeploying" while the policy is rejecting.
+
+If you find yourself wrapping the same `try/catch` in two places, you've found a missing helper. Pull it up before merging.
+
 ## Submitting Changes
 
 1. Fork the repository
