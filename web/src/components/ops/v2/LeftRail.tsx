@@ -98,7 +98,7 @@ function IncidentRow({
       ? 'bg-error'
       : incident.severity === 'warning'
         ? 'bg-warning'
-        : 'bg-muted-ol';
+        : 'bg-muted-foreground/40';
 
   const displayTitle = incident.triggerType
     ? humanizeEventType(incident.triggerType, t)
@@ -126,7 +126,7 @@ function IncidentRow({
               ? 'border-error text-error bg-error/10'
               : incident.severity === 'warning'
                 ? 'border-warning text-warning bg-warning/10'
-                : 'border-muted-ol text-muted-ol bg-muted-ol/10',
+                : 'border-muted-foreground text-muted-ol bg-muted-foreground/10',
           )}
         >
           <span className="text-[10px] font-bold">{projectName.charAt(0).toUpperCase()}</span>

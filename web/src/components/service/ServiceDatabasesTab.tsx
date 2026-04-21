@@ -234,7 +234,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
                 key={user.name}
                 className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-3 flex items-center gap-3"
               >
-                <div className="h-8 w-8 rounded-full bg-primary-ol/10 flex items-center justify-center shrink-0">
+                <div className="h-8 w-8 rounded-full bg-foreground/10 flex items-center justify-center shrink-0">
                   <Users className="h-4 w-4 text-primary-ol" />
                 </div>
                 <div className="font-mono text-sm text-primary-ol truncate">{user.name}</div>

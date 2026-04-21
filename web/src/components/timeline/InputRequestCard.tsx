@@ -130,7 +130,7 @@ export function InputRequestCard({
                           className={cn(
                             'shrink-0 w-3.5 h-3.5 border flex items-center justify-center transition-colors',
                             q.multiple ? 'rounded-[3px]' : 'rounded-full',
-                            selected ? 'border-agent bg-agent' : 'border-muted-ol',
+                            selected ? 'border-agent bg-agent' : 'border-muted-foreground',
                           )}
                         >
                           {selected && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}

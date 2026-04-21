@@ -117,7 +117,7 @@ export function ServicesPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <button
           onClick={openCreate}
-          className="rounded-xl border-2 border-dashed border-[hsl(var(--border))] bg-bg-panel/30 p-5 min-h-[144px] flex flex-col items-center justify-center gap-2 text-secondary-ol hover:border-primary-ol/40 hover:text-primary-ol hover:bg-bg-panel/60 transition-all cursor-pointer group"
+          className="rounded-xl border-2 border-dashed border-[hsl(var(--border))] bg-bg-panel/30 p-5 min-h-[144px] flex flex-col items-center justify-center gap-2 text-secondary-ol hover:border-foreground/40 hover:text-primary-ol hover:bg-bg-panel/60 transition-all cursor-pointer group"
         >
           <div className="h-10 w-10 rounded-full border-2 border-dashed border-current flex items-center justify-center group-hover:border-solid transition-all">
             <Plus className="h-5 w-5" />
@@ -133,7 +133,7 @@ export function ServicesPage() {
             <div
               key={service.id}
               onClick={() => navigate(`/services/${service.id}`)}
-              className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 min-h-[176px] flex flex-col justify-between cursor-pointer hover:border-primary-ol/50 transition-colors card-hover"
+              className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 min-h-[176px] flex flex-col justify-between cursor-pointer hover:border-foreground/50 transition-colors card-hover"
             >
               <div className="space-y-3">
                 <div>

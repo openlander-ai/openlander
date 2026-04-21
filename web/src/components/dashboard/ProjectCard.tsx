@@ -1,12 +1,9 @@
 import { Spinner } from '@/components/ui/spinner';
 import type { Project } from '@/types';
-import { getSetupStatus } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { Clock, ExternalLink, GitBranch, RotateCw, Settings } from 'lucide-react';
 import type { MouseEvent } from 'react';
-import { useEffect, useState } from 'react';
-import { AISparkle } from '@/components/ui/AISparkle';
 
 interface StatusDisplay {
   label: string;
@@ -32,14 +29,6 @@ export function ProjectCard({
   onRedeploy,
   t,
 }: ProjectCardProps) {
-  const [llmConfigured, setLlmConfigured] = useState(false);
-
-  useEffect(() => {
-    getSetupStatus()
-      .then((s) => setLlmConfigured(s.llm.ok))
-      .catch(() => setLlmConfigured(false));
-  }, []);
-
   const status = statusConfig[project.status] ?? statusConfig.stopped;
 
   return (
@@ -52,17 +41,9 @@ export function ProjectCard({
         project.archived_at && 'opacity-60 grayscale-[0.5]',
       )}
     >
-      <div className="flex items-center justify-between p-4 pb-3 border-b border-[hsl(var(--border))]/50">
+      <div className="flex items-center justify-between p-5 pb-3 border-b border-[hsl(var(--border))]/50">
         <div className="flex items-center gap-3 min-w-0">
-          <div
-            className={cn(
-              'h-2.5 w-2.5 rounded-full shrink-0 shadow-[0_0_6px_rgba(0,0,0,0.1)]',
-              status.dot,
-              project.status === 'running' && 'shadow-[0_0_6px_rgba(22,163,74,0.4)]',
-              project.status === 'error' && 'shadow-[0_0_6px_rgba(220,38,38,0.4)]',
-              project.status === 'building' && 'shadow-[0_0_6px_rgba(217,119,6,0.4)]',
-            )}
-          />
+          <div className={cn('h-2 w-2 rounded-full shrink-0', status.dot)} />
           <h3 className="font-display font-semibold text-base text-primary-ol truncate">
             {project.name}
           </h3>
@@ -79,7 +60,7 @@ export function ProjectCard({
         </div>
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className="p-5 space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
@@ -111,7 +92,7 @@ export function ProjectCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
-              className="flex items-center gap-1.5 text-xs font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 truncate transition-colors"
+              className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-primary-ol hover:underline underline-offset-2 truncate transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               {(project.url ?? '').replace(/^https?:\/\//, '')}
@@ -125,7 +106,7 @@ export function ProjectCard({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(event) => event.stopPropagation()}
-                  className="flex items-center gap-1.5 text-xs font-mono text-purple-400 hover:text-purple-300 truncate transition-colors mt-1"
+                  className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-primary-ol truncate transition-colors mt-1"
                 >
                   <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                   {vpn.url.replace(/^https?:\/\//, '')}
@@ -144,7 +125,7 @@ export function ProjectCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
-              className="flex items-center gap-1.5 text-xs font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 truncate transition-colors"
+              className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-primary-ol hover:underline underline-offset-2 truncate transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               {project.publicUrl.replace(/^https?:\/\//, '')}
@@ -153,7 +134,7 @@ export function ProjectCard({
         )}
       </div>
 
-      <div className="absolute top-4 right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-bg-panel/90 backdrop-blur-sm rounded-md p-1 border border-[hsl(var(--border))] shadow-sm">
+      <div className="absolute top-5 right-5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-bg-panel/90 backdrop-blur-sm rounded-md p-1 border border-[hsl(var(--border))] shadow-sm">
         <button
           onClick={(event) => {
             void onRedeploy(event, project.id);
@@ -165,10 +146,7 @@ export function ProjectCard({
           {redeployingIds.has(project.id) ? (
             <Spinner className="h-4 w-4" />
           ) : (
-            <div className="flex items-center gap-1">
-              {llmConfigured && <AISparkle className="h-3 w-3" />}
-              <RotateCw className="h-4 w-4" />
-            </div>
+            <RotateCw className="h-4 w-4" />
           )}
         </button>
         <button

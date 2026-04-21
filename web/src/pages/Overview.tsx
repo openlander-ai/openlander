@@ -12,7 +12,9 @@ import {
   type ProjectWithOptionalEnvironments,
 } from '@/lib/api/projects';
 import { fetchActivityFeed, type ActivityItem } from '@/lib/api/operations';
+import { getStatusConfigMap } from '@/lib/status-config';
 import { formatRelativeTime } from '@/lib/time';
+import { cn } from '@/lib/utils';
 
 interface OverviewStats {
   active_deploys: number;
@@ -23,36 +25,13 @@ interface OverviewStats {
   ai_spend_today: number;
 }
 
-function getStatusConfig(): Record<
-  string,
-  { label: string; dot: string; badge: string; border: string }
-> {
-  return {
-    running: {
-      label: 'Healthy',
-      dot: 'bg-success animate-pulse',
-      badge: 'bg-success/10 text-success border border-success/30',
-      border: 'border-success/20',
-    },
-    stopped: {
-      label: 'Stopped',
-      dot: 'bg-[var(--text-muted)]',
-      badge: 'bg-bg-subtle text-muted-ol border border-border',
-      border: 'border-[hsl(var(--border))]',
-    },
-    building: {
-      label: 'Deploying',
-      dot: 'bg-warning animate-pulse-ring',
-      badge: 'bg-warning/10 text-warning border border-warning/30',
-      border: 'border-warning/30',
-    },
-    error: {
-      label: 'Failed',
-      dot: 'bg-error',
-      badge: 'bg-error/10 text-error border border-error/30',
-      border: 'border-error/30',
-    },
-  };
+function getStatusConfig() {
+  return getStatusConfigMap({
+    running: 'Healthy',
+    stopped: 'Stopped',
+    building: 'Deploying',
+    error: 'Failed',
+  });
 }
 
 export function Overview() {
@@ -122,7 +101,7 @@ export function Overview() {
 
   if (loading) {
     return (
-      <div className="p-6 xl:p-8 max-w-7xl mx-auto w-full space-y-8">
+      <div className="p-6 xl:p-8 max-w-8xl mx-auto w-full space-y-8">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <Skeleton key={i} className="h-24 w-full rounded-lg" />
@@ -143,47 +122,50 @@ export function Overview() {
   }
 
   return (
-    <div className="p-6 xl:p-8 max-w-7xl mx-auto w-full space-y-8">
+    <div className="p-6 xl:p-8 max-w-8xl mx-auto w-full space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="font-display font-bold text-2xl text-primary-ol tracking-tight">
           {t('overview.title')}
         </h1>
       </div>
 
-      {/* KPI Row */}
+      {/* KPI Row — muted icons; attention-requiring KPIs tint the icon when count > 0 */}
       <div data-testid="kpi-row" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <KpiCard
-          icon={<Rocket className="h-5 w-5 text-blue-500" />}
+          icon={<Rocket className="h-5 w-5" />}
           value={stats?.active_deploys ?? 0}
           label={t('overview.kpi.activeDeploys')}
           onClick={() => navigate('/deployments')}
         />
         <KpiCard
-          icon={<RefreshCw className="h-5 w-5 text-purple-500" />}
+          icon={<RefreshCw className="h-5 w-5" />}
           value={stats?.active_recoveries ?? 0}
           label={t('overview.kpi.recoveries')}
           onClick={() => navigate('/operations')}
         />
         <KpiCard
-          icon={<ShieldCheck className="h-5 w-5 text-amber-500" />}
+          icon={<ShieldCheck className="h-5 w-5" />}
           value={stats?.pending_approvals ?? 0}
           label={t('overview.kpi.approvals')}
+          attention={(stats?.pending_approvals ?? 0) > 0 ? 'warning' : undefined}
           onClick={() => navigate('/operations?tab=approvals')}
         />
         <KpiCard
-          icon={<AlertCircle className="h-5 w-5 text-red-500" />}
+          icon={<AlertCircle className="h-5 w-5" />}
           value={stats?.open_incidents ?? 0}
           label={t('overview.kpi.incidents')}
+          attention={(stats?.open_incidents ?? 0) > 0 ? 'critical' : undefined}
           onClick={() => navigate('/operations?tab=incidents')}
         />
         <KpiCard
-          icon={<HeartOff className="h-5 w-5 text-orange-500" />}
+          icon={<HeartOff className="h-5 w-5" />}
           value={stats?.unhealthy_services ?? 0}
           label={t('overview.kpi.services')}
+          attention={(stats?.unhealthy_services ?? 0) > 0 ? 'critical' : undefined}
           onClick={() => navigate('/services')}
         />
         <KpiCard
-          icon={<DollarSign className="h-5 w-5 text-emerald-500" />}
+          icon={<DollarSign className="h-5 w-5" />}
           value={`$${(stats?.ai_spend_today ?? 0).toFixed(2)}`}
           label={t('overview.kpi.aiSpend')}
           onClick={() => navigate('/operations?tab=usage')}
@@ -309,7 +291,7 @@ export function Overview() {
             <h2 className="font-display font-semibold text-lg text-primary-ol">
               {t('overview.health.title')}
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 3xl:grid-cols-4 gap-5">
               {projects.map((project) => (
                 <ProjectCard
                   key={project.id}
@@ -333,20 +315,28 @@ function KpiCard({
   icon,
   value,
   label,
+  attention,
   onClick,
 }: {
   icon: React.ReactNode;
   value: number | string;
   label: string;
+  attention?: 'warning' | 'critical';
   onClick: () => void;
 }) {
+  const iconColor =
+    attention === 'critical'
+      ? 'text-error'
+      : attention === 'warning'
+        ? 'text-warning'
+        : 'text-muted-foreground group-hover:text-agent transition-colors';
   return (
     <div
       onClick={onClick}
-      className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex flex-col gap-2 cursor-pointer hover:bg-bg-panel/80 hover:border-agent/30 transition-all duration-200"
+      className="group bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-5 min-h-[120px] flex flex-col justify-between gap-3 cursor-pointer hover:bg-bg-panel/80 hover:border-agent/30 transition-all duration-200"
     >
       <div className="flex items-center justify-between">
-        <div className="p-2 bg-bg-subtle rounded-md">{icon}</div>
+        <div className={cn('p-2 bg-bg-subtle rounded-md', iconColor)}>{icon}</div>
         <span className="font-display font-bold text-xl text-primary-ol">{value}</span>
       </div>
       <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
@@ -357,13 +347,15 @@ function KpiCard({
 }
 
 function ActivityIcon({ type, severity }: { type: string; severity: string }) {
-  if (type === 'incident') return <AlertCircle className="h-4 w-4 text-error" />;
-  if (type === 'recovery' || type.startsWith('recovery:'))
-    return <RefreshCw className="h-4 w-4 text-purple-500" />;
-  if (type === 'approval') return <ShieldCheck className="h-4 w-4 text-warning" />;
-  if (type.startsWith('ai')) return <DollarSign className="h-4 w-4 text-emerald-500" />;
+  // Status/severity encoding — colors preserved (dokploy rule exception)
+  if (type === 'incident' || severity === 'critical')
+    return <AlertCircle className="h-4 w-4 text-error" />;
+  if (type === 'approval' || severity === 'warning')
+    return <ShieldCheck className="h-4 w-4 text-warning" />;
 
-  if (severity === 'critical') return <AlertCircle className="h-4 w-4 text-error" />;
-  if (severity === 'warning') return <AlertCircle className="h-4 w-4 text-warning" />;
-  return <Rocket className="h-4 w-4 text-blue-500" />;
+  // Decorative / informational — muted (recovery, AI events, default)
+  if (type === 'recovery' || type.startsWith('recovery:'))
+    return <RefreshCw className="h-4 w-4 text-muted-foreground" />;
+  if (type.startsWith('ai')) return <DollarSign className="h-4 w-4 text-muted-foreground" />;
+  return <Rocket className="h-4 w-4 text-muted-foreground" />;
 }

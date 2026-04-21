@@ -25,6 +25,7 @@ import {
   ArchiveRestore,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getStatusDisplay } from '@/lib/status-config';
 import { useSetup } from '@/hooks/use-setup.js';
 import { useLanguage } from '@/i18n/context';
 import { AISparkle } from '@/components/ui/AISparkle';
@@ -47,35 +48,25 @@ interface ProjectHeaderProps {
 
 type StatusConfig = { label: string; color: string; dot: string };
 
-function getStatusConfig(
+function buildStatusConfig(
   t: (key: string) => string,
   isImageSource: boolean = false,
 ): Record<string, StatusConfig> {
-  return {
-    running: {
-      label: t('project.header.status.live'),
-      color: 'text-success',
-      dot: 'bg-success animate-pulse',
-    },
-    stopped: {
-      label: t('project.header.status.stopped'),
-      color: 'text-muted-ol',
-      dot: 'bg-[var(--text-muted)]',
-    },
-    building: {
-      label: isImageSource
-        ? t('project.header.status.pulling')
-        : t('project.header.status.deploying'),
-      color: 'text-warning',
-      dot: 'bg-warning animate-pulse-ring',
-    },
-    error: { label: t('project.header.status.failed'), color: 'text-error', dot: 'bg-error' },
-    idle: {
-      label: t('project.header.status.idle'),
-      color: 'text-muted-ol',
-      dot: 'bg-[var(--text-muted)]',
-    },
+  const labels: Record<string, string> = {
+    running: t('project.header.status.live'),
+    stopped: t('project.header.status.stopped'),
+    building: isImageSource
+      ? t('project.header.status.pulling')
+      : t('project.header.status.deploying'),
+    error: t('project.header.status.failed'),
+    idle: t('project.header.status.idle'),
   };
+  const out: Record<string, StatusConfig> = {};
+  for (const key of Object.keys(labels)) {
+    const def = getStatusDisplay(key);
+    out[key] = { label: labels[key], color: def.textClass, dot: def.dot };
+  }
+  return out;
 }
 
 export function ProjectHeader({
@@ -94,7 +85,7 @@ export function ProjectHeader({
   const { status: setupStatus } = useSetup();
   const { t } = useLanguage();
   const isImageSource = project.source === 'image';
-  const statusConfig = getStatusConfig(t, isImageSource);
+  const statusConfig = buildStatusConfig(t, isImageSource);
   const isLlmConfigured = setupStatus?.llm.ok === true;
 
   const displayStatus = project.status;
@@ -288,10 +279,7 @@ export function ProjectHeader({
 
               {/* Rollback */}
               <DropdownMenuItem onClick={onRollback} disabled={!!actionLoading}>
-                <div className="flex items-center gap-2">
-                  {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
-                  <History className="h-3.5 w-3.5" />
-                </div>
+                <History className="h-3.5 w-3.5 mr-2" />
                 {t('project.header.action.rollback')}
               </DropdownMenuItem>
 
@@ -301,10 +289,7 @@ export function ProjectHeader({
                   onClick={onOpenBlueGreenDialog}
                   disabled={!isRunning || !!actionLoading}
                 >
-                  <div className="flex items-center gap-2">
-                    {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
-                    <Zap className="h-3.5 w-3.5" />
-                  </div>
+                  <Zap className="h-3.5 w-3.5 mr-2" />
                   {t('project.header.action.blueGreen')}
                 </DropdownMenuItem>
               </Tooltip>

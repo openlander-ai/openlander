@@ -29,7 +29,7 @@ export function KeyboardShortcutsHelp({ className, helpButtonRef }: KeyboardShor
         <button
           ref={helpButtonRef}
           className={cn(
-            'inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-subtle hover:text-foreground transition-colors',
+            'inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors',
             className,
           )}
           aria-label={t('opsV2.shortcuts.helpLabel')}

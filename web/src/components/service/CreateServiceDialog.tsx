@@ -139,8 +139,8 @@ export function CreateServiceDialog({
                   className={cn(
                     'flex flex-col items-center justify-center p-4 rounded-lg border transition-all',
                     createMode === 'template' && selectedTemplate?.id === tmpl.id
-                      ? 'border-primary-ol bg-primary-ol/5'
-                      : 'border-[hsl(var(--border))] hover:border-primary-ol/50 hover:bg-bg-subtle',
+                      ? 'border-foreground bg-foreground/5'
+                      : 'border-[hsl(var(--border))] hover:border-foreground/50 hover:bg-bg-subtle',
                   )}
                 >
                   <Database className="h-6 w-6 mb-2 text-secondary-ol" />

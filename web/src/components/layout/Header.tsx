@@ -96,7 +96,7 @@ export function Header({
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-12 border-b border-[hsl(var(--border))] bg-bg-app z-50 flex items-center justify-between px-4">
+    <header className="fixed top-0 left-0 right-0 h-12 border-b border-[hsl(var(--border))] bg-bg-app/80 backdrop-blur-md z-50 flex items-center justify-between px-4">
       <div className="flex items-center gap-3">
         <div
           className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity"
@@ -216,9 +216,9 @@ export function Header({
               llmStatus === null
                 ? 'bg-muted-foreground/40'
                 : llmStatus === 'online'
-                  ? 'bg-success shadow-[0_0_6px_rgba(16,185,129,0.25)]'
+                  ? 'bg-success'
                   : llmStatus === 'error'
-                    ? 'bg-warning animate-pulse'
+                    ? 'bg-warning'
                     : 'bg-muted-foreground/40',
             )}
           />

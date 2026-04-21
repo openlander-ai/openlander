@@ -23,6 +23,7 @@ import { getSetupStatus } from '@/lib/api';
 import { useAgentPanel } from '@/contexts/agent-panel';
 import { formatRelativeTime } from '@/lib/time';
 import { subscribeLlmChanged } from '@/lib/llm-events';
+import { getStatusDisplay } from '@/lib/status-config';
 
 type SidebarProject = Project;
 
@@ -31,13 +32,8 @@ interface SidebarProps {
   loading: boolean;
 }
 
-const statusColor: Record<string, string> = {
-  running: 'bg-success animate-pulse',
-  stopped: 'bg-[var(--text-muted)]',
-  building: 'bg-warning animate-pulse-ring',
-  error: 'bg-error',
-  idle: 'bg-[var(--text-muted)]',
-};
+/* Project-status dot class sourced from centralized status-config. */
+const statusDotClass = (status: string) => getStatusDisplay(status).dot;
 
 const VISIBILITY_ORDER: Record<string, number> = {
   production: 0,
@@ -177,12 +173,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             isProjectActive(project.id) ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
           )}
         >
-          <div
-            className={cn(
-              'h-2 w-2 rounded-full shrink-0',
-              statusColor[project.status] ?? 'bg-[var(--text-muted)]',
-            )}
-          />
+          <div className={cn('h-2 w-2 rounded-full shrink-0', statusDotClass(project.status))} />
           <span className="hidden lg:block flex-1 text-xs font-body truncate">{project.name}</span>
         </button>
       </div>
@@ -296,12 +287,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                     ) : (
                       <ChevronRight className="h-3.5 w-3.5 shrink-0" />
                     )}
-                    <div
-                      className={cn(
-                        'h-2 w-2 rounded-full shrink-0',
-                        statusColor[status] ?? 'bg-[var(--text-muted)]',
-                      )}
-                    />
+                    <div className={cn('h-2 w-2 rounded-full shrink-0', statusDotClass(status))} />
                     <span className="flex-1 text-sm font-medium truncate">{parent.name}</span>
                     <span className="text-xs bg-bg-subtle px-1.5 py-0.5 rounded-full ml-auto group-hover:bg-foreground/10 transition-colors">
                       {parentChildren.length}

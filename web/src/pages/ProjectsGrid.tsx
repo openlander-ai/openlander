@@ -9,38 +9,16 @@ import { useProjects } from '@/hooks/use-projects';
 import { useSystemStatus } from '@/hooks/use-system-status';
 import { useLanguage } from '@/i18n/context';
 import { redeployProject } from '@/lib/api';
+import { getStatusConfigMap } from '@/lib/status-config';
 import { cn } from '@/lib/utils';
 
-function getStatusConfig(): Record<
-  string,
-  { label: string; dot: string; badge: string; border: string }
-> {
-  return {
-    running: {
-      label: 'Healthy',
-      dot: 'bg-success animate-pulse',
-      badge: 'bg-success/10 text-success border border-success/30',
-      border: 'border-success/20',
-    },
-    stopped: {
-      label: 'Stopped',
-      dot: 'bg-[var(--text-muted)]',
-      badge: 'bg-bg-subtle text-muted-ol border border-border',
-      border: 'border-[hsl(var(--border))]',
-    },
-    building: {
-      label: 'Deploying',
-      dot: 'bg-warning animate-pulse-ring',
-      badge: 'bg-warning/10 text-warning border border-warning/30',
-      border: 'border-warning/30',
-    },
-    error: {
-      label: 'Failed',
-      dot: 'bg-error',
-      badge: 'bg-error/10 text-error border border-error/30',
-      border: 'border-error/30',
-    },
-  };
+function getStatusConfig() {
+  return getStatusConfigMap({
+    running: 'Healthy',
+    stopped: 'Stopped',
+    building: 'Deploying',
+    error: 'Failed',
+  });
 }
 
 export function ProjectsGrid() {
@@ -81,7 +59,7 @@ export function ProjectsGrid() {
 
   if (projectsLoading || systemLoading) {
     return (
-      <div className="p-6 xl:p-8 max-w-7xl mx-auto w-full space-y-6">
+      <div className="p-6 xl:p-8 max-w-8xl mx-auto w-full space-y-6">
         <div className="flex items-center justify-between mb-6">
           <div>
             <Skeleton className="h-7 w-32 mb-2" />
@@ -89,7 +67,7 @@ export function ProjectsGrid() {
           </div>
           <Skeleton className="h-8 w-28" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 3xl:grid-cols-4 gap-5">
           {[1, 2, 3, 4].map((index) => (
             <Skeleton key={index} className="h-[140px] w-full rounded-lg" />
           ))}
@@ -99,7 +77,7 @@ export function ProjectsGrid() {
   }
 
   return (
-    <div className="p-6 xl:p-8 max-w-7xl mx-auto w-full space-y-8">
+    <div className="p-6 xl:p-8 max-w-8xl mx-auto w-full space-y-8">
       <SystemHealthCards
         serverStatus={serverStatus}
         setupStatus={setupStatus}
@@ -180,7 +158,7 @@ export function ProjectsGrid() {
           </div>
         </button>
       ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 3xl:grid-cols-4 gap-5">
           {filteredProjects.map((project) => (
             <ProjectCard
               key={project.id}

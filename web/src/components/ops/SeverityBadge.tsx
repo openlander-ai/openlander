@@ -39,7 +39,10 @@ export function SeverityBadge({ severity, count, className }: SeverityBadgeProps
     return (
       <Badge
         variant="outline"
-        className={cn('h-5 px-1.5 text-[10px] text-info border-info/50', className)}
+        className={cn(
+          'h-5 px-1.5 text-[10px] text-blue-600 dark:text-blue-400 border-blue-500/50',
+          className,
+        )}
       >
         {count !== undefined ? `${count} ` : ''}
         {t('opsV2.severity.info')}
