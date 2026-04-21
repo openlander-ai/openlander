@@ -55,6 +55,7 @@ export const projects = sqliteTable(
     health_check_strategy: text('health_check_strategy', { enum: ['http', 'tcp', 'exec', 'none'] }),
     health_check_path: text('health_check_path'),
     server_id: text('server_id').notNull().default('local'),
+    recovering_started_at: text('recovering_started_at'),
   },
   (table) => [
     check(

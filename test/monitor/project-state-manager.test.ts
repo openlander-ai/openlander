@@ -91,7 +91,10 @@ describe('ProjectStateManager', () => {
     const transitioned = await manager.transition('project-1', 'building', 'deploy started');
 
     expect(transitioned).toBe(true);
-    expect(updateProject).toHaveBeenCalledWith('project-1', { status: 'building' });
+    expect(updateProject).toHaveBeenCalledWith(
+      'project-1',
+      expect.objectContaining({ status: 'building' }),
+    );
     expect(capturedEvents).toEqual([
       {
         event: 'project:status-changed',
@@ -162,8 +165,16 @@ describe('ProjectStateManager', () => {
     const result = await manager.reconcileAll();
 
     expect(result).toEqual({ reconciled: 2, skipped: 1 });
-    expect(updateProject).toHaveBeenNthCalledWith(1, 'project-building', { status: 'running' });
-    expect(updateProject).toHaveBeenNthCalledWith(2, 'project-running', { status: 'stopped' });
+    expect(updateProject).toHaveBeenNthCalledWith(
+      1,
+      'project-building',
+      expect.objectContaining({ status: 'running' }),
+    );
+    expect(updateProject).toHaveBeenNthCalledWith(
+      2,
+      'project-running',
+      expect.objectContaining({ status: 'stopped' }),
+    );
     expect(capturedEvents).toEqual([]);
   });
 });

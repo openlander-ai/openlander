@@ -36,6 +36,8 @@ export interface ProjectRow {
   project_type: 'web' | 'worker';
   health_check_strategy: 'http' | 'tcp' | 'exec' | 'none' | null;
   health_check_path: string | null;
+  server_id: string;
+  recovering_started_at: string | null;
 }
 
 export interface EnvironmentRow {

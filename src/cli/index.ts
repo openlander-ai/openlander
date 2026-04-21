@@ -11,6 +11,22 @@ const log = createModuleLogger('cli');
 
 const program = new Command();
 
+/**
+ * 1.0 GA: shared unhandledRejection handler used by both `openlander` and
+ * `openlander start`. Logs the reason but keeps the host process alive so a
+ * transient async failure (e.g. background LLM probe, Docker hiccup) does
+ * not crash-loop under systemd / pm2 / docker. Errors that should bubble
+ * to the user are surfaced through their own typed-error paths.
+ */
+function registerUnhandledRejectionHandler(): void {
+  process.on('unhandledRejection', (reason) => {
+    log.error(
+      { reason },
+      'Unhandled promise rejection — process will continue (check for LLM/Docker connectivity issues)',
+    );
+  });
+}
+
 // ── Default command: openlander (Web mode — default) ─────────────────────────
 
 program
@@ -39,6 +55,8 @@ program
 
     const { createAppContext } = await import('../app.js');
     const ctx = await createAppContext(config, getDbPath());
+
+    registerUnhandledRejectionHandler();
 
     // Register tools with agent (including external MCP tools)
     if (ctx.agent) {
@@ -140,6 +158,8 @@ program
 
     const { createAppContext } = await import('../app.js');
     const ctx = await createAppContext(config, getDbPath());
+
+    registerUnhandledRejectionHandler();
 
     if (ctx.agent) {
       const { createTools } = await import('../tools/index.js');

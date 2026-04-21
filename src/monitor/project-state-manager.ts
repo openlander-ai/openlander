@@ -120,7 +120,15 @@ export class ProjectStateManager {
       return false;
     }
 
-    this.ctx.db.updateProject(projectId, { status: persistedStatus });
+    const recoveringUpdate: { recoveringStartedAt?: string | null } =
+      persistedStatus === 'recovering'
+        ? { recoveringStartedAt: new Date().toISOString() }
+        : { recoveringStartedAt: null };
+
+    this.ctx.db.updateProject(projectId, {
+      status: persistedStatus,
+      ...recoveringUpdate,
+    });
 
     if (!options?.skipEvents) {
       await this.ctx.eventBus.emit('project:status-changed', {

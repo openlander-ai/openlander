@@ -7,7 +7,7 @@ import {
   parseEnvFile,
   formatEnvValue,
 } from './env-inject.js';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { nanoid } from 'nanoid';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
@@ -476,11 +476,13 @@ export class ComposePipeline {
       name: parentName,
       repoUrl: config.repoUrl,
       branch: config.branch,
-      dockerfilePath: config.composePath,
+      dockerfilePath: relative(config.clonePath, config.composePath),
+      buildMethod: 'compose',
     });
     this.db.updateProject(parentProjectId, {
       status: 'building',
-      dockerfilePath: config.composePath,
+      dockerfilePath: relative(config.clonePath, config.composePath),
+      buildMethod: 'compose',
     });
     this.jobManager?.trackJob(parentProjectId, parentName);
 
@@ -557,14 +559,16 @@ export class ComposePipeline {
         name: parentName,
         repoUrl: config.repoUrl,
         branch: config.branch,
-        dockerfilePath: config.composePath,
+        dockerfilePath: relative(config.clonePath, config.composePath),
+        buildMethod: 'compose',
       });
       this.jobManager?.trackJob(parentProjectId, parentName);
     }
 
     this.db.updateProject(parentProjectId, {
       status: 'building',
-      dockerfilePath: config.composePath,
+      dockerfilePath: relative(config.clonePath, config.composePath),
+      buildMethod: 'compose',
     });
 
     const childrenByService = new Map<string, string>();

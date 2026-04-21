@@ -43,6 +43,13 @@
       "when": 1776380000000,
       "tag": "0005_add_error_fields_to_ai_usage_log",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1776480000000,
+      "tag": "0006_compose_path_and_recovering_watchdog",
+      "breakpoints": true
     }
   ]
 }

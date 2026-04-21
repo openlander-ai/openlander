@@ -19,12 +19,35 @@ import type { PendingFixPatch } from './deploy/helpers.js';
 import { findMatchingPatterns, saveRecoveryPattern } from '../llm/memory.js';
 import type { ConfigurableRecoveryStep, RecoveryAutomationPolicy } from '../monitor/ops-types.js';
 import { withRecoveryStage } from '../monitor/recovery-policy.js';
+import { isLlmUnreachableError } from '../errors.js';
 
 const log = createModuleLogger('auto-recovery');
 
 const RECOVERY_OUTCOME_FALLBACK_TIMEOUT_MS = 300_000;
 const RECOVERY_OUTCOME_MAX_TIMEOUT_MS = 600_000;
 const RECOVERY_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * 1.0 GA — when the LLM provider is unreachable, hold off all LLM-driven
+ * recovery for this long before re-attempting. Prevents tight retry loops
+ * against an offline Ollama / OpenAI endpoint and gives the user time to
+ * restart the provider service. Per-process in-memory; resets on restart.
+ *
+ * 1.0.x backlog: persist via circuit-breaker DB row + emit
+ * `recovery:blocked` event for UI surface.
+ */
+const LLM_UNREACHABLE_COOLDOWN_MS = 30 * 60 * 1000;
+let llmUnreachableCooldownUntilMs = 0;
+
+/**
+ * Test-only helper: reset the in-memory LLM-unreachable cooldown so test
+ * cases don't leak state between runs. Production code should never call
+ * this — the cooldown is intentionally process-lifetime to throttle
+ * recovery against an offline LLM endpoint.
+ */
+export function resetLlmUnreachableCooldownForTests(): void {
+  llmUnreachableCooldownUntilMs = 0;
+}
 
 type RecoveryStrategy = 'recipe' | 'llm';
 
@@ -433,7 +456,23 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     const project = db.getProject(projectId);
     const projectName = project?.name ?? projectId;
 
-    if (strategy === 'llm' && agent) {
+    // 1.0 GA: when the LLM cooldown window is active, force the recipe path
+    // so recovery still makes progress against an offline provider without
+    // tight retry loops. Falls through to the existing programmatic path
+    // below by short-circuiting the agent strategy.
+    const llmCooldownActive = Date.now() < llmUnreachableCooldownUntilMs;
+    if (strategy === 'llm' && agent && llmCooldownActive) {
+      const remainingMs = llmUnreachableCooldownUntilMs - Date.now();
+      log.warn(
+        { projectId, remainingMs },
+        'LLM provider in unreachable cooldown — skipping LLM recovery, falling back to programmatic path',
+      );
+      await emitTimelineMessage(
+        eventBus,
+        projectId,
+        `LLM provider is unreachable. Skipping AI recovery for ${String(Math.ceil(remainingMs / 60000))} more minute(s); falling back to recipe-based recovery.`,
+      );
+    } else if (strategy === 'llm' && agent) {
       await emitTimelineMessage(
         eventBus,
         projectId,
@@ -661,6 +700,29 @@ ${plan.agentGuidance}
 
         return;
       } catch (err) {
+        if (isLlmUnreachableError(err)) {
+          // 1.0 GA: open the LLM-unreachable cooldown so subsequent recovery
+          // attempts skip the LLM path until the provider is reachable
+          // again. Prevents the tight retry loop that crash-loops the host
+          // process under a supervisor when local Ollama / OpenAI is down.
+          llmUnreachableCooldownUntilMs = Date.now() + LLM_UNREACHABLE_COOLDOWN_MS;
+          log.warn(
+            { err, projectId, cooldownUntilMs: llmUnreachableCooldownUntilMs },
+            `LLM unreachable — opening ${String(LLM_UNREACHABLE_COOLDOWN_MS / 60000)}min cooldown, will retry after`,
+          );
+          db.updateActionRunStatus(
+            actionRunId,
+            'failed',
+            'LLM provider unreachable — cooldown opened',
+          );
+          await eventBus.emit('recovery:failed', {
+            projectId,
+            error: `LLM provider unreachable — recovery paused for ${String(LLM_UNREACHABLE_COOLDOWN_MS / 60000)} minutes. Restart the LLM provider (e.g. \`ollama serve\`) and recovery will resume.`,
+            attempt,
+            correlationId: projectId,
+          });
+          return;
+        }
         const errorMessage = err instanceof Error ? err.message : error;
         db.updateActionRunStatus(actionRunId, 'failed', errorMessage);
         log.error({ err, projectId }, 'Auto-recovery agent call failed');

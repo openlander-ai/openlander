@@ -358,6 +358,100 @@ export class LLMConcurrencyExceededError extends OpenLanderError {
   }
 }
 
+/**
+ * 1.0 GA — raised when the LLM provider endpoint is unreachable
+ * (ECONNREFUSED, DNS failure, AI SDK RetryError after exhausting retries on
+ * a network-class error). Distinguished from {@link LLMProviderError} because
+ * the user can usually fix this themselves (start Ollama, restart the LLM
+ * service, check VPN). Auto-recovery catches this via {@link isLlmUnreachableError}
+ * and aborts the cycle cleanly so a long-offline provider doesn't make the
+ * host process crash-loop under a supervisor (systemd / pm2 / docker restart).
+ *
+ * NOTE: 1.0 GA does not yet wrap streamText callers to throw this typed
+ * error directly — auto-recovery relies on the heuristic
+ * {@link isLlmUnreachableError} against raw AI SDK errors. 1.0.x backlog:
+ * wrap LLM SDK calls so the typed error becomes the documented contract.
+ */
+export class LLMUnreachableError extends OpenLanderError {
+  constructor(provider: string, cause: string) {
+    super(
+      `LLM provider ${provider} is unreachable: ${cause}. Check that the provider service is running and reachable, then retry.`,
+      'LLM_UNREACHABLE',
+      503,
+      { provider, cause },
+    );
+    this.name = 'LLMUnreachableError';
+  }
+}
+
+/**
+ * Returns true when an unknown error appears to be a connectivity/network
+ * failure rather than a 4xx/5xx from a reachable LLM endpoint. Used by
+ * auto-recovery and the agent layer to translate raw AI SDK errors into a
+ * typed {@link LLMUnreachableError} so the recovery cycle can fail soft
+ * without crashing the host process.
+ *
+ * Heuristics:
+ * - AI SDK `RetryError`/`APICallError` whose underlying cause is network.
+ * - Plain Node errors with `code` ∈ ECONNREFUSED/ENOTFOUND/EHOSTUNREACH/...
+ * - Message strings matching connectivity-class patterns.
+ */
+export function isLlmUnreachableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    const msg = typeof error === 'string' ? error : '';
+    return /econnrefused|enotfound|ehostunreach|etimedout|connection refused|connection reset|fetch failed|network/i.test(
+      msg,
+    );
+  }
+
+  const err = error as {
+    name?: string;
+    code?: string | number;
+    message?: string;
+    cause?: unknown;
+  };
+
+  const codeStr = typeof err.code === 'string' ? err.code : '';
+  if (
+    [
+      'ECONNREFUSED',
+      'ENOTFOUND',
+      'EHOSTUNREACH',
+      'ENETUNREACH',
+      'ETIMEDOUT',
+      'ECONNRESET',
+      'EAI_AGAIN',
+    ].includes(codeStr)
+  ) {
+    return true;
+  }
+
+  const msg = typeof err.message === 'string' ? err.message : '';
+  if (
+    /econnrefused|enotfound|ehostunreach|etimedout|econnreset|connection refused|connection reset|fetch failed|network error|getaddrinfo/i.test(
+      msg,
+    )
+  ) {
+    return true;
+  }
+
+  if (err.name === 'RetryError' || err.name === 'AI_RetryError') {
+    // RetryError wraps the last underlying failure — recurse into cause.
+    if (err.cause && err.cause !== error) {
+      return isLlmUnreachableError(err.cause);
+    }
+    // No cause attached — treat retry exhaustion as unreachable so we
+    // fail soft rather than crash on the bare RetryError instance.
+    return true;
+  }
+
+  if (err.cause && err.cause !== error) {
+    return isLlmUnreachableError(err.cause);
+  }
+
+  return false;
+}
+
 // --- Config errors ---
 
 export class ConfigNotFoundError extends OpenLanderError {

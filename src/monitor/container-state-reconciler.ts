@@ -9,6 +9,14 @@ const log = createModuleLogger('container-state-reconciler');
 
 const DEFAULT_INTERVAL_MS = 30_000;
 const MISSING_CONTAINER_SUGGESTION = 'Run restart_project to redeploy.';
+// 1.0 GA: 60 minutes (raised from 30 to reduce false positives on slow
+// recoveries that legitimately take >30 min — e.g. large npm install +
+// Docker pull + multi-service compose). The watchdog still escapes truly
+// stuck rows; we just give legitimate long recoveries more room.
+// 1.0.x backlog: make configurable via OpenLanderConfig.ai.recovery.stuckTimeoutMs
+// and short-circuit the timeout when an active deploy lock is held for the
+// project (lock holder owns the lifecycle).
+const RECOVERING_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 const RECONCILE_ELIGIBLE_STATUSES: ReadonlySet<ProjectRow['status']> = new Set([
   'running',
   'error',
@@ -79,6 +87,7 @@ export class ContainerStateReconciler {
     try {
       await this.detectMissingContainers();
       await this.detectOrphanContainers();
+      await this.timeoutStuckRecovering();
     } finally {
       this.reconciling = false;
     }
@@ -122,6 +131,50 @@ export class ContainerStateReconciler {
           'Detected project container missing from Docker',
         );
       }
+    }
+  }
+
+  private async timeoutStuckRecovering(): Promise<void> {
+    if (!this.stateManager) return;
+    const now = Date.now();
+    const recovering = this.db.listProjects('recovering');
+    for (const project of recovering) {
+      if (!project.recovering_started_at) continue;
+      const elapsed = now - new Date(project.recovering_started_at).getTime();
+      if (elapsed < RECOVERING_TIMEOUT_MS) continue;
+
+      // 1.0 GA: skip the timeout when a deploy lock is currently held for
+      // this project. The lock holder (recovery agent / manual redeploy)
+      // owns the lifecycle and may legitimately need more than the watchdog
+      // window. acquireDeployLock cleans expired locks itself, so we can
+      // trust deploy_lock_session as a live-liveness signal.
+      const lockInfo =
+        typeof this.db.getDeployLockInfo === 'function'
+          ? this.db.getDeployLockInfo(project.id)
+          : null;
+      if (lockInfo) {
+        log.debug(
+          {
+            projectId: project.id,
+            elapsedMs: elapsed,
+            lockSession: lockInfo.session,
+          },
+          'Recovering project past timeout but deploy lock still held — deferring to lock holder',
+        );
+        continue;
+      }
+
+      log.warn(
+        { projectId: project.id, elapsedMs: elapsed },
+        'Project stuck in recovering state beyond timeout — transitioning to error',
+      );
+      await this.stateManager.transition(project.id, 'error', 'recovering-timeout');
+      await this.events.emit('project:status-changed', {
+        projectId: project.id,
+        from: 'recovering',
+        to: 'error',
+        reason: 'Recovery timed out after 60 minutes',
+      });
     }
   }
 

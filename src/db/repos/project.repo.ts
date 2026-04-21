@@ -40,6 +40,7 @@ export class ProjectRepo {
     dockerfilePath?: string;
     dockerTarget?: string;
     buildContext?: string;
+    buildMethod?: ProjectRow['build_method'];
     source?: ProjectRow['source'];
     imageUrl?: string;
     imageCmd?: string[];
@@ -57,6 +58,7 @@ export class ProjectRepo {
           dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
           docker_target: project.dockerTarget ?? null,
           build_context: project.buildContext ?? null,
+          build_method: project.buildMethod ?? null,
           source: project.source ?? 'git',
           image_url: project.imageUrl ?? null,
           image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
@@ -202,6 +204,7 @@ export class ProjectRepo {
       projectType: ProjectRow['project_type'];
       healthCheckStrategy: ProjectRow['health_check_strategy'];
       healthCheckPath: string | null;
+      recoveringStartedAt: string | null;
     }>,
   ): void {
     const setValues = buildSetValues(updates, {
@@ -229,6 +232,7 @@ export class ProjectRepo {
       projectType: 'project_type',
       healthCheckStrategy: 'health_check_strategy',
       healthCheckPath: 'health_check_path',
+      recoveringStartedAt: 'recovering_started_at',
     });
     if (updates.imageCmd !== undefined) {
       setValues.image_cmd = updates.imageCmd === null ? null : JSON.stringify(updates.imageCmd);
