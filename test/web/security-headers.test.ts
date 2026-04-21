@@ -8,11 +8,22 @@
 import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 
-function makeApp(): Hono {
+function makeApp(opts: { extraConnectSrc?: string } = {}): Hono {
   // Mirror the security-headers middleware shape from src/web/server.ts so
   // the test exercises the same code path without spinning up the full
-  // AppContext (database, docker, etc.).
+  // AppContext (database, docker, etc.). Day 14 narrowed `connect-src` to
+  // `'self'` plus an optional operator override (env-driven in
+  // production, parameterised here).
   const app = new Hono();
+  const cspExtraConnectSrc = (opts.extraConnectSrc ?? '').trim();
+  const connectSrcDirective = cspExtraConnectSrc
+    ? `connect-src 'self' ${cspExtraConnectSrc}`
+    : "connect-src 'self'";
+  const cspHeader =
+    "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; " +
+    `script-src 'self'; ${connectSrcDirective}; frame-ancestors 'none'; ` +
+    "base-uri 'self'; form-action 'self'";
+
   app.use('*', async (c, next) => {
     await next();
     if (!c.res.headers.has('X-Content-Type-Options')) {
@@ -25,12 +36,7 @@ function makeApp(): Hono {
       c.res.headers.set('Referrer-Policy', 'no-referrer');
     }
     if (!c.res.headers.has('Content-Security-Policy')) {
-      c.res.headers.set(
-        'Content-Security-Policy',
-        "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; " +
-          "script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; " +
-          "base-uri 'self'; form-action 'self'",
-      );
+      c.res.headers.set('Content-Security-Policy', cspHeader);
     }
     const forwardedProto = c.req.header('x-forwarded-proto');
     if (forwardedProto && forwardedProto.split(',')[0]?.trim().toLowerCase() === 'https') {
@@ -103,5 +109,36 @@ describe('Day 13 M1: security response headers', () => {
       headers: { 'x-forwarded-proto': 'https, http' },
     });
     expect(res.headers.get('Strict-Transport-Security')).not.toBeNull();
+  });
+});
+
+describe('Day 14 follow-up: CSP connect-src is narrow by default', () => {
+  it("defaults connect-src to 'self' (no open ws:/wss: anymore)", async () => {
+    const app = makeApp();
+    const res = await app.request('/api/info');
+    const csp = res.headers.get('Content-Security-Policy') ?? '';
+    expect(csp).toContain("connect-src 'self'");
+    // Critical regression guard: the open ws/wss wildcards used to live
+    // here. They must not return.
+    expect(csp).not.toMatch(/connect-src[^;]*\bws:\B/);
+    expect(csp).not.toMatch(/connect-src[^;]*\bwss:\B/);
+    expect(csp).not.toMatch(/connect-src[^;]*\bws:\s*[;,]/);
+    expect(csp).not.toMatch(/connect-src[^;]*\bwss:\s*[;,]/);
+  });
+
+  it('appends operator-supplied origins after self when override is set', async () => {
+    const app = makeApp({ extraConnectSrc: 'wss://logs.example.com https://api.example.com' });
+    const res = await app.request('/api/info');
+    const csp = res.headers.get('Content-Security-Policy') ?? '';
+    expect(csp).toContain("connect-src 'self' wss://logs.example.com https://api.example.com");
+    // Self must still be present so same-origin XHR keeps working.
+    expect(csp).toMatch(/connect-src 'self'/);
+  });
+
+  it("ignores blank operator override and keeps the narrow 'self' default", async () => {
+    const app = makeApp({ extraConnectSrc: '   ' });
+    const res = await app.request('/api/info');
+    const csp = res.headers.get('Content-Security-Policy') ?? '';
+    expect(csp).toContain("connect-src 'self';");
   });
 });

@@ -102,6 +102,19 @@ export function createSetupRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   api.get('/setup/status', async (c) => {
+    const hasPassword = ctx.db.isPasswordSet();
+
+    // Day 14 follow-up to Day 13 M5: short-circuit anonymous calls before
+    // we even hit Docker / Traefik / config. Once a password is set the
+    // unauthenticated UI only needs to know `hasPassword` so it can render
+    // the login form — leaking docker state, LLM provider/model, or
+    // GitHub username is the recon primitive we want to remove. Returning
+    // a constant shape (no `ready: true|false` bit either) also denies the
+    // attacker a "is this install fully configured yet?" signal.
+    if (hasPassword && !isAuthenticated(c)) {
+      return c.json({ ok: true, hasPassword: true });
+    }
+
     const [dockerStatus, traefikOk] = await Promise.all([
       ctx.docker.status(),
       ctx.traefik.isRunning().catch(() => false),
@@ -110,18 +123,8 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     const config = loadConfig();
     const dockerOk = dockerStatus.state === 'running';
     const llmStatus = getLlmRuntimeStatus(config, ctx.llmVerified);
-    const hasPassword = ctx.db.isPasswordSet();
 
     const ready = dockerOk && hasPassword;
-
-    // Day 13 M5: once a password is configured, refuse to reveal docker
-    // state, configured LLM provider/model, or GitHub username to anonymous
-    // callers — those are useful to attackers and the legitimate UI always
-    // re-fetches after the user logs in. The `ready` flag is fine to expose
-    // because the login form needs it to render the right view.
-    if (hasPassword && !isAuthenticated(c)) {
-      return c.json({ ready, hasPassword: true });
-    }
 
     let dockerMessage: string;
     if (dockerStatus.state === 'running') {

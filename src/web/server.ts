@@ -159,15 +159,34 @@ function createApp(
 
   app.use('*', logger());
 
-  // Security response headers (Day 13 M1).
+  // Security response headers (Day 13 M1, narrowed by Day 14 follow-up).
   // Applied to every response so static HTML, JSON APIs, and webhook
   // endpoints all share the same baseline. CSP intentionally omits
   // 'unsafe-eval' and 'unsafe-inline' for scripts; styles allow inline
   // because Vite's build emits a small inline style for hashed asset
-  // preloads. WebSocket origins are reachable via ws/wss for the dev
-  // terminal stream. HSTS is only emitted when the request was forwarded
-  // over HTTPS — bare HTTP installs (the default) must not strict-pin
-  // browsers to a scheme they cannot serve.
+  // preloads.
+  //
+  // `connect-src` was originally `'self' ws: wss:` which permits any
+  // WebSocket origin on the open internet — too broad for an admin UI.
+  // Day 14 narrows it to `'self'` (same-origin XHR + WS) by default so
+  // that ws/wss connections can only target the daemon itself. Operators
+  // who run the UI behind a different origin (e.g. forward the daemon
+  // from an SSH tunnel and proxy WS to it) can extend the policy via
+  // `OPENLANDER_CSP_CONNECT_SRC` — that env var is appended verbatim, so
+  // it can include `wss://other.example.com` etc.
+  //
+  // HSTS is only emitted when the request was forwarded over HTTPS —
+  // bare HTTP installs (the default) must not strict-pin browsers to a
+  // scheme they cannot serve.
+  const cspExtraConnectSrc = (process.env['OPENLANDER_CSP_CONNECT_SRC'] ?? '').trim();
+  const connectSrcDirective = cspExtraConnectSrc
+    ? `connect-src 'self' ${cspExtraConnectSrc}`
+    : "connect-src 'self'";
+  const cspHeader =
+    "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; " +
+    `script-src 'self'; ${connectSrcDirective}; frame-ancestors 'none'; ` +
+    "base-uri 'self'; form-action 'self'";
+
   app.use('*', async (c, next) => {
     await next();
     if (!c.res.headers.has('X-Content-Type-Options')) {
@@ -180,12 +199,7 @@ function createApp(
       c.res.headers.set('Referrer-Policy', 'no-referrer');
     }
     if (!c.res.headers.has('Content-Security-Policy')) {
-      c.res.headers.set(
-        'Content-Security-Policy',
-        "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; " +
-          "script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; " +
-          "base-uri 'self'; form-action 'self'",
-      );
+      c.res.headers.set('Content-Security-Policy', cspHeader);
     }
     const forwardedProto = c.req.header('x-forwarded-proto');
     if (forwardedProto && forwardedProto.split(',')[0]?.trim().toLowerCase() === 'https') {

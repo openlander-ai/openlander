@@ -14,28 +14,50 @@ import { describe, expect, it } from 'vitest';
 import pino from 'pino';
 import { Writable } from 'node:stream';
 
+const CREDENTIAL_FIELD_NAMES: string[] = [
+  'password',
+  'token',
+  'api_key',
+  'apiKey',
+  'auth_token',
+  'authToken',
+  'secret',
+  'access_token',
+  'accessToken',
+  'refresh_token',
+  'refreshToken',
+  'client_secret',
+  'clientSecret',
+  'signing_secret',
+  'signingSecret',
+  'webhook_secret',
+  'webhookSecret',
+  'private_key',
+  'privateKey',
+  'session_token',
+  'sessionToken',
+];
+
+const NESTED_CREDENTIAL_CONTAINERS: string[] = [
+  'req.body',
+  'request.body',
+  'res.body',
+  'response.body',
+  'body.body',
+  'data.body',
+  '*.body',
+  'req.query',
+  'request.query',
+  '*.query',
+  'req.params',
+  'request.params',
+];
+
 const REDACT_PATHS: string[] = [
-  '*.password',
-  '*.token',
-  '*.api_key',
-  '*.apiKey',
-  '*.auth_token',
-  '*.authToken',
-  '*.secret',
-  '*.access_token',
-  '*.accessToken',
-  '*.refresh_token',
-  '*.refreshToken',
-  '*.client_secret',
-  '*.clientSecret',
-  '*.signing_secret',
-  '*.signingSecret',
-  '*.webhook_secret',
-  '*.webhookSecret',
-  '*.private_key',
-  '*.privateKey',
-  '*.session_token',
-  '*.sessionToken',
+  ...CREDENTIAL_FIELD_NAMES.map((name) => `*.${name}`),
+  ...NESTED_CREDENTIAL_CONTAINERS.flatMap((container) =>
+    CREDENTIAL_FIELD_NAMES.map((name) => `${container}.${name}`),
+  ),
   'setupSecret',
   'apiToken',
   'oauth_code',
@@ -193,5 +215,99 @@ describe('Day 13 hardening: logger PII redaction', () => {
     expect(() => log.info({ user: { id: 'u1' } }, 'no creds')).not.toThrow();
     const user = (sink.records[0] as { user: Record<string, unknown> }).user;
     expect(user.id).toBe('u1');
+  });
+});
+
+describe('Day 14 follow-up: logger redaction reaches nested response body strings', () => {
+  it('redacts password inside req.body (two levels deep)', () => {
+    const sink = makeSink();
+    const log = makeLogger(sink);
+    log.info(
+      {
+        req: {
+          method: 'POST',
+          path: '/api/login',
+          body: { username: 'alice', password: 'hunter2' },
+        },
+      },
+      'login attempt',
+    );
+    const body = (sink.records[0] as { req: { body: Record<string, string> } }).req.body;
+    expect(body.password).toBe('[REDACTED]');
+    // Non-credential fields stay readable so the log is still useful.
+    expect(body.username).toBe('alice');
+  });
+
+  it('redacts access_token / refresh_token inside response.body', () => {
+    const sink = makeSink();
+    const log = makeLogger(sink);
+    log.info(
+      {
+        response: {
+          status: 200,
+          body: {
+            access_token: 'leaky-access-tok',
+            refresh_token: 'leaky-refresh-tok',
+            expires_in: 3600,
+          },
+        },
+      },
+      'oauth response',
+    );
+    const body = (sink.records[0] as { response: { body: Record<string, unknown> } }).response.body;
+    expect(body.access_token).toBe('[REDACTED]');
+    expect(body.refresh_token).toBe('[REDACTED]');
+    // Non-credential fields stay readable.
+    expect(body.expires_in).toBe(3600);
+  });
+
+  it('redacts api_key inside an arbitrary `*.body` path (Day 13 wildcard regression)', () => {
+    const sink = makeSink();
+    const log = makeLogger(sink);
+    log.info(
+      {
+        proxy: {
+          body: { api_key: 'sk-leak-this-please', model: 'gpt-4o' },
+        },
+      },
+      'proxy upstream',
+    );
+    const body = (sink.records[0] as { proxy: { body: Record<string, string> } }).proxy.body;
+    expect(body.api_key).toBe('[REDACTED]');
+    expect(body.model).toBe('gpt-4o');
+  });
+
+  it('redacts token inside req.query (URL-encoded credentials)', () => {
+    const sink = makeSink();
+    const log = makeLogger(sink);
+    log.info(
+      {
+        req: {
+          path: '/api/webhook',
+          query: { token: 'webhook-tok-leak', filter: 'open' },
+        },
+      },
+      'webhook ping',
+    );
+    const query = (sink.records[0] as { req: { query: Record<string, string> } }).req.query;
+    expect(query.token).toBe('[REDACTED]');
+    expect(query.filter).toBe('open');
+  });
+
+  it('still passes non-credential body fields through unchanged', () => {
+    const sink = makeSink();
+    const log = makeLogger(sink);
+    log.info(
+      {
+        req: {
+          body: { project: 'demo', branch: 'main', sha: 'abc123' },
+        },
+      },
+      'deploy request',
+    );
+    const body = (sink.records[0] as { req: { body: Record<string, string> } }).req.body;
+    expect(body.project).toBe('demo');
+    expect(body.branch).toBe('main');
+    expect(body.sha).toBe('abc123');
   });
 });
