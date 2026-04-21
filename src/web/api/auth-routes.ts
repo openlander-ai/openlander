@@ -12,6 +12,16 @@ const SESSION_MAX_AGE = 7 * 24 * 60 * 60;
 
 const pkceVerifiersByState = new Map<string, { verifier: string; createdAt: number }>();
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+/**
+ * Day 12 (MAJOR #4): hard cap on the in-memory PKCE verifier map. Prevents
+ * an attacker from exhausting RAM by hitting `/auth/google/start` faster than
+ * the 10-minute TTL sweep can reclaim entries. When the cap is reached we
+ * evict the single oldest entry (LRU-by-creation) so a legitimate concurrent
+ * burst can still proceed.
+ *
+ * 1.0.x followup: persist to DB so multi-process deployments share state.
+ */
+const PKCE_STATE_MAX_ENTRIES = 100;
 
 function getSessionCookieToken(cookieHeader: string): string | null {
   const match = cookieHeader.match(/(?:^|;\s*)ol_session=([^;]*)/);
@@ -26,6 +36,43 @@ function cleanExpiredOAuthStates(): void {
     }
   }
 }
+
+/**
+ * Insert a new PKCE state with a hard size cap. If the map is full after the
+ * scheduled TTL sweep, evict the oldest live entry by `createdAt`. Map
+ * iteration order is insertion order, so the first key is the oldest.
+ */
+function setPkceVerifierWithCap(
+  state: string,
+  entry: { verifier: string; createdAt: number },
+): void {
+  if (pkceVerifiersByState.size >= PKCE_STATE_MAX_ENTRIES) {
+    const oldestKey = pkceVerifiersByState.keys().next().value;
+    if (oldestKey !== undefined) {
+      pkceVerifiersByState.delete(oldestKey);
+    }
+  }
+  pkceVerifiersByState.set(state, entry);
+}
+
+/**
+ * Test-only accessors for the in-memory PKCE state map. Exported so the
+ * size-cap and TTL behaviour can be exercised in isolation without driving
+ * the full OAuth roundtrip. Do not consume from production code.
+ */
+export const __pkceTestHooks = {
+  set: setPkceVerifierWithCap,
+  get size() {
+    return pkceVerifiersByState.size;
+  },
+  has(state: string) {
+    return pkceVerifiersByState.has(state);
+  },
+  clear() {
+    pkceVerifiersByState.clear();
+  },
+  maxEntries: PKCE_STATE_MAX_ENTRIES,
+};
 
 export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Hono {
   const api = new Hono();
@@ -192,7 +239,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
     const { verifier, challenge } = generatePkce();
     const state = randomBytes(16).toString('hex');
 
-    pkceVerifiersByState.set(state, { verifier, createdAt: Date.now() });
+    setPkceVerifierWithCap(state, { verifier, createdAt: Date.now() });
 
     const callbackUrl = `${ctx.config.server.baseUrl}/api/auth/callback/google`;
     const authUrl = getGoogleAuthUrl(googleConfig.clientId, callbackUrl, challenge, state);
