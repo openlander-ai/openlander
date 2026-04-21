@@ -12,14 +12,14 @@ The 1.0.0 release closes the eight GA-blocking issues identified in the rc.9 aud
 ### Breaking
 
 - **`409 Conflict` typed responses on mutating routes**: `POST /api/projects/:id/{redeploy,rollback,blue-green}` and the matching MCP tools (`redeploy_project`, `rollback_project`, `deploy_blue_green`, `restart_project`) now reject archived, currently-recovering, or circuit-breaker-open projects with a typed 409 (codes: `PROJECT_ARCHIVED`, `PROJECT_RECOVERING`, `CIRCUIT_BREAKER_OPEN`, `DEPLOY_LOCKED`). Previously these cases silently became fake "deploying" responses, generic 500s, or — for tools — the policy rejection was logged and the user saw a success-shaped reply.
-- **`pipeline.{startDeploy, redeploy, rollback, deployEnvironment}` now throw typed errors instead of returning `{ success: false }` for policy violations.** Direct callers must catch `ProjectArchivedError` / `ProjectRecoveringError` / `CircuitBreakerOpenError` (or use the `tryRejectIfNotMutable` helper). All in-tree callers were migrated; out-of-tree forks need to update their catch blocks.
+- **`pipeline.deploy` (existing-project branch), `pipeline.deployEnvironment`, `pipeline.redeploy`, and `pipeline.rollback` now throw typed errors instead of returning `{ success: false }` for policy violations.** Direct callers must catch `ProjectArchivedError` / `ProjectRecoveringError` / `CircuitBreakerOpenError` (or use the `tryRejectIfNotMutable` helper). All in-tree callers were migrated; out-of-tree forks need to update their catch blocks.
 - **Repo persistence helpers throw `RepoPersistenceError` (code `REPO_PERSISTENCE_FAILED`, 500)** instead of generic `Error('Failed to create X')` from 11 repos. The class extends `OpenLanderError`, so `instanceof Error` catches still match, but message-based routing should be replaced with `instanceof RepoPersistenceError`.
 - **LLM stream cancellation now records as a circuit breaker failure.** Repeated user aborts / client disconnects / `AbortSignal.timeout` will trip the breaker after the threshold, bounding cost-runaway loops. Scripted automations that legitimately cancel often will hit the breaker faster than in rc.7/rc.8.
 
 ### Added
 
-- **`recovery:degraded` event + listeners**: Partial recovery failures now emit a typed event consumed by `incident-reporter` (warn log) and `activity-logger` (DB persist), so the previously silent `try/catch + warn` pattern is observable in the Operations Live feed.
-- **`statusUrl` field on deploy responses**: `POST /api/projects/deploy` and `/api/deploy/start` now return the polling endpoint clients can hit for status, removing the need to construct the URL client-side.
+- **`recovery:degraded` event + listeners**: Partial recovery failures now emit a typed event consumed by `incident-reporter` (warn log) and `activity-logger` (DB persist), replacing the previously silent `try/catch + warn` pattern. ActivityLogger persists every occurrence to the `activity_log` table; surfacing the event in the Operations Live feed (the `/api/activity?follow` SSE subscription) is tracked as a 1.0.x followup.
+- **`statusUrl` field on deploy responses**: `POST /api/projects/deploy` now returns the polling endpoint clients can hit for status, removing the need to construct the URL client-side. (`POST /api/deploy/start` returns the `pipeline.startDeploy` result directly and is unchanged in this release.)
 - **Hono global `onError` handler** (`src/web/server.ts`) as a fallback for sub-routers (webhook, terminal, domain, resource, chat, llm, auth, setup, mcp) that didn't define their own, ensuring every uncaught throw gets a JSON response instead of hanging the request.
 - **`RecoveryPolicy` module** (`src/monitor/recovery-policy.ts`): single source of truth for recovery eligibility (5 triggers × 7 invariants) and `withRecoveryStage` wrapper that auto-emits `recovery:degraded` on stage failure. Replaces inline try/catch + warn patterns in `recovery-coordinator`, `ops-recovery`, and `auto-recovery`.
 - **Mutation policy + lock helpers** (`src/pipeline/mutation-policy.ts`, `src/db/repos/deploy-lock-helper.ts`): `assertProjectMutable` and `withDeployLock` / `acquireDeployLockOrThrow` enforce mutation eligibility and lock ordering at the pipeline boundary; tools use `tryRejectIfNotMutable` for synchronous pre-checks.
@@ -34,9 +34,11 @@ The 1.0.0 release closes the eight GA-blocking issues identified in the rc.9 aud
 - **U-P0-5**: LLM stream `cancel()` is now recorded as a circuit breaker failure (see Breaking).
 - **U-P0-6**: Hono global error handler added (see Added).
 - **U-P0-7**: `statusUrl` field on deploy responses lets clients reliably poll for status (see Added).
-- **U-P0-8**: All four pipeline mutation entry points (`startDeploy` existing-project branch, `redeploy`, `rollback`, `deployEnvironment`) now enforce `assertProjectMutable`, closing the bypass that previously allowed MCP / webhook / domain / env / compose paths to mutate archived or recovering projects.
+- **U-P0-8**: All four pipeline mutation entry points (`pipeline.deploy` existing-project branch, `pipeline.redeploy`, `pipeline.rollback`, `pipeline.deployEnvironment`) now enforce `assertProjectMutable`, closing the bypass that previously allowed MCP / webhook / domain / env / compose paths to mutate archived or recovering projects.
 - **Webhook auto-redeploy** now responds `{ accepted: true, message: 'skipped' }` (200) when policy rejects the target project, instead of attempting a deploy that the pipeline will reject.
 - **`set_env_vars` tool**: env mutation completes successfully even when the follow-up redeploy is blocked by policy. Previously the env update appeared to fail when the project was non-mutable.
+
+> **Audit note**: `U-P0-1` is captured under Added (the `recovery:degraded` event + listeners) and `U-P0-3` is captured under Tests (recovery policy / eligibility race window coverage); the eight rc.9 audit items are not 1:1 with the bullets in this section.
 
 ### Tests
 

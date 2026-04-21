@@ -22,9 +22,11 @@ If anything goes wrong, restore the directory and downgrade.
 
 ---
 
-## 2. Pre-upgrade safety check (recommended)
+## 2. Pre-upgrade safety check (mandatory if you may have non-canonical `result` values)
 
-Migrations `0003_fix_check_constraints.sql` and `0004_restore_ai_usage_result_check.sql` add a `CHECK` constraint on `ai_usage_log.result`. The constraint enforces `result IN ('success', 'failure', 'partial')`. The migration itself preserves any existing values — but **future writes** with a value outside that enum will be rejected by SQLite.
+Migration `0003_fix_check_constraints.sql` rebuilds `ai_usage_log` **without** the legacy `result` CHECK so the table can be reshaped. Migration `0004_restore_ai_usage_result_check.sql` then rebuilds the table again **with** `CHECK("result" IN ('success', 'failure', 'partial'))` and copies rows back via `INSERT … SELECT`.
+
+That `INSERT … SELECT` will FAIL on the first row whose `result` is outside the canonical enum — the migration aborts and the upgrade rolls back. Existing invalid rows do **not** silently survive.
 
 Run this against your live DB before upgrading:
 
@@ -35,7 +37,7 @@ sqlite3 ~/.openlander/openlander.db \
 ```
 
 - **Empty output** → safe. Skip to step 3.
-- **Any rows returned** → those rows will survive the migration but new INSERTs with the same value will fail. Either edit those rows to one of the canonical values or open an issue with the offending value (we'll add it to the enum if it should have been valid).
+- **Any rows returned** → migration `0004` will refuse to apply. Either rewrite those rows to one of the canonical values (`UPDATE ai_usage_log SET result = 'failure' WHERE result = '<bad_value>';`) or open an issue with the offending value (we'll add it to the enum if it should have been valid).
 
 ---
 
@@ -51,10 +53,10 @@ git pull && npm install && npm run build   # source build
 pm2 restart openlander    # or your start command
 ```
 
-On first boot the migrator will apply migrations `0003` → `0004` → `0005` (rc.5) or `0005` only (rc.7). Boot logs include lines like:
+On first boot the migrator applies every Drizzle migration whose row is missing from `__drizzle_migrations`. Both rc.5 and rc.7 predate the Drizzle Kit migrator (it was introduced as part of the 1.0 line), so on either baseline the migrator will apply `0000` → `0001` → `0002` → `0003` → `0004` → `0005` to bring the DB up to the 1.0 schema. Boot logs include lines like:
 
 ```
-{"module":"db","msg":"Drizzle migrations applied","applied":3}
+{"module":"db","msg":"Drizzle migrations applied","applied":6}
 ```
 
 ---
@@ -90,7 +92,7 @@ When a push event lands for an archived / recovering / circuit-broken project, t
 
 ### 4.5 Recovery partial-failure events
 
-When a recovery step fails mid-pipeline (e.g. a state transition fails after the queue accepted the work), a new `recovery:degraded` event is emitted. It's persisted to `activity_log` and surfaces in the Operations Live feed. Previously these failures were swallowed into a `log.warn` line with no UI signal.
+When a recovery step fails mid-pipeline (e.g. a state transition fails after the queue accepted the work), a new `recovery:degraded` event is emitted. `ActivityLogger` persists every occurrence to the `activity_log` table, replacing the previously silent `log.warn` line. Surfacing the event in the Operations Live feed (the `/api/activity?follow` SSE subscription set in `routes.ts`) is tracked as a 1.0.x followup — for 1.0 you can observe partial failures via the DB or the `incident-reporter` warn log.
 
 If you have custom alerting hooked into the event stream, add `recovery:degraded` to your subscription.
 
@@ -128,4 +130,4 @@ npm install -g openlander@1.0.0-rc.7   # or the rc you were on
 pm2 restart openlander
 ```
 
-`rc.7` does not understand the new `__drizzle_migrations` rows for `0003`/`0004`/`0005`, so do **not** point an old build at a `1.0.0` data dir without restoring the backup first.
+`rc.5` and `rc.7` predate the Drizzle Kit migrator entirely — they have no `__drizzle_migrations` table and don't understand the rebuilt `ai_usage_log` / `projects` schemas. Do **not** point an old build at a `1.0.0` data dir without restoring the backup first.
