@@ -32,6 +32,10 @@ export const translations = {
     overview: '개요',
     deployments: '배포',
   },
+  sidebar: {
+    collapse: '사이드바 접기',
+    expand: '사이드바 펼치기',
+  },
   overview: {
     title: '개요',
     kpi: {
@@ -183,6 +187,10 @@ export const translations = {
     },
     card: {
       archivedBadge: '보관됨',
+      lastDeploy: '최근 배포',
+      branch: '브랜치',
+      endpoint: '엔드포인트',
+      public: '퍼블릭',
     },
     archive: {
       button: '보관',

@@ -2,7 +2,7 @@ import { Spinner } from '@/components/ui/spinner';
 import type { Project } from '@/types';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import { Clock, ExternalLink, GitBranch, RotateCw, Settings } from 'lucide-react';
+import { Clock, ExternalLink, RotateCw, Settings } from 'lucide-react';
 import type { MouseEvent } from 'react';
 
 interface StatusDisplay {
@@ -36,7 +36,7 @@ export function ProjectCard({
       key={project.id}
       onClick={() => onNavigate(`/projects/${project.id}`)}
       className={cn(
-        'group relative flex flex-col rounded-lg border bg-bg-panel hover:bg-bg-panel/80 hover:shadow-md hover:border-agent/20 transition-all duration-200 cursor-pointer overflow-hidden card-hover min-h-[160px]',
+        'group relative flex flex-col rounded-lg border bg-bg-panel hover:bg-bg-subtle transition-all duration-200 cursor-pointer overflow-hidden card-hover min-h-[160px]',
         status.border,
         project.archived_at && 'opacity-60 grayscale-[0.5]',
       )}
@@ -60,77 +60,22 @@ export function ProjectCard({
         </div>
       </div>
 
-      <div className="p-5 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
-              Last Deploy
-            </p>
-            <div className="flex items-center gap-1.5 text-xs font-body text-secondary-ol">
-              <Clock className="h-3.5 w-3.5" />
-              {formatRelativeTime(project.updatedAt, t)}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
-              Branch
-            </p>
-            <div className="flex items-center gap-1.5 text-xs font-body text-secondary-ol truncate">
-              <GitBranch className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{project.branch || 'main'}</span>
-            </div>
-          </div>
+      <div className="p-5 space-y-3">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock className="h-3.5 w-3.5" />
+          {formatRelativeTime(project.updatedAt, t)}
         </div>
-
         {project.url && (
-          <div>
-            <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
-              Endpoint
-            </p>
-            <a
-              href={project.url ?? '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(event) => event.stopPropagation()}
-              className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-primary-ol hover:underline underline-offset-2 truncate transition-colors"
-            >
-              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-              {(project.url ?? '').replace(/^https?:\/\//, '')}
-            </a>
-            {project.urls
-              ?.filter((u) => u.type === 'vpn')
-              .map((vpn) => (
-                <a
-                  key={vpn.ip}
-                  href={vpn.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(event) => event.stopPropagation()}
-                  className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-primary-ol truncate transition-colors mt-1"
-                >
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                  {vpn.url.replace(/^https?:\/\//, '')}
-                </a>
-              ))}
-          </div>
-        )}
-
-        {project.publicUrl && (
-          <div>
-            <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
-              Public
-            </p>
-            <a
-              href={project.publicUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(event) => event.stopPropagation()}
-              className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-primary-ol hover:underline underline-offset-2 truncate transition-colors"
-            >
-              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-              {project.publicUrl.replace(/^https?:\/\//, '')}
-            </a>
-          </div>
+          <a
+            href={project.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-primary-ol truncate transition-colors"
+          >
+            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+            {project.url.replace(/^https?:\/\//, '')}
+          </a>
         )}
       </div>
 

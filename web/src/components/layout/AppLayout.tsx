@@ -10,6 +10,7 @@ import { useNotifications } from '@/hooks/use-notifications';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { AgentPanelContext, type AgentPanelInitialContext } from '@/contexts/agent-panel';
 import { CommandPalette } from '@/components/command/CommandPalette';
+import { cn } from '@/lib/utils';
 
 export function AppLayout() {
   const { projects, loading } = useProjects();
@@ -20,6 +21,17 @@ export function AppLayout() {
   const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(false);
   const [agentPanelInitialContext, setAgentPanelInitialContext] =
     useState<AgentPanelInitialContext | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem('openlander-sidebar-collapsed') === 'true',
+  );
+
+  const handleToggleCollapse = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('openlander-sidebar-collapsed', String(next));
+      return next;
+    });
+  }, []);
 
   const closePanel = useCallback(() => setIsAgentPanelOpen(false), []);
 
@@ -74,8 +86,18 @@ export function AppLayout() {
 
         <div className="flex flex-1 overflow-hidden pt-12">
           {/* Desktop Sidebar */}
-          <aside className="hidden md:flex md:w-16 lg:w-[260px] border-r border-[hsl(var(--border))] bg-bg-panel h-full shrink-0 transition-[width] duration-200">
-            <Sidebar projects={projects} loading={loading} />
+          <aside
+            className={cn(
+              'hidden md:flex border-r border-[hsl(var(--border))] bg-bg-panel h-full shrink-0 transition-[width] duration-200',
+              sidebarCollapsed ? 'md:w-16' : 'md:w-16 lg:w-[260px]',
+            )}
+          >
+            <Sidebar
+              projects={projects}
+              loading={loading}
+              collapsed={sidebarCollapsed}
+              onToggleCollapse={handleToggleCollapse}
+            />
           </aside>
 
           {/* Mobile Sidebar Sheet */}

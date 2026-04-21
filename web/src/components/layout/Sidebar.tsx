@@ -17,6 +17,8 @@ import {
   Search,
   ShieldAlert,
   Rocket,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSetupStatus } from '@/lib/api';
@@ -30,6 +32,8 @@ type SidebarProject = Project;
 interface SidebarProps {
   projects: SidebarProject[];
   loading: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 /* Project-status dot class sourced from centralized status-config. */
@@ -77,7 +81,7 @@ function sortProjects(a: Project, b: Project) {
   return a.name.localeCompare(b.name);
 }
 
-export function Sidebar({ projects, loading }: SidebarProps) {
+export function Sidebar({ projects, loading, collapsed, onToggleCollapse }: SidebarProps) {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
@@ -170,11 +174,17 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             'w-full flex min-w-0 items-center gap-2.5 rounded-md px-2.5 py-2 lg:text-left transition-all duration-150',
             'lg:justify-start justify-center',
             'hover:bg-bg-subtle',
-            isProjectActive(project.id) ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
+            isProjectActive(project.id)
+              ? 'bg-bg-subtle text-foreground'
+              : 'text-muted-foreground hover:text-foreground',
           )}
         >
           <div className={cn('h-2 w-2 rounded-full shrink-0', statusDotClass(project.status))} />
-          <span className="hidden lg:block flex-1 text-xs font-body truncate">{project.name}</span>
+          <span
+            className={cn('flex-1 text-xs font-body truncate hidden', !collapsed && 'lg:block')}
+          >
+            {project.name}
+          </span>
         </button>
       </div>
     );
@@ -187,20 +197,25 @@ export function Sidebar({ projects, loading }: SidebarProps) {
     <div className="flex flex-col h-full w-full min-w-0">
       <Separator className="bg-[hsl(var(--border))]" />
 
-      <div className="p-2 lg:p-4 shrink-0" data-testid="mode-toggle">
-        <div className="flex gap-1 p-1 rounded-lg bg-bg-subtle min-w-0 break-words">
+      <div className={cn('shrink-0', collapsed ? 'p-2' : 'p-2 lg:p-4')} data-testid="mode-toggle">
+        <div
+          className={cn(
+            'flex gap-1 p-1 rounded-lg bg-bg-subtle min-w-0 break-words',
+            collapsed && 'flex-col',
+          )}
+        >
           <button
             data-testid="mode-toggle-dashboard"
             onClick={() => navigate('/projects')}
             className={cn(
               'flex-1 flex min-w-0 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all',
               isDashboardMode
-                ? 'bg-bg-panel text-primary-ol shadow-sm font-semibold'
-                : 'text-muted-ol hover:text-secondary-ol',
+                ? 'bg-bg-panel text-foreground shadow-sm font-semibold'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
             <LayoutDashboard className="h-3.5 w-3.5" />
-            <span className="hidden lg:inline">Dashboard</span>
+            <span className={cn('hidden', !collapsed && 'lg:inline')}>Dashboard</span>
           </button>
           <button
             data-testid="mode-toggle-agent"
@@ -209,56 +224,91 @@ export function Sidebar({ projects, loading }: SidebarProps) {
               'flex-1 flex min-w-0 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all',
               isAgentMode
                 ? 'bg-agent/10 text-agent shadow-sm font-semibold border border-agent/20'
-                : 'text-muted-ol hover:text-secondary-ol',
+                : 'text-muted-foreground hover:text-foreground',
             )}
             title={agentDisabled ? 'Configure API key in Settings' : 'Open Agent panel (Alt+J)'}
           >
             <Bot className="h-3.5 w-3.5" />
-            <span className="hidden lg:inline">Agent</span>
+            <span className={cn('hidden', !collapsed && 'lg:inline')}>Agent</span>
           </button>
         </div>
+        {onToggleCollapse && (
+          <div className="hidden lg:flex justify-end mt-2">
+            <button
+              onClick={onToggleCollapse}
+              title={collapsed ? t('sidebar.expand') : t('sidebar.collapse')}
+              className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-bg-subtle transition-colors"
+            >
+              {collapsed ? (
+                <PanelLeftOpen className="h-4 w-4" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Search — opens Cmd+K */}
-      <div className="px-2 lg:px-4 pb-3 shrink-0">
+      <div className={cn('pb-3 shrink-0', collapsed ? 'px-2' : 'px-2 lg:px-4')}>
         <button
           onClick={() => {
             const event = new KeyboardEvent('keydown', { key: 'k', metaKey: true });
             document.dispatchEvent(event);
           }}
-          className="w-full flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-ol bg-bg-subtle hover:bg-bg-subtle/80 transition-colors"
+          className="w-full flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-foreground bg-bg-subtle hover:bg-bg-subtle/80 hover:text-foreground transition-colors"
         >
           <Search className="h-3.5 w-3.5 shrink-0" />
-          <span className="hidden lg:inline flex-1 text-left">Search...</span>
-          <kbd className="hidden lg:inline text-xs font-mono bg-bg-panel px-1.5 py-0.5 rounded border border-border">
+          <span className={cn('flex-1 text-left hidden', !collapsed && 'lg:inline')}>
+            Search...
+          </span>
+          <kbd
+            className={cn(
+              'text-xs font-mono bg-bg-panel px-1.5 py-0.5 rounded border border-border hidden',
+              !collapsed && 'lg:inline',
+            )}
+          >
             ⌘K
           </kbd>
         </button>
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-2 lg:p-4 space-y-1">
+        <div className={cn('space-y-1', collapsed ? 'p-2' : 'p-2 lg:p-4')}>
           {loading && (
-            <div className="flex items-center justify-center lg:justify-start gap-3 py-3 px-3 text-secondary-ol">
+            <div className="flex items-center justify-center lg:justify-start gap-3 py-3 px-3 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-              <span className="hidden lg:inline text-sm font-body">Loading...</span>
+              <span className={cn('text-sm font-body hidden', !collapsed && 'lg:inline')}>
+                Loading...
+              </span>
             </div>
           )}
 
           {!loading && projects.length === 0 && (
-            <div className="flex items-center justify-center lg:justify-start gap-3 py-3 px-3 text-muted-ol">
+            <div className="flex items-center justify-center lg:justify-start gap-3 py-3 px-3 text-muted-foreground">
               <Box className="h-4 w-4 shrink-0" />
-              <span className="hidden lg:inline text-sm font-body">No projects</span>
+              <span className={cn('text-sm font-body hidden', !collapsed && 'lg:inline')}>
+                No projects
+              </span>
             </div>
           )}
 
-          {/* Flat list for collapsed mode (< lg) */}
-          <div className="lg:hidden space-y-0.5">
+          {!loading && projects.length === 0 && (
+            <div className="flex items-center justify-center lg:justify-start gap-3 py-3 px-3 text-muted-foreground">
+              <Box className="h-4 w-4 shrink-0" />
+              <span className={cn('text-sm font-body hidden', !collapsed && 'lg:inline')}>
+                No projects
+              </span>
+            </div>
+          )}
+
+          {/* Flat list for collapsed mode (< lg or collapsed) */}
+          <div className={cn('space-y-0.5', !collapsed && 'lg:hidden')}>
             {allSortedProjects.map((p) => renderProjectItem(p))}
           </div>
 
-          {/* Grouped list for expanded mode (>= lg) */}
-          <div className="hidden lg:block space-y-4">
+          {/* Grouped list for expanded mode (>= lg and not collapsed) */}
+          <div className={cn('space-y-4 hidden', !collapsed && 'lg:block')}>
             {composeParents.map((parent) => {
               const parentChildren = children
                 .filter((c) => c.parentProjectId === parent.id)
@@ -278,8 +328,8 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                       'w-full flex min-w-0 items-center gap-2 px-3 py-2 lg:text-left transition-colors group',
                       'lg:justify-start justify-center',
                       isProjectActive(parent.id)
-                        ? 'text-primary-ol'
-                        : 'text-muted-ol hover:text-secondary-ol',
+                        ? 'text-foreground'
+                        : 'text-muted-foreground hover:text-foreground',
                     )}
                   >
                     {open ? (
@@ -316,7 +366,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                     className={cn(
                       'w-full flex min-w-0 items-center gap-2 px-3 py-2 lg:text-left transition-colors group',
                       'lg:justify-start justify-center',
-                      'text-muted-ol hover:text-secondary-ol',
+                      'text-muted-foreground hover:text-foreground',
                     )}
                   >
                     {open ? (
@@ -347,7 +397,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
       <Separator className="bg-[hsl(var(--border))]" />
 
       {/* Bottom: New Project + Services + Settings */}
-      <div className="shrink-0 p-2 lg:p-4 space-y-1.5">
+      <div className={cn('shrink-0 space-y-1.5', collapsed ? 'p-2' : 'p-2 lg:p-4')}>
         {/* New Project */}
         <button
           onClick={() => navigate('/projects/new')}
@@ -358,7 +408,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           )}
         >
           <Plus className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline">New Project</span>
+          <span className={cn('hidden', !collapsed && 'lg:inline')}>New Project</span>
         </button>
 
         {/* Overview Link */}
@@ -371,12 +421,14 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             'lg:justify-start justify-center',
             'hover:bg-bg-subtle',
             location.pathname === '/overview'
-              ? 'bg-bg-subtle text-primary-ol'
-              : 'text-secondary-ol',
+              ? 'bg-bg-subtle text-foreground'
+              : 'text-muted-foreground hover:text-foreground',
           )}
         >
           <LayoutDashboard className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline text-sm font-body">{t('nav.overview')}</span>
+          <span className={cn('text-sm font-body hidden', !collapsed && 'lg:inline')}>
+            {t('nav.overview')}
+          </span>
         </button>
 
         {/* Deployments Link */}
@@ -389,12 +441,14 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             'lg:justify-start justify-center',
             'hover:bg-bg-subtle',
             location.pathname === '/deployments' || location.pathname.startsWith('/deployments/')
-              ? 'bg-bg-subtle text-primary-ol'
-              : 'text-secondary-ol',
+              ? 'bg-bg-subtle text-foreground'
+              : 'text-muted-foreground hover:text-foreground',
           )}
         >
           <Rocket className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline text-sm font-body">{t('nav.deployments')}</span>
+          <span className={cn('text-sm font-body hidden', !collapsed && 'lg:inline')}>
+            {t('nav.deployments')}
+          </span>
         </button>
 
         {/* Services Link */}
@@ -405,11 +459,15 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             'w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all duration-150',
             'lg:justify-start justify-center',
             'hover:bg-bg-subtle',
-            isActive('/services') ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
+            isActive('/services')
+              ? 'bg-bg-subtle text-foreground'
+              : 'text-muted-foreground hover:text-foreground',
           )}
         >
           <Database className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline text-sm font-body">{t('services.title')}</span>
+          <span className={cn('text-sm font-body hidden', !collapsed && 'lg:inline')}>
+            {t('services.title')}
+          </span>
         </button>
 
         {/* Operations Center */}
@@ -420,11 +478,13 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             'w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all duration-150',
             'lg:justify-start justify-center',
             'hover:bg-bg-subtle',
-            isActive('/operations') ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
+            isActive('/operations')
+              ? 'bg-bg-subtle text-foreground'
+              : 'text-muted-foreground hover:text-foreground',
           )}
         >
           <ShieldAlert className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline text-sm font-body">
+          <span className={cn('text-sm font-body hidden', !collapsed && 'lg:inline')}>
             {t('settings.tabs.operations')}
           </span>
         </button>
@@ -437,11 +497,15 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             'w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all duration-150',
             'lg:justify-start justify-center',
             'hover:bg-bg-subtle',
-            isActive('/settings') ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
+            isActive('/settings')
+              ? 'bg-bg-subtle text-foreground'
+              : 'text-muted-foreground hover:text-foreground',
           )}
         >
           <Settings className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline text-sm font-body">{t('settings.title')}</span>
+          <span className={cn('text-sm font-body hidden', !collapsed && 'lg:inline')}>
+            {t('settings.title')}
+          </span>
         </button>
       </div>
     </div>

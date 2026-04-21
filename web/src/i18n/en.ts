@@ -32,6 +32,10 @@ export const translations = {
     overview: 'Overview',
     deployments: 'Deployments',
   },
+  sidebar: {
+    collapse: 'Collapse sidebar',
+    expand: 'Expand sidebar',
+  },
   overview: {
     title: 'Overview',
     kpi: {
@@ -183,6 +187,10 @@ export const translations = {
     },
     card: {
       archivedBadge: 'Archived',
+      lastDeploy: 'Last Deploy',
+      branch: 'Branch',
+      endpoint: 'Endpoint',
+      public: 'Public',
     },
     archive: {
       button: 'Archive',

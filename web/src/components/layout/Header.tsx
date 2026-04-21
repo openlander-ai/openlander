@@ -109,7 +109,7 @@ export function Header({
             OpenLander
           </span>
           {version && (
-            <span className="px-1.5 py-0.5 rounded-md bg-bg-subtle text-xs font-mono text-muted-ol border border-[hsl(var(--border))]">
+            <span className="px-1.5 py-0.5 rounded-md bg-bg-subtle text-xs font-mono text-muted-foreground border border-[hsl(var(--border))]">
               v{version}
             </span>
           )}
@@ -129,7 +129,7 @@ export function Header({
 
         {/* System Stats */}
         {stats && (
-          <div className="hidden md:flex items-center gap-3 font-mono text-muted-ol">
+          <div className="hidden md:flex items-center gap-3 font-mono text-muted-foreground">
             <div className="flex items-center gap-1" title={'CPU Usage'}>
               <Cpu className="h-3 w-3" />
               <span className="text-xs">
@@ -173,7 +173,7 @@ export function Header({
                 ? 'text-warning bg-warning/10'
                 : unreadCount > 0
                   ? 'text-warning hover:bg-warning/10'
-                  : 'text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle',
+                  : 'text-muted-foreground hover:text-foreground hover:bg-bg-subtle',
             )}
             onClick={() => setShowNotifications((prev) => !prev)}
             title={`Notifications${unreadCount > 0 ? ` (${unreadCount})` : ''}`}
@@ -222,7 +222,7 @@ export function Header({
                     : 'bg-muted-foreground/40',
             )}
           />
-          <span className="hidden sm:inline text-xs font-body text-secondary-ol">
+          <span className="hidden sm:inline text-xs font-body text-muted-foreground">
             {llmStatus === null
               ? '...'
               : llmStatus === 'online'
