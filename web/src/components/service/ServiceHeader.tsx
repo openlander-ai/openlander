@@ -22,7 +22,7 @@ function getStatusConfig(t: (key: string) => string): Record<string, StatusConfi
     stopped: {
       label: t('services.status.stopped'),
       color: 'text-muted-ol',
-      dot: 'bg-[var(--text-muted)]',
+      dot: 'bg-muted-foreground/40',
     },
     error: { label: t('services.status.error'), color: 'text-error', dot: 'bg-error' },
   };

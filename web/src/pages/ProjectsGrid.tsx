@@ -9,38 +9,16 @@ import { useProjects } from '@/hooks/use-projects';
 import { useSystemStatus } from '@/hooks/use-system-status';
 import { useLanguage } from '@/i18n/context';
 import { redeployProject } from '@/lib/api';
+import { getStatusConfigMap } from '@/lib/status-config';
 import { cn } from '@/lib/utils';
 
-function getStatusConfig(): Record<
-  string,
-  { label: string; dot: string; badge: string; border: string }
-> {
-  return {
-    running: {
-      label: 'Healthy',
-      dot: 'bg-success animate-pulse',
-      badge: 'bg-success/10 text-success border border-success/30',
-      border: 'border-success/20',
-    },
-    stopped: {
-      label: 'Stopped',
-      dot: 'bg-[var(--text-muted)]',
-      badge: 'bg-bg-subtle text-muted-ol border border-border',
-      border: 'border-[hsl(var(--border))]',
-    },
-    building: {
-      label: 'Deploying',
-      dot: 'bg-warning animate-pulse-ring',
-      badge: 'bg-warning/10 text-warning border border-warning/30',
-      border: 'border-warning/30',
-    },
-    error: {
-      label: 'Failed',
-      dot: 'bg-error',
-      badge: 'bg-error/10 text-error border border-error/30',
-      border: 'border-error/30',
-    },
-  };
+function getStatusConfig() {
+  return getStatusConfigMap({
+    running: 'Healthy',
+    stopped: 'Stopped',
+    building: 'Deploying',
+    error: 'Failed',
+  });
 }
 
 export function ProjectsGrid() {

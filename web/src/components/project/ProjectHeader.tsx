@@ -51,31 +51,34 @@ function getStatusConfig(
   t: (key: string) => string,
   isImageSource: boolean = false,
 ): Record<string, StatusConfig> {
-  return {
-    running: {
-      label: t('project.header.status.live'),
-      color: 'text-success',
-      dot: 'bg-success animate-pulse',
-    },
-    stopped: {
-      label: t('project.header.status.stopped'),
-      color: 'text-muted-ol',
-      dot: 'bg-[var(--text-muted)]',
-    },
-    building: {
-      label: isImageSource
-        ? t('project.header.status.pulling')
-        : t('project.header.status.deploying'),
-      color: 'text-warning',
-      dot: 'bg-warning animate-pulse-ring',
-    },
-    error: { label: t('project.header.status.failed'), color: 'text-error', dot: 'bg-error' },
-    idle: {
-      label: t('project.header.status.idle'),
-      color: 'text-muted-ol',
-      dot: 'bg-[var(--text-muted)]',
-    },
+  const labels: Record<string, string> = {
+    running: t('project.header.status.live'),
+    stopped: t('project.header.status.stopped'),
+    building: isImageSource
+      ? t('project.header.status.pulling')
+      : t('project.header.status.deploying'),
+    error: t('project.header.status.failed'),
+    idle: t('project.header.status.idle'),
   };
+  const colors: Record<string, string> = {
+    running: 'text-success',
+    stopped: 'text-muted-ol',
+    building: 'text-warning',
+    error: 'text-error',
+    idle: 'text-muted-ol',
+  };
+  const dots: Record<string, string> = {
+    running: 'bg-success',
+    stopped: 'bg-muted-foreground/40',
+    building: 'bg-warning',
+    error: 'bg-error',
+    idle: 'bg-muted-foreground/40',
+  };
+  const out: Record<string, StatusConfig> = {};
+  for (const key of Object.keys(labels)) {
+    out[key] = { label: labels[key], color: colors[key], dot: dots[key] };
+  }
+  return out;
 }
 
 export function ProjectHeader({

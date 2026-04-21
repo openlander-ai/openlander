@@ -32,11 +32,11 @@ interface SidebarProps {
 }
 
 const statusColor: Record<string, string> = {
-  running: 'bg-success animate-pulse',
-  stopped: 'bg-[var(--text-muted)]',
-  building: 'bg-warning animate-pulse-ring',
+  running: 'bg-success',
+  stopped: 'bg-muted-foreground/40',
+  building: 'bg-warning',
   error: 'bg-error',
-  idle: 'bg-[var(--text-muted)]',
+  idle: 'bg-muted-foreground/40',
 };
 
 const VISIBILITY_ORDER: Record<string, number> = {

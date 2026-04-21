@@ -61,12 +61,12 @@
   }
 
   [data-theme='dark'], .dark {
-    /* ── OpenLander Enterprise Cloud (Dark Base) ── */
-    --bg-app: #0f172a;       /* slate-900 - deep navy backdrop */
-    --bg-panel: #1e293b;     /* slate-800 - cards structure */
-    --bg-subtle: #334155;    /* slate-700 */
-    --bg-surface: #0f172a; 
-    --bg-terminal: #020617;  /* slate-950 - extremely dark for real terminals */
+    /* ── OpenLander Enterprise Cloud (Dark Base) — deeper for dokploy-style pro-tool feel ── */
+    --bg-app: #020617;       /* slate-950 - deep backdrop (was slate-900) */
+    --bg-panel: #0f172a;     /* slate-900 - cards (was slate-800) */
+    --bg-subtle: #1e293b;    /* slate-800 */
+    --bg-surface: #020617;
+    --bg-terminal: #000000;  /* pure black - real terminals */
     --color-accent: #6366f1; /* indigo-500 */
     --color-ai: #f43f5e;     /* rose-500 - popping magic */
     --color-success: #10b981;
@@ -81,12 +81,12 @@
     --text-secondary: #cbd5e1; /* slate-300 */
     --text-muted: #94a3b8;   /* slate-400 */
 
-    /* ── shadcn/ui — Dark Slate & Indigo ── */
-    --background: 222 47% 11%; /* slate-900 */
+    /* ── shadcn/ui — Dark Slate & Indigo (deeper base for pro-tool feel) ── */
+    --background: 222 47% 4%;  /* slate-950 */
     --foreground: 210 40% 98%; /* slate-50 */
-    --card: 215 28% 17%; /* slate-800 */
+    --card: 222 47% 11%;       /* slate-900 */
     --card-foreground: 210 40% 98%;
-    --popover: 215 28% 17%;
+    --popover: 222 47% 11%;    /* slate-900 */
     --popover-foreground: 210 40% 98%;
     --primary: 239 84% 67%; /* indigo-500 */
     --primary-foreground: 210 40% 98%; /* white text on indigo */
@@ -143,20 +143,18 @@
     animation: timeline-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
-  /* Card hover micro-interaction */
+  /* Card hover micro-interaction — subtle shadow + border shift, no lift */
   .card-hover {
     transition:
-      transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
       box-shadow 0.2s ease,
       border-color 0.2s ease;
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.04),
-      0 1px 3px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   }
   .card-hover:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-    border-color: rgba(99, 102, 241, 0.4); /* indigo-500/40 */
+    box-shadow:
+      0 1px 3px 0 rgba(0, 0, 0, 0.1),
+      0 1px 2px -1px rgba(0, 0, 0, 0.1);
+    border-color: hsl(var(--border));
   }
 
   /* AI Deployment Border — left accent only */
