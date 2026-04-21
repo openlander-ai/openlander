@@ -12,7 +12,12 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: ['concurrent-deploy.spec.ts', 'c1-newproject.spec.ts'],
+  testMatch: [
+    'concurrent-deploy.spec.ts',
+    'c1-newproject.spec.ts',
+    'c5-opscenter.spec.ts',
+    'c7-dashboard-list.spec.ts',
+  ],
   workers: 1,
   fullyParallel: false,
   retries: 0,
