@@ -78,10 +78,10 @@ export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectT
                             href={vpn.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-purple-400 hover:underline truncate max-w-[200px] flex items-center gap-1"
+                            className="text-xs text-muted-foreground hover:text-primary-ol hover:underline truncate max-w-[200px] flex items-center gap-1"
                             onClick={(event) => event.stopPropagation()}
                           >
-                            <span className="text-[9px] px-1 rounded bg-purple-500/10 border border-purple-500/20">
+                            <span className="text-[9px] px-1 rounded bg-muted text-muted-foreground border border-border">
                               VPN
                             </span>
                             {vpn.url.replace(/^https?:\/\//, '')}

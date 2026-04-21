@@ -19,7 +19,19 @@ export default {
         '2xl': '1400px',
       },
     },
+    screens: {
+      sm: '640px',
+      md: '768px',
+      lg: '1024px',
+      xl: '1280px',
+      '2xl': '1536px',
+      '3xl': '1920px',
+    },
     extend: {
+      maxWidth: {
+        '8xl': '85rem',
+        '9xl': '95rem',
+      },
       colors: {
         /* shadcn/ui semantic colors */
         border: 'hsl(var(--border))',

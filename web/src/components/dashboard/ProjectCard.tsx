@@ -43,15 +43,7 @@ export function ProjectCard({
     >
       <div className="flex items-center justify-between p-4 pb-3 border-b border-[hsl(var(--border))]/50">
         <div className="flex items-center gap-3 min-w-0">
-          <div
-            className={cn(
-              'h-2.5 w-2.5 rounded-full shrink-0 shadow-[0_0_6px_rgba(0,0,0,0.1)]',
-              status.dot,
-              project.status === 'running' && 'shadow-[0_0_6px_rgba(22,163,74,0.4)]',
-              project.status === 'error' && 'shadow-[0_0_6px_rgba(220,38,38,0.4)]',
-              project.status === 'building' && 'shadow-[0_0_6px_rgba(217,119,6,0.4)]',
-            )}
-          />
+          <div className={cn('h-2 w-2 rounded-full shrink-0', status.dot)} />
           <h3 className="font-display font-semibold text-base text-primary-ol truncate">
             {project.name}
           </h3>
@@ -100,7 +92,7 @@ export function ProjectCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
-              className="flex items-center gap-1.5 text-xs font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 truncate transition-colors"
+              className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-primary-ol hover:underline underline-offset-2 truncate transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               {(project.url ?? '').replace(/^https?:\/\//, '')}
@@ -114,7 +106,7 @@ export function ProjectCard({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(event) => event.stopPropagation()}
-                  className="flex items-center gap-1.5 text-xs font-mono text-purple-400 hover:text-purple-300 truncate transition-colors mt-1"
+                  className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-primary-ol truncate transition-colors mt-1"
                 >
                   <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                   {vpn.url.replace(/^https?:\/\//, '')}
@@ -133,7 +125,7 @@ export function ProjectCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
-              className="flex items-center gap-1.5 text-xs font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 truncate transition-colors"
+              className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-primary-ol hover:underline underline-offset-2 truncate transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               {project.publicUrl.replace(/^https?:\/\//, '')}
