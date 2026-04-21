@@ -14,8 +14,6 @@ import {
 import { fetchActivityFeed, type ActivityItem } from '@/lib/api/operations';
 import { formatRelativeTime } from '@/lib/time';
 
-import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
-
 interface OverviewStats {
   active_deploys: number;
   active_recoveries: number;
@@ -60,7 +58,6 @@ function getStatusConfig(): Record<
 export function Overview() {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const isMobile = useIsMobile();
   const statusConfig = getStatusConfig();
 
   const [stats, setStats] = useState<OverviewStats | null>(null);
@@ -101,10 +98,6 @@ export function Overview() {
 
   const handleRedeploy = async (event: MouseEvent, projectId: string) => {
     event.stopPropagation();
-    if (isMobile) {
-      showMobileToast();
-      return;
-    }
     setRedeployingIds((prev) => new Set(prev).add(projectId));
     try {
       await redeployProject(projectId);

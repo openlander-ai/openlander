@@ -47,17 +47,34 @@ interface ProjectHeaderProps {
 
 type StatusConfig = { label: string; color: string; dot: string };
 
-function getStatusConfig(isImageSource: boolean = false): Record<string, StatusConfig> {
+function getStatusConfig(
+  t: (key: string) => string,
+  isImageSource: boolean = false,
+): Record<string, StatusConfig> {
   return {
-    running: { label: 'Live', color: 'text-success', dot: 'bg-success animate-pulse' },
-    stopped: { label: 'Stopped', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
+    running: {
+      label: t('project.header.status.live'),
+      color: 'text-success',
+      dot: 'bg-success animate-pulse',
+    },
+    stopped: {
+      label: t('project.header.status.stopped'),
+      color: 'text-muted-ol',
+      dot: 'bg-[var(--text-muted)]',
+    },
     building: {
-      label: isImageSource ? 'Pulling' : 'Deploying',
+      label: isImageSource
+        ? t('project.header.status.pulling')
+        : t('project.header.status.deploying'),
       color: 'text-warning',
       dot: 'bg-warning animate-pulse-ring',
     },
-    error: { label: 'Failed', color: 'text-error', dot: 'bg-error' },
-    idle: { label: 'Idle', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
+    error: { label: t('project.header.status.failed'), color: 'text-error', dot: 'bg-error' },
+    idle: {
+      label: t('project.header.status.idle'),
+      color: 'text-muted-ol',
+      dot: 'bg-[var(--text-muted)]',
+    },
   };
 }
 
@@ -77,7 +94,7 @@ export function ProjectHeader({
   const { status: setupStatus } = useSetup();
   const { t } = useLanguage();
   const isImageSource = project.source === 'image';
-  const statusConfig = getStatusConfig(isImageSource);
+  const statusConfig = getStatusConfig(t, isImageSource);
   const isLlmConfigured = setupStatus?.llm.ok === true;
 
   const displayStatus = project.status;
@@ -96,13 +113,15 @@ export function ProjectHeader({
       return (
         <Button variant="outline" size="sm" className="h-7 text-xs font-body gap-1.5" disabled>
           <Spinner className="h-3 w-3" />
-          {isImageSource ? 'Pulling...' : 'Deploying...'}
+          {isImageSource
+            ? t('project.header.action.pulling')
+            : t('project.header.action.deploying')}
         </Button>
       );
     }
     if (isStopped && !hasContainer) {
       return (
-        <Tooltip content="AI가 전체 파이프라인을 처리합니다" side="bottom">
+        <Tooltip content={t('project.header.action.aiPipelineTooltip')} side="bottom">
           <Button
             variant="outline"
             size="sm"
@@ -118,7 +137,7 @@ export function ProjectHeader({
                 <Zap className="h-3 w-3" />
               </>
             )}
-            Deploy
+            {t('project.header.action.deploy')}
           </Button>
         </Tooltip>
       );
@@ -137,13 +156,13 @@ export function ProjectHeader({
           ) : (
             <Play className="h-3 w-3" />
           )}
-          Start
+          {t('project.header.action.start')}
         </Button>
       );
     }
     // running or error → Redeploy or Pull & Restart for image source
     return (
-      <Tooltip content="AI가 전체 파이프라인을 처리합니다" side="bottom">
+      <Tooltip content={t('project.header.action.aiPipelineTooltip')} side="bottom">
         <Button
           variant="outline"
           size="sm"
@@ -159,7 +178,9 @@ export function ProjectHeader({
               {isImageSource ? <Download className="h-3 w-3" /> : <RotateCw className="h-3 w-3" />}
             </>
           )}
-          {isImageSource ? 'Pull & Restart' : 'Redeploy'}
+          {isImageSource
+            ? t('project.header.action.pullRestart')
+            : t('project.header.action.redeploy')}
         </Button>
       </Tooltip>
     );
@@ -220,7 +241,7 @@ export function ProjectHeader({
               ) : (
                 <Square className="h-3 w-3" />
               )}
-              Stop
+              {t('project.header.action.stop')}
             </Button>
           )}
 
@@ -237,10 +258,10 @@ export function ProjectHeader({
           >
             {isShared ? <GlobeLock className="h-3 w-3" /> : <Share2 className="h-3 w-3" />}
             {project.visibility === 'shared'
-              ? 'Shared'
+              ? t('project.header.share.shared')
               : project.visibility === 'quick-share'
-                ? 'Exposed'
-                : 'Share'}
+                ? t('project.header.share.exposed')
+                : t('project.header.share.share')}
           </Button>
 
           {/* ⋯ More actions dropdown */}
@@ -253,7 +274,7 @@ export function ProjectHeader({
                 disabled={!!actionLoading}
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
-                <span className="sr-only">More actions</span>
+                <span className="sr-only">{t('project.header.action.more')}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -261,7 +282,7 @@ export function ProjectHeader({
               {isStopped && (
                 <DropdownMenuItem onClick={onRedeploy} disabled={!!actionLoading}>
                   <RotateCw className="h-3.5 w-3.5 mr-2" />
-                  Redeploy
+                  {t('project.header.action.redeploy')}
                 </DropdownMenuItem>
               )}
 
@@ -271,11 +292,11 @@ export function ProjectHeader({
                   {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
                   <History className="h-3.5 w-3.5" />
                 </div>
-                Rollback
+                {t('project.header.action.rollback')}
               </DropdownMenuItem>
 
               {/* Blue-Green */}
-              <Tooltip content="AI가 전체 파이프라인을 처리합니다" side="bottom">
+              <Tooltip content={t('project.header.action.aiPipelineTooltip')} side="bottom">
                 <DropdownMenuItem
                   onClick={onOpenBlueGreenDialog}
                   disabled={!isRunning || !!actionLoading}
@@ -284,7 +305,7 @@ export function ProjectHeader({
                     {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
                     <Zap className="h-3.5 w-3.5" />
                   </div>
-                  Blue-Green Deploy
+                  {t('project.header.action.blueGreen')}
                 </DropdownMenuItem>
               </Tooltip>
 
@@ -298,12 +319,12 @@ export function ProjectHeader({
                   className="text-error focus:text-error"
                 >
                   <Square className="h-3.5 w-3.5 mr-2" />
-                  Stop
+                  {t('project.header.action.stop')}
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuItem onClick={onStart} disabled={!!actionLoading || isBuilding}>
                   <Play className="h-3.5 w-3.5 mr-2" />
-                  Start
+                  {t('project.header.action.start')}
                 </DropdownMenuItem>
               )}
 

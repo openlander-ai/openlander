@@ -41,7 +41,7 @@ export function ProjectDetailTabs({
       onValueChange={onActiveTabChange}
       className="flex-1 flex flex-col min-h-0"
     >
-      <TabsList className="shrink-0 w-full justify-start rounded-none border-b border-[hsl(var(--border))] bg-transparent px-6 h-10">
+      <TabsList className="shrink-0 w-full justify-start rounded-none border-b border-[hsl(var(--border))] bg-transparent px-6 h-10 overflow-x-auto whitespace-nowrap">
         <TabsTrigger
           value="overview"
           className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"

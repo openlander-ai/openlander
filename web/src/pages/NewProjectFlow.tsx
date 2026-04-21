@@ -3,7 +3,6 @@ import { useLanguage } from '@/i18n/context';
 import { useNavigate } from 'react-router-dom';
 import { deployProject } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useEnvScanFlow } from '@/hooks/use-env-scan-flow';
 import { Input } from '@/components/ui/input';
 import { Search, ArrowLeft, Container } from 'lucide-react';
@@ -14,7 +13,6 @@ import { ConfigureDeployStep } from '@/components/new-project/ConfigureDeploySte
 
 export function NewProjectFlow() {
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
   const { t } = useLanguage();
   const [tab, setTab] = useState<Tab>('repos');
   const [repos, setRepos] = useState<GitRepo[]>([]);
@@ -89,10 +87,6 @@ export function NewProjectFlow() {
   }, [searchQuery, tab]);
 
   const handleDeployClick = (repo: GitRepo) => {
-    if (isMobile) {
-      showMobileToast();
-      return;
-    }
     setSelectedRepo(repo);
     setBranch(repo.defaultBranch || 'main');
     envScan.reset();

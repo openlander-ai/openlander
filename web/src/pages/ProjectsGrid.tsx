@@ -8,7 +8,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useProjects } from '@/hooks/use-projects';
 import { useSystemStatus } from '@/hooks/use-system-status';
 import { useLanguage } from '@/i18n/context';
-import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { redeployProject } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -46,7 +45,6 @@ function getStatusConfig(): Record<
 
 export function ProjectsGrid() {
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
   const [showArchived, setShowArchived] = useState(false);
   const { projects, loading: projectsLoading, refetch } = useProjects(showArchived);
   const { serverStatus, setupStatus, loading: systemLoading } = useSystemStatus();
@@ -66,10 +64,6 @@ export function ProjectsGrid() {
 
   const handleRedeploy = async (event: MouseEvent, projectId: string) => {
     event.stopPropagation();
-    if (isMobile) {
-      showMobileToast();
-      return;
-    }
     setRedeployingIds((prev) => new Set(prev).add(projectId));
     try {
       await redeployProject(projectId);
@@ -159,13 +153,7 @@ export function ProjectsGrid() {
             </button>
           </div>
           <button
-            onClick={() => {
-              if (isMobile) {
-                showMobileToast();
-                return;
-              }
-              navigate('/projects/new');
-            }}
+            onClick={() => navigate('/projects/new')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body bg-agent text-white hover:bg-agent/90 transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />

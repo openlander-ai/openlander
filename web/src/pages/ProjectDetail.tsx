@@ -17,7 +17,6 @@ import {
   type EnvVarInfo,
   type ProjectWithOptionalEnvironments,
 } from '@/lib/api';
-import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
 import { ShareDialog } from '@/components/layout/ShareDialog';
 import { parseEnvContent } from '@/lib/parse-env';
@@ -49,7 +48,6 @@ export function ProjectDetail() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [timelineRunKey, setTimelineRunKey] = useState(0);
-  const isMobile = useIsMobile();
   const [shareOpen, setShareOpen] = useState(false);
   const [redeploySheet, setRedeploySheet] = useState(false);
   const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
@@ -92,10 +90,6 @@ export function ProjectDetail() {
   const allTimelineItems = items;
 
   const handleRedeploy = async () => {
-    if (isMobile) {
-      showMobileToast();
-      return;
-    }
     if (!id || actionLoading) return;
     setActionLoading('redeploy');
 
@@ -132,10 +126,6 @@ export function ProjectDetail() {
   };
 
   const handleStop = () => {
-    if (isMobile) {
-      showMobileToast();
-      return;
-    }
     if (!id || actionLoading) return;
     setConfirmAction({
       type: 'stop',
@@ -190,10 +180,6 @@ export function ProjectDetail() {
   };
 
   const handleStart = async () => {
-    if (isMobile) {
-      showMobileToast();
-      return;
-    }
     if (!id || actionLoading) return;
     setActionLoading('start');
     try {
@@ -209,10 +195,6 @@ export function ProjectDetail() {
   };
 
   const handleRollback = () => {
-    if (isMobile) {
-      showMobileToast();
-      return;
-    }
     if (!id || actionLoading) return;
 
     setRollbackDialogOpen(true);
@@ -243,10 +225,6 @@ export function ProjectDetail() {
   };
 
   const handleBlueGreen = () => {
-    if (isMobile) {
-      showMobileToast();
-      return;
-    }
     if (!id || actionLoading) {
       return;
     }
