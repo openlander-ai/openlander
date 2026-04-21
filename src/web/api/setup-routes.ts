@@ -8,6 +8,7 @@ import type { LLMConfig } from '../../llm/index.js';
 import type { LLMProviderType } from '../../llm/providers.js';
 import { LLM_PROVIDERS } from '../../llm/providers.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { isAuthenticated } from '../middleware/auth.js';
 import { createCloudflareSetupRoutes } from './setup/cloudflare-routes.js';
 import { createGithubSetupRoutes } from './setup/github-routes.js';
 import { createMcpSetupRoutes } from './setup/mcp-routes.js';
@@ -112,6 +113,15 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     const hasPassword = ctx.db.isPasswordSet();
 
     const ready = dockerOk && hasPassword;
+
+    // Day 13 M5: once a password is configured, refuse to reveal docker
+    // state, configured LLM provider/model, or GitHub username to anonymous
+    // callers — those are useful to attackers and the legitimate UI always
+    // re-fetches after the user logs in. The `ready` flag is fine to expose
+    // because the login form needs it to render the right view.
+    if (hasPassword && !isAuthenticated(c)) {
+      return c.json({ ready, hasPassword: true });
+    }
 
     let dockerMessage: string;
     if (dockerStatus.state === 'running') {

@@ -30,10 +30,42 @@ const EXEMPT_EXTENSIONS = [
   '.map',
 ];
 
+/**
+ * Read the request's auth flag set by `createAuthMiddleware`. Returns false
+ * for unauthenticated requests that the middleware lets through (static HTML,
+ * /api/setup/status during onboarding, etc.) so handlers can mask sensitive
+ * fields. Routes that require auth are already gated by the middleware itself
+ * — this helper exists for endpoints that intentionally serve a
+ * less-privileged response to anonymous callers (Day 13 M5).
+ */
+export function isAuthenticated(c: Context): boolean {
+  return c.get('isAuthenticated') === true;
+}
+
 export function createAuthMiddleware(authService: AuthService) {
   return async (c: Context, next: Next) => {
     const path = c.req.path;
     const method = c.req.method;
+
+    // Validate session/token for *every* request so handlers can use
+    // `isAuthenticated(c)` to decide whether to redact sensitive fields.
+    // The flag is purely advisory — middleware below still enforces the
+    // hard 401/403 for protected paths.
+    const cookieHeader = c.req.header('cookie') || '';
+    const sessionToken = parseCookie(cookieHeader, 'ol_session');
+    let authed = false;
+    if (sessionToken && authService.validateSession(sessionToken)) {
+      authed = true;
+    } else {
+      const authHeader = c.req.header('authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.slice(7);
+        if (authService.validateApiToken(token)) {
+          authed = true;
+        }
+      }
+    }
+    c.set('isAuthenticated', authed);
 
     if (path === '/health') {
       return next();
@@ -59,6 +91,14 @@ export function createAuthMiddleware(authService: AuthService) {
       return next();
     }
 
+    // /api/info intentionally serves a less-privileged response to anonymous
+    // callers (Day 13 M5). The handler decides what to expose based on
+    // `isAuthenticated(c)`. Skipping the gate here keeps that decision in
+    // one place.
+    if (method === 'GET' && path === '/api/info') {
+      return next();
+    }
+
     if (!authService.isPasswordSet()) {
       if (path.startsWith('/api/setup/') || path.startsWith('/setup')) {
         return next();
@@ -69,18 +109,8 @@ export function createAuthMiddleware(authService: AuthService) {
       return c.json({ error: 'SETUP_REQUIRED' }, 403);
     }
 
-    const cookieHeader = c.req.header('cookie') || '';
-    const sessionToken = parseCookie(cookieHeader, 'ol_session');
-    if (sessionToken && authService.validateSession(sessionToken)) {
+    if (authed) {
       return next();
-    }
-
-    const authHeader = c.req.header('authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
-      if (authService.validateApiToken(token)) {
-        return next();
-      }
     }
 
     if (!path.startsWith('/api/')) {
