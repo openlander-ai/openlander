@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import {
   X,
   AlertCircle,
-  AlertTriangle,
   RefreshCw,
   Loader2,
   Activity,
@@ -317,10 +316,6 @@ export function OpsCenterV2() {
                   <Activity className="h-4 w-4 mr-1.5" />
                   {t('ops.live')}
                 </TabsTrigger>
-                <TabsTrigger value="incidents">
-                  <AlertTriangle className="h-4 w-4 mr-1.5" />
-                  {t('ops.incidents')}
-                </TabsTrigger>
                 <TabsTrigger value="approvals">
                   <ShieldCheck className="h-4 w-4 mr-1.5" />
                   {t('ops.approvals')}
@@ -377,12 +372,6 @@ export function OpsCenterV2() {
                     </Suspense>
                   </div>
                 </main>
-              </TabsContent>
-
-              <TabsContent value="incidents">
-                <div className="p-6 text-muted-foreground text-sm">
-                  {t('ops.incidentsComingSoon')}
-                </div>
               </TabsContent>
 
               <TabsContent value="approvals">
