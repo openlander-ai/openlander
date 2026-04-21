@@ -104,16 +104,18 @@ brew install --cask docker
 
 ## CLI Commands
 
-| Command                            | Description                       |
-| ---------------------------------- | --------------------------------- |
-| `openlander`                       | Start web UI (default port 10114) |
-| `openlander start`                 | Start daemon in background        |
-| `openlander stop`                  | Stop daemon                       |
-| `openlander restart`               | Restart daemon                    |
-| `openlander config`                | Show current config               |
-| `openlander config reset`          | Reset config to defaults          |
-| `openlander config reset-password` | Reset admin password              |
-| `openlander mcp`                   | Start MCP server (stdio mode)     |
+| Command                            | Description                                         |
+| ---------------------------------- | --------------------------------------------------- |
+| `openlander`                       | Start web UI in foreground (default port 10114)     |
+| `openlander start`                 | Alias of `openlander` — also runs in the foreground |
+| `openlander stop`                  | Prints supervisor guidance (no built-in daemon)     |
+| `openlander restart`               | Prints supervisor guidance (no built-in daemon)     |
+| `openlander config`                | Show current config                                 |
+| `openlander config reset`          | Reset config to defaults                            |
+| `openlander config reset-password` | Reset admin password                                |
+| `openlander mcp`                   | Start MCP server (stdio mode)                       |
+
+> **1.0 change**: OpenLander runs in the foreground only. Use systemd / pm2 / docker for background lifecycle (see the [Running as a Service](../../README.md#running-as-a-service) section in README).
 
 ---
 

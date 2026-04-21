@@ -71,7 +71,74 @@ openlander
 2. Start the Traefik reverse proxy
 3. Open the Web UI at `http://localhost:10114`
 4. Walk through setup: add an LLM API key (Gemini free tier works)
+   - On first boot OpenLander prints a one-time **setup secret** to the console; copy it into the setup form to claim the admin account. This prevents anyone else on the LAN from registering before you do.
 5. You're ready to deploy
+
+## Running as a Service
+
+`openlander` runs in the foreground. Use a process supervisor for background lifecycle.
+
+### systemd
+
+```ini
+# /etc/systemd/system/openlander.service
+[Unit]
+Description=OpenLander
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=openlander
+ExecStart=/usr/local/bin/openlander start --no-open
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable --now openlander
+sudo systemctl status openlander
+```
+
+### pm2
+
+```js
+// ecosystem.config.cjs
+module.exports = {
+  apps: [
+    {
+      name: 'openlander',
+      script: 'openlander',
+      args: 'start --no-open',
+      autorestart: true,
+      max_restarts: 10,
+    },
+  ],
+};
+```
+
+```bash
+pm2 start ecosystem.config.cjs
+pm2 save
+```
+
+### Docker
+
+```bash
+docker run -d \
+  --name openlander \
+  --restart unless-stopped \
+  -p 10114:10114 \
+  -v openlander-data:/root/.openlander \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  node:22 \
+  sh -c "npm install -g openlander && openlander start --no-open --host 0.0.0.0"
+```
+
+> `openlander stop` and `openlander restart` are no-ops that point you back at the supervisor — terminating the supervised process is always the supported lifecycle path.
 
 ## Features
 
