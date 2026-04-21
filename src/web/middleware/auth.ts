@@ -2,15 +2,21 @@ import type { Context, Next } from 'hono';
 import type { AuthService } from '../../auth/auth-service.js';
 import { parseCookie } from './cookies.js';
 
-const EXEMPT_PREFIXES = [
-  '/api/webhooks/',
-  '/webhooks/',
-  '/auth/',
-  '/api/auth/',
-  '/assets/',
-  '/mcp',
-  '/api/traefik/',
-];
+const EXEMPT_PREFIXES = ['/api/webhooks/', '/webhooks/', '/assets/', '/mcp', '/api/traefik/'];
+
+// Auth endpoints that intentionally bypass session validation.
+// Anything not in this list (e.g. OAuth start/callback, change-password,
+// token issuance) MUST go through the normal session/API-token auth path.
+const EXEMPT_AUTH_PATHS = new Set<string>([
+  '/auth/login',
+  '/api/auth/login',
+  '/auth/logout',
+  '/api/auth/logout',
+  '/auth/verify',
+  '/api/auth/verify',
+  '/auth/setup-password',
+  '/api/auth/setup-password',
+]);
 
 const EXEMPT_EXTENSIONS = [
   '.js',
@@ -37,6 +43,10 @@ export function createAuthMiddleware(authService: AuthService) {
       if (path.startsWith(prefix)) {
         return next();
       }
+    }
+
+    if (EXEMPT_AUTH_PATHS.has(path)) {
+      return next();
     }
 
     for (const ext of EXEMPT_EXTENSIONS) {

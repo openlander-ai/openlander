@@ -23,8 +23,11 @@ export async function verifySession(): Promise<{ authenticated: boolean }> {
   return apiGet<{ authenticated: boolean }>('/api/auth/verify');
 }
 
-export async function setupPassword(password: string): Promise<{ apiToken: string }> {
-  return apiPost<{ apiToken: string }>('/api/auth/setup-password', { password });
+export async function setupPassword(
+  password: string,
+  setupSecret: string,
+): Promise<{ apiToken: string }> {
+  return apiPost<{ apiToken: string }>('/api/auth/setup-password', { password, setupSecret });
 }
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {

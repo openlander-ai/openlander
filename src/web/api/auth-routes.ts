@@ -35,9 +35,24 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       return c.json({ error: 'Password already configured' }, 403);
     }
 
-    const body = await c.req.json<{ password: string }>();
+    const body = await c.req.json<{ password: string; setupSecret?: string }>();
     if (!body.password) {
       return c.json({ error: 'Password is required' }, 400);
+    }
+
+    if (!authService.verifySetupSecret(body.setupSecret)) {
+      log.warn(
+        { hasSecret: typeof body.setupSecret === 'string' && body.setupSecret.length > 0 },
+        'Setup-password attempt rejected: invalid or missing setup secret',
+      );
+      return c.json(
+        {
+          error: 'INVALID_SETUP_SECRET',
+          message:
+            'A valid one-time setup secret is required. Check the OpenLander server console for the secret printed on startup.',
+        },
+        401,
+      );
     }
 
     const { apiToken } = authService.setupPassword(body.password);
@@ -157,6 +172,12 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
   });
 
   api.get('/auth/google/start', (c) => {
+    const cookieHeader = c.req.header('cookie') || '';
+    const sessionToken = getSessionCookieToken(cookieHeader);
+    if (!sessionToken || !authService.validateSession(sessionToken)) {
+      return c.json({ error: 'AUTH_REQUIRED' }, 401);
+    }
+
     if (!ctx) {
       return c.json({ error: 'OAuth not available' }, 500);
     }
@@ -180,6 +201,12 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
   });
 
   api.get('/auth/callback/google', async (c) => {
+    const cookieHeader = c.req.header('cookie') || '';
+    const sessionToken = getSessionCookieToken(cookieHeader);
+    if (!sessionToken || !authService.validateSession(sessionToken)) {
+      return c.json({ error: 'AUTH_REQUIRED' }, 401);
+    }
+
     if (!ctx) {
       return c.json({ error: 'OAuth not available' }, 500);
     }
