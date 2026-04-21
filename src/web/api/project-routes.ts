@@ -295,13 +295,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       | 'error'
       | undefined;
     const includeArchived = c.req.query('include_archived') === 'true';
-    const projects = ctx.db.listProjects(status, { includeArchived });
+    // Batch fetch projects + environments + child counts in O(3) queries
+    // instead of the previous O(1 + 3N) per-project N+1 (was getEnvironments,
+    // isParentProject, and getChildProjects per row).
+    const projectsWithMeta = ctx.db.listProjectsWithMetadata(status, { includeArchived });
     const ips = getAllIps();
 
     return c.json({
-      count: projects.length,
-      projects: projects.map((p) => {
-        const environments = ctx.db.getEnvironmentsByProject(p.id);
+      count: projectsWithMeta.length,
+      projects: projectsWithMeta.map(({ project: p, environments, childCount }) => {
         return {
           id: p.id,
           name: p.name,
@@ -324,8 +326,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           createdAt: normalizeTimestamp(p.created_at),
           updatedAt: normalizeTimestamp(p.updated_at),
           parentProjectId: p.parent_project_id,
-          isCompose: ctx.db.isParentProject(p.id),
-          serviceCount: ctx.db.getChildProjects(p.id).length,
+          isCompose: childCount > 0,
+          serviceCount: childCount,
           environments: environments.map((env) => mapEnvironment(p.name, env)),
         };
       }),

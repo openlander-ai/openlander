@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { createDrizzleDatabase } from '../../../src/db/drizzle.js';
+import { EnvironmentRepo } from '../../../src/db/repos/environment.repo.js';
 import { ProjectRepo } from '../../../src/db/repos/project.repo.js';
 import { OpenLanderError } from '../../../src/errors.js';
 
@@ -164,5 +165,128 @@ describe('ProjectRepo - Archive', () => {
     it('returns false for non-existent project', () => {
       expect(repo.isArchived('nonexistent')).toBe(false);
     });
+  });
+});
+
+describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
+  let repo: ProjectRepo;
+  let envRepo: EnvironmentRepo;
+  let sqlite: ReturnType<typeof createDrizzleDatabase>['sqlite'];
+
+  beforeEach(() => {
+    const db = createDrizzleDatabase(':memory:');
+    sqlite = db.sqlite;
+    repo = new ProjectRepo(db.db, db.sqlite);
+    envRepo = new EnvironmentRepo(db.db, db.sqlite);
+    migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+  });
+
+  afterEach(() => {
+    sqlite.close();
+  });
+
+  it('returns empty array when there are no projects', () => {
+    expect(repo.listProjectsWithMetadata()).toEqual([]);
+  });
+
+  it('returns each project paired with its environments and child count', () => {
+    repo.createProject({ id: 'parent-1', name: 'compose-app', repoUrl: 'https://x/y' });
+    repo.createProject({ id: 'child-a', name: 'svc-a', repoUrl: '', parentProjectId: 'parent-1' });
+    repo.createProject({ id: 'child-b', name: 'svc-b', repoUrl: '', parentProjectId: 'parent-1' });
+    repo.createProject({ id: 'standalone', name: 'lone-app', repoUrl: 'https://x/z' });
+
+    envRepo.createEnvironment({
+      id: 'parent-1-prod',
+      projectId: 'parent-1',
+      type: 'production',
+      branch: 'main',
+    });
+    envRepo.createEnvironment({
+      id: 'parent-1-dev',
+      projectId: 'parent-1',
+      type: 'development',
+      branch: 'dev',
+    });
+    envRepo.createEnvironment({
+      id: 'standalone-prod',
+      projectId: 'standalone',
+      type: 'production',
+      branch: 'main',
+    });
+
+    const result = repo.listProjectsWithMetadata();
+    const byId = new Map(result.map((r) => [r.project.id, r]));
+
+    expect(byId.get('parent-1')?.environments).toHaveLength(2);
+    expect(byId.get('parent-1')?.childCount).toBe(2);
+
+    expect(byId.get('standalone')?.environments).toHaveLength(1);
+    expect(byId.get('standalone')?.childCount).toBe(0);
+
+    expect(byId.get('child-a')?.environments).toHaveLength(0);
+    expect(byId.get('child-a')?.childCount).toBe(0);
+  });
+
+  it('matches per-row legacy behavior (parity check) with O(3) queries', () => {
+    // Seed 25 projects, each with 1 environment, plus a few compose parents.
+    for (let i = 0; i < 20; i++) {
+      const id = `p-${String(i)}`;
+      repo.createProject({ id, name: `proj-${String(i)}`, repoUrl: `https://x/${String(i)}` });
+      envRepo.createEnvironment({
+        id: `${id}-prod`,
+        projectId: id,
+        type: 'production',
+        branch: 'main',
+      });
+    }
+    repo.createProject({ id: 'parent', name: 'parent-app', repoUrl: 'https://x/parent' });
+    for (let i = 0; i < 4; i++) {
+      repo.createProject({
+        id: `child-${String(i)}`,
+        name: `child-${String(i)}`,
+        repoUrl: '',
+        parentProjectId: 'parent',
+      });
+    }
+
+    const batched = repo.listProjectsWithMetadata();
+    expect(batched.length).toBe(25);
+
+    // Parity: every row's environments + childCount should match per-row queries.
+    for (const row of batched) {
+      const expectedEnvs = envRepo.getEnvironmentsByProject(row.project.id);
+      expect(row.environments.map((e) => e.id).sort()).toEqual(
+        expectedEnvs.map((e) => e.id).sort(),
+      );
+
+      const expectedChildren = repo.getChildProjects(row.project.id).length;
+      expect(row.childCount).toBe(expectedChildren);
+
+      // isCompose semantic check: childCount > 0 ⇔ isParentProject
+      expect(row.childCount > 0).toBe(repo.isParentProject(row.project.id));
+    }
+  });
+
+  it('honors status filter', () => {
+    repo.createProject({ id: 'p1', name: 'a', repoUrl: '' });
+    repo.createProject({ id: 'p2', name: 'b', repoUrl: '' });
+    repo.updateProject('p1', { status: 'running' });
+    repo.updateProject('p2', { status: 'stopped' });
+
+    const running = repo.listProjectsWithMetadata('running');
+    expect(running).toHaveLength(1);
+    expect(running[0].project.id).toBe('p1');
+  });
+
+  it('excludes archived projects by default and includes them when requested', () => {
+    repo.createProject({ id: 'p1', name: 'live', repoUrl: '' });
+    repo.createProject({ id: 'p2', name: 'gone', repoUrl: '' });
+    repo.archiveProject('p2');
+
+    const defaultList = repo.listProjectsWithMetadata();
+    expect(defaultList.map((r) => r.project.id)).toEqual(['p1']);
+
+    const includeArchived = repo.listProjectsWithMetadata(undefined, { includeArchived: true });
+    expect(includeArchived.map((r) => r.project.id).sort()).toEqual(['p1', 'p2']);
   });
 });

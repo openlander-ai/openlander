@@ -1,5 +1,6 @@
 import type { LanguageModel, ToolSet } from 'ai';
 import type { Database } from '../db/index.js';
+import { LLMConcurrencyExceededError } from '../errors.js';
 import type { QuestionBridge } from '../lib/question-bridge.js';
 import type { ApprovalGate } from '../pipeline/approval-gate.js';
 import { Agent } from './agent.js';
@@ -66,7 +67,15 @@ export class AgentPool {
     if (this.pool.size >= MAX_POOL_SIZE) {
       this.evictOldest();
       if (this.pool.size >= MAX_POOL_SIZE) {
-        return this.createAgent();
+        // Pool is full and every entry is active — refuse the new session
+        // instead of silently spawning an unpooled Agent (which previously
+        // bypassed the hard cap and let LLM concurrency / cost grow without
+        // bound). Caller (e.g. chat-routes) maps this to HTTP 429.
+        let activeCount = 0;
+        for (const entry of this.pool.values()) {
+          if (entry.isActive) activeCount += 1;
+        }
+        throw new LLMConcurrencyExceededError(MAX_POOL_SIZE, activeCount);
       }
     }
 

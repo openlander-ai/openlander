@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import {
   OpenLanderError,
   ProjectAlreadyExistsError,
@@ -8,8 +8,20 @@ import {
 import { createModuleLogger } from '../../lib/logger.js';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { buildSetValues } from '../helpers.js';
-import { projects } from '../schema.drizzle.js';
-import type { PendingFixRow, ProjectRow } from '../types.js';
+import { environments, projects } from '../schema.drizzle.js';
+import type { EnvironmentRow, PendingFixRow, ProjectRow } from '../types.js';
+
+/**
+ * Project row plus pre-fetched derived metadata, to let callers render lists
+ * (e.g. /api/projects) without per-row N+1 queries for environments and
+ * compose-parent counts.
+ */
+export interface ProjectWithMetadata {
+  project: ProjectRow;
+  environments: EnvironmentRow[];
+  /** Number of child projects (for compose parents). 0 means non-parent. */
+  childCount: number;
+}
 
 const log = createModuleLogger('project-repo');
 
@@ -98,6 +110,68 @@ export class ProjectRepo {
         .all() as ProjectRow[];
     }
     return this.db.select().from(projects).orderBy(desc(projects.updated_at)).all() as ProjectRow[];
+  }
+
+  /**
+   * Batch fetch projects + their environments + child counts in a single
+   * pass over the projects table and at most two follow-up queries
+   * (one for environments, one for child counts) keyed by project id.
+   *
+   * Replaces the per-row N+1 pattern in /api/projects (one query per project
+   * for environments, isParentProject, and getChildProjects) with O(3)
+   * queries total. See ListProjectsWithMetadata test for the contract.
+   */
+  listProjectsWithMetadata(
+    status?: ProjectRow['status'],
+    opts?: { includeArchived?: boolean },
+  ): ProjectWithMetadata[] {
+    const projectRows = this.listProjects(status, opts);
+    if (projectRows.length === 0) {
+      return [];
+    }
+
+    const projectIds = projectRows.map((p) => p.id);
+
+    // Single query: all environments for these projects, ordered as
+    // EnvironmentRepo.getEnvironmentsByProject does so consumers see the
+    // same ordering they would have gotten before.
+    const envRows = this.db
+      .select()
+      .from(environments)
+      .where(inArray(environments.project_id, projectIds))
+      .orderBy(asc(environments.created_at))
+      .all() as EnvironmentRow[];
+
+    const envByProject = new Map<string, EnvironmentRow[]>();
+    for (const env of envRows) {
+      const list = envByProject.get(env.project_id);
+      if (list) {
+        list.push(env);
+      } else {
+        envByProject.set(env.project_id, [env]);
+      }
+    }
+
+    // Single query: child counts grouped by parent_project_id.
+    const childCountRows = this.db
+      .select({ parentId: projects.parent_project_id, cnt: count() })
+      .from(projects)
+      .where(inArray(projects.parent_project_id, projectIds))
+      .groupBy(projects.parent_project_id)
+      .all() as Array<{ parentId: string | null; cnt: number }>;
+
+    const childCountByParent = new Map<string, number>();
+    for (const row of childCountRows) {
+      if (row.parentId) {
+        childCountByParent.set(row.parentId, row.cnt);
+      }
+    }
+
+    return projectRows.map((project) => ({
+      project,
+      environments: envByProject.get(project.id) ?? [],
+      childCount: childCountByParent.get(project.id) ?? 0,
+    }));
   }
 
   updateProject(

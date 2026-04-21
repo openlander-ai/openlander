@@ -325,6 +325,23 @@ export class LLMNotConfiguredError extends OpenLanderError {
   }
 }
 
+/**
+ * Raised when the LLM agent pool is at its hard cap and no idle session can be
+ * evicted to make room for a new chat session. Mapped to HTTP 429 so callers
+ * can back off and retry once existing sessions complete or go idle.
+ */
+export class LLMConcurrencyExceededError extends OpenLanderError {
+  constructor(maxPoolSize: number, activeSessions: number) {
+    super(
+      `LLM agent pool is full (${String(activeSessions)}/${String(maxPoolSize)} active sessions). Wait for an existing chat to finish, then retry.`,
+      'LLM_CONCURRENCY_EXCEEDED',
+      429,
+      { maxPoolSize, activeSessions },
+    );
+    this.name = 'LLMConcurrencyExceededError';
+  }
+}
+
 // --- Config errors ---
 
 export class ConfigNotFoundError extends OpenLanderError {

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { LanguageModel } from 'ai';
 import type { Database } from '../../src/db/index.js';
+import { LLMConcurrencyExceededError } from '../../src/errors.js';
 import { Agent } from '../../src/llm/agent.js';
 import { AgentPool, MAX_POOL_SIZE, PROJECT_LOCK_TIMEOUT_MS } from '../../src/llm/agent-pool.js';
 
@@ -81,6 +82,56 @@ describe('AgentPool', () => {
       idle: 1,
       total: 2,
     });
+  });
+
+  it('throws LLMConcurrencyExceededError when pool is full and all sessions are active', () => {
+    const pool = createPool();
+    pool.getOrCreate('s1');
+    pool.getOrCreate('s2');
+    pool.getOrCreate('s3');
+    pool.getOrCreate('s4');
+    pool.getOrCreate('s5');
+    expect(pool.getStats()).toEqual({ active: MAX_POOL_SIZE, idle: 0, total: MAX_POOL_SIZE });
+
+    expect(() => pool.getOrCreate('s6')).toThrow(LLMConcurrencyExceededError);
+    // Pool size unchanged — we did not silently spawn an unpooled Agent.
+    expect(pool.getStats().total).toBe(MAX_POOL_SIZE);
+  });
+
+  it('LLMConcurrencyExceededError carries pool capacity details', () => {
+    const pool = createPool();
+    pool.getOrCreate('s1');
+    pool.getOrCreate('s2');
+    pool.getOrCreate('s3');
+    pool.getOrCreate('s4');
+    pool.getOrCreate('s5');
+
+    try {
+      pool.getOrCreate('s6');
+      throw new Error('expected getOrCreate to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(LLMConcurrencyExceededError);
+      const e = err as LLMConcurrencyExceededError;
+      expect(e.code).toBe('LLM_CONCURRENCY_EXCEEDED');
+      expect(e.statusCode).toBe(429);
+      expect(e.details).toEqual({ maxPoolSize: MAX_POOL_SIZE, activeSessions: MAX_POOL_SIZE });
+    }
+  });
+
+  it('recovers after releasing a session — new session reuses the freed slot', () => {
+    const pool = createPool();
+    pool.getOrCreate('s1');
+    pool.getOrCreate('s2');
+    pool.getOrCreate('s3');
+    pool.getOrCreate('s4');
+    pool.getOrCreate('s5');
+
+    expect(() => pool.getOrCreate('s6')).toThrow(LLMConcurrencyExceededError);
+
+    pool.release('s1'); // frees a slot
+    const s6 = pool.getOrCreate('s6'); // should now succeed via eviction
+    expect(s6).toBeInstanceOf(Agent);
+    expect(pool.getStats().total).toBe(MAX_POOL_SIZE);
   });
 
   it('invalidateAll clears all pooled sessions', () => {
