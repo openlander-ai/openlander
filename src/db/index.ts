@@ -498,7 +498,10 @@ export class Database implements AuthDatabase {
     return this.projectRepo.releaseDeployLock(projectId, sessionId);
   }
   getDeployLockInfo(projectId: string) { return this.projectRepo.getDeployLockInfo(projectId); }
-  cleanExpiredDeployLocks(timeoutMinutes = 10) { return this.projectRepo.cleanExpiredDeployLocks(timeoutMinutes); }
+  // 1.0 GA B3: default aligned with PROJECT_LOCK_TIMEOUT_MS (15min in
+  // src/llm/agent-pool.ts) so in-memory + DB lock TTLs share a single
+  // window. Callers can override per-call when needed.
+  cleanExpiredDeployLocks(timeoutMinutes = 15) { return this.projectRepo.cleanExpiredDeployLocks(timeoutMinutes); }
   createEnvironment(environment: Parameters<EnvironmentRepo['createEnvironment']>[0]) { return this.environmentRepo.createEnvironment(environment); }
   getEnvironment(id: string) { return this.environmentRepo.getEnvironment(id); }
   getEnvironmentsByProject(projectId: string) { return this.environmentRepo.getEnvironmentsByProject(projectId); }

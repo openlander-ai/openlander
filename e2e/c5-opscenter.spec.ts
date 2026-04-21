@@ -75,13 +75,14 @@ test.describe('C5 OpsCenter / Alerts', () => {
     const res = await request.get(`${BASE_URL}/api/ops/circuit-breakers`, {
       headers: { Cookie: cookie },
     });
-    expect([200, 404]).toContain(res.status());
-    if (res.ok()) {
-      const body = (await res.json()) as unknown;
-      // shape can be { breakers: [...] } or plain array
-      const list = Array.isArray(body) ? body : ((body as { breakers?: unknown[] }).breakers ?? []);
-      expect(Array.isArray(list)).toBeTruthy();
-    }
+    // 1.0 GA H4: this endpoint is shipped (`src/web/api/ops-routes.ts:381`),
+    // so a 404 here is a regression — tighten from `[200, 404]` to a hard
+    // 200 with the documented `{ breakers: [...] }` shape.
+    expect(res.ok(), `GET /api/ops/circuit-breakers must be 200, got ${res.status()}`).toBeTruthy();
+    const body = (await res.json()) as unknown;
+    // shape can be { breakers: [...] } or plain array
+    const list = Array.isArray(body) ? body : ((body as { breakers?: unknown[] }).breakers ?? []);
+    expect(Array.isArray(list)).toBeTruthy();
   });
 
   test('C5S5 BUG-013/014: ops feed and per-project incidents agree on count', async ({

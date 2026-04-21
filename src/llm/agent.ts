@@ -15,6 +15,7 @@ import { decisionEngine } from './decision.js';
 import type { ApprovalGate } from '../pipeline/approval-gate.js';
 import { eventBus } from '../events/index.js';
 import { classifyLlmError, LlmErrorType } from './llm-error-types.js';
+import { isLlmUnreachableError, LLMUnreachableError } from '../errors.js';
 
 /**
  * OpenLander AI Agent.
@@ -321,6 +322,14 @@ export class Agent {
               const errMsg = part.error instanceof Error ? part.error.message : String(part.error);
               await onEvent({ type: 'error', error: errMsg });
               didStreamFail = true;
+              // 1.0 GA B4: when the AI SDK surfaces a connectivity-class
+              // failure inside the stream, capture it as a typed
+              // `LLMUnreachableError` so auto-recovery callers can detect it
+              // via `instanceof` instead of falling back to the
+              // `isLlmUnreachableError` heuristic against a plain Error.
+              if (this.actionType === 'auto_recovery' && isLlmUnreachableError(part.error)) {
+                throw new LLMUnreachableError(this.provider, errMsg);
+              }
               break streamLoop;
             }
             default:
@@ -332,6 +341,20 @@ export class Agent {
           usage = extractUsageFromResult(await result.usage);
         }
       } catch (error) {
+        // Re-throw a typed LLMUnreachableError synchronously so auto-recovery
+        // (or any caller) can `instanceof` check instead of relying on the
+        // `isLlmUnreachableError` heuristic. Already-typed errors propagate
+        // unchanged. (1.0 GA B4)
+        if (error instanceof LLMUnreachableError) {
+          didStreamFail = true;
+          throw error;
+        }
+        if (this.actionType === 'auto_recovery' && isLlmUnreachableError(error)) {
+          const rawMsg = error instanceof Error ? error.message : String(error);
+          await onEvent({ type: 'error', error: rawMsg });
+          didStreamFail = true;
+          throw new LLMUnreachableError(this.provider, rawMsg);
+        }
         const rawMsg = error instanceof Error ? error.message : String(error);
         const errorType = classifyLlmError(error);
         const isRateLimit =

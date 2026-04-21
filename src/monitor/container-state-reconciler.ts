@@ -13,6 +13,14 @@ const MISSING_CONTAINER_SUGGESTION = 'Run restart_project to redeploy.';
 // recoveries that legitimately take >30 min — e.g. large npm install +
 // Docker pull + multi-service compose). The watchdog still escapes truly
 // stuck rows; we just give legitimate long recoveries more room.
+//
+// 1.0 GA B3: this timeout is intentionally LONGER than `PROJECT_LOCK_TIMEOUT_MS`
+// (15min in `src/llm/agent-pool.ts`) and `cleanExpiredDeployLocks` default
+// (15min). The two layers solve different problems: deploy locks gate
+// concurrent mutations, the watchdog frees rows that got stuck in the
+// `recovering` status field. Recovery itself can legitimately exceed the
+// lock TTL when the lock-holder is alive and renewing it.
+//
 // 1.0.x backlog: make configurable via OpenLanderConfig.ai.recovery.stuckTimeoutMs
 // and short-circuit the timeout when an active deploy lock is held for the
 // project (lock holder owns the lifecycle).

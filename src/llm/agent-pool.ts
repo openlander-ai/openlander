@@ -25,10 +25,17 @@ export const STATE_CHANGING_TOOLS = new Set([
 ]);
 
 /**
- * Stale lock timeout: 5 minutes.
- * If a lock is older than this, it's considered abandoned and can be evicted.
+ * Stale lock timeout: 15 minutes (1.0 GA B3).
+ *
+ * Aligned with the DB-level `cleanExpiredDeployLocks` default so the
+ * in-memory project lock and the persisted `deploy_lock_*` columns expire
+ * in the same window. Previously the in-memory lock TTL was 5min while the
+ * DB-level expiry was 30min; that gap left a race window where the
+ * in-memory lock evicted but the DB lock still surfaced a deeper 409. The
+ * watchdog (`RECOVERING_TIMEOUT_MS`) is intentionally longer (60min) — it
+ * frees rows stuck in `recovering` state, not deploy locks.
  */
-export const PROJECT_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
+export const PROJECT_LOCK_TIMEOUT_MS = 15 * 60 * 1000;
 
 interface PoolEntry {
   agent: Agent;

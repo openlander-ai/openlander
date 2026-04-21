@@ -119,6 +119,16 @@
 - **현재**: errors.ts 의 doc comment 에 내부 incident 참조. 사용자 facing X (단 문서화 시 가려야).
 - **Fix**: 1.0.x cleanup 시 doc 정리.
 
+### 19a. Lock TTL 단일 상수로 추출 (1.0 GA B3 후속)
+
+- **현재**: 1.0 GA B3 에서 `PROJECT_LOCK_TIMEOUT_MS` (15분) 와 `cleanExpiredDeployLocks` default (15분) 를 일치시켰지만, 두 곳에 중복된 숫자로 박혀 있음. `RECOVERING_TIMEOUT_MS` (60분) 는 의도적으로 더 김.
+- **Fix**: `src/llm/agent-pool.ts` 의 `PROJECT_LOCK_TIMEOUT_MS` 를 단일 source 로 두고 `project.repo.ts`/`db/index.ts` 가 import 하도록 정리. 한 곳만 바꾸면 둘 다 따라가게.
+
+### 19b. ops-recovery / rollback-watcher / compose tools lock 적용 (1.0 GA B1/B2 후속)
+
+- **현재**: 1.0 GA B1 + B2 에서 `/rollback`, `/stop`, `/archive`, `/purge`, DELETE `/projects/:id` 5 개 route 에 `agentPool.acquireProjectLock` 적용. 그러나 백로그 #7 에서 언급한 `ops-recovery.ts:590`, `rollback-watcher.ts:147`, `tools/defs/compose.ts:242` 는 여전히 `pipeline.rollback` 직접 호출 — DB-level `withDeployLock` 만 보호.
+- **Fix**: 백로그 #7 과 함께 처리.
+
 ### 20. e2e/concurrent-deploy.spec.ts 정리
 
 - **현재**: 본인 인스턴스 비번 안 받으면 skip. 좋음. 단 archived 시 fallback 개선.

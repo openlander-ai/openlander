@@ -421,7 +421,11 @@ export class ProjectRepo {
     return { session: project.deploy_lock_session, lockedAt: project.deploy_lock_at };
   }
 
-  cleanExpiredDeployLocks(timeoutMinutes = 30): number {
+  // 1.0 GA B3: default aligned with `PROJECT_LOCK_TIMEOUT_MS` (15min in
+  // `src/llm/agent-pool.ts`) so the in-memory project lock and the
+  // persisted DB lock expire in the same window — eliminates the race
+  // where in-memory lock frees but DB lock still 409s for 25 more minutes.
+  cleanExpiredDeployLocks(timeoutMinutes = 15): number {
     this.db
       .update(projects)
       .set({ deploy_lock_session: null, deploy_lock_at: null })

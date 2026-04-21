@@ -75,8 +75,19 @@ test.describe('C4 Danger Actions', () => {
     const res = await request.post(`${BASE_URL}/api/projects/${project.id}/stop`, {
       headers: { Cookie: cookie, 'Content-Type': 'application/json' },
     });
-    // 200 if running, 400/409 if not — must not 5xx.
-    expect(res.status(), 'stop must not 5xx').toBeLessThan(500);
+    // 1.0 GA H4: tightened — `/stop` is shipped and must produce one of the
+    // documented responses. 200 on a running project, 409 if archived /
+    // recovering / circuit_open / deploy locked, 400 on validation failure.
+    // Anything else (including 5xx) is a regression.
+    expect([200, 400, 409], `stop returned ${res.status()}; must be 200/400/409`).toContain(
+      res.status(),
+    );
+    if (res.status() === 409) {
+      const body = (await res.json()) as { error?: string };
+      expect(body.error).toMatch(
+        /PROJECT_RECOVERING|PROJECT_ARCHIVED|CIRCUIT_BREAKER_OPEN|DEPLOY_LOCKED/,
+      );
+    }
   });
 
   test('C4S3 archive endpoint requires mutable state', async ({ request }) => {
@@ -89,7 +100,10 @@ test.describe('C4 Danger Actions', () => {
     const res = await request.post(`${BASE_URL}/api/projects/${project.id}/archive`, {
       headers: { Cookie: cookie, 'Content-Type': 'application/json' },
     });
-    expect(res.status(), 'archive must not 5xx').toBeLessThan(500);
+    // 1.0 GA H4: tightened from `<500` — archive is shipped and must
+    // produce one of the documented responses. 200 on success (and the body
+    // includes the updated project), 409 on lifecycle violation.
+    expect([200, 409], `archive returned ${res.status()}; must be 200/409`).toContain(res.status());
     if (res.status() === 409) {
       const body = (await res.json()) as { error?: string };
       expect(body.error).toMatch(

@@ -58,12 +58,14 @@ test.describe('C3 Recovery / Rollback / Blue-Green', () => {
       headers: { Cookie: cookie, 'Content-Type': 'application/json' },
       data: { deployment_id: 'does-not-exist' },
     });
-    // Either the lifecycle policy rejects first (409 for recovering/archived)
-    // or the deployment lookup fails (404). Both are typed — not 5xx.
+    // 1.0 GA H4: tightened — rollback is a shipped endpoint. The unknown
+    // deployment_id resolves to a typed 404 (DEPLOYMENT_NOT_FOUND); the
+    // lifecycle policy may reject first with 409. Both are typed; 5xx is a
+    // regression. DEPLOY_LOCKED 409 is a valid race outcome too (B1).
     expect([404, 409]).toContain(res.status());
     const body = (await res.json()) as { error?: string };
     expect(body.error, 'typed error code').toMatch(
-      /DEPLOYMENT_NOT_FOUND|PROJECT_RECOVERING|PROJECT_ARCHIVED|CIRCUIT_BREAKER_OPEN/,
+      /DEPLOYMENT_NOT_FOUND|PROJECT_RECOVERING|PROJECT_ARCHIVED|CIRCUIT_BREAKER_OPEN|DEPLOY_LOCKED/,
     );
   });
 
@@ -85,12 +87,13 @@ test.describe('C3 Recovery / Rollback / Blue-Green', () => {
       headers: { Cookie: cookie, 'Content-Type': 'application/json' },
       data: {},
     });
-    // 409 for lifecycle policy violation, 400 for "not running" validation
-    expect([400, 409, 500]).toContain(res.status());
-    if (res.status() !== 500) {
-      const body = (await res.json()) as { error?: string };
-      expect(body.error, 'typed error code').toBeTruthy();
-    }
+    // 1.0 GA H4: tightened — blue-green is shipped. 409 for lifecycle
+    // policy / DEPLOY_LOCKED, 400 for "not running" validation. 5xx removed
+    // from the allow-list — a server error against a non-running project
+    // would be a regression.
+    expect([400, 409]).toContain(res.status());
+    const body = (await res.json()) as { error?: string };
+    expect(body.error, 'typed error code').toBeTruthy();
   });
 
   test('C3S3 ops/actions list for a project is reachable', async ({ request }) => {

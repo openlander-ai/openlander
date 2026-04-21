@@ -736,9 +736,24 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       throw err;
     }
 
-    ctx.coordinator.suppressProject(project.id, 60_000);
-    await ctx.pipeline.stop(project.id);
-    return c.json({ status: 'stopped', project: project.name });
+    // Per-project lock (1.0 GA B2): `assertProjectLifecycleMutable` only
+    // inspects the persisted status field, so an in-flight deploy is
+    // invisible to it. Without the in-memory lock guard, clicking stop
+    // mid-deploy races against the redeploy/rollback/blue-green flows and
+    // can leave the container in an inconsistent state. Surface the
+    // contention as the typed 409 the UI already understands.
+    const lockSessionId = `stop-${project.id}-${Date.now().toString(36)}`;
+    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(project.id, lockSessionId)) {
+      const lock = ctx.agentPool.getProjectLock(project.id);
+      return c.json(new DeployLockedError(project.id, lock?.sessionId ?? 'unknown').toJSON(), 409);
+    }
+    try {
+      ctx.coordinator.suppressProject(project.id, 60_000);
+      await ctx.pipeline.stop(project.id);
+      return c.json({ status: 'stopped', project: project.name });
+    } finally {
+      ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
+    }
   });
 
   api.post('/projects/:id/redeploy', async (c) => {
@@ -897,6 +912,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       }
     }
 
+    // Per-project lock (1.0 GA B1): match /redeploy + /blue-green so two
+    // concurrent rollback requests on the same project are rejected with a
+    // typed 409 at the route layer instead of falling through to the DB-level
+    // `withDeployLock` and surfacing as a deeper error.
+    const lockSessionId = `rollback-${project.id}-${Date.now().toString(36)}`;
+    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(project.id, lockSessionId)) {
+      const lock = ctx.agentPool.getProjectLock(project.id);
+      return c.json(new DeployLockedError(project.id, lock?.sessionId ?? 'unknown').toJSON(), 409);
+    }
     try {
       const result = await ctx.pipeline.rollback(project.id);
       return c.json(result, result.success ? 200 : 500);
@@ -917,6 +941,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         return c.json(err.toJSON(), err.statusCode as 400);
       }
       throw err;
+    } finally {
+      ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
     }
   });
 
@@ -1143,10 +1169,21 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       throw err;
     }
 
-    ctx.coordinator.suppressProject(project.id, 60_000);
-    await ctx.pipeline.archive(project.id);
-    const updated = ctx.db.getProject(project.id);
-    return c.json({ project: updated });
+    // Per-project lock (1.0 GA B2): same rationale as /stop — block archive
+    // when a deploy/rollback/blue-green is in flight.
+    const lockSessionId = `archive-${project.id}-${Date.now().toString(36)}`;
+    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(project.id, lockSessionId)) {
+      const lock = ctx.agentPool.getProjectLock(project.id);
+      return c.json(new DeployLockedError(project.id, lock?.sessionId ?? 'unknown').toJSON(), 409);
+    }
+    try {
+      ctx.coordinator.suppressProject(project.id, 60_000);
+      await ctx.pipeline.archive(project.id);
+      const updated = ctx.db.getProject(project.id);
+      return c.json({ project: updated });
+    } finally {
+      ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
+    }
   });
 
   api.post('/projects/:id/unarchive', async (c) => {
@@ -1179,9 +1216,21 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       throw err;
     }
 
-    ctx.coordinator.suppressProject(project.id, 60_000);
-    await ctx.pipeline.remove(project.id, ctx.cloudflare);
-    return c.json({ success: true, message: 'Project permanently deleted' });
+    // Per-project lock (1.0 GA B2): block hard-delete if any deploy/rollback
+    // is in flight. Permanently removing rows + containers mid-deploy is the
+    // worst-case race — surface it as a typed 409.
+    const lockSessionId = `purge-${project.id}-${Date.now().toString(36)}`;
+    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(project.id, lockSessionId)) {
+      const lock = ctx.agentPool.getProjectLock(project.id);
+      return c.json(new DeployLockedError(project.id, lock?.sessionId ?? 'unknown').toJSON(), 409);
+    }
+    try {
+      ctx.coordinator.suppressProject(project.id, 60_000);
+      await ctx.pipeline.remove(project.id, ctx.cloudflare);
+      return c.json({ success: true, message: 'Project permanently deleted' });
+    } finally {
+      ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
+    }
   });
 
   api.delete('/projects/:id', async (c) => {
@@ -1200,9 +1249,20 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       throw err;
     }
 
-    ctx.coordinator.suppressProject(project.id, 60_000);
-    await ctx.pipeline.archive(project.id);
-    return c.json({ status: 'archived', project: project.name });
+    // Per-project lock (1.0 GA B2): same rationale as POST /archive — DELETE
+    // soft-archives, so block when a deploy is mid-flight.
+    const lockSessionId = `delete-${project.id}-${Date.now().toString(36)}`;
+    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(project.id, lockSessionId)) {
+      const lock = ctx.agentPool.getProjectLock(project.id);
+      return c.json(new DeployLockedError(project.id, lock?.sessionId ?? 'unknown').toJSON(), 409);
+    }
+    try {
+      ctx.coordinator.suppressProject(project.id, 60_000);
+      await ctx.pipeline.archive(project.id);
+      return c.json({ status: 'archived', project: project.name });
+    } finally {
+      ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
+    }
   });
 
   api.get('/projects/:id/logs', async (c) => {
