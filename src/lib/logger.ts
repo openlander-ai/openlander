@@ -68,9 +68,62 @@ class LogCaptureStream extends Writable {
   }
 }
 
+/**
+ * Day 13 hardening: redact common credential field names so a stray
+ * `log.info({ user })` or `log.error({ err, body })` never serialises a
+ * password, OAuth token, or API key into the on-disk JSON stream / log
+ * buffer / log-stream WebSocket. Pino redact paths are matched per token
+ * (`*.password` covers any one-level child); we deliberately use `*` for
+ * all common nesting points and explicit deep paths for the well-known
+ * HTTP request shape.
+ */
+const REDACT_PATHS: string[] = [
+  // Generic credential field names (one level deep)
+  '*.password',
+  '*.token',
+  '*.api_key',
+  '*.apiKey',
+  '*.auth_token',
+  '*.authToken',
+  '*.secret',
+  '*.access_token',
+  '*.accessToken',
+  '*.refresh_token',
+  '*.refreshToken',
+  '*.client_secret',
+  '*.clientSecret',
+  '*.signing_secret',
+  '*.signingSecret',
+  '*.webhook_secret',
+  '*.webhookSecret',
+  '*.private_key',
+  '*.privateKey',
+  '*.session_token',
+  '*.sessionToken',
+  // OpenLander-specific shapes
+  'setupSecret',
+  'apiToken',
+  'oauth_code',
+  'oauthCode',
+  'verifier',
+  'pkce_verifier',
+  'pkceVerifier',
+  // HTTP request leakage
+  'req.headers.authorization',
+  'req.headers.cookie',
+  'request.headers.authorization',
+  'request.headers.cookie',
+  'headers.authorization',
+  'headers.cookie',
+];
+
 export const logger = pino(
   {
     level: isTest ? 'silent' : (process.env['LOG_LEVEL'] ?? 'info'),
+    redact: {
+      paths: REDACT_PATHS,
+      censor: '[REDACTED]',
+    },
   },
   new LogCaptureStream(isTest ? undefined : process.stdout),
 );
