@@ -17,6 +17,7 @@ import { createChatRoutes } from './api/chat-routes.js';
 import { createLlmRoutes } from './api/llm-routes.js';
 import { createAuthRoutes } from './api/auth-routes.js';
 import { createAuthMiddleware } from './middleware/auth.js';
+import { createCorsOriginPolicy } from './middleware/cors-policy.js';
 import { AuthService } from '../auth/auth-service.js';
 import { createMcpHttpRoutes } from '../mcp/server.js';
 import { OpenLanderError } from '../errors.js';
@@ -160,7 +161,8 @@ function createApp(
   app.use(
     '/api/*',
     cors({
-      origin: ctx.config.server.corsOrigin ?? '*',
+      origin: createCorsOriginPolicy(ctx.config.server.corsOrigin, ctx.config.server.baseUrl),
+      credentials: false,
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     }),
   );

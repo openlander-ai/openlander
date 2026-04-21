@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { AppContext } from '../app.js';
 import { AuthService } from '../auth/auth-service.js';
+import { createCorsOriginPolicy } from '../web/middleware/cors-policy.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { VERSION } from '../version.js';
 import { registerCompositeMcpTools } from '../tools/adapters/mcp.js';
@@ -162,7 +163,8 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
   app.use(
     '*',
     cors({
-      origin: '*',
+      origin: createCorsOriginPolicy(ctx.config.server.corsOrigin, ctx.config.server.baseUrl),
+      credentials: false,
       allowMethods: ['GET', 'POST', 'DELETE'],
       allowHeaders: [
         'Content-Type',
