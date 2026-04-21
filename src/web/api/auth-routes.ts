@@ -201,12 +201,11 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
   });
 
   api.get('/auth/callback/google', async (c) => {
-    const cookieHeader = c.req.header('cookie') || '';
-    const sessionToken = getSessionCookieToken(cookieHeader);
-    if (!sessionToken || !authService.validateSession(sessionToken)) {
-      return c.json({ error: 'AUTH_REQUIRED' }, 401);
-    }
-
+    // Note: we deliberately DO NOT check the session cookie here. The redirect
+    // from accounts.google.com is cross-site, so a SameSite=Strict cookie will
+    // not be attached. Authentication is established by the state parameter:
+    // it can only have been issued by /auth/google/start (which requires a
+    // session), is single-use, and expires after 10 minutes (validated below).
     if (!ctx) {
       return c.json({ error: 'OAuth not available' }, 500);
     }

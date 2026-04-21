@@ -20,6 +20,7 @@ import { createAuthMiddleware } from './middleware/auth.js';
 import { AuthService } from '../auth/auth-service.js';
 import { createMcpHttpRoutes } from '../mcp/server.js';
 import { OpenLanderError } from '../errors.js';
+import pc from 'picocolors';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
@@ -102,14 +103,20 @@ function announceSetupSecretIfNeeded(authService: AuthService): void {
     return;
   }
 
-  const banner = '═'.repeat(60);
+  const banner = pc.cyan('═'.repeat(60));
   console.log();
   console.log(banner);
-  console.log('  OpenLander first-run setup');
+  console.log(pc.bold('  OpenLander first-run setup'));
   console.log(banner);
-  console.log(`  ONE-TIME SETUP SECRET: ${secret}`);
+  console.log(`  ONE-TIME SETUP SECRET: ${pc.bold(pc.yellow(secret))}`);
   console.log('  Paste this into the setup form to claim the admin account.');
   console.log('  This value lives in memory only and rotates on restart.');
+  console.log(
+    pc.dim(
+      '  Note: this secret and the initial password travel over plain HTTP.\n' +
+        '  On an untrusted network, run setup over HTTPS or through an SSH tunnel.',
+    ),
+  );
   console.log(banner);
   console.log();
 }
