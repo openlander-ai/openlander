@@ -698,6 +698,16 @@ export class DeployPipeline {
         if (error instanceof PreflightCheckError) {
           await this.transitionProjectState(projectId, 'error', 'deploy-build-error');
           this.jobManager?.updatePhase(projectId, 'failed', error.message);
+          // F3 (Day 9): preflight failure path also returns success:false
+          // without emitting deploy:failed → fireAndForget assumed deploy()
+          // owned the emit and skipped it. Make this a guaranteed terminal
+          // event so plan-engine lock release / questionBridge active project
+          // clear / activity logger always wake up.
+          await eventBus.emit('deploy:failed', {
+            projectId,
+            step: 'preflight',
+            error: error.message,
+          });
           return {
             success: false,
             projectId,
@@ -746,11 +756,25 @@ export class DeployPipeline {
     const startTime = Date.now();
     const project = this.db.getProject(projectId);
     if (!project) {
+      // F3 (Day 9): emit deploy:failed before returning so terminal-event
+      // listeners (plan-engine deploy lock release, questionBridge active-
+      // project clear, activity logger) wake up. The race window is:
+      // startDeploy returns → fireAndForgetDeploy starts background → project
+      // is deleted → background path lands here. Without this emit, the
+      // pre-existing fireAndForget contract (`emitTerminalEvent: false` when
+      // deploy() returns success:false) leaves locks stale until the 30-minute
+      // reconciliation window.
+      const errorMsg = `Project not found: ${projectId}`;
+      await eventBus.emit('deploy:failed', {
+        projectId,
+        step: 'lookup',
+        error: errorMsg,
+      });
       return {
         success: false,
         projectId,
         projectName: 'unknown',
-        error: `Project not found: ${projectId}`,
+        error: errorMsg,
         buildDurationMs: Date.now() - startTime,
       };
     }
@@ -759,11 +783,19 @@ export class DeployPipeline {
     assertProjectMutable(project, { db: this.db });
     const environment = this.db.getEnvironment(environmentId);
     if (!environment || environment.project_id !== projectId) {
+      // F3 (Day 9): see above — same terminal-event guarantee for the
+      // environment-disappeared race.
+      const errorMsg = `Environment not found: ${environmentId}`;
+      await eventBus.emit('deploy:failed', {
+        projectId,
+        step: 'lookup',
+        error: errorMsg,
+      });
       return {
         success: false,
         projectId,
         projectName: project.name,
-        error: `Environment not found: ${environmentId}`,
+        error: errorMsg,
         buildDurationMs: Date.now() - startTime,
       };
     }
@@ -773,11 +805,18 @@ export class DeployPipeline {
     const source = deployConfig.source ?? 'git';
     const repoUrl = deployConfig.repoUrl ?? project.repo_url ?? '';
     if (source !== 'image' && !repoUrl) {
+      // F3 (Day 9): same terminal-event guarantee for missing-repo case.
+      const errorMsg = `Missing repo URL for project: ${projectId}`;
+      await eventBus.emit('deploy:failed', {
+        projectId,
+        step: 'config',
+        error: errorMsg,
+      });
       return {
         success: false,
         projectId,
         projectName,
-        error: `Missing repo URL for project: ${projectId}`,
+        error: errorMsg,
         buildDurationMs: Date.now() - startTime,
       };
     }

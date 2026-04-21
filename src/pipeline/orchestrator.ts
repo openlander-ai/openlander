@@ -36,7 +36,8 @@ export interface OrchestrationResult {
       | 'rolled_back'
       | 'skipped'
       | 'rollback_skipped'
-      | 'rollback_failed_due_to_policy';
+      | 'rollback_failed_due_to_policy'
+      | 'rollback_failed';
     projectId?: string;
     url?: string;
     error?: string;
@@ -398,11 +399,13 @@ export class DeployOrchestrator {
                 : `rollback blocked: ${outcome.reason}`,
             };
           }
-          // Generic rollback failure — keep as deployed (still running) but
-          // record the failure in the error field.
+          // F2 (Day 9): Generic rollback failure (non-policy) — distinct from
+          // policy rejections so operators can tell apart "operator-set state
+          // (archived/recovering/circuit-open)" from "Docker / generic error".
+          // The container is still running; surface the underlying reason.
           return {
             ...current,
-            status: 'rollback_failed_due_to_policy' as const,
+            status: 'rollback_failed' as const,
             error: current.error
               ? `${current.error}; rollback failed: ${outcome.reason}`
               : `rollback failed: ${outcome.reason}`,

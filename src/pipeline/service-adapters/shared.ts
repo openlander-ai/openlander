@@ -1,5 +1,6 @@
 import type { ServiceRow } from '../../db/index.js';
 import type { Docker } from '../docker.js';
+import { ServiceConfigError, ServiceOperationError } from '../../errors.js';
 import type { ContainerExecResult, ServiceCredentials } from './types.js';
 
 const DEFAULT_EXEC_TIMEOUT_MS = 60_000;
@@ -59,8 +60,14 @@ export async function execInServiceContainer(
   if (options?.throwOnNonZeroExit !== false && execResult.exitCode !== 0) {
     const commandText = command.join(' ');
     const output = stderr.trim() || stdout.trim();
-    throw new Error(
+    throw new ServiceOperationError(
+      'execInServiceContainer',
       `Container command failed (${commandText}) with exit code ${String(execResult.exitCode)}${output ? `: ${output}` : ''}`,
+      {
+        serviceId: service.id,
+        command: commandText,
+        exitCode: execResult.exitCode,
+      },
     );
   }
 
@@ -74,18 +81,24 @@ export async function execInServiceContainer(
 
 export function parseServiceCredentials(service: ServiceRow): ServiceCredentials {
   if (!service.credentials) {
-    throw new Error(`Service credentials not available: ${service.id}`);
+    throw new ServiceConfigError(`Service credentials not available: ${service.id}`, {
+      serviceId: service.id,
+    });
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(service.credentials);
   } catch (_err) {
-    throw new Error(`Invalid service credentials: ${service.id}`);
+    throw new ServiceConfigError(`Invalid service credentials: ${service.id}`, {
+      serviceId: service.id,
+    });
   }
 
   if (typeof parsed !== 'object' || parsed === null) {
-    throw new Error(`Incomplete service credentials: ${service.id}`);
+    throw new ServiceConfigError(`Incomplete service credentials: ${service.id}`, {
+      serviceId: service.id,
+    });
   }
 
   const record = parsed as Record<string, unknown>;
@@ -94,7 +107,9 @@ export function parseServiceCredentials(service: ServiceRow): ServiceCredentials
     typeof record['password'] !== 'string' ||
     typeof record['database'] !== 'string'
   ) {
-    throw new Error(`Incomplete service credentials: ${service.id}`);
+    throw new ServiceConfigError(`Incomplete service credentials: ${service.id}`, {
+      serviceId: service.id,
+    });
   }
 
   return {
@@ -106,13 +121,13 @@ export function parseServiceCredentials(service: ServiceRow): ServiceCredentials
 
 export function assertSafeDatabaseName(name: string): void {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
-    throw new Error(`Invalid database name: ${name}`);
+    throw new ServiceConfigError(`Invalid database name: ${name}`, { name });
   }
 }
 
 export function assertSafeUserName(username: string): void {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(username)) {
-    throw new Error(`Invalid username: ${username}`);
+    throw new ServiceConfigError(`Invalid username: ${username}`, { username });
   }
 }
 

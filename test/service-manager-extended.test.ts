@@ -232,7 +232,7 @@ describe('ServiceManager extended DB/user operations', () => {
     const manager = new ServiceManager(dockerHarness.docker, createDbMock([redis]));
 
     await expect(manager.listDatabases('svc-redis')).rejects.toThrow(
-      'Database listing is not supported for redis services',
+      'Database listing is not supported for service type: redis',
     );
   });
 
@@ -252,7 +252,7 @@ describe('ServiceManager extended DB/user operations', () => {
     const manager = new ServiceManager(dockerHarness.docker, createDbMock([redis]));
 
     await expect(manager.listUsers('svc-redis')).rejects.toThrow(
-      'User listing is not supported for redis services',
+      'User listing is not supported for service type: redis',
     );
   });
 
@@ -272,7 +272,7 @@ describe('ServiceManager extended DB/user operations', () => {
     const manager = new ServiceManager(dockerHarness.docker, createDbMock([redis]));
 
     await expect(manager.createDatabase('svc-redis', 'cachedb')).rejects.toThrow(
-      'Database creation is not supported for redis services',
+      'Database creation is not supported for service type: redis',
     );
   });
 
@@ -292,7 +292,7 @@ describe('ServiceManager extended DB/user operations', () => {
     const manager = new ServiceManager(dockerHarness.docker, createDbMock([redis]));
 
     await expect(manager.createUser('svc-redis', 'cache_user')).rejects.toThrow(
-      'User creation is not supported for redis services',
+      'User creation is not supported for service type: redis',
     );
   });
 

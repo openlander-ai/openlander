@@ -388,6 +388,44 @@ export function buildMonorepoResults(params: {
       };
     }
 
+    // F1 (Day 9 Bug #5 follow-up): rollback was attempted but not actually
+    // performed — policy rejected it (archived/recovering/circuit-open) or
+    // it failed for a generic reason. The service container is still
+    // running, so keep `success: true` (the deploy half completed) and
+    // attach the orchestration-level reason. Without this, the result
+    // collapsed into a `success: true` row with no error annotation,
+    // exactly the silent partial-state UX the bug fix aims to remove.
+    if (orchestrationStatus?.status === 'rollback_failed_due_to_policy') {
+      return {
+        ...result,
+        success: false,
+        error:
+          result.error ??
+          orchestrationStatus.error ??
+          'Rollback blocked by policy (project archived / recovering / circuit-open); container still running.',
+      };
+    }
+
+    if (orchestrationStatus?.status === 'rollback_failed') {
+      return {
+        ...result,
+        success: false,
+        error:
+          result.error ?? orchestrationStatus.error ?? 'Rollback failed; container still running.',
+      };
+    }
+
+    if (orchestrationStatus?.status === 'rollback_skipped') {
+      return {
+        ...result,
+        success: false,
+        error:
+          result.error ??
+          orchestrationStatus.error ??
+          'Rollback was not attempted; service may be in inconsistent state.',
+      };
+    }
+
     return result;
   });
 }

@@ -1,5 +1,6 @@
 import type { ServiceRow } from '../../db/index.js';
 import type { Docker } from '../docker.js';
+import { ServiceOperationUnsupportedError } from '../../errors.js';
 import { waitUntilReady } from '../lib/retry.js';
 import { execInServiceContainer } from './shared.js';
 import type {
@@ -58,11 +59,11 @@ export class RabbitMqAdapter implements ServiceAdapter {
   }
 
   listDatabases(_service: ServiceRow, _docker: Docker): Promise<ListedDatabase[]> {
-    return Promise.reject(new Error('Database listing is not supported for rabbitmq services'));
+    return Promise.reject(new ServiceOperationUnsupportedError('Database listing', 'rabbitmq'));
   }
 
   listUsers(_service: ServiceRow, _docker: Docker): Promise<ListedUser[]> {
-    return Promise.reject(new Error('User listing is not supported for rabbitmq services'));
+    return Promise.reject(new ServiceOperationUnsupportedError('User listing', 'rabbitmq'));
   }
 
   createDatabase(
@@ -70,7 +71,7 @@ export class RabbitMqAdapter implements ServiceAdapter {
     _dbName: string,
     _docker: Docker,
   ): Promise<CreateDatabaseResult> {
-    return Promise.reject(new Error('Database creation is not supported for rabbitmq services'));
+    return Promise.reject(new ServiceOperationUnsupportedError('Database creation', 'rabbitmq'));
   }
 
   createUser(
@@ -78,6 +79,6 @@ export class RabbitMqAdapter implements ServiceAdapter {
     _options: CreateUserOptions,
     _docker: Docker,
   ): Promise<CreateUserResult> {
-    return Promise.reject(new Error('User creation is not supported for rabbitmq services'));
+    return Promise.reject(new ServiceOperationUnsupportedError('User creation', 'rabbitmq'));
   }
 }

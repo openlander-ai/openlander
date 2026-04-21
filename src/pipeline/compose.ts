@@ -135,6 +135,13 @@ export interface ComposeServiceStatus {
   status: 'running' | 'stopped' | 'error';
   ports?: string[];
   containerId?: string;
+  /**
+   * Populated when the service is in a partial state (still running but
+   * orchestration rollback was blocked by policy or failed). Lets UI /
+   * monorepo result building distinguish "fully healthy" from
+   * "running but orchestration partially failed".
+   */
+  error?: string;
 }
 
 export interface EnvFileReferenceError {
@@ -918,7 +925,8 @@ export class ComposePipeline {
       );
       const reconciledStatuses = filteredComposeProject.services.map((service) => {
         const deployment = deploymentByService.get(service.name);
-        const orchestrationStatus = orchestrationByService.get(service.name)?.status;
+        const orchestrationEntry = orchestrationByService.get(service.name);
+        const orchestrationStatus = orchestrationEntry?.status;
 
         if (deployment && orchestrationStatus === 'deployed') {
           return {
@@ -929,14 +937,39 @@ export class ComposePipeline {
           };
         }
 
+        // F1 (Day 9 Bug #5 follow-up): rollback policy / generic-error paths
+        // mean the container is STILL RUNNING despite the orchestration as a
+        // whole failing. Preserve `running` + container metadata so downstream
+        // child-project rows reflect reality (and operators can see/clean it
+        // up). Without this, the switch fell through to `stopped`, hiding the
+        // partial deployment.
         if (
-          orchestrationStatus === 'failed' ||
-          orchestrationStatus === 'rolled_back' ||
-          orchestrationStatus === 'skipped'
+          deployment &&
+          (orchestrationStatus === 'rollback_failed_due_to_policy' ||
+            orchestrationStatus === 'rollback_failed')
         ) {
           return {
             name: service.name,
-            status: orchestrationStatus === 'skipped' ? ('stopped' as const) : ('error' as const),
+            status: 'running' as const,
+            ports: [`${String(deployment.port)}:${String(deployment.containerPort)}`],
+            containerId: deployment.containerId,
+            error: orchestrationEntry?.error,
+          };
+        }
+
+        if (
+          orchestrationStatus === 'failed' ||
+          orchestrationStatus === 'rolled_back' ||
+          orchestrationStatus === 'skipped' ||
+          orchestrationStatus === 'rollback_skipped'
+        ) {
+          // skipped / rollback_skipped: never deployed → 'stopped'.
+          // failed / rolled_back: actively cleaned up → 'error'.
+          const isStopped =
+            orchestrationStatus === 'skipped' || orchestrationStatus === 'rollback_skipped';
+          return {
+            name: service.name,
+            status: isStopped ? ('stopped' as const) : ('error' as const),
           };
         }
 
@@ -975,13 +1008,26 @@ export class ComposePipeline {
       const failedOrchestration = orchestration.services
         .filter((service) => service.status === 'failed')
         .map((service) => `${service.name}: ${service.error ?? 'unknown error'}`);
+      // F1 (Day 9 Bug #5 follow-up): partial-state services (rollback policy
+      // blocked or rollback failed) are still running but represent a
+      // half-deployed compose project. Surface them in the error message so
+      // operators see "compose succeeded except svc-x is stuck running, see
+      // reason".
+      const partialStateServices = orchestration.services
+        .filter(
+          (service) =>
+            service.status === 'rollback_failed_due_to_policy' ||
+            service.status === 'rollback_failed',
+        )
+        .map((service) => `${service.name}: ${service.error ?? 'rollback skipped'}`);
       const hasError =
         !orchestration.success ||
         reconciledStatuses.some((status) => status.status === 'error') ||
-        failedOrchestration.length > 0;
+        failedOrchestration.length > 0 ||
+        partialStateServices.length > 0;
       const errorMessage =
-        failedOrchestration.length > 0
-          ? `One or more services failed to start (${failedOrchestration.join('; ')})`
+        failedOrchestration.length > 0 || partialStateServices.length > 0
+          ? `One or more services failed to start (${[...failedOrchestration, ...partialStateServices].join('; ')})`
           : hasError
             ? 'One or more services failed to start'
             : undefined;

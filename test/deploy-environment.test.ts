@@ -10,6 +10,7 @@ import type { Docker } from '../src/pipeline/docker.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
 import * as gitPipeline from '../src/pipeline/git.js';
 import * as dockerfileGen from '../src/pipeline/dockerfile-gen.js';
+import { eventBus } from '../src/events/index.js';
 
 type EnvLike = {
   getGlobalSecrets: () => Record<string, string>;
@@ -823,5 +824,95 @@ describe('DeployPipeline deployEnvironment', () => {
       ),
     ).toBe('runtime');
     expect(detectFailStep('[clone]\n[dockerfile]\n[build]\n[run]')).toBe('unknown');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Day 9 F3: deployEnvironment must emit deploy:failed on its early-return
+  // success:false paths. Without this, fireAndForgetDeploy assumes deploy()
+  // already emitted (it didn't on these paths), and plan-engine deploy lock
+  // listeners / questionBridge active-project clear / activity logger never
+  // wake up — locks stay held until 30-minute reconciliation.
+  // ---------------------------------------------------------------------------
+  describe('deployEnvironment terminal-event guarantees (Day 9 F3)', () => {
+    it('emits deploy:failed when project is not found', async () => {
+      const failures: Array<{ projectId: string; step: string; error: string }> = [];
+      const unsub = eventBus.on('deploy:failed', (payload) => {
+        failures.push({
+          projectId: payload.projectId,
+          step: payload.step,
+          error: payload.error,
+        });
+      });
+
+      try {
+        const result = await pipeline.deployEnvironment('missing-project', 'env-1', {});
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/Project not found/);
+        expect(failures).toHaveLength(1);
+        expect(failures[0]?.projectId).toBe('missing-project');
+        expect(failures[0]?.step).toBe('lookup');
+        expect(failures[0]?.error).toMatch(/Project not found/);
+      } finally {
+        unsub();
+      }
+    });
+
+    it('emits deploy:failed when environment is not found', async () => {
+      db.createProject({
+        id: 'p-race',
+        name: 'race-app',
+        repoUrl: 'https://github.com/openlander/race',
+        branch: 'main',
+      });
+
+      const failures: Array<{ projectId: string; step: string }> = [];
+      const unsub = eventBus.on('deploy:failed', (payload) => {
+        failures.push({ projectId: payload.projectId, step: payload.step });
+      });
+
+      try {
+        const result = await pipeline.deployEnvironment('p-race', 'missing-env', {});
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/Environment not found/);
+        expect(failures).toHaveLength(1);
+        expect(failures[0]?.projectId).toBe('p-race');
+        expect(failures[0]?.step).toBe('lookup');
+      } finally {
+        unsub();
+      }
+    });
+
+    it('emits deploy:failed when repo URL is missing for git source', async () => {
+      db.createProject({
+        id: 'p-norepo',
+        name: 'norepo-app',
+        repoUrl: '',
+        branch: 'main',
+      });
+      db.createEnvironment({
+        id: 'p-norepo-development',
+        projectId: 'p-norepo',
+        type: 'development',
+        branch: 'develop',
+      });
+
+      const failures: Array<{ projectId: string; step: string }> = [];
+      const unsub = eventBus.on('deploy:failed', (payload) => {
+        failures.push({ projectId: payload.projectId, step: payload.step });
+      });
+
+      try {
+        const result = await pipeline.deployEnvironment('p-norepo', 'p-norepo-development', {
+          source: 'git',
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/Missing repo URL/);
+        expect(failures).toHaveLength(1);
+        expect(failures[0]?.projectId).toBe('p-norepo');
+        expect(failures[0]?.step).toBe('config');
+      } finally {
+        unsub();
+      }
+    });
   });
 });
