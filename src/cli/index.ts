@@ -1,9 +1,8 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { join } from 'node:path';
-import { existsSync, unlinkSync, readFileSync } from 'node:fs';
+import { existsSync, unlinkSync } from 'node:fs';
 import { createModuleLogger } from '../lib/logger.js';
-import { sleep } from '../lib/sleep.js';
 import { VERSION } from '../version.js';
 import { getLanIp } from '../pipeline/traefik.js';
 import type { ToolSet } from 'ai';
@@ -104,18 +103,44 @@ program
   });
 
 // ── openlander start ─────────────────────────────────────────────────────────
+//
+// 1.0 GA: OpenLander runs in the foreground only. The previous "background
+// daemon" path silently bypassed PID-file management — `stop`/`restart` could
+// not actually stop a running process and would happily double-start. The
+// supported way to run OpenLander as a service is via systemd, pm2, Docker,
+// or any other process supervisor of your choice.
 
 program
   .command('start')
-  .description('Start daemon only (background)')
-  .action(async () => {
-    const { loadConfig, getDbPath, getDataDir } = await import('../config/index.js');
+  .description('Start OpenLander in the foreground (use systemd/pm2/docker for background)')
+  .option('-p, --port <port>', 'Port to listen on', '10114')
+  .option('--host <host>', 'Host to bind to', '0.0.0.0')
+  .option('--no-open', 'Do not open browser automatically')
+  .action(async (options: { port: string; host: string; open?: boolean }) => {
+    // `start` is now an alias for the default command — same behavior, clearer
+    // intent. Background mode is intentionally not supported by the CLI; use a
+    // process supervisor (systemd unit, pm2 ecosystem.config.cjs, Docker, ...)
+    // to run OpenLander as a long-lived service.
+    console.log(
+      pc.dim(
+        '  Foreground mode. To run in the background, use systemd, pm2, or docker.\n' +
+          '  See README.md for sample systemd unit and pm2 ecosystem files.\n',
+      ),
+    );
+
+    const port = parseInt(options.port, 10);
+
+    const { ensureDocker } = await import('./onboard.js');
+    await ensureDocker();
+
+    const { loadConfig, getDbPath } = await import('../config/index.js');
     const config = loadConfig();
+    config.server.port = port;
+    config.server.host = options.host;
 
     const { createAppContext } = await import('../app.js');
     const ctx = await createAppContext(config, getDbPath());
 
-    // Register tools with agent (including external MCP tools)
     if (ctx.agent) {
       const { createTools } = await import('../tools/index.js');
       const { mergeWithMcpTools } = await import('../mcp/client-manager.js');
@@ -127,140 +152,116 @@ program
       ctx.agent.setTools(tools);
     }
 
-    // Start daemon on Unix socket
-    const { startDaemon } = await import('../web/server.js');
-    const socketPath = join(getDataDir(), 'openlander.sock');
-    await startDaemon({ socketPath }, ctx);
+    try {
+      await ctx.traefik.start();
+    } catch (err) {
+      log.debug({ err }, 'Traefik start failed');
+      console.log(pc.yellow('  ⚠ Traefik could not start'));
+    }
 
-    console.log(pc.green('Daemon started.'), pc.dim(`Socket: ${socketPath}`));
+    const { createServer } = await import('../web/server.js');
+    createServer({ port, host: options.host }, ctx);
 
-    // Keep process running
-    process.on('SIGINT', () => process.exit(0));
-    process.on('SIGTERM', () => process.exit(0));
+    const lanIp = getLanIp();
+    const localUrl = `http://localhost:${String(port)}`;
+    const networkUrl = lanIp ? `http://${lanIp}:${String(port)}` : null;
+
+    console.log();
+    console.log(pc.bold(pc.cyan('  🛬 OpenLander')));
+    console.log();
+    console.log(pc.dim('  Local:   ') + pc.cyan(localUrl));
+    if (networkUrl) {
+      console.log(pc.dim('  Network: ') + pc.cyan(networkUrl));
+    }
+    console.log();
+
+    if (options.open !== false) {
+      const { exec } = await import('node:child_process');
+      const openCmd =
+        process.platform === 'darwin'
+          ? 'open'
+          : process.platform === 'win32'
+            ? 'start'
+            : 'xdg-open';
+      exec(`${openCmd} ${localUrl}`, (err) => {
+        if (err) log.debug({ err }, 'Failed to open browser');
+      });
+    }
+
+    const { shutdownAppContext } = await import('../app.js');
+    const shutdown = (): void => {
+      console.log(pc.dim('\n  Shutting down...'));
+      shutdownAppContext(ctx);
+      process.exit(0);
+    };
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
   });
 
 // ── openlander stop ──────────────────────────────────────────────────────────
+//
+// OpenLander no longer self-manages a background daemon (see `start` above).
+// `stop` cleans up any orphaned IPC socket file from older versions and
+// points the user at the supported lifecycle tooling.
 
 program
   .command('stop')
-  .description('Stop daemon')
+  .description('Inform the user how to stop OpenLander (no background daemon)')
   .action(async () => {
     const { getDataDir } = await import('../config/index.js');
-    const { OpenLanderClient } = await import('../ipc/client.js');
-
     const socketPath = join(getDataDir(), 'openlander.sock');
     const pidPath = join(getDataDir(), 'openlander.pid');
 
-    // Check if socket exists
-    if (!existsSync(socketPath)) {
-      console.log(pc.yellow('Daemon not running.'));
-      process.exit(0);
-    }
+    console.log(
+      pc.yellow(
+        'OpenLander does not run as a background daemon. Stop the foreground process directly,\n' +
+          'or use your service manager (e.g. `systemctl stop openlander`, `pm2 stop openlander`,\n' +
+          '`docker stop openlander`).',
+      ),
+    );
 
-    // Try to connect via IPC client
-    const client = new OpenLanderClient(socketPath);
-    try {
-      await client.ping();
-      // Daemon is running — need to stop it
-      // For now, use PID file approach
-      if (existsSync(pidPath)) {
-        const pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
-        try {
-          process.kill(pid, 'SIGTERM');
-          console.log(pc.green('Daemon stopped.'));
-        } catch (err) {
-          log.debug({ err, pid }, 'Failed to kill daemon process');
-          console.log(pc.yellow('Could not stop daemon (permission denied or already stopped).'));
-        }
-        // Clean up socket file
-        if (existsSync(socketPath)) {
-          try {
-            unlinkSync(socketPath);
-          } catch (err) {
-            log.debug({ err, socketPath }, 'Failed to clean up socket file');
-            // Ignore cleanup errors
-          }
-        }
-      } else {
-        // No PID file — try removing socket as fallback
-        try {
-          unlinkSync(socketPath);
-          console.log(pc.green('Daemon socket cleaned up.'));
-        } catch (err) {
-          log.debug({ err, socketPath }, 'Failed to clean up socket file');
-          console.log(pc.yellow('Could not clean up daemon socket.'));
-        }
-      }
-    } catch (err) {
-      log.debug({ err }, 'Daemon ping failed — cleaning up stale socket');
-      // Daemon not responding — clean up stale socket
+    // Best-effort cleanup of leftover artifacts from older daemon-mode installs.
+    let cleaned = false;
+    if (existsSync(socketPath)) {
       try {
         unlinkSync(socketPath);
-        console.log(pc.yellow('Daemon not running (cleaned up stale socket).'));
+        cleaned = true;
       } catch (err) {
-        log.debug({ err, socketPath }, 'Failed to clean up stale socket');
-        console.log(pc.yellow('Daemon not running.'));
+        log.debug({ err, socketPath }, 'Failed to remove stale socket file');
       }
     }
+    if (existsSync(pidPath)) {
+      try {
+        unlinkSync(pidPath);
+        cleaned = true;
+      } catch (err) {
+        log.debug({ err, pidPath }, 'Failed to remove stale pid file');
+      }
+    }
+    if (cleaned) {
+      console.log(pc.dim('  (Cleaned up stale daemon artifacts from a previous install.)'));
+    }
+
+    process.exit(0);
   });
 
 // ── openlander restart ───────────────────────────────────────────────────────
+//
+// Same rationale as `stop` — defer to the supervising process manager.
 
 program
   .command('restart')
-  .description('Restart daemon')
-  .action(async () => {
-    // Stop
-    const { getDataDir } = await import('../config/index.js');
-    const socketPath = join(getDataDir(), 'openlander.sock');
-    const pidPath = join(getDataDir(), 'openlander.pid');
-
-    if (existsSync(socketPath)) {
-      if (existsSync(pidPath)) {
-        const pid = parseInt(readFileSync(pidPath, 'utf-8').trim(), 10);
-        try {
-          process.kill(pid, 'SIGTERM');
-        } catch (err) {
-          log.debug({ err, pid }, 'Failed to kill process during restart');
-          // Ignore if already stopped
-        }
-      }
-      try {
-        unlinkSync(socketPath);
-      } catch (err) {
-        log.debug({ err, socketPath }, 'Failed to remove socket during restart');
-        // Ignore
-      }
-    }
-
-    // Wait briefly for cleanup
-    await sleep(500);
-
-    // Start
-    const { loadConfig, getDbPath } = await import('../config/index.js');
-    const config = loadConfig();
-
-    const { createAppContext } = await import('../app.js');
-    const ctx = await createAppContext(config, getDbPath());
-
-    if (ctx.agent) {
-      const { createTools } = await import('../tools/index.js');
-      const { mergeWithMcpTools } = await import('../mcp/client-manager.js');
-      let tools: ToolSet = createTools(ctx, ctx.questionBridge);
-      if (ctx.config.mcp.enabled && ctx.config.mcp.servers.length > 0) {
-        await ctx.mcpClientManager.connectAll(ctx.config.mcp.servers);
-        tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
-      }
-      ctx.agent.setTools(tools);
-    }
-
-    const { startDaemon } = await import('../web/server.js');
-    await startDaemon({ socketPath }, ctx);
-
-    console.log(pc.green('Daemon restarted.'), pc.dim(`Socket: ${socketPath}`));
-
-    process.on('SIGINT', () => process.exit(0));
-    process.on('SIGTERM', () => process.exit(0));
+  .description('Inform the user how to restart OpenLander (no background daemon)')
+  .action(() => {
+    console.log(
+      pc.yellow(
+        'OpenLander does not run as a background daemon. Restart your supervising process\n' +
+          '(e.g. `systemctl restart openlander`, `pm2 restart openlander`,\n' +
+          '`docker restart openlander`), or stop the foreground process and run `openlander start`\n' +
+          'again.',
+      ),
+    );
+    process.exit(0);
   });
 
 // ── openlander config ────────────────────────────────────────────────────────
