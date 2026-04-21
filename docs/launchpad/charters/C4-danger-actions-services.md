@@ -30,11 +30,17 @@
 **PASS**: 부분 일치 시 disabled 유지 + Purge 후 ProjectsGrid에서 사라짐 + `docker ps -a` 잔여 없음.
 **FAIL**: 부분 일치로 Confirm 가능 또는 Purge 후 다른 프로젝트 영향.
 
-### C4S4_DOUBLE_REDEPLOY_LOCK (BUG-002 회귀)
+### C4S4a_DOUBLE_REDEPLOY_LOCK_SAME_PROJECT (BUG-002 회귀, same-project)
 
 `qa-c4-archive-target` (Unarchive 후) → header Redeploy 클릭 → 50ms 안에 다시 클릭 (자동화: 10회 반복).
-**PASS**: 2회차 이후 모두 disabled 또는 거부 토스트 + Docker container 중복 생성 0회.
-**FAIL**: 두 개 이상의 동시 빌드 발생 또는 409 Conflict 발생.
+**PASS**: 2회차 이후 모두 disabled 또는 typed 409 DEPLOY_LOCKED 토스트 + Docker container 중복 생성 0회 + 첫 번째 deploy는 정상 완료.
+**FAIL**: 두 개 이상의 동시 빌드 발생.
+
+### C4S4b_PARALLEL_REDEPLOY_DIFFERENT_PROJECTS (per-project lock 검증, commit f8fb853)
+
+탭 1: `qa-c4-archive-target` Redeploy 클릭 → 즉시 탭 2: `qa-c4-svc-consumer` Redeploy 클릭 (1초 안에 둘 다 트리거).
+**PASS**: 두 프로젝트 모두 동시에 'building' 상태 진입 + wall time 직렬 시간(약 60s+60s=120s)보다 짧음(<90s) + 둘 다 'running' 도달.
+**FAIL**: 두 번째 deploy가 첫 번째 완료까지 대기 (전역 큐 회귀) 또는 둘 다 실패.
 
 ### C4S5_VOLUME_DUPLICATE_PATH (BUG-008 회귀)
 

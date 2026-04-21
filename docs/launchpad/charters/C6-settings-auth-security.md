@@ -33,16 +33,17 @@ AI 탭 → 등록된 provider → Test Connection 버튼.
 **PASS**: 패널이 비활성 상태로 표시 + "compose v1.1.0에서 지원" 메시지 노출 (data-testid="resource-limits-compose-unsupported").
 **FAIL**: 일반 패널이 노출되어 사용자가 limits를 설정할 수 있게 보임 (silent failure 위험).
 
-### C6S5_PASSWORD_CHANGE_SESSION_INVALIDATE (SE5)
+### C6S5_PASSWORD_CHANGE_NEXT_LOGIN_REQUIRES_NEW (SE5, scope-corrected)
 
-Security 탭 → 비밀번호 변경 → Save.
-**PASS**: 변경 후 기존 세션 만료 → /login 리다이렉트.
-**FAIL**: 세션 유지 (보안 회귀).
+Security 탭 → 비밀번호 변경 → Save → 즉시 logout → 옛 비번으로 /login → 새 비번으로 /login.
+**PASS**: 옛 비번 401, 새 비번 200.
+**SKIP/1.0.x**: "변경 직후 기존 세션 자동 만료" 는 1.0에서 미구현(`src/web/api/auth-routes.ts:188`). 1.0.x에서 broadcast invalidation 추가 예정.
 
-### C6S6_AUTH_PROTECTED_REDIRECT (A1)
+### C6S6_AUTH_PROTECTED_REDIRECT (A1, scope-corrected)
 
 로그아웃 → 직접 URL `http://localhost:10114/projects` 접근.
-**PASS**: 401 후 /login 리다이렉트 + 로그인 후 /projects로 자동 복귀.
+**PASS**: 401 후 /login 리다이렉트 + 로그인 후 /projects 진입(원래 경로 복귀는 1.0 미구현 — `web/src/pages/LoginPage.tsx:19`이 항상 `/projects`로 보냄. 1.0.x 백로그).
+**FAIL**: 비인증 상태로 보호 라우트 진입 가능 (보안 회귀).
 
 ### C6S7_TOKEN_NOT_IN_URL (보안)
 

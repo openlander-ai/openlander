@@ -1,9 +1,16 @@
 # OpenLander 1.0.0 Web UI QA Plan — v2 (Lean)
 
-**작성일**: 2026-04-20
+**작성일**: 2026-04-20 (Updated 2026-04-21 — per-project lock + A1/SE5 정정)
 **v1 폐기 사유**: 14차터 4라운드는 GA 직전 일정에 비현실적. 3모델 리뷰(critic + Codex + Gemini) 합의 반영하여 7차터 + MIG smoke로 압축.
 **전제**: API 회귀는 `e2e/quality-gate/*` 27 spec(passing)이 커버. 본 v2는 **UI 사용자 동선** 검증에 집중.
 **별도 트랙**: `qa-unit-test-track-2026-04-20.md` — UI 차터로 잡을 수 없는 영역(compose HostConfig, NDJSON ordering 등). **1.0 GA 차단 사유에 포함**.
+
+**v2.1 코드 변경 반영 (2026-04-21)**:
+
+- Per-project deploy lock 도입(commit `f8fb853`) — 다른 프로젝트는 동시 deploy 가능, 같은 프로젝트는 typed 409. C4 BUG-002 시나리오에 cross-project 병렬 시나리오 추가.
+- A1 (로그인 후 원래 경로 복귀): 구현이 항상 `/projects` 로 보냄(`web/src/pages/LoginPage.tsx:19`). PASS 조건 정정.
+- SE5 (비번 변경 후 세션 만료): 구현이 세션 안 죽임(`src/web/api/auth-routes.ts:188`). 1.0.x 백로그로 이동.
+- 1.0 미지원 명시: 일반 사용자(admin 외) 권한 분리, 5+ 동시 deploy 부하, multi-process/cluster, RTL i18n.
 
 ---
 
@@ -94,18 +101,18 @@
 
 ### BUG별 정량 기준
 
-| BUG         | 시나리오                                  | PASS 기준                                                                                  |
-| ----------- | ----------------------------------------- | ------------------------------------------------------------------------------------------ |
-| BUG-001     | NewProjectFlow에 `qa-test-한글` 입력      | UI에서 즉시 거부 + 에러 메시지 노출 + 서버 호출 0회                                        |
-| BUG-002     | 같은 프로젝트 redeploy 50ms 간격 10회     | 2회차 이후 모두 UI disabled 또는 명확한 거부 토스트, 두 개의 중복 컨테이너 생성 0회        |
-| BUG-003     | BlueGreenDialog 후 30초 모니터링          | 헬스체크 timeout 30s 안에 기존 컨테이너 status='running' 유지                              |
-| BUG-004     | deploy 2회 → rollback                     | 60초 안에 status='running' + timeline에 ENETUNREACH/ECONNREFUSED 0회                       |
-| BUG-007     | image deploy 폼 port=-1 입력              | UI 즉시 거부 + 서버 호출 0회                                                               |
-| BUG-008     | Settings/Volumes 같은 mount path 2회 입력 | UI 즉시 거부 + 명확한 에러 메시지                                                          |
-| BUG-009     | ServiceDetail Delete 클릭                 | 사용 중인 프로젝트 목록 다이얼로그 표시 + 해당 프로젝트 env vars 정리 결과 노출            |
-| BUG-013/014 | container 강제 kill 후 70초               | OpsCenter incident count = ProjectDetail Operations 표시 = (사용자 검증 영역인 MCP는 제외) |
-| BUG-017     | running 프로젝트 Overview 탭              | CPU/메모리 카드에 0이 아닌 실제 값 표시                                                    |
-| MIG         | rc.7 dataDir로 부팅                       | 30초 안에 첫 화면, 기존 프로젝트 모두 status reconcile, ai_usage_log CHECK 위반 0건        |
+| BUG         | 시나리오                                                                       | PASS 기준                                                                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BUG-001     | NewProjectFlow에 `qa-test-한글` 입력                                           | UI에서 즉시 거부 + 에러 메시지 노출 + 서버 호출 0회                                                                                                               |
+| BUG-002     | (a) 같은 프로젝트 redeploy 50ms 간격 10회 / (b) 다른 두 프로젝트 동시 redeploy | (a) 2회차 이후 모두 UI disabled 또는 typed 409 DEPLOY_LOCKED, 중복 컨테이너 0회 / (b) 두 프로젝트 모두 wall time 직렬 시간보다 짧게 진행됨(per-project lock 검증) |
+| BUG-003     | BlueGreenDialog 후 30초 모니터링                                               | 헬스체크 timeout 30s 안에 기존 컨테이너 status='running' 유지                                                                                                     |
+| BUG-004     | deploy 2회 → rollback                                                          | 60초 안에 status='running' + timeline에 ENETUNREACH/ECONNREFUSED 0회                                                                                              |
+| BUG-007     | image deploy 폼 port=-1 입력                                                   | UI 즉시 거부 + 서버 호출 0회                                                                                                                                      |
+| BUG-008     | Settings/Volumes 같은 mount path 2회 입력                                      | UI 즉시 거부 + 명확한 에러 메시지                                                                                                                                 |
+| BUG-009     | ServiceDetail Delete 클릭                                                      | 사용 중인 프로젝트 목록 다이얼로그 표시 + 해당 프로젝트 env vars 정리 결과 노출                                                                                   |
+| BUG-013/014 | container 강제 kill 후 70초                                                    | OpsCenter incident count = ProjectDetail Operations 표시 = (사용자 검증 영역인 MCP는 제외)                                                                        |
+| BUG-017     | running 프로젝트 Overview 탭                                                   | CPU/메모리 카드에 0이 아닌 실제 값 표시                                                                                                                           |
+| MIG         | rc.7 dataDir로 부팅                                                            | 30초 안에 첫 화면, 기존 프로젝트 모두 status reconcile, ai_usage_log CHECK 위반 0건                                                                               |
 
 ### 차터 출력 형식 (8섹션 → 5섹션 lean)
 
