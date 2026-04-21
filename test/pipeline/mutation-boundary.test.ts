@@ -16,6 +16,7 @@ import { Database } from '../../src/db/index.js';
 import {
   CircuitBreakerOpenError,
   ProjectArchivedError,
+  ProjectNotFoundError,
   ProjectRecoveringError,
 } from '../../src/errors.js';
 import type { OpenLanderConfig } from '../../src/config/index.js';
@@ -142,6 +143,17 @@ describe('Pipeline mutation boundary policy', () => {
 
       await expect(pipeline.rollback('p1')).rejects.toBeInstanceOf(ProjectArchivedError);
       expect(db.getDeployLockInfo('p1')).toBeNull();
+    });
+
+    it('throws ProjectNotFoundError when project does not exist (no policy or lock bypass)', async () => {
+      // Day 8 Bug #2: Previously, a missing project bypassed mutation policy
+      // and the deploy lock entirely, calling rollbackToImage directly. This
+      // opened a race window where archive→delete in another transaction
+      // could leave a partial rollback running with no lock.
+      await expect(pipeline.rollback('does-not-exist')).rejects.toBeInstanceOf(
+        ProjectNotFoundError,
+      );
+      expect(db.getDeployLockInfo('does-not-exist')).toBeNull();
     });
   });
 

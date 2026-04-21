@@ -9,7 +9,7 @@ import type { OpenLanderConfig } from '../src/config/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import type { CloudflareTunnelManager } from '../src/pipeline/cloudflare.js';
 import { CloudflareTunnel } from '../src/pipeline/tunnel.js';
-import { ContainerNotFoundError } from '../src/errors.js';
+import { ContainerNotFoundError, ProjectNotFoundError } from '../src/errors.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
 
 type EnvLike = {
@@ -471,11 +471,8 @@ describe('DeployPipeline deploy controls', () => {
     expect(logs).toBe('line-a\nline-b');
   });
 
-  it('rollback returns not found when project does not exist', async () => {
-    const result = await pipeline.rollback('missing-project');
-
-    expect(result.success).toBe(false);
-    expect(result.error).toBe('Project not found: missing-project');
+  it('rollback throws ProjectNotFoundError when project does not exist', async () => {
+    await expect(pipeline.rollback('missing-project')).rejects.toBeInstanceOf(ProjectNotFoundError);
   });
 
   it('rollback for project returns error when previous image is unavailable', async () => {

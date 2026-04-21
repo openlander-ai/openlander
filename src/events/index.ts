@@ -229,7 +229,13 @@ export interface EventPayload {
       success: boolean;
       services: Array<{
         name: string;
-        status: 'deployed' | 'failed' | 'rolled_back' | 'skipped';
+        status:
+          | 'deployed'
+          | 'failed'
+          | 'rolled_back'
+          | 'skipped'
+          | 'rollback_skipped'
+          | 'rollback_failed_due_to_policy';
         projectId?: string;
         url?: string;
         error?: string;

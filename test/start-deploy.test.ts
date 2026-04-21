@@ -9,6 +9,7 @@ import type { OpenLanderConfig } from '../src/config/index.js';
 import { JobManager } from '../src/pipeline/job-manager.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { clearPortScanCache, clearPortReservations } from '../src/pipeline/port.js';
+import { eventBus } from '../src/events/index.js';
 
 // Minimal Docker mock — just enough to not crash
 function createMockDocker(): Docker {
@@ -173,6 +174,70 @@ describe('DeployPipeline — non-blocking deploy', () => {
 
       expect(second.projectId).toBe(first.projectId);
       expect(second.status).toBe('building');
+    });
+
+    // -------------------------------------------------------------------------
+    // Day 8 Bug #3: When fireAndForgetDeploy() catches an uncaught throw from
+    // deploy() (e.g. preflight crash), recordBackgroundFailure must emit
+    // `deploy:failed` so plan-engine deploy lock listeners release. Without
+    // this, plan-engine locks stayed held until the 30-minute stale window.
+    // -------------------------------------------------------------------------
+    it('emits deploy:failed when background deploy throws (plan-engine lock release)', async () => {
+      // Force the inner deploy() to throw — simulating a crash before any
+      // deploy:failed emission happens inside deploy().
+      vi.spyOn(pipeline, 'deploy').mockRejectedValueOnce(new Error('preflight exploded'));
+
+      const failures: Array<{ projectId: string; error: string; step: string }> = [];
+      const unsub = eventBus.on('deploy:failed', (payload) => {
+        failures.push({
+          projectId: payload.projectId,
+          error: payload.error,
+          step: payload.step,
+        });
+      });
+
+      try {
+        const result = await pipeline.startDeploy({
+          repoUrl: 'https://github.com/user/crash-app',
+        });
+
+        // Wait a microtask cycle for the fire-and-forget chain to settle.
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(failures).toHaveLength(1);
+        expect(failures[0]?.projectId).toBe(result.projectId);
+        expect(failures[0]?.error).toBe('preflight exploded');
+      } finally {
+        unsub();
+      }
+    });
+
+    it('does NOT double-emit deploy:failed when deploy() returns failure result', async () => {
+      // deploy() already emits deploy:failed in its own catch path. When it
+      // resolves to {success:false}, fireAndForgetDeploy must NOT emit again
+      // — only the .catch() (uncaught throw) path should re-emit.
+      vi.spyOn(pipeline, 'deploy').mockResolvedValueOnce({
+        success: false,
+        projectId: 'background-project',
+        projectName: 'background-project',
+        error: 'controlled failure',
+      });
+
+      const failures: Array<{ projectId: string }> = [];
+      const unsub = eventBus.on('deploy:failed', (payload) => {
+        failures.push({ projectId: payload.projectId });
+      });
+
+      try {
+        await pipeline.startDeploy({
+          repoUrl: 'https://github.com/user/no-double-emit',
+        });
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(failures).toHaveLength(0);
+      } finally {
+        unsub();
+      }
     });
   });
 

@@ -24,6 +24,7 @@ import {
   InvalidProjectNameError,
   MissingImageUrlError,
   PreflightCheckError,
+  ProjectNotFoundError,
   isDockerNotFoundError,
 } from '../errors.js';
 import { preflightCheckOrThrow } from './preflight.js';
@@ -546,18 +547,26 @@ export class DeployPipeline {
     void this.deploy(config)
       .then((result) => {
         if (!result.success) {
+          // deploy() already emitted deploy:failed in its own catch path —
+          // no need to re-emit here, just record bookkeeping.
           this.recordBackgroundFailure(
             projectId,
             result.error ?? 'Deploy returned failure',
             trigger,
+            { emitTerminalEvent: false },
           );
         }
       })
       .catch((err: unknown) => {
+        // Deploy threw before its own try/catch could emit deploy:failed
+        // (e.g., preflight throw, project state throw, unexpected crash).
+        // We must emit the terminal event so listeners (plan-engine deploy
+        // lock release, questionBridge active-project clear) wake up.
         this.recordBackgroundFailure(
           projectId,
           err instanceof Error ? err.message : String(err),
           trigger,
+          { emitTerminalEvent: true },
         );
       });
   }
@@ -566,6 +575,7 @@ export class DeployPipeline {
     projectId: string,
     errMsg: string,
     trigger: 'chat' | 'webhook' | 'api' = 'api',
+    options: { emitTerminalEvent?: boolean } = {},
   ): void {
     log.error({ projectId, error: errMsg }, 'Background deploy failed');
     this.jobManager?.updatePhase(projectId, 'failed', errMsg);
@@ -575,22 +585,33 @@ export class DeployPipeline {
     }
     try {
       const lastLog = this.db.getLastDeployLog(projectId);
-      if (lastLog?.status === 'failed') {
-        return;
+      if (lastLog?.status !== 'failed') {
+        const environments = this.db.getEnvironmentsByProject(projectId);
+        const envId = environments[0]?.id;
+        this.db.createDeployLog({
+          id: nanoid(12),
+          projectId,
+          environmentId: envId,
+          status: 'failed',
+          trigger,
+          buildLog: `[fatal] Deploy crashed before build: ${errMsg}`,
+          durationMs: 0,
+        });
       }
-      const environments = this.db.getEnvironmentsByProject(projectId);
-      const envId = environments[0]?.id;
-      this.db.createDeployLog({
-        id: nanoid(12),
-        projectId,
-        environmentId: envId,
-        status: 'failed',
-        trigger,
-        buildLog: `[fatal] Deploy crashed before build: ${errMsg}`,
-        durationMs: 0,
-      });
     } catch {
       // best-effort — outer catch already logged the error
+    }
+
+    if (options.emitTerminalEvent) {
+      // Emit deploy:failed so terminal-event listeners (plan-engine lock
+      // release, questionBridge active project clear, activity logger) wake
+      // up. Without this, fire-and-forget crash paths leave the plan-engine
+      // deploy lock stale until the 30-minute reconciliation window.
+      void eventBus.emit('deploy:failed', {
+        projectId,
+        step: 'startup',
+        error: errMsg,
+      });
     }
   }
 
@@ -1831,7 +1852,9 @@ export class DeployPipeline {
   ): Promise<DeployResult> {
     const project = this.db.getProject(projectId);
     if (!project) {
-      return this.rollbackExecutor.rollbackToImage(projectId, environmentId);
+      // Surface missing project explicitly so callers cannot accidentally bypass
+      // the mutation policy + deploy lock by referencing an archived/deleted id.
+      throw new ProjectNotFoundError(projectId);
     }
 
     // Pipeline boundary policy: blocks archived/recovering/circuit-open projects.
