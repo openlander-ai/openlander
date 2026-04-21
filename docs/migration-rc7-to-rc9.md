@@ -26,7 +26,13 @@ If anything goes wrong, restore the directory and downgrade.
 
 Migration `0003_fix_check_constraints.sql` rebuilds `ai_usage_log` **without** the legacy `result` CHECK so the table can be reshaped. Migration `0004_restore_ai_usage_result_check.sql` then rebuilds the table again **with** `CHECK("result" IN ('success', 'failure', 'partial'))` and copies rows back via `INSERT … SELECT`.
 
-That `INSERT … SELECT` will FAIL on the first row whose `result` is outside the canonical enum — the migration aborts and the upgrade rolls back. Existing invalid rows do **not** silently survive.
+That `INSERT … SELECT` will FAIL on the first row whose `result` is outside the canonical enum — the migration aborts and the upgrade rolls back. Existing invalid rows do **not** silently survive. The error you will see in the boot log is:
+
+```
+SqliteError: CHECK constraint failed: ai_usage_log_result_check
+```
+
+This behaviour is covered by `test/db/migration-realistic-data.test.ts` (Scenario 2) on every CI run, so a regression here will be caught before release.
 
 Run this against your live DB before upgrading:
 
@@ -37,7 +43,19 @@ sqlite3 ~/.openlander/openlander.db \
 ```
 
 - **Empty output** → safe. Skip to step 3.
-- **Any rows returned** → migration `0004` will refuse to apply. Either rewrite those rows to one of the canonical values (`UPDATE ai_usage_log SET result = 'failure' WHERE result = '<bad_value>';`) or open an issue with the offending value (we'll add it to the enum if it should have been valid).
+- **Any rows returned** → migration `0004` will refuse to apply. Either rewrite those rows to one of the canonical values (`UPDATE ai_usage_log SET result = 'failure' WHERE result NOT IN ('success', 'failure', 'partial');`) or open an issue with the offending value (we'll add it to the enum if it should have been valid).
+
+### Recovery if you skipped the pre-flight and the boot crashed
+
+The migration runs inside a SQLite transaction; the `CHECK` failure aborts before any rows are dropped. Verify with:
+
+```bash
+sqlite3 ~/.openlander/openlander.db "SELECT COUNT(*) FROM ai_usage_log;"
+sqlite3 ~/.openlander/openlander.db "SELECT COUNT(*) FROM __drizzle_migrations;"
+# Migration count should still be 3 (0000-0002) — neither 0003 nor 0004 was recorded.
+```
+
+If both counts match what you had on rc.7, the DB is intact: run the cleanup `UPDATE` above, then restart. If the migration count moved past 3 you have a partial-state DB — restore from the snapshot in step 1.
 
 ---
 

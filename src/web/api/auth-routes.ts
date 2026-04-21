@@ -10,6 +10,42 @@ const log = createModuleLogger('auth-routes');
 
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60;
 
+/**
+ * Day 14 (M2 polish): classify OAuth callback errors into a small enum
+ * before redirecting back to the SPA. Echoing the raw `err.message` (or
+ * a `code` from the upstream IdP) into a query string is technically
+ * safe under `encodeURIComponent`, but it leaks internal failure modes
+ * to the SPA and any logging proxy in front of it. The slug is stable
+ * across upstream wording changes, so the SPA can render localized
+ * messages without parsing free text.
+ */
+type OAuthErrorSlug = 'denied' | 'expired' | 'config' | 'other';
+
+function classifyOAuthError(input: unknown): OAuthErrorSlug {
+  const text = (
+    input instanceof Error ? input.message : typeof input === 'string' ? input : ''
+  ).toLowerCase();
+  if (!text) return 'other';
+  if (
+    text.includes('access_denied') ||
+    text.includes('denied') ||
+    text.includes('consent_required')
+  ) {
+    return 'denied';
+  }
+  if (text.includes('expired') || text.includes('invalid_grant')) {
+    return 'expired';
+  }
+  if (
+    text.includes('not configured') ||
+    text.includes('client_id') ||
+    text.includes('client_secret')
+  ) {
+    return 'config';
+  }
+  return 'other';
+}
+
 const pkceVerifiersByState = new Map<string, { verifier: string; createdAt: number }>();
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 /**
@@ -263,7 +299,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
 
     if (error) {
       log.error({ error }, 'Google OAuth callback error');
-      return c.redirect(`${ctx.config.server.baseUrl}/?oauth_error=${encodeURIComponent(error)}`);
+      return c.redirect(`${ctx.config.server.baseUrl}/?oauth_error=${classifyOAuthError(error)}`);
     }
 
     if (!code || !state) {
@@ -308,8 +344,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       return c.redirect(`${ctx.config.server.baseUrl}/?oauth_success=google`);
     } catch (err) {
       log.error({ err }, 'Google OAuth code exchange failed');
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      return c.redirect(`${ctx.config.server.baseUrl}/?oauth_error=${encodeURIComponent(msg)}`);
+      return c.redirect(`${ctx.config.server.baseUrl}/?oauth_error=${classifyOAuthError(err)}`);
     }
   });
 

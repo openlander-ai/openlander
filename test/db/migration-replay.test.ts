@@ -32,6 +32,19 @@ const BASELINE_TAGS = [
   '0002_add_server_id',
 ] as const;
 
+/**
+ * folderMillis values from drizzle/meta/_journal.json. Drizzle's migrator
+ * skips a migration when its folderMillis is <= the latest `created_at`
+ * in `__drizzle_migrations`. Recording baselines with `Date.now()` would
+ * make every newer-than-now migration get silently skipped, defeating
+ * the rc.7 -> 1.0 fixture simulation. Day 14 fix.
+ */
+const BASELINE_FOLDER_MILLIS: Record<string, number> = {
+  '0000_initial': 1776203869422,
+  '0001_env_vars_scoped_uniques': 1776203869423,
+  '0002_add_server_id': 1776217725447,
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -73,14 +86,17 @@ function applyBaseline0to2(sqlite: SqliteDatabase): void {
       )
     `);
 
-    // Record migrations 0-2 with their content hashes so the migrator skips them
+    // Record migrations 0-2 with their content hashes so the migrator skips them.
+    // Use the exact folderMillis from the journal so 0003+ are detected as
+    // newer than the recorded baseline (drizzle's skip check compares
+    // folderMillis to last-applied created_at, NOT just hash).
     const insert = sqlite.prepare(
       'INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)',
     );
     for (const tag of BASELINE_TAGS) {
       const sql = readFileSync(path.join(DRIZZLE_DIR, `${tag}.sql`), 'utf8');
       const hash = createHash('sha256').update(sql).digest('hex');
-      insert.run(hash, Date.now());
+      insert.run(hash, BASELINE_FOLDER_MILLIS[tag]!);
     }
   } finally {
     sqlite.exec('PRAGMA foreign_keys = ON');
@@ -289,12 +305,10 @@ describe('migration idempotency and safety (0003/0004/0005)', () => {
       expect(countAfter).toBe(3);
     });
 
-    // SKIPPED: applyBaseline0to2() applies SQL manually without recording
-    // __drizzle_migrations rows, so migrate() only records the 3 new ones (0003/0004/0005)
-    // for a total of 3, not 6. A real rc.7 upgrade would have 0~2 rows already
-    // tracked. Test setup needs to seed __drizzle_migrations to simulate this
-    // accurately. Tracked as 1.0.x backlog.
-    it.skip('__drizzle_migrations has exactly 6 rows after upgrading from rc.7 baseline', () => {
+    // Day 14 fix: applyBaseline0to2() now records 0~2 with the correct
+    // folderMillis from the journal, so migrate() detects 0003/0004/0005
+    // as still pending and applies them — bringing the total to 6.
+    it('__drizzle_migrations has exactly 6 rows after upgrading from rc.7 baseline', () => {
       applyBaseline0to2(sqlite);
       runFullMigration(drizzle, sqlite);
 
