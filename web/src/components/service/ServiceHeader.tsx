@@ -3,6 +3,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Play, Square, Trash2, Database, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getStatusDisplay } from '@/lib/status-config';
 import type { Service } from '@/lib/api';
 import { useLanguage } from '@/i18n/context';
 
@@ -16,16 +17,18 @@ interface ServiceHeaderProps {
 
 type StatusConfig = { label: string; color: string; dot: string };
 
-function getStatusConfig(t: (key: string) => string): Record<string, StatusConfig> {
-  return {
-    running: { label: t('services.status.running'), color: 'text-success', dot: 'bg-success' },
-    stopped: {
-      label: t('services.status.stopped'),
-      color: 'text-muted-ol',
-      dot: 'bg-muted-foreground/40',
-    },
-    error: { label: t('services.status.error'), color: 'text-error', dot: 'bg-error' },
+function buildStatusConfig(t: (key: string) => string): Record<string, StatusConfig> {
+  const labels: Record<string, string> = {
+    running: t('services.status.running'),
+    stopped: t('services.status.stopped'),
+    error: t('services.status.error'),
   };
+  const out: Record<string, StatusConfig> = {};
+  for (const key of Object.keys(labels)) {
+    const def = getStatusDisplay(key);
+    out[key] = { label: labels[key], color: def.textClass, dot: def.dot };
+  }
+  return out;
 }
 
 export function ServiceHeader({
@@ -37,7 +40,7 @@ export function ServiceHeader({
 }: ServiceHeaderProps) {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const statusConfig = getStatusConfig(t);
+  const statusConfig = buildStatusConfig(t);
   const status = statusConfig[service.status] ?? statusConfig.stopped;
   const isRunning = service.status === 'running';
   const isStopped = service.status === 'stopped';

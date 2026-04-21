@@ -3,15 +3,17 @@ import { cva, type VariantProps } from 'class-variance-authority';
 
 import { cn } from '@/lib/utils';
 
+/**
+ * StatusDot status values align 1:1 with status-config.ts StatusDisplay.dotStatus
+ * so call sites can pass `getStatusDisplay(project.status).dotStatus` directly.
+ */
 const statusDotVariants = cva('inline-block rounded-full shrink-0', {
   variants: {
     status: {
-      success: 'bg-emerald-500',
-      running: 'bg-amber-500',
-      warning: 'bg-yellow-500',
-      error: 'bg-red-500',
+      success: 'bg-success',
+      warning: 'bg-warning',
+      error: 'bg-error',
       idle: 'bg-muted-foreground/40',
-      unknown: 'bg-muted-foreground/40',
     },
     size: {
       sm: 'h-1.5 w-1.5',

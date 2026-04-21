@@ -25,6 +25,7 @@ import {
   ArchiveRestore,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getStatusDisplay } from '@/lib/status-config';
 import { useSetup } from '@/hooks/use-setup.js';
 import { useLanguage } from '@/i18n/context';
 import { AISparkle } from '@/components/ui/AISparkle';
@@ -47,7 +48,7 @@ interface ProjectHeaderProps {
 
 type StatusConfig = { label: string; color: string; dot: string };
 
-function getStatusConfig(
+function buildStatusConfig(
   t: (key: string) => string,
   isImageSource: boolean = false,
 ): Record<string, StatusConfig> {
@@ -60,23 +61,10 @@ function getStatusConfig(
     error: t('project.header.status.failed'),
     idle: t('project.header.status.idle'),
   };
-  const colors: Record<string, string> = {
-    running: 'text-success',
-    stopped: 'text-muted-ol',
-    building: 'text-warning',
-    error: 'text-error',
-    idle: 'text-muted-ol',
-  };
-  const dots: Record<string, string> = {
-    running: 'bg-success',
-    stopped: 'bg-muted-foreground/40',
-    building: 'bg-warning',
-    error: 'bg-error',
-    idle: 'bg-muted-foreground/40',
-  };
   const out: Record<string, StatusConfig> = {};
   for (const key of Object.keys(labels)) {
-    out[key] = { label: labels[key], color: colors[key], dot: dots[key] };
+    const def = getStatusDisplay(key);
+    out[key] = { label: labels[key], color: def.textClass, dot: def.dot };
   }
   return out;
 }
@@ -97,7 +85,7 @@ export function ProjectHeader({
   const { status: setupStatus } = useSetup();
   const { t } = useLanguage();
   const isImageSource = project.source === 'image';
-  const statusConfig = getStatusConfig(t, isImageSource);
+  const statusConfig = buildStatusConfig(t, isImageSource);
   const isLlmConfigured = setupStatus?.llm.ok === true;
 
   const displayStatus = project.status;

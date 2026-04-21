@@ -620,10 +620,10 @@ export function MainFeedGrid({
                           thread.status === 'active' && 'text-warning',
                           thread.status === 'resolved' && 'text-success',
                           thread.status === 'failed' && 'text-error',
-                          thread.status === 'pending' && 'text-info',
-                          thread.status === 'recovering' && 'text-info',
+                          thread.status === 'pending' && 'text-warning',
+                          thread.status === 'recovering' && 'text-warning',
                           thread.status === 'ai-running' && 'text-agent',
-                          thread.status === 'ai-completed' && 'text-info',
+                          thread.status === 'ai-completed' && 'text-success',
                           thread.status === 'recovery-blocked' && 'text-warning',
                           thread.status === 'recovery-stopped' && 'text-warning',
                         )}
