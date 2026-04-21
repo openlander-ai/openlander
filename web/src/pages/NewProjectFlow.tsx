@@ -178,7 +178,7 @@ export function NewProjectFlow() {
           </button>
           <div>
             <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight">
-              {'New Project'}
+              {t('newProject.title')}
             </h1>
             <p className="text-sm font-body text-secondary-ol">{t('newProject.selectRepo')}</p>
           </div>
@@ -195,7 +195,7 @@ export function NewProjectFlow() {
                   : 'text-secondary-ol hover:text-primary-ol',
               )}
             >
-              {'My Repos'}
+              {t('newProject.myRepos')}
             </button>
             <button
               onClick={() => setTab('search')}
@@ -206,7 +206,7 @@ export function NewProjectFlow() {
                   : 'text-secondary-ol hover:text-primary-ol',
               )}
             >
-              {'Search'}
+              {t('newProject.search')}
             </button>
             <button
               onClick={() => setTab('docker')}
@@ -218,7 +218,7 @@ export function NewProjectFlow() {
               )}
             >
               <Container className="h-3.5 w-3.5" />
-              {'Docker Image'}
+              {t('newProject.dockerImage')}
             </button>
           </div>
 
@@ -226,7 +226,7 @@ export function NewProjectFlow() {
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-ol" />
               <Input
-                placeholder={'Search repositories...'}
+                placeholder={t('newProject.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-8 pl-8 text-xs font-body bg-bg-subtle border-[hsl(var(--border))]"
@@ -271,11 +271,11 @@ export function NewProjectFlow() {
                   htmlFor="image-url"
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
                 >
-                  {'Docker Image'}
+                  {t('newProject.dockerImage')}
                 </label>
                 <Input
                   id="image-url"
-                  placeholder="e.g., nginx:latest or ghcr.io/user/app:v1"
+                  placeholder={t('newProject.imagePlaceholder')}
                   value={imageUrl}
                   onChange={(e) => {
                     setImageUrl(e.target.value);
@@ -297,12 +297,12 @@ export function NewProjectFlow() {
                     htmlFor="port"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
                   >
-                    {'Port (Optional)'}
+                    {t('newProject.portLabel')}
                   </label>
                   <Input
                     id="port"
                     type="number"
-                    placeholder="80"
+                    placeholder={t('newProject.portPlaceholder')}
                     value={port}
                     onChange={(e) => setPort(e.target.value)}
                     className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
@@ -314,11 +314,11 @@ export function NewProjectFlow() {
                   htmlFor="image-cmd"
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
                 >
-                  {'Command (Optional)'}
+                  {t('newProject.commandLabel')}
                 </label>
                 <Input
                   id="image-cmd"
-                  placeholder="e.g., --model-id BAAI/bge-m3"
+                  placeholder={t('newProject.commandPlaceholder')}
                   value={imageCmd}
                   onChange={(e) => setImageCmd(e.target.value)}
                   className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
@@ -345,7 +345,7 @@ export function NewProjectFlow() {
                   disabled={deploying || !imageUrl}
                   className="w-full inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-foreground text-background hover:bg-foreground/90 h-10 px-4 py-2"
                 >
-                  {'Deploy Image'}
+                  {t('newProject.deployImage')}
                 </button>
               </div>
             </form>

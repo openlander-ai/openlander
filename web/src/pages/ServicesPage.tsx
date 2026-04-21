@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageEmptyState } from '@/components/ui/page-empty-state';
 import { getServices, getServiceTemplates, type Service, type ServiceTemplate } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Plus } from 'lucide-react';
+import { Plus, Database } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 
 import { CreateServiceDialog } from '@/components/service/CreateServiceDialog';
@@ -98,6 +99,31 @@ export function ServicesPage() {
             </div>
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (services.length === 0) {
+    return (
+      <div className="p-4 md:p-8 max-w-8xl mx-auto space-y-6">
+        <h2 className="text-lg font-semibold text-primary-ol">{t('services.title')}</h2>
+        <PageEmptyState
+          icon={Database}
+          title={t('services.empty.title')}
+          description={t('services.empty.description')}
+          action={
+            <button
+              onClick={() => {
+                setCreateMode('template');
+                setShowCreate(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-agent text-white font-medium hover:bg-agent/90 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              {t('services.createService')}
+            </button>
+          }
+        />
       </div>
     );
   }

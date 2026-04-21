@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Database, Users, Plus, Copy, Loader2, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { useLanguage } from '@/i18n/context';
 import {
   getServiceDatabases,
   getServiceUsers,
@@ -37,6 +38,7 @@ interface ServiceDatabasesTabProps {
 }
 
 export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
+  const { t } = useLanguage();
   const { copy, isCopied } = useCopy();
   const [databases, setDatabases] = useState<ServiceDatabase[]>([]);
   const [users, setUsers] = useState<ServiceUser[]>([]);
@@ -134,7 +136,11 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
   };
 
   if (loading) {
-    return <div className="text-sm text-muted-ol animate-pulse">Loading databases...</div>;
+    return (
+      <div className="text-sm text-muted-ol animate-pulse">
+        {t('services.detail.loadingDatabases')}
+      </div>
+    );
   }
 
   if (error) {
@@ -308,7 +314,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
               </label>
               <Select value={newUserDatabase} onValueChange={setNewUserDatabase}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a database" />
+                  <SelectValue placeholder={t('services.detail.selectDatabase')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None (Create user only)</SelectItem>

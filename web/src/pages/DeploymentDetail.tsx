@@ -81,7 +81,7 @@ export function DeploymentDetail() {
           onClick={() => navigate(-1)}
           className="text-sm font-body text-agent hover:underline"
         >
-          {'Go back'}
+          {t('deploy.detail.goBack')}
         </button>
       </div>
     );
@@ -114,7 +114,7 @@ export function DeploymentDetail() {
               <div className={cn('h-3 w-3 rounded-full shrink-0', statusMeta.dotClass)} />
               <div className="min-w-0">
                 <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate flex items-center gap-2">
-                  {'Deployment'}
+                  {t('deploy.detail.deployment')}
                   {shortCommitSha && (
                     <span className="flex items-center gap-1 text-sm font-mono font-normal text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
                       <GitCommit className="h-3.5 w-3.5" />
@@ -148,7 +148,7 @@ export function DeploymentDetail() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-3">
               <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
-                {'Status'}
+                {t('deploy.detail.status')}
               </div>
               <div className={cn('mt-1 text-sm font-display font-medium', statusMeta.textClass)}>
                 {statusMeta.label}
@@ -156,7 +156,7 @@ export function DeploymentDetail() {
             </div>
             <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-3">
               <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
-                {'Trigger'}
+                {t('deploy.detail.trigger')}
               </div>
               <div className="mt-1 text-sm font-body text-primary-ol capitalize">
                 {getDeploymentTriggerMetaLabel(deployment.trigger)}
@@ -164,7 +164,7 @@ export function DeploymentDetail() {
             </div>
             <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-3">
               <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
-                {'Started'}
+                {t('deploy.detail.started')}
               </div>
               <div className="mt-1 text-sm font-body text-primary-ol">
                 {formatDateTime(deployment.createdAt) || 'Unknown'}
@@ -172,7 +172,7 @@ export function DeploymentDetail() {
             </div>
             <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-3">
               <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
-                {'Duration'}
+                {t('deploy.detail.duration')}
               </div>
               <div className="mt-1 text-sm font-body text-primary-ol">
                 {formatDeploymentDuration(deployment.durationMs)}
@@ -186,7 +186,9 @@ export function DeploymentDetail() {
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1 space-y-6 min-w-0">
             <div className="space-y-2">
-              <h3 className="text-sm font-display font-medium text-secondary-ol">Build Logs</h3>
+              <h3 className="text-sm font-display font-medium text-secondary-ol">
+                {t('deploy.detail.buildLogs')}
+              </h3>
               <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
                 <StaticLogViewer content={deployment.buildLog} />
               </div>
@@ -196,9 +198,9 @@ export function DeploymentDetail() {
               <div className="space-y-2">
                 <h3 className="text-sm font-display font-medium text-secondary-ol flex items-center gap-2">
                   <Activity className="h-4 w-4" />
-                  Runtime Logs
+                  {t('deploy.detail.runtimeLogs')}
                   <span className="text-xs font-body text-muted-ol font-normal">
-                    (last 500 lines before redeploy)
+                    {t('deploy.detail.runtimeLogsHint')}
                   </span>
                 </h3>
                 <div className="flex flex-col h-full min-h-[300px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useLanguage } from '@/i18n/context';
 import {
   Clock,
   HardDrive,
@@ -45,6 +46,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [stats, setStats] = useState<ServiceStats | null>(null);
   const [connectedProjects, setConnectedProjects] = useState<ConnectedProject[]>([]);
@@ -211,7 +213,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
         {loadingProjects ? (
           <div className="text-sm text-muted-ol animate-pulse">Loading...</div>
         ) : connectedProjects.length === 0 ? (
-          <div className="text-sm text-muted-ol">No projects are using this service</div>
+          <div className="text-sm text-muted-ol">{t('services.detail.noProjectsUsing')}</div>
         ) : (
           <div className="flex flex-col gap-1.5">
             {connectedProjects.map((project) => (

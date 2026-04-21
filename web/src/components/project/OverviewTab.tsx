@@ -476,7 +476,7 @@ export function OverviewTab({
                         onClick={() => void handleDisconnectService(service.id)}
                         disabled={disconnectingId === service.id}
                         className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-muted-ol hover:text-error disabled:opacity-50"
-                        title="Disconnect service"
+                        title={t('project.disconnectService')}
                       >
                         {disconnectingId === service.id ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { RefreshCw, AlertCircle } from 'lucide-react';
+import { useLanguage } from '@/i18n/context';
 import { getServiceLogs } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { parseAnsiLine } from '@/lib/ansi';
@@ -10,6 +11,7 @@ interface ServiceLogViewerProps {
 }
 
 export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
+  const { t } = useLanguage();
   const [logs, setLogs] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +52,9 @@ export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
       <div className="flex h-full items-center justify-center p-6">
         <div className="w-full max-w-md rounded-xl border border-[hsl(var(--border))] bg-bg-panel/60 p-5 text-center shadow-sm">
           <AlertCircle className="mx-auto h-8 w-8 text-muted-ol mb-3" />
-          <p className="text-sm font-body font-medium text-primary-ol">Service is stopped</p>
+          <p className="text-sm font-body font-medium text-primary-ol">
+            {t('services.detail.serviceIsStopped')}
+          </p>
           <p className="mt-2 text-sm font-body text-muted-ol">
             Start the service to view its logs.
           </p>
@@ -66,7 +70,9 @@ export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
       {/* Toolbar */}
       <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-panel">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-body text-muted-ol">Showing last</span>
+          <span className="text-xs font-body text-muted-ol">
+            {t('services.detail.showingLast')}
+          </span>
           <select
             value={lines}
             onChange={(e) => setLines(Number(e.target.value))}

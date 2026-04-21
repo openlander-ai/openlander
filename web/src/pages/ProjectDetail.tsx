@@ -110,7 +110,7 @@ export function ProjectDetail() {
     try {
       await redeployProject(id, undefined);
       setTimelineRunKey((k) => k + 1);
-      toast.success('Project redeploying');
+      toast.success(t('projectDetail.redeploySuccess'));
     } catch (err) {
       console.error('Redeploy failed:', err);
       toast.error('Redeploy failed: ' + (err instanceof Error ? err.message : String(err)));
@@ -133,7 +133,7 @@ export function ProjectDetail() {
         setActionLoading('stop');
         try {
           await stopProject(id);
-          toast.success('Project stopped');
+          toast.success(t('projectDetail.stopSuccess'));
         } catch (err) {
           console.error('Stop failed:', err);
           toast.error('Stop failed: ' + (err instanceof Error ? err.message : String(err)));
@@ -151,7 +151,7 @@ export function ProjectDetail() {
     try {
       await redeployProject(id!, undefined);
       setTimelineRunKey((k) => k + 1);
-      toast.success('Project redeploying');
+      toast.success(t('projectDetail.redeploySuccess'));
     } catch (err) {
       toast.error('Redeploy failed: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -171,7 +171,7 @@ export function ProjectDetail() {
     try {
       await redeployProject(id!, Object.keys(vars).length > 0 ? vars : undefined);
       setTimelineRunKey((k) => k + 1);
-      toast.success('Project deploying');
+      toast.success(t('projectDetail.deploySuccess'));
     } catch (err) {
       toast.error('Deploy failed: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -185,7 +185,7 @@ export function ProjectDetail() {
     try {
       await startProject(id);
       await fetchProject();
-      toast.success('Project started');
+      toast.success(t('projectDetail.startSuccess'));
     } catch (err) {
       console.error('Start failed:', err);
       toast.error('Start failed: ' + (err instanceof Error ? err.message : String(err)));
@@ -209,7 +209,7 @@ export function ProjectDetail() {
       await rollbackProject(id, deploymentId);
       setTimelineRunKey((k) => k + 1);
       setRollbackDialogOpen(false);
-      toast.success('Project rolling back');
+      toast.success(t('projectDetail.rollbackSuccess'));
     } catch (err) {
       console.error('Rollback failed:', err);
       toast.error('Rollback failed: ' + (err instanceof Error ? err.message : String(err)));
@@ -244,7 +244,7 @@ export function ProjectDetail() {
       await blueGreenProject(id, healthCheckPath);
       setTimelineRunKey((k) => k + 1);
       setBlueGreenDialogOpen(false);
-      toast.success('Blue-green deploy started');
+      toast.success(t('projectDetail.blueGreenSuccess'));
     } catch (err) {
       console.error('Blue-green deploy failed:', err);
       toast.error(

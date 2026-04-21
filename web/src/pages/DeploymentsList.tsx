@@ -188,7 +188,7 @@ export function DeploymentsList() {
                 <p className="text-xs text-muted-foreground mt-1">
                   {deployments.length === 0
                     ? t('deploymentsList.emptyHint')
-                    : 'Try changing the filter above.'}
+                    : t('deploymentsList.changeFilterHint')}
                 </p>
               </div>
             ) : (

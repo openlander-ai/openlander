@@ -315,27 +315,27 @@ export function OpsCenterV2() {
               <TabsList className="mb-4">
                 <TabsTrigger value="live">
                   <Activity className="h-4 w-4 mr-1.5" />
-                  Live
+                  {t('ops.live')}
                 </TabsTrigger>
                 <TabsTrigger value="incidents">
                   <AlertTriangle className="h-4 w-4 mr-1.5" />
-                  Incidents
+                  {t('ops.incidents')}
                 </TabsTrigger>
                 <TabsTrigger value="approvals">
                   <ShieldCheck className="h-4 w-4 mr-1.5" />
-                  Approvals
+                  {t('ops.approvals')}
                 </TabsTrigger>
                 <TabsTrigger value="postmortems">
                   <FileText className="h-4 w-4 mr-1.5" />
-                  Postmortems
+                  {t('ops.postmortems')}
                 </TabsTrigger>
                 <TabsTrigger value="patterns">
                   <TrendingUp className="h-4 w-4 mr-1.5" />
-                  Patterns
+                  {t('ops.patterns')}
                 </TabsTrigger>
                 <TabsTrigger value="usage">
                   <BarChart3 className="h-4 w-4 mr-1.5" />
-                  Usage
+                  {t('ops.usage')}
                 </TabsTrigger>
               </TabsList>
 
@@ -380,7 +380,9 @@ export function OpsCenterV2() {
               </TabsContent>
 
               <TabsContent value="incidents">
-                <div className="p-6 text-muted-foreground text-sm">Incidents view coming soon</div>
+                <div className="p-6 text-muted-foreground text-sm">
+                  {t('ops.incidentsComingSoon')}
+                </div>
               </TabsContent>
 
               <TabsContent value="approvals">

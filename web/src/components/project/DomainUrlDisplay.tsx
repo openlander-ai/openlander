@@ -1,5 +1,6 @@
 import React from 'react';
 import { Globe, Wifi, Shield, ExternalLink, ChevronDown, Copy, Check } from 'lucide-react';
+import { useLanguage } from '@/i18n/context';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useCopy } from '@/hooks/use-copy';
 import { cn } from '@/lib/utils';
@@ -17,6 +18,7 @@ interface DomainUrlDisplayProps {
 }
 
 export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlDisplayProps) {
+  const { t } = useLanguage();
   const { copy, isCopied } = useCopy();
   const allUrls: Array<{ url: string; type: string; label: string; icon: React.ElementType }> = [];
 
@@ -78,7 +80,7 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
         <button
           onClick={() => copy(primaryUrl.url, primaryUrl.url)}
           className="p-1.5 text-muted-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-          title="Copy URL"
+          title={t('project.copyUrl')}
         >
           {isCopied(primaryUrl.url) ? (
             <Check className="h-3.5 w-3.5 text-success" />
@@ -152,7 +154,7 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
                         copy(item.url, item.url);
                       }}
                       className="flex items-center justify-center h-7 w-7 text-secondary-ol hover:text-primary-ol hover:bg-bg-panel rounded-md transition-colors border border-transparent hover:border-border shadow-none hover:shadow-sm"
-                      title="Copy URL"
+                      title={t('project.copyUrl')}
                     >
                       {isItemCopied ? (
                         <Check className="h-3.5 w-3.5 text-success" />
