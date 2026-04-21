@@ -92,6 +92,7 @@ function eventCategory(type: string): string {
     type === 'approval' ||
     type === 'incident' ||
     type === 'recovery:blocked' ||
+    type === 'recovery:degraded' ||
     type === 'recovery:stopped' ||
     type === 'recovery:started'
   ) {

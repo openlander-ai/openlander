@@ -32,6 +32,7 @@ const ACTIVITY_TYPES = [
   'ai:invoked',
   'ai:completed',
   'recovery:blocked',
+  'recovery:degraded',
   'recovery:stopped',
   'recovery:started',
 ] as const;
@@ -179,6 +180,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
     'recovery:approval-needed',
     'recovery:approval-resolved',
     'recovery:blocked',
+    'recovery:degraded',
     'recovery:stopped',
     'recovery:started',
     'ai:invoked',

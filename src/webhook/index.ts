@@ -81,8 +81,15 @@ export class WebhookManager {
   constructor(
     private readonly pipeline: DeployPipeline,
     private readonly db: Database,
-    private readonly events: EventBus,
-  ) {}
+    // EventBus is retained on the constructor signature so existing callers
+    // (src/app.ts, src/web/api/webhook-routes.ts, tests) keep wiring it.
+    // After Day 8 Bug #4 the webhook itself no longer emits deploy:start
+    // (the pipeline owns that emit), so this dependency is currently unused
+    // — kept for forthcoming PR-event emits.
+    private readonly _events: EventBus,
+  ) {
+    void this._events;
+  }
 
   generateSecret(projectId: string): string {
     return `${projectId}.${randomBytes(32).toString('hex')}`;
@@ -185,11 +192,12 @@ export class WebhookManager {
       }
     }
 
-    await this.events.emit('deploy:start', {
-      projectId,
-      repoUrl: parsed.repoUrl || project.repo_url || '',
-    });
-
+    // Day 8 Bug #4: Do NOT emit `deploy:start` from the webhook — the
+    // pipeline (redeploy / deployEnvironment) emits it itself, AFTER the
+    // mutation policy clears. Emitting here pre-policy caused stale
+    // active-project state in `questionBridge` and false "started" entries
+    // in the activity feed whenever the policy short-circuited (archived /
+    // recovering / circuit-open).
     if (targetEnvironment) {
       try {
         const deployResult = await this.pipeline.deployEnvironment(

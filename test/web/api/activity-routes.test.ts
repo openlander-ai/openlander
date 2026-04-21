@@ -474,4 +474,48 @@ describe('buildActivityEvent', () => {
     expect(event).not.toBeNull();
     expect(event!.projectName).toBe('unknown-proj');
   });
+
+  // ---------------------------------------------------------------------------
+  // Day 8 Bug #1: recovery:degraded must surface through the activity event
+  // mapper so the SSE feed and persisted activity_log show partial-failure
+  // recovery events. Codex's Day 7 audit found that recovery:degraded was
+  // wired through ActivityLogger but missing from the SSE eventTypes filter
+  // in routes.ts and ops-routes.ts.
+  // ---------------------------------------------------------------------------
+  it('builds a recovery:degraded ActivityEvent with the correct mapped type and status', () => {
+    const event = buildActivityEvent(mockDb, 'recovery:degraded', {
+      projectId: 'proj-1',
+      stage: 'B',
+      reason: 'partial step failure',
+    } as never);
+
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe('recovery:degraded');
+    expect(event!.status).toBe('failed');
+    expect(event!.severity).toBe('warning');
+    expect(event!.title).toContain('partial');
+    expect(event!.reason).toBe('partial step failure');
+    expect(event!.rawType).toBe('recovery:degraded');
+    expect(event!.projectName).toBe('alpha-service');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Day 8 Bug #1: recovery:degraded MUST be present in the SSE event-type
+// arrays so the streaming `/api/activity` and `/api/ops/activity` endpoints
+// don't filter it out before reaching the client. We assert by static-import
+// the route module source and checking the literal arrays.
+// ---------------------------------------------------------------------------
+describe('SSE event type allowlist (Day 8 Bug #1)', () => {
+  it('routes.ts ACTIVITY_TYPES includes recovery:degraded', async () => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync('src/web/api/routes.ts', 'utf8');
+    expect(source).toMatch(/'recovery:degraded'/);
+  });
+
+  it('ops-routes.ts ActivityItem type union includes recovery:degraded', async () => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync('src/web/api/ops-routes.ts', 'utf8');
+    expect(source).toMatch(/'recovery:degraded'/);
+  });
 });

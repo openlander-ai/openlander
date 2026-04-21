@@ -25,6 +25,7 @@ interface ActivityItem {
     | 'ai:invoked'
     | 'ai:completed'
     | 'recovery:blocked'
+    | 'recovery:degraded'
     | 'recovery:stopped'
     | 'recovery:started';
   severity: 'critical' | 'warning' | 'info';

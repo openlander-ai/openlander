@@ -9,6 +9,7 @@ import {
   parseGitHubPRPayload,
   parseGitLabPRPayload,
 } from '../src/webhook/index.js';
+import { ProjectArchivedError } from '../src/errors.js';
 
 function githubPushBody(branch: string): string {
   return JSON.stringify({
@@ -457,5 +458,196 @@ describe('webhook push environment routing', () => {
     });
     expect(deployEnvironment).not.toHaveBeenCalled();
     expect(redeploy).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Day 8 Bug #4: deploy:start MUST NOT be emitted when policy rejects the
+// deploy (archived / recovering / circuit-open). Previously, deploy:start
+// was emitted before the policy check, leaving stale active-project state in
+// questionBridge and false "started" entries in the activity feed when the
+// pipeline call short-circuited.
+// ---------------------------------------------------------------------------
+describe('webhook deploy:start ordering (Day 8 Bug #4)', () => {
+  it('does NOT emit deploy:start when redeploy is policy-rejected (archived)', async () => {
+    const emit = vi.fn(async () => undefined);
+    const redeploy = vi.fn(async () => {
+      throw new ProjectArchivedError('project-1');
+    });
+    const deployEnvironment = vi.fn(async () => ({ success: true }));
+
+    const db = {
+      getProject: vi.fn(() => ({
+        id: 'project-1',
+        name: 'archived-app',
+        repo_url: 'https://github.com/example/repo.git',
+      })),
+      getWebhookConfig: vi.fn(() => ({
+        enabled: 1,
+        secret: 'test-secret',
+        branch_filter: 'main',
+      })),
+      // No environments — fall through to redeploy() path
+      getEnvironmentsByProject: vi.fn(() => []),
+      getPreviewProjects: vi.fn(() => []),
+    };
+
+    const pipeline = {
+      deployEnvironment,
+      redeploy,
+      deployPreview: vi.fn(),
+      remove: vi.fn(),
+    };
+
+    const manager = new WebhookManager(
+      pipeline as unknown as ConstructorParameters<typeof WebhookManager>[0],
+      db as unknown as ConstructorParameters<typeof WebhookManager>[1],
+      { emit } as unknown as ConstructorParameters<typeof WebhookManager>[2],
+    );
+
+    const body = githubPushBody('main');
+    const result = await manager.handleWebhook(
+      'github',
+      {
+        'x-openlander-project-id': 'project-1',
+        'x-github-event': 'push',
+        'x-hub-signature-256': githubSignature(body, 'test-secret'),
+      },
+      body,
+    );
+
+    // Webhook still accepted (the push event is valid; only the deploy
+    // action is gracefully skipped) — but no deploy:start emit should
+    // have happened.
+    expect(result.accepted).toBe(true);
+    expect(result.message).toMatch(/archived/i);
+
+    const startEmits = emit.mock.calls.filter(([eventName]) => eventName === 'deploy:start');
+    expect(startEmits).toHaveLength(0);
+  });
+
+  it('does NOT emit deploy:start when deployEnvironment is policy-rejected', async () => {
+    const emit = vi.fn(async () => undefined);
+    const deployEnvironment = vi.fn(async () => {
+      throw new ProjectArchivedError('project-1');
+    });
+    const redeploy = vi.fn(async () => ({ success: true }));
+
+    const db = {
+      getProject: vi.fn(() => ({
+        id: 'project-1',
+        name: 'archived-env-app',
+        repo_url: 'https://github.com/example/repo.git',
+      })),
+      getWebhookConfig: vi.fn(() => ({
+        enabled: 1,
+        secret: 'test-secret',
+        branch_filter: 'main',
+      })),
+      getEnvironmentsByProject: vi.fn(() => [
+        {
+          id: 'env-prod',
+          type: 'production',
+          branch: 'main',
+          project_id: 'project-1',
+          status: 'idle',
+          assigned_port: null,
+          container_id: null,
+          image_tag: null,
+          previous_image_tag: null,
+          public_url: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ]),
+      getPreviewProjects: vi.fn(() => []),
+    };
+
+    const pipeline = {
+      deployEnvironment,
+      redeploy,
+      deployPreview: vi.fn(),
+      remove: vi.fn(),
+    };
+
+    const manager = new WebhookManager(
+      pipeline as unknown as ConstructorParameters<typeof WebhookManager>[0],
+      db as unknown as ConstructorParameters<typeof WebhookManager>[1],
+      { emit } as unknown as ConstructorParameters<typeof WebhookManager>[2],
+    );
+
+    const body = githubPushBody('main');
+    const result = await manager.handleWebhook(
+      'github',
+      {
+        'x-openlander-project-id': 'project-1',
+        'x-github-event': 'push',
+        'x-hub-signature-256': githubSignature(body, 'test-secret'),
+      },
+      body,
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(result.message).toMatch(/archived/i);
+
+    // Webhook emits NO deploy:start at all — the pipeline owns that emit
+    // and only fires it after the synchronous policy check passes. When the
+    // policy rejects (as here), the pipeline never reaches its own emit.
+    const startEmits = emit.mock.calls.filter(([eventName]) => eventName === 'deploy:start');
+    expect(startEmits).toHaveLength(0);
+  });
+
+  it('webhook itself emits no deploy:start on success path (pipeline owns it)', async () => {
+    // Successful deploy: webhook still must not emit deploy:start. The
+    // pipeline.redeploy() emits its own deploy:start after policy passes,
+    // and the activity feed deduplicates by projectId — double-emit would
+    // pollute the feed.
+    const emit = vi.fn(async () => undefined);
+    const redeploy = vi.fn(async () => ({ success: true }));
+    const deployEnvironment = vi.fn(async () => ({ success: true }));
+
+    const db = {
+      getProject: vi.fn(() => ({
+        id: 'project-1',
+        name: 'happy-app',
+        repo_url: 'https://github.com/example/repo.git',
+      })),
+      getWebhookConfig: vi.fn(() => ({
+        enabled: 1,
+        secret: 'test-secret',
+        branch_filter: 'main',
+      })),
+      getEnvironmentsByProject: vi.fn(() => []),
+      getPreviewProjects: vi.fn(() => []),
+    };
+
+    const pipeline = {
+      deployEnvironment,
+      redeploy,
+      deployPreview: vi.fn(),
+      remove: vi.fn(),
+    };
+
+    const manager = new WebhookManager(
+      pipeline as unknown as ConstructorParameters<typeof WebhookManager>[0],
+      db as unknown as ConstructorParameters<typeof WebhookManager>[1],
+      { emit } as unknown as ConstructorParameters<typeof WebhookManager>[2],
+    );
+
+    const body = githubPushBody('main');
+    const result = await manager.handleWebhook(
+      'github',
+      {
+        'x-openlander-project-id': 'project-1',
+        'x-github-event': 'push',
+        'x-hub-signature-256': githubSignature(body, 'test-secret'),
+      },
+      body,
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(redeploy).toHaveBeenCalledWith('project-1');
+    const startEmits = emit.mock.calls.filter(([eventName]) => eventName === 'deploy:start');
+    expect(startEmits).toHaveLength(0);
   });
 });
