@@ -631,7 +631,7 @@ export function MainFeedGrid({
                         {t(`opsV2.status.${thread.status}`)}
                       </span>
                       {thread.hasPendingApproval && (
-                        <AlertCircle className="h-3.5 w-3.5 text-warning animate-pulse" />
+                        <AlertCircle className="h-3.5 w-3.5 text-warning" />
                       )}
                     </div>
 

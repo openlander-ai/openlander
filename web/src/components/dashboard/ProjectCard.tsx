@@ -1,12 +1,9 @@
 import { Spinner } from '@/components/ui/spinner';
 import type { Project } from '@/types';
-import { getSetupStatus } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { Clock, ExternalLink, GitBranch, RotateCw, Settings } from 'lucide-react';
 import type { MouseEvent } from 'react';
-import { useEffect, useState } from 'react';
-import { AISparkle } from '@/components/ui/AISparkle';
 
 interface StatusDisplay {
   label: string;
@@ -32,14 +29,6 @@ export function ProjectCard({
   onRedeploy,
   t,
 }: ProjectCardProps) {
-  const [llmConfigured, setLlmConfigured] = useState(false);
-
-  useEffect(() => {
-    getSetupStatus()
-      .then((s) => setLlmConfigured(s.llm.ok))
-      .catch(() => setLlmConfigured(false));
-  }, []);
-
   const status = statusConfig[project.status] ?? statusConfig.stopped;
 
   return (
@@ -165,10 +154,7 @@ export function ProjectCard({
           {redeployingIds.has(project.id) ? (
             <Spinner className="h-4 w-4" />
           ) : (
-            <div className="flex items-center gap-1">
-              {llmConfigured && <AISparkle className="h-3 w-3" />}
-              <RotateCw className="h-4 w-4" />
-            </div>
+            <RotateCw className="h-4 w-4" />
           )}
         </button>
         <button
