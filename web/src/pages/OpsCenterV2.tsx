@@ -39,7 +39,7 @@ function deriveHealthState(
 }
 
 const triggerClass =
-  'flex items-center gap-2 w-full !justify-start text-left px-3 py-2 rounded-md text-xs font-body transition-colors shadow-none data-[state=active]:bg-bg-subtle data-[state=active]:text-foreground data-[state=active]:font-medium text-foreground/80 hover:text-foreground hover:bg-bg-subtle/50 whitespace-nowrap';
+  'flex items-center gap-2 w-full !justify-start text-left px-3 py-2 rounded-md text-xs font-body transition-colors shadow-none data-[state=active]:shadow-none data-[state=active]:bg-bg-subtle data-[state=active]:text-foreground data-[state=active]:font-medium text-foreground/80 hover:text-foreground hover:bg-bg-subtle/50 whitespace-nowrap';
 
 export function OpsCenterV2() {
   const { t } = useLanguage();
