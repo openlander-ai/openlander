@@ -1,5 +1,10 @@
 # AI-First 인프라 플랫폼 — 아키텍처 비전
 
+> **⚠ Historical — frozen 2026-04-23 (pre-1.0 launch).**
+> This file captures plan/vision at the time of writing and may diverge from the shipped 1.0.
+> Current state: `docs/RELEASE-NOTES-1.0.md`, `docs/wiki/`, `docs/design/calm-ops-refresh.md`.
+> Kept in place because `.opencode/skills/` and other docs still link here.
+
 **작성일**: 2026-03-27
 **최종 업데이트**: 2026-03-28 (Phase 1 구현 상태 반영)
 **상태**: 비전 문서 (구현 스펙 아님) — Phase 1 핵심 항목 구현 완료
