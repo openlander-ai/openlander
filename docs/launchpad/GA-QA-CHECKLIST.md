@@ -194,7 +194,7 @@
   - PASS: backfill 후 live 전환, 중복 row 0
 
 - [ ] **C5S4 (Incident from crash, BUG-013/014)**: `docker kill qa-c5-crash` → Live 탭 모니터
-  - PASS: 70초 안에 (a) Live feed에 container:die 이벤트, (b) StatusStrip active 카운트 +1, (c) ProjectDetail Operations 탭 같은 incident
+  - PASS: 70초 안에 (a) Live feed에 `container:die` 이벤트 (제네릭 "Container Die" 라벨로 렌더), (b) StatusStrip active 카운트 +1, (c) ProjectDetail Recovery 탭에 동일 incident
   - FAIL: 셋 중 하나라도 누락 또는 카운트 불일치
 
 - [ ] **C5S5 (Incident slideover)**: Live 탭에서 새 incident 관련 activity 클릭 → IncidentDetailSlideover 열림 → 이벤트 타임라인 → Esc 닫힘

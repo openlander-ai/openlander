@@ -1,4 +1,5 @@
 import { Loader2, Settings, Shield, Globe, Github, Bot, Cable, Activity } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useLanguage } from '@/i18n/context';
 import { useSetup } from '@/hooks/use-setup';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,9 +13,18 @@ import { McpSettingsTab } from '@/components/settings/McpSettingsTab';
 import { OperationsSettings } from '@/components/settings/OperationsSettings';
 import { PageHeader } from '@/components/layout/PageHeader';
 
+const VALID_TABS = ['system', 'security', 'proxy', 'github', 'ai', 'operations', 'mcp'] as const;
+type SettingsTab = (typeof VALID_TABS)[number];
+
+function normalizeTab(raw: string | null): SettingsTab {
+  return (VALID_TABS as readonly string[]).includes(raw ?? '') ? (raw as SettingsTab) : 'system';
+}
+
 export function SettingsPage() {
   const { status, loading, refetch } = useSetup();
   const { t } = useLanguage();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = normalizeTab(searchParams.get('tab'));
 
   if (loading && !status) {
     return (
@@ -31,7 +41,8 @@ export function SettingsPage() {
     <div className="flex flex-col h-full w-full">
       <PageHeader title={t('settings.title')} description={t('settings.description')} />
       <Tabs
-        defaultValue="system"
+        value={activeTab}
+        onValueChange={(next) => setSearchParams({ tab: next })}
         className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden"
       >
         {/* Sidebar Tabs — matches ProjectDetail SettingsTab nav */}

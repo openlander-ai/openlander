@@ -30,8 +30,10 @@ Live 탭에서 j (next), k (prev), / (focus search), ? (help), Esc (close detail
 ### C5S4_INCIDENT_FROM_CRASH (R1, BUG-013/014 회귀)
 
 다른 터미널: `docker kill qa-c5-crash` → OpsCenter Live 탭 + StatusStrip 카운트 모니터.
-**PASS**: 70초 안에 (a) Live feed에 `container:die` 이벤트, (b) StatusStrip active 카운트 +1, (c) ProjectDetail Operations 탭에서 같은 incident.
+**PASS**: 70초 안에 (a) Live feed에 `container:die` 이벤트 (제네릭 "Container Die" 라벨로 렌더, 명시적 TITLE_PATTERNS 매핑 미정의), (b) StatusStrip active 카운트 +1, (c) ProjectDetail Recovery 탭에서 같은 incident.
 **FAIL**: 셋 중 하나라도 누락 또는 카운트 불일치.
+
+**Note**: ProjectDetail은 overview/deployments/recovery/runtime/settings 5탭 구조. Operations 탭은 없음.
 
 ### C5S5_INCIDENT_SLIDEOVER
 

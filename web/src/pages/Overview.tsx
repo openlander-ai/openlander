@@ -207,10 +207,7 @@ export function Overview() {
                                 {activity.title}
                               </p>
                               <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                {t('overview.activity.timeAgo').replace(
-                                  '{time}',
-                                  formatRelativeTime(activity.timestamp, t),
-                                )}
+                                {formatRelativeTime(activity.timestamp, t)}
                               </span>
                             </div>
                             <p className="text-xs text-foreground/80 mt-1 truncate">

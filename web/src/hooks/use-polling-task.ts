@@ -80,5 +80,10 @@ export function usePollingTask(
       stop();
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [task, enabled, intervalMs, pauseWhenHidden, refetchOnVisible, runOnMount]);
+    // `task` is intentionally excluded from the deps below — taskRef is kept
+    // fresh via the ref effect above, and including `task` would tear down and
+    // restart the interval on every render when callers pass inline arrow
+    // functions, causing fetch-storm regressions (ERR_INSUFFICIENT_RESOURCES
+    // observed on Overview under Playwright, 2026-04-22).
+  }, [enabled, intervalMs, pauseWhenHidden, refetchOnVisible, runOnMount]);
 }

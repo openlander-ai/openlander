@@ -22,6 +22,11 @@
 - **NewProjectFlow PageHeader 마이그**: `NewProjectFlow.tsx:171-180`이 PageHeader 구조를 수동 재구현. 1:1 교체 가능.
 - **StatusDot/LoadingState**: 2026-04-22에 "orphan primitive 0 consumer"로 판단하여 삭제. 1.0.x에서 "상태 점이 자주 반복되는 곳" 3+곳 발견되면 재도입 검토.
 - **ServicesPage 카드 일관성**: `rounded-xl border-2 border-dashed` / `rounded-xl border` / `rounded-md border/60 bg-bg-app/20` 3종 혼재. dokploy 정합성 위해 단일 카드 atom으로 통합.
+- **ProjectDetail URL tab 쿼리 미반영**: `ProjectDetail.tsx:49`이 `useState('overview')`로 active tab을 로컬 상태로만 관리. 현재 deep-link 사용처가 없어 미발현이지만 `SettingsPage` 패턴 (`useSearchParams`)으로 이관해야 Alerts/Overview에서 프로젝트 특정 탭으로 보내는 링크 추가할 때 회귀 방지. **Why**: 2026-04-22 Playwright QA에서 SettingsPage에 동일 버그 발견 — `/settings?tab=operations`가 System 탭으로 고착됨. **How to apply**: useSearchParams + controlled Tabs value로 교체.
+- **CircuitBreakerWidget 배너 조건 좁히기**: `OpsCenterV2.tsx:168` 현재 `circuitBreakers.length > 0`이라 closed 상태 브레이커도 배너 유발. `trippedCount > 0`으로 좁히거나 CircuitBreakerWidget 내부에서 tripped 아닌 항목 필터. 2026-04-22 Playwright QA에서 "Show 54 more"로 57개 retrying 상태가 항상 노출되는 현상 관찰.
+- **usePollingTask in-flight guard**: `use-polling-task.ts`에 AbortController 기반 중첩 방지 없음. 2026-04-22 fix로 `task` deps 제거해서 fetch storm은 해결했지만, 네트워크 느린 환경에서 이전 폴링 완료 전 다음 폴링이 쌓일 가능성 여전. 각 task 실행 전 AbortController로 이전 in-flight 요청 취소하도록 강화.
+- **formatRelativeTime 한국어 로컬라이징**: `web/src/lib/time.ts:17-29` 는 `t` 파라미터를 받지만 실제로 영어 "ago" suffix만 반환 (터너리 양쪽 모두 동일 값). 한국어 사용자에게도 "6d ago"로 표시. `t` 활용해서 "6일 전" 반환하도록 반영.
+- **Overview "1 unhealthy services" 단복수 처리 누락**: en.ts의 `needsAttentionUnhealthy` 계열 라벨이 숫자 1일 때도 복수형(services) 사용. i18n에 count 기반 plural 키 추가.
 
 ### 1. LLM cooldown DB persist + `recovery:blocked` 이벤트
 
