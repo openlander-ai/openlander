@@ -188,7 +188,7 @@ docker run -d \
 ### Integration
 
 - **MCP server** — Deploy from Claude Code, Cursor, or any MCP client
-- **Multi-channel** — Slack, Discord, Telegram bots for remote management
+- **Email alerts** — SMTP delivery for recovery / alert notifications (Slack / Discord / Telegram planned for 1.0.x)
 - **BYOK (Bring Your Own Key)** — Gemini Flash (free), Claude, OpenAI, OpenRouter, or Ollama (local)
 - **OAuth connect** — Link OpenRouter or OpenAI accounts for LLM access (no manual API key needed)
 - **Private repos** — SSH key auth. Works with GitHub, GitLab, Bitbucket, Gitea.
