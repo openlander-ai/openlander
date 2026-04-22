@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, Suspense, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
@@ -26,8 +26,6 @@ import { PatternsTab } from '@/components/ops/PatternsTab';
 import { UsageTab } from '@/components/ops/UsageTab';
 import type { CircuitBreakerState, ActivityItem } from '@/lib/api/operations';
 import { PageHeader } from '@/components/layout/PageHeader';
-
-const DependencyGraph = React.lazy(() => import('../components/ops/v2/DependencyGraph.js'));
 
 function deriveHealthState(
   incidents: { severity: string }[],
@@ -243,17 +241,6 @@ export function OpsCenterV2() {
                   focusedIndex={currentFocusIndex}
                   onThreadCountChange={setThreadCount}
                 />
-                <div className="h-[600px] w-full mt-6">
-                  <Suspense
-                    fallback={
-                      <div className="flex items-center justify-center h-full w-full bg-bg-panel rounded-lg border border-[hsl(var(--border))]">
-                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                      </div>
-                    }
-                  >
-                    <DependencyGraph />
-                  </Suspense>
-                </div>
               </main>
             </TabsContent>
 

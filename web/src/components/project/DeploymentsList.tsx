@@ -88,9 +88,9 @@ export function DeploymentsList({
   }
 
   return (
-    <div className="p-6 bg-bg-app">
-      <div className="max-w-5xl mx-auto bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm overflow-hidden">
-        <div className="divide-y divide-border/50">
+    <div className="flex flex-col h-full p-6 bg-bg-app">
+      <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm overflow-hidden flex-1 flex flex-col">
+        <div className="divide-y divide-border/50 overflow-auto flex-1">
           {filteredDeployments.map((deploy) => {
             const statusMeta = getDeploymentStatusMeta(deploy.status);
             const shortCommitSha = getShortCommitSha(deploy.commitSha);
