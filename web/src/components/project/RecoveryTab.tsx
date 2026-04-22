@@ -196,9 +196,7 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
           <h2 className="text-lg font-semibold text-foreground">{t('recovery.incidentHistory')}</h2>
         </div>
         {incidents.length === 0 ? (
-          <Card className="p-8 text-center border-dashed bg-bg-panel/50">
-            <p className="text-sm text-muted-foreground">{t('recovery.noIncidents')}</p>
-          </Card>
+          <p className="text-sm text-muted-foreground px-1 py-3">{t('recovery.noIncidents')}</p>
         ) : (
           <div className="space-y-2">
             {incidents.map((incident) => (
@@ -229,9 +227,7 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
           <h2 className="text-lg font-semibold text-foreground">{t('recovery.postmortems')}</h2>
         </div>
         {postmortems.length === 0 ? (
-          <Card className="p-8 text-center border-dashed bg-bg-panel/50">
-            <p className="text-sm text-muted-foreground">{t('recovery.noPostmortems')}</p>
-          </Card>
+          <p className="text-sm text-muted-foreground px-1 py-3">{t('recovery.noPostmortems')}</p>
         ) : (
           <div className="space-y-2">
             {postmortems.map((pm) => (
@@ -262,9 +258,7 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
           </h2>
         </div>
         {approvals.length === 0 ? (
-          <Card className="p-8 text-center border-dashed bg-bg-panel/50">
-            <p className="text-sm text-muted-foreground">{t('recovery.noApprovals')}</p>
-          </Card>
+          <p className="text-sm text-muted-foreground px-1 py-3">{t('recovery.noApprovals')}</p>
         ) : (
           <div className="space-y-3">
             {approvals.map((approval) => (
