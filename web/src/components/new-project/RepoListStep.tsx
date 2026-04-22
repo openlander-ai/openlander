@@ -105,7 +105,7 @@ export function RepoListStep({
                         <span
                           className={cn(
                             'h-2 w-2 rounded-full',
-                            langColors[repo.language] ?? 'bg-[var(--text-muted)]',
+                            langColors[repo.language] ?? 'bg-muted-foreground/40',
                           )}
                         />
                         {repo.language}

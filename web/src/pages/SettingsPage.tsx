@@ -27,7 +27,7 @@ export function SettingsPage() {
     'flex items-center gap-2 px-3 py-2.5 font-body text-sm rounded-md md:rounded-l-none md:rounded-r-md border-l-2 border-transparent data-[state=active]:bg-bg-subtle data-[state=active]:text-foreground data-[state=active]:font-medium data-[state=active]:border-foreground text-foreground/80 shadow-none transition-all hover:text-foreground hover:bg-bg-subtle/50 whitespace-nowrap w-full !justify-start';
 
   return (
-    <div className="w-full max-w-8xl p-4 md:p-8 space-y-8">
+    <div className="w-full p-6 xl:p-8 max-w-8xl space-y-8">
       <div className="border-b border-[hsl(var(--border))] pb-6">
         <h1 className="font-display text-2xl font-bold text-foreground tracking-tight">
           {t('settings.title')}

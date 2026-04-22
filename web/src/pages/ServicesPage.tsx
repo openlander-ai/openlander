@@ -172,7 +172,7 @@ export function ServicesPage() {
                             ? 'bg-success'
                             : isError
                               ? 'bg-error'
-                              : 'bg-[var(--text-muted)]',
+                              : 'bg-muted-foreground/40',
                         )}
                       />
                       <h3 className="text-sm font-display font-semibold text-foreground truncate">

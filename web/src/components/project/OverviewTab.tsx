@@ -461,7 +461,7 @@ export function OverviewTab({
                               ? 'bg-success shadow-[0_0_4px_rgba(22,163,74,0.4)]'
                               : service.status === 'error'
                                 ? 'bg-error'
-                                : 'bg-[var(--text-muted)]',
+                                : 'bg-muted-foreground/40',
                           )}
                         />
                         <span className="text-foreground font-medium truncate">{service.name}</span>

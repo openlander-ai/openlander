@@ -449,9 +449,9 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
             type="button"
             onClick={scrollToBottom}
             className={cn(
-              'flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg transition-all duration-200',
+              'flex items-center gap-2 px-4 py-2.5 rounded-full shadow-md transition-all duration-200',
               unseenCount > 0
-                ? 'bg-foreground text-primary-foreground font-medium hover:scale-105 hover:shadow-xl'
+                ? 'bg-foreground text-primary-foreground font-medium hover:shadow-lg'
                 : 'bg-bg-panel border border-[hsl(var(--border))] text-foreground/80 hover:text-foreground hover:bg-bg-subtle',
             )}
           >

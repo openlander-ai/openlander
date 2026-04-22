@@ -193,6 +193,9 @@ export const translations = {
     deployImage: 'Deploy Image',
   },
   projects: {
+    title: 'Project Overview',
+    newProject: 'New Project',
+    monitored: '{count} projects monitored',
     noProjects: 'No projects found',
     deployFirstApp: 'Deploy your first app',
     connectGithub: 'Connect a GitHub repo and let the agent handle the rest.',

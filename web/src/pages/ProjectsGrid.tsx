@@ -89,11 +89,10 @@ export function ProjectsGrid() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-foreground tracking-tight">
-            Project Overview
+            {t('projects.title')}
           </h1>
           <p className="text-sm font-body text-foreground/80 mt-0.5">
-            {filteredProjects.length}{' '}
-            {filteredProjects.length === 1 ? 'project monitored' : 'projects monitored'}
+            {t('projects.monitored', { count: String(filteredProjects.length) })}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -135,7 +134,7 @@ export function ProjectsGrid() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body bg-agent text-white hover:bg-agent/90 transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
-            New Project
+            {t('projects.newProject')}
           </button>
         </div>
       </div>

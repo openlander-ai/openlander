@@ -193,6 +193,9 @@ export const translations = {
     deployImage: '이미지 배포',
   },
   projects: {
+    title: '프로젝트 개요',
+    newProject: '새 프로젝트',
+    monitored: '프로젝트 {count}개 모니터링 중',
     noProjects: '프로젝트가 없습니다',
     deployFirstApp: '첫 번째 앱 배포하기',
     connectGithub: 'GitHub 레포지토리를 연결하면 에이전트가 나머지를 처리합니다.',

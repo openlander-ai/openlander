@@ -270,7 +270,7 @@ export function OpsCenterV2() {
 
         {/* Scrollable content area */}
         <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-          <div className="mx-auto w-full min-w-0 max-w-8xl space-y-6">
+          <div className="w-full min-w-0 space-y-6">
             {/* Page header */}
             <div className="flex items-center justify-between">
               <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-foreground">

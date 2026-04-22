@@ -122,7 +122,7 @@ export function DeploymentsList() {
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-app">
       <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-        <div className="mx-auto w-full max-w-8xl space-y-6">
+        <div className="w-full space-y-6">
           <div className="flex items-center gap-3">
             <Rocket className="h-5 w-5 text-muted-foreground" />
             <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-foreground">
