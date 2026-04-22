@@ -3,6 +3,7 @@ import { BarChart3 } from 'lucide-react';
 import { getAiUsageSummary, getAiUsageRecent } from '@/lib/api/usage';
 import type { AiUsageSummary, AiUsageLog } from '@/lib/api/usage';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageEmptyState } from '@/components/ui/page-empty-state';
 import { parseTimestamp } from '@/lib/time';
 import { useLanguage } from '@/i18n/context';
 
@@ -45,11 +46,11 @@ export function UsageTab() {
 
   if (!summary || summary.callCount === 0) {
     return (
-      <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
-        <BarChart3 className="h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-medium text-foreground mb-2">{t('usageTab.noUsage')}</h3>
-        <p className="text-sm text-muted-foreground max-w-md">{t('usageTab.emptyMessage')}</p>
-      </div>
+      <PageEmptyState
+        icon={BarChart3}
+        title={t('usageTab.noUsage')}
+        description={t('usageTab.emptyMessage')}
+      />
     );
   }
 

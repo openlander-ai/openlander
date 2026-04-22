@@ -3,6 +3,7 @@ import { ShieldCheck, Check, X, Loader2 } from 'lucide-react';
 import { getPendingApprovals, approveRecovery, rejectRecovery } from '@/lib/api/usage';
 import type { PendingApproval } from '@/lib/api/usage';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageEmptyState } from '@/components/ui/page-empty-state';
 import { parseTimestamp, formatRelativeTime } from '@/lib/time';
 import { useLanguage } from '@/i18n/context';
 
@@ -63,13 +64,11 @@ export function ApprovalsTab() {
 
   if (approvals.length === 0) {
     return (
-      <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
-        <ShieldCheck className="h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-medium text-foreground mb-2">
-          {t('approvalsTab.noPendingApprovals')}
-        </h3>
-        <p className="text-sm text-muted-foreground max-w-md">{t('approvalsTab.emptyMessage')}</p>
-      </div>
+      <PageEmptyState
+        icon={ShieldCheck}
+        title={t('approvalsTab.noPendingApprovals')}
+        description={t('approvalsTab.emptyMessage')}
+      />
     );
   }
 

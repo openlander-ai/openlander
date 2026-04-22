@@ -3,6 +3,7 @@ import { FileText, ChevronDown, ChevronUp } from 'lucide-react';
 import { fetchPostmortems } from '@/lib/api/operations';
 import type { PostmortemEntry } from '@/lib/api/operations';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageEmptyState } from '@/components/ui/page-empty-state';
 import { parseTimestamp } from '@/lib/time';
 import { useLanguage } from '@/i18n/context';
 import ReactMarkdown from 'react-markdown';
@@ -46,13 +47,11 @@ export function PostmortemsTab() {
 
   if (postmortems.length === 0) {
     return (
-      <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
-        <FileText className="h-14 w-14 text-muted-foreground/60 mb-4" />
-        <h3 className="text-lg font-medium text-foreground mb-2">
-          {t('postmortemsTab.noPostmortems')}
-        </h3>
-        <p className="text-sm text-muted-foreground max-w-md">{t('postmortemsTab.emptyMessage')}</p>
-      </div>
+      <PageEmptyState
+        icon={FileText}
+        title={t('postmortemsTab.noPostmortems')}
+        description={t('postmortemsTab.emptyMessage')}
+      />
     );
   }
 
