@@ -8,6 +8,7 @@ import { Plus, Database } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 
 import { CreateServiceDialog } from '@/components/service/CreateServiceDialog';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 function getRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -85,19 +86,21 @@ export function ServicesPage() {
 
   if (loading) {
     return (
-      <div className="p-6 xl:p-8 w-full space-y-6">
-        <h2 className="text-lg font-semibold text-foreground">{t('services.title')}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 min-h-[144px]"
-            >
-              <Skeleton className="h-4 w-24 mb-3" />
-              <Skeleton className="h-3 w-32 mb-2" />
-              <Skeleton className="h-3 w-20" />
-            </div>
-          ))}
+      <div className="flex flex-col h-full w-full">
+        <PageHeader title={t('services.title')} />
+        <div className="p-6 xl:p-8 space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 min-h-[144px]"
+              >
+                <Skeleton className="h-4 w-24 mb-3" />
+                <Skeleton className="h-3 w-32 mb-2" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -105,150 +108,153 @@ export function ServicesPage() {
 
   if (services.length === 0) {
     return (
-      <div className="p-6 xl:p-8 w-full space-y-6">
-        <h2 className="text-lg font-semibold text-foreground">{t('services.title')}</h2>
-        <PageEmptyState
-          icon={Database}
-          title={t('services.empty.title')}
-          description={t('services.empty.description')}
-          action={
-            <button
-              onClick={() => {
-                setCreateMode('template');
-                setShowCreate(true);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-agent text-white font-medium hover:bg-agent/90 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              {t('services.createService')}
-            </button>
-          }
-        />
+      <div className="flex flex-col h-full w-full">
+        <PageHeader title={t('services.title')} />
+        <div className="p-6 xl:p-8 space-y-6">
+          <PageEmptyState
+            icon={Database}
+            title={t('services.empty.title')}
+            description={t('services.empty.description')}
+            action={
+              <button
+                onClick={() => {
+                  setCreateMode('template');
+                  setShowCreate(true);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-agent text-white font-medium hover:bg-agent/90 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                {t('services.createService')}
+              </button>
+            }
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 xl:p-8 w-full space-y-6">
-      <h2 className="text-lg font-semibold text-foreground">{t('services.title')}</h2>
+    <div className="flex flex-col h-full w-full">
+      <PageHeader title={t('services.title')} />
+      <div className="p-6 xl:p-8 space-y-6">
+        <CreateServiceDialog
+          open={showCreate}
+          onOpenChange={setShowCreate}
+          templates={templates}
+          onSuccess={fetchServices}
+          initialMode={createMode}
+        />
 
-      <CreateServiceDialog
-        open={showCreate}
-        onOpenChange={setShowCreate}
-        templates={templates}
-        onSuccess={fetchServices}
-        initialMode={createMode}
-      />
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <button
-          onClick={openCreate}
-          className="rounded-xl border-2 border-dashed border-[hsl(var(--border))] bg-bg-panel/30 p-5 min-h-[144px] flex flex-col items-center justify-center gap-2 text-foreground/80 hover:border-foreground/40 hover:text-foreground hover:bg-bg-panel/60 transition-all cursor-pointer group"
-        >
-          <div className="h-10 w-10 rounded-full border-2 border-dashed border-current flex items-center justify-center group-hover:border-solid transition-all">
-            <Plus className="h-5 w-5" />
-          </div>
-          <span className="text-sm font-body font-medium">{t('services.createService')}</span>
-        </button>
-
-        {services.map((service) => {
-          const isRunning = service.status === 'running';
-          const isError = service.status === 'error';
-
-          return (
-            <div
-              key={service.id}
-              onClick={() => navigate(`/services/${service.id}`)}
-              className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 min-h-[176px] flex flex-col justify-between cursor-pointer hover:border-foreground/50 transition-colors card-hover"
-            >
-              <div className="space-y-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div
-                        className={cn(
-                          'w-2 h-2 rounded-full shrink-0',
-                          isRunning
-                            ? 'bg-success'
-                            : isError
-                              ? 'bg-error'
-                              : 'bg-muted-foreground/40',
-                        )}
-                      />
-                      <h3 className="text-sm font-display font-semibold text-foreground truncate">
-                        {service.name}
-                      </h3>
-                    </div>
-                    {service.type && (
-                      <span
-                        className={cn(
-                          'px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wider border shrink-0 ml-2',
-                          getTypeColor(service.type),
-                        )}
-                      >
-                        {service.type.toLowerCase()}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs font-mono text-muted-foreground truncate">
-                    {service.image}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span
-                    className={cn(
-                      'font-body',
-                      isRunning
-                        ? 'text-success'
-                        : isError
-                          ? 'text-error'
-                          : 'text-[var(--text-muted)]',
-                    )}
-                  >
-                    {statusLabel(service.status)}
-                  </span>
-                  <span className="font-mono">:{service.port}</span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-[11px]">
-                  <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {t('services.metrics.health')}
-                    </div>
-                    <div className="font-mono text-foreground">
-                      {healthLabel(service.summary?.healthStatus ?? null)}
-                    </div>
-                  </div>
-                  <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {t('services.metrics.uptime')}
-                    </div>
-                    <div className="font-mono text-foreground">
-                      {service.summary?.uptimeSeconds != null
-                        ? formatUptime(service.summary.uptimeSeconds)
-                        : '—'}
-                    </div>
-                  </div>
-                  <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {t('services.metrics.restarts')}
-                    </div>
-                    <div className="font-mono text-foreground">
-                      {service.summary?.restartCount != null ? service.summary.restartCount : '—'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {service.updated_at && getRelativeTime(service.updated_at) && (
-                <div className="mt-3 pt-3 border-t border-[hsl(var(--border))]/50 flex items-center text-[11px] text-muted-foreground font-body">
-                  {t('services.updatedAgo', { time: getRelativeTime(service.updated_at) })}
-                </div>
-              )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <button
+            onClick={openCreate}
+            className="rounded-xl border-2 border-dashed border-[hsl(var(--border))] bg-bg-panel/30 p-5 min-h-[144px] flex flex-col items-center justify-center gap-2 text-foreground/80 hover:border-foreground/40 hover:text-foreground hover:bg-bg-panel/60 transition-all cursor-pointer group"
+          >
+            <div className="h-10 w-10 rounded-full border-2 border-dashed border-current flex items-center justify-center group-hover:border-solid transition-all">
+              <Plus className="h-5 w-5" />
             </div>
-          );
-        })}
+            <span className="text-sm font-body font-medium">{t('services.createService')}</span>
+          </button>
+
+          {services.map((service) => {
+            const isRunning = service.status === 'running';
+            const isError = service.status === 'error';
+
+            return (
+              <div
+                key={service.id}
+                onClick={() => navigate(`/services/${service.id}`)}
+                className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 min-h-[176px] flex flex-col justify-between cursor-pointer hover:border-foreground/50 transition-colors card-hover"
+              >
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className={cn(
+                            'w-2 h-2 rounded-full shrink-0',
+                            isRunning
+                              ? 'bg-success'
+                              : isError
+                                ? 'bg-error'
+                                : 'bg-muted-foreground/40',
+                          )}
+                        />
+                        <h3 className="text-sm font-display font-semibold text-foreground truncate">
+                          {service.name}
+                        </h3>
+                      </div>
+                      {service.type && (
+                        <span
+                          className={cn(
+                            'px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wider border shrink-0 ml-2',
+                            getTypeColor(service.type),
+                          )}
+                        >
+                          {service.type.toLowerCase()}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs font-mono text-muted-foreground truncate">
+                      {service.image}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span
+                      className={cn(
+                        'font-body',
+                        isRunning
+                          ? 'text-success'
+                          : isError
+                            ? 'text-error'
+                            : 'text-[var(--text-muted)]',
+                      )}
+                    >
+                      {statusLabel(service.status)}
+                    </span>
+                    <span className="font-mono">:{service.port}</span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-[11px]">
+                    <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {t('services.metrics.health')}
+                      </div>
+                      <div className="font-mono text-foreground">
+                        {healthLabel(service.summary?.healthStatus ?? null)}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {t('services.metrics.uptime')}
+                      </div>
+                      <div className="font-mono text-foreground">
+                        {service.summary?.uptimeSeconds != null
+                          ? formatUptime(service.summary.uptimeSeconds)
+                          : '—'}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        {t('services.metrics.restarts')}
+                      </div>
+                      <div className="font-mono text-foreground">
+                        {service.summary?.restartCount != null ? service.summary.restartCount : '—'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {service.updated_at && getRelativeTime(service.updated_at) && (
+                  <div className="mt-3 pt-3 border-t border-[hsl(var(--border))]/50 flex items-center text-[11px] text-muted-foreground font-body">
+                    {t('services.updatedAgo', { time: getRelativeTime(service.updated_at) })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

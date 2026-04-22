@@ -28,6 +28,7 @@ import { PatternsTab } from '@/components/ops/PatternsTab';
 import { UsageTab } from '@/components/ops/UsageTab';
 import { cn } from '@/lib/utils';
 import type { CircuitBreakerState, ActivityItem } from '@/lib/api/operations';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 const DependencyGraph = React.lazy(() => import('../components/ops/v2/DependencyGraph.js'));
 
@@ -192,6 +193,10 @@ export function OpsCenterV2() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-app">
+      <PageHeader
+        title={t('opsV2.page.title')}
+        actions={<KeyboardShortcutsHelp helpButtonRef={helpButtonRef} />}
+      />
       <StatusStrip
         healthState={isLoading ? 'unknown' : healthState}
         activeIncidentCount={incidents.length}
@@ -269,16 +274,8 @@ export function OpsCenterV2() {
         )}
 
         {/* Scrollable content area */}
-        <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <div className="flex-1 overflow-auto p-6 xl:p-8">
           <div className="w-full min-w-0 space-y-6">
-            {/* Page header */}
-            <div className="flex items-center justify-between">
-              <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-foreground">
-                {t('opsV2.page.title')}
-              </h1>
-              <KeyboardShortcutsHelp helpButtonRef={helpButtonRef} />
-            </div>
-
             {/* Error Banners */}
             {isReconnecting && (
               <div className="flex items-center gap-3 rounded-md bg-warning/10 border border-warning/20 px-4 py-3 text-sm text-warning">
