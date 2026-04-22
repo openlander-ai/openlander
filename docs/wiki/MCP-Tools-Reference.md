@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-OpenLander exposes **82 MCP tools** for AI coding agents to deploy and manage projects programmatically.
+OpenLander exposes **99 MCP tools** for AI coding agents to deploy and manage projects programmatically.
 
 ## Tool Categories
 

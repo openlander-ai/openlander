@@ -85,12 +85,12 @@ On first boot the migrator applies every Drizzle migration whose row is missing 
 
 `POST /api/projects/:id/{redeploy,rollback,blue-green}` and the corresponding MCP tools now return `409 Conflict` with a typed code when the target project is not in a mutatable state:
 
-| Code                   | Meaning                                                             |
-| ---------------------- | ------------------------------------------------------------------- |
-| `PROJECT_ARCHIVED`     | Project has been archived. Unarchive before mutating.               |
-| `PROJECT_RECOVERING`   | Auto-recovery is in progress. Wait for it to complete or fail.      |
-| `CIRCUIT_BREAKER_OPEN` | Recovery has tripped the breaker. Reset it from the Operations tab. |
-| `DEPLOY_LOCKED`        | Another deploy on this project is in progress.                      |
+| Code                   | Meaning                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROJECT_ARCHIVED`     | Project has been archived. Unarchive before mutating.                                                                                                                     |
+| `PROJECT_RECOVERING`   | Auto-recovery is in progress. Wait for it to complete or fail.                                                                                                            |
+| `CIRCUIT_BREAKER_OPEN` | Recovery has tripped the breaker. Reset from the OpsCenter **Live** tab (circuit-breaker banner above the tab strip) or `POST /api/ops/circuit-breaker/:projectId/reset`. |
+| `DEPLOY_LOCKED`        | Another deploy on this project is in progress.                                                                                                                            |
 
 Previous behaviour for these cases was either a 200 with `{ success: false }`, a generic 500, or — for the MCP fire-and-forget tools — a fake "redeploying" response while the pipeline silently rejected. The new typed 409 is the correct outcome at every entry point.
 
@@ -102,7 +102,7 @@ Previous behaviour for these cases was either a 200 with `{ success: false }`, a
 
 If a chat or recovery LLM call is cancelled mid-stream (user abort, client disconnect, AbortSignal.timeout), the cancellation now counts as a failure for the LLM circuit breaker. Repeated cancellations will trip the breaker, which is the intended behaviour — runaway abort loops will no longer rack up cost forever.
 
-If you script automated calls that legitimately cancel often, expect the breaker to open faster than in `rc.7`. Reset is via the Operations dashboard or the same `/ops/circuit-breaker` endpoints.
+If you script automated calls that legitimately cancel often, expect the breaker to open faster than in `rc.7`. Reset via the OpsCenter **Live** tab (the full-width circuit-breaker banner lets you reset per-project or all) or the `POST /api/ops/circuit-breaker/:projectId/reset` endpoint.
 
 > **Single-tenant LLM pool**: 1.0 ships with a hard cap of 5 concurrent LLM sessions across the entire process and is not partitioned per user. Multi-user concurrent operation will surface as `429 LLM_CONCURRENCY_EXCEEDED` once the cap is hit. Per-tenant fairness is planned for v1.1.
 

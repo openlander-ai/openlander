@@ -167,7 +167,7 @@ Local stdio connections (Claude Desktop, Cursor, Windsurf) don't need tokens —
 
 ## Available Tools
 
-Once connected, AI agents get 82 tools. Key ones:
+Once connected, AI agents get 99 tools. Key ones:
 
 | Task     | Tool                | Description                  |
 | -------- | ------------------- | ---------------------------- |
@@ -214,12 +214,11 @@ Agent will: `create_service` → `create_database` → `get_service_credentials`
 
 ## Notification Channels
 
-For remote monitoring, connect notification channels:
+In 1.0, remote notifications are delivered by **email** via SMTP. Configure under **Settings → Operations → Channels → Email** (SMTP host, port, auth, from/to addresses), or under `channels.email` in `config.json`.
 
-| Channel      | What You Need       |
-| ------------ | ------------------- |
-| **Slack**    | Webhook URL         |
-| **Discord**  | Webhook URL         |
-| **Telegram** | Bot token + Chat ID |
-
-Configure in Settings → Channels (web UI) or in `config.json` under `channels`.
+| Channel      | Status                  |
+| ------------ | ----------------------- |
+| **Email**    | Supported in 1.0 (SMTP) |
+| **Slack**    | Planned for 1.0.x       |
+| **Discord**  | Planned for 1.0.x       |
+| **Telegram** | Planned for 1.0.x       |

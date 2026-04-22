@@ -1216,7 +1216,7 @@ AI: bugs.md → 해결됨 + gh issue close
 | CLI-lite Commands (deploy, status, logs, open, projects ls) | ✅   |
 | TUI Freeze (git tag `tui-last` @ e927b30)                   | ✅   |
 
-**의사결정 기록**: [`references/decision-log.md`](../../references/decision-log.md)
+**의사결정 기록**: [`planning/context/decision-log.md`](./context/decision-log.md)
 
 ---
 

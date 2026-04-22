@@ -60,7 +60,7 @@ Infrastructure (Docker + Traefik + Cloudflare + SQLite)
 
 ### Integration
 
-- [[MCP Tools Reference]] — Complete tool reference for AI agents (82 tools)
+- [[MCP Tools Reference]] — Complete tool reference for AI agents (99 tools)
 - [[Integration Guide]] — Connect OpenClaw, Claude Code, Cursor, and more
 
 ---
