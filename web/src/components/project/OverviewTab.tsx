@@ -697,7 +697,9 @@ export function OverviewTab({
               })}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground py-4 text-center">No deployments yet</p>
+            <p className="text-xs text-muted-foreground py-4 text-center">
+              {t('projectDetail.noDeployments')}
+            </p>
           )}
         </section>
       </div>

@@ -894,7 +894,6 @@ export const translations = {
     postmortems: '장애 분석',
     patterns: '패턴',
     usage: '사용량',
-    incidentsComingSoon: '장애 뷰 준비 중',
     ai: {
       invoked: 'AI 호출 시작',
       completed: 'AI 호출 완료',

@@ -898,7 +898,6 @@ export const translations = {
     postmortems: 'Alert Reports',
     patterns: 'Patterns',
     usage: 'Usage',
-    incidentsComingSoon: 'Alerts view coming soon',
     ai: {
       invoked: 'AI Invoked',
       completed: 'AI Completed',

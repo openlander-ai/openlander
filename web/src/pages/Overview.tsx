@@ -155,7 +155,7 @@ export function Overview() {
             value={stats?.open_incidents ?? 0}
             label={t('overview.kpi.incidents')}
             attention={(stats?.open_incidents ?? 0) > 0 ? 'critical' : undefined}
-            onClick={() => navigate('/operations?tab=incidents')}
+            onClick={() => navigate('/operations?tab=live')}
           />
           <KpiCard
             icon={<HeartOff className="h-5 w-5" />}

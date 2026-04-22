@@ -121,7 +121,7 @@ export function DeploymentsList() {
   });
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 bg-app">
+    <div className="flex flex-col h-full w-full">
       <PageHeader title={t('deploymentsList.title')} />
       <div className="flex-1 overflow-auto p-6 xl:p-8">
         <div className="w-full space-y-6">

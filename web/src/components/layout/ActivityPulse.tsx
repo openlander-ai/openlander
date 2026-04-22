@@ -94,7 +94,7 @@ export function ActivityPulse() {
 
       {/* Open Incidents */}
       <button
-        onClick={() => navigate('/operations?tab=incidents')}
+        onClick={() => navigate('/operations?tab=live')}
         className={cn(
           'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
           stats.open_incidents > 0
