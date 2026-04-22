@@ -1,6 +1,13 @@
 # MCP Tools Reference
 
-OpenLander exposes **99 MCP tools** for AI coding agents to deploy and manage projects programmatically.
+OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
+
+- **4 composite tools** (`openlander_deploy`, `openlander_project`, `openlander_service`, `openlander_monitor`) bundling **70 actions** — enabled by default
+- **11 platform tools** for server admin (health, docker inspect, etc.) — gated behind `config.mcp.platformTools: true`
+
+Each composite takes `{ action, params }` — e.g. `openlander_deploy({ action: "deploy", params: { repo_url: "..." } })`. Run `{ action: "help" }` on any composite to list its action catalog.
+
+Internally these compose 99 `ToolDef` entries (used by both the web UI and MCP adapter); the counts below refer to the underlying category groupings, which roll up into the 4 composites.
 
 ## Tool Categories
 

@@ -135,7 +135,7 @@ Setup:
          AI retries with fix.
          Build succeeds — green.
 
-[55-65s] Text overlay: "99 MCP tools — deploy from Cursor or Claude Code"
+[55-65s] Text overlay: "70+ MCP actions — deploy from Cursor or Claude Code"
          (Optional: quick terminal clip showing MCP deploy)
 
 [65-75s] Feature highlights (text overlays, fast cuts):

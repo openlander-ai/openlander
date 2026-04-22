@@ -105,7 +105,7 @@ src/
 │   ├── service-manager.ts   #   Infrastructure services
 │   └── service-adapters/    #   DB adapters (postgres, mysql, redis)
 ├── tools/                   # MCP Tool System
-│   ├── defs/                #   ToolDef definitions (20 files, 99 tools)
+│   ├── defs/                #   ToolDef definitions (20 files, 99 tools — internal; MCP surface is 4 composite tools + 11 opt-in platform)
 │   │   ├── types.ts         #   ToolDef interface
 │   │   └── index.ts         #   Registry exports
 │   └── adapters/            #   Protocol adapters
@@ -297,7 +297,7 @@ interface ToolDef {
 }
 ```
 
-20 tool definition files, 99 tools. Two adapters convert ToolDefs to:
+20 tool definition files, 99 internal tools. The MCP adapter bundles these into **4 composite tools** (`openlander_deploy|_project|_service|_monitor`, 70 actions) exposed by default, plus **11 platform tools** gated by `config.mcp.platformTools`. Two adapters convert ToolDefs to:
 
 - `src/tools/adapters/mcp.ts` — MCP protocol format (4 composite tools)
 - `src/tools/adapters/ai-sdk.ts` — Vercel AI SDK format

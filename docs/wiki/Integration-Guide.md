@@ -167,18 +167,29 @@ Local stdio connections (Claude Desktop, Cursor, Windsurf) don't need tokens —
 
 ## Available Tools
 
-Once connected, AI agents get 99 tools. Key ones:
+Once connected, AI agents see **4 composite MCP tools** bundling **70 actions** (plus 11 optional platform tools with `config.mcp.platformTools: true`). Each composite takes `{ action, params }`:
 
-| Task     | Tool                | Description                  |
-| -------- | ------------------- | ---------------------------- |
-| Deploy   | `deploy`            | One-call deploy from Git URL |
-| Status   | `get_deploy_status` | Check deployment status      |
-| List     | `list_projects`     | Show all projects            |
-| Logs     | `get_logs`          | Container logs               |
-| Env Vars | `set_env_vars`      | Set environment variables    |
-| Rollback | `rollback_project`  | Revert to previous version   |
-| Share    | `share_project`     | Generate public URL          |
-| Service  | `create_service`    | Create database/cache        |
+| Composite            | Actions | Purpose                                               |
+| -------------------- | ------- | ----------------------------------------------------- |
+| `openlander_deploy`  | 20      | Deploy lifecycle: plans, execution, rollback, build   |
+| `openlander_project` | 21      | Project management: lifecycle, env, secrets, webhooks |
+| `openlander_service` | ~17     | Services & infra: databases, caches, volumes          |
+| `openlander_monitor` | ~12     | Monitoring & ops: logs, alerts, stats, recovery       |
+
+Sample actions (accessible via `{ action: "<name>", params: {...} }`):
+
+| Task     | Composite → action                        | Description                  |
+| -------- | ----------------------------------------- | ---------------------------- |
+| Deploy   | `openlander_deploy` → `deploy`            | One-call deploy from Git URL |
+| Status   | `openlander_deploy` → `get_deploy_status` | Check deployment status      |
+| List     | `openlander_project` → `list_projects`    | Show all projects            |
+| Logs     | `openlander_monitor` → `get_logs`         | Container logs               |
+| Env Vars | `openlander_project` → `set_env_vars`     | Set environment variables    |
+| Rollback | `openlander_deploy` → `rollback_project`  | Revert to previous version   |
+| Share    | `openlander_project` → `expose_public`    | Generate public URL          |
+| Service  | `openlander_service` → `create_service`   | Create database/cache        |
+
+Run `{ action: "help" }` on any composite for the full action list.
 
 Full reference: [[MCP Tools Reference]]
 
