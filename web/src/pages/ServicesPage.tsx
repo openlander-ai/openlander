@@ -85,7 +85,7 @@ export function ServicesPage() {
 
   if (loading) {
     return (
-      <div className="p-6 xl:p-8 max-w-8xl mx-auto space-y-6">
+      <div className="p-6 xl:p-8 w-full space-y-6">
         <h2 className="text-lg font-semibold text-foreground">{t('services.title')}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
@@ -105,7 +105,7 @@ export function ServicesPage() {
 
   if (services.length === 0) {
     return (
-      <div className="p-6 xl:p-8 max-w-8xl mx-auto space-y-6">
+      <div className="p-6 xl:p-8 w-full space-y-6">
         <h2 className="text-lg font-semibold text-foreground">{t('services.title')}</h2>
         <PageEmptyState
           icon={Database}
@@ -129,7 +129,7 @@ export function ServicesPage() {
   }
 
   return (
-    <div className="p-6 xl:p-8 max-w-8xl mx-auto space-y-6">
+    <div className="p-6 xl:p-8 w-full space-y-6">
       <h2 className="text-lg font-semibold text-foreground">{t('services.title')}</h2>
 
       <CreateServiceDialog

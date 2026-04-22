@@ -98,7 +98,7 @@ export function DeploymentDetail() {
         : MinusCircle;
 
   return (
-    <div className="flex flex-col h-full bg-bg-app max-w-8xl mx-auto w-full">
+    <div className="flex flex-col h-full bg-bg-app w-full">
       <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel px-6 py-4">
         <div className="flex flex-col gap-3">
           <button

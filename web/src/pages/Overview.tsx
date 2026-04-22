@@ -101,7 +101,7 @@ export function Overview() {
 
   if (loading) {
     return (
-      <div className="p-6 xl:p-8 max-w-8xl mx-auto w-full space-y-8">
+      <div className="p-6 xl:p-8 w-full space-y-8">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <Skeleton key={i} className="h-24 w-full rounded-lg" />
@@ -122,7 +122,7 @@ export function Overview() {
   }
 
   return (
-    <div className="p-6 xl:p-8 max-w-8xl mx-auto w-full space-y-8">
+    <div className="p-6 xl:p-8 w-full space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="font-display font-bold text-2xl text-foreground tracking-tight">
           {t('overview.title')}

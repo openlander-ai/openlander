@@ -59,7 +59,7 @@ export function ProjectsGrid() {
 
   if (projectsLoading || systemLoading) {
     return (
-      <div className="p-6 xl:p-8 max-w-8xl mx-auto w-full space-y-6">
+      <div className="p-6 xl:p-8 w-full space-y-6">
         <div className="flex items-center justify-between mb-6">
           <div>
             <Skeleton className="h-7 w-32 mb-2" />
@@ -77,7 +77,7 @@ export function ProjectsGrid() {
   }
 
   return (
-    <div className="p-6 xl:p-8 max-w-8xl mx-auto w-full space-y-8">
+    <div className="p-6 xl:p-8 w-full space-y-8">
       <SystemHealthCards
         serverStatus={serverStatus}
         setupStatus={setupStatus}
