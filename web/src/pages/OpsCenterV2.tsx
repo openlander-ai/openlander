@@ -231,19 +231,18 @@ export function OpsCenterV2() {
               value="live"
               className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
             >
-              <div className="flex flex-col lg:flex-row gap-6 items-start mb-6">
-                <div className="flex-1 w-full">
-                  <FilterBar filters={filters} projects={projects} onFilterChange={setFilters} />
+              {circuitBreakers.length > 0 && (
+                <div className="mb-6 rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-3">
+                  <CircuitBreakerWidget
+                    circuitBreakers={circuitBreakers}
+                    onFilter={() => setFilters({ ...filters, density: 'actions-only' })}
+                    onReset={retry}
+                  />
                 </div>
-                {circuitBreakers.length > 0 && (
-                  <div className="w-full lg:w-64 shrink-0 bg-bg-subtle/30 rounded-lg border border-[hsl(var(--border))] p-3">
-                    <CircuitBreakerWidget
-                      circuitBreakers={circuitBreakers}
-                      onFilter={() => setFilters({ ...filters, density: 'actions-only' })}
-                      onReset={retry}
-                    />
-                  </div>
-                )}
+              )}
+
+              <div className="mb-6">
+                <FilterBar filters={filters} projects={projects} onFilterChange={setFilters} />
               </div>
 
               <MainFeedGrid
