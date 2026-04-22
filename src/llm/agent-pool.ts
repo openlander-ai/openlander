@@ -25,17 +25,26 @@ export const STATE_CHANGING_TOOLS = new Set([
 ]);
 
 /**
- * Stale lock timeout: 15 minutes (1.0 GA B3).
+ * Stale lock timeout: 30 minutes (1.0 GA — Codex Day 16 cumulative cross-check).
  *
- * Aligned with the DB-level `cleanExpiredDeployLocks` default so the
- * in-memory project lock and the persisted `deploy_lock_*` columns expire
- * in the same window. Previously the in-memory lock TTL was 5min while the
- * DB-level expiry was 30min; that gap left a race window where the
- * in-memory lock evicted but the DB lock still surfaced a deeper 409. The
- * watchdog (`RECOVERING_TIMEOUT_MS`) is intentionally longer (60min) — it
- * frees rows stuck in `recovering` state, not deploy locks.
+ * Aligned with the DB-level `cleanExpiredDeployLocks` default AND
+ * `recovery-policy.ts:DEFAULT_LOCK_STALE_MS` so the in-memory project
+ * lock, persisted `deploy_lock_*` columns, and recovery-policy stale
+ * window all expire in the same 30min window.
+ *
+ * Why 30min and not 15min: a slow first-build (Rails monolith with cold
+ * `bundle install` + `assets:precompile`, or a Next.js project with a
+ * fresh dependency tree on a low-end host) can take 20-25min. With a
+ * 15min TTL, the in-memory lock evicts mid-build, a second user click
+ * lets a duplicate redeploy start, and BUG-002 reappears. 30min covers
+ * realistic worst-case builds for 1.0 GA. Anything beyond 30min is
+ * documented in docs/launchpad/first-24h-runbook.md (force-release
+ * workaround) until the 1.0.x heartbeat/lease-renewal lands.
+ *
+ * The watchdog (`RECOVERING_TIMEOUT_MS`) is intentionally longer (60min)
+ * — it frees rows stuck in `recovering` state, not deploy locks.
  */
-export const PROJECT_LOCK_TIMEOUT_MS = 15 * 60 * 1000;
+export const PROJECT_LOCK_TIMEOUT_MS = 30 * 60 * 1000;
 
 interface PoolEntry {
   agent: Agent;

@@ -44,6 +44,18 @@ Day 16 security-reviewer 결과 (single-tenant 1.0 ship-safe, 그러나 multi-us
 - **B3 (NIT)**: `DockerBuildError` 가 build log 마지막 2KB 노출 — secret-shaped token 가능성. → 정규식 redaction.
 - **B4 (NIT)**: 마이그레이션 backfill 결과 audit 안 됨. → migration_audit 테이블.
 
+### 4b. Codex Day 16 cross-check 발견 — 1.0.x로 deferred
+
+Codex (gpt-5.4) cross-check가 NO-GO 판정한 1 CRITICAL + 3 HIGH + 1 MED. CRITICAL은 즉시 fix (TTL 15→30min, commit 추가됨). 나머지 HIGH 3건은 architecture 큰 작업이라 1.0.x로 deferred:
+
+- **HIGH 1 — Lock manager AgentPool 의존**: `src/web/api/project-routes.ts` 7곳 모두 `if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(...))` 패턴 → LLM 비활성 install 에서 lock guard 전부 disable. → `src/lib/project-lock-manager.ts` 별도 module로 분리, `AppContext.lockManager` 추가, AI 여부 무관 항상 활성. (시도했으나 cascading API change로 48 test fail → revert. 1.0.x에 신중히 재시도.)
+
+- **HIGH 2 — Pipeline boundary lock 누락**: `src/pipeline/deploy-core.ts:1992, 2046, 2090` `pipeline.stop/archive/remove` 자체에 lock 없음. MCP tools (`src/tools/defs/project-ops.ts:61, 385`) 가 직접 호출 시 우회. `src/monitor/rollback-watcher.ts:145, src/monitor/ops-recovery.ts:589` 도 동일. → 7곳 fix는 web route 에서만 작동. boundary lock으로 모든 entry point 보호 필요.
+
+- **HIGH 3 — Watchdog deferral indefinite**: `src/monitor/container-state-reconciler.ts:154` 가 `getDeployLockInfo()` 결과 있으면 timeout skip. `src/db/repos/project.repo.ts:418` `getDeployLockInfo` 자체가 expired row 정리 안 함. → `getDeployLockInfo` 가 `>30min` 자동 NULL 반환 또는 정리. 1.0 ship 시 새 30min TTL이 cleanExpiredDeployLocks에 자동 적용되므로 부분 mitigation.
+
+- **MED — Test 강화**: `test/web/api/danger-actions-lock.test.ts` 가 mock pipeline 의존, real DB lock expiry / AI-disabled mode / throw-path release 미검증. → integration test 추가.
+
 ### 5. 첫 24h ops 알림 hook
 
 - **현재**: GA 첫 24h 사용자가 problem 생기면 알 방법 없음 (dashboard 봐야 함).

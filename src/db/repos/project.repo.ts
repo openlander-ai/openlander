@@ -421,11 +421,13 @@ export class ProjectRepo {
     return { session: project.deploy_lock_session, lockedAt: project.deploy_lock_at };
   }
 
-  // 1.0 GA B3: default aligned with `PROJECT_LOCK_TIMEOUT_MS` (15min in
-  // `src/llm/agent-pool.ts`) so the in-memory project lock and the
-  // persisted DB lock expire in the same window — eliminates the race
-  // where in-memory lock frees but DB lock still 409s for 25 more minutes.
-  cleanExpiredDeployLocks(timeoutMinutes = 15): number {
+  // 1.0 GA B3: default aligned with `PROJECT_LOCK_TIMEOUT_MS` (30min in
+  // `src/llm/agent-pool.ts`, 30min) so the in-memory project lock and
+  // the persisted DB lock expire in the same window — also matches
+  // recovery-policy.ts:DEFAULT_LOCK_STALE_MS. Bumped 15→30 (Codex Day 16)
+  // so slow first-builds (Rails / Next.js cold start ≈ 20-25min) do not
+  // evict mid-build and reintroduce BUG-002.
+  cleanExpiredDeployLocks(timeoutMinutes = 30): number {
     this.db
       .update(projects)
       .set({ deploy_lock_session: null, deploy_lock_at: null })

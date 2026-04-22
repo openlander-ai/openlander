@@ -498,10 +498,11 @@ export class Database implements AuthDatabase {
     return this.projectRepo.releaseDeployLock(projectId, sessionId);
   }
   getDeployLockInfo(projectId: string) { return this.projectRepo.getDeployLockInfo(projectId); }
-  // 1.0 GA B3: default aligned with PROJECT_LOCK_TIMEOUT_MS (15min in
-  // src/llm/agent-pool.ts) so in-memory + DB lock TTLs share a single
-  // window. Callers can override per-call when needed.
-  cleanExpiredDeployLocks(timeoutMinutes = 15) { return this.projectRepo.cleanExpiredDeployLocks(timeoutMinutes); }
+  // 1.0 GA B3 + Codex Day 16 follow-up: default aligned with
+  // PROJECT_LOCK_TIMEOUT_MS (30min in src/llm/agent-pool.ts) AND
+  // recovery-policy.ts:DEFAULT_LOCK_STALE_MS so in-memory + DB lock TTLs
+  // + recovery stale window all share a single 30-min boundary.
+  cleanExpiredDeployLocks(timeoutMinutes = 30) { return this.projectRepo.cleanExpiredDeployLocks(timeoutMinutes); }
   createEnvironment(environment: Parameters<EnvironmentRepo['createEnvironment']>[0]) { return this.environmentRepo.createEnvironment(environment); }
   getEnvironment(id: string) { return this.environmentRepo.getEnvironment(id); }
   getEnvironmentsByProject(projectId: string) { return this.environmentRepo.getEnvironmentsByProject(projectId); }
