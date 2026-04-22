@@ -19,7 +19,7 @@ import { FilterBar, useFilterSearchParams } from '@/components/ops/v2/FilterBar'
 import { CircuitBreakerWidget } from '@/components/ops/v2/CircuitBreakerWidget';
 import { IncidentDetailSlideover } from '@/components/ops/v2/IncidentDetailSlideover';
 import { KeyboardShortcutsHelp } from '@/components/ops/v2/KeyboardShortcutsHelp';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ApprovalsTab } from '@/components/ops/ApprovalsTab';
 import { PostmortemsTab } from '@/components/ops/PostmortemsTab';
 import { PatternsTab } from '@/components/ops/PatternsTab';
@@ -37,6 +37,9 @@ function deriveHealthState(
   if (incidents.length > 0) return 'degraded';
   return 'healthy';
 }
+
+const triggerClass =
+  'flex items-center gap-2 w-full !justify-start text-left px-3 py-2 rounded-md text-xs font-body transition-colors shadow-none data-[state=active]:bg-bg-subtle data-[state=active]:text-foreground data-[state=active]:font-medium text-foreground/80 hover:text-foreground hover:bg-bg-subtle/50 whitespace-nowrap';
 
 export function OpsCenterV2() {
   const { t } = useLanguage();
@@ -148,7 +151,7 @@ export function OpsCenterV2() {
   }, [activities, filters]);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 bg-app">
+    <div className="flex flex-col h-full w-full">
       <PageHeader
         title={t('opsV2.page.title')}
         actions={<KeyboardShortcutsHelp helpButtonRef={helpButtonRef} />}
@@ -162,61 +165,72 @@ export function OpsCenterV2() {
         connectionStatus={isLoading ? undefined : connectionStatus}
       />
 
-      <div className="flex-1 overflow-auto p-6 xl:p-8">
-        <div className="w-full min-w-0 space-y-6">
-          {isReconnecting && (
-            <div className="flex items-center gap-3 rounded-md bg-warning/10 border border-warning/20 px-4 py-3 text-sm text-warning">
-              <Loader2 className="h-4 w-4 animate-spin text-warning" />
-              <p>{t('opsV2.errors.retrying').replace('{count}', String(error?.retryCount ?? 1))}</p>
-            </div>
-          )}
-          {error && !isReconnecting && (
-            <div className="flex items-center justify-between gap-3 rounded-md bg-error/10 border border-error/20 px-4 py-3 text-sm text-error">
-              <div className="flex items-center gap-3">
-                <AlertCircle className="h-4 w-4 text-error" />
+      <Tabs
+        value={activeTab}
+        onValueChange={setTab}
+        className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden"
+      >
+        {/* Sub-sidebar (matches SettingsPage / ProjectDetail → Settings nav) */}
+        <TabsList className="flex flex-row md:flex-col h-auto md:h-full w-full md:w-48 bg-bg-panel p-3 gap-1 justify-start md:items-stretch shrink-0 overflow-x-auto md:overflow-y-auto border-b md:border-b-0 md:border-r border-[hsl(var(--border))]">
+          <TabsTrigger value="live" className={triggerClass}>
+            <Activity className="h-4 w-4 shrink-0" />
+            {t('ops.live')}
+          </TabsTrigger>
+          <TabsTrigger value="approvals" className={triggerClass}>
+            <ShieldCheck className="h-4 w-4 shrink-0" />
+            {t('ops.approvals')}
+          </TabsTrigger>
+          <TabsTrigger value="postmortems" className={triggerClass}>
+            <FileText className="h-4 w-4 shrink-0" />
+            {t('ops.postmortems')}
+          </TabsTrigger>
+          <TabsTrigger value="patterns" className={triggerClass}>
+            <TrendingUp className="h-4 w-4 shrink-0" />
+            {t('ops.patterns')}
+          </TabsTrigger>
+          <TabsTrigger value="usage" className={triggerClass}>
+            <BarChart3 className="h-4 w-4 shrink-0" />
+            {t('ops.usage')}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Main content area */}
+        <div className="flex-1 min-w-0 overflow-auto p-6 xl:p-8">
+          <div className="w-full min-w-0 space-y-6">
+            {isReconnecting && (
+              <div className="flex items-center gap-3 rounded-md bg-warning/10 border border-warning/20 px-4 py-3 text-sm text-warning">
+                <Loader2 className="h-4 w-4 animate-spin text-warning" />
                 <p>
-                  {error.type === 'connection_lost'
-                    ? t('opsV2.errors.connectionLost')
-                    : error.type === 'api_error'
-                      ? t('opsV2.errors.apiError')
-                      : error.message}
+                  {t('opsV2.errors.retrying').replace('{count}', String(error?.retryCount ?? 1))}
                 </p>
               </div>
-              <button
-                onClick={retry}
-                className="flex items-center gap-2 rounded bg-bg-panel px-3 py-1.5 text-xs font-medium text-foreground hover:bg-bg-subtle border border-[hsl(var(--border))] transition-colors"
-              >
-                <RefreshCw className="h-3 w-3" />
-                {t('opsV2.errors.retry')}
-              </button>
-            </div>
-          )}
+            )}
+            {error && !isReconnecting && (
+              <div className="flex items-center justify-between gap-3 rounded-md bg-error/10 border border-error/20 px-4 py-3 text-sm text-error">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="h-4 w-4 text-error" />
+                  <p>
+                    {error.type === 'connection_lost'
+                      ? t('opsV2.errors.connectionLost')
+                      : error.type === 'api_error'
+                        ? t('opsV2.errors.apiError')
+                        : error.message}
+                  </p>
+                </div>
+                <button
+                  onClick={retry}
+                  className="flex items-center gap-2 rounded bg-bg-panel px-3 py-1.5 text-xs font-medium text-foreground hover:bg-bg-subtle border border-[hsl(var(--border))] transition-colors"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  {t('opsV2.errors.retry')}
+                </button>
+              </div>
+            )}
 
-          <Tabs value={activeTab} onValueChange={setTab} className="w-full">
-            <TabsList className="mb-4">
-              <TabsTrigger value="live">
-                <Activity className="h-4 w-4 mr-1.5" />
-                {t('ops.live')}
-              </TabsTrigger>
-              <TabsTrigger value="approvals">
-                <ShieldCheck className="h-4 w-4 mr-1.5" />
-                {t('ops.approvals')}
-              </TabsTrigger>
-              <TabsTrigger value="postmortems">
-                <FileText className="h-4 w-4 mr-1.5" />
-                {t('ops.postmortems')}
-              </TabsTrigger>
-              <TabsTrigger value="patterns">
-                <TrendingUp className="h-4 w-4 mr-1.5" />
-                {t('ops.patterns')}
-              </TabsTrigger>
-              <TabsTrigger value="usage">
-                <BarChart3 className="h-4 w-4 mr-1.5" />
-                {t('ops.usage')}
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="live">
+            <TabsContent
+              value="live"
+              className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
+            >
               <div className="flex flex-col lg:flex-row gap-6 items-start mb-6">
                 <div className="flex-1 w-full">
                   <FilterBar filters={filters} projects={projects} onFilterChange={setFilters} />
@@ -232,36 +246,46 @@ export function OpsCenterV2() {
                 )}
               </div>
 
-              <main className="min-w-0">
-                <MainFeedGrid
-                  activities={filteredActivities}
-                  isFiltered={activities.length > 0 && filteredActivities.length === 0}
-                  onClearFilters={() => setFilters({ ...filters, density: 'all' })}
-                  onThreadSelect={handleThreadSelect}
-                  focusedIndex={currentFocusIndex}
-                  onThreadCountChange={setThreadCount}
-                />
-              </main>
+              <MainFeedGrid
+                activities={filteredActivities}
+                isFiltered={activities.length > 0 && filteredActivities.length === 0}
+                onClearFilters={() => setFilters({ ...filters, density: 'all' })}
+                onThreadSelect={handleThreadSelect}
+                focusedIndex={currentFocusIndex}
+                onThreadCountChange={setThreadCount}
+              />
             </TabsContent>
 
-            <TabsContent value="approvals">
+            <TabsContent
+              value="approvals"
+              className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
+            >
               <ApprovalsTab />
             </TabsContent>
 
-            <TabsContent value="postmortems">
+            <TabsContent
+              value="postmortems"
+              className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
+            >
               <PostmortemsTab />
             </TabsContent>
 
-            <TabsContent value="patterns">
+            <TabsContent
+              value="patterns"
+              className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
+            >
               <PatternsTab />
             </TabsContent>
 
-            <TabsContent value="usage">
+            <TabsContent
+              value="usage"
+              className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
+            >
               <UsageTab />
             </TabsContent>
-          </Tabs>
+          </div>
         </div>
-      </div>
+      </Tabs>
 
       <IncidentDetailSlideover
         incidentId={selectedIncidentId}
