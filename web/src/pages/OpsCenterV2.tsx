@@ -165,6 +165,19 @@ export function OpsCenterV2() {
         connectionStatus={isLoading ? undefined : connectionStatus}
       />
 
+      {circuitBreakers.length > 0 && (
+        <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-subtle/30 px-6 xl:px-8 py-3">
+          <CircuitBreakerWidget
+            circuitBreakers={circuitBreakers}
+            onFilter={() => {
+              setTab('live');
+              setFilters({ ...filters, density: 'actions-only' });
+            }}
+            onReset={retry}
+          />
+        </div>
+      )}
+
       <Tabs
         value={activeTab}
         onValueChange={setTab}
@@ -231,16 +244,6 @@ export function OpsCenterV2() {
               value="live"
               className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
             >
-              {circuitBreakers.length > 0 && (
-                <div className="mb-6 rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-3">
-                  <CircuitBreakerWidget
-                    circuitBreakers={circuitBreakers}
-                    onFilter={() => setFilters({ ...filters, density: 'actions-only' })}
-                    onReset={retry}
-                  />
-                </div>
-              )}
-
               <div className="mb-6">
                 <FilterBar filters={filters} projects={projects} onFilterChange={setFilters} />
               </div>

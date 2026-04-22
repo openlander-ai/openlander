@@ -9,6 +9,20 @@
 
 ## P0 (1.0.x 첫 릴리스에 반드시)
 
+### 0. UI Day-16 tri-review 잔여 항목 (2026-04-22 OMC triple pass)
+
+`code-reviewer` + `critic` + `designer` 3-agent 교차 리뷰에서 SHIP-BLOCKER 3건은 1.0에서 fix, 나머지는 1.0.x로 deferred.
+
+- **Dual-token 마이그레이션 완전 이행**: 커밋 `54c4f9c` 는 text 토큰만 옮김. `bg-bg-app/panel/subtle` 400+곳 잔존 (신규 primitive `PageHeader.tsx:22`, `page-empty-state.tsx:24` 포함). 커밋 헤드라인이 실제 범위를 과장. 1.0.x에서 codemod + Playwright 시각 회귀로 완료. OL 토큰은 `tailwind.config.js:71-75`에 아직 살아있어 정상 렌더 유지. (Why: D-9에 400+ replace는 회귀 기계. How to apply: codemod 준비되면 1주일 버퍼 확보 후 실행.)
+- **`Incidents → Alerts` 영문 리네임 재검토**: 한국어 `장애`는 유지 (탁월). 영어 `Alerts`는 SRE 표준(PagerDuty/Datadog)과 충돌 가능. 30일 후 사용자 피드백 기반 재결정. 되돌릴 경우 i18n 값만 수정 (키 unchanged).
+- **Incidents/Postmortem 내부 심볼 정리**: UI는 Alerts/Alert Reports로 리네임됐으나 API path (`/api/ops/incidents`, `/api/ops/postmortems`), URL param (`?tab=postmortems`), prop (`activeIncidentCount`), i18n 키 (`ops.postmortems`, `postmortemsTab`) 모두 옛 이름 유지 중. 2.0에서 coordinated rename.
+- **PageEmptyState 채택 gap**: `DeploymentsList.tsx:176`, `RecoveryTab.tsx:199/230`, `MainFeedGrid.tsx:457/476`, `Overview.tsx:176/190/236` 아직 인라인 empty-state. 마이그 + PageEmptyState에 `size="sm"` variant 추가 (tab interior용 `p-6 / h-8 w-8`).
+- **Badge 라이트모드 contrast 강화**: `yellow` variant (`bg-yellow-500/15 text-yellow-800`), `green` (`text-emerald-700`) 흰 카드 위에서 WCAG AA 4.5:1 미달 가능. 각 700→800 bump 또는 amber로 교체.
+- **Navigation 일관성**: `AiFeaturesSection.tsx:277`의 `<a href="/settings?tab=operations">`를 `<Link to>` / `navigate()`로 교체 (풀 리로드 방지).
+- **NewProjectFlow PageHeader 마이그**: `NewProjectFlow.tsx:171-180`이 PageHeader 구조를 수동 재구현. 1:1 교체 가능.
+- **StatusDot/LoadingState**: 2026-04-22에 "orphan primitive 0 consumer"로 판단하여 삭제. 1.0.x에서 "상태 점이 자주 반복되는 곳" 3+곳 발견되면 재도입 검토.
+- **ServicesPage 카드 일관성**: `rounded-xl border-2 border-dashed` / `rounded-xl border` / `rounded-md border/60 bg-bg-app/20` 3종 혼재. dokploy 정합성 위해 단일 카드 atom으로 통합.
+
 ### 1. LLM cooldown DB persist + `recovery:blocked` 이벤트
 
 - **현재**: `src/pipeline/auto-recovery.ts` 의 LLM unreachable cooldown이 module-level `let` 변수 — process restart 시 0으로 reset.

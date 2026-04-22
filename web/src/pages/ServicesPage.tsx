@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageEmptyState } from '@/components/ui/page-empty-state';
+import { Badge } from '@/components/ui/badge';
 import { getServices, getServiceTemplates, type Service, type ServiceTemplate } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Plus, Database } from 'lucide-react';
@@ -22,13 +23,12 @@ function getRelativeTime(dateStr: string): string {
   return `${mins}m`;
 }
 
-function getTypeColor(type: string) {
+function getTypeVariant(type: string): 'blue' | 'red' | 'orange' | 'neutral' {
   const t = type.toLowerCase();
-  if (t === 'postgres' || t === 'postgresql')
-    return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-  if (t === 'redis') return 'bg-red-500/10 text-red-500 border-red-500/20';
-  if (t === 'mysql') return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
-  return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
+  if (t === 'postgres' || t === 'postgresql') return 'blue';
+  if (t === 'redis') return 'red';
+  if (t === 'mysql') return 'orange';
+  return 'neutral';
 }
 
 function formatUptime(seconds: number): string {
@@ -185,14 +185,12 @@ export function ServicesPage() {
                         </h3>
                       </div>
                       {service.type && (
-                        <span
-                          className={cn(
-                            'px-2 py-0.5 rounded-md text-[10px] font-medium uppercase tracking-wider border shrink-0 ml-2',
-                            getTypeColor(service.type),
-                          )}
+                        <Badge
+                          variant={getTypeVariant(service.type)}
+                          className="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider shrink-0 ml-2"
                         >
                           {service.type.toLowerCase()}
-                        </span>
+                        </Badge>
                       )}
                     </div>
                     <p className="text-xs font-mono text-muted-foreground truncate">

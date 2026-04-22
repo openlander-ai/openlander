@@ -184,7 +184,7 @@
 
 **시나리오**:
 
-- [ ] **C5S1 (Tabs render)**: /operations → 6탭 (Live/Incidents/Approvals/Postmortems/Patterns/Usage) 전환
+- [ ] **C5S1 (Tabs render)**: /operations → 5탭 (Live/Approvals/Alert Reports/Patterns/Usage) 전환
   - PASS: 각 탭 console.error 0건 + 비예상 4xx/5xx 0건
 
 - [ ] **C5S2 (Keyboard shortcuts)**: Live 탭 → j (next), k (prev), / (focus search), ? (help), Esc (close)
@@ -193,18 +193,18 @@
 - [ ] **C5S3 (SSE backfill + live)**: 페이지 로드 → DevTools Network → 'backfill-complete' 도달 모니터
   - PASS: backfill 후 live 전환, 중복 row 0
 
-- [ ] **C5S4 (Incident from crash, BUG-013/014)**: `docker kill qa-c5-crash` → Live + Incidents 탭 모니터
-  - PASS: 70초 안에 (a) Live feed에 container:die, (b) Incidents 탭 신규 row, (c) ProjectDetail Operations 탭 같은 incident
+- [ ] **C5S4 (Incident from crash, BUG-013/014)**: `docker kill qa-c5-crash` → Live 탭 모니터
+  - PASS: 70초 안에 (a) Live feed에 container:die 이벤트, (b) StatusStrip active 카운트 +1, (c) ProjectDetail Operations 탭 같은 incident
   - FAIL: 셋 중 하나라도 누락 또는 카운트 불일치
 
-- [ ] **C5S5 (Incident slideover)**: 새 incident 클릭 → slideover → 이벤트 타임라인 → Esc 닫힘
+- [ ] **C5S5 (Incident slideover)**: Live 탭에서 새 incident 관련 activity 클릭 → IncidentDetailSlideover 열림 → 이벤트 타임라인 → Esc 닫힘
   - PASS: slideover 정확 + Esc 동작
 
-- [ ] **C5S6 (Circuit breaker open/reset, O2)**: crash 5회 반복 → CircuitBreakerWidget에 'open' → Reset → Confirm
-  - PASS: 5회 실패 후 open + Reset 후 closed
+- [ ] **C5S6 (Circuit breaker open/reset, O2)**: crash 5회 반복 → CircuitBreakerWidget 배너에 'open' → Reset → Confirm
+  - PASS: 5회 실패 후 open + Reset 후 closed. 탭 무관하게 브레이커 배너가 항상 보여야 함
 
-- [ ] **C5S7 (Postmortem auto-gen, O3)**: C5S4 후 5분 안정성 창 대기 → Postmortems 탭
-  - PASS: 5~10분 안에 postmortem 카드 + LLM 분석 텍스트
+- [ ] **C5S7 (Alert Report auto-gen, O3)**: C5S4 후 5분 안정성 창 대기 → Alert Reports 탭
+  - PASS: 5~10분 안에 report 카드 + LLM 분석 텍스트
   - Note: LLM 비용 발생, 잔액 확인
 
 **Cleanup**: `qa-c5-crash` Purge

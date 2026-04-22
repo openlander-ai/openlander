@@ -15,11 +15,9 @@
 export type AppStatus = 'running' | 'stopped' | 'building' | 'error' | 'idle';
 
 export interface StatusDisplay {
-  /** Status for <StatusDot> primitive (ui/status-dot.tsx). */
-  dotStatus: 'success' | 'warning' | 'error' | 'idle';
-  /** Pre-composed dot bg class (legacy consumers — prefer <StatusDot>). */
+  /** Pre-composed dot bg class. */
   dot: string;
-  /** Pre-composed pill-badge className (legacy — prefer <Badge variant="..."/>). */
+  /** Pre-composed pill-badge className (inline legacy — new sites may use <Badge variant={badgeVariant} />). */
   badge: string;
   /** Semantic Badge variant for new call sites. */
   badgeVariant: 'green' | 'yellow' | 'red' | 'neutral';
@@ -31,7 +29,6 @@ export interface StatusDisplay {
 
 const STATUS_MAP: Record<AppStatus, StatusDisplay> = {
   running: {
-    dotStatus: 'success',
     dot: 'bg-success',
     badge: 'bg-success/10 text-success border border-success/30',
     badgeVariant: 'green',
@@ -39,7 +36,6 @@ const STATUS_MAP: Record<AppStatus, StatusDisplay> = {
     border: 'border-success/20',
   },
   stopped: {
-    dotStatus: 'idle',
     dot: 'bg-muted-foreground/40',
     badge: 'bg-muted text-muted-foreground border border-border',
     badgeVariant: 'neutral',
@@ -47,7 +43,6 @@ const STATUS_MAP: Record<AppStatus, StatusDisplay> = {
     border: 'border-[hsl(var(--border))]',
   },
   building: {
-    dotStatus: 'warning',
     dot: 'bg-warning',
     badge: 'bg-warning/10 text-warning border border-warning/30',
     badgeVariant: 'yellow',
@@ -55,7 +50,6 @@ const STATUS_MAP: Record<AppStatus, StatusDisplay> = {
     border: 'border-warning/30',
   },
   error: {
-    dotStatus: 'error',
     dot: 'bg-error',
     badge: 'bg-error/10 text-error border border-error/30',
     badgeVariant: 'red',
@@ -63,7 +57,6 @@ const STATUS_MAP: Record<AppStatus, StatusDisplay> = {
     border: 'border-error/30',
   },
   idle: {
-    dotStatus: 'idle',
     dot: 'bg-muted-foreground/40',
     badge: 'bg-muted text-muted-foreground border border-border',
     badgeVariant: 'neutral',
