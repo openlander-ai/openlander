@@ -50,12 +50,14 @@ describe('deploy-flow unification integration evidence', () => {
     expect(source).not.toContain('agent_completed_without_deploy_project');
   });
 
-  it('keeps both web entry points routed to unified deploy endpoint assumptions', () => {
-    const deployDialog = readSource('web/src/components/layout/DeployDialog.tsx');
+  it('keeps the surviving web entry point routed to the unified deploy endpoint', () => {
+    // V4 cleanup deleted the legacy DeployDialog.tsx — NewProjectFlow is now
+    // the single web entry point that drives /api/projects/deploy. The
+    // assertion below pins that contract: the page imports the typed API
+    // helper and the helper still POSTs to the unified endpoint.
     const newProjectFlow = readSource('web/src/pages/NewProjectFlow.tsx');
     const apiClient = readSource('web/src/lib/api/projects.ts');
 
-    expect(deployDialog).toContain("import { deployProject } from '@/lib/api';");
     expect(newProjectFlow).toContain("import { deployProject } from '@/lib/api';");
     expect(apiClient).toContain("return apiPost<DeployResult>('/api/projects/deploy', body);");
   });

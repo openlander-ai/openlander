@@ -91,6 +91,17 @@ interface TopologyNode {
 const topologyCacheInvalidationRegistered = new WeakSet<object>();
 
 function registerTopologyCacheInvalidation(ctx: AppContext): void {
+  // Defensive: test fixtures may construct AppContext without an eventBus
+  // at all, or mock it with `.emit` only and omit `.on`. The cache
+  // invalidation hook is a perf optimization, not a correctness
+  // requirement (15s TTL still bounds staleness), so silently skip
+  // subscription when the bus or `.on` is unavailable. Production
+  // EventBus (src/events/index.ts) provides both methods.
+  const bus = ctx.eventBus as { on?: unknown; emit?: unknown } | undefined;
+  if (!bus || typeof bus.on !== 'function') {
+    return;
+  }
+
   // Re-mounting routes (e.g. test harness) must not stack subscribers.
   // Guard on the eventBus identity so each bus only registers once.
   if (topologyCacheInvalidationRegistered.has(ctx.eventBus)) {
@@ -104,9 +115,14 @@ function registerTopologyCacheInvalidation(ctx: AppContext): void {
       if (project) {
         invalidateTopologyNodeCache(project.container_id);
       }
-      const children = ctx.db.getChildProjects(projectId);
-      for (const child of children) {
-        invalidateTopologyNodeCache(child.container_id);
+      // getChildProjects is a Database method but some narrow test
+      // fixtures stub `db` with only the methods they exercise — guard
+      // so the optional cache lookup never crashes the subscription.
+      if (typeof ctx.db.getChildProjects === 'function') {
+        const children = ctx.db.getChildProjects(projectId);
+        for (const child of children) {
+          invalidateTopologyNodeCache(child.container_id);
+        }
       }
     } catch (err) {
       log.debug({ err, projectId }, 'topology cache invalidation lookup failed');

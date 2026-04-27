@@ -57,56 +57,82 @@ describe('CLI lifecycle commands (1.0 GA: foreground-only)', () => {
     rmSync(tmpHome, { recursive: true, force: true });
   });
 
+  // Each `runCli` invocation spawns `npx tsx` and re-imports the CLI graph
+  // — cold-start can exceed vitest's 5s default when other suites contend
+  // for CPU. Match the in-test 30s spawn budget so the suite is not flaky
+  // under parallel load.
+  const CLI_TEST_TIMEOUT_MS = 30_000;
+
   describe('openlander stop', () => {
-    it('exits 0 and prints supervisor guidance when nothing is running', () => {
-      const result = runCli(['stop'], tmpHome);
+    it(
+      'exits 0 and prints supervisor guidance when nothing is running',
+      () => {
+        const result = runCli(['stop'], tmpHome);
 
-      expect(result.status).toBe(0);
-      expect(result.stdout).toMatch(/does not run as a background daemon/i);
-      expect(result.stdout).toMatch(/systemctl|pm2|docker/);
-    });
+        expect(result.status).toBe(0);
+        expect(result.stdout).toMatch(/does not run as a background daemon/i);
+        expect(result.stdout).toMatch(/systemctl|pm2|docker/);
+      },
+      CLI_TEST_TIMEOUT_MS,
+    );
 
-    it('removes stale daemon socket and pid file from older installs', () => {
-      const socketPath = join(openlanderDir, 'openlander.sock');
-      const pidPath = join(openlanderDir, 'openlander.pid');
-      writeFileSync(socketPath, '');
-      writeFileSync(pidPath, '99999');
+    it(
+      'removes stale daemon socket and pid file from older installs',
+      () => {
+        const socketPath = join(openlanderDir, 'openlander.sock');
+        const pidPath = join(openlanderDir, 'openlander.pid');
+        writeFileSync(socketPath, '');
+        writeFileSync(pidPath, '99999');
 
-      const result = runCli(['stop'], tmpHome);
+        const result = runCli(['stop'], tmpHome);
 
-      expect(result.status).toBe(0);
-      expect(existsSync(socketPath)).toBe(false);
-      expect(existsSync(pidPath)).toBe(false);
-      expect(result.stdout).toMatch(/Cleaned up stale daemon artifacts/i);
-    });
+        expect(result.status).toBe(0);
+        expect(existsSync(socketPath)).toBe(false);
+        expect(existsSync(pidPath)).toBe(false);
+        expect(result.stdout).toMatch(/Cleaned up stale daemon artifacts/i);
+      },
+      CLI_TEST_TIMEOUT_MS,
+    );
   });
 
   describe('openlander restart', () => {
-    it('exits 0 and points the user at the supervisor (no double-start)', () => {
-      const result = runCli(['restart'], tmpHome);
+    it(
+      'exits 0 and points the user at the supervisor (no double-start)',
+      () => {
+        const result = runCli(['restart'], tmpHome);
 
-      expect(result.status).toBe(0);
-      expect(result.stdout).toMatch(/does not run as a background daemon/i);
-      expect(result.stdout).toMatch(/systemctl|pm2|docker/);
-    });
+        expect(result.status).toBe(0);
+        expect(result.stdout).toMatch(/does not run as a background daemon/i);
+        expect(result.stdout).toMatch(/systemctl|pm2|docker/);
+      },
+      CLI_TEST_TIMEOUT_MS,
+    );
 
-    it('does not create or touch socket/pid files', () => {
-      const socketPath = join(openlanderDir, 'openlander.sock');
-      const pidPath = join(openlanderDir, 'openlander.pid');
+    it(
+      'does not create or touch socket/pid files',
+      () => {
+        const socketPath = join(openlanderDir, 'openlander.sock');
+        const pidPath = join(openlanderDir, 'openlander.pid');
 
-      runCli(['restart'], tmpHome);
+        runCli(['restart'], tmpHome);
 
-      expect(existsSync(socketPath)).toBe(false);
-      expect(existsSync(pidPath)).toBe(false);
-    });
+        expect(existsSync(socketPath)).toBe(false);
+        expect(existsSync(pidPath)).toBe(false);
+      },
+      CLI_TEST_TIMEOUT_MS,
+    );
   });
 
   describe('openlander start --help', () => {
-    it('documents that start runs in the foreground', () => {
-      const result = runCli(['start', '--help'], tmpHome);
+    it(
+      'documents that start runs in the foreground',
+      () => {
+        const result = runCli(['start', '--help'], tmpHome);
 
-      expect(result.status).toBe(0);
-      expect(result.stdout.toLowerCase()).toContain('foreground');
-    });
+        expect(result.status).toBe(0);
+        expect(result.stdout.toLowerCase()).toContain('foreground');
+      },
+      CLI_TEST_TIMEOUT_MS,
+    );
   });
 });
