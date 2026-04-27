@@ -133,7 +133,7 @@ export function MCPServer() {
       >
         {!mcpStatus || mcpStatus.totalConnected === 0 ? (
           <div className="py-6 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
-            Agent session list appears after the first MCP connection.
+            No active sessions. Connect an agent to see it here.
           </div>
         ) : (
           <div className="flex flex-col divide-y divide-[color:var(--ol-border-subtle)]">
@@ -163,9 +163,9 @@ export function MCPServer() {
         )}
       </OuterCard>
 
-      {/* Recent agent calls — sourced from /api/activity?actor=mcp */}
+      {/* Agent activity — sourced from /api/activity?actor=mcp */}
       <OuterCard
-        title="Recent agent calls"
+        title="Agent activity"
         subtitle="MCP-triggered events only. Full history under Activity."
         actions={
           <button

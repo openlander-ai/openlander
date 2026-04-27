@@ -57,7 +57,18 @@ function shortSha(sha: string | null): string {
 function parseTimestamp(value: string | number | null): number | null {
   if (value == null) return null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  const ms = Date.parse(value);
+  // SQLite's CURRENT_TIMESTAMP returns "YYYY-MM-DD HH:MM:SS" (UTC, no offset).
+  // Node's Date.parse interprets that as LOCAL time, which silently breaks
+  // relative-time and sort order on non-UTC hosts. Detect the
+  // no-timezone-suffix shape and append `Z` so it parses as UTC.
+  const trimmed = value.trim();
+  const hasTimezone = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(trimmed);
+  const normalized = hasTimezone
+    ? trimmed
+    : trimmed.includes('T')
+      ? `${trimmed}Z`
+      : `${trimmed.replace(' ', 'T')}Z`;
+  const ms = Date.parse(normalized);
   return Number.isNaN(ms) ? null : ms;
 }
 
@@ -80,54 +91,55 @@ export function createActivityRoutes(ctx: AppContext): Hono {
       projectNameById.set(p.id, p.name);
     }
 
+    const projectScoped =
+      projectFilter !== undefined && projectFilter !== '' && projectFilter !== 'all';
+
     // --- Source 1: deploy_logs ---
-    // The repo only exposes by-project queries today; iterate active projects
-    // and merge. Capped at limit per project to bound work; outer slice
-    // re-trims the merged set.
-    const perProjectLimit = Math.max(20, Math.ceil(limit / Math.max(projects.length, 1)));
-    for (const project of projects) {
-      if (projectFilter && projectFilter !== 'all' && projectFilter !== project.id) continue;
-      const rows = ctx.db.getDeployLogs(project.id, perProjectLimit);
-      for (const row of rows) {
-        const ms = parseTimestamp(row.created_at);
-        if (ms == null) continue;
-        const { at, relTs } = relativeTime(ms, now);
-        const sha = shortSha(row.commit_sha);
-        const kind = deployKindFromStatus(row.status);
-        const actor = deployActor(row.trigger);
-        const titleVerb =
-          kind === 'deploy_completed'
-            ? 'Deploy succeeded'
-            : kind === 'deploy_failed'
-              ? 'Deploy failed'
-              : 'Deploy cancelled';
-        const titleSuffix = sha ? ` · ${sha}` : '';
-        const detail = row.commit_message
-          ? row.commit_message.split('\n')[0]?.slice(0, 120)
-          : (row.trigger_detail ?? undefined);
-        events.push({
-          id: `deploy-${row.id}`,
-          actor,
-          kind,
-          at,
-          relTs,
-          project: project.id,
-          service: null,
-          title: `${titleVerb}${titleSuffix} · ${project.name}`,
-          detail,
-        });
-      }
+    // Cross-project recency query — iterating per-project with caps could
+    // drop hot-project rows.
+    const deployRows = ctx.db.listRecentDeployLogsAcrossProjects(limit * 3);
+    for (const row of deployRows) {
+      if (projectScoped && row.project_id !== projectFilter) continue;
+      const ms = parseTimestamp(row.created_at);
+      if (ms == null) continue;
+      const { at, relTs } = relativeTime(ms, now);
+      const sha = shortSha(row.commit_sha);
+      const kind = deployKindFromStatus(row.status);
+      const actor = deployActor(row.trigger);
+      const titleVerb =
+        kind === 'deploy_completed'
+          ? 'Deploy succeeded'
+          : kind === 'deploy_failed'
+            ? 'Deploy failed'
+            : 'Deploy cancelled';
+      const titleSuffix = sha ? ` · ${sha}` : '';
+      const detail = row.commit_message
+        ? row.commit_message.split('\n')[0]?.slice(0, 120)
+        : (row.trigger_detail ?? undefined);
+      events.push({
+        id: `deploy-${row.id}`,
+        actor,
+        kind,
+        at,
+        relTs,
+        project: row.project_id,
+        service: null,
+        // Project name is intentionally omitted — ActivityRow renders the
+        // project badge from `event.project`, so re-encoding it in the
+        // title would duplicate.
+        title: `${titleVerb}${titleSuffix}`,
+        detail,
+      });
     }
 
     // --- Source 2: runtime_incidents ---
-    // listUnresolved is cheap; resolved ones we surface via per-project fetch
-    // capped to recent rows. Crashes generally outnumber recoveries so two
-    // queries keep the merged list balanced.
+    // listUnresolved is cheap (filtered by `resolved=0`); recent resolved
+    // ones come from a dedicated cross-project query for symmetry.
     const unresolved = ctx.db.listUnresolvedRuntimeIncidents();
     for (const inc of unresolved) {
+      if (projectScoped && inc.project_id !== projectFilter) continue;
       const ms = parseTimestamp(inc.created_at);
       if (ms == null) continue;
-      if (projectFilter && projectFilter !== 'all' && projectFilter !== inc.project_id) continue;
       const projectName = projectNameById.get(inc.project_id) ?? inc.project_id;
       const { at, relTs } = relativeTime(ms, now);
       const detailBits: string[] = [];
@@ -144,51 +156,52 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         relTs,
         project: inc.project_id,
         service: null,
-        title: `\`${projectName}\` crashed`,
-        detail: detailBits.length > 0 ? detailBits.join(' · ') : undefined,
+        // Title leans on project badge in the UI; raw project name kept
+        // out of the headline so the timeline stays uniform.
+        title: 'Service crashed',
+        detail: detailBits.length > 0 ? `${projectName} · ${detailBits.join(' · ')}` : projectName,
       });
     }
 
-    // For resolved incidents, only fetch a small window per project.
-    for (const project of projects) {
-      if (projectFilter && projectFilter !== 'all' && projectFilter !== project.id) continue;
-      const resolvedRows = ctx.db.listRuntimeIncidentsByProject(project.id, { resolved: true });
-      const recentResolved = resolvedRows.slice(0, 10);
-      for (const inc of recentResolved) {
-        const ms = parseTimestamp(inc.resolved_at ?? inc.created_at);
-        if (ms == null) continue;
-        const { at, relTs } = relativeTime(ms, now);
-        events.push({
-          id: `recover-${inc.id}`,
-          actor: 'system',
-          kind: 'service_recovered',
-          at,
-          relTs,
-          project: project.id,
-          service: null,
-          title: `\`${project.name}\` recovered`,
-          detail: inc.category ? `from ${inc.category}` : undefined,
-        });
-      }
+    const resolved = ctx.db.listRecentResolvedRuntimeIncidents(limit * 2);
+    for (const inc of resolved) {
+      if (projectScoped && inc.project_id !== projectFilter) continue;
+      const ms = parseTimestamp(inc.resolved_at ?? inc.created_at);
+      if (ms == null) continue;
+      const { at, relTs } = relativeTime(ms, now);
+      events.push({
+        id: `recover-${inc.id}`,
+        actor: 'system',
+        kind: 'service_recovered',
+        at,
+        relTs,
+        project: inc.project_id,
+        service: null,
+        title: 'Service recovered',
+        detail: inc.category ? `from ${inc.category}` : undefined,
+      });
     }
 
     // --- Source 3: active MCP sessions (synthesized as mcp_connected) ---
     // Only currently-connected sessions surface. Disconnect history is not
-    // persisted today.
-    const mcpSessions = getMcpSessionsSnapshot();
-    for (const s of mcpSessions) {
-      const { at, relTs } = relativeTime(s.connectedAt, now);
-      events.push({
-        id: `mcp-${s.id}`,
-        actor: 'mcp',
-        kind: 'mcp_connected',
-        at,
-        relTs,
-        project: null,
-        service: null,
-        title: `MCP agent connected (${s.transport.toUpperCase()})`,
-        detail: `session ${s.id.slice(0, 8)}`,
-      });
+    // persisted today. Suppressed when the caller asks for a specific
+    // project, since these events are system-level (project=null).
+    if (!projectScoped) {
+      const mcpSessions = getMcpSessionsSnapshot();
+      for (const s of mcpSessions) {
+        const { at, relTs } = relativeTime(s.connectedAt, now);
+        events.push({
+          id: `mcp-${s.id}`,
+          actor: 'mcp',
+          kind: 'mcp_connected',
+          at,
+          relTs,
+          project: null,
+          service: null,
+          title: `MCP agent connected (${s.transport.toUpperCase()})`,
+          detail: `session ${s.id.slice(0, 8)}`,
+        });
+      }
     }
 
     // --- Merge sort + actor filter + slice ---

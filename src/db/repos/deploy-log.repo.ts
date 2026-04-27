@@ -88,4 +88,18 @@ export class DeployLogRepo {
       | DeployLogRow
       | undefined;
   }
+
+  /**
+   * Cross-project recency query. Used by the v4 /api/activity feed to merge
+   * deploy events from all projects without per-project caps that would
+   * otherwise drop hot-project rows.
+   */
+  listRecentAcrossProjects(limit = 100): DeployLogRow[] {
+    return this.db
+      .select()
+      .from(deployLogs)
+      .orderBy(desc(sql`rowid`))
+      .limit(limit)
+      .all() as DeployLogRow[];
+  }
 }

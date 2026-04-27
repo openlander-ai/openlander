@@ -90,6 +90,21 @@ export class RuntimeIncidentRepo {
       .all() as RuntimeIncidentRow[];
   }
 
+  /**
+   * Cross-project recent-resolved query. Used by the v4 /api/activity feed
+   * so the resolved-incident path doesn't have to load full per-project
+   * histories and slice in memory.
+   */
+  listRecentResolved(limit = 50): RuntimeIncidentRow[] {
+    return this.db
+      .select()
+      .from(runtimeIncidents)
+      .where(eq(runtimeIncidents.resolved, 1))
+      .orderBy(desc(runtimeIncidents.resolved_at))
+      .limit(limit)
+      .all() as RuntimeIncidentRow[];
+  }
+
   resolveIncident(id: string): void {
     this.db
       .update(runtimeIncidents)

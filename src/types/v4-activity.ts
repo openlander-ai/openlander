@@ -2,9 +2,10 @@
  * v4 Activity event shape — server contract for the cross-actor audit
  * timeline. Mirrored exactly by `web/src/lib/agentActivity.ts:ActivityEvent`.
  *
- * Keep these two type files in lockstep — the contract test in
- * `src/web/api/__tests__/activity-routes.contract.test.ts` will fail if they
- * drift.
+ * Keep these two type files in lockstep. A zod-backed parity test is
+ * scheduled for 1.1; until then, drift is caught by typecheck on the
+ * UI hook (`web/src/hooks/use-activity-feed.ts`) which casts the
+ * response payload to the UI ActivityEvent type.
  */
 
 export type Actor = 'mcp' | 'human' | 'webhook' | 'system';
