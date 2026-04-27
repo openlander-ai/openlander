@@ -18,7 +18,8 @@ import { OuterCard } from '@/components/Shell/OuterCard';
 import { InfraMap } from '@/components/Shell/InfraMap';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
-import { getProject, type ServiceNode } from '@/lib/projectTopology';
+import { type ServiceNode } from '@/lib/projectTopology';
+import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useIsBelowMd } from '@/hooks/use-viewport';
 import { useProjectTopology } from '@/hooks/use-project-topology';
 import { cn } from '@/lib/utils';
@@ -35,9 +36,37 @@ export function ProjectView() {
   const [activeTab, setActiveTab] = useState<ProjectTabId>(initialTab);
 
   const projectId = id ?? '';
-  const project = getProject(projectId);
+  const { projects, loading: projectsLoading } = useProjectsContext();
+  const realProject = projects.find((p) => p.id === projectId) ?? null;
   const { services, isMockFallback } = useProjectTopology(projectId || null);
   const isBelowMd = useIsBelowMd();
+
+  // Derive display-only fields from real project data
+  const projectInitials = realProject
+    ? realProject.name
+        .split(/[-_\s]/)
+        .slice(0, 2)
+        .map((w) => w[0]?.toUpperCase() ?? '')
+        .join('')
+    : projectId.slice(0, 2).toUpperCase();
+
+  // Deterministic hue from project id for consistent color without a backend field
+  const hue = [...projectId].reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
+  const projectColor = `oklch(0.58 0.17 ${hue})`;
+
+  const projectCreatedAt = realProject
+    ? new Date(realProject.createdAt).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : '—';
+  const projectUpdatedAt = realProject
+    ? new Date(realProject.updatedAt).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+      })
+    : '—';
 
   // Single helper so every internal navigation carries the project context.
   // Avoids drift where some callers forget to attach `?project=` and the
@@ -49,7 +78,17 @@ export function ProjectView() {
     [navigate, projectId],
   );
 
-  if (!project) {
+  // While projects are loading show a skeleton so we don't flash "not found"
+  if (projectsLoading && !realProject) {
+    return (
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
+        <div className="h-32 animate-pulse rounded-[var(--ol-radius)] bg-[color:var(--ol-panel-2)]" />
+        <div className="h-64 animate-pulse rounded-[var(--ol-radius)] bg-[color:var(--ol-panel-2)]" />
+      </div>
+    );
+  }
+
+  if (!projectsLoading && !realProject) {
     return (
       <div className="mx-auto w-full max-w-5xl">
         <OuterCard title="Project not found" subtitle={`No project with id "${projectId}"`}>
@@ -92,17 +131,17 @@ export function ProjectView() {
             <span
               aria-hidden
               className="grid h-6 w-6 place-items-center rounded-md text-[10px] font-semibold text-white"
-              style={{ backgroundColor: project.color }}
+              style={{ backgroundColor: projectColor }}
             >
-              {project.initials}
+              {projectInitials}
             </span>
-            <span>{project.name}</span>
+            <span>{realProject?.name ?? projectId}</span>
           </span>
         }
-        subtitle={project.description}
+        subtitle={realProject?.repoUrl ?? undefined}
         actions={
           <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
-            last deploy {project.lastDeploy} · created {project.createdAt}
+            updated {projectUpdatedAt} · created {projectCreatedAt}
           </span>
         }
         bodyClassName="p-0"
@@ -132,8 +171,8 @@ export function ProjectView() {
             events={[]}
             emptyState={
               <span>
-                No activity for <b>{project.name}</b> yet. When you (or an agent) deploys, restarts,
-                or changes anything in this project, it will appear here.
+                No activity for <b>{realProject?.name ?? projectId}</b> yet. When you (or an agent)
+                deploys, restarts, or changes anything in this project, it will appear here.
               </span>
             }
             onOpenService={(_p, sid) => openService(sid)}
