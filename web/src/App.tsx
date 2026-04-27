@@ -15,7 +15,6 @@ import { NewProjectFlow } from '@/pages/NewProjectFlow';
 import { ProjectsGrid } from '@/pages/ProjectsGrid';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ServicesPage } from '@/pages/ServicesPage';
-import { Overview } from '@/pages/Overview';
 import { DeploymentsList } from '@/pages/DeploymentsList';
 import { Home } from '@/pages/Home';
 import { Activity } from '@/pages/Activity';
@@ -212,7 +211,7 @@ function App() {
                   {/* Legacy pages — kept under V2 chrome until each is
                       individually rewritten. The visual mismatch is the
                       acceptable transition state for one launch cycle. */}
-                  <Route path="/overview" element={<Overview />} />
+                  <Route path="/overview" element={<Navigate to="/home" replace />} />
                   <Route path="/deployments" element={<DeploymentsList />} />
                   <Route path="/projects" element={<ProjectsGrid />} />
                   <Route path="/projects/new" element={<NewProjectFlow />} />

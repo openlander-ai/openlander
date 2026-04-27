@@ -11,7 +11,6 @@ import { SecuritySettingsTab } from '@/components/settings/SecuritySettingsTab';
 import { AiSettingsTab } from '@/components/settings/AiSettingsTab';
 import { McpSettingsTab } from '@/components/settings/McpSettingsTab';
 import { OperationsSettings } from '@/components/settings/OperationsSettings';
-import { PageHeader } from '@/components/layout/PageHeader';
 
 const VALID_TABS = ['system', 'security', 'proxy', 'github', 'ai', 'operations', 'mcp'] as const;
 type SettingsTab = (typeof VALID_TABS)[number];
@@ -39,7 +38,6 @@ export function SettingsPage() {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <PageHeader title={t('settings.title')} description={t('settings.description')} />
       <Tabs
         value={activeTab}
         onValueChange={(next) => setSearchParams({ tab: next })}
