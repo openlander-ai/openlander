@@ -135,6 +135,16 @@ function registerTopologyCacheInvalidation(ctx: AppContext): void {
   ctx.eventBus.on('deploy:failed', (payload) => {
     invalidateProjectContainers(payload.projectId);
   });
+  // Compose deploys never emit deploy:success / deploy:failed — they emit
+  // compose:up / compose:failed instead. Without these subscriptions the
+  // topology cache stayed stale for the full 15s TTL after a compose
+  // rollout or failure (Codex MEDIUM-1).
+  ctx.eventBus.on('compose:up', (payload) => {
+    invalidateProjectContainers(payload.projectId);
+  });
+  ctx.eventBus.on('compose:failed', (payload) => {
+    invalidateProjectContainers(payload.projectId);
+  });
 }
 
 async function fetchTopologyNodeRuntime(
