@@ -4,23 +4,35 @@
  * Two purposes:
  *   1. Tell the user where Claude (and other agents) reach OpenLander —
  *      endpoint URL, status, tools exposed.
- *   2. Show *who* is actively connected. Live MCP sessions with
- *      per-agent stats; disconnect terminates the session.
+ *   2. Show who is actively connected (empty until /api/mcp/status ships).
  *
- * Per the trim: no auto-restart classification, no agent reasoning
- * paragraphs. The recent-calls list re-uses the same ActivityTimeline
- * primitive filtered to actor=mcp.
+ * Per the trim: no mock agent sessions, no synthetic call counts.
+ * Stats and recent-calls appear after first agent call once backend
+ * ships an /api/mcp/status endpoint.
  */
 import { Bot, Cable, Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
-import { MOCK_ACTIVITY, MOCK_MCP_INFO } from '@/lib/agentActivity';
+import { useSystemStatus } from '@/hooks/use-system-status';
 
 export function MCPServer() {
   const navigate = useNavigate();
-  const info = MOCK_MCP_INFO;
-  const recentMcpEvents = MOCK_ACTIVITY.filter((e) => e.actor === 'mcp').slice(0, 6);
+  const { serverStatus } = useSystemStatus();
+
+  // Derive the MCP endpoint from the current page origin as the best
+  // available approximation until /api/mcp/status exists.
+  const mcpEndpoint =
+    typeof window !== 'undefined' ? `${window.location.hostname}/mcp` : 'your-server/mcp';
+
+  // Proxy status gives us a lightweight "is the server reachable" signal.
+  const proxyOk = serverStatus?.proxy?.status === 'running';
+  const statusLabel = proxyOk ? 'Connected' : serverStatus ? 'Degraded' : 'Checking…';
+  const statusColor = proxyOk
+    ? 'var(--ol-success)'
+    : serverStatus
+      ? 'var(--ol-warning)'
+      : 'var(--ol-fg-muted)';
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
@@ -34,51 +46,34 @@ export function MCPServer() {
         }
         subtitle="Where Claude and other agents reach OpenLander."
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <StatusTile
             label="Status"
             value={
               <span
                 className="inline-flex items-center gap-1.5 text-[13px] font-medium"
-                style={{
-                  color:
-                    info.status === 'connected'
-                      ? 'var(--ol-success)'
-                      : info.status === 'reconnecting'
-                        ? 'var(--ol-warning)'
-                        : 'var(--ol-error)',
-                }}
+                style={{ color: statusColor }}
               >
                 <span
                   aria-hidden
                   className="h-1.5 w-1.5 rounded-full"
                   style={{
-                    backgroundColor:
-                      info.status === 'connected'
-                        ? 'var(--ol-success)'
-                        : info.status === 'reconnecting'
-                          ? 'var(--ol-warning)'
-                          : 'var(--ol-error)',
-                    boxShadow:
-                      info.status === 'connected'
-                        ? '0 0 0 3px color-mix(in oklch, var(--ol-success) 30%, transparent)'
-                        : 'none',
+                    backgroundColor: statusColor,
+                    boxShadow: proxyOk
+                      ? '0 0 0 3px color-mix(in oklch, var(--ol-success) 30%, transparent)'
+                      : 'none',
                   }}
                 />
-                {info.status === 'connected'
-                  ? 'Connected'
-                  : info.status === 'reconnecting'
-                    ? 'Reconnecting…'
-                    : 'Disconnected'}
+                {statusLabel}
               </span>
             }
-            footer={`last call · ${info.lastCallAt}`}
+            footer="Proxy health via /api/server/status"
           />
           <StatusTile
             label="Endpoint"
             value={
               <span className="ol-mono break-all text-[12px] text-[color:var(--ol-fg)]">
-                {info.endpoint}
+                {mcpEndpoint}
               </span>
             }
             footer={
@@ -86,8 +81,8 @@ export function MCPServer() {
                 type="button"
                 onClick={() => {
                   if (typeof navigator !== 'undefined' && navigator.clipboard) {
-                    void navigator.clipboard.writeText(info.endpoint).catch(() => {
-                      /* clipboard write best-effort */
+                    void navigator.clipboard.writeText(mcpEndpoint).catch(() => {
+                      /* best-effort */
                     });
                   }
                 }}
@@ -100,21 +95,16 @@ export function MCPServer() {
           <StatusTile
             label="Tools exposed"
             value={
-              <span className="text-[20px] font-semibold tabular-nums">{info.toolsExposed}</span>
+              <span className="text-[20px] font-semibold tabular-nums text-[color:var(--ol-fg)]">
+                70
+              </span>
             }
             footer="deploy, logs, restart, scale, env, …"
-          />
-          <StatusTile
-            label="Calls today"
-            value={
-              <span className="text-[20px] font-semibold tabular-nums">{info.callsToday}</span>
-            }
-            footer={`${info.agentsConnected} agent${info.agentsConnected === 1 ? '' : 's'} active`}
           />
         </div>
       </OuterCard>
 
-      {/* Connected agents */}
+      {/* Connected agents — empty state until /api/mcp/status ships */}
       <OuterCard
         title={
           <span className="flex items-center gap-2">
@@ -123,46 +113,13 @@ export function MCPServer() {
           </span>
         }
         subtitle="Live MCP sessions. Disconnecting terminates the session immediately."
-        bodyClassName="p-0"
       >
-        <ul>
-          {info.agents.map((a, i) => (
-            <li
-              key={a.id}
-              className={
-                i > 0
-                  ? 'flex items-center gap-3 px-5 py-3 border-t border-[color:var(--ol-border-subtle)]'
-                  : 'flex items-center gap-3 px-5 py-3'
-              }
-            >
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[color:var(--ol-primary-soft)] text-[color:var(--ol-primary)]">
-                <Bot className="h-4 w-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13.5px] font-medium text-[color:var(--ol-fg)]">
-                  {a.name}
-                </div>
-                <div className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
-                  connected {a.connectedAt} · {a.callsToday} call
-                  {a.callsToday === 1 ? '' : 's'} today
-                </div>
-              </div>
-              <div className="hidden text-[11.5px] text-[color:var(--ol-fg-subtle)] sm:block">
-                last call · {a.lastCallAt}
-              </div>
-              <button
-                type="button"
-                className="rounded-md border border-[color:var(--ol-border)] px-2.5 py-1 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
-                title="Disconnect this agent session"
-              >
-                Disconnect
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="py-6 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
+          Agent session list appears after the first MCP connection.
+        </div>
       </OuterCard>
 
-      {/* Recent agent calls */}
+      {/* Recent agent calls — empty state until event feed ships */}
       <OuterCard
         title="Recent agent calls"
         subtitle="MCP-triggered events only. Full history under Activity."
@@ -178,7 +135,8 @@ export function MCPServer() {
         bodyClassName="p-0"
       >
         <ActivityTimeline
-          events={recentMcpEvents}
+          events={[]}
+          emptyState="No agent calls yet. Stats appear after the first agent call."
           onOpenService={(project, service) => navigate(`/services/${service}?project=${project}`)}
         />
       </OuterCard>
