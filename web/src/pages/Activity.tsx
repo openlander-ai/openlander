@@ -37,6 +37,7 @@ export function Activity() {
           bucketed
           emptyState="No activity yet. Triggers, deploys, agent runs, and incidents will appear here as they happen."
           onOpenService={(project, service) => navigate(`/services/${service}?project=${project}`)}
+          onOpenDeployment={(deploymentId) => navigate(`/deployments/${deploymentId}`)}
         />
       </OuterCard>
     </div>
