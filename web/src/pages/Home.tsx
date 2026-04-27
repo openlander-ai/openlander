@@ -6,13 +6,70 @@
  *   2. Projects grid — project cards with service-dot list
  *   3. Recent activity peek — top 5 events
  */
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
+import { TriggerChip } from '@/components/Shell/DeployRow';
 import { useProjectsContext } from '@/hooks/use-projects-context';
+import { useProjectTopology } from '@/hooks/use-project-topology';
+import { getProjectDeployments } from '@/lib/api';
+import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
+import type { DeployLogSummary } from '@/types';
+
+// ---- ServiceDots ----
+// Separate component so useProjectTopology can be called per-project
+// without violating the rules-of-hooks (no hook calls inside .map()).
+
+const SERVICE_DOT_CAP = 8;
+
+interface ServiceDotsProps {
+  projectId: string;
+  onDotClick: (projectId: string, serviceId: string, e: React.MouseEvent) => void;
+}
+
+function ServiceDots({ projectId, onDotClick }: ServiceDotsProps) {
+  const { services, isLoading } = useProjectTopology(projectId);
+
+  if (isLoading || services.length === 0) return null;
+
+  const visible = services.slice(0, SERVICE_DOT_CAP);
+  const overflow = services.length - visible.length;
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1">
+      {visible.map((svc) => (
+        <button
+          key={svc.id}
+          type="button"
+          title={`${svc.name} · ${svc.health}`}
+          onClick={(e) => onDotClick(projectId, svc.id, e)}
+          className={cn(
+            'h-2 w-2 shrink-0 rounded-full border transition-opacity hover:opacity-70',
+            svc.health === 'healthy'
+              ? 'border-transparent bg-[color:var(--ol-success)]'
+              : svc.health === 'crashed'
+                ? 'border-transparent bg-[color:var(--ol-error)]'
+                : 'border-[color:var(--ol-fg-subtle)] bg-transparent',
+          )}
+        />
+      ))}
+      {overflow > 0 && (
+        <span className="text-[10px] leading-none text-[color:var(--ol-fg-muted)]">
+          +{overflow}
+        </span>
+      )}
+    </div>
+  );
+}
+
+interface LastDeployState {
+  deploy: DeployLogSummary;
+  projectId: string;
+  projectName: string;
+}
 
 export function Home() {
   const navigate = useNavigate();
@@ -30,6 +87,41 @@ export function Home() {
   }, [projects]);
 
   const allHealthy = tally.crashed === 0;
+
+  // Fetch the most recent deploy across all projects
+  const [lastDeployState, setLastDeployState] = useState<LastDeployState | null>(null);
+  useEffect(() => {
+    if (projects.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const results = await Promise.all(
+          projects.map(async (p) => {
+            try {
+              const deploys = await getProjectDeployments(p.id, 1);
+              return deploys.length > 0
+                ? { deploy: deploys[0], projectId: p.id, projectName: p.name }
+                : null;
+            } catch {
+              return null;
+            }
+          }),
+        );
+        if (cancelled) return;
+        const valid = results.filter((r): r is LastDeployState => r !== null);
+        if (valid.length === 0) return;
+        const newest = valid.reduce((best, cur) =>
+          cur.deploy.createdAt > best.deploy.createdAt ? cur : best,
+        );
+        setLastDeployState(newest);
+      } catch {
+        // silently ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projects]);
 
   if (loading && projects.length === 0) {
     return (
@@ -85,6 +177,68 @@ export function Home() {
           </h1>
         </div>
       </OuterCard>
+
+      {/* ── 1b. Last-deploy hero row ── */}
+      {lastDeployState &&
+        (() => {
+          const { deploy, projectId, projectName } = lastDeployState;
+          const dotColor =
+            deploy.status === 'success'
+              ? 'var(--ol-success)'
+              : deploy.status === 'failed'
+                ? 'var(--ol-error)'
+                : 'var(--ol-fg-subtle)';
+          const shortSha = deploy.commitSha ? deploy.commitSha.slice(0, 7) : deploy.id.slice(0, 8);
+          const commitMsg = deploy.commitMessage
+            ? deploy.commitMessage.length > 60
+              ? deploy.commitMessage.slice(0, 60) + '…'
+              : deploy.commitMessage
+            : null;
+          const timeAgo = formatRelativeTime(deploy.createdAt);
+          return (
+            <button
+              type="button"
+              onClick={() => navigate(`/projects/${projectId}/deployments/${deploy.id}`)}
+              className={cn(
+                'group flex w-full items-center gap-3 rounded-[var(--ol-radius)] px-4 py-3',
+                'bg-[color:var(--ol-panel)] transition-colors hover:bg-[color:var(--ol-panel-2)]',
+                'text-left',
+              )}
+            >
+              {/* Status dot */}
+              <span
+                aria-hidden
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: dotColor }}
+              />
+
+              {/* Content */}
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-[12px] text-[color:var(--ol-fg-muted)]">
+                    Last deploy · {timeAgo}
+                  </span>
+                  <span className="text-[12.5px] font-medium text-[color:var(--ol-fg)]">
+                    {projectName}
+                  </span>
+                  <span className="ol-mono text-[11.5px] text-[color:var(--ol-fg-muted)]">
+                    {shortSha}
+                  </span>
+                  {commitMsg && (
+                    <span className="truncate text-[12px] text-[color:var(--ol-fg-muted)]">
+                      {commitMsg}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-0.5 flex items-center gap-2">
+                  <TriggerChip trigger={deploy.trigger} />
+                </div>
+              </div>
+
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[color:var(--ol-fg-subtle)] opacity-0 transition-opacity group-hover:opacity-60" />
+            </button>
+          );
+        })()}
 
       {/* ── 2. Projects grid ── */}
       <OuterCard
@@ -153,6 +307,14 @@ export function Home() {
                         ? `${p.serviceCount} service${p.serviceCount === 1 ? '' : 's'}`
                         : ''}
                     </div>
+                    {/* Service dots — one per service, color-coded by health */}
+                    <ServiceDots
+                      projectId={p.id}
+                      onDotClick={(projectId, serviceId, e) => {
+                        e.stopPropagation();
+                        navigate(`/services/${serviceId}?project=${projectId}`);
+                      }}
+                    />
                   </div>
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-40" />
                 </button>
