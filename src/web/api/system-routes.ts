@@ -365,19 +365,19 @@ export function createSystemRoutes(ctx: AppContext): Hono {
         );
       }
 
-      let health: 'healthy' | 'crashed' | 'running';
-      if (inspection.healthStatus === 'healthy') {
-        health = 'healthy';
-      } else if (
-        inspection.healthStatus === 'unhealthy' ||
-        inspection.healthStatus === 'starting'
-      ) {
-        health = 'crashed';
-      } else {
-        // No HEALTHCHECK declared (Docker reports `null`) — container
-        // is up but we can't assert healthy.
-        health = 'running';
-      }
+      // Phase 4 fix (Blocker 5): collapse to UI's 2-state vocabulary
+      // (`healthy | crashed`). The 3-state intermediate `running` was
+      // documented but the UI type + zod schema both reject it, so the
+      // health contract test fails when a seeded container has no
+      // HEALTHCHECK declared. Parity with /topology, which also lands
+      // on `healthy | crashed`.
+      //
+      //   docker 'healthy'                  → UI 'healthy'
+      //   docker 'starting' (start_period)  → UI 'healthy'  (grace window)
+      //   docker null (no HEALTHCHECK)      → UI 'healthy'  (collapsed from 'running')
+      //   docker 'unhealthy'                → UI 'crashed'
+      const health: 'healthy' | 'crashed' =
+        inspection.healthStatus === 'unhealthy' ? 'crashed' : 'healthy';
 
       return c.json({ health });
     } catch (err) {

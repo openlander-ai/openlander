@@ -55,13 +55,14 @@ GET /api/services/:id/health
 
 ```json
 {
-  "health": "healthy" | "crashed" | "running"
+  "health": "healthy" | "crashed"
 }
 ```
 
-- `"healthy"` — container running with Docker HEALTHCHECK reporting `healthy`
-- `"crashed"` — container running but healthcheck is `unhealthy` or `starting`
-- `"running"` — container running with no HEALTHCHECK declared
+- `"healthy"` — container running with Docker HEALTHCHECK reporting `healthy`,
+  OR healthcheck is in `starting` (grace window — treated as healthy by default),
+  OR no HEALTHCHECK declared (we can't prove unhealthy → assume healthy)
+- `"crashed"` — container running but healthcheck explicitly reports `unhealthy`
 
 **Response 404:** `{ error: "NOT_FOUND", message: string }` — service not
 found or container not running.
