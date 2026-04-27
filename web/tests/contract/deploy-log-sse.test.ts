@@ -12,20 +12,10 @@
  * strings on the wire.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
 import { z } from 'zod';
 import { DeployLineEventSchema, DeployEndEventSchema } from '../../src/lib/api/deploy-stream-zod';
 import { ErrorClassSchema } from '../../src/lib/api/services-zod';
-
-const PORT_FILE = join(import.meta.dirname, '..', '..', '.test-backend-port');
-
-function getBaseUrl(): string {
-  if (!existsSync(PORT_FILE)) {
-    throw new Error('Contract tests require a running backend via pretest:contract.');
-  }
-  return `http://127.0.0.1:${readFileSync(PORT_FILE, 'utf8').trim()}`;
-}
+import { getBaseUrl, authedFetch } from './helpers';
 
 /**
  * Reads SSE events from a fetch response stream until either:
@@ -39,7 +29,7 @@ async function collectSseEvents(url: string, maxEvents: number, timeoutMs = 10_0
 
   const events: unknown[] = [];
   try {
-    const res = await fetch(url, {
+    const res = await authedFetch(url, {
       signal: controller.signal,
       headers: { Accept: 'text/event-stream' },
     });
@@ -151,7 +141,7 @@ describe('deploy-log SSE contract', () => {
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 3_000);
 
-    const res = await fetch(`${baseUrl}/api/deployments/deploy-running-1/log/stream`, {
+    const res = await authedFetch(`${baseUrl}/api/deployments/deploy-running-1/log/stream`, {
       signal: controller.signal,
       headers: { Accept: 'text/event-stream' },
     }).catch((e: Error) => {

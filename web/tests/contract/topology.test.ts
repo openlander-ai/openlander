@@ -6,22 +6,9 @@
  * response shape and the UI TypeScript type → zod parse failure here.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
 import { z } from 'zod';
 import { ProjectTopologyResponseSchema, ServiceNodeSchema } from '../../src/lib/api/topology-zod';
-
-const PORT_FILE = join(import.meta.dirname, '..', '..', '.test-backend-port');
-
-function getBaseUrl(): string {
-  if (!existsSync(PORT_FILE)) {
-    throw new Error(
-      'Contract tests require a running backend. Run npm run test:contract which boots it via pretest:contract.',
-    );
-  }
-  const port = readFileSync(PORT_FILE, 'utf8').trim();
-  return `http://127.0.0.1:${port}`;
-}
+import { getBaseUrl, authedFetch } from './helpers';
 
 describe('topology contract', () => {
   let baseUrl: string;
@@ -31,7 +18,7 @@ describe('topology contract', () => {
   });
 
   it('GET /api/projects/hotdeal-tracker/topology returns a parseable topology response', async () => {
-    const res = await fetch(`${baseUrl}/api/projects/hotdeal-tracker/topology`);
+    const res = await authedFetch(`${baseUrl}/api/projects/hotdeal-tracker/topology`);
     expect(res.status).toBe(200);
 
     const body: unknown = await res.json();
@@ -41,7 +28,7 @@ describe('topology contract', () => {
   });
 
   it('each service node has valid health, kind, and dependsOn array', async () => {
-    const res = await fetch(`${baseUrl}/api/projects/hotdeal-tracker/topology`);
+    const res = await authedFetch(`${baseUrl}/api/projects/hotdeal-tracker/topology`);
     const body: unknown = await res.json();
     const { services } = ProjectTopologyResponseSchema.parse(body);
 

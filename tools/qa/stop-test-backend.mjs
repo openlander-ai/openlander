@@ -15,6 +15,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEB_DIR = join(__dirname, '..', '..', 'web');
 const PID_FILE = join(WEB_DIR, '.test-backend-pid');
 const PORT_FILE = join(WEB_DIR, '.test-backend-port');
+const TOKEN_FILE = join(WEB_DIR, '.test-backend-token');
 const DB_PATH = '/tmp/ol-contract-test.db';
 
 if (existsSync(PID_FILE)) {
@@ -32,6 +33,7 @@ if (existsSync(PID_FILE)) {
 }
 
 if (existsSync(PORT_FILE)) unlinkSync(PORT_FILE);
+if (existsSync(TOKEN_FILE)) unlinkSync(TOKEN_FILE);
 if (existsSync(DB_PATH)) unlinkSync(DB_PATH);
 
 console.log('[stop-test-backend] cleanup complete');

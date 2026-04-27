@@ -1,118 +1,113 @@
 -- Contract test seed fixture for OpenLander 1.0
--- Loaded by tools/qa/start-test-backend.mjs before vitest runs.
+-- Loaded by tools/qa/start-test-backend.mjs AFTER drizzle migrations have run
+-- against /tmp/ol-contract-test.db. The columns below match the schema as of
+-- migration 0007 — keep this file in lockstep with `drizzle/000*.sql`.
 --
--- Schema must match src/db/schema.sql (or the ORM migration).
 -- Contents are kept minimal — just enough to exercise all 5 contract tests:
---   topology.test.ts     → 1 project with 3 services (non-trivial graph)
---   health.test.ts       → service with known health state
---   metrics.test.ts      → 1 service WITH metrics (200 path) + 1 WITHOUT (204 path)
---   deploy-log-sse.test.ts → 1 completed deploy + 1 running deploy
---   notifications-webhook.test.ts → NO webhook stored (404 path first, then POST)
---
--- IDs are stable strings to make test assertions predictable.
+--   topology.test.ts     → 1 project (hotdeal-tracker) — topology endpoint
+--                           reads from `projects` (single-project deploys
+--                           expose themselves as a 1-node topology).
+--   health.test.ts       → 1 service (svc-web) with status='running'
+--                           (the route collapses 'running' → 'healthy').
+--   metrics.test.ts      → svc-web has metric rows (200 path)
+--                           svc-db has NO metric rows (204 path).
+--   deploy-log-sse.test.ts → 1 completed deploy_log + 1 running deploy_log.
+--   notifications-webhook.test.ts → NO webhook stored (404 path first).
 
 -- ─── Project ──────────────────────────────────────────────────────────────────
-INSERT OR REPLACE INTO projects (id, slug, name, description, initials, color, created_at, updated_at)
+-- Topology resolves `:id` via id-or-name, so id=name keeps the URL stable.
+INSERT OR REPLACE INTO projects (id, name, repo_url, branch, status, source, created_at, updated_at)
 VALUES (
   'hotdeal-tracker',
   'hotdeal-tracker',
-  'hotdeal-tracker',
-  'Korean hot-deal aggregator · web + api + worker + postgres',
-  'HT',
-  'oklch(0.65 0.18 155)',
-  '2025-01-15T00:00:00Z',
-  '2025-01-15T00:00:00Z'
+  'https://github.com/example/hotdeal-tracker.git',
+  'main',
+  'running',
+  'git',
+  '2025-01-15T00:00:00.000Z',
+  '2025-01-15T00:00:00.000Z'
 );
 
 -- ─── Services ─────────────────────────────────────────────────────────────────
--- web service (has metrics history)
-INSERT OR REPLACE INTO services (id, project_id, name, kind, image, port, health, url, depends_on, created_at, updated_at)
+-- The services table is global (no project_id). svc-web is the seeded
+-- "has-metrics" service; svc-db is the seeded "no-metrics" service that
+-- exercises the 204 path.
+INSERT OR REPLACE INTO services (id, name, type, image, status, container_id, container_name, port, created_at, updated_at)
 VALUES (
   'svc-web',
-  'hotdeal-tracker',
-  'web',
-  'Application',
+  'svc-web',
+  'application',
   'node:22-alpine',
-  3000,
-  'healthy',
-  'https://hotdeal.example.com',
-  '[]',
-  '2025-01-15T00:00:00Z',
-  '2025-01-15T00:00:00Z'
-);
-
--- api service (has metrics history)
-INSERT OR REPLACE INTO services (id, project_id, name, kind, image, port, health, url, depends_on, created_at, updated_at)
-VALUES (
-  'svc-api',
-  'hotdeal-tracker',
-  'api',
-  'Application',
-  'node:22-alpine',
-  4000,
-  'healthy',
+  'running',
   NULL,
-  '["svc-db"]',
-  '2025-01-15T00:00:00Z',
-  '2025-01-15T00:00:00Z'
+  'ol-svc-svc-web',
+  3000,
+  '2025-01-15T00:00:00.000Z',
+  '2025-01-15T00:00:00.000Z'
 );
 
--- db service (NO metrics history → triggers 204 path in metrics.test.ts)
-INSERT OR REPLACE INTO services (id, project_id, name, kind, image, port, health, url, depends_on, created_at, updated_at)
+INSERT OR REPLACE INTO services (id, name, type, image, status, container_id, container_name, port, created_at, updated_at)
 VALUES (
   'svc-db',
-  'hotdeal-tracker',
-  'db',
-  'Database',
+  'svc-db',
+  'postgresql',
   'postgres:16-alpine',
-  5432,
-  'healthy',
+  'running',
   NULL,
-  '[]',
-  '2025-01-15T00:00:00Z',
-  '2025-01-15T00:00:00Z'
+  'ol-svc-svc-db',
+  5432,
+  '2025-01-15T00:00:00.000Z',
+  '2025-01-15T00:00:00.000Z'
 );
 
--- ─── Metrics (for svc-web — 60 datapoints, gives 200 response) ───────────────
--- Stored as a single row of JSON arrays; the backend query unpacks them.
-INSERT OR REPLACE INTO service_metrics (service_id, range_key, cpu_json, memory_json, rps_json, error_rate_json, p95_latency_ms, total_requests, recorded_at)
-VALUES (
-  'svc-web',
-  '1h',
-  '[2.1,2.3,2.0,1.9,2.2,2.4,2.1,2.0,1.8,2.5,2.3,2.1,2.0,1.9,2.2,2.4,2.1,2.0,1.8,2.5,2.3,2.1,2.0,1.9,2.2,2.4,2.1,2.0,1.8,2.5,2.3,2.1,2.0,1.9,2.2,2.4,2.1,2.0,1.8,2.5,2.3,2.1,2.0,1.9,2.2,2.4,2.1,2.0,1.8,2.5,2.3,2.1,2.0,1.9,2.2,2.4,2.1,2.0,1.8,2.5]',
-  '[184,186,183,182,185,187,184,183,181,188,186,184,183,182,185,187,184,183,181,188,186,184,183,182,185,187,184,183,181,188,186,184,183,182,185,187,184,183,181,188,186,184,183,182,185,187,184,183,181,188,186,184,183,182,185,187,184,183,181,188]',
-  '[32,34,31,30,33,35,32,31,29,36,34,32,31,30,33,35,32,31,29,36,34,32,31,30,33,35,32,31,29,36,34,32,31,30,33,35,32,31,29,36,34,32,31,30,33,35,32,31,29,36,34,32,31,30,33,35,32,31,29,36]',
-  '[0.4,0.3,0.4,0.5,0.3,0.2,0.4,0.3,0.4,0.5,0.3,0.2,0.4,0.3,0.4,0.5,0.3,0.2,0.4,0.3,0.4,0.5,0.3,0.2,0.4,0.3,0.4,0.5,0.3,0.2,0.4,0.3,0.4,0.5,0.3,0.2,0.4,0.3,0.4,0.5,0.3,0.2,0.4,0.3,0.4,0.5,0.3,0.2,0.4,0.3,0.4,0.5,0.3,0.2,0.4,0.3,0.4,0.5,0.3,0.2]',
-  145,
-  87432,
-  '2025-04-27T00:00:00Z'
-);
+-- ─── Service metrics (svc-web only — gives 200 response) ─────────────────────
+-- Per-row time-series; route downsamples to 60 buckets on read. 12 samples
+-- spread across the last 30 minutes is plenty for the 1h range query and
+-- pads cleanly to 60 datapoints in the route's downsample helper.
+-- recorded_at is epoch milliseconds (integer).
+INSERT INTO service_metrics (service_id, recorded_at, cpu, mem, req, err, p95_latency_ms, request_count)
+VALUES
+  ('svc-web', strftime('%s', 'now', '-30 minutes') * 1000, 2.1, 184, 32, 0.4, 145, 32),
+  ('svc-web', strftime('%s', 'now', '-25 minutes') * 1000, 2.3, 186, 34, 0.3, 142, 34),
+  ('svc-web', strftime('%s', 'now', '-22 minutes') * 1000, 2.0, 183, 31, 0.4, 148, 31),
+  ('svc-web', strftime('%s', 'now', '-18 minutes') * 1000, 1.9, 182, 30, 0.5, 151, 30),
+  ('svc-web', strftime('%s', 'now', '-15 minutes') * 1000, 2.2, 185, 33, 0.3, 147, 33),
+  ('svc-web', strftime('%s', 'now', '-12 minutes') * 1000, 2.4, 187, 35, 0.2, 144, 35),
+  ('svc-web', strftime('%s', 'now', '-10 minutes') * 1000, 2.1, 184, 32, 0.4, 145, 32),
+  ('svc-web', strftime('%s', 'now', '-8 minutes') * 1000, 2.0, 183, 31, 0.3, 146, 31),
+  ('svc-web', strftime('%s', 'now', '-6 minutes') * 1000, 1.8, 181, 29, 0.4, 149, 29),
+  ('svc-web', strftime('%s', 'now', '-4 minutes') * 1000, 2.5, 188, 36, 0.5, 143, 36),
+  ('svc-web', strftime('%s', 'now', '-2 minutes') * 1000, 2.3, 186, 34, 0.3, 145, 34),
+  ('svc-web', strftime('%s', 'now', '-1 minutes') * 1000, 2.1, 184, 32, 0.4, 146, 32);
 
--- ─── Deployments ──────────────────────────────────────────────────────────────
--- Completed deploy (used by deploy-log-sse.test.ts to assert terminal event)
-INSERT OR REPLACE INTO deployments (id, project_id, service_id, status, outcome, error_class, created_at, updated_at)
+-- ─── Deploy logs ──────────────────────────────────────────────────────────────
+-- Completed deploy → SSE end event; build_log content lets the historical
+-- replay path emit at least one `line` event for the live-stream test.
+INSERT OR REPLACE INTO deploy_logs (id, project_id, status, trigger_source, build_log, duration_ms, created_at)
 VALUES (
   'deploy-done-1',
   'hotdeal-tracker',
-  'svc-web',
-  'completed',
   'success',
-  NULL,
-  '2025-04-27T01:00:00Z',
-  '2025-04-27T01:05:00Z'
+  'api',
+  '[clone] cloning https://github.com/example/hotdeal-tracker.git
+[build] docker build -t hotdeal-tracker:latest .
+[build] hotdeal-tracker:latest (1234ms)
+[run] container started ol-hotdeal-tracker',
+  300000,
+  '2025-04-27T01:00:00.000Z'
 );
 
--- Running deploy (no terminal event yet — SSE test subscribes and reads live)
-INSERT OR REPLACE INTO deployments (id, project_id, service_id, status, outcome, error_class, created_at, updated_at)
+-- "Running" deploy is represented by a deploy_log row with status=NULL —
+-- the SSE source treats a NULL status row as in-flight.
+INSERT OR REPLACE INTO deploy_logs (id, project_id, status, trigger_source, build_log, created_at)
 VALUES (
   'deploy-running-1',
   'hotdeal-tracker',
-  'svc-web',
-  'running',
   NULL,
-  NULL,
-  '2025-04-27T02:00:00Z',
-  '2025-04-27T02:00:00Z'
+  'api',
+  '[clone] cloning https://github.com/example/hotdeal-tracker.git
+[build] docker build -t hotdeal-tracker:latest .',
+  '2025-04-27T02:00:00.000Z'
 );
 
 -- ─── Notification webhook — intentionally NOT seeded ─────────────────────────
