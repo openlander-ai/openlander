@@ -11,7 +11,6 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
-import { MOCK_ACTIVITY } from '@/lib/agentActivity';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { cn } from '@/lib/utils';
 
@@ -31,9 +30,6 @@ export function Home() {
   }, [projects]);
 
   const allHealthy = tally.crashed === 0;
-
-  // Activity peek — top 5
-  const activityPeek = MOCK_ACTIVITY.slice(0, 5);
 
   if (loading && projects.length === 0) {
     return (
@@ -183,7 +179,8 @@ export function Home() {
         bodyClassName="p-0"
       >
         <ActivityTimeline
-          events={activityPeek}
+          events={[]}
+          emptyState="No activity yet. Triggers, deploys, agent runs, and incidents will appear here as they happen."
           onOpenService={(project, service) => navigate(`/services/${service}?project=${project}`)}
         />
       </OuterCard>

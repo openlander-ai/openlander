@@ -19,7 +19,6 @@ import { InfraMap } from '@/components/Shell/InfraMap';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
 import { getProject, type ServiceNode } from '@/lib/projectTopology';
-import { MOCK_ACTIVITY } from '@/lib/agentActivity';
 import { useIsBelowMd } from '@/hooks/use-viewport';
 import { useProjectTopology } from '@/hooks/use-project-topology';
 import { cn } from '@/lib/utils';
@@ -38,7 +37,6 @@ export function ProjectView() {
   const projectId = id ?? '';
   const project = getProject(projectId);
   const { services, isMockFallback } = useProjectTopology(projectId || null);
-  const projectActivity = MOCK_ACTIVITY.filter((e) => e.project === projectId);
   const isBelowMd = useIsBelowMd();
 
   // Single helper so every internal navigation carries the project context.
@@ -69,12 +67,7 @@ export function ProjectView() {
 
   const tabs: TabDef<ProjectTabId>[] = [
     { id: 'services', label: 'Services', icon: Box, count: services.length },
-    {
-      id: 'activity',
-      label: 'Activity',
-      icon: ActivityIcon,
-      count: projectActivity.length || undefined,
-    },
+    { id: 'activity', label: 'Activity', icon: ActivityIcon },
   ];
 
   return (
@@ -86,7 +79,7 @@ export function ProjectView() {
       <InfraMap
         projectId={projectId}
         services={services}
-        agentActivity={projectActivity}
+        agentActivity={[]}
         forceDense={isBelowMd}
         isDemo={isMockFallback}
         onSelectService={(_p, sid) => openService(sid)}
@@ -136,7 +129,7 @@ export function ProjectView() {
           className="p-0"
         >
           <ActivityTimeline
-            events={projectActivity}
+            events={[]}
             emptyState={
               <span>
                 No activity for <b>{project.name}</b> yet. When you (or an agent) deploys, restarts,
