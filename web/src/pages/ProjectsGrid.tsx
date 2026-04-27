@@ -6,6 +6,7 @@ import { ProjectTable } from '@/components/dashboard/ProjectTable';
 import { SystemHealthCards } from '@/components/dashboard/SystemHealthCards';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useProjects } from '@/hooks/use-projects';
+import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useSystemStatus } from '@/hooks/use-system-status';
 import { useLanguage } from '@/i18n/context';
 import { redeployProject } from '@/lib/api';
@@ -25,7 +26,17 @@ function getStatusConfig() {
 export function ProjectsGrid() {
   const navigate = useNavigate();
   const [showArchived, setShowArchived] = useState(false);
-  const { projects, loading: projectsLoading, refetch } = useProjects(showArchived);
+  // PR8: pull the default-scope project list from the AppShell-mounted
+  // shared poller (`<ProjectsProvider>`) so this page doesn't double the
+  // backend's `/api/projects` request rate. The archived poller is only
+  // spun up when the toggle is ON — `enabled: showArchived` keeps it
+  // dormant otherwise. When the toggle is on we render `archived`
+  // exclusively; when off, we render the shared `ctx`.
+  const ctx = useProjectsContext();
+  const archived = useProjects(true, { enabled: showArchived });
+  const projects = showArchived ? archived.projects : ctx.projects;
+  const projectsLoading = showArchived ? archived.loading : ctx.loading;
+  const refetch = showArchived ? archived.refetch : ctx.refetch;
   const { serverStatus, setupStatus, loading: systemLoading } = useSystemStatus();
   const { t } = useLanguage();
   const statusConfig = getStatusConfig();

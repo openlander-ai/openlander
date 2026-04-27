@@ -12,9 +12,20 @@ export interface UseProjectsReturn {
   refetch: () => void;
 }
 
-export function useProjects(includeArchived = false): UseProjectsReturn {
+export interface UseProjectsOptions {
+  /** Set to false to disable polling — used by ProjectsGrid when the
+   *  "Show archived" toggle is OFF, so the unused archived poller
+   *  doesn't waste a request cycle. Defaults to true. */
+  enabled?: boolean;
+}
+
+export function useProjects(
+  includeArchived = false,
+  options: UseProjectsOptions = {},
+): UseProjectsReturn {
+  const { enabled = true } = options;
   const [projects, setProjects] = useState<ProjectWithOptionalEnvironments[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
 
   const fetchProjects = useCallback(async () => {
@@ -32,7 +43,9 @@ export function useProjects(includeArchived = false): UseProjectsReturn {
   const hasBuilding = useMemo(() => projects.some((p) => p.status === 'building'), [projects]);
   const pollMs = hasBuilding ? ACTIVE_POLL_MS : IDLE_POLL_MS;
 
-  usePollingTask(fetchProjects, { intervalMs: pollMs });
+  // Pass `enabled` straight through; usePollingTask short-circuits when
+  // disabled, leaving `projects` at its initial empty array.
+  usePollingTask(fetchProjects, { intervalMs: pollMs, enabled });
 
   return { projects, loading, error, refetch: fetchProjects };
 }
