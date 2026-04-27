@@ -1,11 +1,24 @@
-import { useState, useEffect, useCallback } from 'react';
+/**
+ * Deployments — cross-project deploy history (audit view).
+ *
+ * v4 spec (`/tmp/ol-design-v4-backup/test/project/src/app.jsx:297-310`):
+ *   <OuterCard icon="Rocket" title="Deployments"
+ *              subtitle="Cross-project deploy history (audit view)">
+ *     <DeployRow ... /> ×N
+ *   </OuterCard>
+ *
+ * Filter pills (status + project) live above the row list — same shape
+ * the v4 prototype's tabular surfaces use. Click a row to open its log.
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Rocket, CheckCircle, XCircle, Loader2, Clock, Filter } from 'lucide-react';
-import { useLanguage } from '@/i18n/context';
+import { Rocket } from 'lucide-react';
+import { OuterCard } from '@/components/Shell/OuterCard';
+import { DeployRow } from '@/components/Shell/DeployRow';
+import { Skeleton } from '@/components/ui/skeleton';
 import { listProjects, getProjectDeployments } from '@/lib/api/projects';
 import { parseTimestamp } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import { Skeleton } from '@/components/ui/skeleton';
 import type { DeployLogSummary, Project } from '@/types/index';
 
 interface DeploymentRow extends DeployLogSummary {
@@ -13,70 +26,22 @@ interface DeploymentRow extends DeployLogSummary {
   projectId: string;
 }
 
-type StatusFilter = 'all' | 'success' | 'failed' | 'building';
+type StatusFilter = 'all' | 'success' | 'failed' | 'running';
 
-function formatDuration(ms: number | null | undefined): string {
-  if (!ms) return '—';
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rem = s % 60;
-  return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
-}
-
-function timeAgo(dateStr: string): string {
-  const ts = parseTimestamp(dateStr);
-  if (!ts) return '—';
-  const diff = Date.now() - ts.getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
-function StatusBadge({ status, t }: { status: string; t: (key: string) => string }) {
-  if (status === 'success') {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
-        <CheckCircle className="h-3.5 w-3.5" />
-        {t('deploymentsList.success')}
-      </span>
-    );
-  }
-  if (status === 'failed') {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-error">
-        <XCircle className="h-3.5 w-3.5" />
-        {t('deploymentsList.failed')}
-      </span>
-    );
-  }
-  if (status === 'building') {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-warning">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        {t('deploymentsList.building')}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
-      <Clock className="h-3.5 w-3.5" />
-      {status}
-    </span>
-  );
-}
+const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'success', label: 'Done' },
+  { id: 'failed', label: 'Failed' },
+  { id: 'running', label: 'Running' },
+];
 
 export function DeploymentsList() {
-  const { t } = useLanguage();
   const navigate = useNavigate();
   const [deployments, setDeployments] = useState<DeploymentRow[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [projectFilter, setProjectFilter] = useState<string>('all');
-  const [projects, setProjects] = useState<Project[]>([]);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -92,7 +57,7 @@ export function DeploymentsList() {
               rows.push({ ...d, projectName: p.name, projectId: p.id });
             }
           } catch {
-            // skip project if deployments fetch fails
+            // skip project on fetch error
           }
         }),
       );
@@ -113,31 +78,42 @@ export function DeploymentsList() {
     void fetchAll();
   }, [fetchAll]);
 
-  const filtered = deployments.filter((d) => {
-    if (statusFilter !== 'all' && d.status !== statusFilter) return false;
-    if (projectFilter !== 'all' && d.projectId !== projectFilter) return false;
-    return true;
-  });
+  const filtered = useMemo(
+    () =>
+      deployments.filter((d) => {
+        if (statusFilter !== 'all' && d.status !== statusFilter) return false;
+        if (projectFilter !== 'all' && d.projectId !== projectFilter) return false;
+        return true;
+      }),
+    [deployments, statusFilter, projectFilter],
+  );
 
   return (
-    <div className="flex flex-col h-full w-full">
-      <div className="flex-1 overflow-auto p-6 xl:p-8">
-        <div className="w-full space-y-6">
-          <div className="flex flex-wrap items-center gap-3">
-            <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div className="flex items-center bg-bg-subtle rounded-lg p-1 border border-[hsl(var(--border))]">
-              {(['all', 'success', 'failed', 'building'] as StatusFilter[]).map((s) => (
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
+      <OuterCard
+        title={
+          <span className="flex items-center gap-2">
+            <Rocket className="h-4 w-4 text-[color:var(--ol-fg-muted)]" />
+            Deployments
+          </span>
+        }
+        subtitle="Cross-project deploy history (audit view)."
+        actions={
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] p-0.5">
+              {STATUS_FILTERS.map((f) => (
                 <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
+                  key={f.id}
+                  type="button"
+                  onClick={() => setStatusFilter(f.id)}
                   className={cn(
-                    'px-3 py-1 text-xs font-medium rounded-md transition-colors capitalize',
-                    statusFilter === s
-                      ? 'bg-bg-panel text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground/80',
+                    'rounded px-2 py-1 text-[11px] font-medium transition-colors',
+                    statusFilter === f.id
+                      ? 'bg-[color:var(--ol-panel)] text-[color:var(--ol-fg)] shadow-sm'
+                      : 'text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-fg)]',
                   )}
                 >
-                  {s === 'all' ? t('deploymentsList.all') : t(`deploymentsList.${s}`)}
+                  {f.label}
                 </button>
               ))}
             </div>
@@ -145,9 +121,9 @@ export function DeploymentsList() {
               <select
                 value={projectFilter}
                 onChange={(e) => setProjectFilter(e.target.value)}
-                className="text-xs rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 py-1.5 text-foreground"
+                className="rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2 py-1 text-[11px] text-[color:var(--ol-fg)] focus:border-[color:var(--ol-primary)] focus:outline-none"
               >
-                <option value="all">{t('deploymentsList.allProjects')}</option>
+                <option value="all">All projects</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -156,81 +132,49 @@ export function DeploymentsList() {
               </select>
             )}
           </div>
-
-          <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
-            {loading ? (
-              <div className="divide-y divide-[hsl(var(--border))]">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-4 px-4 py-3">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-4 w-16" />
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-4 w-12" />
-                    <Skeleton className="h-4 w-16 ml-auto" />
-                  </div>
-                ))}
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <Rocket className="h-10 w-10 text-muted-foreground mb-3 opacity-40" />
-                <p className="text-sm font-medium text-foreground">
-                  {deployments.length === 0
-                    ? t('deploymentsList.noDeployments')
-                    : t('deploymentsList.noDeploymentsFilter')}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {deployments.length === 0
-                    ? t('deploymentsList.emptyHint')
-                    : t('deploymentsList.changeFilterHint')}
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y divide-[hsl(var(--border))]">
-                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-4 py-2 text-xs font-medium text-muted-foreground bg-bg-subtle">
-                  <span>{t('deploymentsList.projectCommit')}</span>
-                  <span>{t('deploymentsList.status')}</span>
-                  <span>{t('deploymentsList.trigger')}</span>
-                  <span>{t('deploymentsList.duration')}</span>
-                  <span>{t('deploymentsList.time')}</span>
+        }
+        bodyClassName="p-0"
+      >
+        {loading ? (
+          <div className="divide-y divide-[color:var(--ol-border-subtle)]">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-5 py-3">
+                <Skeleton className="h-2 w-2 rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-3 w-48" />
+                  <Skeleton className="h-2.5 w-32" />
                 </div>
-                {filtered.map((d) => (
-                  <button
-                    key={d.id}
-                    onClick={() => navigate(`/deployments/${d.id}`)}
-                    className="w-full grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-4 py-3 text-left hover:bg-bg-subtle transition-colors items-center"
-                  >
-                    <div className="min-w-0">
-                      <span className="text-sm font-medium text-foreground truncate block">
-                        {d.projectName}
-                      </span>
-                      {d.commitSha && (
-                        <span className="text-xs text-muted-foreground font-mono">
-                          {d.commitSha.slice(0, 7)}
-                          {d.commitMessage && (
-                            <span className="ml-2 not-italic text-muted-foreground">
-                              {d.commitMessage.slice(0, 50)}
-                            </span>
-                          )}
-                        </span>
-                      )}
-                    </div>
-                    <StatusBadge status={d.status} t={t} />
-                    <span className="text-xs text-muted-foreground capitalize">
-                      {d.trigger ?? t('deploymentsList.manual')}
-                    </span>
-                    <span className="text-xs text-muted-foreground font-mono">
-                      {formatDuration(d.durationMs)}
-                    </span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {timeAgo(d.createdAt)}
-                    </span>
-                  </button>
-                ))}
+                <Skeleton className="h-5 w-14 rounded-full" />
               </div>
-            )}
+            ))}
           </div>
-        </div>
-      </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-14 text-center">
+            <Rocket className="h-8 w-8 text-[color:var(--ol-fg-subtle)] opacity-60" />
+            <p className="text-[13px] font-medium text-[color:var(--ol-fg)]">
+              {deployments.length === 0 ? 'No deployments yet' : 'No deployments match the filter'}
+            </p>
+            <p className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
+              {deployments.length === 0
+                ? 'Deploy a project to start your build history.'
+                : 'Adjust the filters above.'}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[color:var(--ol-border-subtle)]">
+            {filtered.map((d) => (
+              <DeployRow
+                key={`${d.projectId}-${d.id}`}
+                d={d}
+                projectName={d.projectName}
+                onView={() => navigate(`/projects/${d.projectId}/deployments/${d.id}`)}
+              />
+            ))}
+          </div>
+        )}
+      </OuterCard>
     </div>
   );
 }
+
+export default DeploymentsList;

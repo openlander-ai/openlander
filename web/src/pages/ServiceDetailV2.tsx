@@ -21,27 +21,26 @@ import {
   Cpu,
   Edit,
   ExternalLink,
-  Eye,
   Globe,
-  MoreHorizontal,
   Plus,
   Rocket,
   Settings as SettingsIcon,
   ScrollText,
-  StopCircle,
 } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { LogViewer } from '@/components/Shell/LogViewer';
 import { Sparkline } from '@/components/Shell/Sparkline';
+import { DeployRow } from '@/components/Shell/DeployRow';
 import { deterministicSeries } from '@/lib/deterministicSeries';
 import { getProject, type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
-import { MOCK_DEPLOYMENTS, type DeploymentRecord, type Trigger } from '@/lib/projectDeployments';
 import { LOG_SCRIPT_BASE } from '@/lib/logScripts';
 import { useProjectTopology } from '@/hooks/use-project-topology';
 import { useServiceHealth } from '@/hooks/use-service-health';
 import { useServiceMetrics } from '@/hooks/use-service-metrics';
+import { useDeployments } from '@/hooks/use-deployments';
 import type { MetricsRange } from '@/lib/api/services';
+import type { DeployLogSummary } from '@/types';
 import { cn } from '@/lib/utils';
 
 type ServiceTabId =
@@ -58,7 +57,7 @@ export function ServiceDetailV2() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<ServiceTabId>('general');
-  const [openDeployId, setOpenDeployId] = useState<number | null>(null);
+  const [openDeployId, setOpenDeployId] = useState<string | null>(null);
 
   // Derive project from query — V2 routes use /services/:id?project=…
   // because services may share the same id across projects. PR4 will
@@ -89,7 +88,13 @@ export function ServiceDetailV2() {
   const liveHealth = useServiceHealth(id ?? null);
   const effectiveHealth: ServiceHealth | undefined = liveHealth.health ?? service?.health;
 
-  const runningDeploy = MOCK_DEPLOYMENTS.find((d) => d.status === 'running');
+  // Real deployments: fetch all project deploys (no per-service filter API yet —
+  // show all project deploys, which is an honest view of what touched this project).
+  // DeployLogSummary only persists terminal states (success/failed/cancelled), so
+  // we can't detect a deploy in flight from this shape. Deploy button stays enabled
+  // until a running-deploy signal lands on the wire (follow-up).
+  const { deployments, loading: deploymentsLoading } = useDeployments(projectId ?? '');
+  const hasRunning = false;
 
   const tabs = useMemo<TabDef<ServiceTabId>[]>(
     () => [
@@ -100,13 +105,13 @@ export function ServiceDetailV2() {
         id: 'deployments',
         label: 'Deployments',
         icon: Rocket,
-        count: MOCK_DEPLOYMENTS.length,
+        count: deployments.length || undefined,
       },
       { id: 'logs', label: 'Logs', icon: ScrollText },
       { id: 'monitoring', label: 'Monitoring', icon: ActivityIcon },
       { id: 'advanced', label: 'Advanced', icon: Cpu },
     ],
-    [],
+    [deployments.length],
   );
 
   if (!service || !project) {
@@ -174,17 +179,17 @@ export function ServiceDetailV2() {
             )}
             <button
               type="button"
-              disabled={!!runningDeploy}
+              disabled={hasRunning}
               className={cn(
                 'inline-flex items-center gap-1 rounded-md px-3 py-1 text-[12px] font-medium transition-opacity',
-                runningDeploy
+                hasRunning
                   ? 'cursor-not-allowed bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-subtle)]'
                   : 'bg-[color:var(--ol-primary)] text-[color:var(--ol-primary-fg)] hover:opacity-90',
               )}
-              aria-disabled={!!runningDeploy}
+              aria-disabled={hasRunning}
             >
               <Rocket className="h-3.5 w-3.5" />
-              {runningDeploy ? 'Deploying…' : 'Deploy'}
+              {hasRunning ? 'Deploying…' : 'Deploy'}
             </button>
           </>
         }
@@ -231,7 +236,11 @@ export function ServiceDetailV2() {
           labelledBy="service-deployments"
           className="p-0"
         >
-          <DeploymentsTab onOpenDeploy={(d) => setOpenDeployId(d.id)} />
+          <DeploymentsTab
+            deployments={deployments}
+            loading={deploymentsLoading}
+            onOpenDeploy={(d) => setOpenDeployId(d.id)}
+          />
         </TabPanel>
 
         <TabPanel
@@ -269,35 +278,29 @@ export function ServiceDetailV2() {
         </TabPanel>
       </OuterCard>
 
-      {/* Deploy log viewer modal-style overlay (in-page, not a Dialog).
-          Phase F justified mockMode: openDeployId is a synthetic number from
-          MOCK_DEPLOYMENTS; Phase E_NEW getProjectDeployments() is not yet
-          wired here. Once that endpoint lands, replace MOCK_DEPLOYMENTS with
-          the real list and remove mockMode so the SSE stream takes over.
-          Phase G DoD grep exception: "mockMode=true — Phase E_NEW pending" */}
       {openDeployId != null && (
         <div className="fixed inset-0 z-40 flex items-stretch bg-black/60 p-6">
           <div className="relative ml-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-[var(--ol-radius)] border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)]">
-            <LogViewer
-              variant="deploy"
-              mockMode
-              deploymentId={openDeployId}
-              outcome={
-                MOCK_DEPLOYMENTS.find((d) => d.id === openDeployId)?.status === 'failed'
-                  ? 'fail'
-                  : 'success'
-              }
-              errorClass={MOCK_DEPLOYMENTS.find((d) => d.id === openDeployId)?.errorClass}
-              serviceName={service.name}
-              publicUrl={service.url}
-              internalPort={service.port}
-              onClose={() => setOpenDeployId(null)}
-              headerTitle={
-                <span className="font-medium text-[color:var(--log-header-text)]">
-                  {project.name} / {service.name} · Deploy #{openDeployId}
-                </span>
-              }
-            />
+            {(() => {
+              const dep = deployments.find((d) => d.id === openDeployId);
+              return (
+                <LogViewer
+                  variant="deploy"
+                  deploymentId={openDeployId}
+                  outcome={dep?.status === 'failed' ? 'fail' : 'success'}
+                  errorClass={dep?.failureSummary ?? undefined}
+                  serviceName={service.name}
+                  publicUrl={service.url}
+                  internalPort={service.port}
+                  onClose={() => setOpenDeployId(null)}
+                  headerTitle={
+                    <span className="font-medium text-[color:var(--log-header-text)]">
+                      {project.name} / {service.name} · Deploy {openDeployId.slice(0, 8)}
+                    </span>
+                  }
+                />
+              );
+            })()}
           </div>
         </div>
       )}
@@ -426,10 +429,34 @@ function DomainsTab({ service }: { service: ServiceNode }) {
   );
 }
 
-function DeploymentsTab({ onOpenDeploy }: { onOpenDeploy: (d: DeploymentRecord) => void }) {
+function DeploymentsTab({
+  deployments,
+  loading,
+  onOpenDeploy,
+}: {
+  deployments: DeployLogSummary[];
+  loading: boolean;
+  onOpenDeploy: (d: DeployLogSummary) => void;
+}) {
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-2 p-5">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-12 animate-pulse rounded-md bg-[color:var(--ol-panel-2)]" />
+        ))}
+      </div>
+    );
+  }
+  if (deployments.length === 0) {
+    return (
+      <div className="px-6 py-10 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
+        No deploys yet for this project.
+      </div>
+    );
+  }
   return (
     <ul className="divide-y divide-[color:var(--ol-border-subtle)]">
-      {MOCK_DEPLOYMENTS.map((d) => (
+      {deployments.map((d) => (
         <li key={d.id}>
           <DeployRow d={d} onView={() => onOpenDeploy(d)} />
         </li>
@@ -692,119 +719,6 @@ function RangeToggle<T extends string>({
         );
       })}
     </div>
-  );
-}
-
-function DeployRow({ d, onView }: { d: DeploymentRecord; onView: () => void }) {
-  return (
-    <div className="flex items-center gap-3 px-5 py-3">
-      <span
-        aria-hidden
-        className={cn(
-          'h-2 w-2 shrink-0 rounded-full',
-          d.status === 'running' && 'bg-[color:var(--ol-info)]',
-          d.status === 'done' && 'bg-[color:var(--ol-success)]',
-          d.status === 'failed' && 'bg-[color:var(--ol-error)]',
-          d.status === 'cancelled' && 'bg-[color:var(--ol-fg-subtle)]',
-        )}
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-2">
-          <span className="text-[13px] font-semibold text-[color:var(--ol-fg)]">#{d.id}</span>
-          <span className="ol-mono text-[11.5px] text-[color:var(--ol-fg-muted)]">{d.commit}</span>
-          <span className="truncate text-[12.5px] text-[color:var(--ol-fg-muted)]">
-            {d.message}
-          </span>
-        </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--ol-fg-subtle)]">
-          <TriggerChip trigger={d.trigger} label={d.triggerLabel} />
-          <span className="ol-mono">{d.branch}</span>
-          {d.duration && <span>{d.duration}</span>}
-          <span>{d.started}</span>
-          {d.errorClass && (
-            <span className="ol-mono text-[color:var(--ol-error)]">{d.errorClass}</span>
-          )}
-        </div>
-      </div>
-      <StatusPill status={d.status} />
-      <div className="flex items-center gap-1">
-        {d.status === 'running' && (
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-error)] bg-[color:var(--ol-error-soft)] px-2.5 py-1 text-[11.5px] font-medium text-[color:var(--ol-error)] transition-opacity hover:opacity-90"
-          >
-            <StopCircle className="h-3 w-3" />
-            Kill
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onView}
-          className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
-        >
-          <Eye className="h-3 w-3" />
-          View
-        </button>
-        <button
-          type="button"
-          aria-label="More actions"
-          className="grid h-7 w-7 place-items-center rounded-md text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
-        >
-          <MoreHorizontal className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function TriggerChip({ trigger, label }: { trigger: Trigger; label: string }) {
-  const tone =
-    trigger === 'mcp'
-      ? 'text-[color:var(--ol-actor-mcp)] bg-[color-mix(in_oklch,var(--ol-actor-mcp)_14%,transparent)]'
-      : trigger === 'webhook'
-        ? 'text-[color:var(--ol-actor-webhook)] bg-[color-mix(in_oklch,var(--ol-actor-webhook)_14%,transparent)]'
-        : 'text-[color:var(--ol-fg-muted)] bg-[color:var(--ol-panel-2)]';
-  return (
-    <span
-      className={cn(
-        'ol-mono inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium',
-        tone,
-      )}
-    >
-      {label}
-    </span>
-  );
-}
-
-function StatusPill({ status }: { status: DeploymentRecord['status'] }) {
-  const map: Record<DeploymentRecord['status'], { label: string; tone: string }> = {
-    running: {
-      label: 'Running',
-      tone: 'bg-[color:var(--ol-info-soft)] text-[color:var(--ol-info)]',
-    },
-    done: {
-      label: 'Done',
-      tone: 'bg-[color:var(--ol-success-soft)] text-[color:var(--ol-success)]',
-    },
-    failed: {
-      label: 'Failed',
-      tone: 'bg-[color:var(--ol-error-soft)] text-[color:var(--ol-error)]',
-    },
-    cancelled: {
-      label: 'Cancelled',
-      tone: 'bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]',
-    },
-  };
-  const v = map[status];
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-medium',
-        v.tone,
-      )}
-    >
-      {v.label}
-    </span>
   );
 }
 

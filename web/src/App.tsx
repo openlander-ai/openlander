@@ -19,6 +19,8 @@ import { DeploymentsList } from '@/pages/DeploymentsList';
 import { Home } from '@/pages/Home';
 import { Activity } from '@/pages/Activity';
 import { MCPServer } from '@/pages/MCPServer';
+import { MonitoringPage } from '@/pages/MonitoringPage';
+import { LogsPage } from '@/pages/LogsPage';
 import { WebServerSettings } from '@/pages/settings/WebServer';
 import { GitProvidersSettings } from '@/pages/settings/GitProviders';
 import { SSHKeysSettings } from '@/pages/settings/SSHKeys';
@@ -187,6 +189,8 @@ function App() {
                   <Route path="/home" element={<Home />} />
                   <Route path="/activity" element={<Activity />} />
                   <Route path="/mcp" element={<MCPServer />} />
+                  <Route path="/monitoring" element={<MonitoringPage />} />
+                  <Route path="/logs" element={<LogsPage />} />
                   <Route
                     path="/projects/:id"
                     element={
