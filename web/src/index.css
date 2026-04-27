@@ -19,90 +19,55 @@
     --font-size-2xl: 1.5rem; /* 24px */
     --font-size-3xl: 1.875rem; /* 30px */
 
-    /* ── OpenLander Enterprise Cloud (Light Base) ── */
-    --bg-app: #f1f5f9;       /* slate-100 */
-    --bg-panel: #ffffff;     /* crisp white */
-    --bg-subtle: #f8fafc;    /* slate-50 */
-    --bg-surface: #ffffff; 
-    --bg-terminal: #0f172a;  /* slate-900 (sharp contrast for terminal windows) */
-    --color-accent: #6366f1; /* indigo-500 */
-    --color-ai: #f43f5e;     /* rose-500 */
-    --color-success: #10b981;/* emerald-500 */
-    --color-warning: #f59e0b;/* amber-500 */
-    --color-error: #ef4444;  /* red-500 */
-    
-    /* 💎 AI Sparkle Gradient (Light Mode) 💎 */
-    --sparkle-start: #4f46e5; /* Indigo 600 - Professional and sharp */
-    --sparkle-end: #f43f5e;   /* Rose 500 - Magic AI */
+    /*
+     * ── Tailwind utility tokens (v4-aligned) ──
+     *
+     * These power the legacy `bg-bg-panel`, `text-color-accent`, etc.
+     * Tailwind utility classes that V1 pages still emit. Values are
+     * the v4 light-mode palette from styles/tokens.css translated
+     * into formats Tailwind theme expects (hex / HSL).
+     *
+     * v4 has NO theme toggle (chat1.md decision — light-mode default,
+     * Vercel/Linear restrained). The dark-mode block is removed; if
+     * the OS preference matters in future, re-introduce via
+     * `@media (prefers-color-scheme: dark)`.
+     */
+    --bg-app: oklch(0.992 0.001 250);   /* v4 --bg */
+    --bg-panel: oklch(1 0 0);           /* v4 --panel */
+    --bg-subtle: oklch(0.982 0.002 250); /* v4 --panel-2 */
+    --bg-surface: oklch(1 0 0);
+    --bg-terminal: oklch(0.155 0.004 250); /* v4 dark --bg (terminal contrast) */
+    --color-accent: oklch(0.62 0.16 152);  /* v4 --primary (green) */
+    --color-ai: oklch(0.62 0.16 152);      /* v4: agent identity is the same green */
+    --color-success: oklch(0.62 0.15 150); /* v4 --success */
+    --color-warning: oklch(0.72 0.15 75);  /* v4 --warning */
+    --color-error: oklch(0.58 0.19 25);    /* v4 --error */
 
-    --text-primary: #0f172a; /* slate-900 */
-    --text-secondary: #334155; /* slate-700 (darker for contrast) */
-    --text-muted: #64748b;   /* slate-500 (darker for readability) */
+    --text-primary: oklch(0.16 0.005 250);   /* v4 --fg */
+    --text-secondary: oklch(0.44 0.006 250); /* v4 --fg-muted */
+    --text-muted: oklch(0.62 0.005 250);     /* v4 --fg-subtle */
 
-    /* ── shadcn/ui — Light Slate & Indigo ── */
-    --background: 210 40% 98%; /* slate-50 */
-    --foreground: 222 47% 11%; /* slate-900 */
+    /* ── shadcn/ui — HSL approximations of v4 light palette ── */
+    --background: 220 33% 99%;   /* v4 --bg ≈ near-white */
+    --foreground: 220 8% 10%;    /* v4 --fg ≈ near-black */
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 220 8% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 239 84% 67%; /* indigo-500 */
+    --popover-foreground: 220 8% 10%;
+    --primary: 152 45% 45%;      /* v4 --primary ≈ green */
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%; /* slate-100 */
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%; /* slate-500 */
-    --accent: 210 40% 96%;
-    --accent-foreground: 239 84% 67%; /* indigo text when hovered */
-    --destructive: 0 84% 60%;
+    --secondary: 220 12% 96%;
+    --secondary-foreground: 220 8% 10%;
+    --muted: 220 12% 96%;
+    --muted-foreground: 220 5% 45%;
+    --accent: 220 12% 96%;
+    --accent-foreground: 152 45% 45%;
+    --destructive: 25 70% 45%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 84%; /* slate-300 (stronger borders for crisp white panels) */
-    --input: 214 32% 84%;  /* slate-300 input borders */
-    --ring: 239 84% 67%; /* indigo-500 */
-    --radius: 0.5rem; /* rounded-lg */
-  }
-
-  [data-theme='dark'], .dark {
-    /* ── OpenLander Enterprise Cloud (Dark Base) — deeper for dokploy-style pro-tool feel ── */
-    --bg-app: #020617;       /* slate-950 - deep backdrop (was slate-900) */
-    --bg-panel: #0f172a;     /* slate-900 - cards (was slate-800) */
-    --bg-subtle: #1e293b;    /* slate-800 */
-    --bg-surface: #020617;
-    --bg-terminal: #000000;  /* pure black - real terminals */
-    --color-accent: #6366f1; /* indigo-500 */
-    --color-ai: #f43f5e;     /* rose-500 - popping magic */
-    --color-success: #10b981;
-    --color-warning: #f59e0b;
-    --color-error: #ef4444;
-    
-    /* 💎 AI Sparkle Gradient (Dark Mode) 💎 */
-    --sparkle-start: #22d3ee; /* Cyan 400 - Futuristic Tech */
-    --sparkle-end: #a855f7;   /* Purple 500 - Deep AI Magic */
-
-    --text-primary: #f8fafc; /* slate-50 */
-    --text-secondary: #cbd5e1; /* slate-300 */
-    --text-muted: #94a3b8;   /* slate-400 */
-
-    /* ── shadcn/ui — Dark Slate & Indigo (deeper base for pro-tool feel) ── */
-    --background: 222 47% 4%;  /* slate-950 */
-    --foreground: 210 40% 98%; /* slate-50 */
-    --card: 222 47% 11%;       /* slate-900 */
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 11%;    /* slate-900 */
-    --popover-foreground: 210 40% 98%;
-    --primary: 239 84% 67%; /* indigo-500 */
-    --primary-foreground: 210 40% 98%; /* white text on indigo */
-    --secondary: 215 28% 22%; /* slate-700 */
-    --secondary-foreground: 210 40% 98%;
-    --muted: 215 28% 22%;
-    --muted-foreground: 215 20% 65%; /* slate-400 */
-    --accent: 215 28% 22%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 215 28% 22%; /* slate-700 */
-    --input: 215 28% 22%;
-    --ring: 239 84% 67%; /* indigo-500 */
+    --border: 220 8% 88%;
+    --input: 220 8% 88%;
+    --ring: 152 45% 45%;
+    --radius: 0.5rem;
   }
 }
 
@@ -157,16 +122,6 @@
       0 1px 3px 0 rgba(0, 0, 0, 0.1),
       0 1px 2px -1px rgba(0, 0, 0, 0.1);
     border-color: hsl(var(--border));
-  }
-
-  /* AI Deployment Border — left accent only */
-  .ai-deploy-border {
-    border-left: 3px solid #f43f5e; /* Rose 500 AI Magic */
-  }
-
-  .ai-sparkle-glow {
-    filter: drop-shadow(0 0 3px rgba(168, 85, 247, 0.5))
-      drop-shadow(0 0 6px rgba(244, 63, 94, 0.25));
   }
 
   /* Dokploy-style custom scrollbar for log/terminal surfaces */
@@ -232,9 +187,3 @@
     opacity: 1;
   }
 }
-
-.bg-agent, .bg-primary {
-  --sparkle-start: #ffffff;
-  --sparkle-end: #cffafe;
-}
-
