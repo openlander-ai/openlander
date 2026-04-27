@@ -34,7 +34,7 @@
  * opened). LogViewer uses this to keep both stream hooks mounted and
  * pick whichever one matches `mockMode` + `deploymentId`.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LogEntry } from '../lib/logScripts';
 import type { ConnState } from '../components/Shell/LogViewerHeader';
 
@@ -208,14 +208,32 @@ export function useDeployLogStream(deploymentId: string | number | null): UseDep
     setConnState('CANCELLED');
   }, []);
 
-  return {
-    lines,
-    progressByLineNum,
-    connState,
-    buildOutcome,
-    errorClass,
-    lastEventId,
-    getElapsedSec,
-    kill,
-  };
+  // PR8: stabilize return identity so consumers' `useMemo`/`useCallback`
+  // dependency arrays don't thrash on every render. Without this, any
+  // downstream `[stream]` dep recomputes per render even when none of the
+  // underlying state slices changed. `getElapsedSec`/`kill` are already
+  // stable via `useCallback`, and `progressByLineNum` is a frozen
+  // singleton, so the only true churn sources are the state slices.
+  return useMemo(
+    () => ({
+      lines,
+      progressByLineNum,
+      connState,
+      buildOutcome,
+      errorClass,
+      lastEventId,
+      getElapsedSec,
+      kill,
+    }),
+    [
+      lines,
+      progressByLineNum,
+      connState,
+      buildOutcome,
+      errorClass,
+      lastEventId,
+      getElapsedSec,
+      kill,
+    ],
+  );
 }

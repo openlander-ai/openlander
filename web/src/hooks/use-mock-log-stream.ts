@@ -18,7 +18,7 @@
  * scheduler checks before invoking `next()` and clears all pending
  * timeouts/intervals so the simulation actually stops.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LogEntry } from '../lib/logScripts';
 import type { ConnState } from '../components/Shell/LogViewerHeader';
 
@@ -202,13 +202,18 @@ export function useMockLogStream({
     setConnState('CANCELLED');
   }, []);
 
-  return {
-    lines,
-    progressByLineNum,
-    connState,
-    buildOutcome,
-    errorClass: undefined,
-    getElapsedSec,
-    kill,
-  };
+  // PR8: stabilize return identity — see the matching note in
+  // `use-deploy-log-stream.ts`.
+  return useMemo(
+    () => ({
+      lines,
+      progressByLineNum,
+      connState,
+      buildOutcome,
+      errorClass: undefined,
+      getElapsedSec,
+      kill,
+    }),
+    [lines, progressByLineNum, connState, buildOutcome, getElapsedSec, kill],
+  );
 }

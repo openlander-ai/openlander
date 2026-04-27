@@ -1,5 +1,6 @@
 import type { ServiceHealth } from '../projectTopology';
 import { apiGet, apiPost, apiPostVoid, apiDelete } from './client';
+import { fetchWithAuth } from './auth';
 
 export interface ServiceTemplate {
   id: string;
@@ -49,7 +50,7 @@ export async function createService(opts: {
   port?: number;
   env_vars?: Array<{ key: string; value: string }>;
 }): Promise<Service> {
-  const res = await fetch('/api/services', {
+  const res = await fetchWithAuth('/api/services', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(opts),
@@ -97,7 +98,7 @@ export async function getConnectedProjects(id: string): Promise<ConnectedProject
 }
 
 export async function getServiceLogs(id: string, lines: number = 100): Promise<string> {
-  const res = await fetch(`/api/services/${id}/logs?lines=${lines}`);
+  const res = await fetchWithAuth(`/api/services/${id}/logs?lines=${lines}`);
   if (!res.ok) throw new Error('Failed to fetch service logs');
   const data = await res.json();
   return data.logs;
@@ -113,7 +114,7 @@ export interface ServiceUser {
 }
 
 export async function getServiceDatabases(id: string): Promise<ServiceDatabase[]> {
-  const res = await fetch(`/api/services/${id}/databases`);
+  const res = await fetchWithAuth(`/api/services/${id}/databases`);
   if (!res.ok) throw new Error('Failed to fetch service databases');
   const data = await res.json();
   return data.databases;
@@ -127,7 +128,7 @@ export async function createServiceDatabase(
 }
 
 export async function getServiceUsers(id: string): Promise<ServiceUser[]> {
-  const res = await fetch(`/api/services/${id}/users`);
+  const res = await fetchWithAuth(`/api/services/${id}/users`);
   if (!res.ok) throw new Error('Failed to fetch service users');
   const data = await res.json();
   return data.users;
