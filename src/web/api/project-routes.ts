@@ -355,6 +355,140 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
   });
 
+  // Phase E_NEW Task 6 — topology graph for the v4 InfraMap.
+  // Returns ServiceNode[] matching web/src/lib/projectTopology.ts:
+  //   { id, name, kind, image, health, port, url, cpu, mem, dependsOn }
+  //
+  // For compose projects the nodes are the child projects (one per
+  // compose service). For standalone projects the node is the project
+  // itself. `dependsOn` is derived from the `project_dependencies`
+  // table (target_service_id that matches a sibling node id). Health
+  // uses the same 3-state docker-inspect projection as Task 4 and then
+  // collapses 'running' (no healthcheck) → 'healthy' because the UI
+  // type is binary 'healthy' | 'crashed'.
+  api.get('/projects/:id/topology', async (c) => {
+    const project = getProjectOrThrow(c, ctx);
+
+    try {
+      const childProjects = ctx.db.getChildProjects(project.id);
+      const nodes = childProjects.length > 0 ? childProjects : [project];
+
+      const nodeIds = new Set(nodes.map((n) => n.id));
+
+      // Build dependsOn map: for each node, find its project_dependencies
+      // whose target_service_id is another node in this topology.
+      const dependsOnMap = new Map<string, string[]>();
+      for (const node of nodes) {
+        const deps = ctx.db.findDependenciesByProject(node.id);
+        const siblingDeps = deps
+          .map((d) => d.target_service_id)
+          .filter((sid): sid is string => sid !== null && nodeIds.has(sid));
+        dependsOnMap.set(node.id, siblingDeps);
+      }
+
+      // Determine kind: 'Database' for known db service types, else 'Application'
+      function resolveKind(name: string): 'Application' | 'Database' {
+        const lower = name.toLowerCase();
+        if (/postgres|mysql|mariadb|mongo|redis|sqlite|clickhouse|minio/.test(lower)) {
+          return 'Database';
+        }
+        return 'Application';
+      }
+
+      // Inspect health for all nodes in parallel
+      const serviceNodes = await Promise.all(
+        nodes.map(async (node) => {
+          // Derive port: compose child uses container_port or assigned_port
+          const port = node.assigned_port ?? null;
+          const url = port ? getProjectUrl(node.name) : null;
+          const image = node.image_url ?? node.image_tag ?? `${node.name}:latest`;
+          const kind = resolveKind(node.name);
+
+          // Get runtime stats for cpu/mem display
+          let cpuDisplay = '—';
+          let memDisplay = '—';
+
+          if (node.container_id && node.status === 'running') {
+            try {
+              const rawStats = (await ctx.docker.getContainerStats(node.container_id)) as {
+                cpu_stats: {
+                  cpu_usage: { total_usage: number; percpu_usage?: number[] };
+                  system_cpu_usage: number;
+                  online_cpus?: number;
+                };
+                precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
+                memory_stats: { usage?: number; limit?: number };
+              };
+
+              const cpuDelta =
+                rawStats.cpu_stats.cpu_usage.total_usage -
+                rawStats.precpu_stats.cpu_usage.total_usage;
+              const systemDelta =
+                rawStats.cpu_stats.system_cpu_usage - rawStats.precpu_stats.system_cpu_usage;
+              const cpuCountRaw = rawStats.cpu_stats.cpu_usage.percpu_usage?.length;
+              const cpuCount =
+                cpuCountRaw && cpuCountRaw > 0
+                  ? cpuCountRaw
+                  : (rawStats.cpu_stats.online_cpus ?? 1);
+              const cpuPct =
+                systemDelta > 0 ? Math.round((cpuDelta / systemDelta) * cpuCount * 1000) / 10 : 0;
+              cpuDisplay = `${String(cpuPct)}%`;
+
+              const memBytes = rawStats.memory_stats.usage ?? 0;
+              if (memBytes > 0) {
+                const memMb = Math.round(memBytes / (1024 * 1024));
+                memDisplay = `${String(memMb)} MB`;
+              }
+            } catch {
+              // stats unavailable — display stays '—'
+            }
+          }
+
+          // Determine health using docker inspect (same as Task 4)
+          let health: 'healthy' | 'crashed' = 'healthy';
+          if (node.status !== 'running') {
+            health = 'crashed';
+          } else if (node.container_id) {
+            try {
+              const info = await ctx.docker.inspectContainer(node.container_id);
+              const dockerHealth =
+                (info as unknown as { State: { Health?: { Status?: string } } }).State.Health
+                  ?.Status ?? null;
+              if (dockerHealth === 'unhealthy' || dockerHealth === 'starting') {
+                health = 'crashed';
+              }
+              // 'healthy' and null (no healthcheck) both map to 'healthy'
+            } catch {
+              // inspect failed — keep 'healthy' if container is running
+            }
+          }
+
+          return {
+            id: node.id,
+            name: node.name,
+            kind,
+            image,
+            health,
+            port,
+            url,
+            cpu: cpuDisplay,
+            mem: memDisplay,
+            dependsOn: dependsOnMap.get(node.id) ?? [],
+          };
+        }),
+      );
+
+      return c.json({ services: serviceNodes });
+    } catch (err) {
+      log.debug({ err, projectId: project.id }, 'Get project topology failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Project not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Project not found: ${project.id}` }, 404);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch project topology' }, 500);
+    }
+  });
+
   api.patch('/projects/:id', async (c) => {
     const project = getProjectOrThrow(c, ctx);
 
