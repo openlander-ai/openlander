@@ -188,7 +188,9 @@ function App() {
                   {/* V2 surfaces */}
                   <Route path="/home" element={<Home />} />
                   <Route path="/activity" element={<Activity />} />
-                  <Route path="/mcp" element={<MCPServer />} />
+                  {/* /mcp-server because the backend's MCP JSON-RPC endpoint
+                      sits at /mcp (no content-negotiation). */}
+                  <Route path="/mcp-server" element={<MCPServer />} />
                   <Route path="/monitoring" element={<MonitoringPage />} />
                   <Route path="/logs" element={<LogsPage />} />
                   <Route

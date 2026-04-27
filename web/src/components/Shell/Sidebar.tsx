@@ -67,7 +67,6 @@ const SECTIONS: NavSection[] = [
     label: 'Workspace',
     items: [
       { id: 'home', label: 'Home', icon: Home, to: '/home' },
-      { id: 'activity', label: 'Activity', icon: Activity, to: '/activity' },
       {
         id: 'projects',
         label: 'Projects',
@@ -76,6 +75,7 @@ const SECTIONS: NavSection[] = [
         matches: startsWith('/projects'),
         // badge filled in per-render from useProjects() — see component body
       },
+      { id: 'activity', label: 'Activity', icon: Activity, to: '/activity' },
       {
         id: 'deployments',
         label: 'Deployments',
@@ -113,8 +113,11 @@ const SECTIONS: NavSection[] = [
       {
         id: 'mcp',
         label: 'MCP Server',
+        // Frontend route is /mcp-server because the backend serves a JSON-RPC
+        // MCP protocol endpoint at /mcp (no content-negotiation; backend wins
+        // the route). Renaming the UI surface avoids the conflict.
         icon: Bot,
-        to: '/mcp',
+        to: '/mcp-server',
         badgeDot: 'ok',
       },
     ],
