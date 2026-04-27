@@ -11,12 +11,14 @@
 import { useNavigate } from 'react-router-dom';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
+import { useActivityFeed } from '@/hooks/use-activity-feed';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import type { ProjectSummary } from '@/lib/agentActivity';
 
 export function Activity() {
   const navigate = useNavigate();
   const { projects } = useProjectsContext();
+  const { events } = useActivityFeed({ limit: 200 });
 
   // Build project summary list from real project data for filter pills
   const projectSummaries: ProjectSummary[] = projects.map((p) => ({ id: p.id, name: p.name }));
@@ -29,7 +31,7 @@ export function Activity() {
         bodyClassName="p-0"
       >
         <ActivityTimeline
-          events={[]}
+          events={events}
           showFilters
           projects={projectSummaries}
           bucketed

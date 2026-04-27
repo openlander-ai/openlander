@@ -12,6 +12,7 @@ import { ChevronRight } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
 import { TriggerChip } from '@/components/Shell/DeployRow';
+import { useActivityFeed } from '@/hooks/use-activity-feed';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useProjectTopology } from '@/hooks/use-project-topology';
 import { getProjectDeployments } from '@/lib/api';
@@ -74,6 +75,7 @@ interface LastDeployState {
 export function Home() {
   const navigate = useNavigate();
   const { projects, loading } = useProjectsContext();
+  const { events: activityEvents } = useActivityFeed({ limit: 5 });
 
   // Flat health tally across all projects
   const tally = useMemo(() => {
@@ -341,7 +343,7 @@ export function Home() {
         bodyClassName="p-0"
       >
         <ActivityTimeline
-          events={[]}
+          events={activityEvents}
           emptyState="No activity yet. Triggers, deploys, agent runs, and incidents will appear here as they happen."
           onOpenService={(project, service) => navigate(`/services/${service}?project=${project}`)}
         />

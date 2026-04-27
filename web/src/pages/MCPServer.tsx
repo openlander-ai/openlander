@@ -4,21 +4,38 @@
  * Two purposes:
  *   1. Tell the user where Claude (and other agents) reach OpenLander —
  *      endpoint URL, status, tools exposed.
- *   2. Show who is actively connected (empty until /api/mcp/status ships).
+ *   2. Show who is actively connected via /api/mcp/status snapshot.
  *
- * Per the trim: no mock agent sessions, no synthetic call counts.
- * Stats and recent-calls appear after first agent call once backend
- * ships an /api/mcp/status endpoint.
+ * Recent agent calls reuses /api/activity (filtered to actor=mcp) so the
+ * MCP page never owns its own event store. Tool-call statistics (call
+ * counts, per-tool histogram) are deferred to 1.1; the page intentionally
+ * does not invent numbers.
  */
 import { Bot, Cable, Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
+import { useActivityFeed } from '@/hooks/use-activity-feed';
+import { useMcpStatus } from '@/hooks/use-mcp-status';
 import { useSystemStatus } from '@/hooks/use-system-status';
+
+function formatRelative(iso: string): string {
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return '';
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 
 export function MCPServer() {
   const navigate = useNavigate();
   const { serverStatus } = useSystemStatus();
+  const { status: mcpStatus } = useMcpStatus();
+  const { events: mcpEvents } = useActivityFeed({ limit: 20, actor: 'mcp' });
 
   // Derive the MCP endpoint from the current page origin as the best
   // available approximation until /api/mcp/status exists.
@@ -104,7 +121,7 @@ export function MCPServer() {
         </div>
       </OuterCard>
 
-      {/* Connected agents — empty state until /api/mcp/status ships */}
+      {/* Connected agents — live MCP session snapshot */}
       <OuterCard
         title={
           <span className="flex items-center gap-2">
@@ -114,14 +131,41 @@ export function MCPServer() {
         }
         subtitle="Live MCP sessions. Disconnecting terminates the session immediately."
       >
-        <div className="py-6 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
-          Agent session list appears after the first MCP connection.
-        </div>
+        {!mcpStatus || mcpStatus.totalConnected === 0 ? (
+          <div className="py-6 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
+            No active sessions. Connect an agent to see it here.
+          </div>
+        ) : (
+          <div className="flex flex-col divide-y divide-[color:var(--ol-border-subtle)]">
+            {mcpStatus.sessions.map((s) => (
+              <div
+                key={s.id}
+                className="flex items-center justify-between gap-3 py-2 text-[12.5px]"
+              >
+                <span className="flex items-center gap-2">
+                  <span
+                    aria-hidden
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: 'var(--ol-success)' }}
+                  />
+                  <span className="ol-mono text-[color:var(--ol-fg)]">{s.id}</span>
+                  <span className="rounded bg-[color:var(--ol-panel-2)] px-1.5 py-0.5 text-[10.5px] uppercase tracking-wide text-[color:var(--ol-fg-muted)]">
+                    {s.transport}
+                  </span>
+                </span>
+                <span className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
+                  connected {formatRelative(s.connectedAt)} · last seen{' '}
+                  {formatRelative(s.lastActivityAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </OuterCard>
 
-      {/* Recent agent calls — empty state until event feed ships */}
+      {/* Agent activity — sourced from /api/activity?actor=mcp */}
       <OuterCard
-        title="Recent agent calls"
+        title="Agent activity"
         subtitle="MCP-triggered events only. Full history under Activity."
         actions={
           <button
@@ -135,8 +179,8 @@ export function MCPServer() {
         bodyClassName="p-0"
       >
         <ActivityTimeline
-          events={[]}
-          emptyState="No agent calls yet. Stats appear after the first agent call."
+          events={mcpEvents}
+          emptyState="No agent calls yet. MCP-triggered deploys and connections appear here."
           onOpenService={(project, service) => navigate(`/services/${service}?project=${project}`)}
         />
       </OuterCard>
