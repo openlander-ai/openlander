@@ -1,13 +1,12 @@
 import { Hono } from 'hono';
-import { stream } from 'hono/streaming';
 
 import type { AppContext } from '../../app.js';
-import type { ActivityLogRow } from '../../db/types.js';
 import { OpenLanderError } from '../../errors.js';
-import { eventBus, type EventType, type EventPayload } from '../../events/index.js';
+import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
-import { type ActivityEvent, buildActivityEvent } from '../../monitor/activity-event-mapper.js';
+import { createActivityRoutes } from './activity-routes.js';
 import { createDeployStreamRoutes } from './deploy-stream-routes.js';
+import { createMcpStatusRoutes } from './mcp-status-routes.js';
 import { createProjectRoutes } from './project-routes.js';
 import { createSystemRoutes } from './system-routes.js';
 import { createAiUsageRoutes } from './ai-usage-routes.js';
@@ -21,93 +20,6 @@ import { getEnvironmentProjectHostname, getAllIps } from '../../pipeline/traefik
 const log = createModuleLogger('api');
 const API_SLOW_REQUEST_MS = 300;
 const API_OBSERVE_REQUEST_MS = 150;
-
-const ACTIVITY_TYPES = [
-  'incident',
-  'recovery',
-  'approval',
-  'circuit_breaker',
-  'cleanup',
-  'alert',
-  'ai_diagnosis',
-  'ai:invoked',
-  'ai:completed',
-  'recovery:blocked',
-  'recovery:degraded',
-  'recovery:stopped',
-  'recovery:started',
-  // Day 9 F5: webhook silently-skipped activity row.
-  'webhook:skipped',
-] as const;
-
-function isActivityType(value: string): value is ActivityEvent['type'] {
-  return (ACTIVITY_TYPES as readonly string[]).includes(value);
-}
-
-function parseActivityTypeFilter(raw: string | undefined): Set<ActivityEvent['type']> | null {
-  if (!raw) return null;
-  const parsed = raw
-    .split(',')
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0)
-    .filter(isActivityType);
-  if (parsed.length === 0) return null;
-  return new Set(parsed);
-}
-
-function parseSeverityFilter(raw: string | undefined): ActivityEvent['severity'] | null {
-  if (raw === 'critical' || raw === 'warning' || raw === 'info') return raw;
-  return null;
-}
-
-function shouldIncludeActivity(
-  event: ActivityEvent,
-  filters: {
-    projectId?: string;
-    types?: Set<ActivityEvent['type']> | null;
-    severity?: ActivityEvent['severity'] | null;
-  },
-): boolean {
-  if (filters.projectId && event.projectId !== filters.projectId) return false;
-  if (filters.types && !filters.types.has(event.type)) return false;
-  if (filters.severity && event.severity !== filters.severity) return false;
-  return true;
-}
-
-/**
- * Convert an ActivityLogRow from the database into the ActivityEvent shape
- * consumed by the frontend useActivityStream hook.
- */
-function activityLogRowToEvent(row: ActivityLogRow, projectName: string): ActivityEvent {
-  let metadata: Record<string, unknown> = {};
-  try {
-    metadata = JSON.parse(row.metadata) as Record<string, unknown>;
-  } catch {
-    // ignore malformed metadata
-  }
-
-  return {
-    id: row.id,
-    timestamp: row.created_at,
-    type: row.activity_type as ActivityEvent['type'],
-    severity: row.severity as ActivityEvent['severity'],
-    projectId: row.project_id,
-    projectName,
-    title: row.title,
-    description: row.description,
-    status: row.status as ActivityEvent['status'],
-    incidentId: typeof metadata.incidentId === 'string' ? metadata.incidentId : undefined,
-    actionRunId: typeof metadata.actionRunId === 'string' ? metadata.actionRunId : undefined,
-    correlationId: row.correlation_id ?? undefined,
-    aiMetadata: metadata.aiMetadata as ActivityEvent['aiMetadata'],
-    rawType: row.event_type as EventType,
-    project: projectName,
-    user: 'system',
-    detail: row.description || undefined,
-    time: row.created_at,
-    reason: typeof metadata.reason === 'string' ? metadata.reason : undefined,
-  };
-}
 
 export function createApiRoutes(ctx: AppContext): Hono {
   const api = new Hono();
@@ -148,52 +60,6 @@ export function createApiRoutes(ctx: AppContext): Hono {
     return c.json({ error: 'INTERNAL_ERROR', message: err.message }, 500);
   });
 
-  // --- Event types for SSE streaming ---
-
-  const eventTypes: EventType[] = [
-    'deploy:start',
-    'deploy:clone',
-    'deploy:build',
-    'deploy:run',
-    'deploy:success',
-    'deploy:failed',
-    'deploy:crash',
-    'deploy:rollback',
-    'container:start',
-    'container:stop',
-    'container:remove',
-    'container:health',
-    'container:die',
-    'container:oom',
-    'container:missing',
-    'tunnel:start',
-    'tunnel:stop',
-    'tunnel:url',
-    'env:set',
-    'env:delete',
-    'compose:start',
-    'compose:up',
-    'compose:failed',
-    'monitor:inactive',
-    'health:degraded',
-    'recovery:start',
-    'recovery:success',
-    'recovery:failed',
-    'recovery:exhausted',
-    'recovery:approval-needed',
-    'recovery:approval-resolved',
-    'recovery:blocked',
-    'recovery:degraded',
-    'recovery:stopped',
-    'recovery:started',
-    'ai:invoked',
-    'ai:completed',
-    'alert:new',
-    'alert:resolved',
-    // Day 9 F5: stream webhook policy-skips to UI activity feed.
-    'webhook:skipped',
-  ];
-
   // Auto-release deploy locks on completion/failure (session-scoped to prevent lock stealing)
   eventBus.on('deploy:success', (p) => {
     ctx.db.releaseDeployLock(p.projectId, p.sessionId);
@@ -206,152 +72,6 @@ export function createApiRoutes(ctx: AppContext): Hono {
   });
   eventBus.on('compose:failed', (p) => {
     ctx.db.releaseDeployLock(p.projectId, p.sessionId);
-  });
-
-  // --- Helper: resolve project names for activity log rows ---
-
-  function resolveActivityRows(rows: ActivityLogRow[]): ActivityEvent[] {
-    const projectNameCache = new Map<string, string>();
-    return rows.map((row) => {
-      let name = projectNameCache.get(row.project_id);
-      if (name === undefined) {
-        const project = ctx.db.getProject(row.project_id);
-        name = project?.name ?? row.project_id;
-        projectNameCache.set(row.project_id, name);
-      }
-      return activityLogRowToEvent(row, name);
-    });
-  }
-
-  // --- Activity Endpoint (DB-backed with SSE gap recovery) ---
-
-  api.get('/activity', (c) => {
-    const follow = c.req.query('follow');
-    const sinceId = c.req.query('since') ?? undefined;
-    const projectIdFilter = c.req.query('projectId') ?? undefined;
-    const typeFilter = parseActivityTypeFilter(c.req.query('types'));
-    const severityFilter = parseSeverityFilter(c.req.query('severity'));
-    const correlationIdFilter = c.req.query('correlationId') ?? undefined;
-    const parsedLimit = Number.parseInt(c.req.query('limit') ?? '50', 10);
-    const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 200) : 50;
-
-    // Build DB filter object from query params.
-    // Note: activity_type filter uses comma-separated types from ?types= param;
-    // we pass the first value for DB-level filtering and apply full set in-memory.
-    const dbFilters: {
-      project_id?: string;
-      activity_type?: string;
-      severity?: string;
-      correlation_id?: string;
-    } = {};
-    if (projectIdFilter) dbFilters.project_id = projectIdFilter;
-    if (severityFilter) dbFilters.severity = severityFilter;
-    if (correlationIdFilter) dbFilters.correlation_id = correlationIdFilter;
-    // When a single type is requested, push it to the DB filter for efficiency
-    if (typeFilter && typeFilter.size === 1) {
-      dbFilters.activity_type = [...typeFilter][0];
-    }
-
-    if (follow) {
-      return stream(c, async (s) => {
-        c.header('Content-Type', 'application/x-ndjson');
-
-        // Step 1: Register EventBus listener FIRST to buffer live events during backfill
-        const liveBuffer: ActivityEvent[] = [];
-        let backfillComplete = !sinceId; // no backfill needed if no since param
-        const unsubscribers: Array<() => void> = [];
-
-        for (const eventType of eventTypes) {
-          unsubscribers.push(
-            eventBus.on(eventType, (payload: EventPayload[typeof eventType]) => {
-              const activityEvent = buildActivityEvent(ctx.db, eventType, payload);
-              if (!activityEvent) return;
-              if (
-                !shouldIncludeActivity(activityEvent, {
-                  projectId: projectIdFilter,
-                  types: typeFilter,
-                  severity: severityFilter,
-                })
-              ) {
-                return;
-              }
-              if (!backfillComplete) {
-                // Buffer events that arrive during backfill query
-                liveBuffer.push(activityEvent);
-              } else {
-                void s.write(JSON.stringify(activityEvent) + '\n');
-              }
-            }),
-          );
-        }
-
-        s.onAbort(() => {
-          for (const unsub of unsubscribers) {
-            unsub();
-          }
-        });
-
-        // Step 2: If since param provided, query missed events and send as backfill
-        if (sinceId) {
-          try {
-            const missedRows = ctx.db.findActivityLogSinceFiltered(sinceId, limit, dbFilters);
-            const missedEvents = resolveActivityRows(missedRows);
-
-            // Apply multi-type filter in-memory (DB only filters single type)
-            const filtered =
-              typeFilter && typeFilter.size > 1
-                ? missedEvents.filter((e) => typeFilter.has(e.type))
-                : missedEvents;
-
-            // Step 3: Send backfill events with backfill flag
-            for (const event of filtered) {
-              await s.write(JSON.stringify({ ...event, backfill: true }) + '\n');
-            }
-
-            // Step 4: Send sentinel
-            await s.write(JSON.stringify({ type: 'backfill-complete' }) + '\n');
-          } catch (err) {
-            log.error({ err }, 'Failed to query activity_log for backfill');
-            // Send sentinel even on error so client knows backfill phase is done
-            await s.write(JSON.stringify({ type: 'backfill-complete' }) + '\n');
-          }
-
-          // Step 5: Flush buffered live events that arrived during backfill
-          backfillComplete = true;
-          for (const buffered of liveBuffer) {
-            await s.write(JSON.stringify(buffered) + '\n');
-          }
-          liveBuffer.length = 0;
-        }
-
-        // Step 6: From here, live events are written directly by the listener above
-        await new Promise<void>((resolve) => {
-          s.onAbort(() => {
-            resolve();
-          });
-        });
-      });
-    }
-
-    // --- REST mode: Query activity_log table ---
-    let activities: ActivityEvent[];
-
-    if (sinceId) {
-      // Cursor-based pagination: return events after the given ULID
-      const rows = ctx.db.findActivityLogSinceFiltered(sinceId, limit, dbFilters);
-      activities = resolveActivityRows(rows);
-    } else {
-      // No cursor: return most recent events
-      const rows = ctx.db.findActivityLogRecent(limit, dbFilters);
-      activities = resolveActivityRows(rows);
-    }
-
-    // Apply multi-type filter in-memory when multiple types requested
-    if (typeFilter && typeFilter.size > 1) {
-      activities = activities.filter((e) => typeFilter.has(e.type));
-    }
-
-    return c.json({ activities });
   });
 
   // --- Global Secrets ---
@@ -530,6 +250,8 @@ export function createApiRoutes(ctx: AppContext): Hono {
     return c.json({ http: { routers, services } });
   });
 
+  api.route('/', createActivityRoutes(ctx));
+  api.route('/', createMcpStatusRoutes(ctx));
   api.route('/', createDeployStreamRoutes(ctx));
   api.route('/', createProjectRoutes(ctx));
   api.route('/', createSystemRoutes(ctx));

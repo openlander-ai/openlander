@@ -143,6 +143,7 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
 interface McpSession {
   server: Server; // eslint-disable-line @typescript-eslint/no-deprecated
   transport: WebStandardStreamableHTTPServerTransport;
+  connectedAt: number;
   lastActivity: number;
   heartbeatInterval?: ReturnType<typeof setInterval>;
   ttlTimeout?: ReturnType<typeof setTimeout>;
@@ -151,13 +152,52 @@ interface McpSession {
 interface McpSseSession {
   server: Server; // eslint-disable-line @typescript-eslint/no-deprecated
   transport: SSEServerTransport; // eslint-disable-line @typescript-eslint/no-deprecated
+  connectedAt: number;
   lastActivity: number;
+}
+
+// Module-scope session registries so /api/mcp/status can enumerate active
+// sessions without reaching into createMcpHttpRoutes' closure. Single MCP
+// instance per process (one boot of createMcpHttpRoutes), so the global
+// registries are safe.
+const sessions = new Map<string, McpSession>();
+const sseSessions = new Map<string, McpSseSession>();
+
+export interface McpSessionSnapshot {
+  id: string;
+  transport: 'http' | 'sse';
+  connectedAt: number;
+  lastActivityAt: number;
+}
+
+/**
+ * Snapshot of currently-connected MCP sessions. Returned to /api/mcp/status
+ * so the UI can show "who is connected" without leaking internal session
+ * objects (Server / Transport refs).
+ */
+export function getMcpSessionsSnapshot(): McpSessionSnapshot[] {
+  const out: McpSessionSnapshot[] = [];
+  for (const [id, s] of sessions.entries()) {
+    out.push({
+      id,
+      transport: 'http',
+      connectedAt: s.connectedAt,
+      lastActivityAt: s.lastActivity,
+    });
+  }
+  for (const [id, s] of sseSessions.entries()) {
+    out.push({
+      id,
+      transport: 'sse',
+      connectedAt: s.connectedAt,
+      lastActivityAt: s.lastActivity,
+    });
+  }
+  return out.sort((a, b) => b.connectedAt - a.connectedAt);
 }
 
 export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => void } {
   const app = new Hono();
-  const sessions = new Map<string, McpSession>();
-  const sseSessions = new Map<string, McpSseSession>();
   const authService = new AuthService(ctx.db);
 
   app.use(
@@ -214,10 +254,12 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
       onsessioninitialized: (sid) => {
+        const now = Date.now();
         const session: McpSession = {
           server,
           transport,
-          lastActivity: Date.now(),
+          connectedAt: now,
+          lastActivity: now,
         };
 
         session.heartbeatInterval = setInterval(() => {
@@ -280,6 +322,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
     sseSessions.set(transport.sessionId, {
       server,
       transport,
+      connectedAt: Date.now(),
       lastActivity: Date.now(),
     });
 

@@ -501,18 +501,14 @@ describe('buildActivityEvent', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Day 8 Bug #1: recovery:degraded MUST be present in the SSE event-type
-// arrays so the streaming `/api/activity` and `/api/ops/activity` endpoints
-// don't filter it out before reaching the client. We assert by static-import
-// the route module source and checking the literal arrays.
+// Day 8 Bug #1: recovery:degraded MUST be present in the ops SSE event-type
+// allowlist so the streaming `/api/ops/activity` endpoint doesn't filter it
+// out before reaching the client. The companion routes.ts allowlist was
+// retired when the orphan `/api/activity` (DB-backed activity_log feed) was
+// replaced by the v4 cross-actor activity endpoint, so only the ops-routes
+// guard remains.
 // ---------------------------------------------------------------------------
 describe('SSE event type allowlist (Day 8 Bug #1)', () => {
-  it('routes.ts ACTIVITY_TYPES includes recovery:degraded', async () => {
-    const { readFileSync } = await import('node:fs');
-    const source = readFileSync('src/web/api/routes.ts', 'utf8');
-    expect(source).toMatch(/'recovery:degraded'/);
-  });
-
   it('ops-routes.ts ActivityItem type union includes recovery:degraded', async () => {
     const { readFileSync } = await import('node:fs');
     const source = readFileSync('src/web/api/ops-routes.ts', 'utf8');
