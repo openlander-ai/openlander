@@ -50,6 +50,13 @@
       "when": 1776480000000,
       "tag": "0006_compose_path_and_recovering_watchdog",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1776560000000,
+      "tag": "0007_service_metrics_and_settings",
+      "breakpoints": true
     }
   ]
 }

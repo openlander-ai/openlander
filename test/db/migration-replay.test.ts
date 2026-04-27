@@ -160,7 +160,7 @@ function getColumnNames(sqlite: SqliteDatabase, table: string): Set<string> {
   return new Set(rows.map((r) => r.name));
 }
 
-/** Run all 7 migrations with foreign_keys OFF/ON bracketing (matches production logic). */
+/** Run all 8 migrations with foreign_keys OFF/ON bracketing (matches production logic). */
 function runFullMigration(
   drizzle: ReturnType<typeof createDrizzleDatabase>['db'],
   sqlite: SqliteDatabase,
@@ -208,11 +208,11 @@ describe('migration idempotency and safety (0003/0004/0005)', () => {
       expect(migrationRowCount(sqlite)).toBe(countAfterFirst);
     });
 
-    it('__drizzle_migrations has exactly 7 rows after full migration (no duplicates on re-run)', () => {
+    it('__drizzle_migrations has exactly 8 rows after full migration (no duplicates on re-run)', () => {
       runFullMigration(drizzle, sqlite);
       runFullMigration(drizzle, sqlite); // second run
 
-      expect(migrationRowCount(sqlite)).toBe(7);
+      expect(migrationRowCount(sqlite)).toBe(8);
     });
 
     it('table set is identical before and after re-applying all migrations', () => {
@@ -306,13 +306,13 @@ describe('migration idempotency and safety (0003/0004/0005)', () => {
     });
 
     // Day 14 fix: applyBaseline0to2() now records 0~2 with the correct
-    // folderMillis from the journal, so migrate() detects 0003/0004/0005/0006
-    // as still pending and applies them — bringing the total to 7.
-    it('__drizzle_migrations has exactly 7 rows after upgrading from rc.7 baseline', () => {
+    // folderMillis from the journal, so migrate() detects 0003/0004/0005/0006/0007
+    // as still pending and applies them — bringing the total to 8.
+    it('__drizzle_migrations has exactly 8 rows after upgrading from rc.7 baseline', () => {
       applyBaseline0to2(sqlite);
       runFullMigration(drizzle, sqlite);
 
-      expect(migrationRowCount(sqlite)).toBe(7);
+      expect(migrationRowCount(sqlite)).toBe(8);
     });
   });
 
