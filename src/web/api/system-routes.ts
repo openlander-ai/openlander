@@ -249,6 +249,54 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     }
   });
 
+  // Phase E_NEW Task 4: 3-state service health for v4 InfraMap nodes.
+  // Reads from the same Docker inspect path as `/services/:id/stats`
+  // (`ServiceManager.inspectServiceContainer`) and projects onto the
+  // 3-state vocabulary the UI hook expects:
+  //   container running + healthcheck `healthy`         → 'healthy'
+  //   container running + healthcheck `unhealthy`/`starting` → 'crashed'
+  //   container running + no healthcheck declared       → 'running'
+  //   container not running / no container reference    → 404
+  // The `'crashed'` mapping for `unhealthy`/`starting` matches the v4
+  // ServiceHealth UI type's binary `'healthy' | 'crashed'` consumers
+  // while preserving the third `'running'` slot for services without
+  // an explicit healthcheck.
+  api.get('/services/:id/health', async (c) => {
+    const id = c.req.param('id');
+    try {
+      const inspection = await ctx.serviceManager.getInspectionHealth(id);
+      if (inspection.status !== 'running') {
+        return c.json(
+          { error: 'NOT_FOUND', message: `Service container is not running: ${id}` },
+          404,
+        );
+      }
+
+      let health: 'healthy' | 'crashed' | 'running';
+      if (inspection.healthStatus === 'healthy') {
+        health = 'healthy';
+      } else if (
+        inspection.healthStatus === 'unhealthy' ||
+        inspection.healthStatus === 'starting'
+      ) {
+        health = 'crashed';
+      } else {
+        // No HEALTHCHECK declared (Docker reports `null`) — container
+        // is up but we can't assert healthy.
+        health = 'running';
+      }
+
+      return c.json({ health });
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'Get service health failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch service health' }, 500);
+    }
+  });
+
   api.get('/services/:id/connected-projects', (c) => {
     const id = c.req.param('id');
     try {

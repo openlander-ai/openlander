@@ -808,6 +808,26 @@ export class ServiceManager {
     };
   }
 
+  /**
+   * Phase E_NEW Task 4 — minimal Docker inspect projection used by
+   * `GET /api/services/:id/health`. Reads the same source that the
+   * card-summary path reads (`info.State.Health?.Status`) and returns
+   * the raw `(status, healthStatus)` pair so the route can project
+   * onto the v4 3-state vocabulary (`healthy | crashed | running`).
+   *
+   * `healthStatus` is `null` when the container does not declare a
+   * Docker `HEALTHCHECK`; we only return strings exactly as Docker
+   * reports them (`'healthy'`, `'unhealthy'`, `'starting'`).
+   */
+  async getInspectionHealth(id: string): Promise<{
+    status: ServiceRow['status'];
+    healthStatus: string | null;
+  }> {
+    const service = this.getRequiredService(id);
+    const inspection = await this.inspectServiceContainer(service);
+    return { status: inspection.status, healthStatus: inspection.healthStatus };
+  }
+
   async listWithCardSummary(): Promise<ServiceCardSummary[]> {
     const cached = this.serviceCardSummaryCache;
     if (cached && cached.expiresAt > Date.now()) {
