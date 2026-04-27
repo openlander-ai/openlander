@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { assertUrlSafetyOrThrow, MCP_ALLOWED_SCHEMES } from '../../lib/url-safety.js';
 
 const log = createModuleLogger('api');
 
@@ -10,6 +11,26 @@ const WEBHOOK_KEY = 'notification_webhook';
 interface WebhookConfig {
   url: string;
   events: string[];
+}
+
+/**
+ * Strip embedded user/password from a URL before returning it to the
+ * caller. The webhook URL may legitimately contain credentials (`https://
+ * user:pass@host/path`) since some platforms accept basic-auth that way,
+ * but we don't want to leak the secret on a settings GET. The check
+ * itself happens at write time (`assertUrlSafetyOrThrow`); this is a
+ * defense-in-depth read-time scrub for previously-stored values.
+ */
+function redactUserInfo(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl);
+    if (u.username || u.password) {
+      return `${u.protocol}//${u.host}${u.pathname}${u.search}`;
+    }
+    return rawUrl;
+  } catch {
+    return rawUrl;
+  }
 }
 
 /**
@@ -45,7 +66,7 @@ export function createNotificationsRoutes(ctx: AppContext): Hono {
       }
 
       const config = parsed as WebhookConfig;
-      return c.json({ url: config.url, events: config.events });
+      return c.json({ url: redactUserInfo(config.url), events: config.events });
     } catch (err) {
       log.debug({ err }, 'Get notification webhook failed');
       return c.json(
@@ -71,8 +92,24 @@ export function createNotificationsRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'INVALID_FIELD', message: 'events must be an array of strings' }, 400);
     }
 
+    const trimmedUrl = body.url.trim();
+
+    // SSRF guard — refuse loopback / link-local / RFC1918 / cloud
+    // metadata hosts and non-http(s) schemes. Same allowlist as the MCP
+    // HTTP/SSE transport so an authenticated user can't pivot the
+    // daemon into another tenant or the IMDS endpoint via a webhook.
+    try {
+      assertUrlSafetyOrThrow(trimmedUrl, { allowedSchemes: MCP_ALLOWED_SCHEMES });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'unsafe URL';
+      return c.json(
+        { error: 'INVALID_FIELD', message: `url is not a safe webhook target: ${reason}` },
+        400,
+      );
+    }
+
     const config: WebhookConfig = {
-      url: body.url.trim(),
+      url: trimmedUrl,
       events: body.events,
     };
 
