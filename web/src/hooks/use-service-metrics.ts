@@ -6,11 +6,10 @@
  * usePollingTask re-runs whenever the user toggles the range pill.
  *
  * Fallback policy:
- *   - If the fetch fails or `serviceId` is null, the result's `metrics`
- *     stays null and the consumer renders deterministicSeries instead.
- *   - We DON'T eagerly fall back to deterministicSeries inside the hook
- *     — that's the consumer's call so it can keep deterministic series
- *     stable across re-renders via useMemo.
+ *   - 204 No Content → `isEmpty: true`, `metrics: null`. Consumer renders
+ *     an empty state (Principle 4: no synthetic/deterministic path here).
+ *   - Other errors → `error` set, last-good `metrics` kept if available.
+ *   - When `serviceId` is null → hook is disabled, no fetch runs.
  *
  * 10s flat polling — fast enough to feel live without melting a
  * single-tenant box.
@@ -23,6 +22,8 @@ const POLL_MS = 10_000;
 
 export interface UseServiceMetricsResult {
   metrics: ServiceMetrics | null;
+  /** True when the backend returned 204 No Content (no metrics history yet). */
+  isEmpty: boolean;
   isLoading: boolean;
   error: string | null;
 }
@@ -32,6 +33,7 @@ export function useServiceMetrics(
   range: MetricsRange,
 ): UseServiceMetricsResult {
   const [metrics, setMetrics] = useState<ServiceMetrics | null>(null);
+  const [isEmpty, setIsEmpty] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +44,13 @@ export function useServiceMetrics(
     }
     try {
       const data = await fetchServiceMetrics(serviceId, range);
-      setMetrics(data);
+      if (data === null) {
+        setIsEmpty(true);
+        setMetrics(null);
+      } else {
+        setIsEmpty(false);
+        setMetrics(data);
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch metrics');
@@ -53,5 +61,5 @@ export function useServiceMetrics(
 
   usePollingTask(fetcher, { intervalMs: POLL_MS, enabled: serviceId != null });
 
-  return { metrics, isLoading, error };
+  return { metrics, isEmpty, isLoading, error };
 }

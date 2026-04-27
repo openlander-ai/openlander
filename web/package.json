@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "pretest:contract": "node ../tools/qa/start-test-backend.mjs",
+    "test:contract": "vitest run --config vitest.contract.config.ts",
+    "posttest:contract": "node ../tools/qa/stop-test-backend.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist-mono": "^5.2.7",
@@ -60,6 +63,8 @@
     "tailwindcss-animate": "^1.0.7",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
-    "vite": "^5.4.21"
+    "vite": "^5.4.21",
+    "vitest": "^4.1.5",
+    "zod": "^4.3.6"
   }
 }

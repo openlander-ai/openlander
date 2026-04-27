@@ -270,10 +270,11 @@ export function ServiceDetailV2() {
       </OuterCard>
 
       {/* Deploy log viewer modal-style overlay (in-page, not a Dialog).
-          mockMode=true because openDeployId is a synthetic number from
-          MOCK_DEPLOYMENTS. PR7 will swap DeploymentsTab to real
-          getProjectDeployments() and drop mockMode so the SSE stream
-          takes over. */}
+          Phase F justified mockMode: openDeployId is a synthetic number from
+          MOCK_DEPLOYMENTS; Phase E_NEW getProjectDeployments() is not yet
+          wired here. Once that endpoint lands, replace MOCK_DEPLOYMENTS with
+          the real list and remove mockMode so the SSE stream takes over.
+          Phase G DoD grep exception: "mockMode=true — Phase E_NEW pending" */}
       {openDeployId != null && (
         <div className="fixed inset-0 z-40 flex items-stretch bg-black/60 p-6">
           <div className="relative ml-auto flex h-full w-full max-w-4xl flex-col overflow-hidden rounded-[var(--ol-radius)] border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)]">

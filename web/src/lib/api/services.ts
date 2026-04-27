@@ -171,9 +171,21 @@ export async function fetchServiceHealth(id: string): Promise<ServiceHealth> {
   return data.health;
 }
 
+/**
+ * Fetches metrics. Returns null when the backend responds 204 No Content
+ * (service has no history yet — Principle 4: no synthetic fallback in the
+ * fetch layer; the consumer decides how to render the empty state).
+ */
 export async function fetchServiceMetrics(
   id: string,
   range: MetricsRange = '1h',
-): Promise<ServiceMetrics> {
-  return apiGet<ServiceMetrics>(`/api/services/${id}/metrics?range=${range}`);
+): Promise<ServiceMetrics | null> {
+  const { fetchWithAuth } = await import('./auth');
+  const res = await fetchWithAuth(`/api/services/${id}/metrics?range=${range}`);
+  if (res.status === 204) return null;
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `GET /api/services/${id}/metrics failed (${res.status})`);
+  }
+  return res.json() as Promise<ServiceMetrics>;
 }
