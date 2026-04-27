@@ -16,7 +16,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 
 import type { AppContext } from '../src/app.js';
-import { createProjectRoutes } from '../src/web/api/project-routes.js';
+import {
+  __test_resetTopologyNodeCache,
+  createProjectRoutes,
+} from '../src/web/api/project-routes.js';
 
 interface ServiceNode {
   id: string;
@@ -77,6 +80,10 @@ function createCtx(opts: {
         memory_stats: { usage: 0, limit: 0 },
       }),
     },
+    eventBus: {
+      on: vi.fn(),
+      emit: vi.fn(),
+    },
   } as unknown as AppContext;
 
   return ctx;
@@ -92,9 +99,10 @@ async function fetchTopologyHealth(ctx: AppContext): Promise<'healthy' | 'crashe
   return body.services[0]!.health;
 }
 
-describe("project topology — health projection (Blocker 3)", () => {
+describe('project topology — health projection (Blocker 3)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    __test_resetTopologyNodeCache();
   });
 
   it("docker 'starting' (HEALTHCHECK start_period) → UI 'healthy'", async () => {
