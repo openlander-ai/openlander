@@ -496,9 +496,6 @@ export async function createAppContext(
   const containerStateReconciler = new ContainerStateReconciler(docker, db, eventBus, {
     intervalMs: monitorIntervalMs,
   });
-  const serviceHealthMonitor = createServiceHealthMonitor(docker, db, eventBus, {
-    intervalMs: monitorIntervalMs,
-  });
   const systemMaintenanceMonitor = createSystemMaintenanceMonitor(docker, db, eventBus, {
     intervalMs: monitorIntervalMs,
   });
@@ -512,6 +509,14 @@ export async function createAppContext(
   const cloudflare = new CloudflareTunnelManager(config.cloudflare, db, eventBus);
 
   const serviceManager = new ServiceManager(docker, db);
+
+  // ServiceHealthMonitor depends on serviceManager for the v4 sparkline
+  // recorder hook (Phase E_NEW Task 5). Construct after serviceManager so
+  // each tick can persist a sample into `service_metrics`.
+  const serviceHealthMonitor = createServiceHealthMonitor(docker, db, eventBus, {
+    intervalMs: monitorIntervalMs,
+    serviceManager,
+  });
 
   try {
     await traefik.ensureAllNetworks();

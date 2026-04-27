@@ -1,6 +1,7 @@
 import type { Database, ServiceRow } from '../db/index.js';
 import type { Docker } from '../pipeline/docker.js';
 import type { EventBus } from '../events/index.js';
+import type { ServiceManager } from '../pipeline/service-manager.js';
 import { ContainerNotFoundError, isDockerNotFoundError } from '../errors.js';
 import { createModuleLogger } from '../lib/logger.js';
 
@@ -8,6 +9,14 @@ const log = createModuleLogger('service-health-monitor');
 
 export interface ServiceHealthMonitorOptions {
   intervalMs?: number;
+  /**
+   * Optional ServiceManager — when provided, each successful health check
+   * also records a one-row sample into `service_metrics` so the v4 service
+   * detail sparkline accumulates time-series data. Optional because some
+   * test harnesses construct the monitor without a full service manager;
+   * production wiring in `src/app.ts` always supplies one.
+   */
+  serviceManager?: ServiceManager;
 }
 
 export interface ServiceCheckResult {
@@ -20,6 +29,7 @@ const INITIAL_STAGGER_MS = 5_000;
 
 export class ServiceHealthMonitor {
   private readonly intervalMs: number;
+  private readonly serviceManager?: ServiceManager;
   private intervalId?: ReturnType<typeof setInterval>;
   private initialTimerId?: ReturnType<typeof setTimeout>;
   private checking = false;
@@ -32,6 +42,7 @@ export class ServiceHealthMonitor {
   ) {
     void this.events;
     this.intervalMs = options?.intervalMs ?? DEFAULT_INTERVAL_MS;
+    this.serviceManager = options?.serviceManager;
   }
 
   start(): void {
@@ -126,6 +137,25 @@ export class ServiceHealthMonitor {
 
       if (service.status === 'stopped' || service.status === 'error') {
         this.db.updateService(service.id, { status: 'running' });
+      }
+
+      // Record one metric sample per tick so the v4 service-detail
+      // sparkline has time-series data to render. Wrapped in try/catch
+      // so a recorder failure (DB write hiccup, transient stats fetch
+      // error) never poisons the health-check loop.
+      if (this.serviceManager) {
+        try {
+          await this.serviceManager.recordMetricSample(service.id);
+        } catch (recorderError) {
+          log.warn(
+            {
+              serviceId: service.id,
+              serviceName: service.name,
+              error: recorderError,
+            },
+            'Failed to record service metric sample — continuing health check',
+          );
+        }
       }
     } catch (error) {
       // Check if container is gone (vs transient docker error)
