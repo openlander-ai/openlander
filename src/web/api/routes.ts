@@ -7,6 +7,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { createActivityRoutes } from './activity-routes.js';
 import { createDeployStreamRoutes } from './deploy-stream-routes.js';
 import { createMcpStatusRoutes } from './mcp-status-routes.js';
+import { createMonitoringRoutes } from './monitoring-routes.js';
 import { createProjectRoutes } from './project-routes.js';
 import { createSystemRoutes } from './system-routes.js';
 import { createAiUsageRoutes } from './ai-usage-routes.js';
@@ -252,6 +253,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
   api.route('/', createActivityRoutes(ctx));
   api.route('/', createMcpStatusRoutes(ctx));
+  api.route('/', createMonitoringRoutes(ctx));
   api.route('/', createDeployStreamRoutes(ctx));
   api.route('/', createProjectRoutes(ctx));
   api.route('/', createSystemRoutes(ctx));

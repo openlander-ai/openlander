@@ -1,9 +1,11 @@
 /**
  * Sparkline — tiny SVG line chart.
  *
- * Uses a deterministic series so the same `seed` always renders the
- * same shape (stable across re-renders). Replace with real metrics
- * series when the monitoring endpoint lands.
+ * Pure renderer: takes a pre-computed numeric series and draws a fixed
+ * 380×56 line + filled area. Caller is responsible for the data — DO NOT
+ * seed with synthetic data when metrics are absent. Render an empty
+ * state instead. Synthetic seeds were removed in 1.0
+ * (ralplan-monitoring-logs Phase 2).
  */
 import { useMemo } from 'react';
 
@@ -12,7 +14,7 @@ const H = 56;
 const P = 4;
 
 export interface SparklineProps {
-  /** Numeric series — pre-computed by the page via deterministicSeries() */
+  /** Numeric series. Pass [] when no data; the SVG renders blank. */
   data: number[];
   /** Stroke + area fill color (oklch CSS color) */
   color?: string;
