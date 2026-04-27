@@ -1,35 +1,50 @@
 /**
- * Error class registry — drives FailureSummary.
+ * Error class registry — drives FailureSummary / ErrorSurface.
  *
- * 1.0 ships ten classes (GUIDE-05 §§2.1–2.10). Names are canonical and
- * MUST match the backend's error taxonomy exactly:
+ * 1.0 ships SIXTEEN classes. Names are canonical and MUST match the
+ * backend's `src/pipeline/error-classifier.ts` ErrorClass union exactly.
+ * Phase F's vitest+zod contract test pins the two surfaces into agreement.
  *
- *   CONFIG_MISSING
- *   GIT_ACCESS_DENIED
- *   BUILD_CONTEXT_MISMATCH
- *   IMAGE_WRONG_STAGE
- *   DEPENDENCY_UNHEALTHY
- *   DB_EXTENSION_MISSING
- *   PORT_CONFLICT
- *   CLI_OVERRIDE_SYNTAX
- *   RUNTIME_CRASH
- *   INFRA_UNAVAILABLE
+ *   v1.0 (§§2.1–2.10):  CONFIG_MISSING, GIT_ACCESS_DENIED, BUILD_CONTEXT_MISMATCH,
+ *                        IMAGE_WRONG_STAGE, DEPENDENCY_UNHEALTHY, DB_EXTENSION_MISSING,
+ *                        PORT_CONFLICT, CLI_OVERRIDE_SYNTAX, RUNTIME_CRASH, INFRA_UNAVAILABLE
+ *   v1.1 (§§2.12–2.16): OOM_KILLED, DOCKER_DAEMON_UNREACHABLE, DISK_EXHAUSTED,
+ *                        NETWORK_DEPENDENCY_UNREACHABLE, HEALTHCHECK_TIMEOUT, BUILD_TIMEOUT
  *
- * Six v1.1+ classes are intentionally NOT in this file:
- *   OOM_KILLED, DOCKER_DAEMON_UNREACHABLE, DISK_EXHAUSTED,
- *   NETWORK_DEPENDENCY_UNREACHABLE, HEALTHCHECK_TIMEOUT, BUILD_TIMEOUT.
+ * Phase E_NEW (Architect iteration-4 blocker): registry expanded from 10
+ * → 16 to match the v4 ErrorSurface narrative-specific copy. Source of
+ * the per-key data: `/tmp/ol-design-v4-backup/test/project/src/errors.jsx`
+ * (ported verbatim — title/phase/step/target/fixHint/codeRefs).
  *
  * Renames from earlier rounds (the prototype had drift): R2's
  * PORT_COLLISION → PORT_CONFLICT, REGISTRY_UNREACHABLE →
- * NETWORK_DEPENDENCY_UNREACHABLE (deferred), HEALTHCHECK_FLAPPING →
- * HEALTHCHECK_TIMEOUT (deferred), DISK_FULL → DISK_EXHAUSTED (deferred),
- * ENV_MISSING → CONFIG_MISSING.
+ * NETWORK_DEPENDENCY_UNREACHABLE, HEALTHCHECK_FLAPPING →
+ * HEALTHCHECK_TIMEOUT, DISK_FULL → DISK_EXHAUSTED, ENV_MISSING →
+ * CONFIG_MISSING.
  *
  * The shape carries instance facts (phase, step, target, codeRefs) for
  * the prototype. The eventual backend-supplied incident payload will
  * replace these per-incident fields; the title and fix-hint stay as
  * static class metadata. We don't bother splitting today (PR4 work).
  */
+
+export type ErrorClass =
+  | 'CONFIG_MISSING'
+  | 'GIT_ACCESS_DENIED'
+  | 'BUILD_CONTEXT_MISMATCH'
+  | 'IMAGE_WRONG_STAGE'
+  | 'DEPENDENCY_UNHEALTHY'
+  | 'DB_EXTENSION_MISSING'
+  | 'PORT_CONFLICT'
+  | 'CLI_OVERRIDE_SYNTAX'
+  | 'RUNTIME_CRASH'
+  | 'INFRA_UNAVAILABLE'
+  | 'OOM_KILLED'
+  | 'DOCKER_DAEMON_UNREACHABLE'
+  | 'DISK_EXHAUSTED'
+  | 'NETWORK_DEPENDENCY_UNREACHABLE'
+  | 'HEALTHCHECK_TIMEOUT'
+  | 'BUILD_TIMEOUT';
 
 export type DeployPhase =
   | 'clone'
@@ -48,7 +63,7 @@ export interface ErrorClassCodeRef {
 
 export interface ErrorClassDef {
   /** Canonical key — matches backend taxonomy */
-  id: string;
+  id: ErrorClass;
   title: string;
   phase: DeployPhase;
   /** Display step like "5/12" or "—" */
@@ -63,7 +78,7 @@ export interface ErrorClassDef {
   codeRefs: ErrorClassCodeRef[];
 }
 
-export const ERROR_CLASSES: Record<string, ErrorClassDef> = {
+export const ERROR_CLASSES: Record<ErrorClass, ErrorClassDef> = {
   CONFIG_MISSING: {
     id: 'CONFIG_MISSING',
     title: 'Build crashed because `DATABASE_URL` is not set',
@@ -193,11 +208,88 @@ export const ERROR_CLASSES: Record<string, ErrorClassDef> = {
       'The console can’t reach the OpenLander agent on this host (3 retries × 30s). The agent service may be down — check `Web Server → Status` or restart it via SSH.',
     codeRefs: [],
   },
+  OOM_KILLED: {
+    id: 'OOM_KILLED',
+    title: '`worker` was killed by the kernel — exceeded its 256MB memory limit',
+    phase: 'container_start',
+    step: '—',
+    target: 'service "worker"',
+    fixHint:
+      'Worker peaked at 312MB during ingestion. Either raise `deploy.resources.limits.memory` to 512M or split the batch into smaller pages (current chunk = 5000 deals).',
+    codeRefs: [
+      { path: 'compose.yml', line: 67, snippet: 'memory: 256M' },
+      { path: 'worker logs', line: null, snippet: 'Killed (OOM, peak 312MB)' },
+    ],
+  },
+  DOCKER_DAEMON_UNREACHABLE: {
+    id: 'DOCKER_DAEMON_UNREACHABLE',
+    title: 'Docker daemon stopped responding mid-deploy',
+    phase: 'container_create',
+    step: '—',
+    target: 'host',
+    fixHint:
+      "The agent's docker socket returned `connection refused` for 35s. Existing containers are unaffected. Restart the docker service on the host (`systemctl restart docker`), then re-deploy.",
+    codeRefs: [
+      {
+        path: 'host:/var/run/docker.sock',
+        line: null,
+        snippet: 'connect: connection refused',
+      },
+    ],
+  },
+  DISK_EXHAUSTED: {
+    id: 'DISK_EXHAUSTED',
+    title: 'Build failed — host is out of disk',
+    phase: 'build',
+    step: '7/12',
+    target: 'host',
+    fixHint:
+      'Image cache layer wrote 4.2GB but only 1.1GB remained. Run `docker system prune -af` or wire up the scheduled GC job (see `Web Server → Maintenance`).',
+    codeRefs: [
+      {
+        path: 'host:/var/lib/docker',
+        line: null,
+        snippet: '98% used (47.1G / 48.0G)',
+      },
+    ],
+  },
+  NETWORK_DEPENDENCY_UNREACHABLE: {
+    id: 'NETWORK_DEPENDENCY_UNREACHABLE',
+    title: 'Docker registry timed out while pulling base image',
+    phase: 'image_pull',
+    step: '—',
+    target: 'image "node:20-alpine"',
+    fixHint:
+      "docker.io was unreachable from this host (3 retries × 30s). Check the host's egress firewall, or configure a registry mirror in `/etc/docker/daemon.json`.",
+    codeRefs: [{ path: 'Dockerfile.web', line: 1, snippet: 'FROM node:20-alpine' }],
+  },
+  HEALTHCHECK_TIMEOUT: {
+    id: 'HEALTHCHECK_TIMEOUT',
+    title: '`web` health check kept failing for 60s — marked unhealthy',
+    phase: 'healthcheck_wait',
+    step: '—',
+    target: 'service "web"',
+    fixHint:
+      'Your `/healthz` endpoint returns 503 during startup while it warms the cache. Either bump `start_period` to 90s, or have `/healthz` return 200 once the HTTP server is bound (warm cache lazily).',
+    codeRefs: [{ path: 'compose.yml', line: 14, snippet: 'healthcheck.start_period: 30s' }],
+  },
+  BUILD_TIMEOUT: {
+    id: 'BUILD_TIMEOUT',
+    title: 'Build exceeded 20m timeout',
+    phase: 'build',
+    step: '9/12',
+    target: 'service "api"',
+    fixHint:
+      'Step #9 (`pnpm build`) ran for 19m 40s. Likely culprit: TypeScript checking on a cold cache. Mount `node_modules/.cache` as a buildkit cache, or move type-checking to CI.',
+    codeRefs: [{ path: 'Dockerfile.api', line: 22, snippet: 'RUN pnpm --filter api build' }],
+  },
 };
 
-export const ERROR_CLASS_LIST = Object.keys(ERROR_CLASSES);
+export const ERROR_CLASS_LIST: ErrorClass[] = Object.keys(ERROR_CLASSES) as ErrorClass[];
 
 export function getErrorClass(id: string | undefined | null): ErrorClassDef {
-  if (id && ERROR_CLASSES[id]) return ERROR_CLASSES[id];
+  if (id && (id as ErrorClass) in ERROR_CLASSES) {
+    return ERROR_CLASSES[id as ErrorClass];
+  }
   return ERROR_CLASSES.BUILD_CONTEXT_MISMATCH;
 }
