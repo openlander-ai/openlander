@@ -32,7 +32,6 @@ import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTa
 import { LogViewer } from '@/components/Shell/LogViewer';
 import { Sparkline } from '@/components/Shell/Sparkline';
 import { DeployRow } from '@/components/Shell/DeployRow';
-import { deterministicSeries } from '@/lib/deterministicSeries';
 import { getProject, type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
 import { LOG_SCRIPT_BASE } from '@/lib/logScripts';
 import { useProjectTopology } from '@/hooks/use-project-topology';
@@ -484,24 +483,14 @@ function MonitoringTab({ service }: { service: ServiceNode }) {
   // metrics array. p95LatencyMs feeds the requests-card sub line.
   // Requests-per-second and Error rate big numbers come from the latest
   // metrics datapoint when available, with a safe display fallback.
-  const cpuData = useMemo(
-    () => metrics?.cpu ?? deterministicSeries('cpu' + service.id, 60, 18, 24),
-    [metrics, service.id],
-  );
-  const memData = useMemo(
-    () => metrics?.memory ?? deterministicSeries('mem' + service.id, 60, 240, 80),
-    [metrics, service.id],
-  );
-  const reqData = useMemo(
-    () => metrics?.requestsPerSec ?? deterministicSeries('req' + service.id, 60, 32, 18),
-    [metrics, service.id],
-  );
-  const errData = useMemo(
-    () =>
-      metrics?.errorRate ??
-      deterministicSeries('err' + service.id, 60, 0.4, 0.6).map((v) => Math.max(0, v)),
-    [metrics, service.id],
-  );
+  // Synthetic seed fallbacks were removed in 1.0 (ralplan-monitoring-logs
+  // Phase 2 — Principle 1: no synthetic empty-state numbers). When metrics
+  // is null (no samples yet, or 204 from /api/services/:id/metrics) the
+  // Sparkline renders an empty SVG and the headline value falls back to "—".
+  const cpuData = useMemo(() => metrics?.cpu ?? [], [metrics]);
+  const memData = useMemo(() => metrics?.memory ?? [], [metrics]);
+  const reqData = useMemo(() => metrics?.requestsPerSec ?? [], [metrics]);
+  const errData = useMemo(() => metrics?.errorRate ?? [], [metrics]);
 
   const reqLatest = metrics
     ? Math.round(metrics.requestsPerSec[metrics.requestsPerSec.length - 1] ?? 0)
