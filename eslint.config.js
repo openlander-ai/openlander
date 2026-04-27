@@ -13,6 +13,12 @@ export default tseslint.config(
       '*.config.*',
       'web/dist/',
       'web/node_modules/',
+      // Web files are linted via `web/eslint.config.js` because their
+      // React plugins (react-hooks, react-refresh) are only installed
+      // under web/node_modules. Root-level eslint (incl. lint-staged
+      // running from the repo root) skips them entirely; pre-commit
+      // delegates web linting to a `cd web && eslint --fix` wrapper.
+      'web/src/',
     ],
   },
   // Root src/ - TypeScript strict mode
@@ -36,17 +42,6 @@ export default tseslint.config(
       ],
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
       '@typescript-eslint/no-import-type-side-effects': 'error',
-    },
-  },
-  // Web src/ - TypeScript recommended (lighter than root strict mode)
-  {
-    files: ['web/src/**/*.{ts,tsx}'],
-    extends: [eslint.configs.recommended, tseslint.configs.recommended, eslintConfigPrettier],
-    languageOptions: {
-      parserOptions: {
-        projectService: true,
-        tsconfigRootDir: import.meta.dirname,
-      },
     },
   },
 );

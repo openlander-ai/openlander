@@ -1,16 +1,14 @@
 import { LanguageProvider } from '@/i18n/context';
 import { Component, type ErrorInfo, type ReactNode, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
-import { AppLayout } from '@/components/layout/AppLayout';
+import { AppShell } from '@/components/Shell/AppShell';
 import { SetupScreen } from '@/components/setup/SetupScreen';
 import { NewProjectFlow } from '@/pages/NewProjectFlow';
-import { ProjectDetail } from '@/pages/ProjectDetail';
 import { ProjectsGrid } from '@/pages/ProjectsGrid';
 import { DeploymentDetail } from '@/pages/DeploymentDetail';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ServicesPage } from '@/pages/ServicesPage';
 import { OpsCenterV2 } from '@/pages/OpsCenterV2';
-import { ServiceDetail } from '@/pages/ServiceDetail';
 import { Overview } from '@/pages/Overview';
 import { DeploymentsList } from '@/pages/DeploymentsList';
 import { useAgentPanel } from '@/contexts/agent-panel';
@@ -116,7 +114,7 @@ function App() {
         <ErrorBoundary>
           <Toaster
             toastOptions={{
-              className: 'bg-bg-panel border-border text-foreground font-body',
+              className: 'bg-bg-panel border-border text-primary-ol font-body',
               descriptionClassName: 'text-muted-foreground',
             }}
           />
@@ -125,10 +123,14 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route
                 path="/setup"
-                element={<SetupScreen onComplete={() => (window.location.href = '/projects')} />}
+                element={<SetupScreen onComplete={() => (window.location.href = '/overview')} />}
               />
               <Route element={<SetupGuard />}>
-                <Route element={<AppLayout />}>
+                {/* AppShell takeover: single shell for all authenticated routes.
+                    Legacy AppLayout deleted. V2 pages (Home/Activity/MCPServer/
+                    ProjectView/ServiceDetailV2/settings/*) added in A.2.4 once
+                    their source files land. */}
+                <Route element={<AppShell />}>
                   <Route path="/overview" element={<Overview />} />
                   <Route path="/deployments" element={<DeploymentsList />} />
                   <Route path="/projects" element={<ProjectsGrid />} />
@@ -137,9 +139,7 @@ function App() {
                     path="/projects/:id/deployments/:deployId"
                     element={<DeploymentDetail />}
                   />
-                  <Route path="/projects/:id" element={<ProjectDetail />} />
                   <Route path="/services" element={<ServicesPage />} />
-                  <Route path="/services/:id" element={<ServiceDetail />} />
                   <Route path="/operations" element={<OpsCenterV2 />} />
                   <Route path="/ops-v1" element={<Navigate to="/operations" replace />} />
                   <Route path="/settings" element={<SettingsPage />} />
