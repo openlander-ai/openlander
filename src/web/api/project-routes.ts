@@ -444,7 +444,19 @@ export function createProjectRoutes(ctx: AppContext): Hono {
             }
           }
 
-          // Determine health using docker inspect (same as Task 4)
+          // Determine health using docker inspect (same as Task 4).
+          //
+          // Phase 4 fix (Blocker 3): preserve `starting` as `healthy`.
+          // Containers in their HEALTHCHECK `start_period` (typically 30s
+          // for postgres/mongo) are healthy by default — collapsing
+          // `starting` to `crashed` triggered false alarms in InfraMap
+          // for every fresh deploy. Only `unhealthy` collapses to
+          // `crashed`. `null` (no healthcheck) and `healthy` keep the
+          // default `healthy`.
+          //
+          // Inspect failure now collapses to `crashed` for parity with
+          // ServiceManager.inspectServiceContainer (which sets
+          // status: 'error' on the same failure mode).
           let health: 'healthy' | 'crashed' = 'healthy';
           if (node.status !== 'running') {
             health = 'crashed';
@@ -454,12 +466,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
               const dockerHealth =
                 (info as unknown as { State: { Health?: { Status?: string } } }).State.Health
                   ?.Status ?? null;
-              if (dockerHealth === 'unhealthy' || dockerHealth === 'starting') {
+              if (dockerHealth === 'unhealthy') {
                 health = 'crashed';
               }
-              // 'healthy' and null (no healthcheck) both map to 'healthy'
+              // 'starting' falls through → keeps default 'healthy'
+              // 'healthy' and null (no healthcheck) also keep 'healthy'
             } catch {
-              // inspect failed — keep 'healthy' if container is running
+              // inspect failed — collapse to 'crashed' (parity with
+              // ServiceManager.inspectServiceContainer error path)
+              health = 'crashed';
             }
           }
 
