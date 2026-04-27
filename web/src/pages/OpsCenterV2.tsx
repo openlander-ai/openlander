@@ -25,7 +25,6 @@ import { PostmortemsTab } from '@/components/ops/PostmortemsTab';
 import { PatternsTab } from '@/components/ops/PatternsTab';
 import { UsageTab } from '@/components/ops/UsageTab';
 import type { CircuitBreakerState, ActivityItem } from '@/lib/api/operations';
-import { PageHeader } from '@/components/layout/PageHeader';
 
 function deriveHealthState(
   incidents: { severity: string }[],
@@ -152,10 +151,7 @@ export function OpsCenterV2() {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <PageHeader
-        title={t('opsV2.page.title')}
-        actions={<KeyboardShortcutsHelp helpButtonRef={helpButtonRef} />}
-      />
+      <KeyboardShortcutsHelp helpButtonRef={helpButtonRef} />
       <StatusStrip
         healthState={isLoading ? 'unknown' : healthState}
         activeIncidentCount={incidents.length}

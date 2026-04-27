@@ -1,4 +1,6 @@
+import type { ServiceHealth } from '../projectTopology';
 import { apiGet, apiPost, apiPostVoid, apiDelete } from './client';
+import { fetchWithAuth } from './auth';
 
 export interface ServiceTemplate {
   id: string;
@@ -48,7 +50,7 @@ export async function createService(opts: {
   port?: number;
   env_vars?: Array<{ key: string; value: string }>;
 }): Promise<Service> {
-  const res = await fetch('/api/services', {
+  const res = await fetchWithAuth('/api/services', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(opts),
@@ -96,7 +98,7 @@ export async function getConnectedProjects(id: string): Promise<ConnectedProject
 }
 
 export async function getServiceLogs(id: string, lines: number = 100): Promise<string> {
-  const res = await fetch(`/api/services/${id}/logs?lines=${lines}`);
+  const res = await fetchWithAuth(`/api/services/${id}/logs?lines=${lines}`);
   if (!res.ok) throw new Error('Failed to fetch service logs');
   const data = await res.json();
   return data.logs;
@@ -112,7 +114,7 @@ export interface ServiceUser {
 }
 
 export async function getServiceDatabases(id: string): Promise<ServiceDatabase[]> {
-  const res = await fetch(`/api/services/${id}/databases`);
+  const res = await fetchWithAuth(`/api/services/${id}/databases`);
   if (!res.ok) throw new Error('Failed to fetch service databases');
   const data = await res.json();
   return data.databases;
@@ -126,7 +128,7 @@ export async function createServiceDatabase(
 }
 
 export async function getServiceUsers(id: string): Promise<ServiceUser[]> {
-  const res = await fetch(`/api/services/${id}/users`);
+  const res = await fetchWithAuth(`/api/services/${id}/users`);
   if (!res.ok) throw new Error('Failed to fetch service users');
   const data = await res.json();
   return data.users;
@@ -143,4 +145,47 @@ export async function createServiceUser(
     password,
     database,
   });
+}
+
+// ─── PR6: Round 4 health + metrics endpoints ──────────────────────────────
+
+export type MetricsRange = '15m' | '1h' | '6h' | '24h' | '7d';
+
+export interface ServiceMetrics {
+  /** Per-datapoint CPU percent (60 datapoints over the requested range) */
+  cpu: number[];
+  /** Per-datapoint memory in MB */
+  memory: number[];
+  /** Per-datapoint requests-per-second */
+  requestsPerSec: number[];
+  /** Per-datapoint error rate as a percent (e.g. 0.4 means 0.4%) */
+  errorRate: number[];
+  /** Aggregate p95 latency in milliseconds for the requested range */
+  p95LatencyMs: number;
+  /** Aggregate total request count for the requested range */
+  totalRequests: number;
+}
+
+export async function fetchServiceHealth(id: string): Promise<ServiceHealth> {
+  const data = await apiGet<{ health: ServiceHealth }>(`/api/services/${id}/health`);
+  return data.health;
+}
+
+/**
+ * Fetches metrics. Returns null when the backend responds 204 No Content
+ * (service has no history yet — Principle 4: no synthetic fallback in the
+ * fetch layer; the consumer decides how to render the empty state).
+ */
+export async function fetchServiceMetrics(
+  id: string,
+  range: MetricsRange = '1h',
+): Promise<ServiceMetrics | null> {
+  const { fetchWithAuth } = await import('./auth');
+  const res = await fetchWithAuth(`/api/services/${id}/metrics?range=${range}`);
+  if (res.status === 204) return null;
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `GET /api/services/${id}/metrics failed (${res.status})`);
+  }
+  return res.json() as Promise<ServiceMetrics>;
 }

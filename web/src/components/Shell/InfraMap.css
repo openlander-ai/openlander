@@ -1,0 +1,98 @@
+/*
+ * InfraMap — minimal CSS that React Flow + Tailwind cannot express.
+ *
+ * Most of the visual is driven by Tailwind utilities + var(--ol-*)
+ * tokens. This stylesheet now carries:
+ *   - The crashed-node attention pulse
+ *   - React Flow theme overrides (background dot color, edge stroke)
+ */
+
+.infra-map-node-disk.h-crashed::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 1px solid var(--ol-error);
+  opacity: 0.55;
+  animation: ol-node-pulse 1.4s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes ol-node-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+/* React Flow edge theming. We don't fight RF's defaults — just retint. */
+.infra-map .react-flow__edge-path {
+  stroke: color-mix(in oklch, var(--ol-fg-subtle) 75%, transparent);
+  stroke-width: 1.25;
+}
+.infra-map .react-flow__edge.alert .react-flow__edge-path {
+  stroke: var(--ol-error);
+  stroke-dasharray: 4 3;
+  animation: ol-edge-flow 1.6s linear infinite;
+}
+
+@keyframes ol-edge-flow {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+/* React Flow surface — inherit our panel surface */
+.infra-map .react-flow {
+  background: transparent;
+}
+.infra-map .react-flow__attribution {
+  background: transparent;
+  font-size: 9px;
+  color: var(--ol-fg-subtle);
+}
+
+/* Popover positioning */
+.infra-map-popover {
+  position: absolute;
+  z-index: 30;
+  min-width: 220px;
+  pointer-events: none;
+  animation: ol-popover-in 0.12s ease-out both;
+}
+
+@keyframes ol-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*
+ * Reduced-motion gate (PR7-B, restored after the original edit was
+ * lost). Honours the OS-level "Reduce motion" preference: the crashed-
+ * node attention pulse and the alert-edge dash flow stop animating;
+ * the popover entrance is also flattened. The visual signal is
+ * preserved (node ring + dashed alert edge + popover both still
+ * present) — only the motion is suppressed.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .infra-map-node-disk.h-crashed::before {
+    animation: none;
+    opacity: 0.55;
+  }
+  .infra-map .react-flow__edge.alert .react-flow__edge-path {
+    animation: none;
+  }
+  .infra-map-popover {
+    animation: none;
+  }
+}

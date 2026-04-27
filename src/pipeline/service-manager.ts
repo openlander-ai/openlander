@@ -808,6 +808,65 @@ export class ServiceManager {
     };
   }
 
+  /**
+   * Phase E_NEW Task 5 — recorder hook for the v4 service detail
+   * sparkline. Called from `ServiceHealthMonitor.runServiceCheck` on
+   * each tick (default cadence 30s) so the time-series in
+   * `service_metrics` accumulates one sample per service per tick.
+   * Pure no-op for non-running services; we don't want to pollute the
+   * sparkline with zero rows just because the container isn't up.
+   *
+   * `req` (requests/sec) and `err` (error rate %) are not yet sourced —
+   * the deploy pipeline doesn't surface per-service request counters
+   * today. We persist `0` for both rather than `null` because the
+   * sparkline is happier with zeros than with gaps; the contract is
+   * unchanged. p95 and request_count similarly default to null/0
+   * until a request-counting layer lands (post-1.0 follow-up).
+   */
+  async recordMetricSample(serviceId: string): Promise<void> {
+    const service = this.db.getService(serviceId);
+    if (!service || service.status !== 'running') {
+      return;
+    }
+
+    const runtime = await this.collectRuntimeStats(service);
+    const memMb =
+      runtime.memoryUsageBytes !== null
+        ? Math.round((runtime.memoryUsageBytes / (1024 * 1024)) * 10) / 10
+        : 0;
+
+    this.db.recordServiceMetricSample({
+      serviceId,
+      recordedAt: Date.now(),
+      cpu: runtime.cpuPercent ?? 0,
+      mem: memMb,
+      req: 0,
+      err: 0,
+      p95LatencyMs: null,
+      requestCount: 0,
+    });
+  }
+
+  /**
+   * Phase E_NEW Task 4 — minimal Docker inspect projection used by
+   * `GET /api/services/:id/health`. Reads the same source that the
+   * card-summary path reads (`info.State.Health?.Status`) and returns
+   * the raw `(status, healthStatus)` pair so the route can project
+   * onto the v4 3-state vocabulary (`healthy | crashed | running`).
+   *
+   * `healthStatus` is `null` when the container does not declare a
+   * Docker `HEALTHCHECK`; we only return strings exactly as Docker
+   * reports them (`'healthy'`, `'unhealthy'`, `'starting'`).
+   */
+  async getInspectionHealth(id: string): Promise<{
+    status: ServiceRow['status'];
+    healthStatus: string | null;
+  }> {
+    const service = this.getRequiredService(id);
+    const inspection = await this.inspectServiceContainer(service);
+    return { status: inspection.status, healthStatus: inspection.healthStatus };
+  }
+
   async listWithCardSummary(): Promise<ServiceCardSummary[]> {
     const cached = this.serviceCardSummaryCache;
     if (cached && cached.expiresAt > Date.now()) {

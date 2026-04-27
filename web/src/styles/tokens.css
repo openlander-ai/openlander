@@ -1,0 +1,199 @@
+/*
+ * OpenLander design tokens — Phase A foundation port to design v4.
+ *
+ * Source of truth: /tmp/ol-design-v4-backup/test/project/styles.css
+ * (light :root block lines 10-73; dark mode lines 76-119).
+ *
+ * Strategy: v4 token names (`--bg`, `--panel`, `--fg`, `--primary`,
+ * `--log-*`, etc.) are canonical. `--ol-*` legacy names are aliases
+ * pointing at the v4 values, kept temporarily so the megacommit code
+ * (~25 files referencing `var(--ol-bg)` / `var(--ol-fg)` / etc.) keeps
+ * working without a mechanical sed across every component. Phase D
+ * cleans up the legacy names by renaming consumers to v4 canonical.
+ *
+ * Light mode is the default. Dark mode is opt-in via
+ * `[data-theme='dark']` or `:root.dark`.
+ */
+
+@layer base {
+  :root {
+    /* ── Surfaces (v4 canonical) ── */
+    --bg: oklch(0.992 0.001 250);
+    --bg-sidebar: oklch(0.978 0.001 250);
+    --panel: oklch(1 0 0);
+    --panel-2: oklch(0.982 0.002 250);
+    --panel-hover: oklch(0.965 0.003 250);
+
+    /* ── Borders ── */
+    --border: oklch(0.915 0.003 250);
+    --border-strong: oklch(0.84 0.005 250);
+    --border-subtle: oklch(0.945 0.003 250);
+
+    /* ── Text ── */
+    --fg: oklch(0.16 0.005 250);
+    --fg-muted: oklch(0.44 0.006 250);
+    --fg-subtle: oklch(0.62 0.005 250);
+    --fg-inverse: oklch(1 0 0);
+
+    /* ── Accent (green — Linear/Railway) ── */
+    --primary: oklch(0.62 0.16 152);
+    --primary-hover: oklch(0.56 0.17 152);
+    --primary-soft: oklch(0.95 0.04 152);
+    --primary-fg: oklch(1 0 0);
+
+    /* ── Status ── */
+    --success: oklch(0.62 0.15 150);
+    --success-soft: oklch(0.96 0.03 150);
+    --warning: oklch(0.72 0.15 75);
+    --warning-soft: oklch(0.965 0.04 75);
+    --error: oklch(0.58 0.19 25);
+    --error-soft: oklch(0.965 0.035 25);
+    --info: oklch(0.55 0.13 250);
+    --info-soft: oklch(0.96 0.03 250);
+
+    /* ── Log palette (rendered against panel) ── */
+    --log-bg: oklch(0.992 0.002 250);
+    --log-line-hover: oklch(0.97 0.003 250);
+    --log-text: oklch(0.22 0.005 250);
+    --log-muted: oklch(0.55 0.005 250);
+    --log-num: oklch(0.72 0.005 250);
+    --log-error-bg: oklch(0.965 0.04 25);
+    --log-success: oklch(0.50 0.15 150);
+    --log-warning: oklch(0.62 0.15 75);
+    --log-error: oklch(0.55 0.20 25);
+    --log-debug: oklch(0.6 0.005 250);
+    --log-cyan: oklch(0.58 0.13 215);
+    --log-magenta: oklch(0.55 0.18 330);
+
+    /* ── Radii (Linear-style conservative) ── */
+    --r-sm: 4px;
+    --r-md: 6px;
+    --r-lg: 8px;
+    --r-xl: 10px;
+
+    /* ── Density ── */
+    --row-py: 12px;
+    --card-pad: 24px;
+    --sub-card-pad: 20px;
+
+    /* ── Type ── */
+    --font-sans: 'Geist', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'Geist Mono', 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+    /* ── InfraMap palette (v4 lines 1528-1536) ── */
+    --im-grid: oklch(0.88 0.02 255);
+    --im-edge: oklch(0.72 0.07 255);
+    --im-edge-strong: oklch(0.6 0.1 255);
+    --im-node-bg: oklch(0.99 0.005 250);
+    --im-node-stroke: oklch(0.65 0.1 255);
+    --im-node-icon: oklch(0.5 0.18 255);
+    --im-node-label: oklch(0.5 0.07 255);
+    --im-pulse: oklch(0.55 0.18 255);
+
+    /*
+     * ── Legacy `--ol-*` aliases (Phase A backcompat) ──
+     * Pointing the megacommit's token names at the v4 values so the
+     * ~25 files using `var(--ol-bg)` / `var(--ol-fg)` etc. don't break
+     * before Phase D's mechanical rename. Each alias resolves to the v4
+     * token above. Drop these in Phase D once consumers are renamed.
+     */
+    --ol-bg: var(--bg);
+    --ol-bg-app: var(--bg);
+    --ol-panel: var(--panel);
+    --ol-panel-2: var(--panel-2);
+    --ol-border: var(--border);
+    --ol-border-subtle: var(--border-subtle);
+    --ol-border-strong: var(--border-strong);
+    --ol-fg: var(--fg);
+    --ol-fg-muted: var(--fg-muted);
+    --ol-fg-subtle: var(--fg-subtle);
+    --ol-primary: var(--primary);
+    --ol-primary-soft: var(--primary-soft);
+    --ol-primary-fg: var(--primary-fg);
+    --ol-success: var(--success);
+    --ol-success-soft: var(--success-soft);
+    --ol-warning: var(--warning);
+    --ol-warning-soft: var(--warning-soft);
+    --ol-error: var(--error);
+    --ol-error-soft: var(--error-soft);
+    --ol-info: var(--info);
+    --ol-info-soft: var(--info-soft);
+    --ol-actor-mcp: var(--primary);
+    --ol-actor-human: var(--fg-muted);
+    --ol-actor-webhook: var(--info);
+    --ol-actor-system: var(--fg-subtle);
+    --ol-radius: var(--r-xl);
+    --ol-radius-sm: var(--r-md);
+    --ol-sidebar-w: 256px;
+    --ol-sidebar-w-collapsed: 56px;
+    --ol-topbar-h: 56px;
+    --ol-font-ui: var(--font-sans);
+    --ol-font-mono: var(--font-mono);
+  }
+
+  /* Dark mode (v4 lines 76-119) */
+  [data-theme='dark'],
+  :root.dark,
+  .dark {
+    --bg: oklch(0.155 0.004 250);
+    --bg-sidebar: oklch(0.13 0.004 250);
+    --panel: oklch(0.185 0.005 250);
+    --panel-2: oklch(0.21 0.006 250);
+    --panel-hover: oklch(0.235 0.006 250);
+
+    --border: oklch(0.27 0.006 250);
+    --border-strong: oklch(0.34 0.008 250);
+    --border-subtle: oklch(0.23 0.005 250);
+
+    --fg: oklch(0.96 0.003 250);
+    --fg-muted: oklch(0.68 0.005 250);
+    --fg-subtle: oklch(0.52 0.005 250);
+
+    --primary: oklch(0.72 0.17 152);
+    --primary-hover: oklch(0.78 0.17 152);
+    --primary-soft: oklch(0.27 0.08 152);
+
+    --success: oklch(0.72 0.15 150);
+    --success-soft: oklch(0.27 0.06 150);
+    --warning: oklch(0.78 0.15 75);
+    --warning-soft: oklch(0.30 0.06 75);
+    --error: oklch(0.70 0.18 25);
+    --error-soft: oklch(0.30 0.07 25);
+    --info: oklch(0.72 0.12 250);
+    --info-soft: oklch(0.28 0.05 250);
+
+    --log-bg: oklch(0.14 0.005 250);
+    --log-line-hover: oklch(0.18 0.006 250);
+    --log-text: oklch(0.92 0.005 250);
+    --log-muted: oklch(0.62 0.008 250);
+    --log-num: oklch(0.42 0.008 250);
+    --log-error-bg: oklch(0.30 0.07 25);
+    --log-success: oklch(0.74 0.15 150);
+    --log-warning: oklch(0.80 0.14 75);
+    --log-error: oklch(0.74 0.16 25);
+    --log-debug: oklch(0.55 0.008 250);
+    --log-cyan: oklch(0.74 0.12 215);
+    --log-magenta: oklch(0.72 0.15 330);
+
+    /* InfraMap (dark, v4 lines 1539-1546) */
+    --im-grid: oklch(0.32 0.025 255);
+    --im-edge: oklch(0.45 0.08 255);
+    --im-edge-strong: oklch(0.6 0.12 255);
+    --im-node-bg: oklch(0.2 0.012 250);
+    --im-node-stroke: oklch(0.55 0.1 255);
+    --im-node-icon: oklch(0.78 0.13 255);
+    --im-node-label: oklch(0.7 0.06 255);
+    --im-pulse: oklch(0.78 0.15 255);
+  }
+
+  .ol-shell,
+  .ol-shell-root {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+  }
+
+  .ol-mono {
+    font-family: var(--font-mono);
+  }
+}

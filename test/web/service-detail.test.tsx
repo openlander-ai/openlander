@@ -246,7 +246,12 @@ function renderDetail() {
   }
 }
 
-describe('ServiceDetail', () => {
+// V4 cleanup: web/src/pages/ServiceDetail.tsx was deleted in favour of
+// ServiceDetailV2.tsx (InfraMap-backed v4 page). The hook-replay strategy
+// here pins to specific React internals and cannot be retargeted onto the
+// new component without a full rewrite. Skipping at the describe level so
+// the suite doesn't import a missing module at boot.
+describe.skip('ServiceDetail', () => {
   beforeAll(async () => {
     const { createRequire } = await import('node:module');
     const require = createRequire(import.meta.url);

@@ -5,7 +5,6 @@ import type {
   Environment,
   Project,
 } from '../../types';
-import type { BuildStreamEvent } from '../event-types';
 import { fetchWithAuth } from './auth.js';
 import { apiDelete, apiGet, apiPost, apiPostVoid } from './client';
 
@@ -327,15 +326,6 @@ export async function disconnectProjectService(
   serviceId: string,
 ): Promise<void> {
   return apiDelete(`/api/projects/${projectId}/services/${serviceId}`);
-}
-
-export async function getProjectTimeline(id: string): Promise<BuildStreamEvent[]> {
-  const res = await fetch(`/api/projects/${id}/timeline`);
-  if (!res.ok) {
-    throw new Error('Failed to fetch timeline events');
-  }
-  const data = (await res.json()) as { events?: BuildStreamEvent[] };
-  return data.events ?? [];
 }
 
 export async function getDeploymentDetail(

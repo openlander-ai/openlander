@@ -9,7 +9,6 @@ import { Plus, Database } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 
 import { CreateServiceDialog } from '@/components/service/CreateServiceDialog';
-import { PageHeader } from '@/components/layout/PageHeader';
 
 function getRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -87,7 +86,6 @@ export function ServicesPage() {
   if (loading) {
     return (
       <div className="flex flex-col h-full w-full">
-        <PageHeader title={t('services.title')} />
         <div className="p-6 xl:p-8 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
@@ -109,7 +107,6 @@ export function ServicesPage() {
   if (services.length === 0) {
     return (
       <div className="flex flex-col h-full w-full">
-        <PageHeader title={t('services.title')} />
         <div className="p-6 xl:p-8 space-y-6">
           <PageEmptyState
             icon={Database}
@@ -135,7 +132,6 @@ export function ServicesPage() {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <PageHeader title={t('services.title')} />
       <div className="p-6 xl:p-8 space-y-6">
         <CreateServiceDialog
           open={showCreate}

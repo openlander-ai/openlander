@@ -124,8 +124,12 @@
     "url": "https://github.com/openlander-ai/OpenLander/issues"
   },
   "lint-staged": {
-    "*.{ts,tsx}": [
+    "src/**/*.{ts,tsx}": [
       "eslint --fix",
+      "prettier --write"
+    ],
+    "web/src/**/*.{ts,tsx}": [
+      "bash -c 'cd web && exec npx eslint --fix \"$@\"' --",
       "prettier --write"
     ],
     "*.{json,md,yml,yaml}": [

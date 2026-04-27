@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Contract test runtime artifacts (written by start-test-backend.mjs)
+.test-backend-pid
+.test-backend-port
+.test-backend-token
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

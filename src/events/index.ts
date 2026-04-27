@@ -179,6 +179,13 @@ export interface EventPayload {
     /** Deploy lock session ID — enables session-scoped lock release in event handlers. */
     sessionId?: string;
     serverId?: string;
+    /**
+     * 16-key ErrorClass union value, populated by `classifyDeployError`
+     * in the orchestrator catch path. Surfaces on the SSE terminal
+     * `event: end` payload so the LogViewer ErrorSurface can render the
+     * v4 narrative-specific copy. Phase E_NEW.
+     */
+    errorClass?: string;
   };
   'deploy:needs-user-action': {
     projectId: string;

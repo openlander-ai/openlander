@@ -39,6 +39,224 @@ import {
 
 const log = createModuleLogger('api');
 
+// ---------------------------------------------------------------------------
+// Topology per-node cache (Phase 4 fix — Blocker 4)
+// ---------------------------------------------------------------------------
+//
+// /api/projects/:id/topology used to fire `Promise.all([getContainerStats,
+// inspectContainer])` for EVERY service on EVERY poll, with no caching and
+// no in-flight de-dupe. A 10-service compose project = 20 Docker daemon
+// calls per topology poll, multiplied by however many UI tabs are open.
+//
+// Fix: a per-`container_id` 15s TTL cache + in-flight dedupe, mirroring the
+// pattern at ServiceManager.listWithCardSummary
+// (`serviceCardSummaryCache` + `serviceCardSummaryInFlight`). Concurrent
+// callers asking for the same container collapse to a single Docker call;
+// repeat callers within 15s reuse the cached value entirely.
+//
+// Module-level Maps are intentional — keyed on container_id which is
+// globally unique across projects, so cache reuse is safe across tenants.
+
+interface TopologyNodeRuntime {
+  health: 'healthy' | 'crashed';
+  cpuDisplay: string;
+  memDisplay: string;
+}
+
+const TOPOLOGY_NODE_CACHE_TTL_MS = 15_000;
+const topologyNodeCache = new Map<string, { ts: number; value: TopologyNodeRuntime }>();
+const topologyNodeInFlight = new Map<string, Promise<TopologyNodeRuntime>>();
+
+function invalidateTopologyNodeCache(containerId: string | null | undefined): void {
+  if (!containerId) return;
+  topologyNodeCache.delete(containerId);
+}
+
+/**
+ * Test-only escape hatch. Vitest module isolation gives each test file a
+ * fresh module graph, but tests that exercise the cache within a single
+ * file want a clean slate per case. Exported with a deliberate
+ * `__test_` prefix to signal "do not use from production code".
+ */
+export function __test_resetTopologyNodeCache(): void {
+  topologyNodeCache.clear();
+  topologyNodeInFlight.clear();
+}
+
+interface TopologyNode {
+  container_id: string | null;
+  status: string | null;
+}
+
+const topologyCacheInvalidationRegistered = new WeakSet<object>();
+
+function registerTopologyCacheInvalidation(ctx: AppContext): void {
+  // Defensive: test fixtures may construct AppContext without an eventBus
+  // at all, or mock it with `.emit` only and omit `.on`. The cache
+  // invalidation hook is a perf optimization, not a correctness
+  // requirement (15s TTL still bounds staleness), so silently skip
+  // subscription when the bus or `.on` is unavailable. Production
+  // EventBus (src/events/index.ts) provides both methods.
+  const bus = ctx.eventBus as { on?: unknown; emit?: unknown } | undefined;
+  if (!bus || typeof bus.on !== 'function') {
+    return;
+  }
+
+  // Re-mounting routes (e.g. test harness) must not stack subscribers.
+  // Guard on the eventBus identity so each bus only registers once.
+  if (topologyCacheInvalidationRegistered.has(ctx.eventBus)) {
+    return;
+  }
+  topologyCacheInvalidationRegistered.add(ctx.eventBus);
+
+  const invalidateProjectContainers = (projectId: string): void => {
+    try {
+      const project = ctx.db.getProject(projectId);
+      if (project) {
+        invalidateTopologyNodeCache(project.container_id);
+      }
+      // getChildProjects is a Database method but some narrow test
+      // fixtures stub `db` with only the methods they exercise — guard
+      // so the optional cache lookup never crashes the subscription.
+      if (typeof ctx.db.getChildProjects === 'function') {
+        const children = ctx.db.getChildProjects(projectId);
+        for (const child of children) {
+          invalidateTopologyNodeCache(child.container_id);
+        }
+      }
+    } catch (err) {
+      log.debug({ err, projectId }, 'topology cache invalidation lookup failed');
+    }
+  };
+
+  ctx.eventBus.on('deploy:success', (payload) => {
+    invalidateProjectContainers(payload.projectId);
+  });
+  ctx.eventBus.on('deploy:failed', (payload) => {
+    invalidateProjectContainers(payload.projectId);
+  });
+  // Compose deploys never emit deploy:success / deploy:failed — they emit
+  // compose:up / compose:failed instead. Without these subscriptions the
+  // topology cache stayed stale for the full 15s TTL after a compose
+  // rollout or failure (Codex MEDIUM-1).
+  ctx.eventBus.on('compose:up', (payload) => {
+    invalidateProjectContainers(payload.projectId);
+  });
+  ctx.eventBus.on('compose:failed', (payload) => {
+    invalidateProjectContainers(payload.projectId);
+  });
+}
+
+async function fetchTopologyNodeRuntime(
+  ctx: Pick<AppContext, 'docker'>,
+  node: TopologyNode,
+): Promise<TopologyNodeRuntime> {
+  let cpuDisplay = '—';
+  let memDisplay = '—';
+
+  if (node.container_id && node.status === 'running') {
+    try {
+      const rawStats = (await ctx.docker.getContainerStats(node.container_id)) as {
+        cpu_stats: {
+          cpu_usage: { total_usage: number; percpu_usage?: number[] };
+          system_cpu_usage: number;
+          online_cpus?: number;
+        };
+        precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
+        memory_stats: { usage?: number; limit?: number };
+      };
+
+      const cpuDelta =
+        rawStats.cpu_stats.cpu_usage.total_usage - rawStats.precpu_stats.cpu_usage.total_usage;
+      const systemDelta =
+        rawStats.cpu_stats.system_cpu_usage - rawStats.precpu_stats.system_cpu_usage;
+      const cpuCountRaw = rawStats.cpu_stats.cpu_usage.percpu_usage?.length;
+      const cpuCount =
+        cpuCountRaw && cpuCountRaw > 0 ? cpuCountRaw : (rawStats.cpu_stats.online_cpus ?? 1);
+      const cpuPct =
+        systemDelta > 0 ? Math.round((cpuDelta / systemDelta) * cpuCount * 1000) / 10 : 0;
+      cpuDisplay = `${String(cpuPct)}%`;
+
+      const memBytes = rawStats.memory_stats.usage ?? 0;
+      if (memBytes > 0) {
+        const memMb = Math.round(memBytes / (1024 * 1024));
+        memDisplay = `${String(memMb)} MB`;
+      }
+    } catch {
+      // stats unavailable — display stays '—'
+    }
+  }
+
+  // Determine health using docker inspect (same projection as Task 4).
+  //
+  // Phase 4 fix (Blocker 3): preserve `starting` as `healthy`.
+  // Containers in their HEALTHCHECK `start_period` (typically 30s for
+  // postgres/mongo) are healthy by default — collapsing `starting` to
+  // `crashed` triggered false alarms in InfraMap on every fresh deploy.
+  // Only `unhealthy` collapses to `crashed`. `null` (no healthcheck)
+  // and `healthy` keep the default `healthy`.
+  //
+  // Inspect failure collapses to `crashed` for parity with
+  // ServiceManager.inspectServiceContainer (which sets status: 'error'
+  // on the same failure mode).
+  let health: 'healthy' | 'crashed' = 'healthy';
+  if (node.status !== 'running') {
+    health = 'crashed';
+  } else if (node.container_id) {
+    try {
+      const info = await ctx.docker.inspectContainer(node.container_id);
+      const dockerHealth =
+        (info as unknown as { State: { Health?: { Status?: string } } }).State.Health?.Status ??
+        null;
+      if (dockerHealth === 'unhealthy') {
+        health = 'crashed';
+      }
+    } catch {
+      health = 'crashed';
+    }
+  }
+
+  return { health, cpuDisplay, memDisplay };
+}
+
+/**
+ * Cache + in-flight dedupe wrapper. Concurrent topology polls for the
+ * same `container_id` resolve to a single Docker round-trip; repeat
+ * polls within `TOPOLOGY_NODE_CACHE_TTL_MS` reuse the cached value.
+ *
+ * Nodes without a `container_id` (compose parent rows that never spun
+ * up) skip the cache entirely — there's nothing to fetch and nothing
+ * to dedupe. The result is computed inline so the response shape stays
+ * uniform with the cached path.
+ */
+async function getTopologyNodeRuntime(
+  ctx: Pick<AppContext, 'docker'>,
+  node: TopologyNode,
+): Promise<TopologyNodeRuntime> {
+  const containerId = node.container_id;
+  if (!containerId) {
+    return fetchTopologyNodeRuntime(ctx, node);
+  }
+
+  const cached = topologyNodeCache.get(containerId);
+  if (cached && Date.now() - cached.ts < TOPOLOGY_NODE_CACHE_TTL_MS) {
+    return cached.value;
+  }
+
+  const inflight = topologyNodeInFlight.get(containerId);
+  if (inflight) {
+    return inflight;
+  }
+
+  const promise = fetchTopologyNodeRuntime(ctx, node).finally(() => {
+    topologyNodeInFlight.delete(containerId);
+  });
+  topologyNodeInFlight.set(containerId, promise);
+  const value = await promise;
+  topologyNodeCache.set(containerId, { ts: Date.now(), value });
+  return value;
+}
+
 function mapEnvironment(projectName: string, environment: EnvironmentRow) {
   const ips = getAllIps();
   return {
@@ -178,6 +396,17 @@ function extractImageTagFromBuildLog(buildLog: string | null): string | null {
 
 export function createProjectRoutes(ctx: AppContext): Hono {
   const api = new Hono();
+
+  // One-time cache invalidation hook — when a deploy lands (success or
+  // failure) the topology likely changed, so drop ALL cached node
+  // runtimes for the affected project. Topology nodes for unrelated
+  // projects keep their cache (keyed on container_id which is globally
+  // unique).
+  //
+  // Module-level guard prevents duplicate subscriptions when
+  // createProjectRoutes is invoked multiple times (e.g. by test
+  // harnesses re-mounting the routes).
+  registerTopologyCacheInvalidation(ctx);
 
   api.post('/projects', async (c) => {
     const body = await c.req
@@ -353,6 +582,86 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         commitMessage: log.commit_message ?? null,
       })),
     });
+  });
+
+  // Phase E_NEW Task 6 — topology graph for the v4 InfraMap.
+  // Returns ServiceNode[] matching web/src/lib/projectTopology.ts:
+  //   { id, name, kind, image, health, port, url, cpu, mem, dependsOn }
+  //
+  // For compose projects the nodes are the child projects (one per
+  // compose service). For standalone projects the node is the project
+  // itself. `dependsOn` is derived from the `project_dependencies`
+  // table (target_service_id that matches a sibling node id). Health
+  // uses the same 3-state docker-inspect projection as Task 4 and then
+  // collapses 'running' (no healthcheck) → 'healthy' because the UI
+  // type is binary 'healthy' | 'crashed'.
+  api.get('/projects/:id/topology', async (c) => {
+    const project = getProjectOrThrow(c, ctx);
+
+    try {
+      const childProjects = ctx.db.getChildProjects(project.id);
+      const nodes = childProjects.length > 0 ? childProjects : [project];
+
+      const nodeIds = new Set(nodes.map((n) => n.id));
+
+      // Build dependsOn map: for each node, find its project_dependencies
+      // whose target_service_id is another node in this topology.
+      const dependsOnMap = new Map<string, string[]>();
+      for (const node of nodes) {
+        const deps = ctx.db.findDependenciesByProject(node.id);
+        const siblingDeps = deps
+          .map((d) => d.target_service_id)
+          .filter((sid): sid is string => sid !== null && nodeIds.has(sid));
+        dependsOnMap.set(node.id, siblingDeps);
+      }
+
+      // Determine kind: 'Database' for known db service types, else 'Application'
+      function resolveKind(name: string): 'Application' | 'Database' {
+        const lower = name.toLowerCase();
+        if (/postgres|mysql|mariadb|mongo|redis|sqlite|clickhouse|minio/.test(lower)) {
+          return 'Database';
+        }
+        return 'Application';
+      }
+
+      // Inspect health for all nodes in parallel — but funnel through
+      // a per-container 15s TTL cache + in-flight dedupe so rapid
+      // repeat polls (UI re-renders, multiple tabs) collapse to a
+      // single Docker call instead of N×services per poll.
+      const serviceNodes = await Promise.all(
+        nodes.map(async (node) => {
+          // Derive port: compose child uses container_port or assigned_port
+          const port = node.assigned_port ?? null;
+          const url = port ? getProjectUrl(node.name) : null;
+          const image = node.image_url ?? node.image_tag ?? `${node.name}:latest`;
+          const kind = resolveKind(node.name);
+
+          const runtime = await getTopologyNodeRuntime(ctx, node);
+
+          return {
+            id: node.id,
+            name: node.name,
+            kind,
+            image,
+            health: runtime.health,
+            port,
+            url,
+            cpu: runtime.cpuDisplay,
+            mem: runtime.memDisplay,
+            dependsOn: dependsOnMap.get(node.id) ?? [],
+          };
+        }),
+      );
+
+      return c.json({ services: serviceNodes });
+    } catch (err) {
+      log.debug({ err, projectId: project.id }, 'Get project topology failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Project not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Project not found: ${project.id}` }, 404);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch project topology' }, 500);
+    }
   });
 
   api.patch('/projects/:id', async (c) => {

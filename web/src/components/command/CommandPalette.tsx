@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useProjects } from '@/hooks/use-projects';
+import { useProjectsContext } from '@/hooks/use-projects-context';
 import { redeployProject, stopProject } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
@@ -56,7 +56,7 @@ export function CommandPalette() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const { projects } = useProjects();
+  const { projects } = useProjectsContext();
 
   const { t } = useLanguage();
   // Cmd+K / Ctrl+K toggle
@@ -183,14 +183,18 @@ export function CommandPalette() {
 
         projectItems.push({
           id: `logs-${project.id}`,
-          label: `Logs: ${project.name}`,
-          description: 'View container logs',
+          label: `Activity: ${project.name}`,
+          description: 'Project activity timeline (deploys, config changes, agent calls)',
           icon: <Terminal className="h-4 w-4" />,
           action: () => {
-            navigate(`/projects/${project.id}?tab=console`);
+            // V2 takeover: ProjectViewV2 has Services / Activity tabs. The pre-V2
+            // `?tab=console` deep-link no longer applies; route to the Activity
+            // tab as the closest analog. Per-service runtime logs live under
+            // /services/:id (Logs tab) — those are exposed by ServiceDetailV2.
+            navigate(`/projects/${project.id}?tab=activity`);
             close();
           },
-          keywords: 'console output stderr',
+          keywords: 'console output stderr activity log',
         });
       }
     }

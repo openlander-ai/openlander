@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import type { AppContext } from '../../app.js';
 import { PreflightCheckError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { classifyDeployError } from '../../pipeline/error-classifier.js';
 import { extractProjectName } from '../../pipeline/helpers.js';
 import { parseImageUrl } from '../../pipeline/image-utils.js';
 import { preflightCheckOrThrow } from '../../pipeline/preflight.js';
@@ -14,7 +15,7 @@ import {
   registerEnvScanRoutes,
   startPlanExecution,
 } from './deploy-failure-handler.js';
-import { registerDeployTimelineStreamRoutes } from './deploy-timeline-stream-routes.js';
+import { registerDeployLogStreamRoutes } from './deploy-log-stream-routes.js';
 
 const log = createModuleLogger('api');
 
@@ -287,7 +288,11 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         await startPlanExecution(planDeps);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        log.error({ err, projectId }, 'Deterministic deploy orchestration failed');
+        // Phase E_NEW: classify the failure into one of the 16 ErrorClass
+        // keys so the SSE terminal event can render the v4 ErrorSurface
+        // narrative. Default `RUNTIME_CRASH` when no rule matches.
+        const errorClass = classifyDeployError(err);
+        log.error({ err, projectId, errorClass }, 'Deterministic deploy orchestration failed');
 
         await emitTerminalMessage(
           projectId,
@@ -302,6 +307,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
             step: 'orchestrate',
             failedStep: 'orchestrate',
             error: errMsg,
+            errorClass,
           },
           retryState,
         );
@@ -372,7 +378,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
     }
   });
 
-  registerDeployTimelineStreamRoutes(api, ctx);
+  registerDeployLogStreamRoutes(api, ctx);
 
   registerEnvScanRoutes(api, ctx);
 

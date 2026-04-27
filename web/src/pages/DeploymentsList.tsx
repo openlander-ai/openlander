@@ -7,7 +7,6 @@ import { parseTimestamp } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { DeployLogSummary, Project } from '@/types/index';
-import { PageHeader } from '@/components/layout/PageHeader';
 
 interface DeploymentRow extends DeployLogSummary {
   projectName: string;
@@ -122,7 +121,6 @@ export function DeploymentsList() {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <PageHeader title={t('deploymentsList.title')} />
       <div className="flex-1 overflow-auto p-6 xl:p-8">
         <div className="w-full space-y-6">
           <div className="flex flex-wrap items-center gap-3">
