@@ -131,6 +131,16 @@ describe('Event wiring (static source scan)', () => {
       // v0.3 placeholders (MCP transport wiring not implemented yet).
       'mcp:connect',
       'mcp:disconnect',
+      // Phase E_NEW (single-SSE consolidation): the legacy timeline
+      // route was the only consumer of build:suggest / build:inform
+      // (AI-driven build suggestions surfaced into the project-keyed
+      // ndjson stream). v4's deploy-log-stream-routes.ts only consumes
+      // build:output / lifecycle events. Kept on the EventType union
+      // because the AI build advisor (`pipeline/build-recovery.ts`,
+      // etc.) can re-subscribe in a v1.1+ "build advice" rail without
+      // a schema change.
+      'build:suggest',
+      'build:inform',
     ]);
 
     const unexpectedDeadTypes = deadTypes.filter(

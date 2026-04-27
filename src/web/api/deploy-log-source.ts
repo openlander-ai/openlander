@@ -1,10 +1,10 @@
 /**
  * Deploy log source helpers — Phase E_NEW Task 2.
  *
- * Extracted from `deploy-timeline-stream-routes.ts` (which is deleted in
- * Task 3) so the new `deploy-log-stream-routes.ts` SSE endpoint can
- * subscribe to live build output without depending on the legacy
- * project-keyed timeline implementation.
+ * Extracted from the legacy timeline route file (deleted in Task 3) so
+ * the new `deploy-log-stream-routes.ts` SSE endpoint can subscribe to
+ * live build output without depending on the legacy project-keyed
+ * timeline implementation.
  *
  * The helpers are intentionally agnostic to deployment-vs-project
  * keying: they work against `(projectId, deployId?)` so the new

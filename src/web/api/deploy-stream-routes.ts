@@ -15,7 +15,7 @@ import {
   registerEnvScanRoutes,
   startPlanExecution,
 } from './deploy-failure-handler.js';
-import { registerDeployTimelineStreamRoutes } from './deploy-timeline-stream-routes.js';
+import { registerDeployLogStreamRoutes } from './deploy-log-stream-routes.js';
 
 const log = createModuleLogger('api');
 
@@ -378,7 +378,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
     }
   });
 
-  registerDeployTimelineStreamRoutes(api, ctx);
+  registerDeployLogStreamRoutes(api, ctx);
 
   registerEnvScanRoutes(api, ctx);
 

@@ -3,9 +3,8 @@
  *
  * Single SSE channel going forward (iteration-5 single-SSE consolidation
  * — see ADR-1.1 (revised) in `.omc/plans/ralplan-v4-sprint.md`). The
- * legacy project-keyed `/api/projects/:id/build/stream` (timeline
- * events) is deleted in Task 3; v4 consumes only `line` + `end` events
- * here.
+ * legacy project-keyed timeline route was deleted in Task 3; v4
+ * consumes only `line` + `end` events here.
  *
  * Wire shape (matches `web/src/hooks/use-deploy-log-stream.ts` exactly):
  *
