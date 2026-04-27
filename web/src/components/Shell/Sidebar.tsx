@@ -3,7 +3,7 @@
  *
  * IA per Round 4 strategy notes (agent-first reframe):
  *
- *   Workspace (6):    Home · Activity · Projects · Deployments · Monitoring · Logs
+ *   Workspace (5):    Home · Activity · Projects · Deployments · Monitoring
  *   Infrastructure (2): Web Server · MCP Server
  *   Integrations (3):  Git Providers · SSH Keys · Notifications
  *
@@ -24,7 +24,6 @@ import {
   Activity,
   Rocket,
   BarChart3,
-  ScrollText,
   Server,
   Bot,
   Code2,
@@ -90,13 +89,10 @@ const SECTIONS: NavSection[] = [
         to: '/monitoring',
         matches: startsWith('/monitoring'),
       },
-      {
-        id: 'logs',
-        label: 'Logs',
-        icon: ScrollText,
-        to: '/logs',
-        matches: startsWith('/logs'),
-      },
+      // /logs retired in Phase 3a (ralplan-monitoring-logs spike success):
+      // /activity now has a Kind=Deploys filter + clickable rows that
+      // deep-link into deployment detail. The dedicated /logs entry was
+      // duplicate sidebar real estate.
     ],
   },
   {

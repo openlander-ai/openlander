@@ -21,9 +21,11 @@ import { cn } from '@/lib/utils';
 import {
   bucketByTime,
   filterEvents,
+  isKindInGroup,
   type Actor,
   type ActivityEvent,
   type ActivityFilters,
+  type KindGroup,
   type ProjectSummary,
 } from '@/lib/agentActivity';
 
@@ -57,9 +59,18 @@ export interface ActivityRowProps {
   /** Whether to draw the connecting rail under this row */
   isLast?: boolean;
   onOpenService?: (project: string, service: string) => void;
+  /** Click handler for deploy_* events. Receives the deployment id
+   *  (server-side: event.id has the form `deploy-<id>`). */
+  onOpenDeployment?: (deploymentId: string) => void;
 }
 
-export function ActivityRow({ event, compact, isLast, onOpenService }: ActivityRowProps) {
+export function ActivityRow({
+  event,
+  compact,
+  isLast,
+  onOpenService,
+  onOpenDeployment,
+}: ActivityRowProps) {
   const meta = ACTOR_META[event.actor];
   const Icon = meta.Icon;
   const showBotIcon = event.actor === 'mcp';
@@ -88,9 +99,31 @@ export function ActivityRow({ event, compact, isLast, onOpenService }: ActivityR
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="text-[13.5px] leading-snug text-[color:var(--ol-fg)]">
-            {event.title}
-          </span>
+          {isKindInGroup(event.kind, 'deploys') && onOpenDeployment ? (
+            (() => {
+              // event.id has the form `deploy-<deploymentId>` per
+              // src/web/api/activity-routes.ts. Strip the prefix to deep-link.
+              const deploymentId = event.id.startsWith('deploy-')
+                ? event.id.slice('deploy-'.length)
+                : event.id;
+              return (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenDeployment(deploymentId);
+                  }}
+                  className="text-left text-[13.5px] leading-snug text-[color:var(--ol-fg)] transition-colors hover:text-[color:var(--ol-primary)] hover:underline"
+                >
+                  {event.title}
+                </button>
+              );
+            })()
+          ) : (
+            <span className="text-[13.5px] leading-snug text-[color:var(--ol-fg)]">
+              {event.title}
+            </span>
+          )}
           {event.project && (
             <button
               type="button"
@@ -128,6 +161,10 @@ export function ActivityRow({ event, compact, isLast, onOpenService }: ActivityR
 export interface ActivityTimelineProps {
   events: ActivityEvent[];
   onOpenService?: (project: string, service: string) => void;
+  /** Click handler for deploy_* rows. When provided AND the row is a
+   *  deploy event, the title becomes a clickable deep-link to the
+   *  deployment detail page. */
+  onOpenDeployment?: (deploymentId: string) => void;
   /** Show filter pills above the stream (Activity page) */
   showFilters?: boolean;
   /** When showFilters is true, project pill needs the project list */
@@ -141,13 +178,18 @@ export interface ActivityTimelineProps {
 export function ActivityTimeline({
   events,
   onOpenService,
+  onOpenDeployment,
   showFilters = false,
   projects,
   bucketed = false,
   emptyState,
   className,
 }: ActivityTimelineProps) {
-  const [filters, setFilters] = useState<ActivityFilters>({ actor: 'all', project: 'all' });
+  const [filters, setFilters] = useState<ActivityFilters>({
+    actor: 'all',
+    project: 'all',
+    kind: 'all',
+  });
   const filtered = useMemo(
     () => (showFilters ? filterEvents(events, filters) : events),
     [events, filters, showFilters],
@@ -158,7 +200,13 @@ export function ActivityTimeline({
   const empty = filtered.length === 0;
 
   const renderRow = (e: ActivityEvent, i: number, total: number) => (
-    <ActivityRow key={e.id} event={e} isLast={i === total - 1} onOpenService={onOpenService} />
+    <ActivityRow
+      key={e.id}
+      event={e}
+      isLast={i === total - 1}
+      onOpenService={onOpenService}
+      onOpenDeployment={onOpenDeployment}
+    />
   );
 
   return (
@@ -192,6 +240,35 @@ export function ActivityTimeline({
                 v: 'system',
                 label: 'System',
                 count: events.filter((e) => e.actor === 'system').length,
+              },
+            ]}
+          />
+          <FilterPills
+            label="Kind"
+            value={filters.kind ?? 'all'}
+            onChange={(v) => setFilters((f) => ({ ...f, kind: v as KindGroup }))}
+            options={[
+              { v: 'all', label: 'All', count: events.length },
+              {
+                v: 'deploys',
+                label: 'Deploys',
+                count: events.filter((e) => isKindInGroup(e.kind, 'deploys')).length,
+              },
+              {
+                v: 'crashes',
+                label: 'Crashes',
+                count: events.filter((e) => isKindInGroup(e.kind, 'crashes')).length,
+              },
+              {
+                v: 'mcp',
+                label: 'MCP',
+                count: events.filter((e) => isKindInGroup(e.kind, 'mcp')).length,
+                tone: 'mcp',
+              },
+              {
+                v: 'config',
+                label: 'Config',
+                count: events.filter((e) => isKindInGroup(e.kind, 'config')).length,
               },
             ]}
           />

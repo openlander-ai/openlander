@@ -20,7 +20,6 @@ import { Home } from '@/pages/Home';
 import { Activity } from '@/pages/Activity';
 import { MCPServer } from '@/pages/MCPServer';
 import { MonitoringPage } from '@/pages/MonitoringPage';
-import { LogsPage } from '@/pages/LogsPage';
 import { WebServerSettings } from '@/pages/settings/WebServer';
 import { GitProvidersSettings } from '@/pages/settings/GitProviders';
 import { SSHKeysSettings } from '@/pages/settings/SSHKeys';
@@ -189,7 +188,10 @@ function App() {
                       sits at /mcp (no content-negotiation). */}
                   <Route path="/mcp-server" element={<MCPServer />} />
                   <Route path="/monitoring" element={<MonitoringPage />} />
-                  <Route path="/logs" element={<LogsPage />} />
+                  {/* /logs retired in Phase 3a (ralplan-monitoring-logs).
+                      Stale bookmarks land on /activity, where the new Kind
+                      filter chip surfaces deploy/runtime events. */}
+                  <Route path="/logs" element={<Navigate to="/activity" replace />} />
                   <Route
                     path="/projects/:id"
                     element={

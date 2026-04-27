@@ -47,7 +47,6 @@ const ROUTE_LABELS: Record<string, string> = {
   monitoring: 'Monitoring',
   operations: 'Operations',
   overview: 'Overview',
-  logs: 'Logs',
   settings: 'Settings',
   agent: 'Agent',
 };

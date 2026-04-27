@@ -51,9 +51,27 @@ export interface ActivityEvent {
   detail?: string;
 }
 
+/** Kind filter groups. Maps multiple ActivityKind values into the
+ * pills the user sees on the Activity page. */
+export type KindGroup = 'all' | 'deploys' | 'crashes' | 'mcp' | 'config';
+
+const KIND_GROUP_MAP: Record<Exclude<KindGroup, 'all'>, ActivityKind[]> = {
+  deploys: ['deploy_started', 'deploy_completed', 'deploy_failed', 'deploy_cancelled'],
+  crashes: ['service_crashed', 'service_recovered'],
+  mcp: ['mcp_connected', 'mcp_disconnected'],
+  config: ['config_changed'],
+};
+
+export function isKindInGroup(kind: ActivityKind, group: KindGroup): boolean {
+  if (group === 'all') return true;
+  return KIND_GROUP_MAP[group].includes(kind);
+}
+
 export interface ActivityFilters {
   actor: Actor | 'all';
   project: string | 'all';
+  /** Subset of ActivityKind grouped into user-facing buckets. Defaults to 'all'. */
+  kind?: KindGroup;
 }
 
 /**
@@ -249,11 +267,13 @@ export function bucketByTime(events: ActivityEvent[]): Array<[string, ActivityEv
   return Object.entries(buckets).filter(([, v]) => v.length > 0);
 }
 
-/** Apply Actor + Project filters. */
+/** Apply Actor + Project + Kind filters. */
 export function filterEvents(events: ActivityEvent[], filters: ActivityFilters): ActivityEvent[] {
+  const kindGroup = filters.kind ?? 'all';
   return events.filter((e) => {
     if (filters.actor !== 'all' && e.actor !== filters.actor) return false;
     if (filters.project !== 'all' && e.project !== filters.project) return false;
+    if (kindGroup !== 'all' && !isKindInGroup(e.kind, kindGroup)) return false;
     return true;
   });
 }
