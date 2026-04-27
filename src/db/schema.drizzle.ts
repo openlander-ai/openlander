@@ -720,6 +720,27 @@ export const activityLog = sqliteTable(
 export type ActivityLogRow = typeof activityLog.$inferSelect;
 export type NewActivityLog = typeof activityLog.$inferInsert;
 
+/**
+ * Per-session audit log for the MCP transport. One row per closed session;
+ * powers `mcp_disconnected` synthesis on the v4 /api/activity feed (live
+ * sessions are read directly from the in-memory snapshot).
+ */
+export const mcpSessionLog = sqliteTable(
+  'mcp_session_log',
+  {
+    id: text('id').primaryKey(),
+    session_id: text('session_id').notNull(),
+    transport: text('transport', { enum: ['http', 'sse'] }).notNull(),
+    connected_at: integer('connected_at').notNull(),
+    disconnected_at: integer('disconnected_at').notNull(),
+    client_info: text('client_info'),
+  },
+  (table) => [index('idx_mcp_session_log_disconnected_at').on(table.disconnected_at)],
+);
+
+export type McpSessionLogRow = typeof mcpSessionLog.$inferSelect;
+export type NewMcpSessionLog = typeof mcpSessionLog.$inferInsert;
+
 export const drizzleSchema = {
   projects,
   environments,
@@ -747,4 +768,5 @@ export const drizzleSchema = {
   serviceMetrics,
   settings,
   activityLog,
+  mcpSessionLog,
 };

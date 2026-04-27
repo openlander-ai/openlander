@@ -100,7 +100,10 @@ export function ApprovalDialog() {
     setDismissed(false);
   }, [pending?.id]);
 
-  if (!pending || dismissed || location.pathname === '/operations') {
+  // /operations was retired in Phase 1 hardening (ralplan-monitoring-logs);
+  // /activity is the v4 audit-log surface where the pending approvals also
+  // surface, so suppress the toast there to avoid duplication.
+  if (!pending || dismissed || location.pathname === '/activity') {
     return null;
   }
 
@@ -192,7 +195,7 @@ export function ApprovalDialog() {
         {remainingCount > 0 && (
           <button
             type="button"
-            onClick={() => navigate('/operations')}
+            onClick={() => navigate('/activity')}
             className="ml-auto text-[11px] text-agent hover:text-agent/80 transition-colors underline underline-offset-2"
           >
             {t('agent.approval.pendingMore', { count: String(remainingCount) })}

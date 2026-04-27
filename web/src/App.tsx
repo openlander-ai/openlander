@@ -51,9 +51,6 @@ const ProjectView = lazy(() =>
 const ServiceDetailV2 = lazy(() =>
   import('@/pages/ServiceDetailV2').then((m) => ({ default: m.ServiceDetailV2 })),
 );
-const OpsCenterV2 = lazy(() =>
-  import('@/pages/OpsCenterV2').then((m) => ({ default: m.OpsCenterV2 })),
-);
 const DeploymentDetail = lazy(() =>
   import('@/pages/DeploymentDetail').then((m) => ({ default: m.DeploymentDetail })),
 );
@@ -230,15 +227,11 @@ function App() {
                     }
                   />
                   <Route path="/services" element={<ServicesPage />} />
-                  <Route
-                    path="/operations"
-                    element={
-                      <RouteSuspense>
-                        <OpsCenterV2 />
-                      </RouteSuspense>
-                    }
-                  />
-                  <Route path="/ops-v1" element={<Navigate to="/operations" replace />} />
+                  {/* /operations + /ops-v1 retired in Phase 1 hardening
+                      (ralplan-monitoring-logs). Backend /api/ops/* remains
+                      live for ApprovalDialog / Settings / Recovery; only
+                      the OpsCenterV2 page shell is gone. Stale bookmarks
+                      land on /home via the catch-all redirect. */}
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/agent" element={<AgentRouteRedirect />} />
                 </Route>
