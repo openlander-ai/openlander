@@ -1,3 +1,4 @@
+import type { ServiceHealth } from '../projectTopology';
 import { apiGet, apiPost, apiPostVoid, apiDelete } from './client';
 
 export interface ServiceTemplate {
@@ -143,4 +144,35 @@ export async function createServiceUser(
     password,
     database,
   });
+}
+
+// ─── PR6: Round 4 health + metrics endpoints ──────────────────────────────
+
+export type MetricsRange = '15m' | '1h' | '6h' | '24h' | '7d';
+
+export interface ServiceMetrics {
+  /** Per-datapoint CPU percent (60 datapoints over the requested range) */
+  cpu: number[];
+  /** Per-datapoint memory in MB */
+  memory: number[];
+  /** Per-datapoint requests-per-second */
+  requestsPerSec: number[];
+  /** Per-datapoint error rate as a percent (e.g. 0.4 means 0.4%) */
+  errorRate: number[];
+  /** Aggregate p95 latency in milliseconds for the requested range */
+  p95LatencyMs: number;
+  /** Aggregate total request count for the requested range */
+  totalRequests: number;
+}
+
+export async function fetchServiceHealth(id: string): Promise<ServiceHealth> {
+  const data = await apiGet<{ health: ServiceHealth }>(`/api/services/${id}/health`);
+  return data.health;
+}
+
+export async function fetchServiceMetrics(
+  id: string,
+  range: MetricsRange = '1h',
+): Promise<ServiceMetrics> {
+  return apiGet<ServiceMetrics>(`/api/services/${id}/metrics?range=${range}`);
 }
