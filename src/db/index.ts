@@ -17,6 +17,7 @@ import { ServiceRepo } from './repos/service.repo.js';
 import { ServiceConnectionRepo } from './repos/service-connection.repo.js';
 import { RuntimeIncidentRepo } from './repos/runtime-incident.repo.js';
 import { DeployLogRepo } from './repos/deploy-log.repo.js';
+import { McpSessionLogRepo } from './repos/mcp-session-log.repo.js';
 import { TimelineRepo } from './repos/timeline.repo.js';
 import { DomainMappingRepo } from './repos/domain-mapping.repo.js';
 import { OAuthRepo } from './repos/oauth.repo.js';
@@ -398,6 +399,7 @@ export class Database implements AuthDatabase {
   private readonly serviceConnectionRepo: ServiceConnectionRepo;
   private readonly runtimeIncidentRepo: RuntimeIncidentRepo;
   private readonly deployLogRepo: DeployLogRepo;
+  private readonly mcpSessionLogRepo: McpSessionLogRepo;
   private readonly timelineRepo: TimelineRepo;
   private readonly domainMappingRepo: DomainMappingRepo;
   private readonly oauthRepo: OAuthRepo;
@@ -462,6 +464,7 @@ export class Database implements AuthDatabase {
     this.serviceConnectionRepo = new ServiceConnectionRepo(this.db, this.sqlite);
     this.runtimeIncidentRepo = new RuntimeIncidentRepo(this.db, this.sqlite);
     this.deployLogRepo = new DeployLogRepo(this.db, this.sqlite);
+    this.mcpSessionLogRepo = new McpSessionLogRepo(this.db, this.sqlite);
     this.timelineRepo = new TimelineRepo(this.db, this.sqlite);
     this.domainMappingRepo = new DomainMappingRepo(this.db, this.sqlite);
     this.oauthRepo = new OAuthRepo(this.db, this.sqlite);
@@ -554,6 +557,8 @@ export class Database implements AuthDatabase {
   getLastDeployLog(projectId: string, environmentId?: string) { return this.deployLogRepo.getLastDeployLog(projectId, environmentId); }
   getDeployLog(deployId: string) { return this.deployLogRepo.getDeployLog(deployId); }
   updateRuntimeLog(deployId: string, runtimeLog: string) { this.deployLogRepo.updateRuntimeLog(deployId, runtimeLog); }
+  recordMcpSessionClose(opts: Parameters<McpSessionLogRepo['recordClose']>[0]) { this.mcpSessionLogRepo.recordClose(opts); }
+  listRecentClosedMcpSessions(limit = 50) { return this.mcpSessionLogRepo.listRecentClosed(limit); }
   createTimelineEvent(event: Parameters<TimelineRepo['createTimelineEvent']>[0]) { this.timelineRepo.createTimelineEvent(event); }
   getTimelineEvents(projectId: string, limit = 200) { return this.timelineRepo.getTimelineEvents(projectId, limit); }
   deleteTimelineEvents(projectId: string) { this.timelineRepo.deleteTimelineEvents(projectId); }

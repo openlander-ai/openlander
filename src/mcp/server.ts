@@ -272,6 +272,21 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
       onsessionclosed: (sid) => {
         const session = sessions.get(sid);
         if (session) {
+          // Audit log persistence — record the disconnect moment so the
+          // /api/activity feed can synthesize mcp_disconnected events that
+          // survive process restarts. Best-effort: a DB error here must not
+          // break the close flow.
+          try {
+            ctx.db.recordMcpSessionClose({
+              sessionId: sid,
+              transport: 'http',
+              connectedAt: session.connectedAt,
+              disconnectedAt: Date.now(),
+            });
+          } catch (err) {
+            log.warn({ sessionId: sid, err }, 'Failed to persist MCP HTTP session close');
+          }
+
           if (session.heartbeatInterval) {
             clearInterval(session.heartbeatInterval);
           }
@@ -327,6 +342,22 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
     });
 
     outgoing.on('close', () => {
+      const session = sseSessions.get(transport.sessionId);
+      if (session) {
+        try {
+          ctx.db.recordMcpSessionClose({
+            sessionId: transport.sessionId,
+            transport: 'sse',
+            connectedAt: session.connectedAt,
+            disconnectedAt: Date.now(),
+          });
+        } catch (err) {
+          log.warn(
+            { sessionId: transport.sessionId, err },
+            'Failed to persist MCP SSE session close',
+          );
+        }
+      }
       sseSessions.delete(transport.sessionId);
       log.info({ sessionId: transport.sessionId }, 'MCP SSE session closed');
     });

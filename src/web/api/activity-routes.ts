@@ -182,9 +182,10 @@ export function createActivityRoutes(ctx: AppContext): Hono {
       });
     }
 
-    // --- Source 3: active MCP sessions (synthesized as mcp_connected) ---
-    // Only currently-connected sessions surface. Disconnect history is not
-    // persisted today. Suppressed when the caller asks for a specific
+    // --- Source 3: MCP session lifecycle ---
+    // Live sessions → mcp_connected (from in-memory snapshot).
+    // Closed sessions → mcp_disconnected (from mcp_session_log table, ralplan
+    // Phase 1 step 1). Both are suppressed when the caller asks for a specific
     // project, since these events are system-level (project=null).
     if (!projectScoped) {
       const mcpSessions = getMcpSessionsSnapshot();
@@ -200,6 +201,25 @@ export function createActivityRoutes(ctx: AppContext): Hono {
           service: null,
           title: `MCP agent connected (${s.transport.toUpperCase()})`,
           detail: `session ${s.id.slice(0, 8)}`,
+        });
+      }
+
+      const closedSessions = ctx.db.listRecentClosedMcpSessions(50);
+      for (const s of closedSessions) {
+        const ms = s.disconnected_at;
+        if (!Number.isFinite(ms)) continue;
+        const { at, relTs } = relativeTime(ms, now);
+        const durationSec = Math.max(0, Math.floor((s.disconnected_at - s.connected_at) / 1000));
+        events.push({
+          id: `mcp-close-${s.id}`,
+          actor: 'mcp',
+          kind: 'mcp_disconnected',
+          at,
+          relTs,
+          project: null,
+          service: null,
+          title: `MCP agent disconnected (${s.transport.toUpperCase()})`,
+          detail: `session ${s.session_id.slice(0, 8)} · lasted ${String(durationSec)}s`,
         });
       }
     }
