@@ -15,7 +15,6 @@ import {
   getAllIps,
   type NetworkIp,
   getProjectDomains,
-  getProjectTimeline,
   addProjectDomain,
   removeProjectDomain,
   type DomainMapping,
@@ -106,113 +105,32 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
     fetchProject();
   }, [fetchProject, projectStatus]);
 
+  // Domain AI analysis finalization.
+  //
+  // The previous implementation polled `GET /api/projects/:id/timeline` to
+  // surface live `agent_thinking` / `question_pending` events from the
+  // domain-AI flow. The single-SSE cleanup deleted that route along with
+  // `deploy-timeline-stream-routes.ts`, leaving the call orphaned and the
+  // panel forever stuck on the 404-swallowed silent catch.
+  //
+  // Until the agent-event surface is reattached to a live transport, fall
+  // back to a hard 8s budget — long enough for the backend domain flow to
+  // finish a typical Cloudflare DNS round-trip, short enough that the user
+  // is not staring at a spinner. The InputRequestCard / question-pending
+  // UX path is intentionally degraded; live AI questions for domains will
+  // come back when the new transport ships.
   useEffect(() => {
     if (!domainAiProgress) return;
 
-    let cancelled = false;
-    const seen = new Set<string>();
-    let sawAiEvent = false;
-    let lastEventAt = Date.now();
-
-    const isTerminalStatusMessage = (message: string) => {
-      return (
-        message.includes('User skipped AI-suggested domain env updates') ||
-        message.includes('Triggering redeploy') ||
-        message.includes('Domain env update request timed out')
-      );
-    };
-
-    const poll = async () => {
-      if (cancelled) return;
-
-      try {
-        const events = await getProjectTimeline(projectId);
-        let shouldFinalize = false;
-
-        for (const event of events) {
-          const eventTime = Date.parse(event.timestamp);
-          if (!Number.isFinite(eventTime) || eventTime < domainAiProgress.startedAt - 1500) {
-            continue;
-          }
-
-          const key = event.id ?? `${event.type}|${event.timestamp}|${event.message}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-
-          if (
-            event.type === 'agent_thinking' ||
-            event.type === 'agent_tool_call' ||
-            event.type === 'agent_message' ||
-            event.type === 'agent_tool_result' ||
-            event.type === 'question_pending'
-          ) {
-            sawAiEvent = true;
-            lastEventAt = Date.now();
-          }
-
-          if (event.type === 'agent_thinking') {
-            setDomainAiProgress((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    message: event.message || 'AI 분석 중...',
-                  }
-                : prev,
-            );
-            continue;
-          }
-
-          if (event.type === 'question_pending' && event.questionId && event.questions) {
-            setDomainAiProgress((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    message: event.message,
-                    questionId: event.questionId,
-                    questions: event.questions,
-                    answered: false,
-                  }
-                : prev,
-            );
-            continue;
-          }
-
-          if (event.type === 'status' && isTerminalStatusMessage(event.message)) {
-            shouldFinalize = true;
-            break;
-          }
-
-          if (event.type === 'error' && event.message.startsWith('AI analysis failed:')) {
-            shouldFinalize = true;
-            break;
-          }
-        }
-
-        const elapsedFromStart = Date.now() - domainAiProgress.startedAt;
-        const idleFor = Date.now() - lastEventAt;
-
-        if (
-          shouldFinalize ||
-          (sawAiEvent && idleFor > 5000) ||
-          (!sawAiEvent && elapsedFromStart > 8000)
-        ) {
-          await finalizeDomainAnalysis();
-        }
-      } catch {
-        return;
-      }
-    };
-
-    void poll();
-    const interval = setInterval(() => {
-      void poll();
-    }, 1500);
+    const DOMAIN_AI_PROGRESS_BUDGET_MS = 8000;
+    const timer = setTimeout(() => {
+      void finalizeDomainAnalysis();
+    }, DOMAIN_AI_PROGRESS_BUDGET_MS);
 
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      clearTimeout(timer);
     };
-  }, [domainAiProgress, projectId, finalizeDomainAnalysis]);
+  }, [domainAiProgress, finalizeDomainAnalysis]);
 
   const submitDomainQuestion = useCallback(
     async (questionId: string, answers: QuestionAnswerPayload[]) => {
