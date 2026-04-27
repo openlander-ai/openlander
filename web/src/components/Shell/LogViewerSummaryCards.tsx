@@ -39,7 +39,8 @@ export function LogViewerSummaryCards({
 }: LogViewerSummaryCardsProps) {
   if (variant === 'runtime') return null;
 
-  const wrapperClass = 'border-t border-[oklch(0.32_0.015_255)] bg-[oklch(0.22_0.018_255)] p-3';
+  const wrapperClass =
+    'border-t border-[color:var(--log-header-border)] bg-[color:var(--log-header-bg)] p-3';
 
   if (connState === 'ENDED' && buildOutcome === 'fail') {
     return (

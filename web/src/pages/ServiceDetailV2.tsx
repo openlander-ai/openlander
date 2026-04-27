@@ -293,7 +293,7 @@ export function ServiceDetailV2() {
               internalPort={service.port}
               onClose={() => setOpenDeployId(null)}
               headerTitle={
-                <span className="font-medium text-[oklch(0.96_0.005_250)]">
+                <span className="font-medium text-[color:var(--log-header-text)]">
                   {project.name} / {service.name} · Deploy #{openDeployId}
                 </span>
               }

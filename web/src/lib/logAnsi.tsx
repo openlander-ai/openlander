@@ -62,12 +62,12 @@ export function LogPayload({ entry, progress }: { entry: LogEntry; progress?: nu
     const cur = (total * Math.min(done, 1)).toFixed(2);
     return (
       <span>
-        <span style={{ color: 'oklch(0.72 0.012 255)' }}>{entry.progress.name} </span>
+        <span style={{ color: 'var(--log-muted)' }}>{entry.progress.name} </span>
         <span className="ol-progress-inline">
           <span className="ol-progress-inline-bar">
             <span style={{ width: `${Math.min(done, 1) * 100}%` }} />
           </span>
-          <span style={{ color: 'oklch(0.72 0.012 255)' }}>
+          <span style={{ color: 'var(--log-muted)' }}>
             {cur}MB / {total}MB
           </span>
         </span>

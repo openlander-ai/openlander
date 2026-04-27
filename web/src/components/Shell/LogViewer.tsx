@@ -294,7 +294,7 @@ export function LogViewer({
               <button
                 type="button"
                 onClick={onKill}
-                className="inline-flex items-center gap-1 rounded-md border border-[oklch(0.6_0.2_28)] bg-[oklch(0.32_0.08_28)] px-2.5 py-1 text-[11.5px] font-medium text-[oklch(0.92_0.04_28)] transition-opacity hover:opacity-90"
+                className="inline-flex items-center gap-1 rounded-md border border-[color:var(--log-error)] bg-[color-mix(in_oklch,var(--log-error)_20%,var(--log-header-bg))] px-2.5 py-1 text-[11.5px] font-medium text-[color:var(--log-error)] transition-opacity hover:opacity-90"
               >
                 <StopCircle className="h-3.5 w-3.5" />
                 Kill build
