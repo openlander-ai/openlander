@@ -17,7 +17,46 @@
  * `classifyDeployError(err)` and emits the result on the SSE terminal
  * `event: end` payload's `errorClass` field. See ADR-1.1 (revised) in
  * the v4 sprint plan.
+ *
+ * Codex HIGH-3 fix: first-party typed errors from `src/errors.ts`
+ * (e.g. `DockerNotRunningError`, `PortExhaustedError`) are checked
+ * BEFORE the message-regex fallbacks via `classifyByErrorName`. This
+ * stops typed errors from collapsing to the `RUNTIME_CRASH` default
+ * just because their messages don't happen to match a regex — most
+ * production failures are typed.
  */
+import {
+  CloudflareNotFoundError,
+  CloudflaredNotFoundError,
+  ConfigNotFoundError,
+  ContainerNotFoundError,
+  DockerBuildError,
+  DockerNotRunningError,
+  DockerfileNotFoundError,
+  GitAuthError,
+  GitBranchNotFoundError,
+  GitCloneError,
+  GitRepoNotFoundError,
+  ImageNotFoundError,
+  ImagePullError,
+  LLMConcurrencyExceededError,
+  LLMNotConfiguredError,
+  LLMProviderError,
+  LLMUnreachableError,
+  MissingImageUrlError,
+  NetworkNotFoundError,
+  PortExhaustedError,
+  PreflightCheckError,
+  RepoPersistenceError,
+  ServiceConfigError,
+  ServiceContainerStateError,
+  ServiceInUseError,
+  ServiceOperationError,
+  ServiceOperationUnsupportedError,
+  TunnelStartError,
+  UnsafeRepoUrlError,
+  VolumeNotFoundError,
+} from '../errors.js';
 
 export type ErrorClass =
   | 'CONFIG_MISSING'
@@ -104,6 +143,122 @@ function extractSignal(err: unknown): DeployErrorSignal {
 }
 
 /**
+ * Codex HIGH-3 fix: first-party typed-error → ErrorClass mapping.
+ *
+ * Inspect the error against the typed classes from `src/errors.ts` and
+ * return the matching ErrorClass key, or `null` to fall through to the
+ * existing message-regex pipeline. Checked BEFORE message regex in
+ * `classifyDeployError` so typed errors (the dominant production
+ * failure shape) don't collapse to the generic `RUNTIME_CRASH` default
+ * just because their `.message` strings don't match a hand-crafted
+ * regex.
+ *
+ * Mapping reasoning:
+ * - Docker daemon down / Dockerfile / build-context → infra/build classes.
+ * - Image pull → network class.
+ * - Port exhausted → port-conflict class (host has no free ports left).
+ * - Git/repo/branch/auth/unsafe URL → git-access class (the user can
+ *   only fix these by changing the URL or fixing credentials).
+ * - Config / LLM-not-configured → config-missing class.
+ * - LLM unreachable / LLM provider / LLM pool full / Cloudflare /
+ *   Cloudflared / Tunnel / Preflight / Repo persistence / Service
+ *   operation infra failures → infra-unavailable class.
+ * - Service config invalid → config-missing class (the user supplied a
+ *   bad service config; the agent narrative for `CONFIG_MISSING` is
+ *   the closest fit).
+ * - Generic `Error` and `OpenLanderError` *not* listed above fall
+ *   through to message regex → eventual `RUNTIME_CRASH`.
+ */
+export function classifyByErrorName(err: unknown): ErrorClass | null {
+  if (!err || typeof err !== 'object') {
+    return null;
+  }
+
+  // Docker daemon / build infra ----------------------------------------------
+  if (err instanceof DockerNotRunningError) {
+    return 'DOCKER_DAEMON_UNREACHABLE';
+  }
+  if (err instanceof DockerfileNotFoundError) {
+    return 'BUILD_CONTEXT_MISMATCH';
+  }
+  if (err instanceof DockerBuildError) {
+    // Build failures with no more specific signal: fall through so the
+    // message-regex layer can still pick out BUILD_CONTEXT_MISMATCH /
+    // IMAGE_WRONG_STAGE / BUILD_TIMEOUT from the captured build log.
+    return null;
+  }
+
+  // Docker resource lookup failures map to infra-unavailable: the
+  // referenced container/network/volume/image vanished mid-flight.
+  if (
+    err instanceof ContainerNotFoundError ||
+    err instanceof NetworkNotFoundError ||
+    err instanceof VolumeNotFoundError ||
+    err instanceof ImageNotFoundError ||
+    err instanceof MissingImageUrlError
+  ) {
+    return 'INFRA_UNAVAILABLE';
+  }
+
+  // Image pull failures are network-class — the registry was reachable
+  // enough to start a pull but the pull itself failed mid-stream.
+  if (err instanceof ImagePullError) {
+    return 'NETWORK_DEPENDENCY_UNREACHABLE';
+  }
+
+  // Tunnel / Cloudflare infra ------------------------------------------------
+  if (
+    err instanceof CloudflareNotFoundError ||
+    err instanceof CloudflaredNotFoundError ||
+    err instanceof TunnelStartError
+  ) {
+    return 'INFRA_UNAVAILABLE';
+  }
+
+  // Port exhaustion ----------------------------------------------------------
+  if (err instanceof PortExhaustedError) {
+    return 'PORT_CONFLICT';
+  }
+
+  // Git access ---------------------------------------------------------------
+  if (
+    err instanceof GitAuthError ||
+    err instanceof GitCloneError ||
+    err instanceof GitRepoNotFoundError ||
+    err instanceof GitBranchNotFoundError ||
+    err instanceof UnsafeRepoUrlError
+  ) {
+    return 'GIT_ACCESS_DENIED';
+  }
+
+  // Config missing / LLM not configured / Service config invalid ------------
+  if (
+    err instanceof ConfigNotFoundError ||
+    err instanceof LLMNotConfiguredError ||
+    err instanceof ServiceConfigError
+  ) {
+    return 'CONFIG_MISSING';
+  }
+
+  // LLM provider / pool / preflight / repo persistence / service infra ------
+  if (
+    err instanceof LLMUnreachableError ||
+    err instanceof LLMProviderError ||
+    err instanceof LLMConcurrencyExceededError ||
+    err instanceof PreflightCheckError ||
+    err instanceof RepoPersistenceError ||
+    err instanceof ServiceOperationError ||
+    err instanceof ServiceOperationUnsupportedError ||
+    err instanceof ServiceContainerStateError ||
+    err instanceof ServiceInUseError
+  ) {
+    return 'INFRA_UNAVAILABLE';
+  }
+
+  return null;
+}
+
+/**
  * Map a raw error/unknown thrown by the deploy pipeline to one of the
  * 16 ErrorClass values. Default: `RUNTIME_CRASH`.
  *
@@ -111,6 +266,15 @@ function extractSignal(err: unknown): DeployErrorSignal {
  * strings) are checked before regex/substring fallbacks.
  */
 export function classifyDeployError(err: unknown): ErrorClass {
+  // Codex HIGH-3 fix: typed first-party errors win before message regex.
+  // This stops `DockerNotRunningError`, `PortExhaustedError`, etc. from
+  // collapsing to `RUNTIME_CRASH` just because their human-readable
+  // `.message` strings don't match a hand-crafted regex.
+  const byName = classifyByErrorName(err);
+  if (byName !== null) {
+    return byName;
+  }
+
   const sig = extractSignal(err);
   const msg = sig.message ?? '';
   const lower = msg.toLowerCase();
