@@ -86,7 +86,7 @@ export function InfraMap(props: InfraMapProps) {
 function DemoEyebrowChip() {
   return (
     <span
-      className="ml-2 inline-flex items-center gap-1 rounded bg-[color:var(--ol-warning-soft,oklch(0.32_0.08_75))] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--ol-warning,oklch(0.78_0.15_75))]"
+      className="ml-2 inline-flex items-center gap-1 rounded bg-[color-mix(in_oklch,var(--ol-warning)_14%,transparent)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--ol-warning)]"
       title="Backend topology endpoint unavailable — showing sample data"
     >
       Sample data
@@ -129,7 +129,8 @@ function InfraMapLonely({
   service,
   projectId,
   agentActivity,
-  active,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  active: _active,
   onSelect,
   isDemo,
 }: LonelyProps & { isDemo?: boolean }) {
@@ -144,33 +145,24 @@ function InfraMapLonely({
           type="button"
           onClick={() => onSelect?.(projectId, service.id)}
           aria-label={`${service.name} · ${labelStatus}`}
-          className="group flex flex-col items-center gap-1.5 rounded-md p-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ol-primary)]"
+          className="group relative flex items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ol-primary)] border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] hover:border-[color:var(--ol-border-strong)]"
         >
+          {/* 8px status pip */}
           <span
-            className={
-              `infra-map-node-disk relative grid h-9 w-9 place-items-center rounded-full text-[14px] ` +
-              (isCrashed
-                ? 'h-crashed bg-[color:var(--ol-error-soft)] text-[color:var(--ol-error)]'
-                : 'bg-[color:var(--ol-primary-soft)] text-[color:var(--ol-primary)]') +
-              (active
-                ? ' ring-2 ring-[color:var(--ol-primary)] ring-offset-2 ring-offset-[color:var(--ol-panel)]'
-                : '')
-            }
-          >
-            <span aria-hidden className="leading-none">
-              ▤
+            aria-hidden
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: isCrashed ? 'var(--ol-error)' : 'var(--ol-success)' }}
+          />
+          <span className="ol-mono font-medium text-[color:var(--ol-fg)]">{service.name}</span>
+          {recent && (
+            <span
+              aria-hidden
+              className="absolute -right-1.5 -top-1.5 grid h-3.5 w-3.5 place-items-center rounded-full border border-[color:var(--ol-panel)] bg-[color:var(--ol-actor-mcp)] text-[color:var(--ol-panel)]"
+              title="Agent acted recently"
+            >
+              <Bot className="h-2.5 w-2.5" />
             </span>
-            {recent && (
-              <span
-                aria-hidden
-                className="absolute -right-1 -top-1 grid h-3.5 w-3.5 place-items-center rounded-full border border-[color:var(--ol-panel)] bg-[color:var(--ol-actor-mcp)] text-[color:var(--ol-panel)]"
-                title="Agent acted recently"
-              >
-                <Bot className="h-2.5 w-2.5" />
-              </span>
-            )}
-          </span>
-          <span className="text-[12px] font-medium text-[color:var(--ol-fg)]">{service.name}</span>
+          )}
         </button>
         <span className="text-[12px] text-[color:var(--ol-fg-subtle)]">
           No dependencies declared. Add one in{' '}

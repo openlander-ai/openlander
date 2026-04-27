@@ -252,12 +252,12 @@ export function LogViewer({
   return (
     <div className="ol-log-pane relative flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center gap-3 border-b border-[oklch(0.32_0.015_255)] bg-[oklch(0.22_0.018_255)] px-4 py-2.5">
+      <div className="flex items-center gap-3 border-b border-[color:var(--log-header-border)] bg-[color:var(--log-header-bg)] px-4 py-2.5">
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="grid h-7 w-7 place-items-center rounded-md text-[oklch(0.72_0.012_255)] transition-colors hover:bg-[oklch(0.32_0.015_255)] hover:text-[oklch(0.96_0.005_250)]"
+            className="grid h-7 w-7 place-items-center rounded-md text-[color:var(--log-header-muted)] transition-colors hover:bg-[color:var(--log-header-border)] hover:text-[color:var(--log-header-text)]"
             aria-label="Back"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -266,7 +266,7 @@ export function LogViewer({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
             {headerTitle ?? (
-              <span className="font-medium text-[oklch(0.96_0.005_250)]">
+              <span className="font-medium text-[color:var(--log-header-text)]">
                 {isRuntime ? 'Runtime container logs' : 'Deploy log'}
               </span>
             )}
@@ -274,7 +274,7 @@ export function LogViewer({
             <FsmBadge connState={connState} viewState={viewState} />
           </div>
           {headerSubtitle && (
-            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-[oklch(0.72_0.012_255)]">
+            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-[color:var(--log-header-muted)]">
               {headerSubtitle}
             </div>
           )}

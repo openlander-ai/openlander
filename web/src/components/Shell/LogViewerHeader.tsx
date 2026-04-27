@@ -1,15 +1,14 @@
 /**
  * LogViewer header chrome — extracted from LogViewer.tsx in PR4-C.
  *
+ * Phase D token swap: hardcoded oklch literals replaced with var(--log-header-*)
+ * tokens that are defined in LogViewer.css's .ol-log-pane scope.
+ *
  * Carries:
  *   - HeaderPill: the connection-state pill (Connecting / Live / Failed / etc.)
  *   - FsmBadge: tiny mono-tagged "STATE × VIEW" badge for non-default states
  *   - HeaderActionButton: thin secondary action for Copy / Download / Kill
  *   - Dot: the animated dot used inside HeaderPill
- *
- * The colors are intentionally inline `oklch(...)` literals — the
- * LogViewer is dark-only by design and we hand-pick the dark values
- * rather than route through theme-aware tokens.
  */
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
@@ -53,7 +52,10 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
   if (connState === 'CONNECTING') {
     return (
       <span
-        className={cn(base, 'border border-[oklch(0.4_0.02_255)] text-[oklch(0.85_0.012_255)]')}
+        className={cn(
+          base,
+          'border border-[color:var(--log-header-border)] text-[color:var(--log-header-muted)]',
+        )}
       >
         <Dot color="var(--ol-fg-muted)" />
         Connecting…
@@ -62,7 +64,12 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
   }
   if (connState === 'LIVE') {
     return (
-      <span className={cn(base, 'bg-[oklch(0.32_0.08_165)] text-[oklch(0.92_0.04_165)]')}>
+      <span
+        className={cn(
+          base,
+          'bg-[color-mix(in_oklch,var(--log-success)_18%,var(--log-header-bg))] text-[color:var(--log-success)]',
+        )}
+      >
         <Dot pulse color="var(--ol-success)" />
         Live · {liveDur}
       </span>
@@ -70,7 +77,12 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
   }
   if (connState === 'RECONNECTING') {
     return (
-      <span className={cn(base, 'bg-[oklch(0.32_0.08_70)] text-[oklch(0.92_0.04_80)]')}>
+      <span
+        className={cn(
+          base,
+          'bg-[color-mix(in_oklch,var(--log-warning)_18%,var(--log-header-bg))] text-[color:var(--log-warning)]',
+        )}
+      >
         <Dot pulse color="var(--ol-warning)" />
         Reconnecting · {liveDur}
       </span>
@@ -78,7 +90,12 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
   }
   if (connState === 'BACKFILLING') {
     return (
-      <span className={cn(base, 'bg-[oklch(0.32_0.08_235)] text-[oklch(0.92_0.04_235)]')}>
+      <span
+        className={cn(
+          base,
+          'bg-[color-mix(in_oklch,var(--log-cyan)_18%,var(--log-header-bg))] text-[color:var(--log-cyan)]',
+        )}
+      >
         <Dot pulse color="var(--ol-info)" />
         Backfilling…
       </span>
@@ -86,7 +103,12 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
   }
   if (connState === 'ENDED' && buildOutcome === 'fail') {
     return (
-      <span className={cn(base, 'bg-[oklch(0.32_0.08_28)] text-[oklch(0.92_0.04_28)]')}>
+      <span
+        className={cn(
+          base,
+          'bg-[color-mix(in_oklch,var(--log-error)_18%,var(--log-header-bg))] text-[color:var(--log-error)]',
+        )}
+      >
         <Dot color="var(--ol-error)" />
         Failed · {liveDur}
       </span>
@@ -94,7 +116,12 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
   }
   if (connState === 'ENDED') {
     return (
-      <span className={cn(base, 'bg-[oklch(0.32_0.08_165)] text-[oklch(0.92_0.04_165)]')}>
+      <span
+        className={cn(
+          base,
+          'bg-[color-mix(in_oklch,var(--log-success)_18%,var(--log-header-bg))] text-[color:var(--log-success)]',
+        )}
+      >
         <Dot color="var(--ol-success)" />
         Done · {liveDur}
       </span>
@@ -102,7 +129,12 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
   }
   if (connState === 'ERRORED') {
     return (
-      <span className={cn(base, 'bg-[oklch(0.32_0.08_28)] text-[oklch(0.92_0.04_28)]')}>
+      <span
+        className={cn(
+          base,
+          'bg-[color-mix(in_oklch,var(--log-error)_18%,var(--log-header-bg))] text-[color:var(--log-error)]',
+        )}
+      >
         <Dot color="var(--ol-error)" />
         Stream error · {liveDur}
       </span>
@@ -111,7 +143,10 @@ export function HeaderPill({ connState, buildOutcome, liveDur }: HeaderPillProps
   if (connState === 'CANCELLED') {
     return (
       <span
-        className={cn(base, 'border border-[oklch(0.4_0.02_255)] text-[oklch(0.72_0.012_255)]')}
+        className={cn(
+          base,
+          'border border-[color:var(--log-header-border)] text-[color:var(--log-header-muted)]',
+        )}
       >
         <Dot color="var(--ol-fg-muted)" />
         Cancelled · {liveDur}
@@ -128,7 +163,7 @@ export function FsmBadge({ connState, viewState }: { connState: ConnState; viewS
   if (isDefault) return null;
   return (
     <span
-      className="ol-mono inline-flex rounded border border-[oklch(0.4_0.02_255)] px-1.5 py-0.5 text-[10px] text-[oklch(0.72_0.012_255)]"
+      className="ol-mono inline-flex rounded border border-[color:var(--log-header-border)] px-1.5 py-0.5 text-[10px] text-[color:var(--log-header-muted)]"
       title="Connection × Viewport state"
     >
       {connState} · {viewState}
@@ -149,7 +184,7 @@ export function HeaderActionButton({ icon, title, children, onClick }: HeaderAct
       type="button"
       onClick={onClick}
       title={title}
-      className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11.5px] text-[oklch(0.72_0.012_255)] transition-colors hover:bg-[oklch(0.32_0.015_255)] hover:text-[oklch(0.96_0.005_250)]"
+      className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11.5px] text-[color:var(--log-header-muted)] transition-colors hover:bg-[color:var(--log-header-border)] hover:text-[color:var(--log-header-text)]"
     >
       {icon}
       <span>{children}</span>

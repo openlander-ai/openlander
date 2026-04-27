@@ -1,22 +1,43 @@
 /*
  * LogViewer — log line + phase header + ANSI color styles.
  *
- * Tailwind handles the layout, but ANSI escape sequences need stable
- * named classes since they're emitted by parseAnsi() at render time.
+ * Phase D token swap: hardcoded oklch literals replaced with var(--log-*)
+ * tokens from tokens.css. The terminal pane is intentionally dark-only
+ * (both light and dark app themes render the pane dark), so we force the
+ * dark token values via [data-log-pane] attribute scoping.
+ *
+ * Tailwind handles layout; ANSI escape sequences need stable named classes
+ * since they're emitted by parseAnsi() at render time.
  */
 
+/*
+ * Force dark log-palette on the pane regardless of the app theme.
+ * tokens.css defines --log-* for [data-theme='dark']; we replicate the
+ * dark-mode values here so the pane is always dark even in light app mode.
+ */
 .ol-log-pane {
-  background: oklch(0.18 0.02 255);
-  color: oklch(0.96 0.005 250);
+  /* Dark terminal surface — always dark regardless of app theme */
+  --log-bg:       oklch(0.14 0.005 250);
+  --log-text:     oklch(0.92 0.005 250);
+  --log-muted:    oklch(0.62 0.008 250);
+  --log-num:      oklch(0.42 0.008 250);
+  --log-success:  oklch(0.74 0.15 150);
+  --log-warning:  oklch(0.80 0.14 75);
+  --log-error:    oklch(0.74 0.16 25);
+  --log-debug:    oklch(0.55 0.008 250);
+  --log-cyan:     oklch(0.74 0.12 215);
+  --log-magenta:  oklch(0.72 0.15 330);
+  /* Header surface — slightly lighter than pane */
+  --log-header-bg:     oklch(0.18 0.010 255);
+  --log-header-border: oklch(0.28 0.015 255);
+  --log-header-text:   oklch(0.92 0.005 250);
+  --log-header-muted:  oklch(0.62 0.008 250);
+
+  background: var(--log-bg);
+  color: var(--log-text);
   font-family: var(--ol-font-mono);
   font-size: 12.5px;
   line-height: 1.55;
-}
-
-[data-theme='light']:not(.dark) .ol-log-pane,
-:root:not([data-theme='dark']):not(.dark) .ol-log-pane {
-  background: oklch(0.18 0.02 255);
-  color: oklch(0.96 0.005 250);
 }
 
 .ol-log-line {
@@ -27,11 +48,11 @@
   white-space: pre;
 }
 .ol-log-line.error .ol-log-payload {
-  color: oklch(0.78 0.18 28);
+  color: var(--log-error);
 }
 
 .ol-log-num {
-  color: oklch(0.55 0.015 255);
+  color: var(--log-num);
   width: 4ch;
   text-align: right;
   flex-shrink: 0;
@@ -48,10 +69,10 @@
   flex-shrink: 0;
   opacity: 0.65;
 }
-.ol-log-prefix.info { color: oklch(0.72 0.012 255); }
-.ol-log-prefix.success { color: oklch(0.72 0.15 165); }
-.ol-log-prefix.warning { color: oklch(0.78 0.15 70); }
-.ol-log-prefix.error { color: oklch(0.78 0.18 28); }
+.ol-log-prefix.info    { color: var(--log-muted); }
+.ol-log-prefix.success { color: var(--log-success); }
+.ol-log-prefix.warning { color: var(--log-warning); }
+.ol-log-prefix.error   { color: var(--log-error); }
 
 .ol-log-payload {
   flex: 1;
@@ -66,7 +87,7 @@
   padding: 0 6px;
   border-radius: 3px;
   background: color-mix(in oklch, var(--ol-actor-mcp) 18%, transparent);
-  color: oklch(0.85 0.04 255);
+  color: var(--log-muted);
   font-size: 10.5px;
   font-weight: 600;
 }
@@ -80,29 +101,29 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
-  color: oklch(0.72 0.012 255);
+  color: var(--log-muted);
 }
 .ol-phase-header::after {
   content: '';
   flex: 1;
   height: 1px;
-  background: oklch(0.32 0.015 255);
+  background: var(--log-header-border);
 }
 .ol-phase-header.success {
-  color: oklch(0.78 0.15 165);
+  color: var(--log-success);
 }
 .ol-phase-header.failed {
-  color: oklch(0.78 0.18 28);
+  color: var(--log-error);
 }
 
 /* ANSI colors */
-.ansi-bold { font-weight: 700; }
-.ansi-dim { opacity: 0.7; }
-.ansi-red { color: oklch(0.78 0.18 28); }
-.ansi-green { color: oklch(0.78 0.15 165); }
-.ansi-yellow { color: oklch(0.85 0.16 80); }
-.ansi-magenta { color: oklch(0.75 0.18 320); }
-.ansi-cyan { color: oklch(0.78 0.13 220); }
+.ansi-bold    { font-weight: 700; }
+.ansi-dim     { opacity: 0.7; }
+.ansi-red     { color: var(--log-error); }
+.ansi-green   { color: var(--log-success); }
+.ansi-yellow  { color: var(--log-warning); }
+.ansi-magenta { color: var(--log-magenta); }
+.ansi-cyan    { color: var(--log-cyan); }
 
 /* Inline progress bar (for {progress} entries) */
 .ol-progress-inline {
@@ -115,22 +136,21 @@
   width: 120px;
   height: 6px;
   border-radius: 3px;
-  background: oklch(0.28 0.015 255);
+  background: var(--log-header-border);
   overflow: hidden;
 }
 .ol-progress-inline-bar > span {
   display: block;
   height: 100%;
-  background: oklch(0.7 0.18 255);
+  background: var(--ol-primary, oklch(0.72 0.18 145));
   transition: width 0.18s linear;
 }
 
 /*
- * Reduced-motion gate (PR7-B). The progress bar's width transition is
- * the only motion currently in this stylesheet — drop it under the OS
- * preference so the bar fills instantly. Future header pulses (FsmBadge
- * "live" dot, etc.) inherit this block and should add their own
- * `animation: none` rules here rather than inline.
+ * Reduced-motion gate. The progress bar's width transition is the only
+ * motion in this stylesheet — drop it under the OS preference.
+ * Future header pulses (FsmBadge "live" dot, etc.) inherit this block
+ * and should add their own `animation: none` rules here.
  */
 @media (prefers-reduced-motion: reduce) {
   .ol-progress-inline-bar > span {
@@ -147,7 +167,7 @@
   margin: 0 18px 6px;
   border-radius: 6px;
   background: color-mix(in oklch, var(--ol-actor-mcp) 14%, transparent);
-  color: oklch(0.85 0.04 255);
+  color: var(--log-muted);
   font-family: var(--ol-font-ui);
   font-size: 12px;
 }
@@ -158,11 +178,11 @@
   align-items: center;
   gap: 10px;
   padding: 8px 18px;
-  background: oklch(0.32 0.08 70);
-  color: oklch(0.92 0.03 80);
+  background: color-mix(in oklch, var(--log-warning) 18%, var(--log-header-bg));
+  color: var(--log-warning);
   font-family: var(--ol-font-ui);
   font-size: 12px;
-  border-bottom: 1px solid oklch(0.4 0.02 255);
+  border-bottom: 1px solid var(--log-header-border);
 }
 
 /* Jump-to-latest pill */
@@ -176,12 +196,12 @@
   gap: 6px;
   padding: 6px 14px;
   border-radius: 999px;
-  background: oklch(0.32 0.08 255);
-  color: oklch(0.96 0.005 250);
+  background: var(--log-header-bg);
+  color: var(--log-text);
   font-family: var(--ol-font-ui);
   font-size: 12px;
   font-weight: 500;
-  border: 1px solid oklch(0.55 0.18 255);
+  border: 1px solid var(--ol-border, oklch(0.28 0.015 255));
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   cursor: pointer;
   z-index: 5;
