@@ -11,6 +11,15 @@ import { ServicesPage } from '@/pages/ServicesPage';
 import { OpsCenterV2 } from '@/pages/OpsCenterV2';
 import { Overview } from '@/pages/Overview';
 import { DeploymentsList } from '@/pages/DeploymentsList';
+import { Home } from '@/pages/Home';
+import { Activity } from '@/pages/Activity';
+import { MCPServer } from '@/pages/MCPServer';
+import { ProjectView } from '@/pages/ProjectView';
+import { ServiceDetailV2 } from '@/pages/ServiceDetailV2';
+import { WebServerSettings } from '@/pages/settings/WebServer';
+import { GitProvidersSettings } from '@/pages/settings/GitProviders';
+import { SSHKeysSettings } from '@/pages/settings/SSHKeys';
+import { NotificationsSettings } from '@/pages/settings/Notifications';
 import { useAgentPanel } from '@/contexts/agent-panel';
 import { LoginPage } from '@/pages/LoginPage';
 import { AuthProvider, useAuth } from '@/contexts/auth';
@@ -123,14 +132,28 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route
                 path="/setup"
-                element={<SetupScreen onComplete={() => (window.location.href = '/overview')} />}
+                element={<SetupScreen onComplete={() => (window.location.href = '/home')} />}
               />
               <Route element={<SetupGuard />}>
-                {/* AppShell takeover: single shell for all authenticated routes.
-                    Legacy AppLayout deleted. V2 pages (Home/Activity/MCPServer/
-                    ProjectView/ServiceDetailV2/settings/*) added in A.2.4 once
-                    their source files land. */}
+                {/* Single shell for all authenticated routes (Round 4 PR4
+                    takeover). Legacy AppLayout was deleted; AppShell now
+                    carries CommandPalette / AgentPanel / ApprovalDialog
+                    that the old shell owned. */}
                 <Route element={<AppShell />}>
+                  {/* V2 surfaces */}
+                  <Route path="/home" element={<Home />} />
+                  <Route path="/activity" element={<Activity />} />
+                  <Route path="/mcp" element={<MCPServer />} />
+                  <Route path="/projects/:id" element={<ProjectView />} />
+                  <Route path="/services/:id" element={<ServiceDetailV2 />} />
+                  <Route path="/settings/web-server" element={<WebServerSettings />} />
+                  <Route path="/settings/git-providers" element={<GitProvidersSettings />} />
+                  <Route path="/settings/ssh-keys" element={<SSHKeysSettings />} />
+                  <Route path="/settings/notifications" element={<NotificationsSettings />} />
+
+                  {/* Legacy pages — kept under V2 chrome until each is
+                      individually rewritten. The visual mismatch is the
+                      acceptable transition state for one launch cycle. */}
                   <Route path="/overview" element={<Overview />} />
                   <Route path="/deployments" element={<DeploymentsList />} />
                   <Route path="/projects" element={<ProjectsGrid />} />
@@ -146,8 +169,8 @@ function App() {
                   <Route path="/agent" element={<AgentRouteRedirect />} />
                 </Route>
               </Route>
-              <Route path="/" element={<Navigate to="/overview" replace />} />
-              <Route path="*" element={<Navigate to="/overview" replace />} />
+              <Route path="/" element={<Navigate to="/home" replace />} />
+              <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
           </BrowserRouter>
         </ErrorBoundary>

@@ -1,0 +1,115 @@
+/*
+ * OpenLander design tokens — Round 4 port (PR1)
+ *
+ * Additive layer: defines `--ol-*` oklch tokens that the Shell V2
+ * components (Sidebar/TopBar/OuterCard/Home/Activity/MCPServer) consume.
+ *
+ * Why prefixed `--ol-`:
+ * The existing `index.css` already defines `--bg-app`, `--bg-panel`,
+ * `--color-accent`, etc. Tailwind's theme reads those. New oklch tokens
+ * sit alongside without clobbering the existing palette so old pages
+ * keep their look.
+ *
+ * Light theme is the default. `[data-theme='dark']` and `.dark`
+ * mirror the Shell V2 dark palette.
+ */
+
+@layer base {
+  :root {
+    /* ── Surface ── */
+    --ol-bg: oklch(0.985 0.002 250);          /* off-white */
+    --ol-panel: oklch(1 0 0);                 /* crisp white */
+    --ol-panel-2: oklch(0.97 0.002 250);      /* subtle elevated */
+    --ol-bg-app: oklch(0.985 0.002 250);
+
+    /* ── Border ── */
+    --ol-border: oklch(0.9 0.003 250);
+    --ol-border-subtle: oklch(0.93 0.003 250);
+    --ol-border-strong: oklch(0.83 0.005 250);
+
+    /* ── Foreground ── */
+    --ol-fg: oklch(0.22 0.02 255);
+    --ol-fg-muted: oklch(0.42 0.018 255);
+    --ol-fg-subtle: oklch(0.6 0.015 255);
+
+    /* ── Brand ── */
+    --ol-primary: oklch(0.55 0.18 255);       /* infrastructural indigo */
+    --ol-primary-soft: oklch(0.94 0.04 255);
+    --ol-primary-fg: oklch(1 0 0);
+
+    /* ── Status ── */
+    --ol-success: oklch(0.62 0.15 165);
+    --ol-success-soft: oklch(0.95 0.04 165);
+    --ol-warning: oklch(0.74 0.16 70);
+    --ol-warning-soft: oklch(0.95 0.05 80);
+    --ol-error: oklch(0.6 0.2 28);
+    --ol-error-soft: oklch(0.95 0.04 28);
+    --ol-info: oklch(0.62 0.13 235);
+    --ol-info-soft: oklch(0.94 0.04 235);
+
+    /* ── Actor color hints (Activity timeline) ── */
+    --ol-actor-mcp: oklch(0.55 0.18 255);     /* indigo (mcp = agent identity) */
+    --ol-actor-human: oklch(0.42 0.018 255);  /* neutral foreground */
+    --ol-actor-webhook: oklch(0.6 0.18 290);  /* purple (git push) */
+    --ol-actor-system: oklch(0.6 0.015 255);  /* subtle */
+
+    /* ── Layout ── */
+    --ol-sidebar-w: 256px;
+    --ol-sidebar-w-collapsed: 56px;
+    --ol-topbar-h: 56px;
+    --ol-radius: 12px;
+    --ol-radius-sm: 7px;
+
+    /* ── Type ── */
+    --ol-font-ui: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
+    --ol-font-mono:
+      'JetBrains Mono Variable', 'Geist Mono Variable', ui-monospace,
+      SFMono-Regular, Menlo, monospace;
+  }
+
+  [data-theme='dark'],
+  .dark {
+    --ol-bg: oklch(0.18 0.02 255);
+    --ol-panel: oklch(0.22 0.018 255);
+    --ol-panel-2: oklch(0.25 0.018 255);
+    --ol-bg-app: oklch(0.18 0.02 255);
+
+    --ol-border: oklch(0.32 0.015 255);
+    --ol-border-subtle: oklch(0.28 0.015 255);
+    --ol-border-strong: oklch(0.4 0.02 255);
+
+    --ol-fg: oklch(0.96 0.005 250);
+    --ol-fg-muted: oklch(0.72 0.012 255);
+    --ol-fg-subtle: oklch(0.55 0.015 255);
+
+    --ol-primary: oklch(0.7 0.18 255);
+    --ol-primary-soft: oklch(0.32 0.08 255);
+    --ol-primary-fg: oklch(0.18 0.02 255);
+
+    --ol-success: oklch(0.72 0.15 165);
+    --ol-success-soft: oklch(0.32 0.08 165);
+    --ol-warning: oklch(0.78 0.15 70);
+    --ol-warning-soft: oklch(0.32 0.08 80);
+    --ol-error: oklch(0.7 0.2 28);
+    --ol-error-soft: oklch(0.32 0.08 28);
+    --ol-info: oklch(0.72 0.13 235);
+    --ol-info-soft: oklch(0.32 0.08 235);
+
+    --ol-actor-mcp: oklch(0.7 0.18 255);
+    --ol-actor-human: oklch(0.72 0.012 255);
+    --ol-actor-webhook: oklch(0.72 0.18 290);
+    --ol-actor-system: oklch(0.55 0.015 255);
+  }
+
+  /* Shell V2 baseline — only applied to elements that opt in via `.ol-shell` */
+  .ol-shell,
+  .ol-shell-root {
+    background: var(--ol-bg-app);
+    color: var(--ol-fg);
+    font-family: var(--ol-font-ui);
+  }
+
+  .ol-mono {
+    font-family: var(--ol-font-mono);
+  }
+}
