@@ -11,7 +11,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, Folder, MoreHorizontal, Plus } from 'lucide-react';
 import { useProjectsContext } from '@/hooks/use-projects-context';
-import { useLanguage } from '@/i18n/context';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/types';
@@ -71,7 +70,6 @@ function timeAgo(dateStr: string): string {
 
 export function ProjectsGrid() {
   const navigate = useNavigate();
-  const { t } = useLanguage();
   const { projects, loading } = useProjectsContext();
   const [q, setQ] = useState('');
 
@@ -81,7 +79,7 @@ export function ProjectsGrid() {
     <div className="mx-auto w-full max-w-5xl">
       <OuterCard
         title="Projects"
-        subtitle={t('projects.description') ?? 'Create and manage your projects'}
+        subtitle="Create and manage your projects"
         actions={
           <button
             type="button"
