@@ -36,7 +36,11 @@ const STORAGE_KEY = 'ol-shell-sidebar-collapsed';
 const ROUTE_LABELS: Record<string, string> = {
   home: 'Home',
   activity: 'Activity',
+  // /mcp lost the React surface (backend's JSON-RPC endpoint owns that path);
+  // the UI lives at /mcp-server now. Both keys land here so the breadcrumb
+  // stays "MCP Server" even on the legacy URL during transition.
   mcp: 'MCP Server',
+  'mcp-server': 'MCP Server',
   projects: 'Projects',
   services: 'Services',
   deployments: 'Deployments',
