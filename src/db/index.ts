@@ -33,6 +33,8 @@ import { CircuitBreakerRepo } from './repos/circuit-breaker.repo.js';
 import { ProjectDependencyRepo } from './repos/project-dependency.repo.js';
 import { ProjectOpsOverrideRepo } from './repos/project-ops-override.repo.js';
 import { ActivityLogRepo } from './repos/activity-log.repo.js';
+import { ServiceMetricRepo } from './repos/service-metric.repo.js';
+import { SettingsRepo } from './repos/settings.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 import type { ProjectOpsOverride } from '../monitor/ops-types.js';
@@ -412,6 +414,8 @@ export class Database implements AuthDatabase {
   private readonly projectDependencyRepo: ProjectDependencyRepo;
   private readonly projectOpsOverrideRepo: ProjectOpsOverrideRepo;
   private readonly activityLogRepo: ActivityLogRepo;
+  private readonly serviceMetricRepo: ServiceMetricRepo;
+  private readonly settingsRepo: SettingsRepo;
 
   constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
@@ -474,6 +478,8 @@ export class Database implements AuthDatabase {
     this.projectDependencyRepo = new ProjectDependencyRepo(this.db, this.sqlite);
     this.projectOpsOverrideRepo = new ProjectOpsOverrideRepo(this.db, this.sqlite);
     this.activityLogRepo = new ActivityLogRepo(this.db, this.sqlite);
+    this.serviceMetricRepo = new ServiceMetricRepo(this.db, this.sqlite);
+    this.settingsRepo = new SettingsRepo(this.db, this.sqlite);
     this.actionRunRepo.markStaleAsFailedOnStartup();
   }
 
@@ -640,6 +646,12 @@ export class Database implements AuthDatabase {
   findActivityLogRecent(limit?: number, filters?: { project_id?: string; activity_type?: string; severity?: string; correlation_id?: string }) { return this.activityLogRepo.findRecent(limit, filters); }
   findActivityLogSinceFiltered(lastUlid: string, limit?: number, filters?: { project_id?: string; activity_type?: string; severity?: string; correlation_id?: string }) { return this.activityLogRepo.findSinceFiltered(lastUlid, limit, filters); }
   deleteActivityLogOlderThan(isoDate: string) { return this.activityLogRepo.deleteOlderThan(isoDate); }
+  recordServiceMetricSample(sample: Parameters<ServiceMetricRepo['recordMetricSample']>[0]) { this.serviceMetricRepo.recordMetricSample(sample); }
+  listServiceMetricsSince(serviceId: string, fromMs: number) { return this.serviceMetricRepo.listMetricsSince(serviceId, fromMs); }
+  hasAnyServiceMetrics(serviceId: string) { return this.serviceMetricRepo.hasAnyMetrics(serviceId); }
+  getSetting(key: string) { return this.settingsRepo.getSetting(key); }
+  upsertSetting(key: string, value: string) { this.settingsRepo.upsertSetting(key, value); }
+  deleteSetting(key: string) { return this.settingsRepo.deleteSetting(key); }
   transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
   close() { this.sqlite.close(); }
 }

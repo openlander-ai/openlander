@@ -261,6 +261,99 @@ export function createSystemRoutes(ctx: AppContext): Hono {
   // ServiceHealth UI type's binary `'healthy' | 'crashed'` consumers
   // while preserving the third `'running'` slot for services without
   // an explicit healthcheck.
+  // Phase E_NEW Task 5 — time-series sparkline data for the v4 service detail.
+  // Returns 60 uniformly-downsampled datapoints regardless of range.
+  // 204 when the service has no recorded samples yet (first-deploy or
+  // recorder hasn't fired); the UI hook should treat 204 as "no data"
+  // and keep a placeholder sparkline rather than showing an error.
+  api.get('/services/:id/metrics', (c) => {
+    const id = c.req.param('id');
+
+    const rangeParam = (c.req.query('range') ?? '1h') as '15m' | '1h' | '6h' | '24h' | '7d';
+    const RANGE_MS: Record<string, number> = {
+      '15m': 15 * 60 * 1000,
+      '1h': 60 * 60 * 1000,
+      '6h': 6 * 60 * 60 * 1000,
+      '24h': 24 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
+    };
+    const windowMs: number = RANGE_MS[rangeParam] ?? RANGE_MS['1h'] ?? 3_600_000;
+
+    try {
+      const service = ctx.db.getService(id);
+      if (!service) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+
+      if (!ctx.db.hasAnyServiceMetrics(id)) {
+        return new Response(null, { status: 204 });
+      }
+
+      const fromMs = Date.now() - windowMs;
+      const rows = ctx.db.listServiceMetricsSince(id, fromMs);
+
+      if (rows.length === 0) {
+        return new Response(null, { status: 204 });
+      }
+
+      const TARGET = 60;
+
+      /**
+       * Uniform downsample: bucket the rows into TARGET bins, average
+       * within each bin. If rows < TARGET, pad with the last known value
+       * so the sparkline always has exactly 60 points.
+       */
+      function downsample(values: number[]): number[] {
+        if (values.length === 0) return new Array<number>(TARGET).fill(0);
+        if (values.length >= TARGET) {
+          const result: number[] = [];
+          const binSize = values.length / TARGET;
+          for (let i = 0; i < TARGET; i++) {
+            const start = Math.floor(i * binSize);
+            const end = Math.floor((i + 1) * binSize);
+            const slice = values.slice(start, end);
+            const avg = slice.reduce((s, v) => s + v, 0) / slice.length;
+            result.push(Math.round(avg * 100) / 100);
+          }
+          return result;
+        }
+        // Fewer than 60 points — left-pad with the first value
+        const firstValue = values[0] ?? 0;
+        const padded = new Array<number>(TARGET - values.length).fill(firstValue).concat(values);
+        return padded;
+      }
+
+      const cpuArr = rows.map((r) => r.cpu);
+      const memArr = rows.map((r) => r.mem);
+      const reqArr = rows.map((r) => r.req);
+      const errArr = rows.map((r) => r.err);
+
+      const p95Values = rows.map((r) => r.p95_latency_ms).filter((v): v is number => v !== null);
+      const p95LatencyMs =
+        p95Values.length > 0
+          ? Math.round((p95Values.reduce((s, v) => s + v, 0) / p95Values.length) * 100) / 100
+          : 0;
+
+      const totalRequests = rows.reduce((s, r) => s + r.request_count, 0);
+
+      return c.json({
+        cpu: downsample(cpuArr),
+        memory: downsample(memArr),
+        requestsPerSec: downsample(reqArr),
+        errorRate: downsample(errArr),
+        p95LatencyMs,
+        totalRequests,
+      });
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'Get service metrics failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch service metrics' }, 500);
+    }
+  });
+
   api.get('/services/:id/health', async (c) => {
     const id = c.req.param('id');
     try {

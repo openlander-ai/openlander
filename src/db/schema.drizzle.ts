@@ -637,6 +637,63 @@ export type NewOpsIncidentEvent = typeof opsIncidentEvents.$inferInsert;
 export type CircuitBreakerRow = typeof circuitBreakerState.$inferSelect;
 export type NewCircuitBreaker = typeof circuitBreakerState.$inferInsert;
 
+/**
+ * Phase E_NEW Task 5 — time-series metrics for v4 service detail
+ * sparkline. Recorded by the existing stats collection path (one row
+ * per service per sample interval) and aggregated on read by
+ * `GET /api/services/:id/metrics`. Independent from `service_stats`
+ * (which is a single row per service representing the most-recent
+ * snapshot) because the v4 sparkline needs historical retention.
+ */
+export const serviceMetrics = sqliteTable(
+  'service_metrics',
+  {
+    service_id: text('service_id')
+      .notNull()
+      .references(() => services.id, { onDelete: 'cascade' }),
+    /** Wall-clock millisecond timestamp of the sample (epoch ms). */
+    recorded_at: integer('recorded_at').notNull(),
+    /** CPU percent, 0–100*N where N is core count. */
+    cpu: real('cpu').notNull().default(0),
+    /** Memory usage in MB. */
+    mem: real('mem').notNull().default(0),
+    /** Requests-per-second since the last sample. */
+    req: real('req').notNull().default(0),
+    /** Error rate as percent (e.g. 0.4 = 0.4%). */
+    err: real('err').notNull().default(0),
+    /** p95 latency in ms — optional, for the aggregate read field. */
+    p95_latency_ms: real('p95_latency_ms'),
+    /** Per-sample request count, for the aggregate totalRequests read field. */
+    request_count: integer('request_count').notNull().default(0),
+  },
+  (table) => [
+    index('idx_service_metrics_service_recorded').on(table.service_id, table.recorded_at),
+  ],
+);
+
+export type ServiceMetricRow = typeof serviceMetrics.$inferSelect;
+export type NewServiceMetric = typeof serviceMetrics.$inferInsert;
+
+/**
+ * Phase E_NEW Task 7 — generic key/value settings table for the
+ * notifications webhook (single-row keyed on `'notification_webhook'`)
+ * and any future single-tenant configuration that doesn't merit a
+ * dedicated table. Value is opaque JSON text — callers parse against
+ * their own schema.
+ */
+export const settings = sqliteTable(
+  'settings',
+  {
+    key: text('key').primaryKey(),
+    value: text('value').notNull(),
+    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (_table) => [],
+);
+
+export type SettingsRow = typeof settings.$inferSelect;
+export type NewSetting = typeof settings.$inferInsert;
+
 export const activityLog = sqliteTable(
   'activity_log',
   {
@@ -687,5 +744,7 @@ export const drizzleSchema = {
   opsIncidentEvents,
   circuitBreakerState,
   projectDependencies,
+  serviceMetrics,
+  settings,
   activityLog,
 };
