@@ -15,6 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PROJECT_ACTIONS } from '../../src/mcp/composite-tools.js';
 
 const REPO_ROOT = resolve(__dirname, '..', '..');
 
@@ -50,18 +51,11 @@ const FROZEN_PROJECT_ACTIONS_1_0_RC = [
 
 describe('vocabulary-audit (data-model-alignment guardrail)', () => {
   it('PROJECT_ACTIONS in composite-tools.ts matches the 1.0 RC frozen baseline', () => {
-    // We extract via regex rather than importing the module so this test
-    // does not pull the full MCP runtime into the lint suite.
-    const source = readFileSync(
-      resolve(REPO_ROOT, 'src', 'mcp', 'composite-tools.ts'),
-      'utf8',
-    );
-    const match = source.match(
-      /export\s+const\s+PROJECT_ACTIONS\s*=\s*\[([\s\S]*?)\]\s*as\s+const\s*;/,
-    );
-    expect(match, 'PROJECT_ACTIONS array literal not found in composite-tools.ts').not.toBeNull();
-    const body = match![1];
-    const actions = Array.from(body.matchAll(/'([^']+)'/g)).map((m) => m[1]);
+    // Runtime import (not regex source-scan): a syntax-aware comparison
+    // catches refactors / spreads / commented-out entries that a regex
+    // would miss. Codex CCG flagged the original regex as brittle on
+    // PR #77 review.
+    const actions = PROJECT_ACTIONS as readonly string[];
 
     // No silent removals
     for (const expected of FROZEN_PROJECT_ACTIONS_1_0_RC) {

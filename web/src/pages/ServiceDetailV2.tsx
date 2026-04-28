@@ -69,7 +69,12 @@ export function ServiceDetailV2() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   if (location.pathname.startsWith('/managed-services/') && id) {
-    return <ManagedServiceDetail id={id} />;
+    // `key={id}` forces remount on managed-service navigation. Without
+    // it, React reuses the instance and ManagedServiceDetail's stale
+    // state (previous service object) would render for one commit
+    // before the id-change useEffect fires its setState — flagged by
+    // Codex CCG on PR #77.
+    return <ManagedServiceDetail key={id} id={id} />;
   }
   return <DeployableServiceDetail />;
 }
@@ -785,12 +790,16 @@ function ManagedServiceDetail({ id }: { id: string }) {
   }
 
   if (error || !service) {
+    // 404 vs transient backend failure are different stories — don't
+    // mislabel a 500/network error as "not found" (Codex CCG on PR #77).
+    // Fetch helpers surface "Not found"/"404" on actual 404; anything
+    // else is a transport error worth surfacing honestly.
+    const isNotFound = error == null || /not found|404/i.test(error);
+    const title = isNotFound ? 'Managed service not found' : 'Failed to load managed service';
+    const subtitle = error ?? `No service with id "${id}"`;
     return (
       <div className="mx-auto w-full max-w-5xl">
-        <OuterCard
-          title="Managed service not found"
-          subtitle={error ?? `No service with id "${id}"`}
-        >
+        <OuterCard title={title} subtitle={subtitle}>
           <button
             type="button"
             onClick={() => navigate('/managed-services')}
