@@ -32,7 +32,8 @@ import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTa
 import { LogViewer } from '@/components/Shell/LogViewer';
 import { Sparkline } from '@/components/Shell/Sparkline';
 import { DeployRow } from '@/components/Shell/DeployRow';
-import { getProject, type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
+import { type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
+import { useProjectsContext } from '@/hooks/use-projects-context';
 import { LOG_SCRIPT_BASE } from '@/lib/logScripts';
 import { useProjectTopology } from '@/hooks/use-project-topology';
 import { useServiceHealth } from '@/hooks/use-service-health';
@@ -68,7 +69,13 @@ export function ServiceDetailV2() {
   // services list). All internal callers (ProjectViewV2, Activity, etc.)
   // attach `?project=` via a single openService helper.
   const projectId = searchParams.get('project');
-  const project = projectId ? getProject(projectId) : null;
+  // Real projects come from the AppShell-mounted ProjectsProvider; the
+  // earlier mock-based `getProject()` returned null for any real (non-mock)
+  // project ID, which made every service click resolve to "Service not
+  // found". Codex/Gemini-trio CCG would have caught this if the page had
+  // smoke coverage post-Phase-2.
+  const { projects: allProjects } = useProjectsContext();
+  const project = projectId ? (allProjects.find((p) => p.id === projectId) ?? null) : null;
   // Sibling services come from the topology hook (real when available,
   // mock fallback before the backend session lands). Per CCG review:
   // we DON'T also call useServiceHealth per-node — the topology poll
