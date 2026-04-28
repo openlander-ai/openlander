@@ -147,6 +147,11 @@ interface McpSession {
   lastActivity: number;
   heartbeatInterval?: ReturnType<typeof setInterval>;
   ttlTimeout?: ReturnType<typeof setTimeout>;
+  /** Set when `recordMcpSessionClose` has been called for this session.
+   *  Guards against the close event firing twice (initial DELETE +
+   *  TTL-driven transport.close()) which would write a duplicate
+   *  `mcp_session_log` row. Codex CCG HIGH. */
+  closeRecorded?: boolean;
 }
 
 interface McpSseSession {
@@ -275,16 +280,21 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
           // Audit log persistence — record the disconnect moment so the
           // /api/activity feed can synthesize mcp_disconnected events that
           // survive process restarts. Best-effort: a DB error here must not
-          // break the close flow.
-          try {
-            ctx.db.recordMcpSessionClose({
-              sessionId: sid,
-              transport: 'http',
-              connectedAt: session.connectedAt,
-              disconnectedAt: Date.now(),
-            });
-          } catch (err) {
-            log.warn({ sessionId: sid, err }, 'Failed to persist MCP HTTP session close');
+          // break the close flow. Guarded by `closeRecorded` so re-entrant
+          // close events (DELETE + TTL-driven transport.close()) write at
+          // most one row per session lifetime.
+          if (!session.closeRecorded) {
+            session.closeRecorded = true;
+            try {
+              ctx.db.recordMcpSessionClose({
+                sessionId: sid,
+                transport: 'http',
+                connectedAt: session.connectedAt,
+                disconnectedAt: Date.now(),
+              });
+            } catch (err) {
+              log.warn({ sessionId: sid, err }, 'Failed to persist MCP HTTP session close');
+            }
           }
 
           if (session.heartbeatInterval) {

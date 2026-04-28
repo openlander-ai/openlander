@@ -656,6 +656,7 @@ export class Database implements AuthDatabase {
   recordServiceMetricSample(sample: Parameters<ServiceMetricRepo['recordMetricSample']>[0]) { this.serviceMetricRepo.recordMetricSample(sample); }
   listServiceMetricsSince(serviceId: string, fromMs: number) { return this.serviceMetricRepo.listMetricsSince(serviceId, fromMs); }
   hasAnyServiceMetrics(serviceId: string) { return this.serviceMetricRepo.hasAnyMetrics(serviceId); }
+  getLastServiceMetricAt(serviceId: string) { return this.serviceMetricRepo.getLastSampleAt(serviceId); }
   getSetting(key: string) { return this.settingsRepo.getSetting(key); }
   upsertSetting(key: string, value: string) { this.settingsRepo.upsertSetting(key, value); }
   deleteSetting(key: string) { return this.settingsRepo.deleteSetting(key); }

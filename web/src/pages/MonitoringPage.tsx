@@ -127,8 +127,11 @@ export function MonitoringPage() {
   );
 
   const handleRowClick = (entry: MonitoringServiceView) => {
+    // ServiceDetailV2 reads the project id from `?project=` query param
+    // (App.tsx route is `/services/:id`, not nested). The earlier nested
+    // path was fictitious — Codex blocker #1.
     if (entry.projectId) {
-      navigate(`/projects/${entry.projectId}/services/${entry.serviceId}?tab=monitoring`);
+      navigate(`/services/${entry.serviceId}?project=${entry.projectId}&tab=monitoring`);
     } else {
       navigate(`/services/${entry.serviceId}`);
     }
