@@ -3,6 +3,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { createDrizzleDatabase } from '../../../src/db/drizzle.js';
 import { EnvironmentRepo } from '../../../src/db/repos/environment.repo.js';
 import { ProjectRepo } from '../../../src/db/repos/project.repo.js';
+import { ServiceRepo } from '../../../src/db/repos/service.repo.js';
 import { OpenLanderError } from '../../../src/errors.js';
 import type { SqliteDatabase } from '../../../src/db/drizzle.js';
 
@@ -385,5 +386,84 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
 
     const includeArchived = repo.listProjectsWithMetadata(undefined, { includeArchived: true });
     expect(includeArchived.map((r) => r.project.id).sort()).toEqual(['p1', 'p2']);
+  });
+});
+
+describe('ProjectRepo - createProject auto-inserts backing services row', () => {
+  let repo: ProjectRepo;
+  let serviceRepo: ServiceRepo;
+  let sqlite: ReturnType<typeof createDrizzleDatabase>['sqlite'];
+
+  beforeEach(() => {
+    const db = createDrizzleDatabase(':memory:');
+    sqlite = db.sqlite;
+    repo = new ProjectRepo(db.db, db.sqlite);
+    serviceRepo = new ServiceRepo(db.db, db.sqlite);
+    sqlite.exec('PRAGMA foreign_keys = OFF');
+    try {
+      migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    } finally {
+      sqlite.exec('PRAGMA foreign_keys = ON');
+    }
+  });
+
+  afterEach(() => {
+    sqlite.close();
+  });
+
+  it('createProject auto-inserts a backing services row so listProjects sees it without manual seeding', () => {
+    const projectId = 'auto-svc-test';
+    repo.createProject({
+      id: projectId,
+      name: 'auto-svc-project',
+      repoUrl: 'https://github.com/test/auto-svc',
+    });
+
+    // listProjects must include the new project without any manual service seeding.
+    const listed = repo.listProjects();
+    expect(listed.map((p) => p.id)).toContain(projectId);
+
+    // The backing service row must exist with the canonical id convention.
+    const svc = serviceRepo.getService(`${projectId}__svc`);
+    expect(svc).toBeDefined();
+    expect(svc!.kind).toBe('git');
+    expect(svc!.project_id).toBe(projectId);
+  });
+
+  it('derives kind=image for source=image projects', () => {
+    repo.createProject({
+      id: 'img-proj',
+      name: 'image-project',
+      repoUrl: '',
+      source: 'image',
+      imageUrl: 'nginx:latest',
+    });
+
+    const svc = serviceRepo.getService('img-proj__svc');
+    expect(svc).toBeDefined();
+    expect(svc!.kind).toBe('image');
+  });
+
+  it('derives kind=compose for build_method=compose projects', () => {
+    repo.createProject({
+      id: 'compose-proj',
+      name: 'compose-project',
+      repoUrl: 'https://github.com/test/stack',
+      buildMethod: 'compose',
+    });
+
+    const svc = serviceRepo.getService('compose-proj__svc');
+    expect(svc).toBeDefined();
+    expect(svc!.kind).toBe('compose');
+  });
+
+  it('compose parent is visible in listProjects but compose-child projects are not', () => {
+    repo.createProject({ id: 'parent-p', name: 'parent-compose', repoUrl: 'https://x/y', buildMethod: 'compose' });
+    repo.createProject({ id: 'child-p', name: 'child-svc', repoUrl: '', parentProjectId: 'parent-p' });
+
+    const listed = repo.listProjects();
+    expect(listed.map((p) => p.id)).toContain('parent-p');
+    // child has kind='compose-child', so the EXISTS subquery filters it out.
+    expect(listed.map((p) => p.id)).not.toContain('child-p');
   });
 });

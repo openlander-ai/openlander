@@ -1,4 +1,17 @@
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 import {
   OpenLanderError,
   ProjectAlreadyExistsError,
@@ -8,7 +21,7 @@ import {
 import { createModuleLogger } from '../../lib/logger.js';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { buildSetValues } from '../helpers.js';
-import { environments, projects } from '../schema.drizzle.js';
+import { environments, projects, services } from '../schema.drizzle.js';
 import type { EnvironmentRow, PendingFixRow, ProjectRow } from '../types.js';
 
 /**
@@ -53,6 +66,22 @@ export class ProjectRepo {
     imageCmd?: string[];
     containerPort?: number;
   }): ProjectRow {
+    const source = project.source ?? 'git';
+    const buildMethod = project.buildMethod ?? null;
+    const parentProjectId = project.parentProjectId ?? null;
+
+    // Derive the service kind mirroring 0009 Phase D semantics.
+    let kind: 'git' | 'image' | 'compose' | 'compose-child';
+    if (parentProjectId !== null) {
+      kind = 'compose-child';
+    } else if (buildMethod === 'compose') {
+      kind = 'compose';
+    } else if (source === 'image') {
+      kind = 'image';
+    } else {
+      kind = 'git';
+    }
+
     try {
       this.db
         .insert(projects)
@@ -61,16 +90,41 @@ export class ProjectRepo {
           name: project.name,
           repo_url: project.repoUrl,
           branch: project.branch ?? 'main',
-          parent_project_id: project.parentProjectId ?? null,
+          parent_project_id: parentProjectId,
           dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
           docker_target: project.dockerTarget ?? null,
           build_context: project.buildContext ?? null,
-          build_method: project.buildMethod ?? null,
-          source: project.source ?? 'git',
+          build_method: buildMethod,
+          source,
           image_url: project.imageUrl ?? null,
           image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
           container_port: project.containerPort ?? null,
         })
+        .run();
+
+      // Insert backing service row mirroring 0009 Phase D convention.
+      // - Standalone / compose-parent: project_id = self id.
+      // - Compose-child: project_id = parent group id.
+      // The id || '__svc' convention is required by the listProjects EXISTS
+      // subquery and the schema comment at environments.service_id.
+      this.db
+        .insert(services)
+        .values({
+          id: `${project.id}__svc`,
+          project_id: parentProjectId ?? project.id,
+          name: `${project.name}__svc`,
+          kind,
+          parent_service_id: parentProjectId ? `${parentProjectId}__svc` : null,
+          source,
+          build_method: buildMethod,
+          dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
+          docker_target: project.dockerTarget ?? null,
+          build_context: project.buildContext ?? null,
+          image_url: project.imageUrl ?? null,
+          image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
+          container_port: project.containerPort ?? null,
+        })
+        .onConflictDoNothing()
         .run();
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -106,8 +160,16 @@ export class ProjectRepo {
     // Always exclude the synthesized __orphan_managed group (post-0009).
     const conditions = [
       ne(projects.id, ORPHAN_MANAGED_GROUP_ID),
-      // transitional: replace with bare projects query after 0012 lands; band-aid swap acknowledged per Principle 3 of ralplan-data-model-A-completion.md
-      sql`EXISTS (SELECT 1 FROM services s WHERE s.project_id = projects.id AND s.kind != 'compose-child')`,
+      // Transitional: only return projects with at least one non-compose-child service.
+      // Compose-child rows in `projects` are 0011 reconstructions kept for FK integrity;
+      // 0012 Phase F deletes them and this exists() becomes redundant.
+      // See .omc/plans/ralplan-data-model-A-completion.md (Principle 3, PR 5 cleanup).
+      exists(
+        this.db
+          .select({ one: sql<number>`1` })
+          .from(services)
+          .where(and(eq(services.project_id, projects.id), ne(services.kind, 'compose-child'))),
+      ),
     ];
     if (status) {
       conditions.push(eq(projects.status, status));

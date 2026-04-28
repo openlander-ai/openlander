@@ -143,7 +143,7 @@ export class ServiceRepo {
    * Returns all services that are compose-children of the given parent service.
    * Used by PR 2+ pipeline rewire to replace parent_project_id child-fetch.
    */
-  getCompositeChildren(parentServiceId: string): ServiceRow[] {
+  getComposeChildren(parentServiceId: string): ServiceRow[] {
     return this.db
       .select()
       .from(services)
