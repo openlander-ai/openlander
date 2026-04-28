@@ -104,7 +104,11 @@ export class ProjectRepo {
     _serverId?: string,
   ): ProjectRow[] {
     // Always exclude the synthesized __orphan_managed group (post-0009).
-    const conditions = [ne(projects.id, ORPHAN_MANAGED_GROUP_ID)];
+    const conditions = [
+      ne(projects.id, ORPHAN_MANAGED_GROUP_ID),
+      // transitional: replace with bare projects query after 0012 lands; band-aid swap acknowledged per Principle 3 of ralplan-data-model-A-completion.md
+      sql`EXISTS (SELECT 1 FROM services s WHERE s.project_id = projects.id AND s.kind != 'compose-child')`,
+    ];
     if (status) {
       conditions.push(eq(projects.status, status));
     }

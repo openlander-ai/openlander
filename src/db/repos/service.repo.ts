@@ -138,4 +138,30 @@ export class ServiceRepo {
   deleteService(id: string): void {
     this.db.delete(services).where(eq(services.id, id)).run();
   }
+
+  /**
+   * Returns all services that are compose-children of the given parent service.
+   * Used by PR 2+ pipeline rewire to replace parent_project_id child-fetch.
+   */
+  getCompositeChildren(parentServiceId: string): ServiceRow[] {
+    return this.db
+      .select()
+      .from(services)
+      .where(eq(services.parent_service_id, parentServiceId))
+      .orderBy(desc(services.updated_at))
+      .all() as ServiceRow[];
+  }
+
+  /**
+   * Returns all deployable (non-compose-child) services for a given project group.
+   * Used by PR 2+ pipeline rewire to enumerate top-level deployables for a group.
+   */
+  getDeployablesByGroup(projectId: string): ServiceRow[] {
+    return this.db
+      .select()
+      .from(services)
+      .where(and(eq(services.project_id, projectId), sql`${services.kind} != 'compose-child'`))
+      .orderBy(desc(services.updated_at))
+      .all() as ServiceRow[];
+  }
 }

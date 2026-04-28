@@ -4,6 +4,26 @@ import { createDrizzleDatabase } from '../../../src/db/drizzle.js';
 import { EnvironmentRepo } from '../../../src/db/repos/environment.repo.js';
 import { ProjectRepo } from '../../../src/db/repos/project.repo.js';
 import { OpenLanderError } from '../../../src/errors.js';
+import type { SqliteDatabase } from '../../../src/db/drizzle.js';
+
+/**
+ * Insert a minimal service row for a project. The new listProjects EXISTS
+ * subquery requires at least one service with kind != 'compose-child' per
+ * project. This helper is the test-layer equivalent of the 0009 Phase D
+ * INSERT that auto-creates service rows during migration.
+ */
+function insertServiceForProject(
+  sqlite: SqliteDatabase,
+  projectId: string,
+  kind: string = 'git',
+  parentServiceId: string | null = null,
+): void {
+  sqlite.exec(
+    `INSERT OR IGNORE INTO services (id, project_id, name, kind, parent_service_id, source, project_type, server_id)
+     VALUES ('${projectId}__svc', '${projectId}', '${projectId}__svc', '${kind}',
+             ${parentServiceId ? `'${parentServiceId}'` : 'NULL'}, 'git', 'web', 'local')`,
+  );
+}
 
 describe('ProjectRepo - Archive', () => {
   let repo: ProjectRepo;
@@ -105,6 +125,8 @@ describe('ProjectRepo - Archive', () => {
     it('excludes archived projects by default', () => {
       createTestProject({ id: 'proj-1', name: 'active-project' });
       createTestProject({ id: 'proj-2', name: 'archived-project' });
+      insertServiceForProject(sqlite, 'proj-1');
+      insertServiceForProject(sqlite, 'proj-2');
       repo.archiveProject('proj-2');
 
       const results = repo.listProjects();
@@ -115,6 +137,8 @@ describe('ProjectRepo - Archive', () => {
     it('includes archived projects when includeArchived is true', () => {
       createTestProject({ id: 'proj-1', name: 'active-project' });
       createTestProject({ id: 'proj-2', name: 'archived-project' });
+      insertServiceForProject(sqlite, 'proj-1');
+      insertServiceForProject(sqlite, 'proj-2');
       repo.archiveProject('proj-2');
 
       const results = repo.listProjects(undefined, { includeArchived: true });
@@ -125,6 +149,9 @@ describe('ProjectRepo - Archive', () => {
       createTestProject({ id: 'proj-1', name: 'running-project' });
       createTestProject({ id: 'proj-2', name: 'stopped-project' });
       createTestProject({ id: 'proj-3', name: 'archived-running' });
+      insertServiceForProject(sqlite, 'proj-1');
+      insertServiceForProject(sqlite, 'proj-2');
+      insertServiceForProject(sqlite, 'proj-3');
       repo.updateProject('proj-1', { status: 'running' });
       repo.updateProject('proj-3', { status: 'running' });
       repo.archiveProject('proj-3');
@@ -132,6 +159,40 @@ describe('ProjectRepo - Archive', () => {
       const running = repo.listProjects('running');
       expect(running).toHaveLength(1);
       expect(running[0].name).toBe('running-project');
+    });
+
+    it('listProjects with compose stack returns parent group only', () => {
+      // Seed parent project (the compose group)
+      repo.createProject({ id: 'stack-1', name: 'mystack', repoUrl: 'https://github.com/test/mystack' });
+      // Seed 3 child projects under the parent
+      repo.createProject({ id: 'stack-1__child-api', name: 'mystack/api', repoUrl: '', parentProjectId: 'stack-1' });
+      repo.createProject({ id: 'stack-1__child-web', name: 'mystack/web', repoUrl: '', parentProjectId: 'stack-1' });
+      repo.createProject({ id: 'stack-1__child-db', name: 'mystack/db', repoUrl: '', parentProjectId: 'stack-1' });
+
+      // Parent gets a kind='compose' service (project_id = stack-1)
+      insertServiceForProject(sqlite, 'stack-1', 'compose');
+
+      // Children each get a kind='compose-child' service with parent_service_id pointing at stack-1__svc
+      // project_id for children = stack-1 (their group), per 0009 Phase D convention
+      sqlite.exec(
+        `INSERT OR IGNORE INTO services (id, project_id, name, kind, parent_service_id, source, project_type, server_id)
+         VALUES ('stack-1__child-api__svc', 'stack-1', 'stack-1__child-api__svc', 'compose-child', 'stack-1__svc', 'git', 'web', 'local')`,
+      );
+      sqlite.exec(
+        `INSERT OR IGNORE INTO services (id, project_id, name, kind, parent_service_id, source, project_type, server_id)
+         VALUES ('stack-1__child-web__svc', 'stack-1', 'stack-1__child-web__svc', 'compose-child', 'stack-1__svc', 'git', 'web', 'local')`,
+      );
+      sqlite.exec(
+        `INSERT OR IGNORE INTO services (id, project_id, name, kind, parent_service_id, source, project_type, server_id)
+         VALUES ('stack-1__child-db__svc', 'stack-1', 'stack-1__child-db__svc', 'compose-child', 'stack-1__svc', 'git', 'web', 'local')`,
+      );
+
+      // listProjects should return only 1 row: the parent (stack-1)
+      // The 3 child project rows have NO services of kind != 'compose-child' pointing
+      // at their own project_id, so the EXISTS subquery filters them out.
+      const results = repo.listProjects();
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe('stack-1');
     });
   });
 
@@ -207,6 +268,13 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
     repo.createProject({ id: 'child-b', name: 'svc-b', repoUrl: '', parentProjectId: 'parent-1' });
     repo.createProject({ id: 'standalone', name: 'lone-app', repoUrl: 'https://x/z' });
 
+    // Services required by the transitional EXISTS subquery in listProjects.
+    // Parent gets kind='compose'; children are NOT returned by listProjects (no
+    // non-compose-child service under their own project_id — per 0009 Phase D
+    // compose-child services point at the parent group, not the child project_id).
+    insertServiceForProject(sqlite, 'parent-1', 'compose');
+    insertServiceForProject(sqlite, 'standalone', 'git');
+
     envRepo.createEnvironment({
       id: 'parent-1-prod',
       projectId: 'parent-1',
@@ -229,21 +297,29 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
     const result = repo.listProjectsWithMetadata();
     const byId = new Map(result.map((r) => [r.project.id, r]));
 
+    // listProjects (via EXISTS) returns only parent-1 and standalone; compose
+    // children are filtered out (no non-compose-child service under their project_id).
+    expect(result).toHaveLength(2);
+
     expect(byId.get('parent-1')?.environments).toHaveLength(2);
     expect(byId.get('parent-1')?.childCount).toBe(2);
 
     expect(byId.get('standalone')?.environments).toHaveLength(1);
     expect(byId.get('standalone')?.childCount).toBe(0);
 
-    expect(byId.get('child-a')?.environments).toHaveLength(0);
-    expect(byId.get('child-a')?.childCount).toBe(0);
+    // child-a is no longer returned by listProjects (filtered by EXISTS subquery)
+    expect(byId.has('child-a')).toBe(false);
   });
 
   it('matches per-row legacy behavior (parity check) with O(3) queries', () => {
-    // Seed 25 projects, each with 1 environment, plus a few compose parents.
+    // Seed 20 standalone projects + 1 compose parent + 4 compose children.
+    // listProjects (via EXISTS) only returns the 20 standalones + 1 parent = 21.
+    // Compose children have no non-compose-child service under their own project_id
+    // (per 0009 Phase D convention), so they are filtered by the EXISTS subquery.
     for (let i = 0; i < 20; i++) {
       const id = `p-${String(i)}`;
       repo.createProject({ id, name: `proj-${String(i)}`, repoUrl: `https://x/${String(i)}` });
+      insertServiceForProject(sqlite, id, 'git');
       envRepo.createEnvironment({
         id: `${id}-prod`,
         projectId: id,
@@ -252,6 +328,7 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
       });
     }
     repo.createProject({ id: 'parent', name: 'parent-app', repoUrl: 'https://x/parent' });
+    insertServiceForProject(sqlite, 'parent', 'compose');
     for (let i = 0; i < 4; i++) {
       repo.createProject({
         id: `child-${String(i)}`,
@@ -259,10 +336,14 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
         repoUrl: '',
         parentProjectId: 'parent',
       });
+      // compose-children do NOT get a service under their own project_id;
+      // their service row points at the parent group (project_id='parent'),
+      // matching the 0009 Phase D INSERT shape.
     }
 
     const batched = repo.listProjectsWithMetadata();
-    expect(batched.length).toBe(25);
+    // 20 standalones + 1 compose parent = 21 (children excluded by EXISTS subquery)
+    expect(batched.length).toBe(21);
 
     // Parity: every row's environments + childCount should match per-row queries.
     for (const row of batched) {
@@ -282,6 +363,8 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
   it('honors status filter', () => {
     repo.createProject({ id: 'p1', name: 'a', repoUrl: '' });
     repo.createProject({ id: 'p2', name: 'b', repoUrl: '' });
+    insertServiceForProject(sqlite, 'p1');
+    insertServiceForProject(sqlite, 'p2');
     repo.updateProject('p1', { status: 'running' });
     repo.updateProject('p2', { status: 'stopped' });
 
@@ -293,6 +376,8 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
   it('excludes archived projects by default and includes them when requested', () => {
     repo.createProject({ id: 'p1', name: 'live', repoUrl: '' });
     repo.createProject({ id: 'p2', name: 'gone', repoUrl: '' });
+    insertServiceForProject(sqlite, 'p1');
+    insertServiceForProject(sqlite, 'p2');
     repo.archiveProject('p2');
 
     const defaultList = repo.listProjectsWithMetadata();

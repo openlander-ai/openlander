@@ -550,6 +550,8 @@ export class Database implements AuthDatabase {
   getServices(opts?: Parameters<ServiceRepo['getServices']>[0]) { return this.serviceRepo.getServices(opts); }
   updateService(id: string, updates: Parameters<ServiceRepo['updateService']>[1]) { this.serviceRepo.updateService(id, updates); }
   deleteService(id: string) { this.serviceRepo.deleteService(id); }
+  getCompositeChildren(parentServiceId: string) { return this.serviceRepo.getCompositeChildren(parentServiceId); }
+  getDeployablesByGroup(projectId: string) { return this.serviceRepo.getDeployablesByGroup(projectId); }
   createServiceConnection(opts: Parameters<ServiceConnectionRepo['createConnection']>[0]) { return this.serviceConnectionRepo.createConnection(opts); }
   getServiceConnection(id: string) { return this.serviceConnectionRepo.getConnection(id); }
   getServiceConnectionByProjectAndService(projectId: string, serviceId: string) { return this.serviceConnectionRepo.getConnectionByProjectAndService(projectId, serviceId); }
