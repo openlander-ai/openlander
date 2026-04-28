@@ -41,8 +41,8 @@ export function OuterCard({
   return (
     <section
       className={cn(
-        'rounded-[var(--ol-radius)] border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)]',
-        'shadow-[0_1px_0_color-mix(in_oklch,var(--ol-border)_70%,transparent)]',
+        'rounded-[var(--ol-radius)] border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel)]',
+        'shadow-[0_1px_0_color-mix(in_oklch,var(--ol-border-subtle)_70%,transparent)]',
         className,
       )}
     >

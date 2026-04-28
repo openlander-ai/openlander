@@ -153,7 +153,7 @@ export function AppShell() {
           <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
             <SheetContent
               side="left"
-              className="w-[260px] border-r border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] p-0"
+              className="w-[260px] border-r border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel)] p-0"
               aria-describedby={undefined}
             >
               <SheetTitle className="sr-only">Navigation</SheetTitle>

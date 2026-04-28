@@ -38,7 +38,7 @@ export function TopBar({
     <header
       className={cn(
         'flex h-[var(--ol-topbar-h)] shrink-0 items-center gap-3 px-4',
-        'border-b border-[color:var(--ol-border)] bg-[color:var(--ol-panel)]',
+        'border-b border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel)]',
       )}
     >
       {onToggleSidebar && (

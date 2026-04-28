@@ -13,18 +13,26 @@
  */
 import { useCallback, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Activity as ActivityIcon, Box, Database, ExternalLink, Plus } from 'lucide-react';
+import {
+  Activity as ActivityIcon,
+  Box,
+  Database,
+  ExternalLink,
+  Plus,
+  Settings as SettingsIcon,
+} from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { InfraMap } from '@/components/Shell/InfraMap';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
+import { SettingsTab } from '@/components/project/SettingsTab';
 import { type ServiceNode } from '@/lib/projectTopology';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useIsBelowMd } from '@/hooks/use-viewport';
 import { useProjectTopology } from '@/hooks/use-project-topology';
 import { cn } from '@/lib/utils';
 
-type ProjectTabId = 'services' | 'activity';
+type ProjectTabId = 'services' | 'activity' | 'settings';
 
 export function ProjectView() {
   const { id } = useParams<{ id: string }>();
@@ -32,7 +40,9 @@ export function ProjectView() {
   const navigate = useNavigate();
   // Honor `?tab=services|activity` deep-links (used by CommandPalette and
   // potentially by external bookmarks). Default = services.
-  const initialTab: ProjectTabId = searchParams.get('tab') === 'activity' ? 'activity' : 'services';
+  const tabParam = searchParams.get('tab');
+  const initialTab: ProjectTabId =
+    tabParam === 'activity' || tabParam === 'settings' ? tabParam : 'services';
   const [activeTab, setActiveTab] = useState<ProjectTabId>(initialTab);
 
   const projectId = id ?? '';
@@ -107,6 +117,7 @@ export function ProjectView() {
   const tabs: TabDef<ProjectTabId>[] = [
     { id: 'services', label: 'Services', icon: Box, count: services.length },
     { id: 'activity', label: 'Activity', icon: ActivityIcon },
+    { id: 'settings', label: 'Settings', icon: SettingsIcon },
   ];
 
   return (
@@ -177,6 +188,20 @@ export function ProjectView() {
             }
             onOpenService={(_p, sid) => openService(sid)}
           />
+        </TabPanel>
+        <TabPanel
+          active={activeTab === 'settings'}
+          panelId="projectpanel-settings"
+          labelledBy="project-settings"
+          className="p-0"
+        >
+          {projectId && (
+            <SettingsTab
+              projectId={projectId}
+              projectStatus={realProject?.status}
+              isCompose={false}
+            />
+          )}
         </TabPanel>
       </OuterCard>
     </div>

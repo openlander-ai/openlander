@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BRAND } from '@/lib/brand';
+import { logout } from '@/lib/api/auth';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 
 interface NavItem {
@@ -171,7 +172,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
     <aside
       className={cn(
         'flex h-full flex-col',
-        'border-r border-[color:var(--ol-border)] bg-[color:var(--ol-panel)]',
+        'border-r border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel)]',
         'text-[color:var(--ol-fg)]',
       )}
       style={{ width: collapsed ? 'var(--ol-sidebar-w-collapsed)' : 'var(--ol-sidebar-w)' }}
@@ -254,22 +255,39 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
         ))}
       </nav>
 
-      {/* Account card pinned at bottom */}
+      {/* Account card pinned at bottom — single-user OpenLander, so the
+          earlier "Jiho / jiho@openlander.dev" fake identity was dropped.
+          Click → confirm → POST /api/auth/logout → reload to /login. */}
       <div className="border-t border-[color:var(--ol-border-subtle)] p-3">
         <button
           type="button"
+          onClick={() => {
+            if (typeof window === 'undefined') return;
+            if (!window.confirm('Sign out?')) return;
+            void logout()
+              .catch(() => {
+                /* even if logout fails, force the user to /login so the
+                   stale session can be re-prompted on reload */
+              })
+              .finally(() => {
+                window.location.assign('/login');
+              });
+          }}
           className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-[color:var(--ol-panel-2)]"
-          title="Account · Profile · Sign out"
+          title="Sign out"
         >
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[color:var(--ol-primary-soft)] text-[11px] font-semibold text-[color:var(--ol-primary)]">
-            JH
+          <span
+            aria-hidden
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[color:var(--ol-primary-soft)] text-[12px] font-semibold text-[color:var(--ol-primary)]"
+          >
+            {BRAND.glyph}
           </span>
           {!collapsed && (
             <>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium">Jiho</span>
+                <span className="block truncate text-[13px] font-medium">{BRAND.name}</span>
                 <span className="block truncate text-[11px] text-[color:var(--ol-fg-muted)]">
-                  jiho@openlander.dev
+                  Sign out
                 </span>
               </span>
               <ChevronDown className="h-3.5 w-3.5 text-[color:var(--ol-fg-subtle)]" />
