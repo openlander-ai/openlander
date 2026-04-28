@@ -415,4 +415,47 @@ describe('migration 0009 — per-table FK mapping', () => {
     const violations = sqlite.pragma('foreign_key_check');
     expect(violations).toEqual([]);
   });
+
+  it('Phase E normalizes legacy services.type to canonical kind enum', () => {
+    // Production data found 'postgresql' / 'pgvector' / 'flaresolverr' on
+    // managed services — none match the new kind CHECK enum verbatim. Phase E
+    // must normalize via CASE so the migration doesn't trip the constraint.
+    const legacyTypes: Array<{ id: string; name: string; type: string; expected: string }> = [
+      { id: 'sv-pgsql', name: 'pgsql-1', type: 'postgresql', expected: 'postgres' },
+      { id: 'sv-pgvec', name: 'pgvec-1', type: 'pgvector', expected: 'postgres' },
+      { id: 'sv-pg', name: 'pg-1', type: 'postgres', expected: 'postgres' },
+      { id: 'sv-mariadb', name: 'maria-1', type: 'mariadb', expected: 'mysql' },
+      { id: 'sv-mysql', name: 'mysql-1', type: 'mysql', expected: 'mysql' },
+      { id: 'sv-redis', name: 'redis-1', type: 'redis', expected: 'redis' },
+      { id: 'sv-keydb', name: 'keydb-1', type: 'keydb', expected: 'redis' },
+      { id: 'sv-mongodb', name: 'mongo-1', type: 'mongodb', expected: 'mongo' },
+      { id: 'sv-mongo', name: 'mongo-2', type: 'mongo', expected: 'mongo' },
+      { id: 'sv-minio', name: 'minio-1', type: 'minio', expected: 'minio' },
+      { id: 'sv-flare', name: 'flare-1', type: 'flaresolverr', expected: 'image' },
+      { id: 'sv-custom', name: 'custom-1', type: 'something-else', expected: 'image' },
+    ];
+
+    // assigned_port has UNIQUE on the post-migration services table
+    // (services.assigned_port copied from legacy services.port). Spread the
+    // fixtures across distinct ports so the migration's INSERT doesn't trip.
+    legacyTypes.forEach((fix, idx) => {
+      sqlite
+        .prepare(
+          `INSERT INTO services (id, name, type, image, container_name, port, status)
+           VALUES (?, ?, ?, 'img:latest', ?, ?, 'running')`,
+        )
+        .run(fix.id, fix.name, fix.type, `${fix.id}-c`, 6000 + idx);
+    });
+
+    run0009(drizzle, sqlite);
+
+    for (const fix of legacyTypes) {
+      const row = sqlite
+        .prepare('SELECT kind, type FROM services WHERE id = ?')
+        .get(fix.id) as { kind: string; type: string };
+      expect(row.kind, `kind for legacy type=${fix.type}`).toBe(fix.expected);
+      // Original legacy type preserved verbatim in the additive `type` column
+      expect(row.type, `legacy type preserved for ${fix.id}`).toBe(fix.type);
+    }
+  });
 });

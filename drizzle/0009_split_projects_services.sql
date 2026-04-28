@@ -310,19 +310,36 @@ INSERT INTO migration_0009_audit (phase, source_table, source_id, target_table, 
 --> statement-breakpoint
 
 -- =====================================================================
--- Phase E: managed services_legacy -> services with kind = today's `type`.
--- Today's `type` column on services takes values like 'postgres', 'mysql',
--- 'redis', 'mongo', 'minio' — these line up with the new kind enum.
+-- Phase E: managed services_legacy -> services with kind normalized from
+-- today's `type` column.
+--
+-- Production data has legacy `type` values that don't directly match the
+-- kind enum: 'postgresql' (vs canonical 'postgres'), 'pgvector' (postgres
+-- variant), custom container names like 'flaresolverr'. CHECK (kind IN ...)
+-- on services would reject the raw type. Normalize via CASE:
+--   - postgresql / postgres / pgvector / timescaledb -> 'postgres'
+--   - mysql / mariadb                                -> 'mysql'
+--   - redis / keydb / dragonfly                      -> 'redis'
+--   - mongo / mongodb                                -> 'mongo'
+--   - minio / s3                                     -> 'minio'
+--   - everything else                                -> 'image' (opaque)
+-- Legacy `type` value preserved verbatim in the additive `type` column.
+-- Audit log records the original legacy type for forensic traceability.
 -- All managed services land under the synthesized __orphan_managed group.
--- Legacy columns (type/image/port/env_vars/credentials) preserved for
--- back-compat during P2/P3 transition.
 -- =====================================================================
 INSERT INTO services (id, project_id, name, kind, container_name, status,
                      container_id, assigned_port,
                      type, image, port, env_vars, credentials,
                      created_at, updated_at, server_id)
   SELECT id, '__orphan_managed', name,
-         type,
+         CASE
+           WHEN lower(type) IN ('postgresql', 'postgres', 'pgvector', 'timescaledb') THEN 'postgres'
+           WHEN lower(type) IN ('mysql', 'mariadb') THEN 'mysql'
+           WHEN lower(type) IN ('redis', 'keydb', 'dragonfly') THEN 'redis'
+           WHEN lower(type) IN ('mongo', 'mongodb') THEN 'mongo'
+           WHEN lower(type) IN ('minio', 's3') THEN 'minio'
+           ELSE 'image'
+         END,
          container_name,
          status,
          container_id,
@@ -334,6 +351,9 @@ INSERT INTO services (id, project_id, name, kind, container_name, status,
   FROM services_legacy;
 --> statement-breakpoint
 
+-- Audit log keeps the ORIGINAL legacy type string so forensic queries can
+-- recover the pre-normalization value. The post-normalization kind is what
+-- actually lives in services.kind.
 INSERT INTO migration_0009_audit (phase, source_table, source_id, target_table, target_id, kind, created_at)
   SELECT 'E', 'services', id, 'services', id, type, strftime('%s','now')
   FROM services_legacy;
