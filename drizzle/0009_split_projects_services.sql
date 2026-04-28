@@ -327,8 +327,13 @@ INSERT INTO migration_0009_audit (phase, source_table, source_id, target_table, 
 -- Audit log records the original legacy type for forensic traceability.
 -- All managed services land under the synthesized __orphan_managed group.
 -- =====================================================================
+-- Important: assigned_port is UNIQUE because deployables need a unique
+-- host port. Managed services (multiple postgres instances each listening
+-- on container port 5432) collide on UNIQUE if we copy legacy port into
+-- assigned_port. So managed rows get assigned_port = NULL and keep their
+-- container-internal port in the legacy `port` column for back-compat.
 INSERT INTO services (id, project_id, name, kind, container_name, status,
-                     container_id, assigned_port,
+                     container_id,
                      type, image, port, env_vars, credentials,
                      created_at, updated_at, server_id)
   SELECT id, '__orphan_managed', name,
@@ -343,7 +348,6 @@ INSERT INTO services (id, project_id, name, kind, container_name, status,
          container_name,
          status,
          container_id,
-         port,
          type, image, port, env_vars, credentials,
          created_at,
          updated_at,

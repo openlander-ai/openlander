@@ -435,27 +435,39 @@ describe('migration 0009 — per-table FK mapping', () => {
       { id: 'sv-custom', name: 'custom-1', type: 'something-else', expected: 'image' },
     ];
 
-    // assigned_port has UNIQUE on the post-migration services table
-    // (services.assigned_port copied from legacy services.port). Spread the
-    // fixtures across distinct ports so the migration's INSERT doesn't trip.
-    legacyTypes.forEach((fix, idx) => {
+    // Managed services often share container-internal ports (multiple
+    // postgres instances on 5432). Phase E does NOT copy legacy `port`
+    // into the post-migration `assigned_port` column (which is UNIQUE for
+    // deployable host-port allocation); managed rows get assigned_port
+    // NULL and keep their internal port in the legacy `port` column.
+    // This fixture deliberately collides ports to assert that.
+    for (const fix of legacyTypes) {
       sqlite
         .prepare(
           `INSERT INTO services (id, name, type, image, container_name, port, status)
-           VALUES (?, ?, ?, 'img:latest', ?, ?, 'running')`,
+           VALUES (?, ?, ?, 'img:latest', ?, 5432, 'running')`,
         )
-        .run(fix.id, fix.name, fix.type, `${fix.id}-c`, 6000 + idx);
-    });
+        .run(fix.id, fix.name, fix.type, `${fix.id}-c`);
+    }
 
     run0009(drizzle, sqlite);
 
     for (const fix of legacyTypes) {
       const row = sqlite
-        .prepare('SELECT kind, type FROM services WHERE id = ?')
-        .get(fix.id) as { kind: string; type: string };
+        .prepare('SELECT kind, type, assigned_port, port FROM services WHERE id = ?')
+        .get(fix.id) as {
+        kind: string;
+        type: string;
+        assigned_port: number | null;
+        port: number | null;
+      };
       expect(row.kind, `kind for legacy type=${fix.type}`).toBe(fix.expected);
-      // Original legacy type preserved verbatim in the additive `type` column
+      // Original legacy type preserved verbatim in the additive `type` column.
       expect(row.type, `legacy type preserved for ${fix.id}`).toBe(fix.type);
+      // assigned_port stays NULL on managed rows (UNIQUE collision avoidance).
+      expect(row.assigned_port, `assigned_port NULL for managed ${fix.id}`).toBeNull();
+      // Legacy `port` (container-internal) preserved.
+      expect(row.port, `legacy port preserved for ${fix.id}`).toBe(5432);
     }
   });
 });
