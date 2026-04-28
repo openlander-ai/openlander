@@ -53,7 +53,13 @@ describe('schema parity (drizzle vs migrated DB)', () => {
     const db = createDrizzleDatabase(':memory:');
     sqlite = db.sqlite;
     drizzle = db.db;
-    migrate(drizzle as Parameters<typeof migrate>[0], { migrationsFolder: MIGRATIONS_FOLDER });
+    // 0009 drops parent tables; mirror src/db/index.ts:435-443 production path.
+    sqlite.exec('PRAGMA foreign_keys = OFF');
+    try {
+      migrate(drizzle as Parameters<typeof migrate>[0], { migrationsFolder: MIGRATIONS_FOLDER });
+    } finally {
+      sqlite.exec('PRAGMA foreign_keys = ON');
+    }
   });
 
   afterEach(() => {

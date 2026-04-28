@@ -132,6 +132,51 @@ export interface ServiceRow {
   credentials: string | null;
   created_at: string;
   updated_at: string;
+  // Post-0009 unified-shape columns. Nullable on managed-only rows
+  // (kind ∈ postgres/mysql/redis/mongo/minio) and pre-migration rows.
+  // Plan §6.3 + §6.5 — additive transition; legacy columns above stay
+  // until the post-1.0 follow-up migration drops them.
+  project_id?: string;
+  kind?:
+    | 'git'
+    | 'image'
+    | 'compose'
+    | 'compose-child'
+    | 'postgres'
+    | 'mysql'
+    | 'redis'
+    | 'mongo'
+    | 'minio';
+  parent_service_id?: string | null;
+  assigned_port?: number | null;
+  container_port?: number | null;
+  image_tag?: string | null;
+  previous_image_tag?: string | null;
+  public_url?: string | null;
+  dockerfile_path?: string | null;
+  docker_target?: string | null;
+  build_context?: string | null;
+  build_method?: 'dockerfile' | 'compose' | null;
+  source?: string;
+  image_url?: string | null;
+  image_cmd?: string | null;
+  pending_fix?: string | null;
+  deploy_lock_session?: string | null;
+  deploy_lock_at?: string | null;
+  access_code?: string | null;
+  access_code_iv?: string | null;
+  is_preview?: number | null;
+  pr_number?: number | null;
+  project_type?: 'web' | 'worker';
+  health_check_strategy?: 'http' | 'tcp' | 'exec' | 'none' | null;
+  health_check_path?: string | null;
+  recovering_started_at?: string | null;
+  visibility?: 'internal' | 'quick-share' | 'shared' | 'production' | null;
+  managed_image?: string | null;
+  managed_env_vars?: string | null;
+  managed_credentials?: string | null;
+  archived_at?: string | null;
+  server_id?: string;
 }
 
 export interface ServiceConnectionRow {

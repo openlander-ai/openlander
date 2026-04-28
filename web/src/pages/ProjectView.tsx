@@ -46,6 +46,11 @@ export function ProjectView() {
   const [activeTab, setActiveTab] = useState<ProjectTabId>(initialTab);
 
   const projectId = id ?? '';
+  // 1.0-rc.2 (data-model fullsplit): `useProjectsContext()` returns
+  // groups (formerly projects). Topology gives the deployable nodes for
+  // InfraMap + Services tab — the canonical `/api/projects/:p/services`
+  // endpoint (`useGroupServices`) is reserved for callers that need
+  // shaped GroupService data instead of the topology ServiceNode shape.
   const { projects, loading: projectsLoading } = useProjectsContext();
   const realProject = projects.find((p) => p.id === projectId) ?? null;
   const { services, isMockFallback } = useProjectTopology(projectId || null);

@@ -43,17 +43,18 @@ function isMcpTargeted(def: ToolDef): boolean {
 }
 
 describe('MCP Composite Tools', () => {
-  it('returns 4 composite tools from 70 underlying tool defs', () => {
+  it('returns 5 composite tools from 70 underlying tool defs (rc.2: openlander_managed_service split)', () => {
     const defs = getMcpToolDefs(false);
     const mcpDefs = defs.filter(isMcpTargeted);
     expect(mcpDefs).toHaveLength(70);
 
     const composites = createCompositeTools(defs);
-    expect(composites).toHaveLength(4);
+    expect(composites).toHaveLength(5);
     expect(composites.map((c) => c.name)).toEqual([
       'openlander_deploy',
       'openlander_project',
       'openlander_service',
+      'openlander_managed_service',
       'openlander_monitor',
     ]);
   });
@@ -72,11 +73,11 @@ describe('MCP Composite Tools', () => {
     expect(platformCount).toBeGreaterThan(0);
   });
 
-  it('composite tool count stays the same regardless of platform flag', () => {
+  it('composite tool count stays the same regardless of platform flag (rc.2: 5 composites)', () => {
     const withPlatform = createCompositeTools(getMcpToolDefs(true));
     const withoutPlatform = createCompositeTools(getMcpToolDefs(false));
-    expect(withPlatform).toHaveLength(4);
-    expect(withoutPlatform).toHaveLength(4);
+    expect(withPlatform).toHaveLength(5);
+    expect(withoutPlatform).toHaveLength(5);
   });
 
   it('all composite tools have required interface fields', () => {

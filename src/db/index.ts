@@ -348,6 +348,19 @@ function applyAndRecordAllMigrations(sqlite: SqliteDatabase, migrationsFolder: s
   }
 }
 
+/**
+ * bridgeLegacyDatabase runs BEFORE the Drizzle migrator. It backfills the
+ * `environment_id` column on `env_vars` and `deploy_logs` for databases
+ * that pre-date migration 0001. It does NOT touch `projects` or `services`
+ * structure — those are owned by the regular migration sequence.
+ *
+ * The 0009_split_projects_services migration that follows in the next
+ * migration step (rc.2 P1) is the canonical project/service split. The
+ * bridge is unchanged: it sees the pre-0009 shape (legacy projects + legacy
+ * services tables), and 0009 atomically transitions both to the new shape
+ * inside its own transaction. Plan §6.5 verifies that the bridge does not
+ * conflict with 0009.
+ */
 function bridgeLegacyDatabase(sqlite: SqliteDatabase, migrationsFolder: string): void {
   const tableNames = getTableNames(sqlite);
   if (!tableNames.has('projects')) {
@@ -534,6 +547,7 @@ export class Database implements AuthDatabase {
   createService(service: Parameters<ServiceRepo['createService']>[0]) { return this.serviceRepo.createService(service); }
   getService(id: string) { return this.serviceRepo.getService(id); }
   listServices() { return this.serviceRepo.listServices(); }
+  getServices(opts?: Parameters<ServiceRepo['getServices']>[0]) { return this.serviceRepo.getServices(opts); }
   updateService(id: string, updates: Parameters<ServiceRepo['updateService']>[1]) { this.serviceRepo.updateService(id, updates); }
   deleteService(id: string) { this.serviceRepo.deleteService(id); }
   createServiceConnection(opts: Parameters<ServiceConnectionRepo['createConnection']>[0]) { return this.serviceConnectionRepo.createConnection(opts); }

@@ -5,6 +5,12 @@
  *   1. Hero status — one-sentence health rollup + last-deploy row
  *   2. Projects grid — project cards with service-dot list
  *   3. Recent activity peek — top 5 events
+ *
+ * 1.0-rc.2 (data-model fullsplit): the "Projects" cards on this page now
+ * conceptually render groups, with each card showing aggregate service
+ * count + a per-service health dot row populated by `useProjectTopology`.
+ * Status rollup keeps reading the legacy `status` field, which P1's
+ * additive schema still populates on group rows during transition.
  */
 import { useMemo, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';

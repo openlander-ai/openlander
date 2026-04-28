@@ -64,6 +64,13 @@
       "when": 1777000000000,
       "tag": "0008_mcp_session_log",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1777500000000,
+      "tag": "0009_split_projects_services",
+      "breakpoints": true
     }
   ]
 }

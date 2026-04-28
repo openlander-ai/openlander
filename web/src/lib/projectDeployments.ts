@@ -1,8 +1,10 @@
 /**
  * Mock deployment history per service.
  *
- * Replace with `useDeployments(projectId, serviceId)` backend hook when
- * the deployment-list endpoint lands.
+ * Use `useDeployments(serviceId, status?, environmentId?)` for the real
+ * backend feed (`getProjectDeployments` under the hood). The 1.0-rc.2
+ * fullsplit renamed the hook param from `projectId` to `serviceId` —
+ * for legacy deployables the same id value resolves on both forms.
  */
 
 export type DeployStatus = 'running' | 'done' | 'failed' | 'cancelled';

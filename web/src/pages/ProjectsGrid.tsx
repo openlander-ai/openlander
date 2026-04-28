@@ -6,6 +6,11 @@
  *   - Controls row: filter input + Tags + Newest first
  *   - Empty state: "You don't have any projects yet" v4-exact copy
  *   - StatusPill per project
+ *
+ * 1.0-rc.2 (data-model fullsplit): rows render groups (formerly
+ * projects). The `status` and `serviceCount` fields are P1 additive-
+ * schema fields preserved on group rows during the transition so this
+ * page keeps rendering without a behavioral rewire.
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';

@@ -37,25 +37,27 @@ Upgrading from an earlier release: back up `~/.openlander/openlander.db` before 
 - **Full-width main content** — removed the misapplied `max-w-8xl mx-auto` that pinched content on wide monitors; tables and feeds now use the full available width
 - **Dark-mode contrast** audited on all semantic color tokens and Badge variants
 
-## Data model alignment — 1.0-rc.1 (vocabulary alignment)
+## Data model split
 
-OpenLander 1.0 GA ships in two release candidates aligned to the design vocabulary in `docs/design/v1.0/GUIDE-01-IA-principles.md` §4 (Project = group/container, Service = deployable unit).
+OpenLander 1.0 ships the full data-model split that the design vocabulary has called for since `docs/design/v1.0/GUIDE-01-IA-principles.md` §4. **Project** is now the group/container; **Service** is the deployable unit (Application / Compose / Database). The schema, REST API, MCP composite tools, and UI all speak this vocabulary natively.
 
-**rc.1 (this release)** — vocabulary alignment, schema unchanged:
+1.0 shipped in two release candidates for safety:
 
-- New canonical URL: `/projects/:p/services/:s` (frontend) and `/api/projects/:p/services/:s/*` (REST). Old URLs (`/services/:id?project=:p`, `/api/projects/:id/<verb>`) keep working with deprecation headers.
-- New MCP composite alias actions: `*_service` (e.g., `start_service`, `deploy_service`) delegating to today's `*_project` handlers under the `openlander_project` composite. Existing `*_project` actions still work; deprecation warnings logged once per session per action.
-- No schema migration. No MCP namespace rename.
+- **`v1.0.0-rc.1`** — vocabulary alignment without schema risk. URL redirects, MCP `*_service` aliases delegating to existing handlers, REST `/api/projects/:p/services/:s/...` routes delegating to existing handlers. `git revert`-able.
+- **`v1.0.0-rc.2`** → **`v1.0.0`** — schema migration `0009_split_projects_services`, all handler bodies port to the new schema, MCP composite namespace rename (`openlander_service` for deployables; today's managed-only renamed to `openlander_managed_service`).
 
-**rc.2 (next minor cut, ~1 week)** — schema split:
+**What changed**:
 
-- Migration `0009`: split `projects` table into `projects` (groups) + `services` (deployables, with `kind` discriminator). FK re-point per the data-model-debt ledger.
-- MCP namespace rename: today's managed-only `openlander_service` becomes `openlander_managed_service`; new `openlander_service` composite serves deployables.
-- Frontend hooks rewired (`useProjectsContext`, `useProjectTopology`, etc.) to consume canonical endpoints.
+- **Schema**: `projects` (groups) + `services` (deployables, `kind` discriminator: git / image / compose / compose-child / postgres / mysql / redis / mongo / minio). Legacy columns retained additively during transition; a follow-up migration drops them post-1.0.
+- **REST**: `/api/projects/:p/services/:s` is the canonical deployable URL. Legacy `/services/:id` and `/managed-services/:id` 308-redirect to canonical (since rc.1).
+- **MCP**: every `*_project` action has a `*_service` alias. `openlander_service` composite is now deployable-vocab; today's managed-only behavior moved to `openlander_managed_service`. Legacy `*_project` actions and the managed-flavor of `openlander_service` log a deprecation warning once per session and remain callable through 1.x; removed in 2.0. The dispatcher disambiguates overlapping action names (`start_service`, `stop_service`, `restart_service`, `remove_service`) by reading `services.kind` first, falling back to params-shape inspection (`database_type`/`image` keys → managed), with a hard error on truly ambiguous calls.
+- **UI**: service detail URLs are `/projects/:p/services/:s`. Old bookmarks redirect (since rc.1).
 
-**1.0 GA** — after rc.2 soaks 24-48h. No work deferred to 1.1+ for the data model.
+**Migration**: a one-time SQLite migration runs at first 1.0-rc.2 startup. The server creates `~/.openlander/openlander.db.pre-1.0-fullsplit.bak` before applying. If the migration aborts (FK violation, disk space, etc.), the server refuses to start until the operator restores from backup. **Hard-fail policy on orphans**: any FK re-point that would orphan rows aborts the transaction.
 
-Full migration runbook: `.omc/plans/ralplan-data-model-full-migration.md` (in repo).
+**No follow-ups deferred to 1.1.** The full split is in 1.0. Future work (compose v2 semantics, group-level RBAC, orphan quarantine UX) is genuinely new, not deferred.
+
+Operator upgrade walkthrough: `docs/operations/upgrading-to-1.0.md`. Full migration runbook + ADR: `.omc/plans/ralplan-data-model-full-migration.md` (in repo).
 
 ## Operational reliability
 

@@ -10,6 +10,12 @@
  * That's intentional — the backend parser populates the same shape the
  * prototype mock used.
  *
+ * 1.0-rc.2 P1 additive-schema note: post-fullsplit the topology endpoint
+ * still returns the same wire shape — group fields drop out of service
+ * nodes and service fields drop out of the (implicit) group root, so the
+ * response is purely a `services[]` array. The existing parser tolerates
+ * the new shape natively because it only reads the per-service fields.
+ *
  * 404 → throws so the hook can fall back to mock data; transient errors
  * also throw and the hook keeps last-good data on subsequent polls.
  */

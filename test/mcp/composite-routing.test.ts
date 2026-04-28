@@ -16,6 +16,7 @@ import {
   createCompositeTools,
   DEPLOY_ACTIONS,
   PROJECT_ACTIONS,
+  PROJECT_TO_SERVICE_ALIASES,
   SERVICE_ACTIONS,
   MONITOR_ACTIONS,
   type CompositeTool,
@@ -178,13 +179,18 @@ describe('Composite Action Routing', () => {
       expect(result).toHaveProperty('action', 'create_service');
     });
 
-    it('routes remove_service action (validates params)', async () => {
+    it('rc.2: remove_service is in MANAGED_SERVICE_ACTIONS, not openlander_service', async () => {
+      // rc.2 split: openlander_service is the deployable-vocab composite,
+      // and remove_service moved to openlander_managed_service. Calling
+      // it on openlander_service routes through the disambiguator —
+      // empty params + no service_id → falls through to deployable
+      // (where remove_service is not registered, so UNKNOWN_ACTION).
       const result = (await tool.execute(
         { action: 'remove_service', params: {} },
         mockContext,
       )) as Record<string, unknown>;
-      expect(result).toHaveProperty('error', 'INVALID_PARAMS');
-      expect(result).toHaveProperty('action', 'remove_service');
+      expect(result).toHaveProperty('error', 'UNKNOWN_ACTION');
+      expect(result).toHaveProperty('composite', 'openlander_service');
     });
   });
 
@@ -283,13 +289,24 @@ describe('Composite Action Routing', () => {
       expect(listed).toEqual(expected);
     });
 
-    it('service composite covers all SERVICE_ACTIONS that have tool defs', async () => {
+    it('service composite covers all SERVICE_ACTIONS that have tool defs (rc.2: alias-resolved)', async () => {
       const result = (await findComposite('openlander_service').execute(
         { action: 'help' },
         mockContext,
       )) as Record<string, unknown>;
       const listed = (result['actions'] as Array<{ name: string }>).map((a) => a.name);
-      const expected = SERVICE_ACTIONS.filter((name) => allToolDefs.some((d) => d.name === name));
+      // rc.2: openlander_service is the deployable-vocab composite; its
+      // action names are aliases that resolve to underlying *_project
+      // tool defs via PROJECT_TO_SERVICE_ALIASES. Both direct hits and
+      // alias-resolved hits count as "has a tool def".
+      const aliasReverse = new Map<string, string>(
+        Object.entries(PROJECT_TO_SERVICE_ALIASES).map(([legacy, alias]) => [alias, legacy]),
+      );
+      const expected = SERVICE_ACTIONS.filter((name) => {
+        if (allToolDefs.some((d) => d.name === name)) return true;
+        const legacyName = aliasReverse.get(name);
+        return legacyName !== undefined && allToolDefs.some((d) => d.name === legacyName);
+      });
       expect(listed).toEqual(expected);
     });
 

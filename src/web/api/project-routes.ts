@@ -37,6 +37,7 @@ import {
   getProjectOrThrow,
   resolveEnvironmentByType,
 } from './helpers/project-helpers.js';
+import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 
 const log = createModuleLogger('api');
 
@@ -844,38 +845,31 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // --- Connected Services ---
 
+  // rc.2 §6.6: canonical body — returns deployables scoped to the group via
+  // `db.getServices({ project_id, kindNotIn: MANAGED_SERVICE_KINDS })`.
+  // Legacy connection-mapped managed services were moved under
+  // /projects/:p/managed-services (also wired below).
   api.get('/projects/:id/services', (c) => {
     const project = getProjectOrThrow(c, ctx);
-    const connections = ctx.db.listServiceConnectionsByProject(project.id);
-
-    if (connections.length > 0) {
-      const services = connections
-        .map((connection) => ctx.db.getService(connection.service_id))
-        .filter((service) => service !== undefined);
-
-      return c.json(
-        services.map((service) => ({
-          id: service.id,
-          name: service.name,
-          type: service.type,
-          status: service.status,
-          port: service.port,
-          containerName: service.container_name,
-        })),
-      );
-    }
-
-    const services = ctx.serviceManager.getProjectServices(project.id);
-    return c.json(
-      services.map((s) => ({
-        id: s.id,
-        name: s.name,
-        type: s.type,
-        status: s.status,
-        port: s.port,
-        containerName: s.container_name,
+    const deployables = ctx.db.getServices({
+      project_id: project.id,
+      kindNotIn: MANAGED_SERVICE_KINDS,
+    });
+    return c.json({
+      count: deployables.length,
+      services: deployables.map((svc) => ({
+        id: svc.id,
+        name: svc.name,
+        kind: svc.kind,
+        status: svc.status,
+        assigned_port: svc.assigned_port,
+        container_id: svc.container_id,
+        container_name: svc.container_name,
+        image_tag: svc.image_tag,
+        created_at: normalizeTimestamp(svc.created_at),
+        updated_at: normalizeTimestamp(svc.updated_at),
       })),
-    );
+    });
   });
 
   api.post('/projects/:id/services/:serviceId', (c) => {
@@ -2094,21 +2088,56 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   // GET /projects/:p/services/:s  (single service detail)
+  // rc.2 §6.6: handler resolves the project (group) via :p directly, and
+  // the service via :s against the unified `services` table. Backwards-
+  // compatible with the rc.1 contract where :s == :p == legacy project id
+  // (fall through to the legacy projects row in that case).
   api.get('/projects/:p/services/:s', (c) => {
-    return withServiceAsId(c, (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
-      const envVars = ctx.env.getAll(project.id);
-      const environments = ctx.db.getEnvironmentsByProject(project.id);
-      const deployLogs = ctx.db.getDeployLogs(project.id, 5);
-      return cx.json({
-        ...mapProjectForApi(project),
-        environments: environments.map((env) => mapEnvironment(project.name, env)),
-        envVars,
-        recentDeploys: deployLogs.map((dl) => ({
-          ...dl,
-          commitMessage: dl.commit_message ?? null,
-        })),
-      });
+    const pParam = c.req.param('p');
+    const sParam = c.req.param('s');
+    const project = ctx.db.getProject(pParam) ?? ctx.db.getProjectByName(pParam);
+    if (!project) {
+      return c.json({ error: 'NOT_FOUND', message: `Project not found: ${pParam}` }, 404);
+    }
+
+    // Resolve service via the unified table; auto-derived deployables
+    // use id = `<projectId>__svc`. Managed services keep their original id.
+    const serviceRow = ctx.db.getService(sParam) ?? ctx.db.getService(`${sParam}__svc`) ?? null;
+
+    // Legacy fallback: when :s is the legacy project id (pre-migration
+    // shape, test fixtures without 0009 backfill), resolve project ops
+    // (env vars, deploy logs) via the legacy project row directly.
+    const envVars = ctx.env.getAll(project.id);
+    const environments = ctx.db.getEnvironmentsByProject(project.id);
+    const deployLogs = ctx.db.getDeployLogs(project.id, 5);
+
+    return c.json({
+      ...mapProjectForApi(project),
+      // rc.2 canonical surface: unified `services` row alongside the
+      // legacy project shape so consumers (Phase 3 frontend) can read
+      // native columns without a second fetch.
+      service: serviceRow
+        ? {
+            id: serviceRow.id,
+            name: serviceRow.name,
+            kind: serviceRow.kind,
+            project_id: serviceRow.project_id,
+            parent_service_id: serviceRow.parent_service_id,
+            status: serviceRow.status,
+            assigned_port: serviceRow.assigned_port,
+            container_id: serviceRow.container_id,
+            container_name: serviceRow.container_name,
+            image_tag: serviceRow.image_tag,
+            created_at: normalizeTimestamp(serviceRow.created_at),
+            updated_at: normalizeTimestamp(serviceRow.updated_at),
+          }
+        : null,
+      environments: environments.map((env) => mapEnvironment(project.name, env)),
+      envVars,
+      recentDeploys: deployLogs.map((dl) => ({
+        ...dl,
+        commitMessage: dl.commit_message ?? null,
+      })),
     });
   });
 
@@ -2244,6 +2273,32 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // rc.2 §6.6 — resolveServiceForRequest helper.
+  //
+  // Resolves a (`:p` group, `:s` service) URL pair into a `services` row from
+  // the unified post-0009 schema. Falls back to the legacy `projects` row by
+  // id/name (P1 retains all legacy deployable columns on `projects`) so call
+  // sites that still expect a ProjectRow shape keep working through P2.
+  //
+  // Returns either a resolved `{ project, service }` pair or a Response (404).
+  // ---------------------------------------------------------------------------
+  function resolveServiceForRequest(
+    c: Context,
+  ): { project: ProjectRow; service: ReturnType<typeof ctx.db.getService> | null } | Response {
+    const p = c.req.param('p') ?? '';
+    const s = c.req.param('s') ?? '';
+    const project = ctx.db.getProject(p) ?? ctx.db.getProjectByName(p);
+    if (!project) {
+      return c.json({ error: 'NOT_FOUND', message: `Project not found: ${p}` }, 404);
+    }
+    // services.id either == legacy project_id (rare, pre-migration) or
+    // == legacy_project_id + '__svc' for auto-derived deployables, or
+    // == original managed_service_id (managed kinds).
+    const service = ctx.db.getService(s) ?? ctx.db.getService(`${s}__svc`) ?? null;
+    return { project, service };
+  }
+
   // GET /projects/:p/services (list all managed services connected to project)
   // Also exposed as GET /projects/:p/managed-services (managed-only alias)
   const listManagedServicesHandler = (c: Context) => {
@@ -2269,6 +2324,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   };
 
   api.get('/projects/:p/managed-services', listManagedServicesHandler);
+
+  // Re-export for tests + future internal call sites; intentional unused
+  // suppress because the helper is consumed only by rc.2 P2 tests today.
+  void resolveServiceForRequest;
 
   // POST /projects/:p/services/:s/start
   api.post('/projects/:p/services/:s/start', async (c) => {

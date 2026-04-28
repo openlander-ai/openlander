@@ -212,7 +212,7 @@ describe('migration idempotency and safety (0003/0004/0005)', () => {
       runFullMigration(drizzle, sqlite);
       runFullMigration(drizzle, sqlite); // second run
 
-      expect(migrationRowCount(sqlite)).toBe(9);
+      expect(migrationRowCount(sqlite)).toBe(10);
     });
 
     it('table set is identical before and after re-applying all migrations', () => {
@@ -312,7 +312,7 @@ describe('migration idempotency and safety (0003/0004/0005)', () => {
       applyBaseline0to2(sqlite);
       runFullMigration(drizzle, sqlite);
 
-      expect(migrationRowCount(sqlite)).toBe(9);
+      expect(migrationRowCount(sqlite)).toBe(10);
     });
   });
 

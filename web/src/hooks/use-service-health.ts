@@ -9,6 +9,9 @@
  * Cadence:
  *   - 10s while healthy (steady state)
  *   - 3s while crashed (so recovery surfaces promptly)
+ *
+ * 1.0-rc.2 (data-model fullsplit) note: signature unchanged — `serviceId`
+ * is already the canonical service-level identifier under the new schema.
  */
 import { useCallback, useState } from 'react';
 import { fetchServiceHealth } from '../lib/api/services';

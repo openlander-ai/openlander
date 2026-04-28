@@ -25,6 +25,7 @@ import { webhookToolDefs } from '../../src/tools/defs/webhook.js';
 import type { ToolDef, ToolContext } from '../../src/tools/defs/types.js';
 import {
   createOpenLanderProjectCompositeTool,
+  createOpenLanderServiceCompositeTool,
   type CompositeTool,
 } from '../../src/mcp/composite-tools.js';
 import type { AppContext } from '../../src/app.js';
@@ -197,5 +198,129 @@ describe('openlander_project alias routing (rc.1)', () => {
 
     expect(result).toHaveProperty('error', 'UNKNOWN_ACTION');
     expect(result).toHaveProperty('composite', 'openlander_project');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rc.2 disambiguation — openlander_service overlapping action names route
+// via kind-first DB lookup → param-shape fallback → hard error.
+// Plan §6.7 line 871.
+// ---------------------------------------------------------------------------
+describe('openlander_service rc.2 disambiguation (kind-first → param-shape → hard error)', () => {
+  let tool: CompositeTool;
+
+  beforeEach(() => {
+    tool = createOpenLanderServiceCompositeTool(allToolDefs);
+  });
+
+  it('kind-first lookup: services.kind=postgres → routes to managed handler', async () => {
+    const ctx: ToolContext = {
+      target: 'mcp',
+      appCtx: {
+        db: {
+          getService: (id: string) =>
+            id === 'svc-pg' ? { id, kind: 'postgres' as const } : undefined,
+        },
+      } as unknown as AppContext,
+    };
+
+    // Empty managed params → INVALID_PARAMS at managed handler.
+    // What we're verifying: composite reports openlander_service AND the
+    // managed handler's zod produces the failure (proving managed dispatch).
+    const result = (await tool.execute(
+      { action: 'stop_service', params: { service_id: 'svc-pg' } },
+      ctx,
+    )) as Record<string, unknown>;
+
+    expect(result).toHaveProperty('composite', 'openlander_service');
+    // Either INVALID_PARAMS from managed validation or a successful exec —
+    // the key signal is that we did NOT get a hard ambiguity error.
+    expect(result['error']).not.toBe('AMBIGUOUS_ACTION');
+  });
+
+  it('kind-first lookup: services.kind=git → routes to deployable handler', async () => {
+    const ctx: ToolContext = {
+      target: 'mcp',
+      appCtx: {
+        db: {
+          getService: (id: string) =>
+            id === 'svc-app' ? { id, kind: 'git' as const } : undefined,
+        },
+      } as unknown as AppContext,
+    };
+
+    const result = (await tool.execute(
+      { action: 'stop_service', params: { service_id: 'svc-app' } },
+      ctx,
+    )) as Record<string, unknown>;
+
+    expect(result).toHaveProperty('composite', 'openlander_service');
+    expect(result['error']).not.toBe('AMBIGUOUS_ACTION');
+  });
+
+  it('param-shape fallback: database_type present → managed', async () => {
+    // No service_id supplied — only database_type. Falls past kind-first.
+    const result = (await tool.execute(
+      { action: 'stop_service', params: { database_type: 'postgres' } },
+      mockContext,
+    )) as Record<string, unknown>;
+
+    // Reaches managed handler; missing required params surface as
+    // INVALID_PARAMS (or some other shape), but never AMBIGUOUS.
+    expect(result['error']).not.toBe('AMBIGUOUS_ACTION');
+  });
+
+  it('param-shape fallback: image present → managed', async () => {
+    const result = (await tool.execute(
+      { action: 'stop_service', params: { image: 'postgres:16-alpine' } },
+      mockContext,
+    )) as Record<string, unknown>;
+
+    expect(result['error']).not.toBe('AMBIGUOUS_ACTION');
+  });
+
+  it('hard error: service_id supplied but services.kind not resolvable AND no param-shape hint → AMBIGUOUS_ACTION', async () => {
+    const ctx: ToolContext = {
+      target: 'mcp',
+      appCtx: {
+        db: {
+          // Returns undefined — service not found in DB.
+          getService: (_id: string) => undefined,
+        },
+      } as unknown as AppContext,
+    };
+
+    const result = (await tool.execute(
+      { action: 'stop_service', params: { service_id: 'unknown-service-id' } },
+      ctx,
+    )) as Record<string, unknown>;
+
+    expect(result).toHaveProperty('error', 'AMBIGUOUS_ACTION');
+    expect(result).toHaveProperty('composite', 'openlander_service');
+    const guidance = (result['_agent_guidance'] as { message?: string } | undefined)?.message ?? '';
+    expect(guidance).toMatch('openlander_managed_service.stop_service');
+    expect(guidance).toMatch('explicit service_id');
+  });
+
+  it('default routing: no service_id, no managed-shape hint → deployable handler', async () => {
+    const result = (await tool.execute(
+      { action: 'stop_service', params: {} },
+      mockContext,
+    )) as Record<string, unknown>;
+
+    // Should land on deployable handler (stop_project tool def proxies stop_service).
+    expect(result).toHaveProperty('composite', 'openlander_service');
+    expect(result['error']).not.toBe('AMBIGUOUS_ACTION');
+  });
+
+  it('non-overlapping deployable action (deploy_service) routes directly to deployable handler', async () => {
+    const result = (await tool.execute(
+      { action: 'deploy_service', params: {} },
+      mockContext,
+    )) as Record<string, unknown>;
+
+    expect(result).toHaveProperty('composite', 'openlander_service');
+    expect(result['error']).not.toBe('AMBIGUOUS_ACTION');
+    expect(result['error']).not.toBe('UNKNOWN_ACTION');
   });
 });

@@ -13,7 +13,13 @@ describe('ProjectRepo - Archive', () => {
     const db = createDrizzleDatabase(':memory:');
     sqlite = db.sqlite;
     repo = new ProjectRepo(db.db, db.sqlite);
-    migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    // 0009 drops parent tables; mirror src/db/index.ts:435-443 production path.
+    sqlite.exec('PRAGMA foreign_keys = OFF');
+    try {
+      migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    } finally {
+      sqlite.exec('PRAGMA foreign_keys = ON');
+    }
   });
 
   afterEach(() => {
@@ -178,7 +184,13 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
     sqlite = db.sqlite;
     repo = new ProjectRepo(db.db, db.sqlite);
     envRepo = new EnvironmentRepo(db.db, db.sqlite);
-    migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    // 0009 drops parent tables; mirror src/db/index.ts:435-443 production path.
+    sqlite.exec('PRAGMA foreign_keys = OFF');
+    try {
+      migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    } finally {
+      sqlite.exec('PRAGMA foreign_keys = ON');
+    }
   });
 
   afterEach(() => {

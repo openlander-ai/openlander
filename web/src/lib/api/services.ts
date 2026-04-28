@@ -10,10 +10,25 @@ export interface ServiceTemplate {
   versions?: string[];
 }
 
+/**
+ * Service — covers BOTH deployables and managed services in 1.0-rc.2's
+ * additive schema (P1). The `kind` discriminator is the canonical way to
+ * tell them apart post-fullsplit; legacy callers may still inspect `type`
+ * (preserved on the wire for backward-compat through 1.x).
+ *
+ * `kind` values:
+ *   - Deployables: 'git' | 'image' | 'compose' | 'compose-child'
+ *   - Managed:     'postgres' | 'mysql' | 'redis' | 'mongo' | 'minio'
+ *
+ * Fields like `status`, `container_id`, `port` remain populated on the row
+ * so today's UI keeps rendering during the additive-schema transition.
+ */
 export interface Service {
   id: string;
   name: string;
   type: string;
+  /** rc.2 P1 additive field — canonical service-kind discriminator. */
+  kind?: string;
   image: string;
   status: 'running' | 'stopped' | 'error';
   container_id: string | null;
@@ -30,12 +45,76 @@ export interface Service {
   };
 }
 
+/**
+ * Legacy global services list — backed by today's managed-only handler.
+ * Prefer `managedServices.list()` (`/api/managed-services`) once P2 ships
+ * the canonical alias; this helper stays for backward-compat through 1.x.
+ */
 export async function getServices(): Promise<Service[]> {
   return apiGet<Service[]>('/api/services');
 }
 
+/**
+ * Legacy service-by-id fetch. Post-fullsplit, callers should use
+ * `managedServices.get()` for managed rows or rely on the canonical
+ * deployable detail under `/api/projects/:p/services/:s`. The legacy
+ * URL stays callable through 1.x to avoid breaking older bookmarks.
+ */
 export async function getService(id: string): Promise<Service> {
   return apiGet<Service>(`/api/services/${id}`);
+}
+
+// ─── 1.0-rc.2: managed-services namespace ─────────────────────────────────
+//
+// Per ralplan-data-model-full-migration §6.8: managed-service helpers
+// split into a dedicated namespace so the deployable-vocab `getService(id)`
+// (which will live under `/api/projects/:p/services/:s` once P2 lands the
+// canonical handler) doesn't collide with managed-service callers.
+//
+// The legacy free functions above remain re-exported as-is so existing
+// imports keep working through 1.x.
+
+export const managedServices = {
+  /** List managed services (postgres / mysql / redis / mongo / minio). */
+  list: (): Promise<Service[]> => apiGet<Service[]>('/api/services'),
+  /** Get a managed service by id. */
+  get: (id: string): Promise<Service> => apiGet<Service>(`/api/services/${id}`),
+  /** List managed services attached to a group via service_connections. */
+  listForGroup: (groupId: string): Promise<Service[]> =>
+    apiGet<Service[]>(`/api/projects/${groupId}/managed-services`),
+} as const;
+
+/**
+ * 1.0-rc.2 canonical: list deployable services for a group.
+ *
+ * `/api/projects/:p/services` is the canonical deployable list endpoint
+ * (P2 returns rows where `kind NOT IN (managed kinds)`). Used by the new
+ * `useGroupServices(groupId)` hook that powers ProjectView's Services tab.
+ *
+ * The `ConnectedService` shape from `lib/api/projects.ts` (managed-services
+ * via `service_connections`) is preserved unchanged at
+ * `/api/projects/:p/managed-services` and accessed via
+ * `managedServices.listForGroup(groupId)` above.
+ */
+export interface GroupService {
+  id: string;
+  name: string;
+  /** Canonical kind discriminator (rc.2). */
+  kind: string;
+  image: string | null;
+  status: 'running' | 'stopped' | 'error' | 'building' | 'idle';
+  port: number | null;
+  url: string | null;
+  health: ServiceHealth | null;
+}
+
+export async function listGroupServices(groupId: string): Promise<GroupService[]> {
+  // P2 returns either a bare array or a `{ services }` envelope depending
+  // on the route's serializer. Accept both shapes to stay forward-compat.
+  const data = await apiGet<GroupService[] | { services: GroupService[] }>(
+    `/api/projects/${groupId}/services`,
+  );
+  return Array.isArray(data) ? data : (data.services ?? []);
 }
 
 export async function getServiceTemplates(): Promise<ServiceTemplate[]> {

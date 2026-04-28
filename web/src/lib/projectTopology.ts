@@ -15,6 +15,13 @@
  *   `recentAgentFor()` looks up the most recent mcp-actor event for a
  *   given (project, service) within `lookbackSec`. Used by InfraMap to
  *   render the Bot badge on nodes the agent recently acted on.
+ *
+ * 1.0-rc.2 (data-model fullsplit) note: `ServiceNode.kind` here is the
+ * UI-display category (`Application | Database`); the canonical schema
+ * `kind` discriminator (`git | image | compose | postgres | …`) lives on
+ * `GroupService` from `lib/api/services.ts`. The two are intentionally
+ * decoupled — InfraMap only cares about the visual category, while the
+ * canonical kind drives routing/handler dispatch.
  */
 import type { ActivityEvent } from './agentActivity';
 

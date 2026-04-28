@@ -147,6 +147,13 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   // DeployLogSummary only persists terminal states (success/failed/cancelled), so
   // we can't detect a deploy in flight from this shape. Deploy button stays enabled
   // until a running-deploy signal lands on the wire (follow-up).
+  //
+  // 1.0-rc.2 (data-model fullsplit): `useDeployments` parameter renamed
+  // `projectId` → `serviceId`. For legacy deployables, the project id and
+  // service id resolve to the same row at the backend during the additive-
+  // schema transition, so we pass `projectId` here without changing the
+  // routing. Once P2 ships per-service deployment filtering, this can move
+  // to `useDeployments(id ?? '')` for service-scoped deployments.
   const { deployments, loading: deploymentsLoading } = useDeployments(projectId ?? '');
   const hasRunning = false;
 
@@ -848,7 +855,11 @@ function ManagedServiceDetail({ id }: { id: string }) {
             <ManagedHealthBadge status={service.status} />
           </span>
         }
-        subtitle={service.type}
+        // 1.0-rc.2 (data-model fullsplit): prefer the canonical `kind`
+        // discriminator when the row carries it (P1 additive schema);
+        // fall back to legacy `type` to keep older response shapes
+        // rendering during the transition.
+        subtitle={service.kind ?? service.type}
         actions={
           <button
             type="button"

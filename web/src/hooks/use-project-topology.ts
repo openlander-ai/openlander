@@ -14,8 +14,14 @@
  *     consumer sees the mock data so the UI is usable offline / before
  *     the backend session ships the endpoint.
  *
- * Disabled when `projectId` is null — usePollingTask short-circuits via
+ * Disabled when `groupId` is null — usePollingTask short-circuits via
  * `enabled: false` and the resolved services array is empty.
+ *
+ * 1.0-rc.2 (data-model fullsplit) note: the param `groupId` formerly
+ * meant `projectId`. The endpoint URL `/api/projects/:id/topology`
+ * unchanged — the path segment now identifies a *group*. Return-shape
+ * (per-service node fields) maps natively from the new schema; group
+ * fields no longer appear on service nodes.
  */
 import { useCallback, useMemo, useState } from 'react';
 import { fetchProjectTopology } from '../lib/api/topology';

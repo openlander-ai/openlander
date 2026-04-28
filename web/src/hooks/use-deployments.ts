@@ -1,3 +1,15 @@
+/**
+ * useDeployments — 1.0-rc.2 (data-model fullsplit).
+ *
+ * Parameter `serviceId` (renamed from `projectId`) is the new
+ * service-level identifier — for legacy deployables the value is the
+ * same as the historical project id (backend resolves both forms in
+ * transition via additive schema), so call sites that previously passed
+ * a project id continue to work without code changes during 1.0-rc.2.
+ *
+ * `status` is the live status (e.g. 'building') used to bump polling
+ * cadence; `environmentId` filters the deployment list when set.
+ */
 import { useCallback, useState } from 'react';
 
 import { getProjectDeployments } from '@/lib/api';
@@ -15,8 +27,8 @@ export interface UseDeploymentsReturn {
 }
 
 export function useDeployments(
-  projectId: string,
-  projectStatus?: string,
+  serviceId: string,
+  status?: string,
   environmentId?: string,
 ): UseDeploymentsReturn {
   const [deployments, setDeployments] = useState<DeployLogSummary[]>([]);
@@ -25,7 +37,7 @@ export function useDeployments(
 
   const fetchDeployments = useCallback(async () => {
     try {
-      const data = await getProjectDeployments(projectId, 50, environmentId);
+      const data = await getProjectDeployments(serviceId, 50, environmentId);
       setDeployments(data);
       setError(null);
     } catch (err) {
@@ -33,11 +45,11 @@ export function useDeployments(
     } finally {
       setLoading(false);
     }
-  }, [projectId, environmentId]);
+  }, [serviceId, environmentId]);
 
-  const pollMs = projectStatus === 'building' ? ACTIVE_POLL_MS : IDLE_POLL_MS;
+  const pollMs = status === 'building' ? ACTIVE_POLL_MS : IDLE_POLL_MS;
   usePollingTask(fetchDeployments, {
-    enabled: Boolean(projectId),
+    enabled: Boolean(serviceId),
     intervalMs: pollMs,
   });
 

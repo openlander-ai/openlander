@@ -32,7 +32,13 @@ describe('ProjectRepo — buildMethod=compose persistence (Critical 1)', () => {
     const db = createDrizzleDatabase(':memory:');
     sqlite = db.sqlite;
     repo = new ProjectRepo(db.db, db.sqlite);
-    migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    // 0009 drops parent tables; mirror src/db/index.ts:435-443 production path.
+    sqlite.exec('PRAGMA foreign_keys = OFF');
+    try {
+      migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    } finally {
+      sqlite.exec('PRAGMA foreign_keys = ON');
+    }
   });
 
   afterEach(() => {
@@ -120,7 +126,13 @@ describe('Migration 0006 — build_method backfill (Critical 1)', () => {
   beforeEach(() => {
     const db = createDrizzleDatabase(':memory:');
     sqlite = db.sqlite;
-    migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    // 0009 drops parent tables; mirror src/db/index.ts:435-443 production path.
+    sqlite.exec('PRAGMA foreign_keys = OFF');
+    try {
+      migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    } finally {
+      sqlite.exec('PRAGMA foreign_keys = ON');
+    }
   });
 
   afterEach(() => {
@@ -222,9 +234,15 @@ describe('Migration 0006 — build_method backfill (Critical 1)', () => {
     // So this test just verifies migrate runs idempotently with no errors when
     // re-run — the backfill is non-destructive.
     expect(() => {
-      migrate(createDrizzleDatabase(':memory:').db as Parameters<typeof migrate>[0], {
-        migrationsFolder: './drizzle',
-      });
+      const tmpDb = createDrizzleDatabase(':memory:');
+      tmpDb.sqlite.exec('PRAGMA foreign_keys = OFF');
+      try {
+        migrate(tmpDb.db as Parameters<typeof migrate>[0], {
+          migrationsFolder: './drizzle',
+        });
+      } finally {
+        tmpDb.sqlite.exec('PRAGMA foreign_keys = ON');
+      }
     }).not.toThrow();
   });
 });

@@ -307,7 +307,10 @@ describe('migration realistic-data (rc.7 -> 1.0 at production scale)', () => {
       expect(() => runFullMigration(drizzle, sqlite)).not.toThrow();
 
       // Every table preserved its row count exactly — zero data loss.
-      expect(countRows(sqlite, 'projects')).toBe(counts.projects);
+      // Post-0009: projects gains the synthesized __orphan_managed group row
+      // (Plan §6.3 Phase C). Subtract 1 from the post-migration count to
+      // assert against the input fixture count.
+      expect(countRows(sqlite, 'projects') - 1).toBe(counts.projects);
       expect(countRows(sqlite, 'environments')).toBe(counts.environments);
       expect(countRows(sqlite, 'env_vars')).toBe(counts.envVars);
       expect(countRows(sqlite, 'deploy_logs')).toBe(counts.deployLogs);

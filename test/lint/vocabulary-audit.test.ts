@@ -15,7 +15,13 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PROJECT_ACTIONS, PROJECT_TO_SERVICE_ALIASES } from '../../src/mcp/composite-tools.js';
+import {
+  MANAGED_SERVICE_ACTIONS,
+  PROJECT_ACTIONS,
+  PROJECT_TO_SERVICE_ALIASES,
+  SERVICE_ACTIONS,
+} from '../../src/mcp/composite-tools.js';
+import { VERSION } from '../../src/version.js';
 
 const REPO_ROOT = resolve(__dirname, '..', '..');
 
@@ -34,6 +40,63 @@ const FROZEN_PROJECT_ACTIONS_1_0_RC = [
   'archive_project',
   'unarchive_project',
   'update_project_config',
+  'list_env_vars',
+  'get_env_var',
+  'set_env_vars',
+  'set_global_secret',
+  'list_global_secrets',
+  'upload_secret_file',
+  'list_secret_files',
+  'remove_secret_file',
+  'expose_public',
+  'unexpose_public',
+  'enable_webhook',
+  'disable_webhook',
+  'get_webhook_config',
+] as const;
+
+/**
+ * rc.2 baseline: MANAGED_SERVICE_ACTIONS is the 21-action list that USED
+ * to live in SERVICE_ACTIONS at rc.1. Frozen here verbatim so that any
+ * accidental rename / removal is caught at lint time. Plan §6.7 line 810.
+ */
+const FROZEN_MANAGED_SERVICE_ACTIONS_1_0_RC2 = [
+  'create_service',
+  'list_services',
+  'get_service_status',
+  'get_service_credentials',
+  'get_service_logs',
+  'start_service',
+  'stop_service',
+  'remove_service',
+  'backup_service',
+  'restore_service',
+  'list_service_backups',
+  'create_service_user',
+  'create_bucket',
+  'list_buckets',
+  'delete_bucket',
+  'exec_service_container',
+  'add_volume',
+  'list_volumes',
+  'remove_volume',
+  'get_disk_usage',
+  'cleanup_docker',
+] as const;
+
+/**
+ * rc.2 baseline: SERVICE_ACTIONS is the deployable-vocab composite
+ * (apps + workers). Frozen verbatim per plan §6.7 lines 834-857.
+ */
+const FROZEN_DEPLOYABLE_SERVICE_ACTIONS_1_0_RC2 = [
+  'list_services',
+  'stop_service',
+  'start_service',
+  'restart_service',
+  'deploy_service',
+  'archive_service',
+  'unarchive_service',
+  'update_service_config',
   'list_env_vars',
   'get_env_var',
   'set_env_vars',
@@ -99,6 +162,76 @@ describe('vocabulary-audit (data-model-alignment guardrail)', () => {
     expect(
       /backToServices\s*:/.test(en),
       'backToServices key removed from web/src/i18n/en.ts — required by 1.1 ServiceHeader revival.',
+    ).toBe(true);
+  });
+
+  it('rc.2 — MANAGED_SERVICE_ACTIONS matches the frozen 21-action baseline (verbatim from rc.1 SERVICE_ACTIONS)', () => {
+    const actions = MANAGED_SERVICE_ACTIONS as readonly string[];
+
+    expect(
+      actions.length,
+      `MANAGED_SERVICE_ACTIONS must have exactly 21 entries; got ${String(actions.length)}.`,
+    ).toBe(FROZEN_MANAGED_SERVICE_ACTIONS_1_0_RC2.length);
+
+    for (const expected of FROZEN_MANAGED_SERVICE_ACTIONS_1_0_RC2) {
+      expect(
+        actions,
+        `${expected} disappeared from MANAGED_SERVICE_ACTIONS — managed surface frozen for 1.0-rc.2.`,
+      ).toContain(expected);
+    }
+  });
+
+  it('rc.2 — SERVICE_ACTIONS (deployable-vocab) matches the frozen 21-action baseline', () => {
+    const actions = SERVICE_ACTIONS as readonly string[];
+
+    expect(
+      actions.length,
+      `SERVICE_ACTIONS must have exactly 21 deployable entries; got ${String(actions.length)}.`,
+    ).toBe(FROZEN_DEPLOYABLE_SERVICE_ACTIONS_1_0_RC2.length);
+
+    for (const expected of FROZEN_DEPLOYABLE_SERVICE_ACTIONS_1_0_RC2) {
+      expect(
+        actions,
+        `${expected} disappeared from SERVICE_ACTIONS — deployable surface frozen for 1.0-rc.2.`,
+      ).toContain(expected);
+    }
+  });
+
+  it('rc.2 — every PROJECT_ACTIONS *_project entry has a *_service alias in PROJECT_TO_SERVICE_ALIASES', () => {
+    const aliasMap = PROJECT_TO_SERVICE_ALIASES as Record<string, string>;
+    for (const action of PROJECT_ACTIONS) {
+      expect(
+        Object.prototype.hasOwnProperty.call(aliasMap, action),
+        `PROJECT_ACTIONS entry "${action}" missing from PROJECT_TO_SERVICE_ALIASES — alias parity required for 1.0-rc.2.`,
+      ).toBe(true);
+      const alias = aliasMap[action];
+      expect(
+        typeof alias === 'string' && alias.length > 0,
+        `PROJECT_TO_SERVICE_ALIASES["${action}"] must be a non-empty string.`,
+      ).toBe(true);
+    }
+  });
+
+  it('rc.2 — MCP serverInfo.version reads VERSION from package.json (forces clients to refetch tools/list between RCs)', () => {
+    // Architect iter-2 fix #5: bumping the package version between RCs
+    // forces MCP clients to invalidate their cached tools/list. The
+    // wiring in src/mcp/server.ts:121 must read VERSION from
+    // src/version.ts, which is injected at build time from package.json.
+    const versionTs = readFileSync(resolve(REPO_ROOT, 'src', 'version.ts'), 'utf8');
+    expect(
+      /export const VERSION/.test(versionTs),
+      'src/version.ts must export a VERSION constant.',
+    ).toBe(true);
+
+    const serverTs = readFileSync(resolve(REPO_ROOT, 'src', 'mcp', 'server.ts'), 'utf8');
+    expect(
+      /name:\s*'openlander',\s*version:\s*VERSION/.test(serverTs),
+      'src/mcp/server.ts must wire serverInfo.version to the imported VERSION constant.',
+    ).toBe(true);
+
+    expect(
+      typeof VERSION === 'string' && VERSION.length > 0,
+      'VERSION must resolve to a non-empty string at runtime.',
     ).toBe(true);
   });
 

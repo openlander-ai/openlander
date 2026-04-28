@@ -133,7 +133,9 @@ const SERVICE_ALIAS_TO_PROJECT_ACTION = new Map<string, (typeof PROJECT_ACTIONS)
 const deprecationWarnedKeys = new Set<string>();
 
 /**
- * openlander_service: Infrastructure services & storage
+ * openlander_managed_service (rc.2): Infrastructure services & storage.
+ * Renamed from `SERVICE_ACTIONS` — see plan §6.7. The 21-action list is
+ * frozen verbatim from the rc.1 SERVICE_ACTIONS baseline.
  * - Service provisioning (PostgreSQL, MySQL, Redis, MongoDB, MinIO)
  * - Service lifecycle (start, stop, remove)
  * - Service credentials & connection strings
@@ -145,7 +147,7 @@ const deprecationWarnedKeys = new Set<string>();
  * - Disk usage monitoring
  * Total: 21 tools
  */
-export const SERVICE_ACTIONS = [
+export const MANAGED_SERVICE_ACTIONS = [
   'create_service',
   'list_services',
   'get_service_status',
@@ -167,6 +169,44 @@ export const SERVICE_ACTIONS = [
   'remove_volume',
   'get_disk_usage',
   'cleanup_docker',
+] as const;
+
+/**
+ * openlander_service (rc.2): Deployable-vocab composite — apps + workers.
+ * Plan §6.7 lines 834-857. These actions are aliases of the corresponding
+ * *_project actions, surfaced under the deployable namespace.
+ *
+ * Handler routing for overlapping action names (`start_service`,
+ * `stop_service`, `restart_service`, `remove_service`):
+ *   - Kind-first lookup (Architect iter-2 fix): inspect services.kind by
+ *     service_id. kind ∈ managed kinds → managed handler; else deployable.
+ *   - Param-shape fallback: presence of `database_type`/`image` keys ⇒ managed.
+ *   - Hard error last resort: ambiguous params + unresolved kind.
+ *
+ * Total: 21 tools
+ */
+export const SERVICE_ACTIONS = [
+  'list_services',
+  'stop_service',
+  'start_service',
+  'restart_service',
+  'deploy_service',
+  'archive_service',
+  'unarchive_service',
+  'update_service_config',
+  'list_env_vars',
+  'get_env_var',
+  'set_env_vars',
+  'set_global_secret',
+  'list_global_secrets',
+  'upload_secret_file',
+  'list_secret_files',
+  'remove_secret_file',
+  'expose_public',
+  'unexpose_public',
+  'enable_webhook',
+  'disable_webhook',
+  'get_webhook_config',
 ] as const;
 
 /**
@@ -232,19 +272,30 @@ export const PLATFORM_ACTIONS = [
 export type DeployAction = (typeof DEPLOY_ACTIONS)[number];
 export type ProjectAction = (typeof PROJECT_ACTIONS)[number];
 export type ServiceAction = (typeof SERVICE_ACTIONS)[number];
+export type ManagedServiceAction = (typeof MANAGED_SERVICE_ACTIONS)[number];
 export type MonitorAction = (typeof MONITOR_ACTIONS)[number];
 export type PlatformAction = (typeof PLATFORM_ACTIONS)[number];
 
-export type CompositeAction = DeployAction | ProjectAction | ServiceAction | MonitorAction;
+export type CompositeAction =
+  | DeployAction
+  | ProjectAction
+  | ServiceAction
+  | ManagedServiceAction
+  | MonitorAction;
 export type AllAction = CompositeAction | PlatformAction;
 
 /**
- * Composite registry for routing
+ * Composite registry for routing.
+ *
+ * rc.2: `openlander_service` is the deployable-vocab composite (21 actions);
+ * the rc.1 managed-only set is exported as `openlander_managed_service`.
+ * Plan §6.7 lines 859-866.
  */
 export const COMPOSITE_REGISTRY = {
   openlander_deploy: DEPLOY_ACTIONS,
   openlander_project: PROJECT_ACTIONS,
   openlander_service: SERVICE_ACTIONS,
+  openlander_managed_service: MANAGED_SERVICE_ACTIONS,
   openlander_monitor: MONITOR_ACTIONS,
 } as const;
 
@@ -428,10 +479,278 @@ export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): Compo
   };
 }
 
+/**
+ * Set of action names that exist in BOTH the deployable and managed
+ * composites. When a caller invokes one of these via `openlander_service`
+ * the dispatcher must disambiguate (kind-first lookup → param-shape
+ * fallback → hard error). Plan §6.7 line 871.
+ */
+const OVERLAPPING_SERVICE_ACTIONS = new Set<string>(
+  (SERVICE_ACTIONS as readonly string[]).filter((name) =>
+    (MANAGED_SERVICE_ACTIONS as readonly string[]).includes(name),
+  ),
+);
+
+/** Managed `services.kind` values per plan §6.3. */
+const MANAGED_KINDS = new Set<string>(['postgres', 'mysql', 'redis', 'mongo', 'minio']);
+
+/**
+ * Per-session dedup set for the rc.2 `[mcp:rename]` deprecation warning.
+ * Plan §6.7 line 869.
+ */
+const renameWarnedKeys = new Set<string>();
+
+interface DbWithGetService {
+  getService?: (id: string) => { kind?: string | null } | undefined;
+}
+
+/**
+ * Disambiguation for overlapping action names invoked under
+ * `openlander_service`. Returns:
+ *   - `'managed'` → route to `MANAGED_SERVICE_ACTIONS` handler
+ *   - `'deployable'` → route to `SERVICE_ACTIONS` handler (default)
+ *   - `'ambiguous'` → caller must explicitly disambiguate; hard error
+ *
+ * Resolution order (Architect iter-2 fix):
+ *   1. Kind-first lookup: services.kind by service_id
+ *   2. Param-shape fallback: presence of database_type/image
+ *   3. Default: deployable
+ */
+function disambiguateOverlappingService(
+  params: Record<string, unknown> | undefined,
+  context: ToolContext,
+): 'managed' | 'deployable' | 'ambiguous' {
+  const serviceId =
+    typeof params?.service_id === 'string' && params.service_id.length > 0
+      ? params.service_id
+      : undefined;
+
+  // (1) Kind-first DB lookup. Best-effort: if appCtx.db.getService is
+  // unavailable (test fixture), fall through to param-shape inspection.
+  if (serviceId) {
+    const appCtx = (context as { appCtx?: { db?: DbWithGetService } }).appCtx;
+    const db = appCtx?.db;
+    if (db && typeof db.getService === 'function') {
+      try {
+        const svc = db.getService(serviceId);
+        if (svc) {
+          const kind = svc.kind ?? null;
+          if (kind && MANAGED_KINDS.has(kind)) return 'managed';
+          if (kind) return 'deployable';
+        }
+      } catch {
+        // DB may be partially mocked in tests — fall through.
+      }
+    }
+  }
+
+  // (2) Param-shape fallback.
+  if (params) {
+    if (typeof params.database_type === 'string' && params.database_type.length > 0) {
+      return 'managed';
+    }
+    if (typeof params.image === 'string' && params.image.length > 0) {
+      return 'managed';
+    }
+  }
+
+  // (3) When the caller supplied a service_id we couldn't resolve and
+  // the params shape is silent, the request is ambiguous.
+  if (serviceId) {
+    return 'ambiguous';
+  }
+
+  return 'deployable';
+}
+
+/**
+ * rc.2: openlander_service composite — deployable-vocab actions with
+ * kind-first dispatch into the managed composite for overlapping names.
+ *
+ * Plan §6.7 lines 868-871:
+ *   - `create_service` is managed-only — auto-route to
+ *     `openlander_managed_service.create_service` with a
+ *     `[mcp:rename] tool=openlander_service action=create_service
+ *     redirected_to=openlander_managed_service since=1.0-rc.2 removed_in=2.0`
+ *     warning logged once per session.
+ *   - Overlapping names (`start_service`, `stop_service`, `restart_service`,
+ *     `remove_service`) disambiguate per `disambiguateOverlappingService`.
+ *   - All other deployable actions go to the deployable handler directly.
+ */
 export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): CompositeTool {
+  const description =
+    'Deployable services (apps + workers): lifecycle, config, env vars, secrets, public exposure, webhook management.';
+  const toolName = 'openlander_service';
+  const deployableActions = COMPOSITE_REGISTRY[toolName];
+  const managedActions = COMPOSITE_REGISTRY.openlander_managed_service;
+  // Resolve every deployable-vocab action name (e.g. `deploy_service`) to the
+  // underlying ToolDef by walking the rc.1 alias map first
+  // (SERVICE_ALIAS_TO_PROJECT_ACTION). This lets the deployable composite
+  // reuse the existing *_project handlers without duplicating tool defs.
+  const deployableToolDefs: ToolDef[] = deployableActions
+    .map((alias) => {
+      // Try direct lookup first (e.g. list_services hits a real tool def).
+      const direct = toolDefs.find((def) => def.name === alias);
+      if (direct) return direct;
+      // Otherwise resolve via the alias → *_project map (e.g.
+      // `deploy_service` → `redeploy_project`, `stop_service` → `stop_project`).
+      const legacyName = SERVICE_ALIAS_TO_PROJECT_ACTION.get(alias);
+      if (legacyName) {
+        const aliased = toolDefs.find((def) => def.name === legacyName);
+        if (aliased) {
+          // Surface the deployable-vocab name so help / errors carry the
+          // canonical rc.2 vocabulary, not the legacy *_project names.
+          return { ...aliased, name: alias };
+        }
+      }
+      return undefined;
+    })
+    .filter((def): def is ToolDef => def !== undefined);
+  const managedToolDefs = buildCompositeToolDefs(toolDefs, managedActions);
+
+  // Cache the once-per-session dedup id from context.
+  const emitRenameWarn = (action: string, redirectedTo: string, context: ToolContext): void => {
+    const sessionId = (context as { sessionId?: string }).sessionId ?? 'unknown';
+    const warnKey = `${sessionId}:${action}->${redirectedTo}`;
+    if (renameWarnedKeys.has(warnKey)) return;
+    renameWarnedKeys.add(warnKey);
+    console.warn(
+      `[mcp:rename] tool=openlander_service action=${action} redirected_to=${redirectedTo} since=1.0-rc.2 removed_in=2.0`,
+    );
+  };
+
+  return {
+    name: toolName,
+    description,
+    inputSchema: compositeToolInputSchema,
+    execute: async (args, context) => {
+      const { action, params } = args as { action: string; params?: Record<string, unknown> };
+
+      if (action === 'help') {
+        return {
+          composite: toolName,
+          description,
+          actions: deployableToolDefs.map((def) => ({
+            name: def.name,
+            description: def.mcpDescription ?? def.description,
+          })),
+          _agent_guidance: {
+            message: `Pick an action and call with params. Example: { action: "${deployableToolDefs[0]?.name ?? 'help'}", params: { ... } }`,
+          },
+        };
+      }
+
+      // (a) `create_service` is managed-only — auto-route + deprecation warn.
+      if (action === 'create_service') {
+        emitRenameWarn('create_service', 'openlander_managed_service', context);
+        const def = managedToolDefs.find((item) => item.name === 'create_service');
+        if (!def) {
+          return {
+            error: 'UNKNOWN_ACTION',
+            action,
+            composite: toolName,
+            available_actions: deployableToolDefs.map((item) => item.name).sort(),
+            _agent_guidance: {
+              message: `Unknown action "${action}". Use action="help" to see available operations.`,
+            },
+          };
+        }
+        const parsed = def.inputSchema.safeParse(params ?? {});
+        if (!parsed.success) {
+          return {
+            error: 'INVALID_PARAMS',
+            action,
+            composite: toolName,
+            details: parsed.error.message,
+            _agent_guidance: {
+              message: `Invalid parameters for action "${action}". Use action="help" to see parameter details.`,
+            },
+          };
+        }
+        const result = await def.execute(parsed.data, context);
+        return def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
+      }
+
+      // (b) Overlapping names — kind-first lookup → param-shape fallback → hard error.
+      if (OVERLAPPING_SERVICE_ACTIONS.has(action)) {
+        const verdict = disambiguateOverlappingService(params, context);
+        if (verdict === 'ambiguous') {
+          return {
+            error: 'AMBIGUOUS_ACTION',
+            action,
+            composite: toolName,
+            _agent_guidance: {
+              message: `Ambiguous service action — use openlander_managed_service.${action} for databases or openlander_service.${action} with explicit service_id for deployables.`,
+            },
+          };
+        }
+        const targetDefs = verdict === 'managed' ? managedToolDefs : deployableToolDefs;
+        const def = targetDefs.find((item) => item.name === action);
+        if (!def) {
+          // Should not happen — overlapping set guarantees both registries have the action.
+          return {
+            error: 'UNKNOWN_ACTION',
+            action,
+            composite: toolName,
+            available_actions: deployableToolDefs.map((item) => item.name).sort(),
+            _agent_guidance: {
+              message: `Unknown action "${action}". Use action="help" to see available operations.`,
+            },
+          };
+        }
+        const parsed = def.inputSchema.safeParse(params ?? {});
+        if (!parsed.success) {
+          return {
+            error: 'INVALID_PARAMS',
+            action,
+            composite: toolName,
+            details: parsed.error.message,
+            _agent_guidance: {
+              message: `Invalid parameters for action "${action}". Use action="help" to see parameter details.`,
+            },
+          };
+        }
+        const result = await def.execute(parsed.data, context);
+        return def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
+      }
+
+      // (c) Pure deployable action — direct dispatch.
+      const def = deployableToolDefs.find((item) => item.name === action);
+      if (!def) {
+        return {
+          error: 'UNKNOWN_ACTION',
+          action,
+          composite: toolName,
+          available_actions: deployableToolDefs.map((item) => item.name).sort(),
+          _agent_guidance: {
+            message: `Unknown action "${action}". Use action="help" to see available operations.`,
+          },
+        };
+      }
+
+      const parsed = def.inputSchema.safeParse(params ?? {});
+      if (!parsed.success) {
+        return {
+          error: 'INVALID_PARAMS',
+          action,
+          composite: toolName,
+          details: parsed.error.message,
+          _agent_guidance: {
+            message: `Invalid parameters for action "${action}". Use action="help" to see parameter details.`,
+          },
+        };
+      }
+
+      const result = await def.execute(parsed.data, context);
+      return def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
+    },
+  };
+}
+
+export function createOpenLanderManagedServiceCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
-    'openlander_service',
-    'Services, credentials, backups, users, buckets, volumes, disk usage, Docker cleanup.',
+    'openlander_managed_service',
+    'Managed infrastructure services (Postgres, MySQL, Redis, Mongo, MinIO): provisioning, credentials, backups, users, buckets, volumes, disk usage, Docker cleanup.',
     toolDefs,
   );
 }
@@ -449,6 +768,7 @@ export function createCompositeTools(toolDefs: ToolDef[]): CompositeTool[] {
     createOpenLanderDeployCompositeTool(toolDefs),
     createOpenLanderProjectCompositeTool(toolDefs),
     createOpenLanderServiceCompositeTool(toolDefs),
+    createOpenLanderManagedServiceCompositeTool(toolDefs),
     createOpenLanderMonitorCompositeTool(toolDefs),
   ];
 }

@@ -16,6 +16,11 @@
  * in PR2/PR3 once new pages are validated. PR1 keeps both sidebars
  * coexisting; only V2 routes (`/home`, `/activity`, `/mcp`) render this
  * one.
+ *
+ * 1.0-rc.2 (data-model fullsplit): the Projects badge counts groups
+ * (formerly projects). Service-level navigation goes through the
+ * Workspace items (Activity, Deployments, Monitoring) which all reflect
+ * the group/service hierarchy on their detail pages.
  */
 import { useLocation, useNavigate } from 'react-router-dom';
 import {

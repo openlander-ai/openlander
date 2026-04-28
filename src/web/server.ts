@@ -426,13 +426,19 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
 
   server.listen(options.port, options.host, () => {
     log.info({ version: VERSION, port: options.port }, `OpenLander v${VERSION} listening`);
-    // Announce data-model alignment phase. rc.1 ships vocabulary alignment:
-    // canonical URLs (/projects/:p/services/:s) + MCP alias actions. Schema
-    // unchanged. rc.2 lands the schema split + hook rewire. See
-    // ralplan-data-model-full-migration §6.B for full runbook.
+    // Announce data-model alignment phase. 1.0 GA = full split:
+    // schema migration 0009 (projects → groups + services with kind),
+    // MCP composite namespace rename (openlander_service is now deployable-
+    // vocab; today's managed-only moved to openlander_managed_service),
+    // 17 frontend hook call sites rewired, REST handlers natively read the
+    // new shape. See ralplan-data-model-full-migration for full runbook.
     log.info(
-      { phase: '1.0-rc.1', scope: 'B-vocabulary-alignment', next: '1.0-rc.2 schema-split' },
-      '[data-model-alignment] phase=1.0-rc.1 (B-vocabulary-alignment) next=1.0-rc.2 (schema-split)',
+      {
+        phase: '1.0',
+        scope: 'GA-full-split',
+        followup: 'legacy-column-drop in 1.0.x patch',
+      },
+      '[data-model-alignment] phase=1.0 (GA-full-split) followup=legacy-column-drop',
     );
     const host = options.host || 'localhost';
     console.log(`\n  OpenLander v${VERSION}\n  http://${host}:${String(options.port)}\n`);

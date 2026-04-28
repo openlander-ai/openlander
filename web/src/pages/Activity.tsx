@@ -7,6 +7,12 @@
  *   - Empty-state copy when filters yield zero matches
  *
  * The row primitive is shared with Home (and MCP Server).
+ *
+ * 1.0-rc.2 (data-model fullsplit): filter pills on this page key on
+ * group id (`project_id` field on the event), since group-level activity
+ * is the natural roll-up for an audit timeline. Service-level filtering
+ * keys on `service_id` and is exposed inside ServiceDetailV2's Activity
+ * surface (rc.2 will route service rows accordingly).
  */
 import { useNavigate } from 'react-router-dom';
 import { OuterCard } from '@/components/Shell/OuterCard';

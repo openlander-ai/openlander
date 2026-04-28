@@ -30,6 +30,9 @@ export function DeploymentsList({
 }: DeploymentsListProps) {
   const navigate = useNavigate();
   const { t } = useLanguage();
+  // 1.0-rc.2: `useDeployments` parameter is now named `serviceId` — for legacy
+  // deployables the value is identical to the historical project id, so we
+  // pass `projectId` straight through without prop renaming on this caller.
   const { deployments, loading, error, refetch } = useDeployments(projectId, projectStatus);
   const filteredDeployments = deployments.filter((deploy) => {
     if (statusFilter === 'all') return true;

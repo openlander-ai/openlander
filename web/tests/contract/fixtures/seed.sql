@@ -29,10 +29,11 @@ VALUES (
 );
 
 -- ─── Services ─────────────────────────────────────────────────────────────────
--- The services table is global (no project_id). svc-web is the seeded
--- "has-metrics" service; svc-db is the seeded "no-metrics" service that
--- exercises the 204 path.
-INSERT OR REPLACE INTO services (id, name, type, image, status, container_id, container_name, port, created_at, updated_at)
+-- Post-0009 services table requires project_id (FK → projects) and kind.
+-- Managed services land in the synthetic __orphan_managed group; svc-web
+-- imitates a deployable but is treated as a generic "application" via legacy
+-- type column for the metrics endpoint test (which keys on service_id only).
+INSERT OR REPLACE INTO services (id, name, type, image, status, container_id, container_name, port, project_id, kind, created_at, updated_at)
 VALUES (
   'svc-web',
   'svc-web',
@@ -42,11 +43,13 @@ VALUES (
   NULL,
   'ol-svc-svc-web',
   3000,
+  '__orphan_managed',
+  'image',
   '2025-01-15T00:00:00.000Z',
   '2025-01-15T00:00:00.000Z'
 );
 
-INSERT OR REPLACE INTO services (id, name, type, image, status, container_id, container_name, port, created_at, updated_at)
+INSERT OR REPLACE INTO services (id, name, type, image, status, container_id, container_name, port, project_id, kind, created_at, updated_at)
 VALUES (
   'svc-db',
   'svc-db',
@@ -56,6 +59,8 @@ VALUES (
   NULL,
   'ol-svc-svc-db',
   5432,
+  '__orphan_managed',
+  'postgres',
   '2025-01-15T00:00:00.000Z',
   '2025-01-15T00:00:00.000Z'
 );

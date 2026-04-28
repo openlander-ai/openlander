@@ -57,7 +57,13 @@ describe('ActivityLogRepo', () => {
   beforeEach(() => {
     const db = createDrizzleDatabase(':memory:');
     sqlite = db.sqlite;
-    migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    // 0009 drops parent tables; mirror src/db/index.ts:435-443 production path.
+    sqlite.exec('PRAGMA foreign_keys = OFF');
+    try {
+      migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    } finally {
+      sqlite.exec('PRAGMA foreign_keys = ON');
+    }
     repo = new ActivityLogRepo(db.db, db.sqlite);
   });
 

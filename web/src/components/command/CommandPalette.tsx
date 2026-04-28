@@ -1,3 +1,8 @@
+// 1.0-rc.2 (data-model fullsplit): the palette searches across groups
+// (formerly projects). Per-service drill-in stays under the legacy
+// `/services/:id?project=:p` URL — App.tsx redirects to the canonical
+// `/projects/:p/services/:s` shape since rc.1, so palette deep-links
+// keep working without per-action rewires.
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectsContext } from '@/hooks/use-projects-context';

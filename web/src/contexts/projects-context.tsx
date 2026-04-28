@@ -20,6 +20,12 @@
  *     the default `includeArchived: false` scope. Splitting the
  *     context into two scopes seemed like premature complexity for one
  *     consumer.
+ *
+ * 1.0-rc.2 (data-model fullsplit) note: post-fullsplit, the shared
+ * value is conceptually the *group* list. Deployable-only fields stay
+ * populated during the additive-schema transition so consumers keep
+ * rendering; for canonical deployable detail use
+ * `useGroupServices(groupId)`.
  */
 import { createContext, type ReactNode } from 'react';
 import { useProjects, type UseProjectsReturn } from '@/hooks/use-projects';

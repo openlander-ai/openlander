@@ -15,6 +15,11 @@
  * Host-level system metrics (CPU/Mem/Disk for the machine itself) are
  * NOT shown — agent-first principle: the agent already has `docker stats`
  * via MCP. Adding a duplicate human dashboard would be slop.
+ *
+ * 1.0-rc.2 (data-model fullsplit): the project filter dropdown keys on
+ * group id (`projectId` from the projects context). Each row's drill-in
+ * navigates to a service id (`/services/:s?project=:p`), keying the
+ * monitoring detail on the service-level identifier under the new schema.
  */
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';

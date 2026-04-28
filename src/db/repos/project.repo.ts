@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import {
   OpenLanderError,
   ProjectAlreadyExistsError,
@@ -24,6 +24,13 @@ export interface ProjectWithMetadata {
 }
 
 const log = createModuleLogger('project-repo');
+
+/**
+ * Synthesized group hosting all managed services post-0009 split. Never
+ * user-facing; filtered out of listProjects/getProjectByName results.
+ * Plan §6.3 Phase C.
+ */
+const ORPHAN_MANAGED_GROUP_ID = '__orphan_managed';
 
 export class ProjectRepo {
   constructor(
@@ -96,22 +103,20 @@ export class ProjectRepo {
     opts?: { includeArchived?: boolean },
     _serverId?: string,
   ): ProjectRow[] {
-    const conditions = [];
+    // Always exclude the synthesized __orphan_managed group (post-0009).
+    const conditions = [ne(projects.id, ORPHAN_MANAGED_GROUP_ID)];
     if (status) {
       conditions.push(eq(projects.status, status));
     }
     if (!opts?.includeArchived) {
       conditions.push(isNull(projects.archived_at));
     }
-    if (conditions.length > 0) {
-      return this.db
-        .select()
-        .from(projects)
-        .where(and(...conditions))
-        .orderBy(desc(projects.updated_at))
-        .all() as ProjectRow[];
-    }
-    return this.db.select().from(projects).orderBy(desc(projects.updated_at)).all() as ProjectRow[];
+    return this.db
+      .select()
+      .from(projects)
+      .where(and(...conditions))
+      .orderBy(desc(projects.updated_at))
+      .all() as ProjectRow[];
   }
 
   /**
@@ -307,7 +312,7 @@ export class ProjectRepo {
     return this.db
       .select()
       .from(projects)
-      .where(isNotNull(projects.archived_at))
+      .where(and(isNotNull(projects.archived_at), ne(projects.id, ORPHAN_MANAGED_GROUP_ID)))
       .orderBy(desc(projects.updated_at))
       .all() as ProjectRow[];
   }

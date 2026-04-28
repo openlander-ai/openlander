@@ -13,6 +13,9 @@
  *
  * 10s flat polling — fast enough to feel live without melting a
  * single-tenant box.
+ *
+ * 1.0-rc.2 (data-model fullsplit) note: signature unchanged — `serviceId`
+ * is already the canonical service-level identifier under the new schema.
  */
 import { useCallback, useState } from 'react';
 import { fetchServiceMetrics, type MetricsRange, type ServiceMetrics } from '../lib/api/services';
