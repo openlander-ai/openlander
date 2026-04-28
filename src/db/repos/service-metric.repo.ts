@@ -78,4 +78,19 @@ export class ServiceMetricRepo {
       .get();
     return row !== undefined;
   }
+
+  /**
+   * Latest sample timestamp regardless of window. Used by the v4
+   * /api/monitoring/services route to render a "stale" badge with the
+   * actual age when a service has historical metrics but no samples in
+   * the polling window. Returns null when no samples exist at all.
+   */
+  getLastSampleAt(serviceId: string): number | null {
+    const row = this.db
+      .select({ recorded_at: sql<number | null>`MAX(${serviceMetrics.recorded_at})` })
+      .from(serviceMetrics)
+      .where(eq(serviceMetrics.service_id, serviceId))
+      .get();
+    return row?.recorded_at ?? null;
+  }
 }

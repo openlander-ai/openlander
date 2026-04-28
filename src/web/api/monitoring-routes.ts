@@ -117,20 +117,21 @@ export function createMonitoringRoutes(ctx: AppContext): Hono {
       if (projectScoped && projectId !== projectFilter) continue;
       total += 1;
 
+      // Per Critic Amendment #2: only services with NO metrics ever are
+      // excluded. Services with historical samples but none in the recent
+      // window are surfaced as stale (Codex CCG flagged the prior
+      // behavior — silently dropping >60m-old services — as a HIGH).
       if (!ctx.db.hasAnyServiceMetrics(svc.id)) {
         excluded += 1;
         continue;
       }
 
       const samples = ctx.db.listServiceMetricsSince(svc.id, fromMs);
-      if (samples.length === 0) {
-        excluded += 1;
-        continue;
-      }
-
-      const cpu60 = downsample(samples.map((s) => s.cpu));
-      const mem60 = downsample(samples.map((s) => s.mem));
-      const lastSampleAt = samples[samples.length - 1]?.recorded_at ?? null;
+      const cpu60 = samples.length > 0 ? downsample(samples.map((s) => s.cpu)) : [];
+      const mem60 = samples.length > 0 ? downsample(samples.map((s) => s.mem)) : [];
+      const lastInWindow = samples[samples.length - 1]?.recorded_at ?? null;
+      const lastEver = ctx.db.getLastServiceMetricAt(svc.id);
+      const lastSampleAt = lastInWindow ?? lastEver;
       const stale = lastSampleAt == null ? true : now - lastSampleAt > STALE_AFTER_MS;
 
       out.push({

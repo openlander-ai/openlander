@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePollingTask } from '@/hooks/use-polling-task';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
   approveActionRun,
@@ -15,7 +15,6 @@ import { TOOL_HUMAN_LABELS } from '@/components/ops/utils';
 
 export function ApprovalDialog() {
   const { t, language } = useLanguage();
-  const navigate = useNavigate();
   const [allPending, setAllPending] = useState<ActionRun[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,10 +99,13 @@ export function ApprovalDialog() {
     setDismissed(false);
   }, [pending?.id]);
 
-  // /operations was retired in Phase 1 hardening (ralplan-monitoring-logs);
-  // /activity is the v4 audit-log surface where the pending approvals also
-  // surface, so suppress the toast there to avoid duplication.
-  if (!pending || dismissed || location.pathname === '/activity') {
+  // /operations was retired in Phase 1 hardening (ralplan-monitoring-logs).
+  // No dedicated approvals page in 1.0 — the dialog is now the only
+  // approval surface, so it must render on every page (including
+  // /activity) when there's something pending. Codex CCG flagged the
+  // earlier `/activity` suppression as a launch blocker.
+  void location; // intentionally unused — kept for future per-page rules
+  if (!pending || dismissed) {
     return null;
   }
 
@@ -193,13 +195,13 @@ export function ApprovalDialog() {
         </Button>
 
         {remainingCount > 0 && (
-          <button
-            type="button"
-            onClick={() => navigate('/activity')}
-            className="ml-auto text-[11px] text-agent hover:text-agent/80 transition-colors underline underline-offset-2"
-          >
+          // Static count — no destination page exists in 1.0; the dialog
+          // cycles through pending approvals one at a time as the user
+          // resolves them. Was a navigate-to-/operations button in v1
+          // but /operations was retired (ralplan Phase 1).
+          <span className="ml-auto text-[11px] text-agent">
             {t('agent.approval.pendingMore', { count: String(remainingCount) })}
-          </button>
+          </span>
         )}
       </div>
     </div>

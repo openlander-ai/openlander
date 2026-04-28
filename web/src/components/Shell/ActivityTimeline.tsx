@@ -60,8 +60,11 @@ export interface ActivityRowProps {
   isLast?: boolean;
   onOpenService?: (project: string, service: string) => void;
   /** Click handler for deploy_* events. Receives the deployment id
-   *  (server-side: event.id has the form `deploy-<id>`). */
-  onOpenDeployment?: (deploymentId: string) => void;
+   *  (server-side: event.id has the form `deploy-<id>`) plus the
+   *  project id (non-null at call time per the guard) so the consumer
+   *  can construct the nested `/projects/:id/deployments/:deployId`
+   *  route required by DeploymentDetail. */
+  onOpenDeployment?: (deploymentId: string, projectId: string) => void;
 }
 
 export function ActivityRow({
@@ -99,19 +102,20 @@ export function ActivityRow({
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          {isKindInGroup(event.kind, 'deploys') && onOpenDeployment ? (
+          {isKindInGroup(event.kind, 'deploys') && onOpenDeployment && event.project ? (
             (() => {
               // event.id has the form `deploy-<deploymentId>` per
               // src/web/api/activity-routes.ts. Strip the prefix to deep-link.
               const deploymentId = event.id.startsWith('deploy-')
                 ? event.id.slice('deploy-'.length)
                 : event.id;
+              const projectId = event.project;
               return (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onOpenDeployment(deploymentId);
+                    onOpenDeployment(deploymentId, projectId);
                   }}
                   className="text-left text-[13.5px] leading-snug text-[color:var(--ol-fg)] transition-colors hover:text-[color:var(--ol-primary)] hover:underline"
                 >
@@ -162,9 +166,9 @@ export interface ActivityTimelineProps {
   events: ActivityEvent[];
   onOpenService?: (project: string, service: string) => void;
   /** Click handler for deploy_* rows. When provided AND the row is a
-   *  deploy event, the title becomes a clickable deep-link to the
-   *  deployment detail page. */
-  onOpenDeployment?: (deploymentId: string) => void;
+   *  deploy event with a non-null project, the title becomes a
+   *  clickable deep-link to the deployment detail page. */
+  onOpenDeployment?: (deploymentId: string, projectId: string) => void;
   /** Show filter pills above the stream (Activity page) */
   showFilters?: boolean;
   /** When showFilters is true, project pill needs the project list */
