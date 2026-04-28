@@ -22,3 +22,40 @@
 - [ ] If Phase C overruns, drop Project view's Deployments/Environment/Settings tabs and ship Project view as Overview-only. Confirm this fallback is acceptable, or pick a different cut-line.
 - [ ] Synthetic-metrics fallback behaviour: should synthetic data be deterministic per-service (so reloads don't flicker) or live-randomized? Plan says deterministic; verify with user.
 
+## ralplan-data-model-full-migration - 2026-04-28 (iter 2 — Option E)
+
+iter-1 gating questions Q2 / Q5 / Q9 are RESOLVED:
+
+- ~~[ ] `secret_files` ownership~~ — RESOLVED: stays at `projects.id` (group). Verified `src/pipeline/compose.ts:668` `getSecretFilesForDeploy(parentProjectId)` shares result across compose siblings via `sharedSecretFiles` (compose.ts:790).
+- ~~[ ] `projectDependencies` triple-rename~~ — RESOLVED: `source_project_id` → `source_service_id`; `target_project_id` → `target_service_id`; today's `target_service_id` → `target_managed_service_id`. Verified `src/db/schema.drizzle.ts:601-623`.
+- ~~[ ] Mac-mini production data fixture~~ — RESOLVED: hand-built representative fixture at `test/fixtures/openlander-1.0-pre-fullsplit.db`. Captured-data path rejected (PII scrub complexity + per-user variance + OSS privacy concerns).
+
+Remaining items (post-1.0 considerations, NON-GATING for 1.0):
+
+- [ ] `__orphan_managed` group naming + visibility (1.1) — synthesized group hosts unattached managed services. Default 1.0: hide via special-case in `useProjectsContext` filter. Revisit in 1.1 with "Managed" badge alternative.
+- [ ] Compose v2 semantics shape (1.1+) — 1.0 unwind preserves "parent + N children". A v2 might collapse compose into a single `services` row. NOT foreclosed by 1.0 schema (`parent_service_id` self-FK accommodates both shapes).
+- [ ] Deprecation deadline (2.0) — legacy `*_project` MCP actions removed in 2.0. 1.x is the deprecation window. Confirm semver policy at 1.5 milestone.
+- [ ] Audit log retention (1.1+) — `migration_0009_audit` is append-only. Future migrations using this pattern should consolidate into a single `__migrations_audit` partitioned by `migration_tag`.
+- [ ] `bun run scripts/migrate-dry-run.ts` home — RESOLVED: `scripts/` (existing) per consistency with `scripts/db-inspect.ts`. Non-gating.
+- [ ] Parent-branch merge style (1.0 process) — squash-merge vs merge-commit per RC. Default: merge-commit per RC for bisect-friendliness. Confirm before merging rc.1 / rc.2.
+
+## ralplan-data-model-alignment - 2026-04-28 (revised iter 3) — SUPERSEDED by full-migration plan above
+
+Iter-1/iter-2 questions about `/resources`, `CreateResourceDialog.tsx` rename, and MCP composite tweaks are STRUCK — the plan was reframed in iter 3 to drop the "Resource" noun entirely and to drop all server-side endpoint work. Active questions for iter-3 plan:
+
+- [ ] Managed-detail render path choice: gate inside `ServiceDetailV2` (planner default — ~1-2 hr) vs net-new `web/src/pages/ManagedServiceDetail.tsx` (~3-4 hr realistic given ServiceDetailV2's hook entanglement with `useProjectsContext`/`useProjectTopology`/`useServiceHealth`/`useServiceMetrics`/`useDeployments`) vs scope-cut "redirect-to-list with toast" fallback. Decision point during Phase 1 step 3 — needs user yes/no before that step starts.
+- [ ] `/services` route handling: keep `<Navigate to="/managed-services" replace />` redirect (planner default — preserves bookmarks; 4 doc files and dogfood bookmarks land on `/services` today) vs hard-remove (cleaner, breaks bookmarks/docs). Affects external link stability.
+- [ ] Lint guardrail (`vocabulary-audit.test.ts`) activation timing: activate immediately with the verified 21-action baseline (planner default — catches new debt during 1.0→1.1 window) vs activate post-1.0-RC. The frozen baseline IS today's verified count.
+- [ ] README "What's coming" pointer to data-model-evolution roadmap: add (planner default — OSS adopters land on README first) vs skip (release notes are enough).
+- [ ] [DEFERRED to 1.1 design pass] MCP composite shape for new `*_service` actions: extend `openlander_service` (currently managed-only, 21 actions in `SERVICE_ACTIONS` at `src/mcp/composite-tools.ts:97-119`) to also cover deployables, vs introduce a new `openlander_deployable` composite, vs rename today's `openlander_service` to `openlander_managed_service`. All three options remain open since iter-3 plan deliberately does not introduce a noun in 1.0.
+- [ ] [DEFERRED to 1.1 design pass] API endpoint shape for the design-vocab deployables-list: extend already-existing `GET /api/projects/:id/topology` (returns `{services: [...]}` per `src/web/api/project-routes.ts:598`) as the canonical endpoint, vs introduce non-colliding new path (e.g., `/api/projects/:id/deployables`). Either decision goes through endpoint-collision audit grep first (Scenario 4 detect step in iter-3 plan).
+
+## ralplan-monitoring-logs - 2026-04-28
+
+- [ ] Page name `/logs` vs `/deploys` — content is deploy-scoped (no Traefik, no runtime tail, no audit). Architect should weigh in. Planner default: keep `/logs` for sidebar real estate; revisit naming in 1.1 if user feedback flags the mismatch.
+- [ ] Empty-state policy on `GET /api/monitoring/services` for services with zero samples: include row with empty arrays (UI shows "—") or exclude entirely? Planner default: include — predictable UI, clearer "service exists but isn't sampling yet" signal.
+- [ ] Phase 1 OpsCenterV2 retire — delete `src/web/api/ops-routes.ts` entirely, or keep file (remove route registration only) in case MCP tools still call it? Planner default: keep file, drop route registration, audit MCP consumers in 1.1.
+- [ ] Codename rename gate vs feature completeness — confirm shipping as 1.0 (not 0.9.0) is correct given memory rule "rename to real brand at 1.0.0". Phase 1+2+3 closes the visible "coming soon" surface, but only the user can call the brand-rename trigger.
+- [ ] D-3 timeline acceptance — 18 hr planner-estimate, 26 hr at 1.45× fudge, 24 hr available. Confirm user accepts zero-buffer plan or wants Phase 3 cut-line moved (drop log-line summary column → ship as plain DeploymentsList styling).
+- [ ] `summary` line truncation policy on `/api/logs/recent` — 120 chars from last non-empty `log_text` line. Confirm 120 is right, and confirm "last non-empty" is the right strategy vs "first line" (some deploys' last lines are noisy success markers).
+
