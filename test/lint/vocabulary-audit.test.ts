@@ -15,7 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PROJECT_ACTIONS } from '../../src/mcp/composite-tools.js';
+import { PROJECT_ACTIONS, PROJECT_TO_SERVICE_ALIASES } from '../../src/mcp/composite-tools.js';
 
 const REPO_ROOT = resolve(__dirname, '..', '..');
 
@@ -100,5 +100,40 @@ describe('vocabulary-audit (data-model-alignment guardrail)', () => {
       /backToServices\s*:/.test(en),
       'backToServices key removed from web/src/i18n/en.ts — required by 1.1 ServiceHeader revival.',
     ).toBe(true);
+  });
+
+  it('PROJECT_TO_SERVICE_ALIASES exists, has exactly 21 entries, every value is a non-empty string', () => {
+    // Runtime import (not regex scan) — structural check is syntax-aware.
+    // 21 entries must match PROJECT_ACTIONS.length (frozen at 21 for 1.0-rc.1).
+    const aliasMap = PROJECT_TO_SERVICE_ALIASES as Record<string, string>;
+
+    expect(
+      typeof aliasMap,
+      'PROJECT_TO_SERVICE_ALIASES must be exported from src/mcp/composite-tools.ts',
+    ).toBe('object');
+
+    const entries = Object.entries(aliasMap);
+
+    expect(
+      entries.length,
+      `PROJECT_TO_SERVICE_ALIASES must have exactly 21 entries (one per PROJECT_ACTION). Found ${String(entries.length)}.`,
+    ).toBe(21);
+
+    // Every key must be a PROJECT_ACTION
+    const projectActionSet = new Set<string>(PROJECT_ACTIONS);
+    for (const [key] of entries) {
+      expect(
+        projectActionSet.has(key),
+        `PROJECT_TO_SERVICE_ALIASES key "${key}" is not a PROJECT_ACTION — remove it or update PROJECT_ACTIONS.`,
+      ).toBe(true);
+    }
+
+    // Every value must be a non-empty string
+    for (const [key, value] of entries) {
+      expect(
+        typeof value === 'string' && value.length > 0,
+        `PROJECT_TO_SERVICE_ALIASES["${key}"] must be a non-empty string, got: ${String(value)}`,
+      ).toBe(true);
+    }
   });
 });

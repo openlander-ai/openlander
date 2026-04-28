@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test": "vitest run --config vitest.unit.config.ts",
     "pretest:contract": "node ../tools/qa/start-test-backend.mjs",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "posttest:contract": "node ../tools/qa/stop-test-backend.mjs"

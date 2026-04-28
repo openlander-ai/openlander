@@ -82,6 +82,57 @@ export const PROJECT_ACTIONS = [
 ] as const;
 
 /**
+ * PROJECT_TO_SERVICE_ALIASES: Maps legacy *_project action names to their
+ * canonical *_service equivalents (rc.2 vocabulary). Used by openlander_project
+ * composite to accept both old and new names in rc.1 while emitting deprecation
+ * warnings for legacy callers.
+ *
+ * CRITICAL: these aliases are intentionally NOT added to SERVICE_ACTIONS —
+ * that array is for managed infrastructure services (Postgres, Redis, etc.)
+ * and `start_service` there means "start managed Postgres", not "start app".
+ * The aliases are only surfaced through openlander_project in rc.1.
+ */
+export const PROJECT_TO_SERVICE_ALIASES: Record<(typeof PROJECT_ACTIONS)[number], string> = {
+  list_projects: 'list_projects',
+  stop_project: 'stop_service',
+  start_project: 'start_service',
+  restart_project: 'restart_service',
+  redeploy_project: 'deploy_service',
+  archive_project: 'archive_service',
+  unarchive_project: 'unarchive_service',
+  update_project_config: 'update_service_config',
+  list_env_vars: 'list_env_vars',
+  get_env_var: 'get_env_var',
+  set_env_vars: 'set_env_vars',
+  set_global_secret: 'set_global_secret',
+  list_global_secrets: 'list_global_secrets',
+  upload_secret_file: 'upload_secret_file',
+  list_secret_files: 'list_secret_files',
+  remove_secret_file: 'remove_secret_file',
+  expose_public: 'expose_public',
+  unexpose_public: 'unexpose_public',
+  enable_webhook: 'enable_webhook',
+  disable_webhook: 'disable_webhook',
+  get_webhook_config: 'get_webhook_config',
+};
+
+/**
+ * Reverse map: alias → legacy action name (for openlander_project dispatcher).
+ * Built once at module load — not user-configurable.
+ */
+const SERVICE_ALIAS_TO_PROJECT_ACTION = new Map<string, (typeof PROJECT_ACTIONS)[number]>(
+  (Object.entries(PROJECT_TO_SERVICE_ALIASES) as [(typeof PROJECT_ACTIONS)[number], string][])
+    .filter(([legacy, alias]) => alias !== legacy)
+    .map(([legacy, alias]) => [alias, legacy]),
+);
+
+/**
+ * In-memory dedup set for deprecation warnings.
+ * Key: `${sessionId}:${actionName}` — warn only once per session per action.
+ */
+const deprecationWarnedKeys = new Set<string>();
+
+/**
  * openlander_service: Infrastructure services & storage
  * - Service provisioning (PostgreSQL, MySQL, Redis, MongoDB, MinIO)
  * - Service lifecycle (start, stop, remove)
@@ -294,11 +345,87 @@ export function createOpenLanderDeployCompositeTool(toolDefs: ToolDef[]): Compos
 }
 
 export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): CompositeTool {
-  return createCompositeTool(
-    'openlander_project',
-    'Projects, lifecycle, config, env vars, secrets, public exposure, webhook management.',
-    toolDefs,
-  );
+  const description =
+    'Projects, lifecycle, config, env vars, secrets, public exposure, webhook management.';
+  const toolName = 'openlander_project';
+  const actions = COMPOSITE_REGISTRY[toolName];
+  const compositeToolDefs = buildCompositeToolDefs(toolDefs, actions);
+
+  return {
+    name: toolName,
+    description,
+    inputSchema: compositeToolInputSchema,
+    execute: async (args, context) => {
+      const { action: rawAction, params } = args as {
+        action: string;
+        params?: Record<string, unknown>;
+      };
+
+      // Resolve alias → legacy action name if caller used the *_service vocabulary
+      const legacyAction = SERVICE_ALIAS_TO_PROJECT_ACTION.get(rawAction);
+      const action = legacyAction ?? rawAction;
+
+      if (action === 'help') {
+        return {
+          composite: toolName,
+          description,
+          actions: compositeToolDefs.map((def) => ({
+            name: def.name,
+            description: def.mcpDescription ?? def.description,
+          })),
+          _agent_guidance: {
+            message: `Pick an action and call with params. Example: { action: "${compositeToolDefs[0]?.name ?? 'help'}", params: { ... } }`,
+          },
+        };
+      }
+
+      // Emit once-per-session deprecation warning for legacy *_project callers
+      // (only when using the old name directly, not via alias)
+      if (!legacyAction && PROJECT_TO_SERVICE_ALIASES[action as (typeof PROJECT_ACTIONS)[number]]) {
+        const alias = PROJECT_TO_SERVICE_ALIASES[action as (typeof PROJECT_ACTIONS)[number]];
+        if (alias !== action) {
+          const sessionId = (context as { sessionId?: string }).sessionId ?? 'unknown';
+          const warnKey = `${sessionId}:${action}`;
+          if (!deprecationWarnedKeys.has(warnKey)) {
+            deprecationWarnedKeys.add(warnKey);
+            // Use console.warn directly so tests can spy on it (pino is silent in test env)
+            console.warn(
+              `[mcp][deprecation] action=${action} use=${alias} since=1.0-rc.1 removed_in=2.0`,
+            );
+          }
+        }
+      }
+
+      const def = compositeToolDefs.find((item) => item.name === action);
+      if (!def) {
+        return {
+          error: 'UNKNOWN_ACTION',
+          action: rawAction,
+          composite: toolName,
+          available_actions: compositeToolDefs.map((item) => item.name).sort(),
+          _agent_guidance: {
+            message: `Unknown action "${rawAction}". Use action="help" to see available operations.`,
+          },
+        };
+      }
+
+      const parsed = def.inputSchema.safeParse(params ?? {});
+      if (!parsed.success) {
+        return {
+          error: 'INVALID_PARAMS',
+          action: rawAction,
+          composite: toolName,
+          details: parsed.error.message,
+          _agent_guidance: {
+            message: `Invalid parameters for action "${rawAction}". Use action="help" to see parameter details.`,
+          },
+        };
+      }
+
+      const result = await def.execute(parsed.data, context);
+      return def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
+    },
+  };
 }
 
 export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): CompositeTool {

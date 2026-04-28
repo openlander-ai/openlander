@@ -66,8 +66,21 @@ type ServiceTabId =
  * ?project= was attached. Tracked in ralplan-data-model-alignment §6.
  */
 export function ServiceDetailV2() {
-  const { id } = useParams<{ id: string }>();
+  // 1.0-rc.1: two URL shapes are supported simultaneously.
+  //
+  // Canonical (rc.1+):  /projects/:p/services/:s  → params { p, s }
+  // Legacy   (rc.0):    /services/:id?project=:p  → params { id }
+  // Managed  (rc.0+):   /managed-services/:id     → params { id }
+  //
+  // The `id` field covers both legacy shapes; `s` covers canonical.
+  // rc.2 will deprecate the legacy deployable URL once all internal
+  // callers emit `/projects/:p/services/:s`.
+  const { id, s } = useParams<{ id?: string; p?: string; s?: string }>();
   const location = useLocation();
+
+  // Managed-service path takes priority — check by prefix before
+  // inspecting params so that a future managed-service canonical URL
+  // (/projects/:p/services/:s with kind=database) can be gated separately.
   if (location.pathname.startsWith('/managed-services/') && id) {
     // `key={id}` forces remount on managed-service navigation. Without
     // it, React reuses the instance and ManagedServiceDetail's stale
@@ -76,26 +89,34 @@ export function ServiceDetailV2() {
     // Codex CCG on PR #77.
     return <ManagedServiceDetail key={id} id={id} />;
   }
+
+  // Canonical path: /projects/:p/services/:s
+  // `s` is the service id; the project id is available as a route param
+  // (not query string). DeployableServiceDetail reads project via
+  // useSearchParams('project') — pass `s` as a synthetic `id` by using
+  // the key prop to force remount on navigation, matching legacy behaviour.
+  if (s) {
+    return <DeployableServiceDetail key={s} canonicalServiceId={s} />;
+  }
+
   return <DeployableServiceDetail />;
 }
 
-function DeployableServiceDetail() {
-  const { id } = useParams<{ id: string }>();
+function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: string }) {
+  // `canonicalServiceId` is set when mounted via the canonical route
+  // `/projects/:p/services/:s` — the dispatcher passes params.s here.
+  // Legacy route `/services/:id` keeps using useParams() directly.
+  const params = useParams<{ id?: string; p?: string }>();
+  const id = canonicalServiceId ?? params.id;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<ServiceTabId>('general');
   const [openDeployId, setOpenDeployId] = useState<string | null>(null);
 
-  // Derive project from query — V2 routes use /services/:id?project=…
-  // because services may share the same id across projects. PR4 will
-  // formalize this as a parent route param (e.g. `/projects/:projectId/services/:id`)
-  // once the AppLayout takeover is complete and we control all entry points.
-  //
-  // Today: if `?project=` is missing, surface the not-found branch rather
-  // than silently picking a default project (which would render the wrong
-  // services list). All internal callers (ProjectViewV2, Activity, etc.)
-  // attach `?project=` via a single openService helper.
-  const projectId = searchParams.get('project');
+  // Derive project id: canonical route exposes it as the `:p` param;
+  // legacy `/services/:id?project=:p` passes it as a query string.
+  // `params.p` is only populated when mounted via `/projects/:p/services/:s`.
+  const projectId = params.p ?? searchParams.get('project');
   // Real projects come from the AppShell-mounted ProjectsProvider; the
   // earlier mock-based `getProject()` returned null for any real (non-mock)
   // project ID, which made every service click resolve to "Service not

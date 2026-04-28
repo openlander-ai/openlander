@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { stream } from 'hono/streaming';
 import { rm } from 'node:fs/promises';
 
@@ -407,6 +408,36 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // createProjectRoutes is invoked multiple times (e.g. by test
   // harnesses re-mounting the routes).
   registerTopologyCacheInvalidation(ctx);
+
+  // ---------------------------------------------------------------------------
+  // Deprecated-endpoint middleware (rc.1)
+  // Adds X-Deprecated-Endpoint to all legacy /projects/:id/* responses so API
+  // consumers can discover and migrate to the canonical vocabulary before 2.0.
+  // Must be registered BEFORE route handlers so Hono applies it on the way out.
+  // ---------------------------------------------------------------------------
+
+  const DEPRECATED_HEADER_VALUE =
+    'use METHOD /api/projects/:p/services/:s/<verb> since=1.0-rc.1 removed_in=2.0';
+
+  // Returns true for canonical /projects/:p/services/:s/... paths — these must NOT get the header.
+  const isCanonicalProjectServicePath = (path: string): boolean =>
+    /\/projects\/[^/]+\/services\/[^/]+/.test(path);
+
+  // Hono middleware: intercept responses for legacy /projects/:id/* routes.
+  // Skip canonical /projects/:p/services/:s/... paths (Hono's /:id/* also matches those).
+  api.use('/projects/:id/*', async (c, next) => {
+    await next();
+    if (!isCanonicalProjectServicePath(c.req.path)) {
+      c.res.headers.set('X-Deprecated-Endpoint', DEPRECATED_HEADER_VALUE);
+    }
+  });
+
+  // Hono's /projects/:id/* does NOT match /projects/:id (exact, no sub-path).
+  // Add a second middleware to cover the exact route.
+  api.use('/projects/:id', async (c, next) => {
+    await next();
+    c.res.headers.set('X-Deprecated-Endpoint', DEPRECATED_HEADER_VALUE);
+  });
 
   api.post('/projects', async (c) => {
     const body = await c.req
@@ -1733,11 +1764,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         return c.json({ error: 'INVALID_ANSWER', message: 'Each answer must be an object' }, 400);
       }
 
-      const normalized = answer as {
-        questionIndex?: unknown;
-        selectedLabels?: unknown;
-        customText?: unknown;
-      };
+      const normalized = answer;
 
       const isValidQuestionIndex =
         typeof normalized.questionIndex === 'number' &&
@@ -1965,6 +1992,659 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     await ctx.pipeline.remove(previewId, ctx.cloudflare);
     return c.json({ status: 'removed', preview: preview.name });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Deprecated-endpoint middleware (rc.1)
+  // Adds X-Deprecated-Endpoint to all legacy /projects/:id/* responses so API
+  // consumers can discover and migrate to the canonical vocabulary before 2.0.
+  // Applies only to routes matched under /projects/:id/... so POST /projects
+  // (create) and GET /projects (list) are deliberately excluded.
+  // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // rc.1: 308 redirects for /api/services/:id and /api/managed-services/:id
+  // when the :id resolves to a known project (app service). Implemented as
+  // middleware (not a route handler) so unrecognised IDs fall through to
+  // system-routes.ts which owns the managed-infrastructure service endpoints.
+  // ---------------------------------------------------------------------------
+  api.use('/services/:id', async (c, next) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (project) {
+      return c.redirect(`/api/projects/${project.id}/services/${project.id}`, 308);
+    }
+    await next();
+  });
+
+  api.get('/managed-services/:id', (c) => {
+    const id = c.req.param('id');
+    // /managed-services/:id has no legacy handler — always redirect to canonical shape.
+    // Use the id as both :p and :s (managed services map 1:1 to their project scope in rc.1).
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    const projectId = project?.id ?? id;
+    return c.redirect(`/api/projects/${projectId}/services/${id}`, 308);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Canonical REST aliases — /projects/:p/services/:s/<verb>
+  // Each handler reads :p (project id/name) and :s (service/legacy project id)
+  // from URL params, then delegates to the same logic as the legacy route by
+  // temporarily mapping :s → :id in the request context.
+  //
+  // All canonical routes deliberately do NOT set X-Deprecated-Endpoint.
+  // ---------------------------------------------------------------------------
+
+  // Helper: override c.req.param('id') to return the :s (service) param so
+  // legacy getProjectOrThrow calls resolve via the service/project id in :s.
+  // Uses Context from hono (not the route-specific generic) to avoid inference issues.
+  function withServiceAsId<T>(c: Context, fn: (c: Context) => T): T {
+    const origParam = c.req.param.bind(c.req);
+    const serviceId = (origParam as (name: string) => string)('s');
+    // Monkey-patch param on this request instance only
+    c.req.param = ((name?: string) => {
+      if (name === 'id') return serviceId;
+      if (name === undefined) {
+        const all = (origParam as () => Record<string, string>)();
+        return { ...all, id: serviceId };
+      }
+      return (origParam as (n: string) => string)(name);
+    }) as typeof c.req.param;
+    return fn(c);
+  }
+
+  // GET /projects/:p/services/:s/stats
+  api.get('/projects/:p/services/:s/stats', async (c) => {
+    return withServiceAsId(c, (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      if (project.container_id && project.status === 'running') {
+        return ctx.docker
+          .getContainerStats(project.container_id)
+          .then((stats) => {
+            const s = stats as {
+              cpu_stats: {
+                cpu_usage: { total_usage: number };
+                system_cpu_usage: number;
+                online_cpus?: number;
+              };
+              precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
+              memory_stats: { usage: number; limit: number };
+            };
+            const cpuDelta =
+              s.cpu_stats.cpu_usage.total_usage - s.precpu_stats.cpu_usage.total_usage;
+            const systemDelta = s.cpu_stats.system_cpu_usage - s.precpu_stats.system_cpu_usage;
+            const cpuCountRaw = (s.cpu_stats.cpu_usage as unknown as { percpu_usage?: number[] })
+              .percpu_usage?.length;
+            const cpuCount =
+              cpuCountRaw && cpuCountRaw > 0 ? cpuCountRaw : s.cpu_stats.online_cpus || 1;
+            const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
+            return cx.json({
+              cpu: Math.round(cpuPercent * 10) / 10,
+              memory: s.memory_stats.usage,
+              memoryLimit: s.memory_stats.limit,
+              status: project.status,
+            });
+          })
+          .catch(() => cx.json({ cpu: 0, memory: 0, memoryLimit: 0, status: project.status }));
+      }
+      return Promise.resolve(
+        cx.json({ cpu: 0, memory: 0, memoryLimit: 0, status: project.status }),
+      );
+    });
+  });
+
+  // GET /projects/:p/services/:s  (single service detail)
+  api.get('/projects/:p/services/:s', (c) => {
+    return withServiceAsId(c, (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      const envVars = ctx.env.getAll(project.id);
+      const environments = ctx.db.getEnvironmentsByProject(project.id);
+      const deployLogs = ctx.db.getDeployLogs(project.id, 5);
+      return cx.json({
+        ...mapProjectForApi(project),
+        environments: environments.map((env) => mapEnvironment(project.name, env)),
+        envVars,
+        recentDeploys: deployLogs.map((dl) => ({
+          ...dl,
+          commitMessage: dl.commit_message ?? null,
+        })),
+      });
+    });
+  });
+
+  // PATCH /projects/:p/services/:s  (update config)
+  api.patch('/projects/:p/services/:s', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      const body = await cx.req
+        .json<{
+          imageUrl?: unknown;
+          imageCmd?: unknown;
+          containerPort?: unknown;
+          image_url?: unknown;
+          image_cmd?: unknown;
+          container_port?: unknown;
+        }>()
+        .catch(
+          (): {
+            imageUrl?: unknown;
+            imageCmd?: unknown;
+            containerPort?: unknown;
+            image_url?: unknown;
+            image_cmd?: unknown;
+            container_port?: unknown;
+          } => ({}),
+        );
+      const imageUrlRaw = body.imageUrl ?? body.image_url;
+      const imageCmdRaw = body.imageCmd ?? body.image_cmd;
+      const containerPortRaw = body.containerPort ?? body.container_port;
+      const imageUrl =
+        imageUrlRaw === undefined || imageUrlRaw === null
+          ? undefined
+          : typeof imageUrlRaw === 'string'
+            ? imageUrlRaw
+            : undefined;
+      const imageCmd =
+        imageCmdRaw === undefined || imageCmdRaw === null
+          ? undefined
+          : Array.isArray(imageCmdRaw) && imageCmdRaw.every((e) => typeof e === 'string')
+            ? imageCmdRaw
+            : typeof imageCmdRaw === 'string'
+              ? imageCmdRaw
+                  .split(' ')
+                  .map((p) => p.trim())
+                  .filter((p) => p.length > 0)
+              : undefined;
+      const containerPort =
+        containerPortRaw === undefined || containerPortRaw === null
+          ? undefined
+          : typeof containerPortRaw === 'number' && Number.isInteger(containerPortRaw)
+            ? containerPortRaw
+            : typeof containerPortRaw === 'string'
+              ? Number.parseInt(containerPortRaw, 10)
+              : undefined;
+      if (containerPort !== undefined && !Number.isFinite(containerPort)) {
+        return cx.json(
+          { error: 'INVALID_FIELD', message: 'containerPort must be a valid integer' },
+          400,
+        );
+      }
+      if (containerPort !== undefined && (containerPort < 1 || containerPort > 65535)) {
+        return cx.json(
+          { error: 'INVALID_FIELD', message: 'containerPort must be between 1 and 65535' },
+          400,
+        );
+      }
+      ctx.db.updateProject(project.id, { imageUrl, imageCmd, containerPort });
+      const updated = ctx.db.getProject(project.id);
+      if (!updated) return cx.json({ error: 'NOT_FOUND', message: 'Project not found' }, 404);
+      return cx.json(mapProjectForApi(updated));
+    });
+  });
+
+  // GET /projects/:p/services/:s/topology
+  api.get('/projects/:p/services/:s/topology', async (c) => {
+    return withServiceAsId(c, (cx) => {
+      // Re-use the same logic as /projects/:id/topology by faking the inner
+      // request and delegating to the existing handler via a sub-request.
+      // Simpler: inline the same response shape using the resolved project.
+      const project = getProjectOrThrow(cx, ctx);
+      try {
+        const childProjects = ctx.db.getChildProjects(project.id);
+        const nodes = childProjects.length > 0 ? childProjects : [project];
+        const nodeIds = new Set(nodes.map((n) => n.id));
+        const dependsOnMap = new Map<string, string[]>();
+        for (const node of nodes) {
+          const deps = ctx.db.findDependenciesByProject(node.id);
+          const siblingDeps = deps
+            .map((d) => d.target_service_id)
+            .filter((sid): sid is string => sid !== null && nodeIds.has(sid));
+          dependsOnMap.set(node.id, siblingDeps);
+        }
+        function resolveKind(name: string): 'Application' | 'Database' {
+          const lower = name.toLowerCase();
+          if (/postgres|mysql|mariadb|mongo|redis|sqlite|clickhouse|minio/.test(lower)) {
+            return 'Database';
+          }
+          return 'Application';
+        }
+        return Promise.all(
+          nodes.map(async (node) => {
+            const port = node.assigned_port ?? null;
+            const url = port ? getProjectUrl(node.name) : null;
+            const image = node.image_url ?? node.image_tag ?? `${node.name}:latest`;
+            const kind = resolveKind(node.name);
+            const runtime = await getTopologyNodeRuntime(ctx, node);
+            return {
+              id: node.id,
+              name: node.name,
+              kind,
+              image,
+              health: runtime.health,
+              port,
+              url,
+              cpu: runtime.cpuDisplay,
+              mem: runtime.memDisplay,
+              dependsOn: dependsOnMap.get(node.id) ?? [],
+            };
+          }),
+        ).then((serviceNodes) => cx.json({ services: serviceNodes }));
+      } catch (err) {
+        log.debug({ err, projectId: project.id }, 'Get project topology failed (canonical path)');
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes('Project not found')) {
+          return Promise.resolve(
+            cx.json({ error: 'NOT_FOUND', message: `Project not found: ${project.id}` }, 404),
+          );
+        }
+        return Promise.resolve(
+          cx.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch project topology' }, 500),
+        );
+      }
+    });
+  });
+
+  // GET /projects/:p/services (list all managed services connected to project)
+  // Also exposed as GET /projects/:p/managed-services (managed-only alias)
+  const listManagedServicesHandler = (c: Context) => {
+    const projectId = c.req.param('p') ?? '';
+    const project = ctx.db.getProject(projectId) ?? ctx.db.getProjectByName(projectId);
+    if (!project) {
+      return c.json({ error: 'NOT_FOUND', message: `Project not found: ${projectId}` }, 404);
+    }
+    const connections = ctx.db.listServiceConnectionsByProject(project.id);
+    const services = connections
+      .map((conn) => ctx.db.getService(conn.service_id))
+      .filter((svc) => svc !== undefined);
+    return c.json(
+      services.map((svc) => ({
+        id: svc.id,
+        name: svc.name,
+        type: svc.type,
+        status: svc.status,
+        port: svc.port,
+        containerName: svc.container_name,
+      })),
+    );
+  };
+
+  api.get('/projects/:p/managed-services', listManagedServicesHandler);
+
+  // POST /projects/:p/services/:s/start
+  api.post('/projects/:p/services/:s/start', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      try {
+        assertProjectLifecycleMutable(project, 'start', ctx);
+      } catch (err) {
+        if (
+          err instanceof ProjectArchivedError ||
+          err instanceof ProjectRecoveringError ||
+          err instanceof CircuitBreakerOpenError
+        ) {
+          return cx.json(err.toJSON(), 409);
+        }
+        throw err;
+      }
+      if (!project.container_id) {
+        return cx.json({ error: 'No container to start. Redeploy instead.' }, 400);
+      }
+      await ctx.pipeline.start(project.id);
+      return cx.json({ status: 'started', project: project.name });
+    });
+  });
+
+  // POST /projects/:p/services/:s/stop
+  api.post('/projects/:p/services/:s/stop', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      try {
+        assertProjectLifecycleMutable(project, 'stop', ctx);
+      } catch (err) {
+        if (
+          err instanceof ProjectArchivedError ||
+          err instanceof ProjectRecoveringError ||
+          err instanceof CircuitBreakerOpenError
+        ) {
+          return cx.json(err.toJSON(), 409);
+        }
+        throw err;
+      }
+      const lockSessionId = `stop-${project.id}-${Date.now().toString(36)}`;
+      if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(project.id, lockSessionId)) {
+        const lock = ctx.agentPool.getProjectLock(project.id);
+        return cx.json(
+          new DeployLockedError(project.id, lock?.sessionId ?? 'unknown').toJSON(),
+          409,
+        );
+      }
+      try {
+        ctx.coordinator.suppressProject(project.id, 60_000);
+        await ctx.pipeline.stop(project.id);
+        return cx.json({ status: 'stopped', project: project.name });
+      } finally {
+        ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
+      }
+    });
+  });
+
+  // POST /projects/:p/services/:s/restart
+  api.post('/projects/:p/services/:s/restart', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      try {
+        assertProjectLifecycleMutable(project, 'stop', ctx);
+      } catch (err) {
+        if (
+          err instanceof ProjectArchivedError ||
+          err instanceof ProjectRecoveringError ||
+          err instanceof CircuitBreakerOpenError
+        ) {
+          return cx.json(err.toJSON(), 409);
+        }
+        throw err;
+      }
+      const lockSessionId = `restart-${project.id}-${Date.now().toString(36)}`;
+      if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(project.id, lockSessionId)) {
+        const lock = ctx.agentPool.getProjectLock(project.id);
+        return cx.json(
+          new DeployLockedError(project.id, lock?.sessionId ?? 'unknown').toJSON(),
+          409,
+        );
+      }
+      try {
+        ctx.coordinator.suppressProject(project.id, 30_000);
+        await ctx.pipeline.stop(project.id);
+        await ctx.pipeline.start(project.id);
+        return cx.json({ status: 'restarted', project: project.name });
+      } finally {
+        ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
+      }
+    });
+  });
+
+  // POST /projects/:p/services/:s/deploy  (alias for /redeploy — Task 1 §5)
+  api.post('/projects/:p/services/:s/deploy', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      try {
+        assertProjectMutable(project, ctx);
+      } catch (err) {
+        if (
+          err instanceof ProjectArchivedError ||
+          err instanceof ProjectRecoveringError ||
+          err instanceof CircuitBreakerOpenError
+        ) {
+          return cx.json(err.toJSON(), 409);
+        }
+        throw err;
+      }
+      const strategy = (cx.req.query('strategy') ?? 'force') as 'blue-green' | 'force';
+      const body = await cx.req
+        .json<{
+          env_vars?: Record<string, string>;
+          no_cache?: boolean;
+          health_check_path?: string;
+        }>()
+        .catch(() => ({ env_vars: undefined, no_cache: undefined, health_check_path: undefined }));
+      if (body.env_vars && typeof body.env_vars === 'object') {
+        for (const [key, value] of Object.entries(body.env_vars)) {
+          if (value.trim()) ctx.env.set(project.id, key, value.trim());
+        }
+      }
+      if (project.source === 'git' && !project.repo_url) {
+        return cx.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
+      }
+      const lockSessionId = `redeploy-${project.id}-${Date.now().toString(36)}`;
+      if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(project.id, lockSessionId)) {
+        const lock = ctx.agentPool.getProjectLock(project.id);
+        return cx.json(
+          new DeployLockedError(project.id, lock?.sessionId ?? 'unknown').toJSON(),
+          409,
+        );
+      }
+      try {
+        ctx.coordinator.suppressProject(project.id, 120_000);
+        ctx.db.updateProject(project.id, { status: 'building' });
+        const result = await ctx.pipeline.redeploy(project.id, {
+          noCache: body.no_cache,
+          strategy,
+          healthCheckPath: body.health_check_path,
+        });
+        return cx.json(result, result.success ? 200 : 500);
+      } catch (err) {
+        if (err instanceof DeployLockedError) return cx.json(err.toJSON(), 409);
+        if (
+          err instanceof ProjectArchivedError ||
+          err instanceof ProjectRecoveringError ||
+          err instanceof CircuitBreakerOpenError
+        ) {
+          return cx.json(err.toJSON(), 409);
+        }
+        if (err instanceof OpenLanderError) return cx.json(err.toJSON(), err.statusCode as 400);
+        ctx.db.updateProject(project.id, { status: 'error' });
+        const errMsg = err instanceof Error ? err.message : String(err);
+        return cx.json({ success: false, error: errMsg }, 500);
+      } finally {
+        ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
+      }
+    });
+  });
+
+  // POST /projects/:p/services/:s/archive
+  api.post('/projects/:p/services/:s/archive', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      try {
+        assertProjectLifecycleMutable(project, 'archive', ctx);
+      } catch (err) {
+        if (
+          err instanceof ProjectArchivedError ||
+          err instanceof ProjectRecoveringError ||
+          err instanceof CircuitBreakerOpenError
+        ) {
+          return cx.json(err.toJSON(), 409);
+        }
+        throw err;
+      }
+      const lockSessionId = `archive-${project.id}-${Date.now().toString(36)}`;
+      if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(project.id, lockSessionId)) {
+        const lock = ctx.agentPool.getProjectLock(project.id);
+        return cx.json(
+          new DeployLockedError(project.id, lock?.sessionId ?? 'unknown').toJSON(),
+          409,
+        );
+      }
+      try {
+        ctx.coordinator.suppressProject(project.id, 60_000);
+        await ctx.pipeline.archive(project.id);
+        const updated = ctx.db.getProject(project.id);
+        return cx.json({ project: updated });
+      } finally {
+        ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
+      }
+    });
+  });
+
+  // POST /projects/:p/services/:s/unarchive
+  api.post('/projects/:p/services/:s/unarchive', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      await ctx.pipeline.unarchive(project.id);
+      const updated = ctx.db.getProject(project.id);
+      return cx.json({ project: updated });
+    });
+  });
+
+  // GET /projects/:p/services/:s/logs
+  api.get('/projects/:p/services/:s/logs', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      const lines = parseInt(cx.req.query('lines') ?? '50', 10);
+      const logs = await ctx.pipeline.getLogs(project.id, lines);
+      return cx.json({ project: project.name, logs });
+    });
+  });
+
+  // GET /projects/:p/services/:s/env
+  api.get('/projects/:p/services/:s/env', (c) => {
+    return withServiceAsId(c, (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      const vars = ctx.env.getAll(project.id);
+      return cx.json({ project: project.name, envVars: vars });
+    });
+  });
+
+  // POST /projects/:p/services/:s/env
+  api.post('/projects/:p/services/:s/env', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      const body = await cx.req.json<{ variables?: Record<string, string> }>();
+      if (!body.variables) {
+        return cx.json({ error: 'MISSING_FIELD', message: 'variables object is required' }, 400);
+      }
+      const changed = ctx.env.setBulk(project.id, body.variables);
+      return cx.json({
+        status: changed ? 'updated' : 'unchanged',
+        project: project.name,
+        keys: Object.keys(body.variables),
+        needsRedeploy: changed && project.status === 'running',
+      });
+    });
+  });
+
+  // GET /projects/:p/services/:s/deployments
+  api.get('/projects/:p/services/:s/deployments', (c) => {
+    return withServiceAsId(c, (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      const limit = parseInt(cx.req.query('limit') ?? '50', 10);
+      const environmentId = cx.req.query('environmentId');
+      const deployLogs = ctx.db.getDeployLogs(project.id, limit, environmentId);
+      return cx.json({
+        count: deployLogs.length,
+        deployments: deployLogs.map((dl) => ({
+          id: dl.id,
+          status: dl.status,
+          trigger: dl.trigger,
+          triggerDetail: dl.trigger_detail,
+          commitSha: dl.commit_sha,
+          commitMessage: dl.commit_message ?? null,
+          durationMs: dl.duration_ms,
+          createdAt: normalizeTimestamp(dl.created_at),
+          failureSummary: dl.status === 'failed' ? extractFailureSummary(dl.build_log) : null,
+        })),
+      });
+    });
+  });
+
+  // POST /projects/:p/services/:s/expose
+  api.post('/projects/:p/services/:s/expose', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      if (!project.assigned_port) {
+        return cx.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
+      }
+      try {
+        const url = await ctx.pipeline.exposeTunnel(project.id, project.assigned_port);
+        return cx.json({ status: 'exposed', project: project.name, publicUrl: url });
+      } catch (error) {
+        if (error instanceof TunnelStartError) {
+          return cx.json(
+            {
+              error: 'TUNNEL_START_FAILED',
+              message: 'Cloudflare service is temporarily unavailable. Please try again.',
+            },
+            503,
+          );
+        }
+        throw error;
+      }
+    });
+  });
+
+  // POST /projects/:p/services/:s/unexpose
+  api.post('/projects/:p/services/:s/unexpose', (c) => {
+    return withServiceAsId(c, (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      ctx.pipeline.closeTunnel(project.id);
+      return cx.json({ status: 'unexposed', project: project.name });
+    });
+  });
+
+  // GET /projects/:p/services/:s/webhooks
+  api.get('/projects/:p/services/:s/webhooks', (c) => {
+    return withServiceAsId(c, (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      const configs = ctx.db.getWebhookConfigs(project.id);
+      return cx.json({
+        webhooks: configs.map((cfg) => ({
+          id: cfg.id,
+          source: cfg.source,
+          secret: cfg.secret,
+          branchFilter: cfg.branch_filter,
+          enabled: cfg.enabled === 1,
+          webhookUrl: `/api/webhooks/${project.id}/${cfg.source}`,
+          createdAt: normalizeTimestamp(cfg.created_at),
+        })),
+      });
+    });
+  });
+
+  // POST /projects/:p/services/:s/webhooks
+  api.post('/projects/:p/services/:s/webhooks', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      const body = await cx.req
+        .json<{ source: string; branch_filter?: string; enabled?: boolean }>()
+        .catch(() => ({ source: '', branch_filter: undefined, enabled: undefined }));
+      if (!body.source || !['github', 'gitlab', 'bitbucket'].includes(body.source)) {
+        return cx.json({ error: 'Invalid source. Must be github, gitlab, or bitbucket.' }, 400);
+      }
+      const source = body.source as 'github' | 'gitlab' | 'bitbucket';
+      const existing = ctx.db.getWebhookConfig(project.id, source);
+      const secret = existing?.secret ?? `${project.id}.${crypto.randomUUID().replace(/-/g, '')}`;
+      const configId = existing?.id ?? crypto.randomUUID();
+      ctx.db.setWebhookConfig({
+        id: configId,
+        projectId: project.id,
+        source,
+        secret,
+        branchFilter: body.branch_filter ?? 'main',
+        enabled: body.enabled !== false,
+      });
+      const config = ctx.db.getWebhookConfig(project.id, source);
+      if (!config) {
+        return cx.json({ error: 'Failed to configure webhook' }, 500);
+      }
+      return cx.json({
+        id: config.id,
+        source: config.source,
+        secret: config.secret,
+        branchFilter: config.branch_filter,
+        enabled: config.enabled === 1,
+        webhookUrl: `/api/webhooks/${project.id}/${config.source}`,
+      });
+    });
+  });
+
+  // GET /projects/:p/services/:s/previews
+  api.get('/projects/:p/services/:s/previews', (c) => {
+    return withServiceAsId(c, (cx) => {
+      const project = getProjectOrThrow(cx, ctx);
+      const previews = ctx.db.getPreviewProjects(project.id);
+      return cx.json({
+        previews: previews.map((preview) => ({
+          id: preview.id,
+          name: preview.name,
+          status: preview.status,
+          prNumber: preview.pr_number,
+          url: getProjectUrl(preview.name),
+          publicUrl: preview.public_url,
+          createdAt: normalizeTimestamp(preview.created_at),
+          updatedAt: normalizeTimestamp(preview.updated_at),
+        })),
+      });
+    });
   });
 
   return api;

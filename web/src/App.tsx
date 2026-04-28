@@ -200,10 +200,28 @@ function App() {
                       </RouteSuspense>
                     }
                   />
-                  {/* Deployable detail. The `:id` here is a `projects.id`
-                      and the page expects `?project=:p`. Managed services
-                      route through `/managed-services/:id` (see below) so
-                      the two id spaces don't collide on the same path. */}
+                  {/* ── 1.0-rc.1: canonical deployable-service URL ─────────────
+                      `/projects/:p/services/:s` is the canonical route per
+                      GUIDE-01-IA-principles §4 vocabulary (Project = group,
+                      Service = deployable unit). ServiceDetailV2 dispatcher
+                      normalises both URL shapes via useParams() — when this
+                      path matches, params are { p, s }; legacy path gives
+                      { id } plus ?project= query.
+                      rc.2 will deprecate `/services/:id?project=:p` once all
+                      internal callers are migrated to the canonical form. */}
+                  <Route
+                    path="/projects/:p/services/:s"
+                    element={
+                      <RouteSuspense>
+                        <ServiceDetailV2 />
+                      </RouteSuspense>
+                    }
+                  />
+                  {/* Legacy deployable-detail URL — kept live in rc.1 for
+                      bookmark continuity. ServiceDetailV2 accepts ?project=
+                      query param as a fallback. Deprecation: rc.2 will add
+                      a `Deprecation` response header and redirect callers to
+                      the canonical `/projects/:p/services/:s` form. */}
                   <Route
                     path="/services/:id"
                     element={
@@ -215,8 +233,10 @@ function App() {
                   {/* Managed services (postgres / mysql / redis / mongo) —
                       separate from `/services/:id` (deployable detail) so
                       `services.id` and `projects.id` no longer share a
-                      route prefix. URL graduates in 1.2 alongside the
-                      schema split per ralplan-data-model-alignment. */}
+                      route prefix. Canonical replacement (`/projects/:p/
+                      services/:s` with kind=database discriminator) lands
+                      in rc.2 once managed services merge into the `services`
+                      table per the schema-split migration. */}
                   <Route path="/managed-services" element={<ServicesPage />} />
                   <Route
                     path="/managed-services/:id"
