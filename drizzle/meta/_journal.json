@@ -78,6 +78,13 @@
       "when": 1777500001000,
       "tag": "0010_cleanup_compose_child_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1777500002000,
+      "tag": "0011_repoint_deployable_project_ids",
+      "breakpoints": true
     }
   ]
 }

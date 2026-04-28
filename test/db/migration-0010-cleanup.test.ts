@@ -99,7 +99,7 @@ describe('Migration 0010: cleanup compose-child group fan-out', () => {
       .run(id, name, parentProjectId, buildMethod);
   }
 
-  it('removes wrongly-inserted compose-child group rows', () => {
+  it('marks compose-child group rows with parent_project_id (re-inserted by 0011)', () => {
     // Legacy compose stack: 1 parent + 2 children
     insertLegacyProject('cmp-parent', 'mystack', null, 'compose');
     insertLegacyProject('cmp-child-a', 'mystack/api', 'cmp-parent', null);
@@ -111,16 +111,26 @@ describe('Migration 0010: cleanup compose-child group fan-out', () => {
     migrate(drizzle as Parameters<typeof migrate>[0], { migrationsFolder: MIGRATIONS_FOLDER });
     sqlite.pragma('foreign_keys = ON');
 
+    // 0010 deletes child group rows; 0011 reconstructs them from the
+    // surviving services rows (kind='compose-child') so per-deployable
+    // FK tables (environments, deploy_configs, etc.) keep valid
+    // project_id references. The user-visible "3 projects shown" issue
+    // is addressed at the UI/API filter layer, not here.
     const groups = sqlite
-      .prepare('SELECT id FROM projects WHERE id != ? ORDER BY id')
-      .all('__orphan_managed') as { id: string }[];
+      .prepare(
+        `SELECT id, parent_project_id FROM projects WHERE id != ? ORDER BY id`,
+      )
+      .all('__orphan_managed') as Array<{ id: string; parent_project_id: string | null }>;
 
-    // Only parent + standalone should survive as groups.
-    expect(groups.map((g) => g.id).sort()).toEqual(['cmp-parent', 'standalone-1'].sort());
+    const ids = groups.map((g) => g.id).sort();
+    expect(ids).toEqual(['cmp-child-a', 'cmp-child-b', 'cmp-parent', 'standalone-1'].sort());
 
-    // Children must NOT be in projects.
-    expect(groups.find((g) => g.id === 'cmp-child-a')).toBeUndefined();
-    expect(groups.find((g) => g.id === 'cmp-child-b')).toBeUndefined();
+    // Parent + standalone keep parent_project_id NULL.
+    expect(groups.find((g) => g.id === 'cmp-parent')?.parent_project_id).toBeNull();
+    expect(groups.find((g) => g.id === 'standalone-1')?.parent_project_id).toBeNull();
+    // Children carry parent_project_id so the UI/API can filter them out.
+    expect(groups.find((g) => g.id === 'cmp-child-a')?.parent_project_id).toBe('cmp-parent');
+    expect(groups.find((g) => g.id === 'cmp-child-b')?.parent_project_id).toBe('cmp-parent');
   });
 
   it('keeps services rows for compose children intact', () => {
