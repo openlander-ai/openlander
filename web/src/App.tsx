@@ -200,8 +200,26 @@ function App() {
                       </RouteSuspense>
                     }
                   />
+                  {/* Deployable detail. The `:id` here is a `projects.id`
+                      and the page expects `?project=:p`. Managed services
+                      route through `/managed-services/:id` (see below) so
+                      the two id spaces don't collide on the same path. */}
                   <Route
                     path="/services/:id"
+                    element={
+                      <RouteSuspense>
+                        <ServiceDetailV2 />
+                      </RouteSuspense>
+                    }
+                  />
+                  {/* Managed services (postgres / mysql / redis / mongo) —
+                      separate from `/services/:id` (deployable detail) so
+                      `services.id` and `projects.id` no longer share a
+                      route prefix. URL graduates in 1.2 alongside the
+                      schema split per ralplan-data-model-alignment. */}
+                  <Route path="/managed-services" element={<ServicesPage />} />
+                  <Route
+                    path="/managed-services/:id"
                     element={
                       <RouteSuspense>
                         <ServiceDetailV2 />
@@ -228,7 +246,11 @@ function App() {
                       </RouteSuspense>
                     }
                   />
-                  <Route path="/services" element={<ServicesPage />} />
+                  {/* /services list → /managed-services for vocabulary
+                      alignment (1.0 routing fix). The list page is
+                      managed-services-only; deployables are reached via
+                      a project's Services tab, not a top-level list. */}
+                  <Route path="/services" element={<Navigate to="/managed-services" replace />} />
                   {/* /operations + /ops-v1 retired in Phase 1 hardening
                       (ralplan-monitoring-logs). Backend /api/ops/* remains
                       live for ApprovalDialog / Settings / Recovery; only

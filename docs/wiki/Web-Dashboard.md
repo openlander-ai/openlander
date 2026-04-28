@@ -110,7 +110,12 @@ Detailed view for a specific deployment.
 
 ---
 
-### Services (`/services`)
+### Managed Services (`/managed-services`)
+
+> **1.0 routing change**: list URL is now `/managed-services`. The old
+> `/services` redirects here for bookmark continuity. Detail page is
+> at `/managed-services/:id`. See the "Data model alignment" section
+> in `RELEASE-NOTES-1.0.md` for the why.
 
 Manage infrastructure services (databases, caches, etc.).
 
@@ -123,7 +128,12 @@ Manage infrastructure services (databases, caches, etc.).
 
 ---
 
-### Service Detail (`/services/:id`)
+### Service Detail
+
+> **1.0 routing**: managed-service detail at `/managed-services/:id`;
+> deployable detail at `/services/:id?project=:p`. The detail URL
+> graduates to `/projects/:p/services/:s` in 1.2 alongside the schema
+> split. See `RELEASE-NOTES-1.0.md` "Data model alignment".
 
 **Actions**: Start, Stop, Delete
 

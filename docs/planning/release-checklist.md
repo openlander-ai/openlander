@@ -202,7 +202,9 @@
 
 ---
 
-## 시나리오 16: 공유 서비스 (`/services`)
+## 시나리오 16: 공유 서비스 (`/managed-services`)
+
+> **1.0 변경**: 라우트가 `/services` → `/managed-services`로 이동 (구 URL은 redirect). 백엔드 REST `/api/services*`는 그대로. 자세한 내용은 `RELEASE-NOTES-1.0.md` "Data model alignment" 참조.
 
 **사전조건**: 없음
 
@@ -210,6 +212,7 @@
 - [ ] 커스텀 이미지 생성 시 `name + image + port`가 필수인지 확인
 - [ ] 서비스 `Start / Stop / Remove` 동작 확인
 - [ ] 연결정보(credential/env) 펼침/복사 UI 동작 확인
+- [ ] `/services` 직접 접속 시 `/managed-services`로 redirect 확인
 
 **확인방법**: `/api/services*` 응답 + `docker ps` 상태 일치
 

@@ -119,13 +119,13 @@ export function CommandPalette() {
       },
       {
         id: 'nav-services',
-        label: 'Services',
+        label: 'Managed Services',
         icon: <Database className="h-4 w-4" />,
         action: () => {
-          navigate('/services');
+          navigate('/managed-services');
           close();
         },
-        keywords: 'database redis postgres',
+        keywords: 'database redis postgres mysql mongo managed services',
       },
       {
         id: 'settings',

@@ -159,7 +159,7 @@ export function ServicesPage() {
             return (
               <div
                 key={service.id}
-                onClick={() => navigate(`/services/${service.id}`)}
+                onClick={() => navigate(`/managed-services/${service.id}`)}
                 className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 min-h-[176px] flex flex-col justify-between cursor-pointer hover:border-foreground/50 transition-colors card-hover"
               >
                 <div className="space-y-3">

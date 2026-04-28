@@ -143,7 +143,7 @@ xl:  1280px
 ──────────
 Overview
 Projects      → /projects
-Services      → /services
+Services      → /managed-services  (1.0; old /services redirects)
 Ops Center    → /ops
 Deploy        → /projects/new
 Settings      → /settings

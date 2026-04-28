@@ -426,6 +426,14 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
 
   server.listen(options.port, options.host, () => {
     log.info({ version: VERSION, port: options.port }, `OpenLander v${VERSION} listening`);
+    // Announce data-model alignment phase. The 1.0 release ships only the
+    // frontend routing fix; backend schema + MCP namespaces stay on the
+    // legacy "project = deployable" shape until the API compat layer in
+    // 1.1 and the schema split in 1.2. See ralplan-data-model-alignment.
+    log.info(
+      { phase: '1.0', scope: 'frontend-route-fix-only', next: '1.1 api-compat' },
+      '[data-model-alignment] phase=1.0 (frontend-route-fix-only) next=1.1 (api-compat)',
+    );
     const host = options.host || 'localhost';
     console.log(`\n  OpenLander v${VERSION}\n  http://${host}:${String(options.port)}\n`);
     announceSetupSecretIfNeeded(authService);

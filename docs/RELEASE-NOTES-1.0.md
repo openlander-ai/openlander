@@ -37,6 +37,22 @@ Upgrading from an earlier release: back up `~/.openlander/openlander.db` before 
 - **Full-width main content** — removed the misapplied `max-w-8xl mx-auto` that pinched content on wide monitors; tables and feeds now use the full available width
 - **Dark-mode contrast** audited on all semantic color tokens and Badge variants
 
+## Data model alignment (1.0 routing fix; follow-ups in 1.1+)
+
+OpenLander's design vocabulary (per `docs/design/v1.0/GUIDE-01-IA-principles.md` §4) treats **Project** as a group/container and **Service** as the deployable unit (Application / Compose / Database). The v1 backend uses a single `projects` table for both deployable rows and compose parents, with a separate `services` table for managed databases. The vocabulary mismatch leaks into URLs and a few backend route names today.
+
+1.0 ships a **frontend routing fix only**:
+
+- New `/managed-services` (list) and `/managed-services/:id` (detail) routes for Postgres / MySQL / Redis / Mongo and the like — split off from `/services/:id`, which kept landing managed-service clicks on the deployable-detail view because no `?project=` query was attached. Old `/services` URLs redirect for bookmark continuity.
+- No schema changes, no MCP tool renames, no REST endpoint changes. The MCP composite vocabulary (`openlander_project`, `openlander_service`) stays exactly as it was.
+
+Follow-up work, no calendar commitment beyond "next minor releases":
+
+- **1.1 — API compatibility layer.** New REST surfaces speaking the design vocabulary, layered on top of today's project-routes. `GET /api/projects/:id/topology` (already returns deployables under a `services` key) is the canonical extension point. MCP composite tools gain alias actions; legacy `*_project` actions remain with deprecation warnings for one major version.
+- **1.2 — Schema split.** Separate `projects` (groups only) from `services` (deployable rows with `kind` discriminator: git / image / compose / postgres / etc.). Re-points dependent FKs via a remap manifest. The `/services/:id?project=:p` URL graduates to `/projects/:p/services/:s` at this point — bookmark redirect plan TBD with that release.
+
+The full debt ledger lives at `.omc/plans/data-model-debt.md` (in the repo, not the OSS distribution) for future contributors who want to pick up alignment work.
+
 ## Operational reliability
 
 - **Deploy-lock TTL aligned across memory + DB at 15 min (`0be8f22`), then widened to 30 min (`e43cf15`)** — closes the race window where the in-memory lock expired early, and prevents slow cold first-builds (Rails / Next.js) from timing out mid-deploy

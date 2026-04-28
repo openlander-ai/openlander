@@ -549,6 +549,8 @@ MVP 일상관리 MCP연동 멀티채널 TUI리팩토링 TUI마감 서버인식 P
 | 2     | ServiceManager 클래스    | Docker 컨테이너 생성/시작/중지/삭제. 4개 템플릿(PostgreSQL/MySQL/Redis/MongoDB) + 커스텀 이미지 | ✅   |
 | 3     | REST API                 | GET/POST/DELETE /services, start/stop, GET /services/templates                                  | ✅   |
 | 4     | 프론트엔드               | /services 페이지 — 템플릿 퀵스타트 + 커스텀 이미지 폼 + 서비스 목록(연결정보/start/stop/remove) | ✅   |
+
+> **Note (1.0)**: 위 테이블의 프론트엔드 라우트 `/services`는 1.0에서 `/managed-services`로 이전됨 (bookmark redirect 제공). 백엔드 REST `/services` 엔드포인트는 그대로. 자세한 내용은 `RELEASE-NOTES-1.0.md` "Data model alignment" 섹션 참조.
 | 5     | i18n                     | 서비스 관련 en/ko 번역 키 추가                                                                  | ✅   |
 | 6     | API 테스트               | 9개 신규 테스트 (template/custom create, validation, CRUD, templates endpoint)                  | ✅   |
 

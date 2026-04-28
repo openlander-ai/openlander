@@ -11,14 +11,15 @@
  * Tab switching uses ProjectTabs which gives us WAI-ARIA arrow-key
  * tablist for free.
  */
-import { useMemo, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Activity as ActivityIcon,
   Box,
   Code2,
   Copy,
   Cpu,
+  Database,
   Edit,
   ExternalLink,
   Globe,
@@ -39,7 +40,7 @@ import { useProjectTopology } from '@/hooks/use-project-topology';
 import { useServiceHealth } from '@/hooks/use-service-health';
 import { useServiceMetrics } from '@/hooks/use-service-metrics';
 import { useDeployments } from '@/hooks/use-deployments';
-import type { MetricsRange } from '@/lib/api/services';
+import { getService, type MetricsRange, type Service } from '@/lib/api/services';
 import type { DeployLogSummary } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -52,7 +53,28 @@ type ServiceTabId =
   | 'monitoring'
   | 'advanced';
 
+/**
+ * Top-level dispatcher. Same route slot serves two different ID spaces:
+ *   /services/:id (deployable; :id is a projects.id) vs
+ *   /managed-services/:id (managed services row; :id is a services.id).
+ *
+ * Each child component has its own hook order — keeping the dispatch
+ * here lets us avoid violating rules-of-hooks while still reusing the
+ * same `<RouteSuspense>` mount in App.tsx. Fixes the pre-existing
+ * routing collision where a managed-service click landed on the
+ * deployable detail and rendered "Service not found" because no
+ * ?project= was attached. Tracked in ralplan-data-model-alignment §6.
+ */
 export function ServiceDetailV2() {
+  const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  if (location.pathname.startsWith('/managed-services/') && id) {
+    return <ManagedServiceDetail id={id} />;
+  }
+  return <DeployableServiceDetail />;
+}
+
+function DeployableServiceDetail() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -715,6 +737,181 @@ function RangeToggle<T extends string>({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * ManagedServiceDetail — minimal detail surface for managed services
+ * (postgres / mysql / redis / mongo etc).
+ *
+ * Mounted at `/managed-services/:id` via the route-prefix gate at the
+ * top of `ServiceDetailV2`. Intentionally simple for 1.0 — image / port /
+ * container ID + a back link. The richer experience (Connection /
+ * Logs / Settings tabs) is staged for 1.1 alongside the API compat
+ * layer; the legacy `web/src/components/service/Service*Tab.tsx`
+ * components are dead today and will be revived or deleted then.
+ */
+function ManagedServiceDetail({ id }: { id: string }) {
+  const navigate = useNavigate();
+  const [service, setService] = useState<Service | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getService(id)
+      .then((s) => {
+        if (!cancelled) setService(s);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load service');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
+        <div className="h-32 animate-pulse rounded-[var(--ol-radius)] bg-[color:var(--ol-panel-2)]" />
+      </div>
+    );
+  }
+
+  if (error || !service) {
+    return (
+      <div className="mx-auto w-full max-w-5xl">
+        <OuterCard
+          title="Managed service not found"
+          subtitle={error ?? `No service with id "${id}"`}
+        >
+          <button
+            type="button"
+            onClick={() => navigate('/managed-services')}
+            className="text-[13px] text-[color:var(--ol-primary)] hover:underline"
+          >
+            ← Back to Managed Services
+          </button>
+        </OuterCard>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
+      <OuterCard
+        title={
+          <span className="flex items-center gap-2">
+            <span
+              aria-hidden
+              className="grid h-6 w-6 place-items-center rounded-md bg-[color:var(--ol-primary-soft)] text-[color:var(--ol-primary)]"
+            >
+              <Database className="h-3.5 w-3.5" />
+            </span>
+            <span>{service.name}</span>
+            <ManagedHealthBadge status={service.status} />
+          </span>
+        }
+        subtitle={service.type}
+        actions={
+          <button
+            type="button"
+            onClick={() => navigate('/managed-services')}
+            className="text-[12px] text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-fg)]"
+          >
+            ← Managed Services
+          </button>
+        }
+      >
+        <dl className="grid grid-cols-1 gap-3 text-[13px] sm:grid-cols-2">
+          <ManagedDetailField label="Image" value={service.image} mono />
+          <ManagedDetailField label="Port" value={String(service.port)} mono />
+          <ManagedDetailField label="Container" value={service.container_name} mono />
+          <ManagedDetailField
+            label="Container ID"
+            value={service.container_id ? service.container_id.slice(0, 12) : '—'}
+            mono
+          />
+          <ManagedDetailField
+            label="Created"
+            value={new Date(service.created_at).toLocaleString()}
+          />
+          <ManagedDetailField
+            label="Updated"
+            value={new Date(service.updated_at).toLocaleString()}
+          />
+        </dl>
+      </OuterCard>
+    </div>
+  );
+}
+
+function ManagedDetailField({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <dt className="text-[11px] uppercase tracking-[0.06em] text-[color:var(--ol-fg-subtle)]">
+        {label}
+      </dt>
+      <dd
+        className={cn('mt-0.5 truncate text-[color:var(--ol-fg)]', mono && 'ol-mono text-[12.5px]')}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function ManagedHealthBadge({ status }: { status: 'running' | 'stopped' | 'error' }) {
+  const cfg =
+    status === 'running'
+      ? {
+          bg: 'var(--ol-success-soft)',
+          fg: 'var(--ol-success)',
+          dot: 'var(--ol-success)',
+          label: 'running',
+        }
+      : status === 'error'
+        ? {
+            bg: 'var(--ol-error-soft)',
+            fg: 'var(--ol-error)',
+            dot: 'var(--ol-error)',
+            label: 'error',
+          }
+        : {
+            bg: 'var(--ol-panel-2)',
+            fg: 'var(--ol-fg-muted)',
+            dot: 'var(--ol-fg-subtle)',
+            label: 'stopped',
+          };
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+      style={{
+        backgroundColor: `color-mix(in oklch, ${cfg.bg} 100%, transparent)`,
+        color: `color-mix(in oklch, ${cfg.fg} 100%, transparent)`,
+      }}
+    >
+      <span
+        aria-hidden
+        className="h-1 w-1 rounded-full"
+        style={{ backgroundColor: `color-mix(in oklch, ${cfg.dot} 100%, transparent)` }}
+      />
+      {cfg.label}
+    </span>
   );
 }
 
