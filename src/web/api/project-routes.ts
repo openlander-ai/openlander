@@ -892,13 +892,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
 
     const credentials = parseServiceCredentials(service.credentials);
+    const serviceKind = service.kind ?? 'unknown';
     const injectedKeys = autoInjectServiceEnv({
       db: ctx.db,
       env: ctx.env,
       projectId: project.id,
       serviceId: service.id,
       serviceName: service.name,
-      serviceType: service.type,
+      serviceType: serviceKind,
       containerName: service.container_name,
       credentials,
     });
@@ -912,9 +913,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         source_project_id: project.id,
         target_service_id: serviceId,
         dependency_type:
-          service.type === 'postgres' || service.type === 'mysql'
+          serviceKind === 'postgres' || serviceKind === 'mysql'
             ? 'database'
-            : service.type === 'redis'
+            : serviceKind === 'redis'
               ? 'cache'
               : 'custom',
         source: 'auto',
@@ -929,9 +930,12 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         service: {
           id: service.id,
           name: service.name,
-          type: service.type,
+          // Wire key preserved; canonical source: kind
+          type: serviceKind,
           status: service.status,
-          port: service.port,
+          // Wire key preserved; canonical source: assigned_port
+          // eslint-disable-next-line @typescript-eslint/no-deprecated
+          port: service.assigned_port ?? service.port,
           containerName: service.container_name,
         },
         createdAt: connection.created_at,
@@ -2312,14 +2316,20 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       .map((conn) => ctx.db.getService(conn.service_id))
       .filter((svc) => svc !== undefined);
     return c.json(
-      services.map((svc) => ({
-        id: svc.id,
-        name: svc.name,
-        type: svc.type,
-        status: svc.status,
-        port: svc.port,
-        containerName: svc.container_name,
-      })),
+      services.map((svc) => {
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        const svcPort = svc.assigned_port ?? svc.port;
+        return {
+          id: svc.id,
+          name: svc.name,
+          // Wire key preserved; canonical source: kind
+          type: svc.kind ?? 'unknown',
+          status: svc.status,
+          // Wire key preserved; canonical source: assigned_port
+          port: svcPort,
+          containerName: svc.container_name,
+        };
+      }),
     );
   };
 
