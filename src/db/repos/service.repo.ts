@@ -29,6 +29,29 @@ function normalizeKind(kind: string): ServiceKind {
   return (known as string[]).includes(kind) ? (kind as ServiceKind) : 'postgres';
 }
 
+/**
+ * Map a canonical service kind back to the legacy wire-format type string
+ * used by all existing clients (frontend, AI agents, etc.).
+ *
+ * Contract: wire emission must use the legacy vocabulary so that:
+ * - `postgres` → `postgresql`  (frontend ServiceDatabasesTab branches on this)
+ * - `mongo`    → `mongodb`
+ * - All other kinds pass through unchanged (already match legacy vocabulary).
+ *
+ * This ensures wire-format stability regardless of whether the legacy `type`
+ * column is populated (post-migration rows created after 0012 may have NULL).
+ */
+export function kindToLegacyType(kind: string): string {
+  switch (kind) {
+    case 'postgres':
+      return 'postgresql';
+    case 'mongo':
+      return 'mongodb';
+    default:
+      return kind;
+  }
+}
+
 export class ServiceRepo {
   constructor(
     private readonly db: DrizzleClient,

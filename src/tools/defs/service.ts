@@ -2,6 +2,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { getAllIps } from '../../pipeline/traefik.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import { isDockerNotFoundError, ServiceNotFoundError } from '../../errors.js';
+import { kindToLegacyType } from '../../db/repos/service.repo.js';
 import type { ToolDef } from './types.js';
 import {
   backupServiceSchema,
@@ -105,9 +106,11 @@ export const serviceToolDefs: ToolDef[] = [
         service: {
           id: result.id,
           name: result.name,
-          // Wire key preserved; canonical first, legacy fallback for pre-migration rows
-          // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
-          type: result.kind ?? result.type ?? 'unknown',
+          // Wire contract: emit legacy vocabulary (postgresql/mongodb) regardless of
+          // whether legacy `type` column is populated. kindToLegacyType ensures
+          // forward-compat with post-0012 rows where legacy column may be NULL.
+          // eslint-disable-next-line @typescript-eslint/no-deprecated
+          type: result.type ?? kindToLegacyType(result.kind),
           status: result.status,
           // Wire key preserved; canonical source: assigned_port
           port: legacyPort,
@@ -144,9 +147,9 @@ export const serviceToolDefs: ToolDef[] = [
             return {
               id: service.id,
               name: service.name,
-              // Wire key preserved; canonical first, legacy fallback for pre-migration rows
-              // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
-              type: service.kind ?? service.type ?? 'unknown',
+              // Wire contract: emit legacy vocabulary (postgresql/mongodb).
+              // eslint-disable-next-line @typescript-eslint/no-deprecated
+              type: service.type ?? kindToLegacyType(service.kind),
               status: service.status,
               // Wire key preserved; canonical source: assigned_port
               port: svcPort,
@@ -176,9 +179,9 @@ export const serviceToolDefs: ToolDef[] = [
           return {
             id: service.id,
             name: service.name,
-            // Wire key preserved; canonical first, legacy fallback for pre-migration rows
-            // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
-            type: service.kind ?? service.type ?? 'unknown',
+            // Wire contract: emit legacy vocabulary (postgresql/mongodb).
+            // eslint-disable-next-line @typescript-eslint/no-deprecated
+            type: service.type ?? kindToLegacyType(service.kind),
             status: service.status,
             // Wire key preserved; canonical source: assigned_port
             port: svcPort,
@@ -361,9 +364,9 @@ export const serviceToolDefs: ToolDef[] = [
       return {
         id: service.id,
         name: service.name,
-        // Wire key preserved; canonical first, legacy fallback for pre-migration rows
-        // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
-        type: service.kind ?? service.type ?? 'unknown',
+        // Wire contract: emit legacy vocabulary (postgresql/mongodb).
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        type: service.type ?? kindToLegacyType(service.kind),
         status: service.status,
         health,
         ...(healthDetail ? { healthDetail } : {}),
@@ -430,8 +433,9 @@ export const serviceToolDefs: ToolDef[] = [
       const serviceName = args['service_name'] as string;
       const force = (args['force'] as boolean | undefined) ?? false;
       const service = await getServiceByName(appCtx, serviceName);
-      // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
-      const serviceType = service.kind ?? service.type ?? 'unknown';
+      // Wire contract: emit legacy vocabulary (postgresql/mongodb).
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      const serviceType = service.type ?? kindToLegacyType(service.kind);
       const result = await appCtx.serviceManager.remove(service.id, { force });
       return {
         status: 'removed',
@@ -591,9 +595,9 @@ export const serviceToolDefs: ToolDef[] = [
       const svcPort = service.assigned_port ?? service.port;
       return {
         service: serviceName,
-        // Wire key preserved; canonical first, legacy fallback for pre-migration rows
-        // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
-        type: service.kind ?? service.type ?? 'unknown',
+        // Wire contract: emit legacy vocabulary (postgresql/mongodb).
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        type: service.type ?? kindToLegacyType(service.kind),
         credentials,
         connectionString,
         host: internalHost,

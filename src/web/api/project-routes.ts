@@ -37,7 +37,7 @@ import {
   getProjectOrThrow,
   resolveEnvironmentByType,
 } from './helpers/project-helpers.js';
-import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 
 const log = createModuleLogger('api');
 
@@ -1048,8 +1048,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
 
     const credentials = parseServiceCredentials(service.credentials);
-    // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
-    const serviceKind = service.kind ?? service.type ?? 'unknown';
+    // Wire contract: emit legacy vocabulary (postgresql/mongodb) for back-compat.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    const serviceKind = service.type ?? kindToLegacyType(service.kind);
     const injectedKeys = autoInjectServiceEnv({
       db: ctx.db,
       env: ctx.env,
@@ -2547,9 +2548,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         return {
           id: svc.id,
           name: svc.name,
-          // Wire key preserved; canonical first, legacy fallback for pre-migration rows
-          // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
-          type: svc.kind ?? svc.type ?? 'unknown',
+          // Wire contract: emit legacy vocabulary (postgresql/mongodb).
+          // eslint-disable-next-line @typescript-eslint/no-deprecated
+          type: svc.type ?? kindToLegacyType(svc.kind),
           status: svc.status,
           // Wire key preserved; canonical source: assigned_port
           port: svcPort,

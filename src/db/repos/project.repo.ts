@@ -70,55 +70,70 @@ export class ProjectRepo {
     }
 
     try {
-      // Post-0012: projects table is group-only; deployable runtime fields
-      // live on the canonical services row inserted below.
-      this.db
-        .insert(projects)
-        .values({
-          id: project.id,
-          name: project.name,
-          repo_url: project.repoUrl,
-          branch: project.branch ?? 'main',
-        })
-        .run();
+      const raw = this.db.transaction((tx) => {
+        // Post-0012: projects table is group-only; deployable runtime fields
+        // live on the canonical services row inserted below.
+        tx.insert(projects)
+          .values({
+            id: project.id,
+            name: project.name,
+            repo_url: project.repoUrl,
+            branch: project.branch ?? 'main',
+            // group-only: NO deployable fields, NO parent_project_id
+          })
+          .run();
 
-      // Insert backing service row.
-      // - Standalone / compose-parent: project_id = self id.
-      // - Compose-child: project_id = parent group id.
-      // The id || '__svc' convention is used by getDeployableForProject and
-      // related canonical-resolution helpers across the codebase.
-      this.db
-        .insert(services)
-        .values({
-          id: `${project.id}__svc`,
-          project_id: parentProjectId ?? project.id,
-          name: `${project.name}__svc`,
-          kind,
-          parent_service_id: parentProjectId ? `${parentProjectId}__svc` : null,
-          status: 'stopped',
-          visibility: 'internal',
-          source,
-          build_method: buildMethod,
-          dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
-          docker_target: project.dockerTarget ?? null,
-          build_context: project.buildContext ?? null,
-          image_url: project.imageUrl ?? null,
-          image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
-          container_port: project.containerPort ?? null,
-        })
-        .onConflictDoNothing()
-        .run();
+        // Insert backing service row.
+        // - Standalone / compose-parent: project_id = self id.
+        // - Compose-child: project_id = parent group id.
+        // The id || '__svc' convention is used by getDeployableForProject and
+        // related canonical-resolution helpers across the codebase.
+        // NO onConflictDoNothing — a UNIQUE conflict here means an orphan service
+        // row from a previously-deleted project; that is corrupt state and must
+        // abort the whole transaction so the projects row is never committed.
+        tx.insert(services)
+          .values({
+            id: `${project.id}__svc`,
+            project_id: parentProjectId ?? project.id,
+            name: `${project.name}__svc`,
+            kind,
+            parent_service_id: parentProjectId ? `${parentProjectId}__svc` : null,
+            status: 'stopped',
+            visibility: 'internal',
+            source,
+            build_method: buildMethod,
+            dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
+            docker_target: project.dockerTarget ?? null,
+            build_context: project.buildContext ?? null,
+            image_url: project.imageUrl ?? null,
+            image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
+            container_port: project.containerPort ?? null,
+          })
+          .run();
+
+        const created = tx.select().from(projects).where(eq(projects.id, project.id)).get() as
+          | ProjectRow
+          | undefined;
+        if (!created) throw new RepoPersistenceError('project', project.id);
+        return created;
+      });
+      // Hydrate deployable fields from the canonical __svc service row so
+      // callers receive the full legacy runtime shape (status, visibility,
+      // build_method, etc.) immediately after creation.
+      return this.hydrateDeployable(raw);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes('UNIQUE constraint failed')) {
+        if (msg.includes('services.id') || msg.includes('services.name')) {
+          throw new Error(
+            `A previous project with id "${project.id}" left orphan service rows. ` +
+              `Delete them or pick a new id.`,
+          );
+        }
         throw new ProjectAlreadyExistsError(project.name);
       }
       throw error;
     }
-
-    const created = this.getProject(project.id);
-    if (!created) throw new RepoPersistenceError('project', project.id);
-    return created;
   }
 
   /**
