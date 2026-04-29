@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
 import type { ServiceRow } from '../../db/types.js';
+import { kindToLegacyType } from '../../db/repos/service.repo.js';
 import { createGitProvider } from '../../git-providers/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getSystemStats, formatStatsSummary } from '../../monitor/stats.js';
@@ -32,7 +33,7 @@ function toServiceWire(
 ): ServiceRow & { type: string; image: string; env_vars: string | null } {
   return {
     ...service,
-    type: service.type ?? service.kind,
+    type: service.type ?? kindToLegacyType(service.kind),
     image: service.image ?? service.image_url ?? '',
     port: service.port ?? service.assigned_port ?? undefined,
     env_vars:

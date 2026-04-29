@@ -192,6 +192,121 @@ describe('system-routes /api/services wire shape contract', () => {
     expect(svc.port).toBe(6379);
   });
 
+  it('GET /services: kind=postgres + type=NULL → wire emits postgresql (CCG regression)', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+
+    const postgresRow = makeCardSummary({
+      kind: 'postgres',
+      // type is absent (post-0012 fresh row — legacy column dropped)
+      image_url: 'postgres:17-alpine',
+      assigned_port: 5432,
+    });
+
+    const mockCtx = {
+      serviceManager: {
+        listWithCardSummary: vi.fn().mockResolvedValue([postgresRow]),
+        create: vi.fn(), getDetail: vi.fn(), getLogs: vi.fn(), getStats: vi.fn(),
+        getInspectionHealth: vi.fn(), getConnectedProjects: vi.fn(),
+        listDatabases: vi.fn(), createDatabase: vi.fn(), listUsers: vi.fn(),
+        createUser: vi.fn(), remove: vi.fn(), start: vi.fn(), stop: vi.fn(), restart: vi.fn(),
+      },
+      db: {
+        getEnvVars: vi.fn().mockReturnValue({}),
+        getService: vi.fn(), hasAnyServiceMetrics: vi.fn(), listServiceMetricsSince: vi.fn(),
+      },
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services');
+    expect(res.status).toBe(200);
+
+    const body = await res.json() as Array<Record<string, unknown>>;
+    // kind='postgres' + type=NULL → kindToLegacyType → 'postgresql'
+    expect(body[0].type).toBe('postgresql');
+    expect(body[0].type).not.toBe('postgres');
+  });
+
+  it('GET /services/:id: kind=postgres + type=NULL → wire emits postgresql (CCG regression)', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+
+    const postgresRow = makeCanonicalServiceRow({
+      id: 'svc-pg-001',
+      kind: 'postgres',
+      // type absent — post-0012 fresh row
+      image_url: 'postgres:17-alpine',
+      assigned_port: 5432,
+    });
+
+    const mockCtx = {
+      serviceManager: {
+        listWithCardSummary: vi.fn(),
+        create: vi.fn(),
+        getDetail: vi.fn().mockResolvedValue(postgresRow),
+        getLogs: vi.fn(), getStats: vi.fn(), getInspectionHealth: vi.fn(),
+        getConnectedProjects: vi.fn(), listDatabases: vi.fn(), createDatabase: vi.fn(),
+        listUsers: vi.fn(), createUser: vi.fn(), remove: vi.fn(), start: vi.fn(),
+        stop: vi.fn(), restart: vi.fn(),
+      },
+      db: {
+        getEnvVars: vi.fn().mockReturnValue({}),
+        getService: vi.fn(), hasAnyServiceMetrics: vi.fn(), listServiceMetricsSince: vi.fn(),
+      },
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services/svc-pg-001');
+    expect(res.status).toBe(200);
+
+    const svc = await res.json() as Record<string, unknown>;
+    // kind='postgres' + type=NULL → kindToLegacyType → 'postgresql'
+    expect(svc.type).toBe('postgresql');
+    expect(svc.type).not.toBe('postgres');
+  });
+
+  it('GET /services: kind=mongo + type=NULL → wire emits mongodb (CCG regression)', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+
+    const mongoRow = makeCardSummary({
+      id: 'svc-mongo-001',
+      kind: 'mongo',
+      // type absent — post-0012 fresh row
+      image_url: 'mongo:7',
+      assigned_port: 27017,
+    });
+
+    const mockCtx = {
+      serviceManager: {
+        listWithCardSummary: vi.fn().mockResolvedValue([mongoRow]),
+        create: vi.fn(), getDetail: vi.fn(), getLogs: vi.fn(), getStats: vi.fn(),
+        getInspectionHealth: vi.fn(), getConnectedProjects: vi.fn(),
+        listDatabases: vi.fn(), createDatabase: vi.fn(), listUsers: vi.fn(),
+        createUser: vi.fn(), remove: vi.fn(), start: vi.fn(), stop: vi.fn(), restart: vi.fn(),
+      },
+      db: {
+        getEnvVars: vi.fn().mockReturnValue({}),
+        getService: vi.fn(), hasAnyServiceMetrics: vi.fn(), listServiceMetricsSince: vi.fn(),
+      },
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services');
+    expect(res.status).toBe(200);
+
+    const body = await res.json() as Array<Record<string, unknown>>;
+    // kind='mongo' + type=NULL → kindToLegacyType → 'mongodb'
+    expect(body[0].type).toBe('mongodb');
+    expect(body[0].type).not.toBe('mongo');
+  });
+
   it('legacy rows with type/image/port already set: passthrough unchanged', async () => {
     const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
     const app = new Hono();
