@@ -503,4 +503,55 @@ describe('ProjectRepo - createProject auto-inserts backing services row', () => 
     // child has kind='compose-child', so the EXISTS subquery filters it out.
     expect(listed.map((p) => p.id)).not.toContain('child-p');
   });
+
+  // CCG regression: createProject must be fully transactional. If the backing
+  // services insert fails (e.g. orphan row from a prior deleted project), the
+  // projects row must NOT be committed.
+  describe('createProject — transactional atomicity', () => {
+    it('throws when an orphan service row exists for the same id, and does NOT create the projects row', () => {
+      const projectId = 'stale-proj';
+
+      // Pre-seed the orphan service row that a previously-deleted project left behind.
+      sqlite.exec(
+        `INSERT INTO services (id, project_id, name, kind, source, project_type, server_id)
+         VALUES ('${projectId}__svc', '__orphan_managed', '${projectId}__svc', 'git', 'git', 'web', 'local')`,
+      );
+
+      // createProject must throw because the services INSERT hits a UNIQUE conflict.
+      expect(() =>
+        repo.createProject({
+          id: projectId,
+          name: 'stale-project',
+          repoUrl: 'https://github.com/test/stale',
+        }),
+      ).toThrow();
+
+      // The transaction must have rolled back — no projects row should exist.
+      const project = repo.getProject(projectId);
+      expect(project).toBeUndefined();
+    });
+
+    it('error message mentions orphan service rows when services.id conflicts', () => {
+      const projectId = 'orphan-id-proj';
+
+      sqlite.exec(
+        `INSERT INTO services (id, project_id, name, kind, source, project_type, server_id)
+         VALUES ('${projectId}__svc', '__orphan_managed', '${projectId}__svc', 'git', 'git', 'web', 'local')`,
+      );
+
+      let thrown: Error | undefined;
+      try {
+        repo.createProject({
+          id: projectId,
+          name: 'orphan-id-project',
+          repoUrl: 'https://github.com/test/orphan',
+        });
+      } catch (err) {
+        thrown = err as Error;
+      }
+
+      expect(thrown).toBeDefined();
+      expect(thrown!.message).toMatch(/orphan service rows/i);
+    });
+  });
 });

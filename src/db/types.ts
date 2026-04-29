@@ -124,9 +124,11 @@ export interface ServiceRow {
   name: string;
   /**
    * @deprecated — drops in migration 0012 Phase C. Read `kind` instead.
-   * Wire responses must still emit `type` (use `kind` as the source value).
+   * Wire responses must still emit `type` (use `kindToLegacyType(kind)` as the
+   * source value). NULL for rows created after migration 0012 that no longer
+   * write this column.
    */
-  type: string;
+  type: string | null;
   /**
    * @deprecated — drops in migration 0012 Phase C. Read `image_url` instead.
    * Wire responses must still emit `image` (use `image_url` as the source value).

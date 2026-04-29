@@ -56,15 +56,19 @@ function buildPreMigrationRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
   };
 }
 
-/** Build a ServiceRow that has canonical columns populated with correct values
- * and legacy columns set to intentionally stale/wrong values so the test
- * verifies which source the wire code reads from. */
+/**
+ * Build a ServiceRow that mimics a post-0012 fresh-create row:
+ * canonical columns populated, legacy `type` column is NULL (not written
+ * by the new code path after migration 0012). Wire emission must fall back
+ * to kindToLegacyType(kind) and emit the legacy vocabulary (postgresql/mongodb).
+ */
 function buildCanonicalRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
   return {
     id: 'svc-canonical-1',
     name: 'my-postgres',
-    // Legacy columns — stale on purpose so the test catches regressions
-    type: 'STALE_TYPE',
+    // Legacy `type` is NULL — post-0012 fresh-create rows won't have it populated.
+    // Wire emission must derive the legacy vocabulary via kindToLegacyType(kind).
+    type: null,
     image: 'STALE_IMAGE',
     port: 9999,
     env_vars: null,
@@ -74,7 +78,7 @@ function buildCanonicalRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
     container_name: 'ol-svc-my-postgres',
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
-    // Canonical columns — these should be used for wire responses
+    // Canonical columns — source of truth for post-0012 rows
     kind: 'postgres',
     image_url: 'postgres:17-alpine',
     assigned_port: 5432,
@@ -112,7 +116,7 @@ describe('PR 2.5 — services wire-format stability (MCP)', () => {
     vi.spyOn(traefikPipeline, 'getAllIps').mockReturnValue([]);
   });
 
-  it('list_services emits kind as `type` and assigned_port as `port`', async () => {
+  it('list_services emits legacy vocabulary type (postgresql) via kindToLegacyType when type=NULL', async () => {
     const row = buildCanonicalRow();
     const { ctx } = createMcpContext(row);
 
@@ -127,17 +131,17 @@ describe('PR 2.5 — services wire-format stability (MCP)', () => {
 
     expect(result.services).toHaveLength(1);
     const svc = result.services[0];
-    // Must use canonical values, not legacy stale values
-    expect(svc.type).toBe('postgres');
+    // Wire contract: kind='postgres' + type=NULL → emit 'postgresql' (legacy vocabulary)
+    expect(svc.type).toBe('postgresql');
     expect(svc.port).toBe(5432);
     expect(svc.image).toBe('postgres:17-alpine');
-    // Must NOT emit stale legacy values
-    expect(svc.type).not.toBe('STALE_TYPE');
+    // Must NOT emit canonical kind directly or stale values
+    expect(svc.type).not.toBe('postgres');
     expect(svc.port).not.toBe(9999);
     expect(svc.image).not.toBe('STALE_IMAGE');
   });
 
-  it('get_service_credentials emits canonical kind as `type` and assigned_port as `port`', async () => {
+  it('get_service_credentials emits legacy vocabulary type (postgresql) via kindToLegacyType when type=NULL', async () => {
     const row = buildCanonicalRow({
       credentials: JSON.stringify({
         user: 'openlander',
@@ -160,14 +164,15 @@ describe('PR 2.5 — services wire-format stability (MCP)', () => {
       { target: 'mcp' },
     )) as { type: string; port: number };
 
-    expect(result.type).toBe('postgres');
-    expect(result.type).not.toBe('STALE_TYPE');
+    // Wire contract: kind='postgres' + type=NULL → emit 'postgresql' (legacy vocabulary)
+    expect(result.type).toBe('postgresql');
+    expect(result.type).not.toBe('postgres');
     // Port comes from credentials blob first, which is 5432
     expect(result.port).toBe(5432);
     expect(result.port).not.toBe(9999);
   });
 
-  it('list_services falls back to legacy image/port for 0009-migrated rows (image_url=NULL, assigned_port=NULL)', async () => {
+  it('list_services emits legacy type directly for 0009-migrated rows (type=postgresql, image_url=NULL, assigned_port=NULL)', async () => {
     const row = buildPreMigrationRow();
     const { ctx } = createMcpContext(row);
 
@@ -182,8 +187,8 @@ describe('PR 2.5 — services wire-format stability (MCP)', () => {
 
     expect(result.services).toHaveLength(1);
     const svc = result.services[0];
-    // canonical kind takes precedence over legacy type for the `type` field
-    expect(svc.type).toBe('postgres');
+    // Wire contract: legacy type='postgresql' is present, so it passes through directly.
+    expect(svc.type).toBe('postgresql');
     // assigned_port is NULL — must fall back to legacy port
     expect(svc.port).toBe(5432);
     // image_url is NULL — must fall back to legacy image, not emit empty string
@@ -238,7 +243,7 @@ describe('PR 2.5 — services wire-format stability (HTTP)', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('GET /projects/:p/managed-services emits canonical kind as `type` and assigned_port as `port`', async () => {
+  it('GET /projects/:p/managed-services emits legacy type (postgres) when legacy type column is populated', async () => {
     const res = await app.request(`/api/projects/${projectId}/managed-services`);
     expect(res.status).toBe(200);
 
@@ -251,7 +256,8 @@ describe('PR 2.5 — services wire-format stability (HTTP)', () => {
     expect(body).toHaveLength(1);
 
     const svc = body[0];
-    // kind='postgres' should be emitted as type
+    // createService writes type='postgres' (legacy column populated), so it passes through.
+    // Wire contract: legacy type takes precedence when present.
     expect(svc.type).toBe('postgres');
     // assigned_port=5432 should be emitted as port
     expect(svc.port).toBe(5432);
@@ -268,5 +274,70 @@ describe('PR 2.5 — services wire-format stability (HTTP)', () => {
     expect(svc!.type).toBe('postgres');
     expect(svc!.image).toBe('postgres:17-alpine');
     expect(svc!.port).toBe(5432);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CCG regression: kindToLegacyType wire-emission contract
+// ---------------------------------------------------------------------------
+
+describe('CCG — kindToLegacyType wire-emission (MCP)', () => {
+  beforeEach(() => {
+    vi.spyOn(traefikPipeline, 'getAllIps').mockReturnValue([]);
+  });
+
+  // Scenario: post-rc.7 fresh-create where legacy `type` column was NOT populated.
+  // kind='postgres', type=NULL → wire must emit 'postgresql' (not 'postgres').
+  it('list_services emits postgresql (not postgres) for kind=postgres + type=NULL', async () => {
+    const row = buildCanonicalRow({ type: null });
+    const { ctx } = createMcpContext(row);
+
+    const tool = createSharedToolRegistry(ctx, { target: 'mcp' }).find(
+      (t) => t.name === 'list_services',
+    );
+    expect(tool).toBeDefined();
+
+    const result = (await tool!.execute({}, { target: 'mcp' })) as {
+      services: Array<{ type: string }>;
+    };
+
+    expect(result.services[0].type).toBe('postgresql');
+    expect(result.services[0].type).not.toBe('postgres');
+  });
+
+  // Scenario: post-rc.7 fresh-create where legacy `type` column was NOT populated.
+  // kind='mongo', type=NULL → wire must emit 'mongodb' (not 'mongo').
+  it('list_services emits mongodb (not mongo) for kind=mongo + type=NULL', async () => {
+    const row = buildCanonicalRow({ kind: 'mongo', type: null, assigned_port: 27017 });
+    const { ctx } = createMcpContext(row);
+
+    const tool = createSharedToolRegistry(ctx, { target: 'mcp' }).find(
+      (t) => t.name === 'list_services',
+    );
+    expect(tool).toBeDefined();
+
+    const result = (await tool!.execute({}, { target: 'mcp' })) as {
+      services: Array<{ type: string }>;
+    };
+
+    expect(result.services[0].type).toBe('mongodb');
+    expect(result.services[0].type).not.toBe('mongo');
+  });
+
+  // Scenario: legacy type is already populated (pre-0012 rows) → passes through unchanged.
+  it('list_services passes through legacy type when already populated (e.g. postgresql)', async () => {
+    const row = buildCanonicalRow({ type: 'postgresql', kind: 'postgres' });
+    const { ctx } = createMcpContext(row);
+
+    const tool = createSharedToolRegistry(ctx, { target: 'mcp' }).find(
+      (t) => t.name === 'list_services',
+    );
+    expect(tool).toBeDefined();
+
+    const result = (await tool!.execute({}, { target: 'mcp' })) as {
+      services: Array<{ type: string }>;
+    };
+
+    expect(result.services[0].type).toBe('postgresql');
   });
 });

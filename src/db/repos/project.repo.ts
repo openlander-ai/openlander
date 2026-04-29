@@ -83,60 +83,70 @@ export class ProjectRepo {
     }
 
     try {
-      this.db
-        .insert(projects)
-        .values({
-          id: project.id,
-          name: project.name,
-          repo_url: project.repoUrl,
-          branch: project.branch ?? 'main',
-          parent_project_id: parentProjectId,
-          dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
-          docker_target: project.dockerTarget ?? null,
-          build_context: project.buildContext ?? null,
-          build_method: buildMethod,
-          source,
-          image_url: project.imageUrl ?? null,
-          image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
-          container_port: project.containerPort ?? null,
-        })
-        .run();
+      return this.db.transaction((tx) => {
+        tx.insert(projects)
+          .values({
+            id: project.id,
+            name: project.name,
+            repo_url: project.repoUrl,
+            branch: project.branch ?? 'main',
+            parent_project_id: parentProjectId,
+            dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
+            docker_target: project.dockerTarget ?? null,
+            build_context: project.buildContext ?? null,
+            build_method: buildMethod,
+            source,
+            image_url: project.imageUrl ?? null,
+            image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
+            container_port: project.containerPort ?? null,
+          })
+          .run();
 
-      // Insert backing service row mirroring 0009 Phase D convention.
-      // - Standalone / compose-parent: project_id = self id.
-      // - Compose-child: project_id = parent group id.
-      // The id || '__svc' convention is required by the listProjects EXISTS
-      // subquery and the schema comment at environments.service_id.
-      this.db
-        .insert(services)
-        .values({
-          id: `${project.id}__svc`,
-          project_id: parentProjectId ?? project.id,
-          name: `${project.name}__svc`,
-          kind,
-          parent_service_id: parentProjectId ? `${parentProjectId}__svc` : null,
-          source,
-          build_method: buildMethod,
-          dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
-          docker_target: project.dockerTarget ?? null,
-          build_context: project.buildContext ?? null,
-          image_url: project.imageUrl ?? null,
-          image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
-          container_port: project.containerPort ?? null,
-        })
-        .onConflictDoNothing()
-        .run();
+        // Insert backing service row mirroring 0009 Phase D convention.
+        // - Standalone / compose-parent: project_id = self id.
+        // - Compose-child: project_id = parent group id.
+        // The id || '__svc' convention is required by the listProjects EXISTS
+        // subquery and the schema comment at environments.service_id.
+        // NO onConflictDoNothing — a UNIQUE conflict here means an orphan service
+        // row from a previously-deleted project; that is corrupt state and must
+        // abort the whole transaction so the projects row is never committed.
+        tx.insert(services)
+          .values({
+            id: `${project.id}__svc`,
+            project_id: parentProjectId ?? project.id,
+            name: `${project.name}__svc`,
+            kind,
+            parent_service_id: parentProjectId ? `${parentProjectId}__svc` : null,
+            source,
+            build_method: buildMethod,
+            dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
+            docker_target: project.dockerTarget ?? null,
+            build_context: project.buildContext ?? null,
+            image_url: project.imageUrl ?? null,
+            image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
+            container_port: project.containerPort ?? null,
+          })
+          .run();
+
+        const created = tx.select().from(projects).where(eq(projects.id, project.id)).get() as
+          | ProjectRow
+          | undefined;
+        if (!created) throw new RepoPersistenceError('project', project.id);
+        return created;
+      });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes('UNIQUE constraint failed')) {
+        if (msg.includes('services.id') || msg.includes('services.name')) {
+          throw new Error(
+            `A previous project with id "${project.id}" left orphan service rows. ` +
+              `Delete them or pick a new id.`,
+          );
+        }
         throw new ProjectAlreadyExistsError(project.name);
       }
       throw error;
     }
-
-    const created = this.getProject(project.id);
-    if (!created) throw new RepoPersistenceError('project', project.id);
-    return created;
   }
 
   getProject(id: string): ProjectRow | undefined {
