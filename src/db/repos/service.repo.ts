@@ -58,11 +58,16 @@ export class ServiceRepo {
         project_id: '__orphan_managed',
         name: service.name,
         kind: legacyTypeToKind(service.type),
+        // Legacy columns — kept until migration 0012 Phase C drops them.
         type: service.type,
         image: service.image,
-        container_name: service.containerName,
         port: service.port,
         env_vars: service.envVars ?? null,
+        // Canonical columns — PR 2.5 ensures these are populated at creation
+        // so that post-0012 readers never fall back to the legacy columns.
+        image_url: service.image,
+        assigned_port: service.port,
+        container_name: service.containerName,
         credentials: service.credentials ?? null,
       })
       .run();
