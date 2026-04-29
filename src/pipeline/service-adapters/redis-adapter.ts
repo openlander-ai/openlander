@@ -25,7 +25,7 @@ export class RedisAdapter implements ServiceAdapter {
   }
 
   async waitForReady(service: ServiceRow, docker: Docker): Promise<void> {
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     await waitUntilReady(
       async () => {
         const logs = await docker.getLogs(containerId, 200);

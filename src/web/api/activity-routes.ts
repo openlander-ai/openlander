@@ -122,7 +122,7 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         kind,
         at,
         relTs,
-        project: row.project_id,
+        project: row.project_id ?? null,
         service: null,
         // Project name is intentionally omitted — ActivityRow renders the
         // project badge from `event.project`, so re-encoding it in the
@@ -137,10 +137,11 @@ export function createActivityRoutes(ctx: AppContext): Hono {
     // ones come from a dedicated cross-project query for symmetry.
     const unresolved = ctx.db.listUnresolvedRuntimeIncidents();
     for (const inc of unresolved) {
-      if (projectScoped && inc.project_id !== projectFilter) continue;
+      const incProjectId = inc.service_id;
+      if (projectScoped && incProjectId !== projectFilter) continue;
       const ms = parseTimestamp(inc.created_at);
       if (ms == null) continue;
-      const projectName = projectNameById.get(inc.project_id) ?? inc.project_id;
+      const projectName = projectNameById.get(incProjectId) ?? incProjectId;
       const { at, relTs } = relativeTime(ms, now);
       const detailBits: string[] = [];
       if (inc.exit_code != null) detailBits.push(`exit ${String(inc.exit_code)}`);
@@ -154,7 +155,7 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         kind: 'service_crashed',
         at,
         relTs,
-        project: inc.project_id,
+        project: inc.service_id,
         service: null,
         // Title leans on project badge in the UI; raw project name kept
         // out of the headline so the timeline stays uniform.
@@ -165,7 +166,8 @@ export function createActivityRoutes(ctx: AppContext): Hono {
 
     const resolved = ctx.db.listRecentResolvedRuntimeIncidents(limit * 2);
     for (const inc of resolved) {
-      if (projectScoped && inc.project_id !== projectFilter) continue;
+      const resolvedProjectId = inc.service_id;
+      if (projectScoped && resolvedProjectId !== projectFilter) continue;
       const ms = parseTimestamp(inc.resolved_at ?? inc.created_at);
       if (ms == null) continue;
       const { at, relTs } = relativeTime(ms, now);
@@ -175,7 +177,7 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         kind: 'service_recovered',
         at,
         relTs,
-        project: inc.project_id,
+        project: inc.service_id,
         service: null,
         title: 'Service recovered',
         detail: inc.category ? `from ${inc.category}` : undefined,

@@ -110,14 +110,14 @@ export const serviceToolDefs: ToolDef[] = [
           // whether legacy `type` column is populated. kindToLegacyType ensures
           // forward-compat with post-0012 rows where legacy column may be NULL.
           // eslint-disable-next-line @typescript-eslint/no-deprecated
-          type: result.type ?? kindToLegacyType(result.kind ?? 'unknown'),
+          type: result.type ?? kindToLegacyType(result.kind),
           status: result.status,
           // Wire key preserved; canonical source: assigned_port
           port: legacyPort,
           credentials: parseServiceCredentials(result.credentials),
         },
         suggested_env: suggestedEnv,
-        externalAccess: getServiceExternalAccess(legacyPort),
+        externalAccess: getServiceExternalAccess(legacyPort ?? null),
         _agent_guidance: {
           next_steps: [
             'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
@@ -149,16 +149,16 @@ export const serviceToolDefs: ToolDef[] = [
               name: service.name,
               // Wire contract: emit legacy vocabulary (postgresql/mongodb).
               // eslint-disable-next-line @typescript-eslint/no-deprecated
-              type: service.type ?? kindToLegacyType(service.kind ?? 'unknown'),
+              type: service.type ?? kindToLegacyType(service.kind),
               status: service.status,
               // Wire key preserved; canonical source: assigned_port
               port: svcPort,
               network: SHARED_NETWORK_NAME,
               // Wire key preserved; canonical first, legacy fallback for pre-migration rows
-              // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
+              // eslint-disable-next-line @typescript-eslint/no-deprecated
               image: service.image_url ?? service.image ?? '',
               createdAt: service.created_at,
-              externalAccess: getServiceExternalAccess(svcPort),
+              externalAccess: getServiceExternalAccess(svcPort ?? null),
             };
           }),
           _agent_guidance: {
@@ -181,7 +181,7 @@ export const serviceToolDefs: ToolDef[] = [
             name: service.name,
             // Wire contract: emit legacy vocabulary (postgresql/mongodb).
             // eslint-disable-next-line @typescript-eslint/no-deprecated
-            type: service.type ?? kindToLegacyType(service.kind ?? 'unknown'),
+            type: service.type ?? kindToLegacyType(service.kind),
             status: service.status,
             // Wire key preserved; canonical source: assigned_port
             port: svcPort,
@@ -366,7 +366,7 @@ export const serviceToolDefs: ToolDef[] = [
         name: service.name,
         // Wire contract: emit legacy vocabulary (postgresql/mongodb).
         // eslint-disable-next-line @typescript-eslint/no-deprecated
-        type: service.type ?? kindToLegacyType(service.kind ?? 'unknown'),
+        type: service.type ?? kindToLegacyType(service.kind),
         status: service.status,
         health,
         ...(healthDetail ? { healthDetail } : {}),
@@ -374,13 +374,13 @@ export const serviceToolDefs: ToolDef[] = [
         port: svcPort,
         network: SHARED_NETWORK_NAME,
         // Wire key preserved; canonical first, legacy fallback for pre-migration rows
-        // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
         image: service.image_url ?? service.image ?? '',
         containerName: service.container_name,
         containerId: service.container_id,
         createdAt: service.created_at,
         updatedAt: service.updated_at,
-        externalAccess: getServiceExternalAccess(svcPort),
+        externalAccess: getServiceExternalAccess(svcPort ?? null),
         _agent_guidance: {
           networking: [
             `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
@@ -435,7 +435,7 @@ export const serviceToolDefs: ToolDef[] = [
       const service = await getServiceByName(appCtx, serviceName);
       // Wire contract: emit legacy vocabulary (postgresql/mongodb).
       // eslint-disable-next-line @typescript-eslint/no-deprecated
-      const serviceType = service.type ?? kindToLegacyType(service.kind ?? 'unknown');
+      const serviceType = service.type ?? kindToLegacyType(service.kind);
       const result = await appCtx.serviceManager.remove(service.id, { force });
       return {
         status: 'removed',
@@ -529,7 +529,7 @@ export const serviceToolDefs: ToolDef[] = [
             service: serviceName,
             status: service.status,
             logs: null,
-            error: `Service "${serviceName}" is in ${service.status} state — container is not running. Logs are unavailable. Try start_service to restart, or check Docker host health.`,
+            error: `Service "${serviceName}" is in ${service.status ?? 'unknown'} state — container is not running. Logs are unavailable. Try start_service to restart, or check Docker host health.`,
           };
         }
         throw error;
@@ -597,7 +597,7 @@ export const serviceToolDefs: ToolDef[] = [
         service: serviceName,
         // Wire contract: emit legacy vocabulary (postgresql/mongodb).
         // eslint-disable-next-line @typescript-eslint/no-deprecated
-        type: service.type ?? kindToLegacyType(service.kind ?? 'unknown'),
+        type: service.type ?? kindToLegacyType(service.kind),
         credentials,
         connectionString,
         host: internalHost,
@@ -606,7 +606,7 @@ export const serviceToolDefs: ToolDef[] = [
         user: (credentials?.['user'] as string | undefined) || null,
         password: (credentials?.['password'] as string | undefined) || null,
         database: (credentials?.['database'] as string | undefined) || null,
-        externalAccess: getServiceExternalAccess(svcPort),
+        externalAccess: getServiceExternalAccess(svcPort ?? null),
         externalConnectionStrings: getExternalConnectionStrings(connectionString, internalHost),
       };
     },

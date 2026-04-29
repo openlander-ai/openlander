@@ -7,12 +7,12 @@ export class AuthRepo {
   constructor(private readonly db: DrizzleClient) {}
 
   isPasswordSet(): boolean {
-    const row = this.db.select().from(auth).where(eq(auth.id, 1)).get() as AuthRow | undefined;
+    const row = this.db.select().from(auth).where(eq(auth.id, 1)).get();
     return row !== undefined && row.password_hash !== '';
   }
 
   getAuth(): AuthRow | null {
-    const row = this.db.select().from(auth).where(eq(auth.id, 1)).get() as AuthRow | undefined;
+    const row = this.db.select().from(auth).where(eq(auth.id, 1)).get();
     return row ?? null;
   }
 
@@ -26,7 +26,7 @@ export class AuthRepo {
   }
 
   getApiToken(): { encrypted: string; iv: string } | null {
-    const row = this.db.select().from(auth).where(eq(auth.id, 1)).get() as AuthRow | undefined;
+    const row = this.db.select().from(auth).where(eq(auth.id, 1)).get();
     if (!row || !row.api_token || !row.api_token_iv) return null;
     return { encrypted: row.api_token, iv: row.api_token_iv };
   }
@@ -48,7 +48,7 @@ export class AuthRepo {
   }
 
   getSession(): { token: string; createdAt: number; expiresAt: number } | null {
-    const row = this.db.select().from(auth).where(eq(auth.id, 1)).get() as AuthRow | undefined;
+    const row = this.db.select().from(auth).where(eq(auth.id, 1)).get();
     if (
       !row ||
       !row.session_token ||

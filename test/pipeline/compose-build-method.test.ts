@@ -140,18 +140,22 @@ describe('Migration 0006 — build_method backfill (Critical 1)', () => {
   });
 
   it('backfills build_method=compose for git rows whose dockerfile_path is docker-compose.yml', () => {
-    // Insert a row mimicking a pre-fix compose project
+    // Post-0012: dockerfile_path/source/build_method live on services rows, not projects.
+    // Insert a group row + a service row mimicking a pre-fix compose project.
+    sqlite
+      .prepare(`INSERT INTO projects (id, name, repo_url, branch) VALUES ('p-lcyml', 'legacy-compose-yml', 'https://example.com/r.git', 'main')`)
+      .run();
     sqlite
       .prepare(
-        `INSERT INTO projects (id, name, repo_url, branch, dockerfile_path, source, build_method)
-         VALUES ('legacy-compose-yml', 'legacy-compose-yml', 'https://example.com/r.git', 'main', 'docker-compose.yml', 'git', NULL)`,
+        `INSERT INTO services (id, project_id, name, kind, source, dockerfile_path, build_method)
+         VALUES ('p-lcyml__svc', 'p-lcyml', 'legacy-compose-yml', 'git', 'git', 'docker-compose.yml', NULL)`,
       )
       .run();
 
-    // Re-apply 0006's backfill statement directly (idempotent against migrate())
+    // Re-apply 0006's backfill logic targeting services (post-0012 equivalent).
     sqlite
       .prepare(
-        `UPDATE projects SET build_method = 'compose'
+        `UPDATE services SET build_method = 'compose'
            WHERE source = 'git'
              AND build_method IS NULL
              AND dockerfile_path IS NOT NULL
@@ -165,22 +169,25 @@ describe('Migration 0006 — build_method backfill (Critical 1)', () => {
       .run();
 
     const row = sqlite
-      .prepare('SELECT build_method FROM projects WHERE id = ?')
-      .get('legacy-compose-yml') as { build_method: string | null };
+      .prepare('SELECT build_method FROM services WHERE id = ?')
+      .get('p-lcyml__svc') as { build_method: string | null };
     expect(row.build_method).toBe('compose');
   });
 
   it('does NOT backfill rows with a Dockerfile path', () => {
     sqlite
+      .prepare(`INSERT INTO projects (id, name, repo_url, branch) VALUES ('p-ldf', 'legacy-dockerfile', 'https://example.com/r.git', 'main')`)
+      .run();
+    sqlite
       .prepare(
-        `INSERT INTO projects (id, name, repo_url, branch, dockerfile_path, source, build_method)
-         VALUES ('legacy-dockerfile', 'legacy-dockerfile', 'https://example.com/r.git', 'main', 'Dockerfile', 'git', NULL)`,
+        `INSERT INTO services (id, project_id, name, kind, source, dockerfile_path, build_method)
+         VALUES ('p-ldf__svc', 'p-ldf', 'legacy-dockerfile', 'git', 'git', 'Dockerfile', NULL)`,
       )
       .run();
 
     sqlite
       .prepare(
-        `UPDATE projects SET build_method = 'compose'
+        `UPDATE services SET build_method = 'compose'
            WHERE source = 'git'
              AND build_method IS NULL
              AND dockerfile_path IS NOT NULL
@@ -194,22 +201,25 @@ describe('Migration 0006 — build_method backfill (Critical 1)', () => {
       .run();
 
     const row = sqlite
-      .prepare('SELECT build_method FROM projects WHERE id = ?')
-      .get('legacy-dockerfile') as { build_method: string | null };
+      .prepare('SELECT build_method FROM services WHERE id = ?')
+      .get('p-ldf__svc') as { build_method: string | null };
     expect(row.build_method).toBeNull();
   });
 
   it('does NOT overwrite an explicitly set build_method=dockerfile', () => {
     sqlite
+      .prepare(`INSERT INTO projects (id, name, repo_url, branch) VALUES ('p-edf', 'explicit-df', 'https://example.com/r.git', 'main')`)
+      .run();
+    sqlite
       .prepare(
-        `INSERT INTO projects (id, name, repo_url, branch, dockerfile_path, source, build_method)
-         VALUES ('explicit-df', 'explicit-df', 'https://example.com/r.git', 'main', 'docker-compose.yml', 'git', 'dockerfile')`,
+        `INSERT INTO services (id, project_id, name, kind, source, dockerfile_path, build_method)
+         VALUES ('p-edf__svc', 'p-edf', 'explicit-df', 'git', 'git', 'docker-compose.yml', 'dockerfile')`,
       )
       .run();
 
     sqlite
       .prepare(
-        `UPDATE projects SET build_method = 'compose'
+        `UPDATE services SET build_method = 'compose'
            WHERE source = 'git'
              AND build_method IS NULL
              AND dockerfile_path IS NOT NULL
@@ -223,8 +233,8 @@ describe('Migration 0006 — build_method backfill (Critical 1)', () => {
       .run();
 
     const row = sqlite
-      .prepare('SELECT build_method FROM projects WHERE id = ?')
-      .get('explicit-df') as { build_method: string | null };
+      .prepare('SELECT build_method FROM services WHERE id = ?')
+      .get('p-edf__svc') as { build_method: string | null };
     expect(row.build_method).toBe('dockerfile');
   });
 

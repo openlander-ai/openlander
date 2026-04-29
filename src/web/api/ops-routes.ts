@@ -823,20 +823,20 @@ export function createOpsRoutes(ctx: AppContext): Hono {
           type: 'project' as const,
           name: p.name,
           // Fix 3: status is a deployable field — canonical-first ?? legacy fallback.
-          status: ctx.db.getDeployableForProject(p.id)?.status ?? p.status,
+          status: ctx.db.getDeployableForProject(p.id)?.status ?? p.status ?? '',
         })),
         ...services.map((s) => ({
           id: s.id,
           type: 'service' as const,
           name: s.name,
-          status: s.status,
+          status: s.status ?? '',
         })),
       ];
 
       const edges = dependencies
         .map((dep) => ({
-          source: dep.source_project_id,
-          target: dep.target_project_id ?? dep.target_service_id ?? '',
+          source: dep.source_service_id,
+          target: dep.target_service_id ?? '',
           dependencyType: dep.dependency_type,
         }))
         .filter((e) => e.target !== '');

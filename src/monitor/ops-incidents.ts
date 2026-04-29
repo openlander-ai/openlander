@@ -73,7 +73,7 @@ export class IncidentManager {
     try {
       const dependents = this.ctx.db.findProjectDependents(projectId, undefined);
       if (dependents.length > 0) {
-        const affectedProjectIds = dependents.map((d) => d.source_project_id);
+        const affectedProjectIds = dependents.map((d) => d.source_service_id);
         this.addEvent(
           incident.id,
           'cascade_detected',

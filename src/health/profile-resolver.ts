@@ -6,7 +6,7 @@ export function resolveMonitoringProfile(
   deployable?: ServiceRow | null,
 ): MonitoringProfile {
   // PR 4.5: canonical-first reads — deployable (services) is source of truth post-0012.
-  const projectType = deployable?.project_type ?? project.project_type;
+  const projectType = deployable?.project_type ?? project.project_type ?? 'web';
 
   const defaultsByType: Record<
     'web' | 'worker',

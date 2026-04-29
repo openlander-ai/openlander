@@ -402,7 +402,9 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
     name: project.name,
     repo_url: project.repo_url,
     branch: project.branch,
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     parent_project_id: project.parent_project_id,
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     visibility: project.visibility,
     server_id: project.server_id,
     project_type: projectType,
@@ -434,7 +436,7 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
     repoUrl: project.repo_url,
     source,
     imageUrl,
-    imageCmd: parseImageCmd(imageCmdRaw),
+    imageCmd: parseImageCmd(imageCmdRaw ?? null),
     containerPort,
     created_at: normalizeTimestamp(project.created_at),
     updated_at: normalizeTimestamp(project.updated_at),
@@ -703,6 +705,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           id: p.id,
           name: p.name,
           status: projectStatus,
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           visibility: p.visibility,
           source: projectSource,
           repoUrl: p.repo_url,
@@ -720,6 +723,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           ...(imageUrl ? { imageUrl } : {}),
           createdAt: normalizeTimestamp(p.created_at),
           updatedAt: normalizeTimestamp(p.updated_at),
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           parentProjectId: p.parent_project_id,
           isCompose: childCount > 0,
           serviceCount: childCount,
@@ -816,7 +820,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           // pre-0012 too.
           const runtimeNode: TopologyNode = {
             container_id: deployable?.container_id ?? node.container_id,
-            status: deployable?.status ?? node.status,
+            status: deployable?.status ?? node.status ?? null,
           };
           const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
 
@@ -917,7 +921,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     ctx.db.updateProject(project.id, {
       imageUrl,
-      imageCmd,
+      imageCmd: imageCmd ? JSON.stringify(imageCmd) : null,
       containerPort,
     });
 
@@ -1046,7 +1050,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const credentials = parseServiceCredentials(service.credentials);
     // Wire contract: emit legacy vocabulary (postgresql/mongodb) for back-compat.
     // eslint-disable-next-line @typescript-eslint/no-deprecated
-    const serviceKind = service.type ?? kindToLegacyType(service.kind ?? 'unknown');
+    const serviceKind = service.type ?? kindToLegacyType(service.kind);
     const injectedKeys = autoInjectServiceEnv({
       db: ctx.db,
       env: ctx.env,
@@ -1054,7 +1058,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       serviceId: service.id,
       serviceName: service.name,
       serviceType: serviceKind,
-      containerName: service.container_name,
+      containerName: service.container_name ?? '',
       credentials,
     });
     ctx.db.updateServiceConnection(connection.id, {
@@ -1064,7 +1068,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     // Auto-sync dependency
     try {
       ctx.db.createProjectDependency({
-        source_project_id: project.id,
+        source_service_id: `${project.id}__svc`,
         target_service_id: serviceId,
         dependency_type:
           serviceKind === 'postgres' || serviceKind === 'mysql'
@@ -2053,6 +2057,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     // PR 4 canonical-first: assigned_port from deployable services row.
     const shareDeployable = ctx.db.getDeployableForProject(project.id);
     const sharePort = shareDeployable?.assigned_port ?? project.assigned_port;
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     if (project.visibility !== 'quick-share' && project.visibility !== 'shared') {
       if (!sharePort) {
         return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
@@ -2410,7 +2415,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           400,
         );
       }
-      ctx.db.updateProject(project.id, { imageUrl, imageCmd, containerPort });
+      ctx.db.updateProject(project.id, {
+        imageUrl,
+        imageCmd: imageCmd ? JSON.stringify(imageCmd) : null,
+        containerPort,
+      });
       const updated = ctx.db.getProject(project.id);
       if (!updated) return cx.json({ error: 'NOT_FOUND', message: 'Project not found' }, 404);
       // PR 4 canonical-first: re-read deployable after mutation so wire
@@ -2462,7 +2471,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
             const kind = resolveKind(node.name);
             const runtimeNode: TopologyNode = {
               container_id: deployable?.container_id ?? node.container_id,
-              status: deployable?.status ?? node.status,
+              status: deployable?.status ?? node.status ?? null,
             };
             const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
             return {
@@ -2530,7 +2539,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     }
     const connections = ctx.db.listServiceConnectionsByProject(project.id);
     const services = connections
-      .map((conn) => ctx.db.getService(conn.service_id))
+      .map((conn) => ctx.db.getService(conn.service_id_provider))
       .filter((svc) => svc !== undefined);
     return c.json(
       services.map((svc) => {
@@ -2541,7 +2550,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           name: svc.name,
           // Wire contract: emit legacy vocabulary (postgresql/mongodb).
           // eslint-disable-next-line @typescript-eslint/no-deprecated
-          type: svc.type ?? kindToLegacyType(svc.kind ?? 'unknown'),
+          type: svc.type ?? kindToLegacyType(svc.kind),
           status: svc.status,
           // Wire key preserved; canonical source: assigned_port
           port: svcPort,

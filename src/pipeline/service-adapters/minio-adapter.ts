@@ -56,7 +56,7 @@ export class MinioAdapter implements ServiceAdapter {
     const hostPort = service.assigned_port ?? service.port;
     await waitUntilReady(
       async () => {
-        const response = await fetch(`${resolveContainerUrl(hostPort)}/minio/health/live`, {
+        const response = await fetch(`${resolveContainerUrl(hostPort ?? 0)}/minio/health/live`, {
           signal: AbortSignal.timeout(2000),
         });
         if (!response.ok) {

@@ -156,7 +156,7 @@ const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
   },
   {
     category: 'dockerfile-content',
-    tier: 2.5 as BuildTier,
+    tier: 2.5,
     autoFixable: true,
     suggestible: false,
     message: 'Dockerfile content appears invalid or incompatible with project requirements.',

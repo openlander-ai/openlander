@@ -4,6 +4,14 @@ import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { deployLogs } from '../schema.drizzle.js';
 import type { DeployLogRow } from '../types.js';
 
+/**
+ * Post-0012: deploy_logs is service-scoped. Callers still pass `projectId`
+ * for vocabulary continuity; the repo translates to the canonical service id.
+ */
+function projectIdToServiceId(projectId: string): string {
+  return projectId.endsWith('__svc') ? projectId : `${projectId}__svc`;
+}
+
 export class DeployLogRepo {
   constructor(
     private readonly db: DrizzleClient,
@@ -28,7 +36,7 @@ export class DeployLogRepo {
       .insert(deployLogs)
       .values({
         id: log.id,
-        project_id: log.projectId,
+        service_id: projectIdToServiceId(log.projectId),
         environment_id: log.environmentId ?? null,
         status: log.status,
         trigger: log.trigger,
@@ -48,9 +56,10 @@ export class DeployLogRepo {
     environmentId?: string,
     _serverId?: string,
   ): DeployLogRow[] {
+    const serviceId = projectIdToServiceId(projectId);
     const whereClause = environmentId
-      ? and(eq(deployLogs.project_id, projectId), eq(deployLogs.environment_id, environmentId))
-      : eq(deployLogs.project_id, projectId);
+      ? and(eq(deployLogs.service_id, serviceId), eq(deployLogs.environment_id, environmentId))
+      : eq(deployLogs.service_id, serviceId);
 
     return this.db
       .select()
@@ -62,9 +71,10 @@ export class DeployLogRepo {
   }
 
   getLastDeployLog(projectId: string, environmentId?: string): DeployLogRow | undefined {
+    const serviceId = projectIdToServiceId(projectId);
     const whereClause = environmentId
-      ? and(eq(deployLogs.project_id, projectId), eq(deployLogs.environment_id, environmentId))
-      : eq(deployLogs.project_id, projectId);
+      ? and(eq(deployLogs.service_id, serviceId), eq(deployLogs.environment_id, environmentId))
+      : eq(deployLogs.service_id, serviceId);
 
     return this.db
       .select()

@@ -7,7 +7,7 @@ import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('db-migration');
 import { createDrizzleDatabase, type DrizzleClient, type SqliteDatabase } from './drizzle.js';
-import { environments, projects } from './schema.drizzle.js';
+import { environments, services } from './schema.drizzle.js';
 import { ProjectRepo } from './repos/project.repo.js';
 import { EnvironmentRepo } from './repos/environment.repo.js';
 import { EnvVarRepo } from './repos/env-var.repo.js';
@@ -189,49 +189,110 @@ function createEnvironmentsTable(sqlite: SqliteDatabase): void {
   sqlite.exec(
     'CREATE UNIQUE INDEX IF NOT EXISTS environments_assigned_port_unique ON environments(assigned_port)',
   );
-  sqlite.exec(
-    'CREATE UNIQUE INDEX IF NOT EXISTS environments_project_type_unique ON environments(project_id, type)',
-  );
-  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id)');
+  // Post-0012: environments uses service_id instead of project_id; skip legacy
+  // project_id index creation if the column was already dropped by migration 0012.
+  const envCols = getTableColumns(sqlite, 'environments');
+  if (envCols.has('project_id')) {
+    sqlite.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS environments_project_type_unique ON environments(project_id, type)',
+    );
+    sqlite.exec('CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id)');
+  }
 }
 
 function backfillProductionEnvironments(sqlite: SqliteDatabase): void {
-  const projectsToBackfill = sqlite
-    .prepare('SELECT * FROM projects')
-    .all() as LegacyProjectRuntimeRow[];
-  const insertEnvironment = sqlite.prepare(`
-    INSERT OR IGNORE INTO environments (
-      id,
-      project_id,
-      type,
-      branch,
-      status,
-      assigned_port,
-      container_id,
-      image_tag,
-      previous_image_tag,
-      public_url,
-      container_port,
-      created_at,
-      updated_at
-    ) VALUES (?, ?, 'production', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  // Post-0012: environments uses service_id; the legacy project_id backfill
+  // path is only valid for pre-0009 schemas. Skip if already migrated.
+  const envCols = getTableColumns(sqlite, 'environments');
+  if (!envCols.has('project_id')) return;
+
+  // Post-0009: service_id column exists on environments. The INSERT must
+  // populate it (= project_id || '__svc') so that 0012 Phase A's NULL-orphan
+  // assertion does not fire on rows inserted here (e.g. __orphan_managed).
+  const hasServiceIdCol = envCols.has('service_id');
+
+  // When service_id col exists (post-0009), only backfill projects that have a
+  // corresponding __svc service row. The synthetic __orphan_managed group row
+  // has no __svc service row and must be skipped to avoid FK orphans post-0012.
+  const projectsToBackfill = hasServiceIdCol
+    ? (sqlite
+        .prepare(
+          `SELECT p.* FROM projects p
+           WHERE EXISTS (SELECT 1 FROM services s WHERE s.id = (p.id || '__svc'))`,
+        )
+        .all() as LegacyProjectRuntimeRow[])
+    : (sqlite.prepare('SELECT * FROM projects').all() as LegacyProjectRuntimeRow[]);
+
+  const insertEnvironment = hasServiceIdCol
+    ? sqlite.prepare(`
+        INSERT OR IGNORE INTO environments (
+          id,
+          project_id,
+          service_id,
+          type,
+          branch,
+          status,
+          assigned_port,
+          container_id,
+          image_tag,
+          previous_image_tag,
+          public_url,
+          container_port,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, 'production', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+    : sqlite.prepare(`
+        INSERT OR IGNORE INTO environments (
+          id,
+          project_id,
+          type,
+          branch,
+          status,
+          assigned_port,
+          container_id,
+          image_tag,
+          previous_image_tag,
+          public_url,
+          container_port,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, 'production', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
 
   for (const project of projectsToBackfill) {
-    insertEnvironment.run(
-      `${project.id}-production`,
-      project.id,
-      project.branch ?? 'main',
-      project.status ?? 'idle',
-      project.assigned_port ?? null,
-      project.container_id ?? null,
-      project.image_tag ?? null,
-      project.previous_image_tag ?? null,
-      project.public_url ?? null,
-      null,
-      project.created_at ?? new Date().toISOString(),
-      project.updated_at ?? new Date().toISOString(),
-    );
+    if (hasServiceIdCol) {
+      insertEnvironment.run(
+        `${project.id}-production`,
+        project.id,
+        `${project.id}__svc`,
+        project.branch ?? 'main',
+        project.status ?? 'idle',
+        project.assigned_port ?? null,
+        project.container_id ?? null,
+        project.image_tag ?? null,
+        project.previous_image_tag ?? null,
+        project.public_url ?? null,
+        null,
+        project.created_at ?? new Date().toISOString(),
+        project.updated_at ?? new Date().toISOString(),
+      );
+    } else {
+      insertEnvironment.run(
+        `${project.id}-production`,
+        project.id,
+        project.branch ?? 'main',
+        project.status ?? 'idle',
+        project.assigned_port ?? null,
+        project.container_id ?? null,
+        project.image_tag ?? null,
+        project.previous_image_tag ?? null,
+        project.public_url ?? null,
+        null,
+        project.created_at ?? new Date().toISOString(),
+        project.updated_at ?? new Date().toISOString(),
+      );
+    }
   }
 }
 
@@ -308,6 +369,85 @@ function rebuildLegacyDeployLogs(sqlite: SqliteDatabase): void {
   sqlite.exec(
     'CREATE INDEX IF NOT EXISTS idx_deploy_logs_environment ON deploy_logs(environment_id)',
   );
+}
+
+/**
+ * Backup-or-bust prelude for the 0012 schema-split migration.
+ *
+ * Plan §"PR 5 Backup-or-bust prelude": before the Drizzle migrator runs,
+ * detect whether 0012 is pending and (if so) copy the DB file to a
+ * timestamped `.pre-1.0-a-completion.bak` sidecar. If the copy fails, ABORT
+ * the migration — the runtime must NOT proceed without a verified backup
+ * because 0012 drops 25+6 columns and table-rebuilds 6 per-deployable
+ * tables; a partial run would corrupt operational data.
+ *
+ * Backup retention: 7 days minimum (operator-managed). The file path is
+ * logged at info level so the rollback runbook can locate it without
+ * reaching into the dbPath directory directly.
+ */
+function backupOrBustForMigration0012(sqlite: SqliteDatabase, dbPath: string): string | null {
+  // In-memory DBs are non-persistent and never need a backup; tests using
+  // ':memory:' would otherwise fail trying to copyFileSync from a missing
+  // path.
+  if (dbPath === ':memory:' || !existsSync(dbPath)) {
+    return null;
+  }
+
+  // Detect whether 0012 has already been applied. If __drizzle_migrations
+  // doesn't exist or doesn't have a row count >= 12, assume 0012 is pending.
+  let alreadyApplied = false;
+  try {
+    const tables = sqlite
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = '__drizzle_migrations'",
+      )
+      .all() as Array<{ name: string }>;
+    if (tables.length > 0) {
+      const row = sqlite.prepare('SELECT COUNT(*) AS cnt FROM __drizzle_migrations').get() as
+        | { cnt: number }
+        | undefined;
+      // 0012 is index 12 in the journal; >= 13 entries means 0012 ran.
+      alreadyApplied = (row?.cnt ?? 0) >= 13;
+    }
+  } catch (err) {
+    log.debug({ err }, '0012 backup-or-bust pending-check failed; assuming pending');
+  }
+
+  if (alreadyApplied) return null;
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = `${dbPath}.pre-1.0-a-completion.${timestamp}.bak`;
+
+  try {
+    // WAL-safe backup via VACUUM INTO. SQLite is in WAL mode (src/db/drizzle.ts).
+    // Plain copyFileSync would capture the main DB file without checkpointing,
+    // potentially missing pages still in the -wal sidecar — restoring such a
+    // copy yields an inconsistent database. VACUUM INTO acquires a read lock,
+    // reads all pages including WAL-buffered ones, and writes a self-contained
+    // copy to the destination atomically. No checkpoint dance needed.
+    //
+    // Note: BEGIN IMMEDIATE is intentionally not used here — Drizzle's migrator
+    // manages its own BEGIN/COMMIT per migration file. The backup IS the rollback
+    // path: if migrate() fails mid-flight, restore backupPath to dbPath to
+    // return to the last consistent state.
+    const escapedBackup = backupPath.replace(/'/g, "''");
+    sqlite.exec(`VACUUM INTO '${escapedBackup}'`);
+    log.info(
+      { backupPath, dbPath },
+      '[migrate:0012] backup-or-bust wrote WAL-safe pre-migration backup via VACUUM INTO',
+    );
+    return backupPath;
+  } catch (err) {
+    log.error(
+      { err, dbPath, backupPath },
+      '[migrate:0012] backup-or-bust FAILED — aborting migration',
+    );
+    throw new Error(
+      `Backup-or-bust prelude failed: could not copy ${dbPath} -> ${backupPath}. ` +
+        `Migration 0012 will not proceed without a verified backup. ` +
+        `Underlying error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 function applyAndRecordAllMigrations(sqlite: SqliteDatabase, migrationsFolder: string): void {
@@ -447,6 +587,12 @@ export class Database implements AuthDatabase {
     this.db = db;
     this.sqlite.exec('PRAGMA foreign_keys = OFF');
     try {
+      // Backup-or-bust prelude — runs FIRST, before any DB mutation. If
+      // bridgeLegacyDatabase or migrate() fails midway, the on-disk
+      // backup represents the original pre-mutation state, not a
+      // partially-bridged hybrid. Pending-detection only reads
+      // __drizzle_migrations row count, so it works without the bridge.
+      backupOrBustForMigration0012(this.sqlite, dbPath);
       bridgeLegacyDatabase(this.sqlite, migrationsFolder);
       migrate(this.db as Parameters<typeof migrate>[0], {
         migrationsFolder,
@@ -502,8 +648,8 @@ export class Database implements AuthDatabase {
   createProject(project: Parameters<ProjectRepo['createProject']>[0]): ProjectRow { const created = this.projectRepo.createProject(project); this.environmentRepo.createEnvironment({ id: `${project.id}-production`, projectId: created.id, type: 'production', branch: project.branch ?? 'main' }); return created; }
   getProject(id: string) { return this.projectRepo.getProject(id); }
   getProjectByName(name: string) { return this.projectRepo.getProjectByName(name); }
-  listProjects(status?: ProjectRow['status'], opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjects(status, opts); }
-  listProjectsWithMetadata(status?: ProjectRow['status'], opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjectsWithMetadata(status, opts); }
+  listProjects(status?: ProjectRow['status'] | null, opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjects(status, opts); }
+  listProjectsWithMetadata(status?: ProjectRow['status'] | null, opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjectsWithMetadata(status, opts); }
   archiveProject(id: string) { this.projectRepo.archiveProject(id); }
   unarchiveProject(id: string) { this.projectRepo.unarchiveProject(id); }
   listArchivedProjects() { return this.projectRepo.listArchivedProjects(); }
@@ -631,7 +777,7 @@ export class Database implements AuthDatabase {
   getSession() { return this.authRepo.getSession(); }
   createSession(token: string, createdAt: number, expiresAt: number) { this.authRepo.createSession(token, createdAt, expiresAt); }
   deleteSession() { this.authRepo.deleteSession(); }
-  getUsedPorts(): number[] { const projectPorts = this.db.select({ assigned_port: projects.assigned_port }).from(projects).where(isNotNull(projects.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); const envPorts = this.db.select({ assigned_port: environments.assigned_port }).from(environments).where(isNotNull(environments.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); return [...new Set([...projectPorts, ...envPorts])]; }
+  getUsedPorts(): number[] { const servicePorts = this.db.select({ assigned_port: services.assigned_port }).from(services).where(isNotNull(services.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); const envPorts = this.db.select({ assigned_port: environments.assigned_port }).from(environments).where(isNotNull(environments.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); return [...new Set([...servicePorts, ...envPorts])]; }
   createAiUsageLog(data: Parameters<AiUsageLogRepo['create']>[0]) { return this.aiUsageLogRepo.create(data); }
   getAiUsageLogsByProject(projectId: string) { return this.aiUsageLogRepo.findByProjectId(projectId); }
   getAiUsageLogsByDateRange(from: Date, to: Date) { return this.aiUsageLogRepo.findByDateRange(from, to); }

@@ -208,5 +208,5 @@ export function withTrackingMiddleware(
   return wrapLanguageModel({
     model: model as LanguageModelV3,
     middleware: createTrackingMiddleware(eventBus, provider, modelName),
-  }) as LanguageModel;
+  });
 }

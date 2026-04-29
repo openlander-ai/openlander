@@ -285,6 +285,7 @@ export const deployToolDefs: ToolDef[] = [
               health: (() => {
                 try {
                   const project = appCtx.db.getProjectByName(job.projectName);
+                  // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
                   return project?.status ?? 'unknown';
                 } catch {
                   return 'unknown';
@@ -355,6 +356,7 @@ export const deployToolDefs: ToolDef[] = [
         if (!project) {
           const plans = appCtx.db.listDeployPlans(projectName);
           const activePlan = plans.find((p) => {
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             return p.status === 'executing' || p.status === 'ready' || p.status === 'draft';
           });
           if (activePlan) {

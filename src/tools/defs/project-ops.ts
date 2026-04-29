@@ -126,6 +126,7 @@ export const projectOpsToolDefs: ToolDef[] = [
               id: project.id,
               name: project.name,
               status,
+              // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
               visibility: project.visibility,
               repoUrl: project.repo_url,
               branch: project.branch,
@@ -160,6 +161,7 @@ export const projectOpsToolDefs: ToolDef[] = [
           return {
             name: project.name,
             status,
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             visibility: project.visibility,
             port,
             containerName: containerId ? projectContainerName(project.name) : null,

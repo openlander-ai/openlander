@@ -718,7 +718,7 @@ export class DeployPipeline {
           ? {
               source,
               imageUrl: config.imageUrl,
-              imageCmd: config.imageCmd,
+              imageCmd: config.imageCmd ? JSON.stringify(config.imageCmd) : null,
               containerPort: config.containerPort,
             }
           : {}),
@@ -727,7 +727,7 @@ export class DeployPipeline {
       this.db.updateProject(projectId, {
         source,
         imageUrl: config.imageUrl,
-        imageCmd: config.imageCmd,
+        imageCmd: config.imageCmd ? JSON.stringify(config.imageCmd) : null,
         containerPort: config.containerPort,
       });
     }
@@ -1012,7 +1012,7 @@ export class DeployPipeline {
         imageTag,
         dockerfilePath,
         previousEnvironmentImageTag: preservedPreviousTag ?? environment.image_tag,
-        previousProjectImageTag: preservedPreviousTag ?? project.image_tag,
+        previousProjectImageTag: preservedPreviousTag ?? project.image_tag ?? null,
         shouldSyncProjectState: true,
         config: deployConfig,
         buildLog,
@@ -1343,6 +1343,7 @@ export class DeployPipeline {
         const project = this.db.getProject(deployment.projectId);
         // PR 4.5: canonical-first read of container_id with `??` fallback.
         const deployableForHealth = this.db.getDeployableForProject(deployment.projectId);
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
         const containerId = deployableForHealth?.container_id ?? project?.container_id;
         if (!containerId) {
           log.warn(
@@ -1480,7 +1481,7 @@ export class DeployPipeline {
       const redeploySource = redeployDeployable?.source ?? project.source;
       const redeployAssignedPort = redeployDeployable?.assigned_port ?? project.assigned_port;
       const currentRunningTag = redeployImageTag;
-      let redeployPreviousTag: string | null = currentRunningTag;
+      let redeployPreviousTag: string | null = currentRunningTag ?? null;
       if (redeploySource !== 'image' && currentRunningTag) {
         if (currentRunningTag !== redeployPreviousLabel) {
           try {

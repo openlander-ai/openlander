@@ -160,7 +160,7 @@ export function deserializeConfig(json: string): StoredDeployConfig | null {
 
     return {
       version: obj.version,
-      snapshot: obj.snapshot as DeployConfigSnapshot,
+      snapshot: obj.snapshot,
       savedAt: obj.savedAt,
     };
   } catch {

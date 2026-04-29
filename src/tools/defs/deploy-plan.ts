@@ -590,6 +590,7 @@ export const deployPlanToolDefs: ToolDef[] = [
       }
 
       if (plan.build.method === 'dockerfile') {
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
         const hasExpose = plan.build.compose_services?.some((s) => s.port !== undefined);
         const hasGeneratedDockerfile = plan.build.generated_dockerfile !== undefined;
 
@@ -642,6 +643,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           checks.push({
             name: 'services',
             status: 'info',
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             message: `${String(needsCreation.length)} service(s) will be auto-provisioned: ${needsCreation.map((s) => s.type).join(', ')}`,
           });
         }
@@ -650,6 +652,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           checks.push({
             name: 'services',
             status: 'pass',
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             message: `${String(reusable.length)} existing service(s) will be reused: ${reusable.map((s) => `${s.type}${s.name ? ` (${s.name})` : ''}`).join(', ')}`,
           });
         }

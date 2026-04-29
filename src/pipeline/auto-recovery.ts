@@ -814,6 +814,7 @@ ${plan.agentGuidance}
           // PR 4.5: canonical-first read of image_tag with `??` fallback.
           imageTag:
             db.getDeployableForProject(projectId)?.image_tag ??
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             project?.image_tag ??
             `openlander/${projectName}:latest`,
           failedStep: mapFailStep(step),

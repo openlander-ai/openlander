@@ -194,6 +194,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const mappings = ctx.db.listDomainMappings();
     const projectDomains = new Map<string, { projectName: string; domains: string[] }>();
     for (const mapping of mappings) {
+      if (!mapping.project_id) continue;
       const existing = projectDomains.get(mapping.project_id);
       if (existing) {
         existing.domains.push(mapping.domain);
@@ -216,8 +217,10 @@ export function createApiRoutes(ctx: AppContext): Hono {
         const deployable = project ? ctx.db.getDeployableForProject(project.id) : undefined;
         const internalPort =
           deployable?.container_port ??
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           project?.container_port ??
           deployable?.assigned_port ??
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           project?.assigned_port;
         if (!internalPort) continue;
         services[svcName] = {

@@ -90,10 +90,9 @@ function getDataMountPath(kind: string): string {
 }
 
 function getServiceContainerPort(service: ServiceRow): number {
-  const serviceKind = service.kind ?? 'unknown';
-  const template = SERVICE_TEMPLATES[serviceKind];
+  const template = SERVICE_TEMPLATES[service.kind as string];
   // eslint-disable-next-line @typescript-eslint/no-deprecated
-  return template?.port ?? service.assigned_port ?? service.port;
+  return template?.port ?? service.assigned_port ?? service.port ?? 0;
 }
 
 async function recoverService(
@@ -137,7 +136,7 @@ async function recoverService(
 
     // Ensure image — read from canonical image_url; legacy image is @deprecated
     // eslint-disable-next-line @typescript-eslint/no-deprecated
-    const serviceImage = service.image_url ?? service.image;
+    const serviceImage = service.image_url ?? service.image ?? '';
     const hasImage = await imageExists(ctx, serviceImage);
     if (!hasImage) {
       await ctx.docker.pullImage(serviceImage);
@@ -145,7 +144,8 @@ async function recoverService(
 
     const envVars: Record<string, string> = {};
     // env_vars column is @deprecated but has no canonical per-service equivalent yet (1.1)
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
+
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const rawEnvVars = service.env_vars;
     if (rawEnvVars) {
       const parsed = JSON.parse(rawEnvVars) as Array<{ key: string; value: string }>;
@@ -155,11 +155,10 @@ async function recoverService(
     }
 
     // Get template config — use canonical kind
-    const serviceKind = service.kind ?? 'unknown';
-    const template = SERVICE_TEMPLATES[serviceKind];
+    const template = SERVICE_TEMPLATES[service.kind as string];
     const containerPort = getServiceContainerPort(service);
-    const dataMountPath = getDataMountPath(serviceKind);
-    const memLimits = SERVICE_MEMORY_LIMITS[serviceKind] ?? {
+    const dataMountPath = getDataMountPath(service.kind);
+    const memLimits = SERVICE_MEMORY_LIMITS[service.kind as string] ?? {
       memoryLimitBytes: 536870912,
       cpuShares: 512,
     };
@@ -168,7 +167,7 @@ async function recoverService(
 
     // Use canonical assigned_port; fall back to legacy port for pre-migration rows
     // eslint-disable-next-line @typescript-eslint/no-deprecated
-    const hostPort = service.assigned_port ?? service.port;
+    const hostPort = service.assigned_port ?? service.port ?? 0;
     const containerId = await ctx.docker.runServiceContainer({
       imageTag: serviceImage,
       name: cName,

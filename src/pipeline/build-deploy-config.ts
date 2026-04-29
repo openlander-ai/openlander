@@ -57,18 +57,20 @@ export function buildDeployConfig(params: BuildDeployConfigParams): ProjectConfi
   const assignedPort = deployable?.assigned_port ?? project.assigned_port;
 
   const isCompose = buildMethod === 'compose';
-  const imageCmd = parseImageCmd(imageCmdRaw);
+  const imageCmd = parseImageCmd(imageCmdRaw ?? null);
   const dbConfig: ProjectConfig = {
     repoUrl: project.repo_url ?? '',
     branch: project.branch,
     name: project.name,
-    visibility: project.visibility,
-    source,
+    visibility: project.visibility ?? undefined,
+    source: (source as 'git' | 'image' | undefined) ?? undefined,
     imageUrl: imageUrl ?? undefined,
     imageCmd,
     containerPort: containerPort ?? undefined,
     dockerfilePath:
-      !isCompose && isValidDockerfilePath(dockerfilePath) ? dockerfilePath : undefined,
+      !isCompose && dockerfilePath != null && isValidDockerfilePath(dockerfilePath)
+        ? dockerfilePath
+        : undefined,
     dockerTarget: isCompose ? undefined : (dockerTarget ?? undefined),
     buildContext: buildContext ?? undefined,
     preferDockerfile: buildMethod !== 'compose',

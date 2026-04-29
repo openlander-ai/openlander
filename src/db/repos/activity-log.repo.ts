@@ -83,9 +83,7 @@ export class ActivityLogRepo {
       })
       .run();
 
-    const created = this.db.select().from(activityLog).where(eq(activityLog.id, id)).get() as
-      | ActivityLogRow
-      | undefined;
+    const created = this.db.select().from(activityLog).where(eq(activityLog.id, id)).get();
 
     if (!created) throw new RepoPersistenceError('activity log entry', id);
     return created;
@@ -98,7 +96,7 @@ export class ActivityLogRepo {
       .where(gt(activityLog.id, lastUlid))
       .orderBy(asc(activityLog.id))
       .limit(limit)
-      .all() as ActivityLogRow[];
+      .all();
   }
 
   findByDateRange(
@@ -126,7 +124,7 @@ export class ActivityLogRepo {
       .where(and(...conditions))
       .orderBy(asc(activityLog.id))
       .limit(limit)
-      .all() as ActivityLogRow[];
+      .all();
   }
 
   /** Find recent activity log entries with optional filters (newest first). */
@@ -197,7 +195,7 @@ export class ActivityLogRepo {
       .where(and(...conditions))
       .orderBy(asc(activityLog.id))
       .limit(limit)
-      .all() as ActivityLogRow[];
+      .all();
   }
 
   deleteOlderThan(isoDate: string): number {

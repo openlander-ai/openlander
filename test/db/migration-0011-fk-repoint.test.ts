@@ -85,7 +85,7 @@ describe('Migration 0011: reconstruct compose-child group rows', () => {
       .run(id, name, parentProjectId, buildMethod);
   }
 
-  it('reconstructs deleted compose-child group rows from services data', () => {
+  it('post-0012: only compose parent group row survives (child rows deleted by Phase F)', () => {
     insertLegacyProject('cmp-parent', 'mystack', null, 'compose');
     insertLegacyProject('cmp-child-a', 'mystack/api', 'cmp-parent', null);
     insertLegacyProject('cmp-child-b', 'mystack/web', 'cmp-parent', null);
@@ -94,15 +94,27 @@ describe('Migration 0011: reconstruct compose-child group rows', () => {
     migrate(drizzle as Parameters<typeof migrate>[0], { migrationsFolder: MIGRATIONS_FOLDER });
     sqlite.pragma('foreign_keys = ON');
 
+    // 0011 reconstructs child project rows so legacy FK tables keep valid references.
+    // 0012 Phase F then deletes compose-child rows from projects (per-deployable FKs
+    // moved to services.id in Phase B, so child project rows are no longer needed).
+    // Post-0012: only the parent group row remains; parent_project_id col is also gone.
     const groups = sqlite
-      .prepare(`SELECT id, parent_project_id FROM projects WHERE id LIKE 'cmp-%' ORDER BY id`)
-      .all() as Array<{ id: string; parent_project_id: string | null }>;
+      .prepare(`SELECT id FROM projects WHERE id LIKE 'cmp-%' ORDER BY id`)
+      .all() as Array<{ id: string }>;
 
-    // After 0011, all three project rows exist (parent + 2 reconstructed children).
-    expect(groups.length).toBe(3);
-    expect(groups.find((g) => g.id === 'cmp-parent')?.parent_project_id).toBeNull();
-    expect(groups.find((g) => g.id === 'cmp-child-a')?.parent_project_id).toBe('cmp-parent');
-    expect(groups.find((g) => g.id === 'cmp-child-b')?.parent_project_id).toBe('cmp-parent');
+    const ids = groups.map((g) => g.id);
+    expect(ids).toContain('cmp-parent');
+    expect(ids).not.toContain('cmp-child-a');
+    expect(ids).not.toContain('cmp-child-b');
+
+    // Services rows (kind='compose'/'compose-child') still exist for compose children.
+    const services = sqlite
+      .prepare(`SELECT id, kind FROM services WHERE id LIKE 'cmp-%' ORDER BY id`)
+      .all() as Array<{ id: string; kind: string }>;
+    const svcIds = services.map((s) => s.id);
+    expect(svcIds).toContain('cmp-parent__svc');
+    expect(svcIds).toContain('cmp-child-a__svc');
+    expect(svcIds).toContain('cmp-child-b__svc');
   });
 
   it('foreign_key_check passes after 0011 with per-deployable FK rows', () => {

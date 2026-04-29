@@ -404,6 +404,7 @@ export class RecoveryPipeline {
       const project = this.ctx.db.getProject(projectId);
       // PR 4.5: canonical-first read of assigned_port with `??` fallback.
       const deployable = this.ctx.db.getDeployableForProject(projectId);
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       const port = deployable?.assigned_port ?? project?.assigned_port;
       const containerRunning = await this.isContainerRunning(containerId);
       const httpHealthy = typeof port === 'number' ? await this.isHttpHealthy(port) : false;
@@ -446,6 +447,7 @@ export class RecoveryPipeline {
     const diagDeployable = project
       ? this.ctx.db.getDeployableForProject(context.projectId)
       : undefined;
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const diagStatus = diagDeployable?.status ?? project?.status;
     if (!project || project.archived_at || diagStatus === 'stopped') {
       log.debug(
@@ -530,6 +532,7 @@ export class RecoveryPipeline {
       const portDeployable = project
         ? this.ctx.db.getDeployableForProject(context.projectId)
         : undefined;
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       const portAssigned = portDeployable?.assigned_port ?? project?.assigned_port;
       if (portAssigned != null) {
         const resolved = await this.resolvePortConflict(context, portAssigned);
@@ -583,6 +586,7 @@ export class RecoveryPipeline {
     const rollbackDeployable = project
       ? this.ctx.db.getDeployableForProject(context.projectId)
       : undefined;
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const previousImageTag = rollbackDeployable?.previous_image_tag ?? project?.previous_image_tag;
     if (!previousImageTag) {
       return await this.escalate(context, `${reason}; no previous image available for rollback`);

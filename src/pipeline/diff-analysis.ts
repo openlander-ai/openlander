@@ -11,7 +11,7 @@ type ExecFn = (
   opts?: { cwd?: string; timeout?: number },
 ) => Promise<{ stdout: string; stderr: string }>;
 
-const defaultExec: ExecFn = promisify(execFile) as ExecFn;
+const defaultExec: ExecFn = promisify(execFile);
 
 export interface DiffAnalysis {
   changedFiles: string[];

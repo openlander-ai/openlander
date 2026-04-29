@@ -19,16 +19,14 @@ export const MANAGED_SERVICE_KINDS: readonly ServiceKind[] = [
 ];
 
 /**
- * Map a legacy managed-service `type` value (postgres/mysql/redis/mongo/minio)
- * to the unified `services.kind` enum. Plan §6.3 line 519: managed kinds
- * are a subset of the kind enum, so the legacy `type` column maps 1-to-1.
- *
- * Falls back to 'postgres' for unknown legacy types so the NOT NULL CHECK
- * constraint passes; calls into ServiceRepo always provide a real type.
+ * Map a managed-service `kind` value (postgres/mysql/redis/mongo/minio) onto
+ * itself; falls back to `'postgres'` for unknown inputs so the NOT NULL kind
+ * CHECK passes. Wire callers that emit a free-form `type` string still
+ * transit through this mapping when persisting.
  */
-function legacyTypeToKind(type: string): ServiceKind {
+function normalizeKind(kind: string): ServiceKind {
   const known: ServiceKind[] = ['postgres', 'mysql', 'redis', 'mongo', 'minio'];
-  return (known as string[]).includes(type) ? (type as ServiceKind) : 'postgres';
+  return (known as string[]).includes(kind) ? (kind as ServiceKind) : 'postgres';
 }
 
 /**
@@ -62,32 +60,29 @@ export class ServiceRepo {
     void this.sqlite;
   }
 
+  /**
+   * Create a managed service row under the synthesized __orphan_managed
+   * group. Post-0012: legacy type/image/port/env_vars columns are gone;
+   * canonical kind/image_url/assigned_port are the source of truth.
+   */
   createService(service: {
     id: string;
     name: string;
+    /** Wire-format `type` string from MCP/REST; mapped to the canonical kind enum. */
     type: string;
     image: string;
     containerName: string;
     port: number;
-    envVars?: string;
+    /** @deprecated 1.1 — credentials column removal pairs with secret refactor. */
     credentials?: string;
   }): ServiceRow {
-    // Plan §6.3 / §6.5 backward-compat: managed services land under the
-    // synthesized __orphan_managed group with kind derived from legacy type.
     this.db
       .insert(services)
       .values({
         id: service.id,
         project_id: '__orphan_managed',
         name: service.name,
-        kind: legacyTypeToKind(service.type),
-        // Legacy columns — kept until migration 0012 Phase C drops them.
-        type: service.type,
-        image: service.image,
-        port: service.port,
-        env_vars: service.envVars ?? null,
-        // Canonical columns — PR 2.5 ensures these are populated at creation
-        // so that post-0012 readers never fall back to the legacy columns.
+        kind: normalizeKind(service.type),
         image_url: service.image,
         assigned_port: service.port,
         container_name: service.containerName,
@@ -113,11 +108,7 @@ export class ServiceRepo {
 
   /**
    * Filtered service query — used by REST + MCP handlers to scope to a
-   * group (project_id) and/or include/exclude kinds. Plan §6.6 line 795.
-   *
-   * `kindIn`/`kindNotIn` are mutually exclusive; only one is honored at a
-   * time (kindIn takes precedence). Pass empty arrays to skip the kind
-   * filter entirely.
+   * group (project_id) and/or include/exclude kinds.
    */
   getServices(opts?: {
     project_id?: string;
@@ -173,7 +164,6 @@ export class ServiceRepo {
 
   /**
    * Returns all services that are compose-children of the given parent service.
-   * Used by PR 2+ pipeline rewire to replace parent_project_id child-fetch.
    */
   getComposeChildren(parentServiceId: string): ServiceRow[] {
     return this.db
@@ -186,7 +176,6 @@ export class ServiceRepo {
 
   /**
    * Returns all deployable (non-compose-child) services for a given project group.
-   * Used by PR 2+ pipeline rewire to enumerate top-level deployables for a group.
    */
   getDeployablesByGroup(projectId: string): ServiceRow[] {
     return this.db

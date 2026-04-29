@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
+import type { ServiceRow } from '../../db/types.js';
+import { kindToLegacyType } from '../../db/repos/service.repo.js';
 import { createGitProvider } from '../../git-providers/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getSystemStats, formatStatsSummary } from '../../monitor/stats.js';
@@ -8,6 +10,42 @@ import { detectReverseProxy, getProxyStatus, getLanIp, getAllIps } from '../../p
 import { SERVICE_TEMPLATES, AVAILABLE_VERSIONS } from '../../pipeline/service-manager.js';
 
 const log = createModuleLogger('api');
+
+/**
+ * Map a canonical ServiceRow to the legacy wire shape expected by the
+ * frontend (Service interface in web/src/lib/api/services.ts).
+ *
+ * After Phase C of migration 0012 drops `type`, `image`, `port`, `env_vars`
+ * from the services table, those fields are undefined on the row. The frontend
+ * still reads them for managed-service cards (ServicesPage, ServiceDetailV2,
+ * ServiceConnectionTab). This mapper fills the legacy fields from the canonical
+ * post-0012 equivalents so the wire contract stays stable through 1.x.
+ *
+ * Canonical → legacy mapping:
+ *   kind        → type   (discriminator string)
+ *   image_url   → image
+ *   assigned_port → port
+ *   env_vars repo (JSON.stringify) → env_vars
+ */
+function toServiceWire(
+  service: ServiceRow,
+  envVars: Record<string, string>,
+): ServiceRow & { type: string; image: string; env_vars: string | null } {
+  return {
+    ...service,
+    type: service.type ?? kindToLegacyType(service.kind),
+    image: service.image ?? service.image_url ?? '',
+    port: service.port ?? service.assigned_port ?? undefined,
+    env_vars:
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+      service.env_vars !== undefined
+        ? // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+          service.env_vars
+        : Object.keys(envVars).length > 0
+          ? JSON.stringify(envVars)
+          : null,
+  };
+}
 
 export function createSystemRoutes(ctx: AppContext): Hono {
   const api = new Hono();
@@ -124,7 +162,11 @@ export function createSystemRoutes(ctx: AppContext): Hono {
   api.get('/services', async (c) => {
     try {
       const services = await ctx.serviceManager.listWithCardSummary();
-      return c.json(services);
+      const wire = services.map((svc) => {
+        const envVars = ctx.db.getEnvVars(svc.id);
+        return toServiceWire(svc, envVars);
+      });
+      return c.json(wire);
     } catch (err) {
       log.debug({ err }, 'List services failed');
       return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to list services' }, 500);
@@ -187,7 +229,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
         version: body.version,
         envVars: body.env_vars,
       });
-      return c.json(service);
+      const envVars = ctx.db.getEnvVars(service.id);
+      return c.json(toServiceWire(service, envVars));
     } catch (err) {
       log.debug({ err }, 'Create service failed');
       const detail = err instanceof Error ? err.message : String(err);
@@ -202,7 +245,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     const id = c.req.param('id');
     try {
       const service = await ctx.serviceManager.getDetail(id);
-      return c.json(service);
+      const envVars = ctx.db.getEnvVars(service.id);
+      return c.json(toServiceWire(service, envVars));
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Get service detail failed');
       const message = err instanceof Error ? err.message : String(err);

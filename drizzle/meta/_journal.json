@@ -85,6 +85,13 @@
       "when": 1777500002000,
       "tag": "0011_repoint_deployable_project_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1777500003000,
+      "tag": "0012_complete_schema_split",
+      "breakpoints": true
     }
   ]
 }
