@@ -603,9 +603,9 @@ describe('ComposePipeline', () => {
       });
       expect(firstDeploy.success).toBe(true);
 
-      const originalGetChildProjects = db.getChildProjects.bind(db);
-      vi.spyOn(db, 'getChildProjects').mockImplementation((projectId) =>
-        originalGetChildProjects(projectId),
+      const originalGetComposeChildProjects = db.getComposeChildProjects.bind(db);
+      vi.spyOn(db, 'getComposeChildProjects').mockImplementation((projectId) =>
+        originalGetComposeChildProjects(projectId),
       );
       const deleteProjectMock = vi.spyOn(db, 'deleteProject');
 
@@ -676,9 +676,9 @@ describe('ComposePipeline', () => {
       const beforeChildIds = new Set(beforeChildren.map((child) => child.id));
       expect(beforeChildren.map((child) => child.name).sort()).toEqual(['stack/api', 'stack/web']);
 
-      const originalGetChildProjects = db.getChildProjects.bind(db);
-      vi.spyOn(db, 'getChildProjects').mockImplementation((projectId) =>
-        originalGetChildProjects(projectId),
+      const originalGetComposeChildProjects2 = db.getComposeChildProjects.bind(db);
+      vi.spyOn(db, 'getComposeChildProjects').mockImplementation((projectId) =>
+        originalGetComposeChildProjects2(projectId),
       );
       const deleteProjectMock = vi.spyOn(db, 'deleteProject');
 
@@ -712,6 +712,66 @@ describe('ComposePipeline', () => {
       const workerChild = afterChildren.find((child) => child.name === 'stack/worker');
       expect(workerChild).toBeDefined();
       expect(workerChild && beforeChildIds.has(workerChild.id)).toBe(false);
+    });
+
+    it('deletes the backing services row for orphan child so no ghost deployable is exposed', async () => {
+      const composePath = join(tmpDir, 'docker-compose.yml');
+      writeFileSync(
+        composePath,
+        `services:\n  web:\n    image: nginx\n  api:\n    image: node:20\n  worker:\n    image: busybox\n`,
+        'utf8',
+      );
+
+      pipeline = new ComposePipeline(createMockDocker(), db, events);
+
+      const firstDeploy = await deployWithEnv(pipeline, {
+        repoUrl: 'https://github.com/example/stack',
+        clonePath: tmpDir,
+        composePath,
+        name: 'stack',
+        trigger: 'chat',
+      });
+      expect(firstDeploy.success).toBe(true);
+
+      const firstChildren = db.getChildProjects(firstDeploy.parentProjectId);
+      expect(firstChildren).toHaveLength(3);
+      const workerProject = firstChildren.find((c) => c.name === 'stack/worker');
+      expect(workerProject).toBeDefined();
+      const workerServiceId = `${workerProject!.id}__svc`;
+
+      // Confirm services row exists before cleanup
+      expect(db.getService(workerServiceId)).toBeDefined();
+
+      // Redeploy with worker removed — triggers orphan cleanup
+      writeFileSync(
+        composePath,
+        `services:\n  web:\n    image: nginx\n  api:\n    image: node:20\n`,
+        'utf8',
+      );
+      const secondDeploy = await deployWithEnv(pipeline, {
+        repoUrl: 'https://github.com/example/stack',
+        clonePath: tmpDir,
+        composePath,
+        name: 'stack',
+        _parentId: firstDeploy.parentProjectId,
+        trigger: 'chat',
+      });
+      expect(secondDeploy.success).toBe(true);
+
+      // Ghost deployable check: services row must be gone
+      expect(db.getService(workerServiceId)).toBeUndefined();
+
+      // getServices on parent must return exactly 2 deployable services (web + api)
+      const { MANAGED_SERVICE_KINDS } = await import('../src/db/repos/service.repo.js');
+      const deployables = db.getServices({
+        project_id: firstDeploy.parentProjectId,
+        kindNotIn: MANAGED_SERVICE_KINDS,
+      });
+      // After cleanup: parent compose row + web child + api child = 3 non-managed services.
+      // The worker compose-child row (the ghost) must NOT appear.
+      expect(deployables).toHaveLength(3);
+      const deployableNames = deployables.map((s) => s.name).sort();
+      expect(deployableNames).not.toContain(`${workerProject!.name}__svc`);
     });
   });
 

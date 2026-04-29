@@ -642,6 +642,10 @@ export class ComposePipeline {
           }
 
           // Hard delete intentional: orphaned compose children are not user-created projects and should not be archived.
+          // Also explicitly delete the backing services row: compose-child service rows have
+          // project_id = parentProjectId (not child.id), so the FK cascade on deleteProject
+          // does NOT reach them. The __svc convention is established in createProject().
+          this.db.deleteService(`${child.id}__svc`);
           this.db.deleteProject(child.id);
           removed.push(serviceName);
         }
