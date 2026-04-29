@@ -567,6 +567,15 @@ export class Database implements AuthDatabase {
       .filter((p): p is ProjectRow => p !== undefined);
   }
   getDeployablesByGroup(projectId: string) { return this.serviceRepo.getDeployablesByGroup(projectId); }
+  /**
+   * PR 4 helper: resolve the auto-derived deployable services row for a
+   * project group. Convention from `createProject`: deployable services use
+   * id = `<projectId>__svc`. Used by web/api route handlers to read
+   * canonical (kind/image_url/assigned_port/status/container_id/...)
+   * fields with `??` fallback to the legacy `projects` columns through
+   * migration 0012.
+   */
+  getDeployableForProject(projectId: string) { return this.serviceRepo.getService(`${projectId}__svc`); }
   createServiceConnection(opts: Parameters<ServiceConnectionRepo['createConnection']>[0]) { return this.serviceConnectionRepo.createConnection(opts); }
   getServiceConnection(id: string) { return this.serviceConnectionRepo.getConnection(id); }
   getServiceConnectionByProjectAndService(projectId: string, serviceId: string) { return this.serviceConnectionRepo.getConnectionByProjectAndService(projectId, serviceId); }
