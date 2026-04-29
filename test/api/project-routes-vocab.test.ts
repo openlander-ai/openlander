@@ -246,15 +246,8 @@ describe('project-routes vocabulary aliases (rc.1)', () => {
   });
 
   it('rc.2 — GET /api/projects/:p/services/:s exposes new `service` field from unified services table', async () => {
-    // Seed a service whose id matches the legacy convention (<projectId>__svc).
-    db.createService({
-      id: `${projectId}__svc`,
-      name: `${projectId}__svc`,
-      type: 'git',
-      image: 'app:latest',
-      containerName: `ol-${projectId}`,
-      port: 3000,
-    });
+    // createProject already auto-inserts a backing service row at `${projectId}__svc`
+    // (commit b0e287a). We resolve via that auto-created row — no extra createService call needed.
 
     const res = await app.request(`/api/projects/${projectId}/services/${projectId}__svc`);
     expect(res.status).toBe(200);
@@ -272,10 +265,10 @@ describe('project-routes vocabulary aliases (rc.1)', () => {
   });
 
   it('rc.2 — GET /api/projects/:p/services/:s falls back gracefully when unified row absent (legacy `:s = :id`)', async () => {
-    // No services row seeded — the handler should still return the
-    // legacy project shape with `service: null` (P1 additive schema:
-    // legacy projects columns still readable).
-    const res = await app.request(`/api/projects/${projectId}/services/${projectId}`);
+    // createProject auto-inserts `${projectId}__svc`, so :s = projectId resolves via
+    // the __svc suffix fallback and is no longer absent. Use a truly absent service id
+    // to verify the `service: null` fallback path still works.
+    const res = await app.request(`/api/projects/${projectId}/services/no-such-service`);
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as Record<string, unknown>;
