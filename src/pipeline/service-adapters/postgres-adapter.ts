@@ -163,6 +163,8 @@ export class PostgresAdapter implements ServiceAdapter {
   ): Promise<CreateDatabaseResult> {
     const credentials = parseServiceCredentials(service);
     await this.waitForReady(service, docker);
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    const hostPort = service.assigned_port ?? service.port;
 
     await execInServiceContainer(docker, service, [
       'psql',
@@ -180,7 +182,7 @@ export class PostgresAdapter implements ServiceAdapter {
       database: dbName,
       user: credentials.user,
       password: credentials.password,
-      connectionString: this.getConnectionString(service.container_name, service.port, {
+      connectionString: this.getConnectionString(service.container_name, hostPort, {
         user: credentials.user,
         password: credentials.password,
         database: dbName,
@@ -195,6 +197,8 @@ export class PostgresAdapter implements ServiceAdapter {
   ): Promise<CreateUserResult> {
     const credentials = parseServiceCredentials(service);
     await this.waitForReady(service, docker);
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    const hostPort = service.assigned_port ?? service.port;
 
     await execInServiceContainer(docker, service, [
       'psql',
@@ -228,7 +232,7 @@ export class PostgresAdapter implements ServiceAdapter {
       database,
       user: options.username,
       password: options.password,
-      connectionString: this.getConnectionString(service.container_name, service.port, {
+      connectionString: this.getConnectionString(service.container_name, hostPort, {
         user: options.username,
         password: options.password,
         database,
