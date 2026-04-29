@@ -72,6 +72,8 @@ describe('context-assembler', () => {
       getDeployLogs: () => [],
       getEnvVars: () => ({}),
       getTopDeploymentPatterns: () => [],
+      // PR 3: context-assembler now queries services for canonical parent hierarchy
+      getService: () => undefined,
     };
   });
 
@@ -285,6 +287,8 @@ describe('context-assembler', () => {
         getDeployLogs: (_projectId: string, _limit?: number) => [],
         getEnvVars: () => ({}),
         getTopDeploymentPatterns: () => [],
+        // PR 3: context-assembler now queries services for canonical parent hierarchy
+        getService: () => undefined,
       };
     });
 
@@ -465,6 +469,7 @@ describe('context-assembler', () => {
         getDeployLogs: () => [],
         getEnvVars: () => ({}),
         getTopDeploymentPatterns: vi.fn().mockReturnValue(mockPatterns),
+        getService: () => undefined,
       };
       const result = await buildContextSnapshot(mockDb as unknown as Database, undefined, {
         type: 'project',
@@ -501,6 +506,7 @@ describe('context-assembler', () => {
         getDeployLogs: () => [],
         getEnvVars: () => ({}),
         getTopDeploymentPatterns: vi.fn().mockReturnValue([]),
+        getService: () => undefined,
       };
       const result = await buildContextSnapshot(mockDb as unknown as Database, undefined, {
         type: 'project',
@@ -526,6 +532,7 @@ describe('context-assembler', () => {
         getDeployLogs: () => [],
         getEnvVars: () => ({}),
         getTopDeploymentPatterns,
+        getService: () => undefined,
       };
       await buildContextSnapshot(mockDb as unknown as Database, undefined, undefined);
       expect(getTopDeploymentPatterns).not.toHaveBeenCalled();
@@ -547,6 +554,7 @@ describe('context-assembler', () => {
         getDeployLogs: () => [],
         getEnvVars: () => ({}),
         getTopDeploymentPatterns: vi.fn().mockReturnValue([]),
+        getService: () => undefined,
       };
       const result = await buildContextSnapshot(mockDb as unknown as Database);
       expect(result).toContain('Known fix categories');
@@ -591,6 +599,7 @@ describe('context-assembler', () => {
         getDeployLogs: () => [],
         getEnvVars: () => ({}),
         getTopDeploymentPatterns: vi.fn().mockReturnValue(longPatterns),
+        getService: () => undefined,
       };
       const result = await buildContextSnapshot(mockDb as unknown as Database, undefined, {
         type: 'project',

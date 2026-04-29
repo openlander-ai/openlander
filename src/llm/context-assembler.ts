@@ -55,7 +55,7 @@ export async function buildContextSnapshot(
       ? buildScopedProjectLines(projects, scope?.projectId)
       : buildGlobalProjectLines(projects);
 
-  const projectGroups = buildProjectGroups(projects);
+  const projectGroups = buildProjectGroups(projects, db);
 
   const parts: string[] = [
     `## Current Server State (auto-injected)
@@ -164,19 +164,27 @@ export function buildIncidentBriefing(incidents: RuntimeIncidentRow[], db: Datab
 // Project relationship grouping
 // ---------------------------------------------------------------------------
 
-function buildProjectGroups(projects: ProjectRow[]): string {
+function buildProjectGroups(projects: ProjectRow[], db: Database): string {
   if (projects.length < 2) return '';
 
   const repoGroups = new Map<string, ProjectRow[]>();
   const parentGroups = new Map<string, ProjectRow[]>();
 
   for (const p of projects) {
-    if (p.parent_project_id) {
-      const siblings = parentGroups.get(p.parent_project_id);
+    // PR 3: derive compose-child parent from services.parent_service_id (canonical),
+    // fall back to projects.parent_project_id for pre-migration rows.
+    const svc = db.getService(`${p.id}__svc`);
+    const parentId =
+      (svc?.parent_service_id ? svc.parent_service_id.replace(/__svc$/, '') : null) ??
+      p.parent_project_id ??
+      null;
+
+    if (parentId) {
+      const siblings = parentGroups.get(parentId);
       if (siblings) {
         siblings.push(p);
       } else {
-        parentGroups.set(p.parent_project_id, [p]);
+        parentGroups.set(parentId, [p]);
       }
     }
 
@@ -202,7 +210,11 @@ function buildProjectGroups(projects: ProjectRow[]): string {
 
   for (const [repoUrl, group] of repoGroups) {
     if (group.length < 2) continue;
-    const alreadyGrouped = group.every((p) => p.parent_project_id);
+    // PR 3: check canonical parent via services; fall back to projects column.
+    const alreadyGrouped = group.every((p) => {
+      const s = db.getService(`${p.id}__svc`);
+      return (s?.parent_service_id ?? p.parent_project_id) != null;
+    });
     if (alreadyGrouped) continue;
     const repoShort = repoUrl.split('/').slice(-2).join('/');
     const names = group.map((p) => p.name).join(', ');
