@@ -41,6 +41,36 @@
 -- and Drizzle never starts the migration.
 
 -- =====================================================================
+-- Phase A.0 — Synthetic-row cleanup (administrative, not user data).
+--
+-- 0009 Phase C synthesizes a `__orphan_managed` group row to host managed
+-- services (which have no real project group). Pre-fix runs of
+-- `backfillProductionEnvironments` (src/db/index.ts) inserted a
+-- `__orphan_managed-production` environment row with project_id =
+-- '__orphan_managed' BEFORE service_id was wired up — leaving it with a
+-- NULL service_id forever. The current backfill (post-fix) skips
+-- __orphan_managed via the EXISTS-__svc guard, but databases that booted
+-- on the older code path still carry this single legacy row.
+--
+-- This row is administrative: __orphan_managed has no __svc deployable,
+-- so the production environment row is never actually used by the
+-- runtime. Delete it explicitly here (with audit) so Phase A.1's
+-- NULL-service_id assertion does not abort on dogfood DBs that booted
+-- through the old backfill code path. We do NOT broaden the assertion to
+-- silently skip __orphan_managed — only this single, identified
+-- administrative row is removed.
+-- =====================================================================
+DELETE FROM environments
+  WHERE project_id = '__orphan_managed'
+    AND service_id IS NULL;
+--> statement-breakpoint
+INSERT INTO migration_0009_audit (phase, source_table, source_id, target_table, target_id, kind, created_at)
+  SELECT '0012-A.0', 'environments', '__orphan_managed-production',
+         'environments', '<deleted>', '0012-orphan-cleanup', strftime('%s','now')
+  WHERE (SELECT changes()) > 0;
+--> statement-breakpoint
+
+-- =====================================================================
 -- Phase A — Pre-flight assertions.
 --
 -- Two assertion groups per the temp-table-trigger pattern:
