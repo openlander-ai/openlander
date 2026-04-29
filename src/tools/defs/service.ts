@@ -105,8 +105,9 @@ export const serviceToolDefs: ToolDef[] = [
         service: {
           id: result.id,
           name: result.name,
-          // Wire key preserved; canonical source: kind
-          type: result.kind ?? 'unknown',
+          // Wire key preserved; canonical first, legacy fallback for pre-migration rows
+          // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
+          type: result.kind ?? result.type ?? 'unknown',
           status: result.status,
           // Wire key preserved; canonical source: assigned_port
           port: legacyPort,
@@ -143,14 +144,16 @@ export const serviceToolDefs: ToolDef[] = [
             return {
               id: service.id,
               name: service.name,
-              // Wire key preserved; canonical source: kind
-              type: service.kind ?? 'unknown',
+              // Wire key preserved; canonical first, legacy fallback for pre-migration rows
+              // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
+              type: service.kind ?? service.type ?? 'unknown',
               status: service.status,
               // Wire key preserved; canonical source: assigned_port
               port: svcPort,
               network: SHARED_NETWORK_NAME,
-              // Wire key preserved; canonical source: image_url
-              image: service.image_url ?? '',
+              // Wire key preserved; canonical first, legacy fallback for pre-migration rows
+              // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
+              image: service.image_url ?? service.image ?? '',
               createdAt: service.created_at,
               externalAccess: getServiceExternalAccess(svcPort),
             };
@@ -173,8 +176,9 @@ export const serviceToolDefs: ToolDef[] = [
           return {
             id: service.id,
             name: service.name,
-            // Wire key preserved; canonical source: kind
-            type: service.kind ?? 'unknown',
+            // Wire key preserved; canonical first, legacy fallback for pre-migration rows
+            // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
+            type: service.kind ?? service.type ?? 'unknown',
             status: service.status,
             // Wire key preserved; canonical source: assigned_port
             port: svcPort,
@@ -357,16 +361,18 @@ export const serviceToolDefs: ToolDef[] = [
       return {
         id: service.id,
         name: service.name,
-        // Wire key preserved; canonical source: kind
-        type: service.kind ?? 'unknown',
+        // Wire key preserved; canonical first, legacy fallback for pre-migration rows
+        // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
+        type: service.kind ?? service.type ?? 'unknown',
         status: service.status,
         health,
         ...(healthDetail ? { healthDetail } : {}),
         // Wire key preserved; canonical source: assigned_port
         port: svcPort,
         network: SHARED_NETWORK_NAME,
-        // Wire key preserved; canonical source: image_url
-        image: service.image_url ?? '',
+        // Wire key preserved; canonical first, legacy fallback for pre-migration rows
+        // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
+        image: service.image_url ?? service.image ?? '',
         containerName: service.container_name,
         containerId: service.container_id,
         createdAt: service.created_at,
@@ -424,7 +430,8 @@ export const serviceToolDefs: ToolDef[] = [
       const serviceName = args['service_name'] as string;
       const force = (args['force'] as boolean | undefined) ?? false;
       const service = await getServiceByName(appCtx, serviceName);
-      const serviceType = service.kind ?? 'unknown';
+      // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
+      const serviceType = service.kind ?? service.type ?? 'unknown';
       const result = await appCtx.serviceManager.remove(service.id, { force });
       return {
         status: 'removed',
@@ -584,8 +591,9 @@ export const serviceToolDefs: ToolDef[] = [
       const svcPort = service.assigned_port ?? service.port;
       return {
         service: serviceName,
-        // Wire key preserved; canonical source: kind
-        type: service.kind ?? 'unknown',
+        // Wire key preserved; canonical first, legacy fallback for pre-migration rows
+        // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
+        type: service.kind ?? service.type ?? 'unknown',
         credentials,
         connectionString,
         host: internalHost,

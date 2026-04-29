@@ -28,6 +28,34 @@ import * as traefikPipeline from '../../src/pipeline/traefik.js';
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Build a ServiceRow that mimics a 0009-migrated managed service:
+ * kind is set from legacyTypeToKind(), but image_url=NULL and assigned_port=NULL
+ * as 0009 intentionally left them. Wire emission must fall back to legacy columns.
+ */
+function buildPreMigrationRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
+  return {
+    id: 'svc-premigration-1',
+    name: 'my-pg-legacy',
+    // Legacy columns — source of truth for 0009-migrated rows
+    type: 'postgresql',
+    image: 'postgres:14',
+    port: 5432,
+    env_vars: null,
+    credentials: null,
+    status: 'running',
+    container_id: 'ctr-legacy',
+    container_name: 'ol-svc-my-pg-legacy',
+    created_at: '2025-01-01T00:00:00.000Z',
+    updated_at: '2025-01-01T00:00:00.000Z',
+    // Canonical columns — partially populated as 0009 left them
+    kind: 'postgres',
+    image_url: null, // 0009 did not backfill
+    assigned_port: null, // managed services intentionally NULL per 0009 design
+    ...overrides,
+  };
+}
+
 /** Build a ServiceRow that has canonical columns populated with correct values
  * and legacy columns set to intentionally stale/wrong values so the test
  * verifies which source the wire code reads from. */
@@ -137,6 +165,30 @@ describe('PR 2.5 — services wire-format stability (MCP)', () => {
     // Port comes from credentials blob first, which is 5432
     expect(result.port).toBe(5432);
     expect(result.port).not.toBe(9999);
+  });
+
+  it('list_services falls back to legacy image/port for 0009-migrated rows (image_url=NULL, assigned_port=NULL)', async () => {
+    const row = buildPreMigrationRow();
+    const { ctx } = createMcpContext(row);
+
+    const tool = createSharedToolRegistry(ctx, { target: 'mcp' }).find(
+      (t) => t.name === 'list_services',
+    );
+    expect(tool).toBeDefined();
+
+    const result = (await tool!.execute({}, { target: 'mcp' })) as {
+      services: Array<{ type: string; port: number; image: string }>;
+    };
+
+    expect(result.services).toHaveLength(1);
+    const svc = result.services[0];
+    // canonical kind takes precedence over legacy type for the `type` field
+    expect(svc.type).toBe('postgres');
+    // assigned_port is NULL — must fall back to legacy port
+    expect(svc.port).toBe(5432);
+    // image_url is NULL — must fall back to legacy image, not emit empty string
+    expect(svc.image).toBe('postgres:14');
+    expect(svc.image).not.toBe('');
   });
 });
 

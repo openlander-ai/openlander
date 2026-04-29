@@ -892,7 +892,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
 
     const credentials = parseServiceCredentials(service.credentials);
-    const serviceKind = service.kind ?? 'unknown';
+    // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
+    const serviceKind = service.kind ?? service.type ?? 'unknown';
     const injectedKeys = autoInjectServiceEnv({
       db: ctx.db,
       env: ctx.env,
@@ -2322,8 +2323,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         return {
           id: svc.id,
           name: svc.name,
-          // Wire key preserved; canonical source: kind
-          type: svc.kind ?? 'unknown',
+          // Wire key preserved; canonical first, legacy fallback for pre-migration rows
+          // eslint-disable-next-line @typescript-eslint/no-deprecated, @typescript-eslint/no-unnecessary-condition
+          type: svc.kind ?? svc.type ?? 'unknown',
           status: svc.status,
           // Wire key preserved; canonical source: assigned_port
           port: svcPort,
