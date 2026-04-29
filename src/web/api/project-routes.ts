@@ -345,6 +345,14 @@ type DeployableForApi = {
   source?: string | null;
   build_method?: string | null;
   dockerfile_path?: string | null;
+  // PR 4.5: residual deployable fields read by mapProjectForApi.
+  access_code?: string | null;
+  access_code_iv?: string | null;
+  pending_fix?: string | null;
+  recovering_started_at?: string | null;
+  docker_target?: string | null;
+  build_context?: string | null;
+  image_cmd?: string | null;
 };
 
 /**
@@ -369,6 +377,14 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
   const source = deployable?.source ?? project.source;
   const buildMethod = deployable?.build_method ?? project.build_method ?? null;
   const dockerfilePath = deployable?.dockerfile_path ?? project.dockerfile_path;
+  // PR 4.5: residual deployable fields canonicalized in mapProjectForApi.
+  const accessCode = deployable?.access_code ?? project.access_code;
+  const accessCodeIv = deployable?.access_code_iv ?? project.access_code_iv;
+  const pendingFix = deployable?.pending_fix ?? project.pending_fix;
+  const recoveringStartedAt = deployable?.recovering_started_at ?? project.recovering_started_at;
+  const dockerTarget = deployable?.docker_target ?? project.docker_target;
+  const buildContext = deployable?.build_context ?? project.build_context;
+  const imageCmdRaw = deployable?.image_cmd ?? project.image_cmd;
 
   return {
     // --- Identity / group fields (live on `projects` permanently) ---
@@ -386,13 +402,13 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
     health_check_path: project.health_check_path,
     deploy_lock_session: project.deploy_lock_session,
     deploy_lock_at: project.deploy_lock_at,
-    access_code: project.access_code,
-    access_code_iv: project.access_code_iv,
-    pending_fix: project.pending_fix,
-    recovering_started_at: project.recovering_started_at,
+    access_code: accessCode,
+    access_code_iv: accessCodeIv,
+    pending_fix: pendingFix,
+    recovering_started_at: recoveringStartedAt,
     archived_at: project.archived_at,
-    docker_target: project.docker_target,
-    build_context: project.build_context,
+    docker_target: dockerTarget,
+    build_context: buildContext,
     // --- Deployable runtime fields — canonical-first ?? legacy fallback ---
     status,
     container_id: containerId,
@@ -408,7 +424,7 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
     repoUrl: project.repo_url,
     source,
     imageUrl,
-    imageCmd: parseImageCmd(project.image_cmd),
+    imageCmd: parseImageCmd(imageCmdRaw),
     containerPort,
     created_at: normalizeTimestamp(project.created_at),
     updated_at: normalizeTimestamp(project.updated_at),

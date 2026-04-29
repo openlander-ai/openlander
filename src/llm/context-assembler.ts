@@ -416,8 +416,10 @@ function buildDeploymentHistory(db: Database, allProjects: ProjectRow[]): string
       return `    ${l.status === 'success' ? '✅' : '❌'} ${time} (${duration})${l.status === 'failed' && l.build_log ? ' — ' + extractFailureHint(l.build_log) : ''}`;
     });
 
-    const portInfo =
-      project.assigned_port != null ? `port ${String(project.assigned_port)}` : 'no port';
+    // PR 4.5: canonical-first read of assigned_port with `??` fallback.
+    const portDeployable = db.getDeployableForProject(project.id);
+    const portAssigned = portDeployable?.assigned_port ?? project.assigned_port;
+    const portInfo = portAssigned != null ? `port ${String(portAssigned)}` : 'no port';
     const envInfo = envKeys.length > 0 ? `env: ${envKeys.join(', ')}` : 'no env vars';
 
     sections.push(`  ${project.name}: ${portInfo}, ${envInfo}\n${logLines.join('\n')}`);

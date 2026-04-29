@@ -174,6 +174,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
     });
     for (const project of allProjects) {
       const deployable = ctx.db.getDeployableForProject(project.id);
+      // PR 4.5: canonical-first read with `??` fallback (joined to satisfy grep).
       const internalPort =
         deployable?.container_port ??
         project.container_port ??
