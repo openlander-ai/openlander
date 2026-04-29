@@ -246,10 +246,14 @@ export class RollbackExecutor {
   }
 
   private async cleanupRunningContainer(target: RollbackTarget): Promise<void> {
+    // PR 4.5: canonical-first read for project-level cleanup with `??` fallback.
+    const projectDeployable = this.db.getDeployableForProject(target.project.id);
     const containerId = target.environment
       ? target.environment.container_id
-      : target.project.container_id;
-    const status = target.environment ? target.environment.status : target.project.status;
+      : (projectDeployable?.container_id ?? target.project.container_id);
+    const status = target.environment
+      ? target.environment.status
+      : (projectDeployable?.status ?? target.project.status);
 
     if (!containerId || status !== 'running') {
       return;

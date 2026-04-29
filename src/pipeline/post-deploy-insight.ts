@@ -119,7 +119,10 @@ export async function generatePostDeployInsights(
  */
 async function checkHealth(ctx: InsightContext, db: Database, locale: Locale): Promise<Insight> {
   const project = db.getProject(ctx.projectId);
-  if (!project || project.assigned_port == null) {
+  // PR 4.5: canonical-first read of assigned_port with `??` fallback.
+  const deployable = project ? db.getDeployableForProject(ctx.projectId) : undefined;
+  const assignedPort = deployable?.assigned_port ?? project?.assigned_port;
+  if (!project || assignedPort == null) {
     return {
       title: pickLocale(locale, {
         ko: '⚠️ 헬스체크 건너뜀 - 포트 정보가 없습니다.',
@@ -145,7 +148,7 @@ async function checkHealth(ctx: InsightContext, db: Database, locale: Locale): P
     };
   }
 
-  const port = project.assigned_port;
+  const port = assignedPort;
   const path = profile.health.path ?? '/';
   const deadline = Date.now() + HEALTHCHECK_TIMEOUT_MS;
 
@@ -203,7 +206,9 @@ async function checkStaleContainers(
   const project = db.getProject(projectId);
   if (!project) return null;
 
-  const currentContainerId = project.container_id;
+  // PR 4.5: canonical-first read of container_id with `??` fallback.
+  const deployable = db.getDeployableForProject(projectId);
+  const currentContainerId = deployable?.container_id ?? project.container_id;
   if (!currentContainerId) return null;
 
   try {

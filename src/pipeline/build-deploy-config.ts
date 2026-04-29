@@ -43,26 +43,37 @@ export function buildDeployConfig(params: BuildDeployConfigParams): ProjectConfi
     throw new Error(`Project not found: ${projectId}`);
   }
 
-  const isCompose = project.build_method === 'compose';
-  const imageCmd = parseImageCmd(project.image_cmd);
+  // PR 4.5: canonical-first reads of deployable fields with `??` fallback to
+  // legacy `projects` columns through migration 0012.
+  const deployable = db.getDeployableForProject(projectId);
+  const buildMethod = deployable?.build_method ?? project.build_method;
+  const source = deployable?.source ?? project.source;
+  const imageUrl = deployable?.image_url ?? project.image_url;
+  const imageCmdRaw = deployable?.image_cmd ?? project.image_cmd;
+  const containerPort = deployable?.container_port ?? project.container_port;
+  const dockerfilePath = deployable?.dockerfile_path ?? project.dockerfile_path;
+  const dockerTarget = deployable?.docker_target ?? project.docker_target;
+  const buildContext = deployable?.build_context ?? project.build_context;
+  const assignedPort = deployable?.assigned_port ?? project.assigned_port;
+
+  const isCompose = buildMethod === 'compose';
+  const imageCmd = parseImageCmd(imageCmdRaw);
   const dbConfig: ProjectConfig = {
     repoUrl: project.repo_url ?? '',
     branch: project.branch,
     name: project.name,
     visibility: project.visibility,
-    source: project.source,
-    imageUrl: project.image_url ?? undefined,
+    source,
+    imageUrl: imageUrl ?? undefined,
     imageCmd,
-    containerPort: project.container_port ?? undefined,
+    containerPort: containerPort ?? undefined,
     dockerfilePath:
-      !isCompose && isValidDockerfilePath(project.dockerfile_path)
-        ? project.dockerfile_path
-        : undefined,
-    dockerTarget: isCompose ? undefined : (project.docker_target ?? undefined),
-    buildContext: project.build_context ?? undefined,
-    preferDockerfile: project.build_method !== 'compose',
+      !isCompose && isValidDockerfilePath(dockerfilePath) ? dockerfilePath : undefined,
+    dockerTarget: isCompose ? undefined : (dockerTarget ?? undefined),
+    buildContext: buildContext ?? undefined,
+    preferDockerfile: buildMethod !== 'compose',
     _projectId: projectId,
-    _preferredPort: project.assigned_port ?? undefined,
+    _preferredPort: assignedPort ?? undefined,
   };
 
   const stored = db.loadDeployConfig(projectId);

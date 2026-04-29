@@ -68,7 +68,11 @@ export class ContainerLifecycle {
     }
 
     const project = this.db.getProject(projectId);
-    if (!project?.container_id) {
+    // PR 4.5: canonical-first read of container_id with `??` fallback to
+    // legacy `projects` column through migration 0012.
+    const startDeployable = project ? this.db.getDeployableForProject(projectId) : undefined;
+    const startContainerId = startDeployable?.container_id ?? project?.container_id;
+    if (!project || !startContainerId) {
       if (hasChildren) {
         await this.stateManager.transition(projectId, 'running', 'container-healthy');
       }
@@ -76,7 +80,7 @@ export class ContainerLifecycle {
     }
 
     try {
-      await this.docker.startContainer(project.container_id);
+      await this.docker.startContainer(startContainerId);
     } catch (err) {
       if (err instanceof ContainerNotFoundError) {
         log.warn(
@@ -96,7 +100,7 @@ export class ContainerLifecycle {
     for (const env of this.db.getEnvironmentsByProject(projectId)) {
       this.db.updateEnvironment(env.id, { status: 'running' });
     }
-    await eventBus.emit('container:start', { projectId, containerId: project.container_id });
+    await eventBus.emit('container:start', { projectId, containerId: startContainerId });
   }
 
   async stop(projectId: string): Promise<void> {
@@ -109,14 +113,17 @@ export class ContainerLifecycle {
     }
 
     const project = this.db.getProject(projectId);
-    if (!project?.container_id) {
+    // PR 4.5: canonical-first read of container_id.
+    const stopDeployable = project ? this.db.getDeployableForProject(projectId) : undefined;
+    const stopContainerId = stopDeployable?.container_id ?? project?.container_id;
+    if (!project || !stopContainerId) {
       await this.stateManager.transition(projectId, 'stopped', 'container-manual-stop');
       await eventBus.emit('container:stop', { projectId, containerId: '' });
       return;
     }
 
     try {
-      await this.docker.stopContainer(project.container_id);
+      await this.docker.stopContainer(stopContainerId);
     } catch (err) {
       if (!(err instanceof ContainerNotFoundError)) {
         throw err;
@@ -125,7 +132,7 @@ export class ContainerLifecycle {
 
     // Remove container after stop so Docker events can no longer fire for this project
     try {
-      await this.docker.removeContainer(project.container_id);
+      await this.docker.removeContainer(stopContainerId);
     } catch (err) {
       log.debug({ err, projectId }, 'Stop remove container skipped (already removed)');
     }
@@ -135,7 +142,7 @@ export class ContainerLifecycle {
     for (const env of this.db.getEnvironmentsByProject(projectId)) {
       this.db.updateEnvironment(env.id, { status: 'stopped' });
     }
-    await eventBus.emit('container:stop', { projectId, containerId: project.container_id });
+    await eventBus.emit('container:stop', { projectId, containerId: stopContainerId });
   }
 
   async remove(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
@@ -160,8 +167,11 @@ export class ContainerLifecycle {
     }
 
     tunnelManager?.close(projectId);
+    // PR 4.5: canonical-first read of container_id for the remove event.
+    const removeDeployable = this.db.getDeployableForProject(projectId);
+    const removeContainerId = removeDeployable?.container_id ?? project.container_id ?? '';
     this.db.deleteProject(projectId);
-    await eventBus.emit('container:remove', { projectId, containerId: project.container_id ?? '' });
+    await eventBus.emit('container:remove', { projectId, containerId: removeContainerId });
   }
 
   async archive(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
@@ -170,7 +180,14 @@ export class ContainerLifecycle {
 
     this.coordinator?.suppressProject(projectId, 60_000);
 
-    if (project.status === 'building') {
+    // PR 4.5: canonical-first reads of runtime fields with `??` fallback to
+    // legacy `projects` columns through migration 0012.
+    const archiveDeployable = this.db.getDeployableForProject(projectId);
+    const archiveStatus = archiveDeployable?.status ?? project.status;
+    const archiveContainerId = archiveDeployable?.container_id ?? project.container_id;
+    const archiveImageTag = archiveDeployable?.image_tag ?? project.image_tag;
+
+    if (archiveStatus === 'building') {
       throw new OpenLanderError(
         'Cannot archive a building project',
         'ARCHIVE_BUILDING_PROJECT',
@@ -189,25 +206,25 @@ export class ContainerLifecycle {
     // the Eligibility Gate will see archived_at and reject recovery
     this.db.archiveProject(projectId);
 
-    if (project.container_id) {
+    if (archiveContainerId) {
       try {
-        await this.docker.stopContainer(project.container_id);
+        await this.docker.stopContainer(archiveContainerId);
       } catch (err) {
         log.debug({ err, projectId }, 'Archive stop skipped');
       }
 
       try {
-        await this.docker.removeContainer(project.container_id);
+        await this.docker.removeContainer(archiveContainerId);
       } catch (err) {
         log.debug({ err, projectId }, 'Archive remove container skipped');
       }
     }
 
-    if (project.image_tag) {
+    if (archiveImageTag) {
       try {
-        await this.docker.removeImage(project.image_tag);
+        await this.docker.removeImage(archiveImageTag);
       } catch (err) {
-        log.debug({ err, projectId, imageTag: project.image_tag }, 'Archive remove image skipped');
+        log.debug({ err, projectId, imageTag: archiveImageTag }, 'Archive remove image skipped');
       }
     }
 
@@ -234,12 +251,17 @@ export class ContainerLifecycle {
     const ids = new Set<string>();
     const names = new Set<string>();
 
-    if (project.container_id) ids.add(project.container_id);
+    // PR 4.5: canonical-first read of container_id with `??` fallback.
+    const cleanupDeployable = this.db.getDeployableForProject(projectId);
+    const cleanupContainerId = cleanupDeployable?.container_id ?? project.container_id;
+    if (cleanupContainerId) ids.add(cleanupContainerId);
     names.add(projectContainerName(project.name));
 
     const children = this.db.getChildProjects(projectId);
     for (const child of children) {
-      if (child.container_id) ids.add(child.container_id);
+      const childDeployable = this.db.getDeployableForProject(child.id);
+      const childContainerId = childDeployable?.container_id ?? child.container_id;
+      if (childContainerId) ids.add(childContainerId);
       names.add(projectContainerName(child.name));
     }
 
@@ -355,10 +377,16 @@ export class ContainerLifecycle {
 
   async getLogs(projectId: string, tail = 50): Promise<string> {
     const project = this.db.getProject(projectId);
-    if (!project?.container_id) {
+    if (!project) {
+      return 'No container running for this project.';
+    }
+    // PR 4.5: canonical-first read of container_id.
+    const logsDeployable = this.db.getDeployableForProject(projectId);
+    const logsContainerId = logsDeployable?.container_id ?? project.container_id;
+    if (!logsContainerId) {
       return 'No container running for this project.';
     }
 
-    return this.docker.getLogs(project.container_id, tail);
+    return this.docker.getLogs(logsContainerId, tail);
   }
 }

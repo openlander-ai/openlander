@@ -315,10 +315,13 @@ export async function rollbackMonorepoService(
     return;
   }
 
-  if (project.container_id) {
+  // PR 4.5: canonical-first read of container_id with `??` fallback.
+  const deployable = deps.db.getDeployableForProject(service.projectId);
+  const containerId = deployable?.container_id ?? project.container_id;
+  if (containerId) {
     try {
-      await deps.docker.stopContainer(project.container_id);
-      await deps.docker.safeRemoveContainer(project.container_id);
+      await deps.docker.stopContainer(containerId);
+      await deps.docker.safeRemoveContainer(containerId);
     } catch (error) {
       log.warn({ err: error, service: service.name }, 'Monorepo rollback container cleanup failed');
     }

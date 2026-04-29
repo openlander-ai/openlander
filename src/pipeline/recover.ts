@@ -201,17 +201,25 @@ async function recoverProject(
   dryRun: boolean,
 ): Promise<RecoverItemResult<ProjectStatus>> {
   const cName = projectContainerName(project.name);
+  // PR 4.5: canonical-first reads of runtime fields with `??` fallback to
+  // legacy `projects` columns through migration 0012.
+  const deployable = ctx.db.getDeployableForProject(project.id);
+  const status = deployable?.status ?? project.status;
+  const imageTag = deployable?.image_tag ?? project.image_tag;
+  const imageCmdRaw = deployable?.image_cmd ?? project.image_cmd;
+  const assignedPort = deployable?.assigned_port ?? project.assigned_port;
+  const containerPortRaw = deployable?.container_port ?? project.container_port;
 
   try {
     // Skip stopped/archived projects
-    if (project.status === 'stopped' || project.archived_at) {
+    if (status === 'stopped' || project.archived_at) {
       return { name: project.name, status: 'skipped' };
     }
 
     // Check if container already exists
     const container = await containerExists(ctx, cName);
     if (container.exists && container.running) {
-      if (project.status !== 'running') {
+      if (status !== 'running') {
         await ctx.stateManager.transition(project.id, 'running', 'manual-recovery');
       }
       return { name: project.name, status: 'running' };
@@ -225,11 +233,11 @@ async function recoverProject(
     }
 
     // Container doesn't exist — check if image is available
-    if (!project.image_tag) {
+    if (!imageTag) {
       return { name: project.name, status: 'needs_redeploy' };
     }
 
-    const hasImage = await imageExists(ctx, project.image_tag);
+    const hasImage = await imageExists(ctx, imageTag);
     if (!hasImage) {
       // Also check :latest tag
       const latestTag = `openlander/${project.name}:latest`;
@@ -248,17 +256,16 @@ async function recoverProject(
     const secretFiles = ctx.env.getSecretFilesForDeploy(project.id);
 
     // Determine port — reuse stored port or allocate new one
-    const port =
-      project.assigned_port ?? (await allocatePort(ctx.db, ctx.docker, {}, 'production'));
-    const containerPort = project.container_port ?? port;
+    const port = assignedPort ?? (await allocatePort(ctx.db, ctx.docker, {}, 'production'));
+    const containerPort = containerPortRaw ?? port;
 
     // Parse image cmd
     let imageCmd: string[] | undefined;
-    if (project.image_cmd) {
+    if (imageCmdRaw) {
       try {
-        imageCmd = JSON.parse(project.image_cmd) as string[];
+        imageCmd = JSON.parse(imageCmdRaw) as string[];
       } catch {
-        imageCmd = [project.image_cmd];
+        imageCmd = [imageCmdRaw];
       }
     }
 
@@ -271,7 +278,7 @@ async function recoverProject(
 
     // Create and start container
     const containerId = await ctx.docker.runContainer({
-      imageTag: project.image_tag,
+      imageTag,
       name: cName,
       port,
       containerPort,
