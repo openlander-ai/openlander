@@ -422,8 +422,12 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
     try {
       const cloneResult = await cloneRepo({ repoUrl: project.repo_url, branch: project.branch });
       clonePath = cloneResult.path;
+      // PR 4 canonical-first: dockerfile_path on the deployable services
+      // row supersedes the legacy projects column post-0012.
+      const deployable = ctx.db.getDeployableForProject(project.id);
+      const dockerfilePath = deployable?.dockerfile_path ?? project.dockerfile_path;
       const scanResult = scanRepoEnvVars(clonePath, {
-        dockerfilePath: project.dockerfile_path,
+        dockerfilePath,
       });
 
       const allStoredKeys = new Set<string>();

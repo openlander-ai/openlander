@@ -162,11 +162,23 @@ export function createApiRoutes(ctx: AppContext): Hono {
     // Build self-contained services for projects with an active container.
     // Uses Docker DNS (container name) + container port — no @docker dependency.
     // Includes 'building' status to keep routes alive during blue-green deploys.
-    const allProjects = ctx.db
-      .listProjects()
-      .filter((p) => p.status === 'running' || (p.status === 'building' && p.container_id));
+    //
+    // PR 4 canonical-first: read status / container_id / container_port /
+    // assigned_port via the deployable services row when available; fall
+    // back to legacy projects columns through migration 0012.
+    const allProjects = ctx.db.listProjects().filter((p) => {
+      const deployable = ctx.db.getDeployableForProject(p.id);
+      const status = deployable?.status ?? p.status;
+      const containerId = deployable?.container_id ?? p.container_id;
+      return status === 'running' || (status === 'building' && containerId);
+    });
     for (const project of allProjects) {
-      const internalPort = project.container_port ?? project.assigned_port;
+      const deployable = ctx.db.getDeployableForProject(project.id);
+      const internalPort =
+        deployable?.container_port ??
+        project.container_port ??
+        deployable?.assigned_port ??
+        project.assigned_port;
       if (!internalPort) continue;
       const svcName = `svc-${project.name}`;
       services[svcName] = {
@@ -198,7 +210,14 @@ export function createApiRoutes(ctx: AppContext): Hono {
       const svcName = `svc-${projectName}`;
       if (!services[svcName]) {
         const project = ctx.db.getProject(projectId);
-        const internalPort = project?.container_port ?? project?.assigned_port;
+        // PR 4 canonical-first: container_port + assigned_port via
+        // deployable services row when available.
+        const deployable = project ? ctx.db.getDeployableForProject(project.id) : undefined;
+        const internalPort =
+          deployable?.container_port ??
+          project?.container_port ??
+          deployable?.assigned_port ??
+          project?.assigned_port;
         if (!internalPort) continue;
         services[svcName] = {
           loadBalancer: {
@@ -231,12 +250,14 @@ export function createApiRoutes(ctx: AppContext): Hono {
         }
       }
 
-      if (
-        (project.visibility === 'quick-share' || project.visibility === 'shared') &&
-        project.public_url
-      ) {
+      // PR 4 canonical-first: public_url + visibility from deployable
+      // services row when available; fall back to legacy projects columns.
+      const deployable = ctx.db.getDeployableForProject(project.id);
+      const visibility = deployable?.visibility ?? project.visibility;
+      const publicUrl = deployable?.public_url ?? project.public_url;
+      if ((visibility === 'quick-share' || visibility === 'shared') && publicUrl) {
         try {
-          const host = new URL(project.public_url).hostname;
+          const host = new URL(publicUrl).hostname;
           routers[`qs-${project.name}`] = {
             rule: `Host(\`${host}\`)`,
             entryPoints: ['web'],

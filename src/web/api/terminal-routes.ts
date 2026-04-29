@@ -106,12 +106,18 @@ export function createTerminalRoutes(
 
               const project = getProjectOrThrow(c, ctx);
 
-              if (!project.container_id || project.status !== 'running') {
+              // PR 4 canonical-first: container_id + status from the
+              // deployable services row when available; fall back to
+              // legacy projects columns through migration 0012.
+              const deployable = ctx.db.getDeployableForProject(project.id);
+              const status = deployable?.status ?? project.status;
+              const projectContainerId = deployable?.container_id ?? project.container_id;
+              if (!projectContainerId || status !== 'running') {
                 closeWithError(ws, 'Container is not running');
                 return;
               }
 
-              const containerId = project.container_id;
+              const containerId = projectContainerId;
               const containerInfo = await ctx.docker.inspectContainer(containerId);
               if (!containerInfo.State.Running) {
                 closeWithError(ws, 'Container is not running');
