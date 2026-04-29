@@ -134,7 +134,7 @@ async function checkHealth(ctx: InsightContext, db: Database, locale: Locale): P
   }
 
   // Get the monitoring profile to determine health check strategy and path
-  const profile = resolveMonitoringProfile(project);
+  const profile = resolveMonitoringProfile(project, deployable);
 
   // Skip HTTP check for workers (strategy='none')
   if (profile.health.strategy === 'none') {

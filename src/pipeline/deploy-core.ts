@@ -1706,7 +1706,7 @@ export class DeployPipeline {
         url: getProjectUrl(projectName),
       });
 
-      const probeProfile = resolveMonitoringProfile(project);
+      const probeProfile = resolveMonitoringProfile(project, blueDeployable);
       const probeConfig = {
         ...probeProfile.health,
         // Override path if explicitly provided in RedeployOptions

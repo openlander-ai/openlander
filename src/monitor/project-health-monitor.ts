@@ -90,7 +90,8 @@ export class ProjectHealthMonitor {
       };
     }
 
-    const profile = resolveMonitoringProfile(project);
+    const deployable = this.db.getDeployableForProject(projectId);
+    const profile = resolveMonitoringProfile(project, deployable);
     if (profile.health.strategy === 'none') {
       this.consecutiveFailures.set(projectId, 0);
       return {

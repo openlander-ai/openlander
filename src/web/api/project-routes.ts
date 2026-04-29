@@ -353,6 +353,11 @@ type DeployableForApi = {
   docker_target?: string | null;
   build_context?: string | null;
   image_cmd?: string | null;
+  project_type?: 'web' | 'worker' | null;
+  is_preview?: number | null;
+  pr_number?: number | null;
+  health_check_strategy?: 'http' | 'tcp' | 'exec' | 'none' | null;
+  health_check_path?: string | null;
 };
 
 /**
@@ -385,6 +390,11 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
   const dockerTarget = deployable?.docker_target ?? project.docker_target;
   const buildContext = deployable?.build_context ?? project.build_context;
   const imageCmdRaw = deployable?.image_cmd ?? project.image_cmd;
+  const projectType = deployable?.project_type ?? project.project_type;
+  const isPreview = deployable?.is_preview ?? project.is_preview;
+  const prNumber = deployable?.pr_number ?? project.pr_number;
+  const healthCheckStrategy = deployable?.health_check_strategy ?? project.health_check_strategy;
+  const healthCheckPath = deployable?.health_check_path ?? project.health_check_path;
 
   return {
     // --- Identity / group fields (live on `projects` permanently) ---
@@ -395,11 +405,11 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
     parent_project_id: project.parent_project_id,
     visibility: project.visibility,
     server_id: project.server_id,
-    project_type: project.project_type,
-    is_preview: project.is_preview,
-    pr_number: project.pr_number,
-    health_check_strategy: project.health_check_strategy,
-    health_check_path: project.health_check_path,
+    project_type: projectType,
+    is_preview: isPreview,
+    pr_number: prNumber,
+    health_check_strategy: healthCheckStrategy,
+    health_check_path: healthCheckPath,
     deploy_lock_session: project.deploy_lock_session,
     deploy_lock_at: project.deploy_lock_at,
     access_code: accessCode,
