@@ -318,6 +318,47 @@ export class ProjectRepo {
       .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
       .where(eq(projects.id, id))
       .run();
+
+    // PR 4.5 write-through: keep the canonical `services` row in sync for
+    // deployable columns until migration 0012 drops the legacy `projects`
+    // duplicates. Without this mirror, canonical-first readers (added in
+    // PR 4.5) would return stale services rows after `updateProject` calls
+    // that bypass `service-manager`. The write is a no-op when no `__svc`
+    // row exists (managed-only / pre-0009 rows). Once 0012 lands, this
+    // block becomes the only writer (PR 5 will delete the projects-table
+    // update above and drop the duplicate columns).
+    const serviceSetValues: Record<string, unknown> = {};
+    for (const [src, dst] of [
+      ['status', 'status'],
+      ['assigned_port', 'assigned_port'],
+      ['container_id', 'container_id'],
+      ['container_port', 'container_port'],
+      ['image_tag', 'image_tag'],
+      ['previous_image_tag', 'previous_image_tag'],
+      ['public_url', 'public_url'],
+      ['build_method', 'build_method'],
+      ['source', 'source'],
+      ['dockerfile_path', 'dockerfile_path'],
+      ['docker_target', 'docker_target'],
+      ['build_context', 'build_context'],
+      ['image_url', 'image_url'],
+      ['image_cmd', 'image_cmd'],
+      ['pending_fix', 'pending_fix'],
+      ['access_code', 'access_code'],
+      ['access_code_iv', 'access_code_iv'],
+      ['recovering_started_at', 'recovering_started_at'],
+    ] as const) {
+      if (src in setValues) {
+        serviceSetValues[dst] = setValues[src];
+      }
+    }
+    if (Object.keys(serviceSetValues).length > 0) {
+      this.db
+        .update(services)
+        .set({ ...serviceSetValues, updated_at: sql`CURRENT_TIMESTAMP` })
+        .where(eq(services.id, `${id}__svc`))
+        .run();
+    }
   }
 
   setPendingFix(projectId: string, pendingFix: PendingFixRow): void {
