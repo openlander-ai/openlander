@@ -100,10 +100,12 @@ export class ProjectHealthMonitor {
       };
     }
 
+    // PR 4.5: canonical-first read of runtime columns with `??` fallback.
+    const deployableForProbe = this.db.getDeployableForProject(projectId);
     const probeContext: ProbeContext = {
       projectId,
-      containerId: project.container_id ?? '',
-      assignedPort: project.assigned_port ?? undefined,
+      containerId: deployableForProbe?.container_id ?? project.container_id ?? '',
+      assignedPort: deployableForProbe?.assigned_port ?? project.assigned_port ?? undefined,
     };
 
     const probeConfig = {

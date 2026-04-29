@@ -28,12 +28,14 @@ function insertServiceForProject(
 
 describe('ProjectRepo - Archive', () => {
   let repo: ProjectRepo;
+  let serviceRepo: ServiceRepo;
   let sqlite: ReturnType<typeof createDrizzleDatabase>['sqlite'];
 
   beforeEach(() => {
     const db = createDrizzleDatabase(':memory:');
     sqlite = db.sqlite;
     repo = new ProjectRepo(db.db, db.sqlite);
+    serviceRepo = new ServiceRepo(db.db, db.sqlite);
     // 0009 drops parent tables; mirror src/db/index.ts:435-443 production path.
     sqlite.exec('PRAGMA foreign_keys = OFF');
     try {
@@ -119,6 +121,41 @@ describe('ProjectRepo - Archive', () => {
       const unarchived = repo.getProject('proj-1');
       expect(unarchived!.archived_at).toBeNull();
       expect(unarchived!.status).toBe('stopped');
+    });
+
+    // PR 4.5 regression: archive→unarchive must mirror to __svc row so
+    // canonical-first readers don't see stale state (Codex repro: after
+    // archive→unarchive, __svc kept status='running'/assigned_port/container_id).
+    it('archive mirrors cleared runtime cols to __svc services row', () => {
+      createTestProject();
+      repo.updateProject('proj-1', {
+        assignedPort: 10001,
+        containerId: 'container-abc',
+        imageTag: 'v1.0',
+        status: 'running',
+      });
+
+      repo.archiveProject('proj-1');
+
+      const svc = serviceRepo.getService('proj-1__svc');
+      expect(svc).toBeDefined();
+      expect(svc!.archived_at).toBeTruthy();
+      expect(svc!.assigned_port).toBeNull();
+      expect(svc!.container_id).toBeNull();
+      expect(svc!.image_tag).toBeNull();
+      expect(svc!.status).toBe('stopped');
+    });
+
+    it('unarchive mirrors cleared archived_at and stopped status to __svc services row', () => {
+      createTestProject();
+      repo.updateProject('proj-1', { status: 'running', assignedPort: 10001, containerId: 'ctr', imageTag: 'v1' });
+      repo.archiveProject('proj-1');
+      repo.unarchiveProject('proj-1');
+
+      const svc = serviceRepo.getService('proj-1__svc');
+      expect(svc).toBeDefined();
+      expect(svc!.archived_at).toBeNull();
+      expect(svc!.status).toBe('stopped');
     });
   });
 

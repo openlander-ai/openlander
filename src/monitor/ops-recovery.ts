@@ -402,7 +402,9 @@ export class RecoveryPipeline {
       });
 
       const project = this.ctx.db.getProject(projectId);
-      const port = project?.assigned_port;
+      // PR 4.5: canonical-first read of assigned_port with `??` fallback.
+      const deployable = this.ctx.db.getDeployableForProject(projectId);
+      const port = deployable?.assigned_port ?? project?.assigned_port;
       const containerRunning = await this.isContainerRunning(containerId);
       const httpHealthy = typeof port === 'number' ? await this.isHttpHealthy(port) : false;
 

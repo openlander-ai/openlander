@@ -811,7 +811,11 @@ ${plan.agentGuidance}
         const diagnosis = await buildDebugger.diagnose({
           buildLog: latestBuildLog,
           projectName,
-          imageTag: project?.image_tag ?? `openlander/${projectName}:latest`,
+          // PR 4.5: canonical-first read of image_tag with `??` fallback.
+          imageTag:
+            db.getDeployableForProject(projectId)?.image_tag ??
+            project?.image_tag ??
+            `openlander/${projectName}:latest`,
           failedStep: mapFailStep(step),
         });
         await emitTimelineMessage(eventBus, projectId, `Debug summary: ${diagnosis.summary}`);

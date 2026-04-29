@@ -1341,7 +1341,9 @@ export class DeployPipeline {
         }
 
         const project = this.db.getProject(deployment.projectId);
-        const containerId = project?.container_id;
+        // PR 4.5: canonical-first read of container_id with `??` fallback.
+        const deployableForHealth = this.db.getDeployableForProject(deployment.projectId);
+        const containerId = deployableForHealth?.container_id ?? project?.container_id;
         if (!containerId) {
           log.warn(
             { serviceName: service.name },

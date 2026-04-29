@@ -172,7 +172,12 @@ export class ProjectRepo {
       ),
     ];
     if (status) {
-      conditions.push(eq(projects.status, status));
+      // PR 4.5: filter by canonical services status so this predicate survives
+      // migration 0012 dropping projects.status. Semantics are identical today
+      // (updateProject dual-write keeps both columns in sync).
+      conditions.push(
+        sql`EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND s.kind != 'compose-child' AND s.status = ${status})`,
+      );
     }
     if (!opts?.includeArchived) {
       conditions.push(isNull(projects.archived_at));
@@ -392,10 +397,16 @@ export class ProjectRepo {
         { projectId: id },
       );
     }
+    const archivedAt = new Date().toISOString();
+    // PR 4.5 write-through: mirror archive to canonical services row so that
+    // canonical-first readers don't see stale runtime state after archiving.
+    // `services` has `archived_at` (migration 0011), so we mirror all cleared
+    // deployable columns plus archived_at. This is a no-op if the __svc row
+    // doesn't exist (pre-0009 rows).
     this.db
       .update(projects)
       .set({
-        archived_at: new Date().toISOString(),
+        archived_at: archivedAt,
         assigned_port: null,
         container_id: null,
         image_tag: null,
@@ -404,9 +415,23 @@ export class ProjectRepo {
       })
       .where(eq(projects.id, id))
       .run();
+    this.db
+      .update(services)
+      .set({
+        archived_at: archivedAt,
+        assigned_port: null,
+        container_id: null,
+        image_tag: null,
+        status: 'stopped',
+        updated_at: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(services.id, `${id}__svc`))
+      .run();
   }
 
   unarchiveProject(id: string): void {
+    // PR 4.5 write-through: mirror unarchive to canonical services row so that
+    // canonical-first readers see the correct post-unarchive state.
     this.db
       .update(projects)
       .set({
@@ -415,6 +440,15 @@ export class ProjectRepo {
         updated_at: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(projects.id, id))
+      .run();
+    this.db
+      .update(services)
+      .set({
+        archived_at: null,
+        status: 'stopped',
+        updated_at: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(services.id, `${id}__svc`))
       .run();
   }
 

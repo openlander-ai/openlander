@@ -63,7 +63,10 @@ export class RollbackWatcher {
 
   private startWatching(projectId: string, planId?: string): void {
     const project = this.db.getProject(projectId);
-    if (!project?.previous_image_tag) return;
+    // PR 4.5: canonical-first read of previous_image_tag with `??` fallback.
+    const deployable = this.db.getDeployableForProject(projectId);
+    const previousImageTag = deployable?.previous_image_tag ?? project?.previous_image_tag;
+    if (!previousImageTag) return;
 
     this.stopWatching(projectId);
 

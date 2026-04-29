@@ -494,12 +494,15 @@ export class RecoveryCoordinator {
     }
     try {
       const project = this.getProjectSnapshot(projectId);
+      // PR 4.5: canonical-first read of container_id with `||` fallback.
+      const deployable = this.db.getDeployableForProject(projectId);
       this.opsAgent.enqueue({
         type: 'deploy:crash',
         payload: {
           projectId,
           projectName: project?.name ?? projectId,
-          containerId: containerIdOverride || project?.container_id || '',
+          containerId:
+            containerIdOverride || deployable?.container_id || project?.container_id || '',
         },
         timestamp: Date.now(),
       });
