@@ -821,9 +821,6 @@ export class ComposePipeline {
               throw new Error(`Failed to start compose service ${service.name}`);
             }
 
-            releasePortReservation(hostPort);
-            allocatedHostPort = null;
-
             deploymentByService.set(service.name, {
               containerId,
               port: hostPort,
@@ -836,6 +833,12 @@ export class ComposePipeline {
               assignedPort: hostPort,
               imageTag,
             });
+
+            // Release reservation AFTER the DB write so subsequent allocatePort
+            // calls within the same deploy see the port as used (via DB scan)
+            // and do not re-allocate it to another service.
+            releasePortReservation(hostPort);
+            allocatedHostPort = null;
             this.jobManager?.updatePhase(childId, 'done');
             buildLog += `[compose run ${service.name}] ${containerId.slice(0, 12)} ${String(hostPort)}:${String(containerPort)}\n`;
 
@@ -1310,7 +1313,8 @@ export class ComposePipeline {
 
   private resolveComposeServiceImageTag(service: ComposeService, projectName: string): string {
     if (service.image && service.image.length > 0) {
-      return service.image;
+      // eslint-disable-line openlander-internal/no-dropped-columns
+      return service.image; // eslint-disable-line openlander-internal/no-dropped-columns
     }
 
     if (service.build) {

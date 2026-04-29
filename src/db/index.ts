@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path, { dirname } from 'node:path';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { isNotNull } from 'drizzle-orm';
@@ -206,42 +206,93 @@ function backfillProductionEnvironments(sqlite: SqliteDatabase): void {
   const envCols = getTableColumns(sqlite, 'environments');
   if (!envCols.has('project_id')) return;
 
-  const projectsToBackfill = sqlite
-    .prepare('SELECT * FROM projects')
-    .all() as LegacyProjectRuntimeRow[];
-  const insertEnvironment = sqlite.prepare(`
-    INSERT OR IGNORE INTO environments (
-      id,
-      project_id,
-      type,
-      branch,
-      status,
-      assigned_port,
-      container_id,
-      image_tag,
-      previous_image_tag,
-      public_url,
-      container_port,
-      created_at,
-      updated_at
-    ) VALUES (?, ?, 'production', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  // Post-0009: service_id column exists on environments. The INSERT must
+  // populate it (= project_id || '__svc') so that 0012 Phase A's NULL-orphan
+  // assertion does not fire on rows inserted here (e.g. __orphan_managed).
+  const hasServiceIdCol = envCols.has('service_id');
+
+  // When service_id col exists (post-0009), only backfill projects that have a
+  // corresponding __svc service row. The synthetic __orphan_managed group row
+  // has no __svc service row and must be skipped to avoid FK orphans post-0012.
+  const projectsToBackfill = hasServiceIdCol
+    ? (sqlite
+        .prepare(
+          `SELECT p.* FROM projects p
+           WHERE EXISTS (SELECT 1 FROM services s WHERE s.id = (p.id || '__svc'))`,
+        )
+        .all() as LegacyProjectRuntimeRow[])
+    : (sqlite.prepare('SELECT * FROM projects').all() as LegacyProjectRuntimeRow[]);
+
+  const insertEnvironment = hasServiceIdCol
+    ? sqlite.prepare(`
+        INSERT OR IGNORE INTO environments (
+          id,
+          project_id,
+          service_id,
+          type,
+          branch,
+          status,
+          assigned_port,
+          container_id,
+          image_tag,
+          previous_image_tag,
+          public_url,
+          container_port,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, 'production', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+    : sqlite.prepare(`
+        INSERT OR IGNORE INTO environments (
+          id,
+          project_id,
+          type,
+          branch,
+          status,
+          assigned_port,
+          container_id,
+          image_tag,
+          previous_image_tag,
+          public_url,
+          container_port,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, 'production', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
 
   for (const project of projectsToBackfill) {
-    insertEnvironment.run(
-      `${project.id}-production`,
-      project.id,
-      project.branch ?? 'main',
-      project.status ?? 'idle',
-      project.assigned_port ?? null,
-      project.container_id ?? null,
-      project.image_tag ?? null,
-      project.previous_image_tag ?? null,
-      project.public_url ?? null,
-      null,
-      project.created_at ?? new Date().toISOString(),
-      project.updated_at ?? new Date().toISOString(),
-    );
+    if (hasServiceIdCol) {
+      insertEnvironment.run(
+        `${project.id}-production`,
+        project.id,
+        `${project.id}__svc`,
+        project.branch ?? 'main',
+        project.status ?? 'idle', // eslint-disable-line openlander-internal/no-dropped-columns
+        project.assigned_port ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
+        project.container_id ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
+        project.image_tag ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
+        project.previous_image_tag ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
+        project.public_url ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
+        null,
+        project.created_at ?? new Date().toISOString(),
+        project.updated_at ?? new Date().toISOString(),
+      );
+    } else {
+      insertEnvironment.run(
+        `${project.id}-production`,
+        project.id,
+        project.branch ?? 'main',
+        project.status ?? 'idle', // eslint-disable-line openlander-internal/no-dropped-columns
+        project.assigned_port ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
+        project.container_id ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
+        project.image_tag ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
+        project.previous_image_tag ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
+        project.public_url ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
+        null,
+        project.created_at ?? new Date().toISOString(),
+        project.updated_at ?? new Date().toISOString(),
+      );
+    }
   }
 }
 
@@ -368,12 +419,23 @@ function backupOrBustForMigration0012(sqlite: SqliteDatabase, dbPath: string): s
   const backupPath = `${dbPath}.pre-1.0-a-completion.${timestamp}.bak`;
 
   try {
-    // SQLite WAL/journal sidecars: copyFileSync of the main DB file is
-    // sufficient for a stop-the-world backup. Better-sqlite3 holds a write
-    // lock during this prelude (called inside the constructor before
-    // migrate()), so no concurrent writer can race.
-    copyFileSync(dbPath, backupPath);
-    log.info({ backupPath, dbPath }, '[migrate:0012] backup-or-bust wrote pre-migration backup');
+    // WAL-safe backup via VACUUM INTO. SQLite is in WAL mode (src/db/drizzle.ts).
+    // Plain copyFileSync would capture the main DB file without checkpointing,
+    // potentially missing pages still in the -wal sidecar — restoring such a
+    // copy yields an inconsistent database. VACUUM INTO acquires a read lock,
+    // reads all pages including WAL-buffered ones, and writes a self-contained
+    // copy to the destination atomically. No checkpoint dance needed.
+    //
+    // Note: BEGIN IMMEDIATE is intentionally not used here — Drizzle's migrator
+    // manages its own BEGIN/COMMIT per migration file. The backup IS the rollback
+    // path: if migrate() fails mid-flight, restore backupPath to dbPath to
+    // return to the last consistent state.
+    const escapedBackup = backupPath.replace(/'/g, "''");
+    sqlite.exec(`VACUUM INTO '${escapedBackup}'`);
+    log.info(
+      { backupPath, dbPath },
+      '[migrate:0012] backup-or-bust wrote WAL-safe pre-migration backup via VACUUM INTO',
+    );
     return backupPath;
   } catch (err) {
     log.error(
