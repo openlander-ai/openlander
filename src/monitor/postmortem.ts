@@ -105,13 +105,13 @@ export class PostmortemGenerator {
       }
       const project = this.db.getProject(projectId);
       const projectName = project?.name ?? projectId;
+      // PR 4.5: canonical-first status read with `??` fallback.
+      const deployable = project ? this.db.getDeployableForProject(projectId) : undefined;
+      const status = deployable?.status ?? project?.status;
 
       // Skip non-running projects — no postmortem needed
-      if (!project || project.status !== 'running' || project.archived_at) {
-        log.debug(
-          { projectId, status: project?.status },
-          'Skipping postmortem for non-running project',
-        );
+      if (!project || status !== 'running' || project.archived_at) {
+        log.debug({ projectId, status }, 'Skipping postmortem for non-running project');
         return;
       }
 

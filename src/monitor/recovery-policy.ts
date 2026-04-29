@@ -63,7 +63,7 @@ export interface RecoveryProjectSnapshot {
 
 /** External signals the policy needs in order to decide. */
 export interface RecoveryEligibilityContext {
-  db: Pick<Database, 'getProject'>;
+  db: Pick<Database, 'getProject' | 'getDeployableForProject'>;
   /** Optional — when omitted the circuit-breaker invariant is skipped. */
   isCircuitBreakerOpen?: (projectId: string) => boolean;
   /** Optional — when omitted the global-budget invariant is skipped. */
@@ -85,7 +85,7 @@ export function checkRecoveryEligibility(
 
   let project: RecoveryProjectSnapshot | undefined;
   try {
-    project = ctx.db.getProject(projectId) as RecoveryProjectSnapshot | undefined;
+    project = ctx.db.getProject(projectId);
   } catch (err) {
     // Treat DB lookup failure as "project not found" — caller will emit
     // recovery:blocked rather than starting a recovery on unknown state.
@@ -109,7 +109,12 @@ export function checkRecoveryEligibility(
     };
   }
 
-  if (project.status === 'stopped') {
+  // PR 4.5: canonical-first read of status with `??` fallback to legacy
+  // `projects` column through migration 0012.
+  const deployable = ctx.db.getDeployableForProject(projectId);
+  const status = deployable?.status ?? project.status;
+
+  if (status === 'stopped') {
     return {
       eligible: false,
       reason: 'stopped',
@@ -133,11 +138,11 @@ export function checkRecoveryEligibility(
   // continue_check is invoked while recovery is already running — `recovering`
   // status is the expected state, not a blocker.
   if (trigger === 'continue_check') {
-    if (project.status !== 'running' && project.status !== 'recovering') {
+    if (status !== 'running' && status !== 'recovering') {
       return {
         eligible: false,
         reason: 'recovering_in_progress',
-        message: `Project is in status ${project.status}, cannot continue recovery`,
+        message: `Project is in status ${status}, cannot continue recovery`,
       };
     }
   }

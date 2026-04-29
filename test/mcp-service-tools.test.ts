@@ -13,19 +13,26 @@ const mockAnalyzeInfrastructure = vi.fn();
 const mockWebSearch = vi.fn();
 
 function createServiceRow(partial: Partial<ServiceRow>): ServiceRow {
+  const legacyType = partial.type ?? 'postgresql';
+  const legacyImage = partial.image ?? 'postgres:16-alpine';
+  const legacyPort = partial.port ?? 5432;
   return {
     id: partial.id ?? 'svc-1',
     name: partial.name ?? 'shared-pg',
-    type: partial.type ?? 'postgresql',
-    image: partial.image ?? 'postgres:16-alpine',
+    type: legacyType,
+    image: legacyImage,
     status: partial.status ?? 'running',
     container_id: partial.container_id ?? 'container-1',
     container_name: partial.container_name ?? 'ol-svc-shared-pg',
-    port: partial.port ?? 5432,
+    port: legacyPort,
     env_vars: partial.env_vars ?? null,
     credentials: partial.credentials ?? null,
     created_at: partial.created_at ?? '2026-01-01T00:00:00.000Z',
     updated_at: partial.updated_at ?? '2026-01-01T00:00:00.000Z',
+    // Canonical columns — PR 2.5 migration
+    kind: partial.kind ?? (legacyType as ServiceRow['kind']),
+    image_url: partial.image_url ?? legacyImage,
+    assigned_port: partial.assigned_port ?? legacyPort,
   };
 }
 

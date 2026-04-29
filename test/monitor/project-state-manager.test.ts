@@ -69,6 +69,8 @@ describe('ProjectStateManager', () => {
         getProject,
         listProjects,
         updateProject,
+        // PR 4.5: canonical-first reads need this helper.
+        getDeployableForProject: vi.fn().mockReturnValue(undefined),
       },
       docker: {
         listManagedContainers,

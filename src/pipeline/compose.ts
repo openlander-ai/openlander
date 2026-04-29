@@ -334,7 +334,8 @@ export class ComposePipeline {
       } else if (environmentRaw && typeof environmentRaw === 'object') {
         const envObj: Record<string, string> = {};
         for (const [key, envValue] of Object.entries(environmentRaw as Record<string, unknown>)) {
-          envObj[key] = envValue == null ? '' : String(envValue as string | number);
+          // eslint-disable-next-line @typescript-eslint/no-base-to-string
+          envObj[key] = envValue == null ? '' : String(envValue);
         }
         environment = envObj;
       }
@@ -343,7 +344,7 @@ export class ComposePipeline {
       if (Array.isArray(dependsOnRaw)) {
         dependsOn = dependsOnRaw.map((dep) => String(dep));
       } else if (dependsOnRaw && typeof dependsOnRaw === 'object') {
-        dependsOn = Object.keys(dependsOnRaw as Record<string, unknown>);
+        dependsOn = Object.keys(dependsOnRaw);
       }
 
       const portsRaw = serviceObj['ports'];
@@ -572,7 +573,8 @@ export class ComposePipeline {
     });
 
     const childrenByService = new Map<string, string>();
-    const existingChildren = this.db.getChildProjects(parentProjectId);
+    // PR 2: fetch existing children via services.parent_service_id.
+    const existingChildren = this.db.getComposeChildProjects(parentProjectId);
     const existingByName = new Map(existingChildren.map((c) => [c.name, c]));
 
     for (const service of filteredComposeProject.services) {
@@ -640,6 +642,10 @@ export class ComposePipeline {
           }
 
           // Hard delete intentional: orphaned compose children are not user-created projects and should not be archived.
+          // Also explicitly delete the backing services row: compose-child service rows have
+          // project_id = parentProjectId (not child.id), so the FK cascade on deleteProject
+          // does NOT reach them. The __svc convention is established in createProject().
+          this.db.deleteService(`${child.id}__svc`);
           this.db.deleteProject(child.id);
           removed.push(serviceName);
         }
@@ -1145,7 +1151,8 @@ export class ComposePipeline {
 
   async stopCompose(projectId: string): Promise<void> {
     const parent = this.resolveParentProject(projectId);
-    const children = this.db.getChildProjects(parent.id);
+    // PR 2: fetch compose children via services.parent_service_id.
+    const children = this.db.getComposeChildProjects(parent.id);
 
     for (const child of children) {
       if (child.container_id) {
@@ -1179,10 +1186,11 @@ export class ComposePipeline {
 
   async getServiceLogs(projectId: string, service?: string, lines = 100): Promise<string> {
     const parent = this.resolveParentProject(projectId);
-    const children = this.db.getChildProjects(parent.id);
+    // PR 2: fetch compose children via services.parent_service_id.
+    const children = this.db.getComposeChildProjects(parent.id);
 
     if (service) {
-      const child = children.find((entry) => entry.name === `${parent.name}/${service}`);
+      const child = children.find((c) => c.name === `${parent.name}/${service}`);
       if (!child) {
         throw new Error(`Compose service not found: ${service}`);
       }
@@ -1210,7 +1218,8 @@ export class ComposePipeline {
 
   getServiceStatuses(projectId: string): ComposeServiceStatus[] {
     const parent = this.resolveParentProject(projectId);
-    const children = this.db.getChildProjects(parent.id);
+    // PR 2: fetch compose children via services.parent_service_id.
+    const children = this.db.getComposeChildProjects(parent.id);
     return children.map((child) => {
       const serviceName = child.name.startsWith(`${parent.name}/`)
         ? child.name.slice(parent.name.length + 1)
@@ -1271,13 +1280,18 @@ export class ComposePipeline {
     if (!project) {
       throw new Error(`Project not found: ${projectId}`);
     }
-    if (!project.parent_project_id) {
+    // PR 2: read parent relationship from services.parent_service_id instead of
+    // projects.parent_project_id. Convention: deployable service id = <projectId>__svc.
+    const svc = this.db.getService(`${projectId}__svc`);
+    if (!svc?.parent_service_id) {
+      // No parent service — this is already a top-level group.
       return project;
     }
-
-    const parent = this.db.getProject(project.parent_project_id);
+    // Derive parent project id by stripping the __svc suffix.
+    const parentProjectId = svc.parent_service_id.replace(/__svc$/, '');
+    const parent = this.db.getProject(parentProjectId);
     if (!parent) {
-      throw new Error(`Parent project not found: ${project.parent_project_id}`);
+      throw new Error(`Parent project not found: ${parentProjectId}`);
     }
     return parent;
   }

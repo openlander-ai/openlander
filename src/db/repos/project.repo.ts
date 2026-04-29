@@ -1,4 +1,17 @@
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 import {
   OpenLanderError,
   ProjectAlreadyExistsError,
@@ -8,7 +21,7 @@ import {
 import { createModuleLogger } from '../../lib/logger.js';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { buildSetValues } from '../helpers.js';
-import { environments, projects } from '../schema.drizzle.js';
+import { environments, projects, services } from '../schema.drizzle.js';
 import type { EnvironmentRow, PendingFixRow, ProjectRow } from '../types.js';
 
 /**
@@ -53,36 +66,87 @@ export class ProjectRepo {
     imageCmd?: string[];
     containerPort?: number;
   }): ProjectRow {
+    const source = project.source ?? 'git';
+    const buildMethod = project.buildMethod ?? null;
+    const parentProjectId = project.parentProjectId ?? null;
+
+    // Derive the service kind mirroring 0009 Phase D semantics.
+    let kind: 'git' | 'image' | 'compose' | 'compose-child';
+    if (parentProjectId !== null) {
+      kind = 'compose-child';
+    } else if (buildMethod === 'compose') {
+      kind = 'compose';
+    } else if (source === 'image') {
+      kind = 'image';
+    } else {
+      kind = 'git';
+    }
+
     try {
-      this.db
-        .insert(projects)
-        .values({
-          id: project.id,
-          name: project.name,
-          repo_url: project.repoUrl,
-          branch: project.branch ?? 'main',
-          parent_project_id: project.parentProjectId ?? null,
-          dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
-          docker_target: project.dockerTarget ?? null,
-          build_context: project.buildContext ?? null,
-          build_method: project.buildMethod ?? null,
-          source: project.source ?? 'git',
-          image_url: project.imageUrl ?? null,
-          image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
-          container_port: project.containerPort ?? null,
-        })
-        .run();
+      return this.db.transaction((tx) => {
+        tx.insert(projects)
+          .values({
+            id: project.id,
+            name: project.name,
+            repo_url: project.repoUrl,
+            branch: project.branch ?? 'main',
+            parent_project_id: parentProjectId,
+            dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
+            docker_target: project.dockerTarget ?? null,
+            build_context: project.buildContext ?? null,
+            build_method: buildMethod,
+            source,
+            image_url: project.imageUrl ?? null,
+            image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
+            container_port: project.containerPort ?? null,
+          })
+          .run();
+
+        // Insert backing service row mirroring 0009 Phase D convention.
+        // - Standalone / compose-parent: project_id = self id.
+        // - Compose-child: project_id = parent group id.
+        // The id || '__svc' convention is required by the listProjects EXISTS
+        // subquery and the schema comment at environments.service_id.
+        // NO onConflictDoNothing — a UNIQUE conflict here means an orphan service
+        // row from a previously-deleted project; that is corrupt state and must
+        // abort the whole transaction so the projects row is never committed.
+        tx.insert(services)
+          .values({
+            id: `${project.id}__svc`,
+            project_id: parentProjectId ?? project.id,
+            name: `${project.name}__svc`,
+            kind,
+            parent_service_id: parentProjectId ? `${parentProjectId}__svc` : null,
+            source,
+            build_method: buildMethod,
+            dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
+            docker_target: project.dockerTarget ?? null,
+            build_context: project.buildContext ?? null,
+            image_url: project.imageUrl ?? null,
+            image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
+            container_port: project.containerPort ?? null,
+          })
+          .run();
+
+        const created = tx.select().from(projects).where(eq(projects.id, project.id)).get() as
+          | ProjectRow
+          | undefined;
+        if (!created) throw new RepoPersistenceError('project', project.id);
+        return created;
+      });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes('UNIQUE constraint failed')) {
+        if (msg.includes('services.id') || msg.includes('services.name')) {
+          throw new Error(
+            `A previous project with id "${project.id}" left orphan service rows. ` +
+              `Delete them or pick a new id.`,
+          );
+        }
         throw new ProjectAlreadyExistsError(project.name);
       }
       throw error;
     }
-
-    const created = this.getProject(project.id);
-    if (!created) throw new RepoPersistenceError('project', project.id);
-    return created;
   }
 
   getProject(id: string): ProjectRow | undefined {
@@ -104,9 +168,26 @@ export class ProjectRepo {
     _serverId?: string,
   ): ProjectRow[] {
     // Always exclude the synthesized __orphan_managed group (post-0009).
-    const conditions = [ne(projects.id, ORPHAN_MANAGED_GROUP_ID)];
+    const conditions = [
+      ne(projects.id, ORPHAN_MANAGED_GROUP_ID),
+      // Transitional: only return projects with at least one non-compose-child service.
+      // Compose-child rows in `projects` are 0011 reconstructions kept for FK integrity;
+      // 0012 Phase F deletes them and this exists() becomes redundant.
+      // See .omc/plans/ralplan-data-model-A-completion.md (Principle 3, PR 5 cleanup).
+      exists(
+        this.db
+          .select({ one: sql<number>`1` })
+          .from(services)
+          .where(and(eq(services.project_id, projects.id), ne(services.kind, 'compose-child'))),
+      ),
+    ];
     if (status) {
-      conditions.push(eq(projects.status, status));
+      // PR 4.5: filter by canonical services status so this predicate survives
+      // migration 0012 dropping projects.status. Semantics are identical today
+      // (updateProject dual-write keeps both columns in sync).
+      conditions.push(
+        sql`EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND s.kind != 'compose-child' AND s.status = ${status})`,
+      );
     }
     if (!opts?.includeArchived) {
       conditions.push(isNull(projects.archived_at));
@@ -159,12 +240,15 @@ export class ProjectRepo {
       }
     }
 
-    // Single query: child counts grouped by parent_project_id.
+    // Single query: compose-child service counts grouped by parent project id.
+    // PR 4 Fix 2: count compose-child rows in `services` (canonical source)
+    // instead of child project rows — after 0012 drops compose-child from
+    // `projects`, the old query would return 0 for every stack.
     const childCountRows = this.db
-      .select({ parentId: projects.parent_project_id, cnt: count() })
-      .from(projects)
-      .where(inArray(projects.parent_project_id, projectIds))
-      .groupBy(projects.parent_project_id)
+      .select({ parentId: services.project_id, cnt: count() })
+      .from(services)
+      .where(and(inArray(services.project_id, projectIds), eq(services.kind, 'compose-child')))
+      .groupBy(services.project_id)
       .all() as Array<{ parentId: string | null; cnt: number }>;
 
     const childCountByParent = new Map<string, number>();
@@ -249,6 +333,47 @@ export class ProjectRepo {
       .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
       .where(eq(projects.id, id))
       .run();
+
+    // PR 4.5 write-through: keep the canonical `services` row in sync for
+    // deployable columns until migration 0012 drops the legacy `projects`
+    // duplicates. Without this mirror, canonical-first readers (added in
+    // PR 4.5) would return stale services rows after `updateProject` calls
+    // that bypass `service-manager`. The write is a no-op when no `__svc`
+    // row exists (managed-only / pre-0009 rows). Once 0012 lands, this
+    // block becomes the only writer (PR 5 will delete the projects-table
+    // update above and drop the duplicate columns).
+    const serviceSetValues: Record<string, unknown> = {};
+    for (const [src, dst] of [
+      ['status', 'status'],
+      ['assigned_port', 'assigned_port'],
+      ['container_id', 'container_id'],
+      ['container_port', 'container_port'],
+      ['image_tag', 'image_tag'],
+      ['previous_image_tag', 'previous_image_tag'],
+      ['public_url', 'public_url'],
+      ['build_method', 'build_method'],
+      ['source', 'source'],
+      ['dockerfile_path', 'dockerfile_path'],
+      ['docker_target', 'docker_target'],
+      ['build_context', 'build_context'],
+      ['image_url', 'image_url'],
+      ['image_cmd', 'image_cmd'],
+      ['pending_fix', 'pending_fix'],
+      ['access_code', 'access_code'],
+      ['access_code_iv', 'access_code_iv'],
+      ['recovering_started_at', 'recovering_started_at'],
+    ] as const) {
+      if (src in setValues) {
+        serviceSetValues[dst] = setValues[src];
+      }
+    }
+    if (Object.keys(serviceSetValues).length > 0) {
+      this.db
+        .update(services)
+        .set({ ...serviceSetValues, updated_at: sql`CURRENT_TIMESTAMP` })
+        .where(eq(services.id, `${id}__svc`))
+        .run();
+    }
   }
 
   setPendingFix(projectId: string, pendingFix: PendingFixRow): void {
@@ -282,10 +407,16 @@ export class ProjectRepo {
         { projectId: id },
       );
     }
+    const archivedAt = new Date().toISOString();
+    // PR 4.5 write-through: mirror archive to canonical services row so that
+    // canonical-first readers don't see stale runtime state after archiving.
+    // `services` has `archived_at` (migration 0011), so we mirror all cleared
+    // deployable columns plus archived_at. This is a no-op if the __svc row
+    // doesn't exist (pre-0009 rows).
     this.db
       .update(projects)
       .set({
-        archived_at: new Date().toISOString(),
+        archived_at: archivedAt,
         assigned_port: null,
         container_id: null,
         image_tag: null,
@@ -294,9 +425,23 @@ export class ProjectRepo {
       })
       .where(eq(projects.id, id))
       .run();
+    this.db
+      .update(services)
+      .set({
+        archived_at: archivedAt,
+        assigned_port: null,
+        container_id: null,
+        image_tag: null,
+        status: 'stopped',
+        updated_at: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(services.id, `${id}__svc`))
+      .run();
   }
 
   unarchiveProject(id: string): void {
+    // PR 4.5 write-through: mirror unarchive to canonical services row so that
+    // canonical-first readers see the correct post-unarchive state.
     this.db
       .update(projects)
       .set({
@@ -305,6 +450,15 @@ export class ProjectRepo {
         updated_at: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(projects.id, id))
+      .run();
+    this.db
+      .update(services)
+      .set({
+        archived_at: null,
+        status: 'stopped',
+        updated_at: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(services.id, `${id}__svc`))
       .run();
   }
 

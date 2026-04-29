@@ -84,14 +84,16 @@ async function ensureNetwork(
   }
 }
 
-function getDataMountPath(type: string): string {
-  const adapter = getServiceAdapter(type);
+function getDataMountPath(kind: string): string {
+  const adapter = getServiceAdapter(kind);
   return adapter ? adapter.getDataMountPath() : '/data';
 }
 
 function getServiceContainerPort(service: ServiceRow): number {
-  const template = SERVICE_TEMPLATES[service.type];
-  return template?.port ?? service.port;
+  const serviceKind = service.kind ?? 'unknown';
+  const template = SERVICE_TEMPLATES[serviceKind];
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
+  return template?.port ?? service.assigned_port ?? service.port;
 }
 
 async function recoverService(
@@ -133,36 +135,45 @@ async function recoverService(
       });
     }
 
-    // Ensure image
-    const hasImage = await imageExists(ctx, service.image);
+    // Ensure image — read from canonical image_url; legacy image is @deprecated
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    const serviceImage = service.image_url ?? service.image;
+    const hasImage = await imageExists(ctx, serviceImage);
     if (!hasImage) {
-      await ctx.docker.pullImage(service.image);
+      await ctx.docker.pullImage(serviceImage);
     }
 
     const envVars: Record<string, string> = {};
-    if (service.env_vars) {
-      const parsed = JSON.parse(service.env_vars) as Array<{ key: string; value: string }>;
+    // env_vars column is @deprecated but has no canonical per-service equivalent yet (1.1)
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    const rawEnvVars = service.env_vars;
+    if (rawEnvVars) {
+      const parsed = JSON.parse(rawEnvVars) as Array<{ key: string; value: string }>;
       for (const { key, value } of parsed) {
         envVars[key] = value;
       }
     }
 
-    // Get template config
-    const template = SERVICE_TEMPLATES[service.type];
+    // Get template config — use canonical kind
+    const serviceKind = service.kind ?? 'unknown';
+    const template = SERVICE_TEMPLATES[serviceKind];
     const containerPort = getServiceContainerPort(service);
-    const dataMountPath = getDataMountPath(service.type);
-    const memLimits = SERVICE_MEMORY_LIMITS[service.type] ?? {
+    const dataMountPath = getDataMountPath(serviceKind);
+    const memLimits = SERVICE_MEMORY_LIMITS[serviceKind] ?? {
       memoryLimitBytes: 536870912,
       cpuShares: 512,
     };
 
     await ctx.docker.safeRemoveContainer(cName);
 
+    // Use canonical assigned_port; fall back to legacy port for pre-migration rows
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    const hostPort = service.assigned_port ?? service.port;
     const containerId = await ctx.docker.runServiceContainer({
-      imageTag: service.image,
+      imageTag: serviceImage,
       name: cName,
-      port: service.port,
-      hostPort: service.port,
+      port: hostPort,
+      hostPort,
       containerPort,
       envVars,
       serviceName: service.name,
@@ -190,17 +201,25 @@ async function recoverProject(
   dryRun: boolean,
 ): Promise<RecoverItemResult<ProjectStatus>> {
   const cName = projectContainerName(project.name);
+  // PR 4.5: canonical-first reads of runtime fields with `??` fallback to
+  // legacy `projects` columns through migration 0012.
+  const deployable = ctx.db.getDeployableForProject(project.id);
+  const status = deployable?.status ?? project.status;
+  const imageTag = deployable?.image_tag ?? project.image_tag;
+  const imageCmdRaw = deployable?.image_cmd ?? project.image_cmd;
+  const assignedPort = deployable?.assigned_port ?? project.assigned_port;
+  const containerPortRaw = deployable?.container_port ?? project.container_port;
 
   try {
     // Skip stopped/archived projects
-    if (project.status === 'stopped' || project.archived_at) {
+    if (status === 'stopped' || project.archived_at) {
       return { name: project.name, status: 'skipped' };
     }
 
     // Check if container already exists
     const container = await containerExists(ctx, cName);
     if (container.exists && container.running) {
-      if (project.status !== 'running') {
+      if (status !== 'running') {
         await ctx.stateManager.transition(project.id, 'running', 'manual-recovery');
       }
       return { name: project.name, status: 'running' };
@@ -214,11 +233,11 @@ async function recoverProject(
     }
 
     // Container doesn't exist — check if image is available
-    if (!project.image_tag) {
+    if (!imageTag) {
       return { name: project.name, status: 'needs_redeploy' };
     }
 
-    const hasImage = await imageExists(ctx, project.image_tag);
+    const hasImage = await imageExists(ctx, imageTag);
     if (!hasImage) {
       // Also check :latest tag
       const latestTag = `openlander/${project.name}:latest`;
@@ -237,17 +256,16 @@ async function recoverProject(
     const secretFiles = ctx.env.getSecretFilesForDeploy(project.id);
 
     // Determine port — reuse stored port or allocate new one
-    const port =
-      project.assigned_port ?? (await allocatePort(ctx.db, ctx.docker, {}, 'production'));
-    const containerPort = project.container_port ?? port;
+    const port = assignedPort ?? (await allocatePort(ctx.db, ctx.docker, {}, 'production'));
+    const containerPort = containerPortRaw ?? port;
 
     // Parse image cmd
     let imageCmd: string[] | undefined;
-    if (project.image_cmd) {
+    if (imageCmdRaw) {
       try {
-        imageCmd = JSON.parse(project.image_cmd) as string[];
+        imageCmd = JSON.parse(imageCmdRaw) as string[];
       } catch {
-        imageCmd = [project.image_cmd];
+        imageCmd = [imageCmdRaw];
       }
     }
 
@@ -260,7 +278,7 @@ async function recoverProject(
 
     // Create and start container
     const containerId = await ctx.docker.runContainer({
-      imageTag: project.image_tag,
+      imageTag,
       name: cName,
       port,
       containerPort,

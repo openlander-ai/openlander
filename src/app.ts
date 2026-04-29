@@ -76,7 +76,7 @@ const POSTMORTEM_CANCEL_EVENTS = [
   'deploy:failed',
 ] as const;
 
-type PostmortemProjectLookup = Pick<Database, 'getProject'>;
+type PostmortemProjectLookup = Pick<Database, 'getProject' | 'getDeployableForProject'>;
 type PostmortemGeneratorLike = Pick<PostmortemGenerator, 'generatePostmortem'>;
 
 interface RecoveryPostmortemAutomationOptions {
@@ -113,7 +113,11 @@ export function setupRecoveryPostmortemAutomation({
         postmortemTimers.delete(payload.projectId);
 
         const project = db.getProject(payload.projectId);
-        if (!project || project.status !== 'running') {
+        // PR 4.5: canonical-first status read with `??` fallback to legacy
+        // `projects` column through migration 0012.
+        const deployable = project ? db.getDeployableForProject(payload.projectId) : undefined;
+        const status = deployable?.status ?? project?.status;
+        if (!project || status !== 'running') {
           return;
         }
 

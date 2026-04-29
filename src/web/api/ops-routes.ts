@@ -822,7 +822,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
           id: p.id,
           type: 'project' as const,
           name: p.name,
-          status: p.status,
+          // Fix 3: status is a deployable field — canonical-first ?? legacy fallback.
+          status: ctx.db.getDeployableForProject(p.id)?.status ?? p.status,
         })),
         ...services.map((s) => ({
           id: s.id,

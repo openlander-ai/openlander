@@ -37,7 +37,7 @@ import {
   getProjectOrThrow,
   resolveEnvironmentByType,
 } from './helpers/project-helpers.js';
-import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 
 const log = createModuleLogger('api');
 
@@ -115,7 +115,13 @@ function registerTopologyCacheInvalidation(ctx: AppContext): void {
     try {
       const project = ctx.db.getProject(projectId);
       if (project) {
-        invalidateTopologyNodeCache(project.container_id);
+        // PR 4 canonical-first: prefer the deployable service's container_id
+        // (post-0012 source of truth) over the legacy projects column.
+        const deployable =
+          typeof ctx.db.getDeployableForProject === 'function'
+            ? ctx.db.getDeployableForProject(projectId)
+            : undefined;
+        invalidateTopologyNodeCache(deployable?.container_id ?? project.container_id);
       }
       // getChildProjects is a Database method but some narrow test
       // fixtures stub `db` with only the methods they exercise — guard
@@ -123,7 +129,11 @@ function registerTopologyCacheInvalidation(ctx: AppContext): void {
       if (typeof ctx.db.getChildProjects === 'function') {
         const children = ctx.db.getChildProjects(projectId);
         for (const child of children) {
-          invalidateTopologyNodeCache(child.container_id);
+          const childDeployable =
+            typeof ctx.db.getDeployableForProject === 'function'
+              ? ctx.db.getDeployableForProject(child.id)
+              : undefined;
+          invalidateTopologyNodeCache(childDeployable?.container_id ?? child.container_id);
         }
       }
     } catch (err) {
@@ -317,18 +327,115 @@ function parseServiceCredentials(credentials: string | null): Record<string, str
   }
 }
 
-function mapProjectForApi(project: ProjectRow) {
+/**
+ * Deployable fields that can be read from the canonical services row.
+ * All fields are optional — callers pass `undefined` when no deployable row
+ * exists yet (e.g. during project creation).
+ */
+type DeployableForApi = {
+  kind?: string | null;
+  status?: string | null;
+  assigned_port?: number | null;
+  container_id?: string | null;
+  container_port?: number | null;
+  image_tag?: string | null;
+  previous_image_tag?: string | null;
+  public_url?: string | null;
+  image_url?: string | null;
+  source?: string | null;
+  build_method?: string | null;
+  dockerfile_path?: string | null;
+  // PR 4.5: residual deployable fields read by mapProjectForApi.
+  access_code?: string | null;
+  access_code_iv?: string | null;
+  pending_fix?: string | null;
+  recovering_started_at?: string | null;
+  docker_target?: string | null;
+  build_context?: string | null;
+  image_cmd?: string | null;
+  project_type?: 'web' | 'worker' | null;
+  is_preview?: number | null;
+  pr_number?: number | null;
+  health_check_strategy?: 'http' | 'tcp' | 'exec' | 'none' | null;
+  health_check_path?: string | null;
+};
+
+/**
+ * Map a project row to the wire shape used by /api/projects/:id and friends.
+ *
+ * PR 4 (Fix 1): Every deployable runtime field reads canonical-first from the
+ * `services` row (`<projectId>__svc`) with `??` fallback to the legacy
+ * `projects` columns through migration 0012.  NO `...project` spread — all
+ * wire keys are emitted explicitly so that when 0012 drops legacy columns the
+ * wire format is unchanged.  Wire keys are preserved byte-identical.
+ */
+function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
+  // Deployable runtime fields — canonical-first ?? legacy fallback.
+  const port = deployable?.assigned_port ?? project.assigned_port ?? null;
+  const imageUrl = deployable?.image_url ?? project.image_url ?? undefined;
+  const status = deployable?.status ?? project.status;
+  const containerId = deployable?.container_id ?? project.container_id ?? null;
+  const containerPort = deployable?.container_port ?? project.container_port ?? null;
+  const imageTag = deployable?.image_tag ?? project.image_tag ?? null;
+  const previousImageTag = deployable?.previous_image_tag ?? project.previous_image_tag ?? null;
+  const publicUrl = deployable?.public_url ?? project.public_url ?? null;
+  const source = deployable?.source ?? project.source;
+  const buildMethod = deployable?.build_method ?? project.build_method ?? null;
+  const dockerfilePath = deployable?.dockerfile_path ?? project.dockerfile_path;
+  // PR 4.5: residual deployable fields canonicalized in mapProjectForApi.
+  const accessCode = deployable?.access_code ?? project.access_code;
+  const accessCodeIv = deployable?.access_code_iv ?? project.access_code_iv;
+  const pendingFix = deployable?.pending_fix ?? project.pending_fix;
+  const recoveringStartedAt = deployable?.recovering_started_at ?? project.recovering_started_at;
+  const dockerTarget = deployable?.docker_target ?? project.docker_target;
+  const buildContext = deployable?.build_context ?? project.build_context;
+  const imageCmdRaw = deployable?.image_cmd ?? project.image_cmd;
+  const projectType = deployable?.project_type ?? project.project_type;
+  const isPreview = deployable?.is_preview ?? project.is_preview;
+  const prNumber = deployable?.pr_number ?? project.pr_number;
+  const healthCheckStrategy = deployable?.health_check_strategy ?? project.health_check_strategy;
+  const healthCheckPath = deployable?.health_check_path ?? project.health_check_path;
+
   return {
-    ...project,
-    port: project.assigned_port ?? null,
-    url: project.assigned_port ? getProjectUrl(project.name) : null,
-    urls: project.assigned_port ? getProjectUrls(project.name) : [],
-    publicUrl: project.public_url ?? null,
+    // --- Identity / group fields (live on `projects` permanently) ---
+    id: project.id,
+    name: project.name,
+    repo_url: project.repo_url,
+    branch: project.branch,
+    parent_project_id: project.parent_project_id,
+    visibility: project.visibility,
+    server_id: project.server_id,
+    project_type: projectType,
+    is_preview: isPreview,
+    pr_number: prNumber,
+    health_check_strategy: healthCheckStrategy,
+    health_check_path: healthCheckPath,
+    deploy_lock_session: project.deploy_lock_session,
+    deploy_lock_at: project.deploy_lock_at,
+    access_code: accessCode,
+    access_code_iv: accessCodeIv,
+    pending_fix: pendingFix,
+    recovering_started_at: recoveringStartedAt,
+    archived_at: project.archived_at,
+    docker_target: dockerTarget,
+    build_context: buildContext,
+    // --- Deployable runtime fields — canonical-first ?? legacy fallback ---
+    status,
+    container_id: containerId,
+    image_tag: imageTag,
+    previous_image_tag: previousImageTag,
+    build_method: buildMethod,
+    dockerfile_path: dockerfilePath,
+    // --- Transformed/computed wire keys (camelCase for frontend) ---
+    port,
+    url: port ? getProjectUrl(project.name) : null,
+    urls: port ? getProjectUrls(project.name) : [],
+    publicUrl,
     repoUrl: project.repo_url,
-    source: project.source,
-    imageUrl: project.image_url ?? undefined,
-    imageCmd: parseImageCmd(project.image_cmd),
-    containerPort: project.container_port ?? null,
+    source,
+    imageUrl,
+    imageCmd: parseImageCmd(imageCmdRaw),
+    containerPort,
     created_at: normalizeTimestamp(project.created_at),
     updated_at: normalizeTimestamp(project.updated_at),
   };
@@ -505,9 +612,16 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.get('/projects/:id/stats', async (c) => {
     const project = getProjectOrThrow(c, ctx);
 
-    if (project.container_id && project.status === 'running') {
+    // PR 4 canonical-first: prefer the deployable services row for
+    // status + container_id; fall back to legacy projects columns through
+    // migration 0012.
+    const deployable = ctx.db.getDeployableForProject(project.id);
+    const status = deployable?.status ?? project.status;
+    const containerId = deployable?.container_id ?? project.container_id;
+
+    if (containerId && status === 'running') {
       try {
-        const stats = (await ctx.docker.getContainerStats(project.container_id)) as {
+        const stats = (await ctx.docker.getContainerStats(containerId)) as {
           cpu_stats: {
             cpu_usage: { total_usage: number };
             system_cpu_usage: number;
@@ -530,7 +644,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           cpu: Math.round(cpuPercent * 10) / 10,
           memory: stats.memory_stats.usage,
           memoryLimit: stats.memory_stats.limit,
-          status: project.status,
+          status,
         });
       } catch (err) {
         log.debug({ err, projectId: project.id }, 'Container stats fetch failed');
@@ -538,7 +652,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           cpu: 0,
           memory: 0,
           memoryLimit: 0,
-          status: project.status,
+          status,
         });
       }
     }
@@ -547,7 +661,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       cpu: 0,
       memory: 0,
       memoryLimit: 0,
-      status: project.status,
+      status,
     });
   });
 
@@ -565,28 +679,45 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const projectsWithMeta = ctx.db.listProjectsWithMetadata(status, { includeArchived });
     const ips = getAllIps();
 
+    // PR 4 canonical-first batch lookup: pre-fetch each project's deployable
+    // services row (id = `<projectId>__svc`) so per-row wire emission can
+    // read canonical kind/image_url/assigned_port/status without N+1
+    // round-trips. Falls back to legacy `projects` columns through 0012.
+    const deployableById = new Map<string, ReturnType<typeof ctx.db.getDeployableForProject>>();
+    for (const { project: p } of projectsWithMeta) {
+      deployableById.set(p.id, ctx.db.getDeployableForProject(p.id));
+    }
+
     return c.json({
       count: projectsWithMeta.length,
       projects: projectsWithMeta.map(({ project: p, environments, childCount }) => {
+        const deployable = deployableById.get(p.id);
+        // Canonical-first reads (?? legacy fallback). Wire keys preserved.
+        const projectStatus = deployable?.status ?? p.status;
+        const port = deployable?.assigned_port ?? p.assigned_port;
+        const imageUrl = deployable?.image_url ?? p.image_url;
+        // Fix 3: source and public_url are deployable fields — canonical-first.
+        const projectSource = deployable?.source ?? p.source;
+        const publicUrl = deployable?.public_url ?? p.public_url ?? null;
         return {
           id: p.id,
           name: p.name,
-          status: p.status,
+          status: projectStatus,
           visibility: p.visibility,
-          source: p.source,
+          source: projectSource,
           repoUrl: p.repo_url,
           branch: p.branch,
-          port: p.assigned_port,
-          url: p.assigned_port ? getProjectUrl(p.name) : null,
-          urls: p.assigned_port
+          port,
+          url: port ? getProjectUrl(p.name) : null,
+          urls: port
             ? ips.map((ip) => ({
                 url: `http://${p.name}.${ip.address}.sslip.io`,
                 type: ip.type,
                 ip: ip.address,
               }))
             : [],
-          publicUrl: p.public_url,
-          ...(p.image_url ? { imageUrl: p.image_url } : {}),
+          publicUrl,
+          ...(imageUrl ? { imageUrl } : {}),
           createdAt: normalizeTimestamp(p.created_at),
           updatedAt: normalizeTimestamp(p.updated_at),
           parentProjectId: p.parent_project_id,
@@ -604,9 +735,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const envVars = ctx.env.getAll(project.id);
     const environments = ctx.db.getEnvironmentsByProject(project.id);
     const deployLogs = ctx.db.getDeployLogs(project.id, 5);
+    // PR 4 canonical-first: fetch the deployable service row once and
+    // pass into mapProjectForApi so wire emission reads canonical fields
+    // (kind/image_url/assigned_port) with `??` fallback.
+    const deployable = ctx.db.getDeployableForProject(project.id);
 
     return c.json({
-      ...mapProjectForApi(project),
+      ...mapProjectForApi(project, deployable),
       environments: environments.map((env) => mapEnvironment(project.name, env)),
       envVars,
       recentDeploys: deployLogs.map((log) => ({
@@ -662,13 +797,28 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       // single Docker call instead of N×services per poll.
       const serviceNodes = await Promise.all(
         nodes.map(async (node) => {
-          // Derive port: compose child uses container_port or assigned_port
-          const port = node.assigned_port ?? null;
+          // PR 4 canonical-first: each topology node renders deployable
+          // runtime fields. Read from the services row (canonical) when
+          // available; fall back to legacy projects columns through 0012.
+          const deployable = ctx.db.getDeployableForProject(node.id);
+          const port = deployable?.assigned_port ?? node.assigned_port ?? null;
           const url = port ? getProjectUrl(node.name) : null;
-          const image = node.image_url ?? node.image_tag ?? `${node.name}:latest`;
+          const image =
+            deployable?.image_url ??
+            node.image_url ??
+            deployable?.image_tag ??
+            node.image_tag ??
+            `${node.name}:latest`;
           const kind = resolveKind(node.name);
 
-          const runtime = await getTopologyNodeRuntime(ctx, node);
+          // Hydrate the runtime probe with canonical container_id + status
+          // so per-node CPU / health collapses to the canonical source
+          // pre-0012 too.
+          const runtimeNode: TopologyNode = {
+            container_id: deployable?.container_id ?? node.container_id,
+            status: deployable?.status ?? node.status,
+          };
+          const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
 
           return {
             id: node.id,
@@ -776,7 +926,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'NOT_FOUND', message: 'Project not found' }, 404);
     }
 
-    return c.json(mapProjectForApi(updatedProject));
+    // PR 4 canonical-first: re-read deployable after mutation.
+    const updatedDeployable = ctx.db.getDeployableForProject(updatedProject.id);
+    return c.json(mapProjectForApi(updatedProject, updatedDeployable));
   });
 
   api.post('/projects/:id/environments', (_c) => {
@@ -892,13 +1044,16 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
 
     const credentials = parseServiceCredentials(service.credentials);
+    // Wire contract: emit legacy vocabulary (postgresql/mongodb) for back-compat.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    const serviceKind = service.type ?? kindToLegacyType(service.kind ?? 'unknown');
     const injectedKeys = autoInjectServiceEnv({
       db: ctx.db,
       env: ctx.env,
       projectId: project.id,
       serviceId: service.id,
       serviceName: service.name,
-      serviceType: service.type,
+      serviceType: serviceKind,
       containerName: service.container_name,
       credentials,
     });
@@ -912,9 +1067,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         source_project_id: project.id,
         target_service_id: serviceId,
         dependency_type:
-          service.type === 'postgres' || service.type === 'mysql'
+          serviceKind === 'postgres' || serviceKind === 'mysql'
             ? 'database'
-            : service.type === 'redis'
+            : serviceKind === 'redis'
               ? 'cache'
               : 'custom',
         source: 'auto',
@@ -929,9 +1084,12 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         service: {
           id: service.id,
           name: service.name,
-          type: service.type,
+          // Wire key preserved; canonical source: kind
+          type: serviceKind,
           status: service.status,
-          port: service.port,
+          // Wire key preserved; canonical source: assigned_port
+          // eslint-disable-next-line @typescript-eslint/no-deprecated
+          port: service.assigned_port ?? service.port,
           containerName: service.container_name,
         },
         createdAt: connection.created_at,
@@ -1046,7 +1204,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       throw err;
     }
 
-    if (!project.container_id) {
+    // PR 4 canonical-first: read container_id from the deployable services
+    // row when available; fall back to the legacy projects column.
+    const deployable = ctx.db.getDeployableForProject(project.id);
+    const containerId = deployable?.container_id ?? project.container_id;
+    if (!containerId) {
       return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
     }
 
@@ -1124,7 +1286,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       }
     }
 
-    if (project.source === 'git' && !project.repo_url) {
+    // PR 4 canonical-first: source is on services post-0009 too. Read
+    // canonical with legacy fallback.
+    const deployable = ctx.db.getDeployableForProject(project.id);
+    const projectSource = deployable?.source ?? project.source;
+    if (projectSource === 'git' && !project.repo_url) {
       return c.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
     }
 
@@ -1446,12 +1612,16 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     switch (action) {
       case 'cleanup_stale': {
-        // Remove old containers for this project (keep the current one)
+        // Remove old containers for this project (keep the current one).
+        // PR 4 canonical-first: prefer deployable services row's
+        // container_id; fall back to legacy projects column through 0012.
+        const deployable = ctx.db.getDeployableForProject(project.id);
+        const currentContainerId = deployable?.container_id ?? project.container_id;
         const managed = await ctx.docker.listManagedContainers();
         const stale = managed.filter(
           (c) =>
             c.name.startsWith(project.name) &&
-            c.id !== project.container_id &&
+            c.id !== currentContainerId &&
             c.status === 'running',
         );
         for (const container of stale) {
@@ -1604,8 +1774,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     const follow = c.req.query('follow');
 
-    if (follow && project.container_id) {
-      const containerId = project.container_id;
+    // PR 4 canonical-first: container_id from deployable services row.
+    const deployable = ctx.db.getDeployableForProject(project.id);
+    const followContainerId = deployable?.container_id ?? project.container_id;
+    if (follow && followContainerId) {
+      const containerId = followContainerId;
       return stream(c, async (s) => {
         c.header('Content-Type', 'application/x-ndjson');
 
@@ -1717,11 +1890,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     }
 
     const changed = ctx.env.setBulk(project.id, body.variables);
+    // PR 4 canonical-first: status from deployable services row.
+    const deployable = ctx.db.getDeployableForProject(project.id);
+    const projectStatus = deployable?.status ?? project.status;
     return c.json({
       status: changed ? 'updated' : 'unchanged',
       project: project.name,
       keys: Object.keys(body.variables),
-      needsRedeploy: changed && project.status === 'running',
+      needsRedeploy: changed && projectStatus === 'running',
     });
   });
 
@@ -1827,12 +2003,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.post('/projects/:id/expose', async (c) => {
     const project = getProjectOrThrow(c, ctx);
 
-    if (!project.assigned_port) {
+    // PR 4 canonical-first: assigned_port from deployable services row.
+    const deployable = ctx.db.getDeployableForProject(project.id);
+    const exposePort = deployable?.assigned_port ?? project.assigned_port;
+    if (!exposePort) {
       return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
     }
 
     try {
-      const url = await ctx.pipeline.exposeTunnel(project.id, project.assigned_port);
+      const url = await ctx.pipeline.exposeTunnel(project.id, exposePort);
       return c.json({ status: 'exposed', project: project.name, publicUrl: url });
     } catch (error) {
       if (error instanceof TunnelStartError) {
@@ -1871,12 +2050,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     const { encrypted, iv } = encrypt(body.accessCode);
 
+    // PR 4 canonical-first: assigned_port from deployable services row.
+    const shareDeployable = ctx.db.getDeployableForProject(project.id);
+    const sharePort = shareDeployable?.assigned_port ?? project.assigned_port;
     if (project.visibility !== 'quick-share' && project.visibility !== 'shared') {
-      if (!project.assigned_port) {
+      if (!sharePort) {
         return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
       }
       try {
-        await ctx.pipeline.exposeTunnel(project.id, project.assigned_port);
+        await ctx.pipeline.exposeTunnel(project.id, sharePort);
       } catch (error) {
         if (error instanceof TunnelStartError) {
           return c.json(
@@ -1893,8 +2075,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     let tunnel = ctx.pipeline.getTunnel(project.id);
     if (!tunnel) {
-      const assignedPort = project.assigned_port;
-      if (assignedPort === null) {
+      const assignedPort = sharePort;
+      if (!assignedPort) {
         return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
       }
       try {
@@ -1933,10 +2115,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
 
     const updatedProject = ctx.db.getProject(project.id);
+    // PR 4 canonical-first: public_url from deployable services row.
+    const updatedDeployable = updatedProject
+      ? ctx.db.getDeployableForProject(updatedProject.id)
+      : undefined;
     return c.json({
       status: 'shared',
       project: project.name,
-      publicUrl: updatedProject?.public_url,
+      publicUrl: updatedDeployable?.public_url ?? updatedProject?.public_url,
     });
   });
 
@@ -1962,16 +2148,22 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     const previews = ctx.db.getPreviewProjects(project.id);
     return c.json({
-      previews: previews.map((preview) => ({
-        id: preview.id,
-        name: preview.name,
-        status: preview.status,
-        prNumber: preview.pr_number,
-        url: getProjectUrl(preview.name),
-        publicUrl: preview.public_url,
-        createdAt: normalizeTimestamp(preview.created_at),
-        updatedAt: normalizeTimestamp(preview.updated_at),
-      })),
+      previews: previews.map((preview) => {
+        // PR 4 canonical-first: status + public_url from each preview's
+        // deployable services row when available; fall back to legacy
+        // projects columns through migration 0012.
+        const deployable = ctx.db.getDeployableForProject(preview.id);
+        return {
+          id: preview.id,
+          name: preview.name,
+          status: deployable?.status ?? preview.status,
+          prNumber: preview.pr_number,
+          url: getProjectUrl(preview.name),
+          publicUrl: deployable?.public_url ?? preview.public_url,
+          createdAt: normalizeTimestamp(preview.created_at),
+          updatedAt: normalizeTimestamp(preview.updated_at),
+        };
+      }),
     });
   });
 
@@ -1979,8 +2171,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const previewId = c.req.param('previewId');
     const project = getProjectOrThrow(c, ctx);
 
+    // PR 4 canonical-first (Codex CCG flagged): resolve preview's parent
+    // via the services hierarchy first (parent_service_id stripped of
+    // `__svc` suffix → parent project id), fall back to the legacy
+    // projects.parent_project_id column through migration 0012.
     const preview = ctx.db.getProject(previewId);
-    if (!preview || preview.parent_project_id !== project.id) {
+    const previewService = preview ? ctx.db.getService(`${previewId}__svc`) : undefined;
+    const previewParentId =
+      previewService?.parent_service_id?.replace(/__svc$/, '') ?? preview?.parent_project_id;
+    if (!preview || previewParentId !== project.id) {
       return c.json({ error: 'PREVIEW_NOT_FOUND', message: 'Preview not found' }, 404);
     }
 
@@ -2051,9 +2250,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.get('/projects/:p/services/:s/stats', async (c) => {
     return withServiceAsId(c, (cx) => {
       const project = getProjectOrThrow(cx, ctx);
-      if (project.container_id && project.status === 'running') {
+      // PR 4 canonical-first: prefer the deployable services row's
+      // status + container_id; fall back to legacy projects columns
+      // through 0012.
+      const deployable = ctx.db.getDeployableForProject(project.id);
+      const status = deployable?.status ?? project.status;
+      const containerId = deployable?.container_id ?? project.container_id;
+      if (containerId && status === 'running') {
         return ctx.docker
-          .getContainerStats(project.container_id)
+          .getContainerStats(containerId)
           .then((stats) => {
             const s = stats as {
               cpu_stats: {
@@ -2076,14 +2281,12 @@ export function createProjectRoutes(ctx: AppContext): Hono {
               cpu: Math.round(cpuPercent * 10) / 10,
               memory: s.memory_stats.usage,
               memoryLimit: s.memory_stats.limit,
-              status: project.status,
+              status,
             });
           })
-          .catch(() => cx.json({ cpu: 0, memory: 0, memoryLimit: 0, status: project.status }));
+          .catch(() => cx.json({ cpu: 0, memory: 0, memoryLimit: 0, status }));
       }
-      return Promise.resolve(
-        cx.json({ cpu: 0, memory: 0, memoryLimit: 0, status: project.status }),
-      );
+      return Promise.resolve(cx.json({ cpu: 0, memory: 0, memoryLimit: 0, status }));
     });
   });
 
@@ -2110,9 +2313,12 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const envVars = ctx.env.getAll(project.id);
     const environments = ctx.db.getEnvironmentsByProject(project.id);
     const deployLogs = ctx.db.getDeployLogs(project.id, 5);
+    // PR 4 canonical-first: pass the auto-derived deployable so wire
+    // emission reads canonical kind/image_url/assigned_port with fallback.
+    const deployable = ctx.db.getDeployableForProject(project.id);
 
     return c.json({
-      ...mapProjectForApi(project),
+      ...mapProjectForApi(project, deployable),
       // rc.2 canonical surface: unified `services` row alongside the
       // legacy project shape so consumers (Phase 3 frontend) can read
       // native columns without a second fetch.
@@ -2207,7 +2413,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       ctx.db.updateProject(project.id, { imageUrl, imageCmd, containerPort });
       const updated = ctx.db.getProject(project.id);
       if (!updated) return cx.json({ error: 'NOT_FOUND', message: 'Project not found' }, 404);
-      return cx.json(mapProjectForApi(updated));
+      // PR 4 canonical-first: re-read deployable after mutation so wire
+      // emission reflects the post-update canonical state.
+      const updatedDeployable = ctx.db.getDeployableForProject(updated.id);
+      return cx.json(mapProjectForApi(updated, updatedDeployable));
     });
   });
 
@@ -2239,11 +2448,23 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         }
         return Promise.all(
           nodes.map(async (node) => {
-            const port = node.assigned_port ?? null;
+            // PR 4 canonical-first: deployable services row drives port,
+            // image, and runtime status when present.
+            const deployable = ctx.db.getDeployableForProject(node.id);
+            const port = deployable?.assigned_port ?? node.assigned_port ?? null;
             const url = port ? getProjectUrl(node.name) : null;
-            const image = node.image_url ?? node.image_tag ?? `${node.name}:latest`;
+            const image =
+              deployable?.image_url ??
+              node.image_url ??
+              deployable?.image_tag ??
+              node.image_tag ??
+              `${node.name}:latest`;
             const kind = resolveKind(node.name);
-            const runtime = await getTopologyNodeRuntime(ctx, node);
+            const runtimeNode: TopologyNode = {
+              container_id: deployable?.container_id ?? node.container_id,
+              status: deployable?.status ?? node.status,
+            };
+            const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
             return {
               id: node.id,
               name: node.name,
@@ -2312,14 +2533,21 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       .map((conn) => ctx.db.getService(conn.service_id))
       .filter((svc) => svc !== undefined);
     return c.json(
-      services.map((svc) => ({
-        id: svc.id,
-        name: svc.name,
-        type: svc.type,
-        status: svc.status,
-        port: svc.port,
-        containerName: svc.container_name,
-      })),
+      services.map((svc) => {
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        const svcPort = svc.assigned_port ?? svc.port;
+        return {
+          id: svc.id,
+          name: svc.name,
+          // Wire contract: emit legacy vocabulary (postgresql/mongodb).
+          // eslint-disable-next-line @typescript-eslint/no-deprecated
+          type: svc.type ?? kindToLegacyType(svc.kind ?? 'unknown'),
+          status: svc.status,
+          // Wire key preserved; canonical source: assigned_port
+          port: svcPort,
+          containerName: svc.container_name,
+        };
+      }),
     );
   };
 
@@ -2345,7 +2573,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         }
         throw err;
       }
-      if (!project.container_id) {
+      // PR 4 canonical-first: container_id from deployable services row.
+      const deployable = ctx.db.getDeployableForProject(project.id);
+      const containerId = deployable?.container_id ?? project.container_id;
+      if (!containerId) {
         return cx.json({ error: 'No container to start. Redeploy instead.' }, 400);
       }
       await ctx.pipeline.start(project.id);
@@ -2451,7 +2682,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           if (value.trim()) ctx.env.set(project.id, key, value.trim());
         }
       }
-      if (project.source === 'git' && !project.repo_url) {
+      // PR 4 canonical-first: source from deployable services row.
+      const deployable = ctx.db.getDeployableForProject(project.id);
+      const projectSource = deployable?.source ?? project.source;
+      if (projectSource === 'git' && !project.repo_url) {
         return cx.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
       }
       const lockSessionId = `redeploy-${project.id}-${Date.now().toString(36)}`;
@@ -2563,11 +2797,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         return cx.json({ error: 'MISSING_FIELD', message: 'variables object is required' }, 400);
       }
       const changed = ctx.env.setBulk(project.id, body.variables);
+      // PR 4 canonical-first: status from deployable services row.
+      const deployable = ctx.db.getDeployableForProject(project.id);
+      const projectStatus = deployable?.status ?? project.status;
       return cx.json({
         status: changed ? 'updated' : 'unchanged',
         project: project.name,
         keys: Object.keys(body.variables),
-        needsRedeploy: changed && project.status === 'running',
+        needsRedeploy: changed && projectStatus === 'running',
       });
     });
   });
@@ -2600,11 +2837,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.post('/projects/:p/services/:s/expose', async (c) => {
     return withServiceAsId(c, async (cx) => {
       const project = getProjectOrThrow(cx, ctx);
-      if (!project.assigned_port) {
+      // PR 4 canonical-first: assigned_port from deployable services row.
+      const deployable = ctx.db.getDeployableForProject(project.id);
+      const exposePort = deployable?.assigned_port ?? project.assigned_port;
+      if (!exposePort) {
         return cx.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
       }
       try {
-        const url = await ctx.pipeline.exposeTunnel(project.id, project.assigned_port);
+        const url = await ctx.pipeline.exposeTunnel(project.id, exposePort);
         return cx.json({ status: 'exposed', project: project.name, publicUrl: url });
       } catch (error) {
         if (error instanceof TunnelStartError) {
@@ -2692,16 +2932,20 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       const project = getProjectOrThrow(cx, ctx);
       const previews = ctx.db.getPreviewProjects(project.id);
       return cx.json({
-        previews: previews.map((preview) => ({
-          id: preview.id,
-          name: preview.name,
-          status: preview.status,
-          prNumber: preview.pr_number,
-          url: getProjectUrl(preview.name),
-          publicUrl: preview.public_url,
-          createdAt: normalizeTimestamp(preview.created_at),
-          updatedAt: normalizeTimestamp(preview.updated_at),
-        })),
+        previews: previews.map((preview) => {
+          // PR 4 canonical-first: per-preview deployable services row.
+          const deployable = ctx.db.getDeployableForProject(preview.id);
+          return {
+            id: preview.id,
+            name: preview.name,
+            status: deployable?.status ?? preview.status,
+            prNumber: preview.pr_number,
+            url: getProjectUrl(preview.name),
+            publicUrl: deployable?.public_url ?? preview.public_url,
+            createdAt: normalizeTimestamp(preview.created_at),
+            updatedAt: normalizeTimestamp(preview.updated_at),
+          };
+        }),
       });
     });
   });

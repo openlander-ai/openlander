@@ -22,7 +22,7 @@ import {
   ProjectArchivedError,
   ProjectRecoveringError,
 } from '../errors.js';
-import type { ProjectRow } from '../db/index.js';
+import type { ProjectRow, ServiceRow } from '../db/index.js';
 
 /**
  * Minimal context required by `assertProjectMutable`. Implemented by both
@@ -30,7 +30,11 @@ import type { ProjectRow } from '../db/index.js';
  * the policy can be shared without coupling to either type.
  */
 export interface MutationPolicyCtx {
-  db: { isCircuitBreakerOpen: (projectId: string) => boolean };
+  db: {
+    isCircuitBreakerOpen: (projectId: string) => boolean;
+    // PR 4.5: needed for canonical-first status reads with `??` fallback.
+    getDeployableForProject: (projectId: string) => ServiceRow | undefined;
+  };
 }
 
 /**
@@ -43,7 +47,10 @@ export function assertProjectMutable(project: ProjectRow, ctx: MutationPolicyCtx
   if (project.archived_at) {
     throw new ProjectArchivedError(project.id);
   }
-  if (project.status === 'recovering') {
+  // PR 4.5: canonical-first read of status with `??` fallback.
+  const deployable = ctx.db.getDeployableForProject(project.id);
+  const status = deployable?.status ?? project.status;
+  if (status === 'recovering') {
     throw new ProjectRecoveringError(project.id);
   }
   if (ctx.db.isCircuitBreakerOpen(project.id)) {
@@ -98,8 +105,12 @@ export function assertProjectLifecycleMutable(
     throw new ProjectArchivedError(project.id);
   }
 
+  // PR 4.5: canonical-first status read with `??` fallback.
+  const deployable = ctx.db.getDeployableForProject(project.id);
+  const status = deployable?.status ?? project.status;
+
   // Recovering gate — `stop` is the operator escape hatch.
-  if (project.status === 'recovering' && action !== 'stop') {
+  if (status === 'recovering' && action !== 'stop') {
     throw new ProjectRecoveringError(project.id);
   }
 

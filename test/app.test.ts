@@ -67,7 +67,7 @@ describe('setupRecoveryPostmortemAutomation', () => {
   it('generates a postmortem after the stability window when the project is still running', async () => {
     stop = setupRecoveryPostmortemAutomation({
       eventBus: events,
-      db: { getProject },
+      db: { getProject, getDeployableForProject: vi.fn().mockReturnValue(undefined) },
       getPostmortem: () => ({ generatePostmortem }),
       delayMs: 5 * 60 * 1000,
     });
@@ -89,7 +89,7 @@ describe('setupRecoveryPostmortemAutomation', () => {
 
     stop = setupRecoveryPostmortemAutomation({
       eventBus: events,
-      db: { getProject },
+      db: { getProject, getDeployableForProject: vi.fn().mockReturnValue(undefined) },
       getPostmortem: () => ({ generatePostmortem }),
       delayMs: 5 * 60 * 1000,
     });
@@ -110,7 +110,7 @@ describe('setupRecoveryPostmortemAutomation', () => {
     async (cancelEvent) => {
       stop = setupRecoveryPostmortemAutomation({
         eventBus: events,
-        db: { getProject },
+        db: { getProject, getDeployableForProject: vi.fn().mockReturnValue(undefined) },
         getPostmortem: () => ({ generatePostmortem }),
         delayMs: 5 * 60 * 1000,
       });
@@ -150,7 +150,7 @@ describe('setupRecoveryPostmortemAutomation', () => {
   it('restarts the timer when recovery succeeds again before the window expires', async () => {
     stop = setupRecoveryPostmortemAutomation({
       eventBus: events,
-      db: { getProject },
+      db: { getProject, getDeployableForProject: vi.fn().mockReturnValue(undefined) },
       getPostmortem: () => ({ generatePostmortem }),
       delayMs: 5 * 60 * 1000,
     });

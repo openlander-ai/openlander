@@ -264,7 +264,7 @@ export class ServiceHealthMonitor {
         category: 'service_down',
         errorSnippet: JSON.stringify({
           serviceName: service.name,
-          serviceType: service.type,
+          serviceType: service.kind ?? 'unknown',
           affectedProjects,
         }),
       });

@@ -31,6 +31,29 @@ function legacyTypeToKind(type: string): ServiceKind {
   return (known as string[]).includes(type) ? (type as ServiceKind) : 'postgres';
 }
 
+/**
+ * Map a canonical service kind back to the legacy wire-format type string
+ * used by all existing clients (frontend, AI agents, etc.).
+ *
+ * Contract: wire emission must use the legacy vocabulary so that:
+ * - `postgres` → `postgresql`  (frontend ServiceDatabasesTab branches on this)
+ * - `mongo`    → `mongodb`
+ * - All other kinds pass through unchanged (already match legacy vocabulary).
+ *
+ * This ensures wire-format stability regardless of whether the legacy `type`
+ * column is populated (post-migration rows created after 0012 may have NULL).
+ */
+export function kindToLegacyType(kind: string): string {
+  switch (kind) {
+    case 'postgres':
+      return 'postgresql';
+    case 'mongo':
+      return 'mongodb';
+    default:
+      return kind;
+  }
+}
+
 export class ServiceRepo {
   constructor(
     private readonly db: DrizzleClient,
@@ -58,11 +81,16 @@ export class ServiceRepo {
         project_id: '__orphan_managed',
         name: service.name,
         kind: legacyTypeToKind(service.type),
+        // Legacy columns — kept until migration 0012 Phase C drops them.
         type: service.type,
         image: service.image,
-        container_name: service.containerName,
         port: service.port,
         env_vars: service.envVars ?? null,
+        // Canonical columns — PR 2.5 ensures these are populated at creation
+        // so that post-0012 readers never fall back to the legacy columns.
+        image_url: service.image,
+        assigned_port: service.port,
+        container_name: service.containerName,
         credentials: service.credentials ?? null,
       })
       .run();
@@ -115,6 +143,7 @@ export class ServiceRepo {
     updates: Partial<{
       status: ServiceRow['status'];
       containerId: string | null;
+      imageUrl: string | null;
     }>,
   ): void {
     const setValues: Partial<typeof services.$inferInsert> = {};
@@ -124,6 +153,9 @@ export class ServiceRepo {
     }
     if (updates.containerId !== undefined) {
       setValues.container_id = updates.containerId;
+    }
+    if (updates.imageUrl !== undefined) {
+      setValues.image_url = updates.imageUrl;
     }
 
     if (Object.keys(setValues).length === 0) return;
@@ -137,5 +169,31 @@ export class ServiceRepo {
 
   deleteService(id: string): void {
     this.db.delete(services).where(eq(services.id, id)).run();
+  }
+
+  /**
+   * Returns all services that are compose-children of the given parent service.
+   * Used by PR 2+ pipeline rewire to replace parent_project_id child-fetch.
+   */
+  getComposeChildren(parentServiceId: string): ServiceRow[] {
+    return this.db
+      .select()
+      .from(services)
+      .where(eq(services.parent_service_id, parentServiceId))
+      .orderBy(desc(services.updated_at))
+      .all() as ServiceRow[];
+  }
+
+  /**
+   * Returns all deployable (non-compose-child) services for a given project group.
+   * Used by PR 2+ pipeline rewire to enumerate top-level deployables for a group.
+   */
+  getDeployablesByGroup(projectId: string): ServiceRow[] {
+    return this.db
+      .select()
+      .from(services)
+      .where(and(eq(services.project_id, projectId), sql`${services.kind} != 'compose-child'`))
+      .orderBy(desc(services.updated_at))
+      .all() as ServiceRow[];
   }
 }

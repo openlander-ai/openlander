@@ -100,10 +100,16 @@ export const monitoringToolDefs: ToolDef[] = [
         throw new ProjectNotFoundError(projectName);
       }
 
-      if (!project.container_id || project.status !== 'running') {
+      // PR 4.5: canonical-first read of runtime fields with `??` fallback to
+      // legacy `projects` columns through migration 0012.
+      const deployable = appCtx.db.getDeployableForProject(project.id);
+      const status = deployable?.status ?? project.status;
+      const containerId = deployable?.container_id ?? project.container_id;
+
+      if (!containerId || status !== 'running') {
         return {
           project: projectName,
-          status: project.status,
+          status,
           cpu_percent: 0,
           memory_usage_mb: 0,
           memory_limit_mb: 0,
@@ -113,7 +119,7 @@ export const monitoringToolDefs: ToolDef[] = [
       }
 
       try {
-        const stats = (await appCtx.docker.getContainerStats(project.container_id)) as {
+        const stats = (await appCtx.docker.getContainerStats(containerId)) as {
           cpu_stats: {
             cpu_usage: { total_usage: number; percpu_usage?: unknown };
             system_cpu_usage: number;
@@ -121,7 +127,7 @@ export const monitoringToolDefs: ToolDef[] = [
           precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
           memory_stats: { usage: number; limit: number };
         };
-        const inspect = await appCtx.docker.inspectContainer(project.container_id);
+        const inspect = await appCtx.docker.inspectContainer(containerId);
         // Calculate CPU percentage
         const cpuDelta =
           stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
@@ -142,7 +148,7 @@ export const monitoringToolDefs: ToolDef[] = [
 
         return {
           project: projectName,
-          status: project.status,
+          status,
           cpu_percent: Math.round(cpuPercent * 10) / 10,
           memory_usage_mb: memoryUsageMb,
           memory_limit_mb: memoryLimitMb,
@@ -151,13 +157,10 @@ export const monitoringToolDefs: ToolDef[] = [
         };
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        log.warn(
-          { err, projectName, containerId: project.container_id },
-          'Failed to fetch container stats',
-        );
+        log.warn({ err, projectName, containerId }, 'Failed to fetch container stats');
         return {
           project: projectName,
-          status: project.status,
+          status,
           cpu_percent: 0,
           memory_usage_mb: 0,
           memory_limit_mb: 0,

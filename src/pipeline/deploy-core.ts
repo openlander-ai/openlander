@@ -1206,11 +1206,12 @@ export class DeployPipeline {
       };
     });
 
-    const existingChildren = this.db.getChildProjects(parentId);
+    // PR 2: fetch existing children via services.parent_service_id.
+    const existingChildren = this.db.getComposeChildProjects(parentId);
     detectMonorepoDependencies(services, parentName, (serviceName) => {
       const envVarsToScan: Record<string, string> = {};
       const childName = `${parentName}/${serviceName}`;
-      const existingChild = existingChildren.find((child) => child.name === childName);
+      const existingChild = existingChildren.find((c) => c.name === childName);
 
       if (existingChild) {
         Object.assign(envVarsToScan, this.env.getAll(existingChild.id));
@@ -1225,9 +1226,7 @@ export class DeployPipeline {
 
     const serviceNames = new Set(services.map((s) => s.name));
     if (serviceNames.has('app') && !serviceNames.has('main')) {
-      const legacyChildren = this.db
-        .getChildProjects(parentId)
-        .filter((c) => c.name === `${parentName}/main`);
+      const legacyChildren = existingChildren.filter((c) => c.name === `${parentName}/main`);
       for (const child of legacyChildren) {
         if (child.container_id) {
           try {
@@ -1342,7 +1341,9 @@ export class DeployPipeline {
         }
 
         const project = this.db.getProject(deployment.projectId);
-        const containerId = project?.container_id;
+        // PR 4.5: canonical-first read of container_id with `??` fallback.
+        const deployableForHealth = this.db.getDeployableForProject(deployment.projectId);
+        const containerId = deployableForHealth?.container_id ?? project?.container_id;
         if (!containerId) {
           log.warn(
             { serviceName: service.name },
@@ -1473,9 +1474,14 @@ export class DeployPipeline {
 
       const redeployRouteName = getRouteName(project.name);
       const redeployPreviousLabel = `openlander/${redeployRouteName}:previous`;
-      const currentRunningTag = project.image_tag;
+      // PR 4.5: canonical-first reads of deployable fields with `??` fallback.
+      const redeployDeployable = this.db.getDeployableForProject(projectId);
+      const redeployImageTag = redeployDeployable?.image_tag ?? project.image_tag;
+      const redeploySource = redeployDeployable?.source ?? project.source;
+      const redeployAssignedPort = redeployDeployable?.assigned_port ?? project.assigned_port;
+      const currentRunningTag = redeployImageTag;
       let redeployPreviousTag: string | null = currentRunningTag;
-      if (project.source !== 'image' && currentRunningTag) {
+      if (redeploySource !== 'image' && currentRunningTag) {
         if (currentRunningTag !== redeployPreviousLabel) {
           try {
             await this.docker.tagImage(
@@ -1501,7 +1507,7 @@ export class DeployPipeline {
 
       this.db.updateProject(projectId, { previousImageTag: redeployPreviousTag });
 
-      const previousPort = project.assigned_port ?? undefined;
+      const previousPort = redeployAssignedPort ?? undefined;
 
       await this.transitionProjectState(projectId, 'building', 'deploy-started', {
         containerId: null,
@@ -1525,7 +1531,7 @@ export class DeployPipeline {
           _projectId: projectId,
           _preferredPort: previousPort,
           _lockSessionId: lockSession,
-          _noCacheBuild: project.source === 'image' ? true : options?.noCache,
+          _noCacheBuild: redeploySource === 'image' ? true : options?.noCache,
           environment: 'production',
           ...(options?.cmd && { imageCmd: options.cmd }),
         },
@@ -1584,9 +1590,12 @@ export class DeployPipeline {
 
       projectName = project.name;
       this.validateProjectName(projectName);
-      blueContainerId = project.container_id ?? undefined;
+      // PR 4.5: canonical-first reads of deployable fields with `??` fallback.
+      const blueDeployable = this.db.getDeployableForProject(projectId);
+      const blueStatus = blueDeployable?.status ?? project.status;
+      blueContainerId = blueDeployable?.container_id ?? project.container_id ?? undefined;
 
-      if (project.status !== 'running' || !blueContainerId) {
+      if (blueStatus !== 'running' || !blueContainerId) {
         return {
           success: false,
           projectId,
@@ -1697,7 +1706,7 @@ export class DeployPipeline {
         url: getProjectUrl(projectName),
       });
 
-      const probeProfile = resolveMonitoringProfile(project);
+      const probeProfile = resolveMonitoringProfile(project, blueDeployable);
       const probeConfig = {
         ...probeProfile.health,
         // Override path if explicitly provided in RedeployOptions
@@ -1742,7 +1751,8 @@ export class DeployPipeline {
         assignedPort: newPort,
         containerPort,
         imageTag,
-        previousImageTag: project.image_tag,
+        // PR 4.5: canonical-first read of previous image tag.
+        previousImageTag: blueDeployable?.image_tag ?? project.image_tag,
       });
       if (prodEnv) {
         this.db.updateEnvironment(prodEnv.id, {
@@ -2005,8 +2015,9 @@ export class DeployPipeline {
       return;
     }
 
-    const children = this.db.getChildProjects(projectId);
-    if (children.length > 0) {
+    // PR 2: check compose children via services.parent_service_id.
+    const childProjects = this.db.getComposeChildProjects(projectId);
+    if (childProjects.length > 0) {
       await this.lifecycle.stop(projectId);
       this.closeTunnel(projectId);
       return;
@@ -2060,8 +2071,9 @@ export class DeployPipeline {
     while (queue.length > 0) {
       const current = queue.shift();
       if (!current) continue;
-      const children = this.db.getChildProjects(current);
-      for (const child of children) {
+      // PR 2: fetch compose children via services.parent_service_id.
+      const childProjects = this.db.getComposeChildProjects(current);
+      for (const child of childProjects) {
         if (descendants.has(child.id)) continue;
         descendants.add(child.id);
         queue.push(child.id);

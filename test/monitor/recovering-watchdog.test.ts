@@ -83,6 +83,8 @@ describe('ContainerStateReconciler — recovering watchdog (Fix 3)', () => {
       listProjects: vi.fn().mockReturnValue([]),
       listServices: vi.fn().mockReturnValue([]),
       getDeployLockInfo: vi.fn().mockReturnValue(null),
+      // PR 4.5: canonical-first reads need this helper.
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     };
 
     reconciler = new ContainerStateReconciler(

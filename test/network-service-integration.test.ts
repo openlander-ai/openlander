@@ -297,7 +297,7 @@ describe('Auto env injection', () => {
       type: 'postgresql',
       image: 'postgres:16-alpine',
       containerName: 'ol-svc-analytics-db',
-      port: 5432,
+      port: 5433,
     });
     db.createServiceConnection({ projectId: 'p1', serviceId: 'svc-pg-1' });
 

@@ -18,10 +18,21 @@ import { ServiceManager } from '../src/pipeline/service-manager.js';
 import { createMockDockerHarness } from './helpers/docker-mocks.js';
 
 function createService(partial: Partial<ServiceRow>): ServiceRow {
+  const legacyType = partial.type ?? 'postgresql';
+  // Map legacy type to canonical kind so production code (which reads kind ?? 'unknown')
+  // resolves the correct adapter instead of falling back to 'unknown'.
+  const typeToKind: Record<string, ServiceRow['kind']> = {
+    postgresql: 'postgres',
+    postgres: 'postgres',
+    mysql: 'mysql',
+    redis: 'redis',
+    mongo: 'mongo',
+    minio: 'minio',
+  };
   return {
     id: partial.id ?? 'svc-1',
     name: partial.name ?? 'shared-pg',
-    type: partial.type ?? 'postgresql',
+    type: legacyType,
     image: partial.image ?? 'postgres:16-alpine',
     status: partial.status ?? 'running',
     container_id: partial.container_id ?? 'svc-1-container',
@@ -37,6 +48,9 @@ function createService(partial: Partial<ServiceRow>): ServiceRow {
       }),
     created_at: partial.created_at ?? '2026-01-01T00:00:00.000Z',
     updated_at: partial.updated_at ?? '2026-01-01T00:00:00.000Z',
+    kind: partial.kind ?? typeToKind[legacyType] ?? 'postgres',
+    image_url: partial.image_url ?? partial.image ?? 'postgres:16-alpine',
+    assigned_port: partial.assigned_port ?? partial.port ?? 5432,
   };
 }
 
@@ -365,6 +379,9 @@ describe('ServiceManager detail/log/stats operations', () => {
       exitCode: 0,
       stdout: '4096\t/var/lib/postgresql/data\n',
     });
+    // postgres adapter getConnectionStats issues 2 psql execs (active count + max_connections)
+    dockerHarness.queueExecResult('svc-stats-container', { exitCode: 0, stdout: '0\n' });
+    dockerHarness.queueExecResult('svc-stats-container', { exitCode: 0, stdout: '' });
     const manager = new ServiceManager(dockerHarness.docker, db);
 
     const stats = await manager.getStats('svc-stats');

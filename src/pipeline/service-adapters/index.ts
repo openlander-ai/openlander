@@ -16,12 +16,14 @@ const rabbitMqAdapter = new RabbitMqAdapter();
 export function getServiceAdapter(type: string): ServiceAdapter | null {
   switch (type) {
     case 'postgresql':
+    case 'postgres': // canonical kind value from services.kind enum
       return postgresAdapter;
     case 'mysql':
       return mySqlAdapter;
     case 'redis':
       return redisAdapter;
     case 'mongodb':
+    case 'mongo': // canonical kind value from services.kind enum
       return mongoAdapter;
     case 'minio':
       return minioAdapter;

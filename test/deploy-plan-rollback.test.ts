@@ -23,6 +23,8 @@ function createMockDb(overrides?: {
           },
     ),
     updateDeployPlanStatus: vi.fn(),
+    // PR 4.5: canonical-first reads need this helper.
+    getDeployableForProject: vi.fn().mockReturnValue(undefined),
   } as unknown as Database;
 }
 

@@ -73,6 +73,7 @@ function createMockContext(opts?: {
     listProjects: vi.fn().mockReturnValue(opts?.projects ?? []),
     getProjectByName: vi.fn().mockImplementation((name: string) => opts?.getProjectByName?.(name)),
     getEnvironmentsByProject: vi.fn().mockReturnValue([{ id: 'env-prod', type: 'production' }]),
+    getDeployableForProject: vi.fn().mockReturnValue(undefined),
   };
 
   const pipeline = {

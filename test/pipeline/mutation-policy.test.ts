@@ -53,6 +53,9 @@ function makeCtx(opts: { circuitBreakerOpen?: boolean } = {}) {
   return {
     db: {
       isCircuitBreakerOpen: vi.fn().mockReturnValue(opts.circuitBreakerOpen ?? false),
+      // PR 4.5: canonical-first reads need this helper; default to undefined
+      // so legacy `projects` columns provide the fallback.
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     },
   };
 }

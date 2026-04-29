@@ -52,9 +52,11 @@ export class MinioAdapter implements ServiceAdapter {
   }
 
   async waitForReady(service: ServiceRow, _docker: Docker): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    const hostPort = service.assigned_port ?? service.port;
     await waitUntilReady(
       async () => {
-        const response = await fetch(`${resolveContainerUrl(service.port)}/minio/health/live`, {
+        const response = await fetch(`${resolveContainerUrl(hostPort)}/minio/health/live`, {
           signal: AbortSignal.timeout(2000),
         });
         if (!response.ok) {

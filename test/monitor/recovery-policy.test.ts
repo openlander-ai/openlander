@@ -64,7 +64,10 @@ function makeCtx(
       }
       return project;
     }),
-  } as unknown as Pick<Database, 'getProject'>;
+    // PR 4.5: canonical-first reads need this helper; default to undefined
+    // so legacy `projects` fields drive the test snapshot.
+    getDeployableForProject: vi.fn().mockReturnValue(undefined),
+  } as unknown as Pick<Database, 'getProject' | 'getDeployableForProject'>;
 
   return {
     db,

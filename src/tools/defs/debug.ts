@@ -82,7 +82,11 @@ export const debugToolDefs: ToolDef[] = [
       return appCtx.buildDebugger.diagnose({
         buildLog,
         projectName,
-        imageTag: project.image_tag ?? `openlander/${projectName}:latest`,
+        // PR 4.5: canonical-first read of image_tag with `??` fallback.
+        imageTag:
+          appCtx.db.getDeployableForProject(project.id)?.image_tag ??
+          project.image_tag ??
+          `openlander/${projectName}:latest`,
         failedStep: 'build',
       });
     },

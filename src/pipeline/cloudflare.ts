@@ -148,7 +148,11 @@ export class CloudflareTunnelManager {
 
   private async syncProjectRouting(projectId: string): Promise<void> {
     const project = this.db.getProject(projectId);
-    if (!project || !project.assigned_port) {
+    // PR 4.5: canonical-first read of assigned_port with `??` fallback to
+    // legacy `projects` column through migration 0012.
+    const deployable = project ? this.db.getDeployableForProject(projectId) : undefined;
+    const assignedPort = deployable?.assigned_port ?? project?.assigned_port;
+    if (!project || !assignedPort) {
       this.traefikLabels.delete(projectId);
       return;
     }
@@ -160,7 +164,7 @@ export class CloudflareTunnelManager {
       return;
     }
 
-    const labels = this.buildCustomDomainLabels(project.name, project.assigned_port, domains);
+    const labels = this.buildCustomDomainLabels(project.name, assignedPort, domains);
     this.traefikLabels.set(projectId, labels);
 
     const primaryUrl = `https://${domains[0] ?? 'unknown'}`;
@@ -318,7 +322,7 @@ export class CloudflareTunnelManager {
       headers: {
         Authorization: `Bearer ${this.config.apiToken}`,
         'Content-Type': 'application/json',
-        ...((init?.headers as Record<string, string> | undefined) ?? {}),
+        ...((init?.headers ?? {}) as Record<string, string>),
       },
     });
 

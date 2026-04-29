@@ -29,22 +29,25 @@ async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1
   const projects = appCtx.db.listProjects();
 
   for (const project of projects) {
-    if (project.status !== 'running' || !project.container_id) {
+    // PR 4.5: canonical-first read of runtime fields with `??` fallback to
+    // legacy `projects` columns through migration 0012.
+    const deployable = appCtx.db.getDeployableForProject(project.id);
+    const status = deployable?.status ?? project.status;
+    const containerId = deployable?.container_id ?? project.container_id;
+
+    if (status !== 'running' || !containerId) {
       continue;
     }
 
     try {
-      const info = await appCtx.docker.inspectContainer(project.container_id);
-      const status = info.State.Running ? 'running' : 'stopped';
+      const info = await appCtx.docker.inspectContainer(containerId);
+      const nextStatus = info.State.Running ? 'running' : 'stopped';
 
-      if (status !== project.status || info.Id !== project.container_id) {
-        appCtx.db.updateProject(project.id, { status, containerId: info.Id });
+      if (nextStatus !== status || info.Id !== containerId) {
+        appCtx.db.updateProject(project.id, { status: nextStatus, containerId: info.Id });
       }
     } catch (err) {
-      log.debug(
-        { err, projectId: project.id, containerId: project.container_id },
-        'Failed to inspect project container',
-      );
+      log.debug({ err, projectId: project.id, containerId }, 'Failed to inspect project container');
       appCtx.db.updateProject(project.id, { status: 'error' });
     }
   }
@@ -65,7 +68,10 @@ export const projectOpsToolDefs: ToolDef[] = [
         throw new ProjectNotFoundError(projectName);
       }
 
-      if (project.status === 'building') {
+      // PR 4.5: canonical-first status read.
+      const deployable = context.appCtx.db.getDeployableForProject(project.id);
+      const projectStatus = deployable?.status ?? project.status;
+      if (projectStatus === 'building') {
         context.appCtx.docker.cancelBuild(project.id);
       }
 
@@ -96,26 +102,43 @@ export const projectOpsToolDefs: ToolDef[] = [
       }
 
       const projects = context.appCtx.db.listProjects();
+      // PR 4.5: batch-resolve deployables once so per-project mapping
+      // reads canonical-first with `??` fallback to the legacy `projects`
+      // columns through migration 0012.
+      const deployables = new Map<
+        string,
+        ReturnType<typeof context.appCtx.db.getDeployableForProject>
+      >();
+      for (const p of projects) {
+        deployables.set(p.id, context.appCtx.db.getDeployableForProject(p.id));
+      }
 
       if (context.target === 'mcp') {
         return {
           count: projects.length,
-          projects: projects.map((project) => ({
-            id: project.id,
-            name: project.name,
-            status: project.status,
-            visibility: project.visibility,
-            repoUrl: project.repo_url,
-            branch: project.branch,
-            port: project.assigned_port,
-            containerName: project.container_id ? projectContainerName(project.name) : null,
-            network: SHARED_NETWORK_NAME,
-            url: project.assigned_port ? getProjectUrl(project.name) : null,
-            urls: project.assigned_port ? getProjectUrls(project.name) : [],
-            publicUrl: project.public_url,
-            createdAt: project.created_at,
-            updatedAt: project.updated_at,
-          })),
+          projects: projects.map((project) => {
+            const deployable = deployables.get(project.id);
+            const status = deployable?.status ?? project.status;
+            const port = deployable?.assigned_port ?? project.assigned_port;
+            const containerId = deployable?.container_id ?? project.container_id;
+            const publicUrl = deployable?.public_url ?? project.public_url;
+            return {
+              id: project.id,
+              name: project.name,
+              status,
+              visibility: project.visibility,
+              repoUrl: project.repo_url,
+              branch: project.branch,
+              port,
+              containerName: containerId ? projectContainerName(project.name) : null,
+              network: SHARED_NETWORK_NAME,
+              url: port ? getProjectUrl(project.name) : null,
+              urls: port ? getProjectUrls(project.name) : [],
+              publicUrl,
+              createdAt: project.created_at,
+              updatedAt: project.updated_at,
+            };
+          }),
           _agent_guidance: {
             networking: [
               `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
@@ -128,16 +151,23 @@ export const projectOpsToolDefs: ToolDef[] = [
 
       return {
         count: projects.length,
-        projects: projects.map((project) => ({
-          name: project.name,
-          status: project.status,
-          visibility: project.visibility,
-          port: project.assigned_port,
-          containerName: project.container_id ? projectContainerName(project.name) : null,
-          url: project.assigned_port ? getProjectUrl(project.name) : null,
-          publicUrl: project.public_url,
-          repoUrl: project.repo_url,
-        })),
+        projects: projects.map((project) => {
+          const deployable = deployables.get(project.id);
+          const status = deployable?.status ?? project.status;
+          const port = deployable?.assigned_port ?? project.assigned_port;
+          const containerId = deployable?.container_id ?? project.container_id;
+          const publicUrl = deployable?.public_url ?? project.public_url;
+          return {
+            name: project.name,
+            status,
+            visibility: project.visibility,
+            port,
+            containerName: containerId ? projectContainerName(project.name) : null,
+            url: port ? getProjectUrl(project.name) : null,
+            publicUrl,
+            repoUrl: project.repo_url,
+          };
+        }),
       };
     },
   },
@@ -389,7 +419,10 @@ export const projectOpsToolDefs: ToolDef[] = [
         throw new ProjectNotFoundError(projectName);
       }
 
-      if (project.status === 'building') {
+      // PR 4.5: canonical-first status read.
+      const deployable = context.appCtx.db.getDeployableForProject(project.id);
+      const projectStatus = deployable?.status ?? project.status;
+      if (projectStatus === 'building') {
         context.appCtx.docker.cancelBuild(project.id);
       }
 

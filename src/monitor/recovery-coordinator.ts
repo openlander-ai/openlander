@@ -227,17 +227,22 @@ export class RecoveryCoordinator {
       return { eligible: false, reason: 'project_not_found' };
     }
 
+    // PR 4.5: canonical-first read of status with `??` fallback to legacy
+    // `projects` column through migration 0012.
+    const deployable = this.db.getDeployableForProject(projectId);
+    const status = deployable?.status ?? project.status;
+
     // Coordinator-specific status whitelist (depends on trigger).
     // checkEligibility legacy behaviour: only running/error are eligible.
     // shouldContinue legacy behaviour: only running is eligible (recovery may
     // already have transitioned the project; recovery_in_progress handled by policy).
     if (trigger === 'continue_check') {
-      if (project.status !== 'running' && project.status !== 'recovering') {
-        return { eligible: false, reason: `status_${project.status}` };
+      if (status !== 'running' && status !== 'recovering') {
+        return { eligible: false, reason: `status_${status}` };
       }
     } else {
-      if (project.status !== 'running' && project.status !== 'error') {
-        return { eligible: false, reason: `status_${project.status}` };
+      if (status !== 'running' && status !== 'error') {
+        return { eligible: false, reason: `status_${status}` };
       }
     }
 
@@ -489,12 +494,15 @@ export class RecoveryCoordinator {
     }
     try {
       const project = this.getProjectSnapshot(projectId);
+      // PR 4.5: canonical-first read of container_id with `||` fallback.
+      const deployable = this.db.getDeployableForProject(projectId);
       this.opsAgent.enqueue({
         type: 'deploy:crash',
         payload: {
           projectId,
           projectName: project?.name ?? projectId,
-          containerId: containerIdOverride || project?.container_id || '',
+          containerId:
+            containerIdOverride || deployable?.container_id || project?.container_id || '',
         },
         timestamp: Date.now(),
       });
@@ -553,13 +561,17 @@ export class RecoveryCoordinator {
     const project = this.getProjectSnapshot(projectId);
     if (!project) return;
 
-    if (project.status === 'recovering') {
+    // PR 4.5: canonical-first status read with `??` fallback.
+    const deployable = this.db.getDeployableForProject(projectId);
+    const status = deployable?.status ?? project.status;
+
+    if (status === 'recovering') {
       await this.transitionProjectStatus(
         projectId,
         nextStatus,
         nextStatus === 'running' ? 'recovery-success' : 'recovery-failed',
       );
-    } else if (nextStatus === 'running' && project.status === 'error') {
+    } else if (nextStatus === 'running' && status === 'error') {
       await this.transitionProjectStatus(projectId, nextStatus, 'recovery-success');
       log.info({ projectId }, 'Restored project status from error to running (defensive recovery)');
     }

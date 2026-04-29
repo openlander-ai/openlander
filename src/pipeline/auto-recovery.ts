@@ -332,7 +332,11 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     providedShouldContinue ??
     ((projectId: string) => {
       const project = db.getProject(projectId);
-      return Boolean(project && project.status === 'running' && !project.archived_at);
+      if (!project) return false;
+      // PR 4.5: canonical-first status read with `??` fallback.
+      const deployable = db.getDeployableForProject(projectId);
+      const status = deployable?.status ?? project.status;
+      return status === 'running' && !project.archived_at;
     });
 
   let recoveryChain = Promise.resolve();
@@ -807,7 +811,11 @@ ${plan.agentGuidance}
         const diagnosis = await buildDebugger.diagnose({
           buildLog: latestBuildLog,
           projectName,
-          imageTag: project?.image_tag ?? `openlander/${projectName}:latest`,
+          // PR 4.5: canonical-first read of image_tag with `??` fallback.
+          imageTag:
+            db.getDeployableForProject(projectId)?.image_tag ??
+            project?.image_tag ??
+            `openlander/${projectName}:latest`,
           failedStep: mapFailStep(step),
         });
         await emitTimelineMessage(eventBus, projectId, `Debug summary: ${diagnosis.summary}`);

@@ -122,12 +122,31 @@ export interface WebhookConfigRow {
 export interface ServiceRow {
   id: string;
   name: string;
-  type: string;
+  /**
+   * @deprecated — drops in migration 0012 Phase C. Read `kind` instead.
+   * Wire responses must still emit `type` (use `kindToLegacyType(kind)` as the
+   * source value). NULL for rows created after migration 0012 that no longer
+   * write this column.
+   */
+  type: string | null;
+  /**
+   * @deprecated — drops in migration 0012 Phase C. Read `image_url` instead.
+   * Wire responses must still emit `image` (use `image_url` as the source value).
+   */
   image: string;
   status: 'running' | 'stopped' | 'error';
   container_id: string | null;
   container_name: string;
+  /**
+   * @deprecated — drops in migration 0012 Phase C. Read `assigned_port` instead.
+   * Wire responses must still emit `port` (use `assigned_port` as the source value).
+   */
   port: number;
+  /**
+   * @deprecated — drops in migration 0012 Phase C. This column holds the
+   * legacy per-service JSON env blob for managed services. No canonical
+   * equivalent exists in the env_vars table per-service yet (deferred to 1.1).
+   */
   env_vars: string | null;
   credentials: string | null;
   created_at: string;
@@ -135,7 +154,7 @@ export interface ServiceRow {
   // Post-0009 unified-shape columns. Nullable on managed-only rows
   // (kind ∈ postgres/mysql/redis/mongo/minio) and pre-migration rows.
   // Plan §6.3 + §6.5 — additive transition; legacy columns above stay
-  // until the post-1.0 follow-up migration drops them.
+  // until migration 0012 Phase C drops them.
   project_id?: string;
   kind?:
     | 'git'

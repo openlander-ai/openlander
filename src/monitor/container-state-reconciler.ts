@@ -102,12 +102,24 @@ export class ContainerStateReconciler {
   }
 
   private async detectMissingContainers(): Promise<void> {
-    const projects = this.db.listProjects().filter((project) => {
-      return project.container_id !== null && RECONCILE_ELIGIBLE_STATUSES.has(project.status);
+    // PR 4.5: batch-resolve deployables once so canonical-first reads of
+    // status/container_id flow through a `??` fallback to legacy `projects`
+    // columns until migration 0012 drops them.
+    const allProjects = this.db.listProjects();
+    const deployables = new Map<string, ReturnType<typeof this.db.getDeployableForProject>>();
+    for (const p of allProjects) {
+      deployables.set(p.id, this.db.getDeployableForProject(p.id));
+    }
+    const projects = allProjects.filter((project) => {
+      const d = deployables.get(project.id);
+      const containerId = d?.container_id ?? project.container_id;
+      const status = d?.status ?? project.status;
+      return Boolean(containerId) && RECONCILE_ELIGIBLE_STATUSES.has(status);
     });
 
     for (const project of projects) {
-      const containerId = project.container_id;
+      const d = deployables.get(project.id);
+      const containerId = d?.container_id ?? project.container_id;
       if (!containerId) {
         continue;
       }
@@ -147,8 +159,12 @@ export class ContainerStateReconciler {
     const now = Date.now();
     const recovering = this.db.listProjects('recovering');
     for (const project of recovering) {
-      if (!project.recovering_started_at) continue;
-      const elapsed = now - new Date(project.recovering_started_at).getTime();
+      // PR 4.5: canonical-first read of recovering_started_at with `??` fallback.
+      const deployable = this.db.getDeployableForProject(project.id);
+      const recoveringStartedAt =
+        deployable?.recovering_started_at ?? project.recovering_started_at;
+      if (!recoveringStartedAt) continue;
+      const elapsed = now - new Date(recoveringStartedAt).getTime();
       if (elapsed < RECOVERING_TIMEOUT_MS) continue;
 
       // 1.0 GA: skip the timeout when a deploy lock is currently held for
@@ -194,8 +210,11 @@ export class ContainerStateReconciler {
 
       const knownContainerIds = new Set<string>();
       for (const project of projects) {
-        if (project.container_id) {
-          knownContainerIds.add(project.container_id);
+        // PR 4.5: canonical-first read of container_id with `??` fallback.
+        const deployable = this.db.getDeployableForProject(project.id);
+        const containerId = deployable?.container_id ?? project.container_id;
+        if (containerId) {
+          knownContainerIds.add(containerId);
         }
       }
 

@@ -8,7 +8,13 @@
  */
 
 import { getSystemStats } from '../monitor/stats.js';
-import type { ProjectRow, DeployLogRow, RuntimeIncidentRow, Database } from '../db/index.js';
+import type {
+  ProjectRow,
+  DeployLogRow,
+  RuntimeIncidentRow,
+  Database,
+  ServiceRow,
+} from '../db/index.js';
 import type { Docker } from '../pipeline/docker.js';
 import { scanUsedPorts } from '../pipeline/port.js';
 import { detectReverseProxy } from '../pipeline/traefik.js';
@@ -52,10 +58,10 @@ export async function buildContextSnapshot(
 
   const projectLines =
     effectiveType === 'project' || effectiveType === 'recovery'
-      ? buildScopedProjectLines(projects, scope?.projectId)
-      : buildGlobalProjectLines(projects);
+      ? buildScopedProjectLines(projects, db, scope?.projectId)
+      : buildGlobalProjectLines(projects, db);
 
-  const projectGroups = buildProjectGroups(projects);
+  const projectGroups = buildProjectGroups(projects, db);
 
   const parts: string[] = [
     `## Current Server State (auto-injected)
@@ -164,19 +170,27 @@ export function buildIncidentBriefing(incidents: RuntimeIncidentRow[], db: Datab
 // Project relationship grouping
 // ---------------------------------------------------------------------------
 
-function buildProjectGroups(projects: ProjectRow[]): string {
+function buildProjectGroups(projects: ProjectRow[], db: Database): string {
   if (projects.length < 2) return '';
 
   const repoGroups = new Map<string, ProjectRow[]>();
   const parentGroups = new Map<string, ProjectRow[]>();
 
   for (const p of projects) {
-    if (p.parent_project_id) {
-      const siblings = parentGroups.get(p.parent_project_id);
+    // PR 3: derive compose-child parent from services.parent_service_id (canonical),
+    // fall back to projects.parent_project_id for pre-migration rows.
+    const svc = db.getService(`${p.id}__svc`);
+    const parentId =
+      (svc?.parent_service_id ? svc.parent_service_id.replace(/__svc$/, '') : null) ??
+      p.parent_project_id ??
+      null;
+
+    if (parentId) {
+      const siblings = parentGroups.get(parentId);
       if (siblings) {
         siblings.push(p);
       } else {
-        parentGroups.set(p.parent_project_id, [p]);
+        parentGroups.set(parentId, [p]);
       }
     }
 
@@ -202,7 +216,11 @@ function buildProjectGroups(projects: ProjectRow[]): string {
 
   for (const [repoUrl, group] of repoGroups) {
     if (group.length < 2) continue;
-    const alreadyGrouped = group.every((p) => p.parent_project_id);
+    // PR 3: check canonical parent via services; fall back to projects column.
+    const alreadyGrouped = group.every((p) => {
+      const s = db.getService(`${p.id}__svc`);
+      return (s?.parent_service_id ?? p.parent_project_id) != null;
+    });
     if (alreadyGrouped) continue;
     const repoShort = repoUrl.split('/').slice(-2).join('/');
     const names = group.map((p) => p.name).join(', ');
@@ -217,34 +235,32 @@ function buildProjectGroups(projects: ProjectRow[]): string {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatProjectLine(p: ProjectRow): string {
-  const statusIcon =
-    p.status === 'running'
-      ? '🟢'
-      : p.status === 'error'
-        ? '🔴'
-        : p.status === 'building'
-          ? '🔄'
-          : '⚪';
+// PR 4.5: accept optional canonical ServiceRow so callers can pass the
+// deployable row from `getDeployableForProject` and we read status/url/port
+// from it first, falling back to the legacy ProjectRow columns.
+function formatProjectLine(p: ProjectRow, svc?: ServiceRow | null): string {
+  const status = svc?.status ?? p.status;
+  const publicUrl = svc?.public_url ?? p.public_url;
+  const assignedPort = svc?.assigned_port ?? p.assigned_port;
 
-  const url = p.public_url
-    ? `🌐 ${p.public_url}`
-    : p.assigned_port
-      ? `🔒 port ${String(p.assigned_port)}`
-      : '';
+  const statusIcon =
+    status === 'running' ? '🟢' : status === 'error' ? '🔴' : status === 'building' ? '🔄' : '⚪';
+
+  const url = publicUrl ? `🌐 ${publicUrl}` : assignedPort ? `🔒 port ${String(assignedPort)}` : '';
 
   // Container name follows ol-{name} naming convention (only shown when not stopped)
-  const containerName = p.status !== 'stopped' ? ` [ol-${p.name}]` : '';
+  const containerName = status !== 'stopped' ? ` [ol-${p.name}]` : '';
 
-  return `  ${statusIcon} ${p.name} (${p.status})${containerName}${url ? ` — ${url}` : ''}`;
+  return `  ${statusIcon} ${p.name} (${status})${containerName}${url ? ` — ${url}` : ''}`;
 }
 
-function formatProjectSummary(p: ProjectRow): string {
-  const statusIcon = p.status === 'running' ? '🟢' : p.status === 'error' ? '🔴' : '⚪';
-  return `  ${statusIcon} ${p.name} (${p.status})`;
+function formatProjectSummary(p: ProjectRow, svc?: ServiceRow | null): string {
+  const status = svc?.status ?? p.status;
+  const statusIcon = status === 'running' ? '🟢' : status === 'error' ? '🔴' : '⚪';
+  return `  ${statusIcon} ${p.name} (${status})`;
 }
 
-function buildGlobalProjectLines(projects: ProjectRow[]): string {
+function buildGlobalProjectLines(projects: ProjectRow[], db: Database): string {
   const MAX_DETAILED_PROJECTS = 5;
 
   if (projects.length === 0) {
@@ -252,20 +268,28 @@ function buildGlobalProjectLines(projects: ProjectRow[]): string {
   }
 
   if (projects.length <= MAX_DETAILED_PROJECTS) {
-    return projects.map((p: ProjectRow) => formatProjectLine(p)).join('\n');
+    return projects
+      .map((p: ProjectRow) => formatProjectLine(p, db.getDeployableForProject(p.id)))
+      .join('\n');
   }
 
-  const running = projects.filter((p) => p.status === 'running');
-  const errored = projects.filter((p) => p.status === 'error');
-  const stopped = projects.filter((p) => p.status === 'stopped');
+  // PR 4.5: derive counts from canonical status, falling back to legacy column.
+  const withSvc = projects.map((p) => ({ p, svc: db.getDeployableForProject(p.id) }));
+  const running = withSvc.filter(({ p, svc }) => (svc?.status ?? p.status) === 'running');
+  const errored = withSvc.filter(({ p, svc }) => (svc?.status ?? p.status) === 'error');
+  const stopped = withSvc.filter(({ p, svc }) => (svc?.status ?? p.status) === 'stopped');
   const important = [...running, ...errored];
   return [
     `${String(running.length)} running, ${String(errored.length)} error, ${String(stopped.length)} stopped — use list_projects for full details`,
-    ...important.map((p: ProjectRow) => formatProjectLine(p)),
+    ...important.map(({ p, svc }) => formatProjectLine(p, svc)),
   ].join('\n');
 }
 
-function buildScopedProjectLines(projects: ProjectRow[], focalProjectId?: string): string {
+function buildScopedProjectLines(
+  projects: ProjectRow[],
+  db: Database,
+  focalProjectId?: string,
+): string {
   if (projects.length === 0) {
     return '(no projects deployed yet)';
   }
@@ -276,11 +300,11 @@ function buildScopedProjectLines(projects: ProjectRow[], focalProjectId?: string
   const lines: string[] = [];
 
   if (focal) {
-    lines.push(formatProjectLine(focal));
+    lines.push(formatProjectLine(focal, db.getDeployableForProject(focal.id)));
   }
 
   if (others.length > 0) {
-    lines.push(...others.map((p) => formatProjectSummary(p)));
+    lines.push(...others.map((p) => formatProjectSummary(p, db.getDeployableForProject(p.id))));
   }
 
   return lines.join('\n');
@@ -404,8 +428,10 @@ function buildDeploymentHistory(db: Database, allProjects: ProjectRow[]): string
       return `    ${l.status === 'success' ? '✅' : '❌'} ${time} (${duration})${l.status === 'failed' && l.build_log ? ' — ' + extractFailureHint(l.build_log) : ''}`;
     });
 
-    const portInfo =
-      project.assigned_port != null ? `port ${String(project.assigned_port)}` : 'no port';
+    // PR 4.5: canonical-first read of assigned_port with `??` fallback.
+    const portDeployable = db.getDeployableForProject(project.id);
+    const portAssigned = portDeployable?.assigned_port ?? project.assigned_port;
+    const portInfo = portAssigned != null ? `port ${String(portAssigned)}` : 'no port';
     const envInfo = envKeys.length > 0 ? `env: ${envKeys.join(', ')}` : 'no env vars';
 
     sections.push(`  ${project.name}: ${portInfo}, ${envInfo}\n${logLines.join('\n')}`);

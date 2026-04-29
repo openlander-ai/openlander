@@ -51,9 +51,13 @@ type ServiceCardSummary = ServiceRow & {
 
 export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   postgresql: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
+  // Canonical alias so version resolution works when service.kind='postgres'
+  postgres: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
   mysql: ['9', '8'],
   redis: ['8-alpine', '7-alpine'],
   mongodb: ['8', '7'],
+  // Canonical alias so version resolution works when service.kind='mongo'
+  mongo: ['8', '7'],
   minio: ['RELEASE.2024-11-07T00-52-20Z', 'latest'],
   rabbitmq: ['4.0-management-alpine', '3.13-management-alpine'],
 };
@@ -73,17 +77,28 @@ export interface ServiceTemplate {
   env: (creds: { user: string; password: string; database: string }) => string[];
 }
 
+const postgresTemplate: ServiceTemplate = {
+  type: 'postgresql',
+  image: 'postgres:16-alpine',
+  port: 5432,
+  env: (c) => [
+    `POSTGRES_USER=${c.user}`,
+    `POSTGRES_PASSWORD=${c.password}`,
+    `POSTGRES_DB=${c.database}`,
+  ],
+};
+
+const mongoTemplate: ServiceTemplate = {
+  type: 'mongodb',
+  image: 'mongo:7',
+  port: 27017,
+  env: (c) => [`MONGO_INITDB_ROOT_USERNAME=${c.user}`, `MONGO_INITDB_ROOT_PASSWORD=${c.password}`],
+};
+
 export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
-  postgresql: {
-    type: 'postgresql',
-    image: 'postgres:16-alpine',
-    port: 5432,
-    env: (c) => [
-      `POSTGRES_USER=${c.user}`,
-      `POSTGRES_PASSWORD=${c.password}`,
-      `POSTGRES_DB=${c.database}`,
-    ],
-  },
+  postgresql: postgresTemplate,
+  // Canonical alias — legacyTypeToKind() maps 'postgresql'→'postgres'
+  postgres: postgresTemplate,
   mysql: {
     type: 'mysql',
     image: 'mysql:8',
@@ -101,15 +116,9 @@ export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
     port: 6379,
     env: () => [],
   },
-  mongodb: {
-    type: 'mongodb',
-    image: 'mongo:7',
-    port: 27017,
-    env: (c) => [
-      `MONGO_INITDB_ROOT_USERNAME=${c.user}`,
-      `MONGO_INITDB_ROOT_PASSWORD=${c.password}`,
-    ],
-  },
+  mongodb: mongoTemplate,
+  // Canonical alias — legacyTypeToKind() maps 'mongodb'→'mongo'
+  mongo: mongoTemplate,
   minio: {
     type: 'minio',
     image: 'minio/minio:RELEASE.2024-11-07T00-52-20Z',
@@ -144,9 +153,11 @@ export const SERVICE_MEMORY_LIMITS: Record<
   { memoryLimitBytes: number; cpuShares: number }
 > = {
   postgresql: { memoryLimitBytes: 536870912, cpuShares: 512 }, // 512MB
+  postgres: { memoryLimitBytes: 536870912, cpuShares: 512 }, // canonical alias
   mysql: { memoryLimitBytes: 536870912, cpuShares: 512 }, // 512MB
   redis: { memoryLimitBytes: 134217728, cpuShares: 256 }, // 128MB
   mongodb: { memoryLimitBytes: 1073741824, cpuShares: 1024 }, // 1GB
+  mongo: { memoryLimitBytes: 1073741824, cpuShares: 1024 }, // canonical alias
   minio: { memoryLimitBytes: 268435456, cpuShares: 512 }, // 256MB
   rabbitmq: { memoryLimitBytes: 268435456, cpuShares: 512 }, // 256MB
 };
@@ -157,9 +168,11 @@ export const SERVICE_MEMORY_LIMITS: Record<
  */
 const DEFAULT_ENV_KEYS: Record<string, string> = {
   postgresql: 'DATABASE_URL',
+  postgres: 'DATABASE_URL', // canonical alias
   mysql: 'DATABASE_URL',
   redis: 'REDIS_URL',
   mongodb: 'MONGODB_URL',
+  mongo: 'MONGODB_URL', // canonical alias
   minio: 'S3_ENDPOINT',
   rabbitmq: 'RABBITMQ_URL',
 };
@@ -189,7 +202,8 @@ export class ServiceManager {
    *  - Subsequent services of the same type → prefixed key (e.g. MYDB_DATABASE_URL)
    */
   getSuggestedEnv(service: ServiceRow): Array<{ key: string; value: string }> {
-    const baseKey = DEFAULT_ENV_KEYS[service.type];
+    const serviceKind = service.kind ?? 'unknown';
+    const baseKey = DEFAULT_ENV_KEYS[serviceKind];
     if (!baseKey) {
       return [];
     }
@@ -202,9 +216,9 @@ export class ServiceManager {
 
     const existing = this.db
       .listServices()
-      .filter((s) => s.type === service.type && s.id !== service.id);
+      .filter((s) => (s.kind ?? 'unknown') === serviceKind && s.id !== service.id);
 
-    if (service.type === 'minio') {
+    if (serviceKind === 'minio') {
       const user = (credentials?.['user'] as string | undefined) ?? '';
       const password = (credentials?.['password'] as string | undefined) ?? '';
       const prefix =
@@ -589,7 +603,8 @@ export class ServiceManager {
 
     // Redis: flush in-memory data to disk (BGSAVE) before volume backup.
     // Without this, the RDB dump file may not exist or be stale, leading to empty backups.
-    const isRedis = service.type === 'redis' || service.image.includes('redis');
+    const isRedis =
+      (service.kind ?? 'unknown') === 'redis' || (service.image_url ?? '').includes('redis');
     if (isRedis) {
       try {
         const initialResult = await execInServiceContainer(this.docker, service, [
@@ -1015,7 +1030,7 @@ export class ServiceManager {
 
     let diskUsageBytes: number | null = null;
     try {
-      const dataMountPath = this.getDataMountPath(service.type);
+      const dataMountPath = this.getDataMountPath(service.kind ?? 'unknown');
       const result = await execInServiceContainer(this.docker, service, [
         'du',
         '-sb',
@@ -1060,7 +1075,7 @@ export class ServiceManager {
     let activeConnections: number | null = null;
     let maxConnections: number | null = null;
     try {
-      const adapter = getServiceAdapter(service.type);
+      const adapter = getServiceAdapter(service.kind ?? 'unknown');
       if (adapter) {
         const connectionStats = await adapter.getConnectionStats(service, this.docker);
         activeConnections = connectionStats.activeConnections;
@@ -1114,9 +1129,10 @@ export class ServiceManager {
   async listDatabases(serviceId: string): Promise<ListedDatabase[]> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    const adapter = getServiceAdapter(service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
-      throw new ServiceOperationUnsupportedError('Database listing', service.type);
+      throw new ServiceOperationUnsupportedError('Database listing', serviceKind);
     }
 
     return adapter.listDatabases(service, this.docker);
@@ -1125,9 +1141,10 @@ export class ServiceManager {
   async listUsers(serviceId: string): Promise<ListedUser[]> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    const adapter = getServiceAdapter(service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
-      throw new ServiceOperationUnsupportedError('User listing', service.type);
+      throw new ServiceOperationUnsupportedError('User listing', serviceKind);
     }
 
     return adapter.listUsers(service, this.docker);
@@ -1138,9 +1155,10 @@ export class ServiceManager {
     await this.ensureServiceContainerRunning(service);
     assertSafeDatabaseName(dbName);
 
-    const adapter = getServiceAdapter(service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
-      throw new ServiceOperationUnsupportedError('Database creation', service.type);
+      throw new ServiceOperationUnsupportedError('Database creation', serviceKind);
     }
 
     return adapter.createDatabase(service, dbName, this.docker);
@@ -1161,9 +1179,10 @@ export class ServiceManager {
       assertSafeDatabaseName(grants.database);
     }
 
-    const adapter = getServiceAdapter(service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
-      throw new ServiceOperationUnsupportedError('User creation', service.type);
+      throw new ServiceOperationUnsupportedError('User creation', serviceKind);
     }
 
     return adapter.createUser(service, { username, password: userPassword, grants }, this.docker);
@@ -1172,8 +1191,9 @@ export class ServiceManager {
   async listBuckets(serviceId: string): Promise<Array<{ name: string; createdAt: string }>> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    if (service.type !== 'minio') {
-      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    if (serviceKind !== 'minio') {
+      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', serviceKind);
     }
 
     const adapter = new MinioAdapter();
@@ -1183,8 +1203,9 @@ export class ServiceManager {
   async createBucket(serviceId: string, bucketName: string): Promise<void> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    if (service.type !== 'minio') {
-      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    if (serviceKind !== 'minio') {
+      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', serviceKind);
     }
 
     const adapter = new MinioAdapter();
@@ -1194,8 +1215,9 @@ export class ServiceManager {
   async deleteBucket(serviceId: string, bucketName: string): Promise<void> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    if (service.type !== 'minio') {
-      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    if (serviceKind !== 'minio') {
+      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', serviceKind);
     }
 
     const adapter = new MinioAdapter();

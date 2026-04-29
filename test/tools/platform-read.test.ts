@@ -45,6 +45,7 @@ function createMockPlatformContext(overrides?: {
     db: {
       listProjects: vi.fn(() => projects),
       listServices: vi.fn(() => services),
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     },
   } as unknown as AppContext;
 

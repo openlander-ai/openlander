@@ -80,6 +80,8 @@ function makeProjectRow(
 function makeDb(projectRow: ReturnType<typeof makeProjectRow>): Database {
   return {
     getProject: vi.fn(() => projectRow),
+    // PR 4.5: canonical-first reads need this helper.
+    getDeployableForProject: vi.fn().mockReturnValue(undefined),
     updateProject: vi.fn(),
     isCircuitBreakerOpen: vi.fn(() => false),
   } as unknown as Database;

@@ -113,7 +113,9 @@ export class MongoAdapter implements ServiceAdapter {
     _docker: Docker,
   ): Promise<CreateDatabaseResult> {
     return Promise.reject(
-      new Error(`Database creation is not supported for service type: ${service.type}`),
+      new Error(
+        `Database creation is not supported for service type: ${service.kind ?? 'unknown'}`,
+      ),
     );
   }
 
@@ -123,7 +125,7 @@ export class MongoAdapter implements ServiceAdapter {
     _docker: Docker,
   ): Promise<CreateUserResult> {
     return Promise.reject(
-      new Error(`User creation is not supported for service type: ${service.type}`),
+      new Error(`User creation is not supported for service type: ${service.kind ?? 'unknown'}`),
     );
   }
 }
