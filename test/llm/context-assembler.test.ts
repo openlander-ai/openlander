@@ -74,6 +74,7 @@ describe('context-assembler', () => {
       getTopDeploymentPatterns: () => [],
       // PR 3: context-assembler now queries services for canonical parent hierarchy
       getService: () => undefined,
+      getDeployableForProject: () => undefined,
     };
   });
 
@@ -289,6 +290,7 @@ describe('context-assembler', () => {
         getTopDeploymentPatterns: () => [],
         // PR 3: context-assembler now queries services for canonical parent hierarchy
         getService: () => undefined,
+        getDeployableForProject: () => undefined,
       };
     });
 

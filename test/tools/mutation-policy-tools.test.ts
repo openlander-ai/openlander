@@ -34,6 +34,7 @@ function createPolicyContext(opts: ProjectFixtureOpts = {}): AppContext {
     db: {
       getProjectByName: vi.fn((name: string) => (name === 'rejected-app' ? project : undefined)),
       getProject: vi.fn(() => project),
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
       isCircuitBreakerOpen: vi.fn(() => opts.circuitBreakerOpen ?? false),
       acquireDeployLock: vi.fn(() => true),
       releaseDeployLock: vi.fn(),

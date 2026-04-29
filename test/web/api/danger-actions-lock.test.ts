@@ -83,6 +83,7 @@ function createCtx(opts: CtxOptions): AppContext {
     db: {
       getProject: vi.fn((id: string) => (id === opts.project.id ? opts.project : undefined)),
       getProjectByName: vi.fn().mockReturnValue(undefined),
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
       updateProject: vi.fn(),
       isCircuitBreakerOpen: vi.fn().mockReturnValue(false),
       getEnvironmentsByProject: vi.fn().mockReturnValue([]),

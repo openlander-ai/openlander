@@ -55,6 +55,7 @@ function createMockPlatformActionContext(overrides?: {
       getEnvironmentsByProject,
       listServices,
       updateProject,
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     },
   } as unknown as AppContext;
 

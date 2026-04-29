@@ -11,6 +11,7 @@ function createLockedContext(): AppContext {
   return {
     db: {
       getProjectByName: vi.fn((name: string) => (name === 'locked-app' ? project : undefined)),
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
       acquireDeployLock: vi.fn(() => false),
       isCircuitBreakerOpen: vi.fn(() => false),
       getDeployLockInfo: vi.fn(() => ({

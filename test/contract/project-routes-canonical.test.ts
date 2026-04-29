@@ -127,11 +127,13 @@ describe('PR 4 — canonical reads: scenario B (canonical deployable values)', (
       source: 'image',
       imageUrl: 'canonical/image:2.0',
     });
-    // Set stale imageUrl on the projects row (simulating legacy column going stale)
+    // Set stale imageUrl on the projects row (simulating legacy column going stale),
+    // then restore canonical value on the __svc row so it differs from projects row.
     db.updateProject('proj-b', {
       status: 'running',
       imageUrl: 'stale/image:old',
     });
+    db.updateService('proj-b__svc', { imageUrl: 'canonical/image:2.0' });
 
     const res = await app.request('/api/projects/proj-b');
     expect(res.status).toBe(200);
@@ -278,9 +280,10 @@ describe('PR 4 — /api/projects/:p/services/:s canonical-first reads', () => {
       name: 'app-ps',
       repoUrl: 'https://github.com/test/app-ps',
     });
-    // Set canonical status on the __svc row; leave project row stale
-    db.updateService('proj-ps__svc', { status: 'running' });
+    // Set stale status on the projects row, then restore canonical on __svc row.
+    // (updateProject write-through overwrites __svc, so canonical must be set last.)
     db.updateProject('proj-ps', { status: 'stopped' });
+    db.updateService('proj-ps__svc', { status: 'running' });
 
     const res = await app.request('/api/projects/proj-ps/services/proj-ps');
     expect(res.status).toBe(200);

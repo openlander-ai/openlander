@@ -41,6 +41,7 @@ describe('project-ops list_projects reconciliation', () => {
       db: {
         listProjects,
         updateProject,
+        getDeployableForProject: vi.fn().mockReturnValue(undefined),
       },
       docker: {
         inspectContainer,
@@ -78,6 +79,7 @@ describe('project-ops list_projects reconciliation', () => {
       db: {
         listProjects,
         updateProject,
+        getDeployableForProject: vi.fn().mockReturnValue(undefined),
       },
       docker: {
         inspectContainer,
@@ -108,6 +110,7 @@ describe('project-ops list_projects reconciliation', () => {
       db: {
         listProjects,
         updateProject,
+        getDeployableForProject: vi.fn().mockReturnValue(undefined),
       },
       docker: {
         inspectContainer,
@@ -137,6 +140,7 @@ describe('project-ops list_projects reconciliation', () => {
       db: {
         listProjects,
         updateProject,
+        getDeployableForProject: vi.fn().mockReturnValue(undefined),
       },
       docker: {
         inspectContainer,

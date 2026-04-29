@@ -140,6 +140,8 @@ describe('PostmortemGenerator - redactSecrets', () => {
     const db = {
       getProject: vi.fn(),
       getDeployLogs: vi.fn(),
+      // PR 4.5: canonical-first reads need this helper.
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     } as unknown as Database;
     const agent = {
       chat: vi.fn().mockResolvedValue({ message: 'test markdown' }),
@@ -197,6 +199,7 @@ describe('PostmortemGenerator - lifecycle and generation', () => {
     const db = {
       getProject,
       getDeployLogs,
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     } as unknown as Database;
     const agent = {
       chat,
@@ -264,6 +267,8 @@ describe('PostmortemGenerator singleton helpers', () => {
     const db = {
       getProject: vi.fn(),
       getDeployLogs: vi.fn(),
+      // PR 4.5: canonical-first reads need this helper.
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     } as unknown as Database;
     const agent = {
       chat: vi.fn().mockResolvedValue({ message: 'test markdown' }),
@@ -291,6 +296,7 @@ describe('PostmortemGenerator - dynamic locale behavior', () => {
     const db = {
       getProject,
       getDeployLogs,
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     } as unknown as Database;
     const agent = {
       chat,

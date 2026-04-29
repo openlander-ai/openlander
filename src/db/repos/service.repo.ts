@@ -120,6 +120,7 @@ export class ServiceRepo {
     updates: Partial<{
       status: ServiceRow['status'];
       containerId: string | null;
+      imageUrl: string | null;
     }>,
   ): void {
     const setValues: Partial<typeof services.$inferInsert> = {};
@@ -129,6 +130,9 @@ export class ServiceRepo {
     }
     if (updates.containerId !== undefined) {
       setValues.container_id = updates.containerId;
+    }
+    if (updates.imageUrl !== undefined) {
+      setValues.image_url = updates.imageUrl;
     }
 
     if (Object.keys(setValues).length === 0) return;
