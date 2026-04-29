@@ -73,19 +73,22 @@ export class DriftDetector {
         };
       }
 
-      if (service.image) {
+      // Canonical source: image_url; legacy image is @deprecated
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      const expectedImage = service.image_url ?? service.image;
+      if (expectedImage) {
         const currentImage = (info.Config.Image as string | undefined) ?? '';
         if (
           currentImage &&
-          service.image !== currentImage &&
-          !currentImage.includes(service.image) &&
-          !service.image.includes(currentImage)
+          expectedImage !== currentImage &&
+          !currentImage.includes(expectedImage) &&
+          !expectedImage.includes(currentImage)
         ) {
           return {
             serviceId: service.id,
             serviceName: service.name,
             driftType: 'image_mismatch',
-            description: `Service "${service.name}" running image "${currentImage}" differs from expected "${service.image}"`,
+            description: `Service "${service.name}" running image "${currentImage}" differs from expected "${expectedImage}"`,
           };
         }
       }
