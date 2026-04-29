@@ -189,7 +189,8 @@ export class ServiceManager {
    *  - Subsequent services of the same type → prefixed key (e.g. MYDB_DATABASE_URL)
    */
   getSuggestedEnv(service: ServiceRow): Array<{ key: string; value: string }> {
-    const baseKey = DEFAULT_ENV_KEYS[service.type];
+    const serviceKind = service.kind ?? 'unknown';
+    const baseKey = DEFAULT_ENV_KEYS[serviceKind];
     if (!baseKey) {
       return [];
     }
@@ -202,9 +203,9 @@ export class ServiceManager {
 
     const existing = this.db
       .listServices()
-      .filter((s) => s.type === service.type && s.id !== service.id);
+      .filter((s) => (s.kind ?? 'unknown') === serviceKind && s.id !== service.id);
 
-    if (service.type === 'minio') {
+    if (serviceKind === 'minio') {
       const user = (credentials?.['user'] as string | undefined) ?? '';
       const password = (credentials?.['password'] as string | undefined) ?? '';
       const prefix =
@@ -589,7 +590,8 @@ export class ServiceManager {
 
     // Redis: flush in-memory data to disk (BGSAVE) before volume backup.
     // Without this, the RDB dump file may not exist or be stale, leading to empty backups.
-    const isRedis = service.type === 'redis' || service.image.includes('redis');
+    const isRedis =
+      (service.kind ?? 'unknown') === 'redis' || (service.image_url ?? '').includes('redis');
     if (isRedis) {
       try {
         const initialResult = await execInServiceContainer(this.docker, service, [
@@ -1015,7 +1017,7 @@ export class ServiceManager {
 
     let diskUsageBytes: number | null = null;
     try {
-      const dataMountPath = this.getDataMountPath(service.type);
+      const dataMountPath = this.getDataMountPath(service.kind ?? 'unknown');
       const result = await execInServiceContainer(this.docker, service, [
         'du',
         '-sb',
@@ -1060,7 +1062,7 @@ export class ServiceManager {
     let activeConnections: number | null = null;
     let maxConnections: number | null = null;
     try {
-      const adapter = getServiceAdapter(service.type);
+      const adapter = getServiceAdapter(service.kind ?? 'unknown');
       if (adapter) {
         const connectionStats = await adapter.getConnectionStats(service, this.docker);
         activeConnections = connectionStats.activeConnections;
@@ -1114,9 +1116,10 @@ export class ServiceManager {
   async listDatabases(serviceId: string): Promise<ListedDatabase[]> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    const adapter = getServiceAdapter(service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
-      throw new ServiceOperationUnsupportedError('Database listing', service.type);
+      throw new ServiceOperationUnsupportedError('Database listing', serviceKind);
     }
 
     return adapter.listDatabases(service, this.docker);
@@ -1125,9 +1128,10 @@ export class ServiceManager {
   async listUsers(serviceId: string): Promise<ListedUser[]> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    const adapter = getServiceAdapter(service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
-      throw new ServiceOperationUnsupportedError('User listing', service.type);
+      throw new ServiceOperationUnsupportedError('User listing', serviceKind);
     }
 
     return adapter.listUsers(service, this.docker);
@@ -1138,9 +1142,10 @@ export class ServiceManager {
     await this.ensureServiceContainerRunning(service);
     assertSafeDatabaseName(dbName);
 
-    const adapter = getServiceAdapter(service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
-      throw new ServiceOperationUnsupportedError('Database creation', service.type);
+      throw new ServiceOperationUnsupportedError('Database creation', serviceKind);
     }
 
     return adapter.createDatabase(service, dbName, this.docker);
@@ -1161,9 +1166,10 @@ export class ServiceManager {
       assertSafeDatabaseName(grants.database);
     }
 
-    const adapter = getServiceAdapter(service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
-      throw new ServiceOperationUnsupportedError('User creation', service.type);
+      throw new ServiceOperationUnsupportedError('User creation', serviceKind);
     }
 
     return adapter.createUser(service, { username, password: userPassword, grants }, this.docker);
@@ -1172,8 +1178,9 @@ export class ServiceManager {
   async listBuckets(serviceId: string): Promise<Array<{ name: string; createdAt: string }>> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    if (service.type !== 'minio') {
-      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    if (serviceKind !== 'minio') {
+      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', serviceKind);
     }
 
     const adapter = new MinioAdapter();
@@ -1183,8 +1190,9 @@ export class ServiceManager {
   async createBucket(serviceId: string, bucketName: string): Promise<void> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    if (service.type !== 'minio') {
-      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    if (serviceKind !== 'minio') {
+      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', serviceKind);
     }
 
     const adapter = new MinioAdapter();
@@ -1194,8 +1202,9 @@ export class ServiceManager {
   async deleteBucket(serviceId: string, bucketName: string): Promise<void> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    if (service.type !== 'minio') {
-      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', service.type);
+    const serviceKind = service.kind ?? 'unknown';
+    if (serviceKind !== 'minio') {
+      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', serviceKind);
     }
 
     const adapter = new MinioAdapter();
