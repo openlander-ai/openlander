@@ -434,7 +434,7 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
     repoUrl: project.repo_url,
     source,
     imageUrl,
-    imageCmd: parseImageCmd(imageCmdRaw),
+    imageCmd: parseImageCmd(imageCmdRaw ?? null),
     containerPort,
     created_at: normalizeTimestamp(project.created_at),
     updated_at: normalizeTimestamp(project.updated_at),
@@ -816,7 +816,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           // pre-0012 too.
           const runtimeNode: TopologyNode = {
             container_id: deployable?.container_id ?? node.container_id,
-            status: deployable?.status ?? node.status,
+            status: deployable?.status ?? node.status ?? null,
           };
           const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
 
@@ -917,7 +917,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     ctx.db.updateProject(project.id, {
       imageUrl,
-      imageCmd,
+      imageCmd: imageCmd ? JSON.stringify(imageCmd) : null,
       containerPort,
     });
 
@@ -1053,7 +1053,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       serviceId: service.id,
       serviceName: service.name,
       serviceType: serviceKind,
-      containerName: service.container_name,
+      containerName: service.container_name ?? '',
       credentials,
     });
     ctx.db.updateServiceConnection(connection.id, {
@@ -1063,7 +1063,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     // Auto-sync dependency
     try {
       ctx.db.createProjectDependency({
-        source_project_id: project.id,
+        source_service_id: `${project.id}__svc`,
         target_service_id: serviceId,
         dependency_type:
           serviceKind === 'postgres' || serviceKind === 'mysql'
@@ -2409,7 +2409,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           400,
         );
       }
-      ctx.db.updateProject(project.id, { imageUrl, imageCmd, containerPort });
+      ctx.db.updateProject(project.id, {
+        imageUrl,
+        imageCmd: imageCmd ? JSON.stringify(imageCmd) : null,
+        containerPort,
+      });
       const updated = ctx.db.getProject(project.id);
       if (!updated) return cx.json({ error: 'NOT_FOUND', message: 'Project not found' }, 404);
       // PR 4 canonical-first: re-read deployable after mutation so wire
@@ -2461,7 +2465,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
             const kind = resolveKind(node.name);
             const runtimeNode: TopologyNode = {
               container_id: deployable?.container_id ?? node.container_id,
-              status: deployable?.status ?? node.status,
+              status: deployable?.status ?? node.status ?? null,
             };
             const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
             return {
@@ -2529,7 +2533,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     }
     const connections = ctx.db.listServiceConnectionsByProject(project.id);
     const services = connections
-      .map((conn) => ctx.db.getService(conn.service_id))
+      .map((conn) => ctx.db.getService(conn.service_id_provider))
       .filter((svc) => svc !== undefined);
     return c.json(
       services.map((svc) => {

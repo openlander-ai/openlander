@@ -1,8 +1,17 @@
 import { desc, eq } from 'drizzle-orm';
 
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
-import { domainMappings, projects } from '../schema.drizzle.js';
+import { domainMappings, projects, services } from '../schema.drizzle.js';
 import type { DomainMappingRow } from '../types.js';
+
+/**
+ * Post-0012: domain_mappings is service-scoped. Callers still pass
+ * `projectId` for vocabulary continuity; the repo translates to the
+ * canonical deployable service id.
+ */
+function projectIdToServiceId(projectId: string): string {
+  return projectId.endsWith('__svc') ? projectId : `${projectId}__svc`;
+}
 
 export class DomainMappingRepo {
   constructor(
@@ -23,7 +32,7 @@ export class DomainMappingRepo {
       .insert(domainMappings)
       .values({
         id: mapping.id,
-        project_id: mapping.projectId,
+        service_id: projectIdToServiceId(mapping.projectId),
         domain: mapping.domain,
         cloudflare_zone_id: mapping.cloudflareZoneId ?? null,
         cloudflare_dns_record_id: mapping.cloudflareDnsRecordId ?? null,
@@ -35,15 +44,18 @@ export class DomainMappingRepo {
     return this.db
       .select()
       .from(domainMappings)
-      .where(eq(domainMappings.project_id, projectId))
+      .where(eq(domainMappings.service_id, projectIdToServiceId(projectId)))
       .all() as DomainMappingRow[];
   }
 
+  /**
+   * List domain mappings with project name resolved via services -> projects join.
+   */
   listDomainMappings(): DomainMappingRow[] {
     return this.db
       .select({
         id: domainMappings.id,
-        project_id: domainMappings.project_id,
+        service_id: domainMappings.service_id,
         domain: domainMappings.domain,
         cloudflare_zone_id: domainMappings.cloudflare_zone_id,
         cloudflare_dns_record_id: domainMappings.cloudflare_dns_record_id,
@@ -52,7 +64,8 @@ export class DomainMappingRepo {
         project_name: projects.name,
       })
       .from(domainMappings)
-      .innerJoin(projects, eq(domainMappings.project_id, projects.id))
+      .innerJoin(services, eq(domainMappings.service_id, services.id))
+      .innerJoin(projects, eq(services.project_id, projects.id))
       .orderBy(desc(domainMappings.created_at))
       .all() as DomainMappingRow[];
   }

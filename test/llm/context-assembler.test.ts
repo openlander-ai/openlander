@@ -165,6 +165,7 @@ describe('context-assembler', () => {
       const incidents: RuntimeIncidentRow[] = [
         {
           id: 'inc-1',
+          service_id: 'proj-1',
           project_id: 'proj-1',
           category: 'crash',
           error_snippet: 'Out of memory',

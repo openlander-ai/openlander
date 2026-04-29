@@ -42,15 +42,13 @@ describe('migration 0009 — up + seed conservation', () => {
     sqlite.close();
   });
 
-  it('post-0009: a fresh insert into projects appears in services via the auto-derived id', () => {
-    // Insert through the legacy projects shape (P1 back-compat retains all
-    // legacy columns). The auto-derived service is created by the repo
-    // layer in a follow-up patch; here we just assert the schema accepts
-    // the insert and the FK round-trip works.
+  it('post-0012: a fresh insert into projects + services passes FK check', () => {
+    // Post-0012 (Phase G): projects table is group-only (no source/status/etc).
+    // Insert uses only the surviving group columns.
     sqlite
       .prepare(
-        `INSERT INTO projects (id, name, repo_url, branch, source)
-         VALUES ('rt-1', 'rt-app', 'https://x/y', 'main', 'git')`,
+        `INSERT INTO projects (id, name, repo_url, branch)
+         VALUES ('rt-1', 'rt-app', 'https://x/y', 'main')`,
       )
       .run();
     sqlite
@@ -64,11 +62,12 @@ describe('migration 0009 — up + seed conservation', () => {
     expect(violations).toEqual([]);
   });
 
-  it('post-0009: foreign_key_check passes for an env_vars row pointing at a group', () => {
+  it('post-0012: foreign_key_check passes for an env_vars row pointing at a group', () => {
+    // Post-0012: projects no longer has `source` column.
     sqlite
       .prepare(
-        `INSERT INTO projects (id, name, repo_url, branch, source)
-         VALUES ('rt-2', 'rt-app2', 'https://x/y', 'main', 'git')`,
+        `INSERT INTO projects (id, name, repo_url, branch)
+         VALUES ('rt-2', 'rt-app2', 'https://x/y', 'main')`,
       )
       .run();
     sqlite

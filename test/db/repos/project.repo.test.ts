@@ -80,7 +80,14 @@ describe('ProjectRepo - Archive', () => {
 
     it('throws when project status is building', () => {
       createTestProject();
-      repo.updateProject('proj-1', { status: 'building' });
+      // Post-0012: 'building' state lives on environments (services schema only
+      // allows running|stopped|error). Set a building environment to trigger
+      // the archiveProject guard.
+      const envRepo = new EnvironmentRepo(
+        (repo as unknown as { db: Parameters<typeof EnvironmentRepo>[0] }).db,
+        sqlite,
+      );
+      envRepo.createEnvironment({ id: 'proj-1-prod', projectId: 'proj-1', type: 'production', branch: 'main', status: 'building' });
 
       expect(() => repo.archiveProject('proj-1')).toThrow(
         'Cannot archive a project that is currently building',

@@ -103,7 +103,7 @@ export function createMonitoringRoutes(ctx: AppContext): Hono {
     for (const svc of allServices) {
       const conns = ctx.db.listServiceConnectionsByService(svc.id);
       const first = conns[0];
-      if (first) projectIdByService.set(svc.id, first.project_id);
+      if (first) projectIdByService.set(svc.id, first.service_id_consumer);
     }
 
     const now = Date.now();
@@ -139,8 +139,8 @@ export function createMonitoringRoutes(ctx: AppContext): Hono {
         projectId,
         projectName: projectId ? (projectNameById.get(projectId) ?? null) : null,
         name: svc.name,
-        status: svc.status,
-        health: deriveHealth(svc.status),
+        status: svc.status ?? 'unknown',
+        health: deriveHealth(svc.status ?? 'unknown'),
         cpu60,
         mem60,
         lastSampleAt,

@@ -18,7 +18,7 @@ export class StreamOps {
         tail,
         follow: false,
       });
-      const buffer = Buffer.isBuffer(logs) ? logs : Buffer.from(logs as string);
+      const buffer = Buffer.isBuffer(logs) ? logs : Buffer.from(logs);
       return stripDockerStreamHeaders(buffer);
     } catch (error) {
       if (isDockerNotFoundError(error)) {
@@ -35,12 +35,12 @@ export class StreamOps {
     opts?: { tail?: number; stdout?: boolean; stderr?: boolean },
   ): Promise<NodeJS.ReadableStream> {
     const container = this.ctx.client.getContainer(containerId);
-    return (await container.logs({
+    return await container.logs({
       follow: true,
       stdout: opts?.stdout ?? true,
       stderr: opts?.stderr ?? true,
       tail: opts?.tail ?? 50,
-    })) as unknown as NodeJS.ReadableStream;
+    });
   }
 
   /** Get Docker daemon event stream for real-time container events. */

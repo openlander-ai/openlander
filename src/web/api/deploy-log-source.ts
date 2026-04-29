@@ -33,7 +33,7 @@ export function resolveDeploymentLogSource(
 ): { project: ProjectRow; deployLog: DeployLogRow | null } | null {
   const deployLog = ctx.db.getDeployLog(id) ?? null;
   if (deployLog) {
-    const project = ctx.db.getProject(deployLog.project_id);
+    const project = ctx.db.getProject(deployLog.project_id ?? '');
     if (!project) return null;
     return { project, deployLog };
   }

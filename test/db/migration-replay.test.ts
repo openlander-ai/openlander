@@ -212,8 +212,8 @@ describe('migration idempotency and safety (0003/0004/0005)', () => {
       runFullMigration(drizzle, sqlite);
       runFullMigration(drizzle, sqlite); // second run
 
-      // 12 = 0000..0011 (full split + cleanup + FK re-point)
-      expect(migrationRowCount(sqlite)).toBe(12);
+      // 13 = 0000..0012 (full split + cleanup + FK re-point + schema-split GA)
+      expect(migrationRowCount(sqlite)).toBe(13);
     });
 
     it('table set is identical before and after re-applying all migrations', () => {
@@ -313,8 +313,8 @@ describe('migration idempotency and safety (0003/0004/0005)', () => {
       applyBaseline0to2(sqlite);
       runFullMigration(drizzle, sqlite);
 
-      // 12 = 0000..0011 (full split + cleanup + FK re-point)
-      expect(migrationRowCount(sqlite)).toBe(12);
+      // 13 = 0000..0012 (full split + cleanup + FK re-point + schema-split GA)
+      expect(migrationRowCount(sqlite)).toBe(13);
     });
   });
 

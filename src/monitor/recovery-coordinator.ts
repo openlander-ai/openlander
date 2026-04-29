@@ -38,7 +38,7 @@ type EligibilityReason = CoordinatorEligibilityReason | PolicyEligibilityReason;
 
 interface ProjectSnapshot {
   name: string;
-  status: string;
+  status?: string | null;
   archived_at: string | null;
   container_id: string | null;
   deploy_lock_session: string | null;
@@ -238,11 +238,11 @@ export class RecoveryCoordinator {
     // already have transitioned the project; recovery_in_progress handled by policy).
     if (trigger === 'continue_check') {
       if (status !== 'running' && status !== 'recovering') {
-        return { eligible: false, reason: `status_${status}` };
+        return { eligible: false, reason: `status_${status ?? 'unknown'}` };
       }
     } else {
       if (status !== 'running' && status !== 'error') {
-        return { eligible: false, reason: `status_${status}` };
+        return { eligible: false, reason: `status_${status ?? 'unknown'}` };
       }
     }
 

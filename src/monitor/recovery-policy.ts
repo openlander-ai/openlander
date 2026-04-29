@@ -55,7 +55,7 @@ export interface RecoveryEligibilityResult {
 export interface RecoveryProjectSnapshot {
   id?: string;
   name?: string;
-  status: string;
+  status?: string | null;
   archived_at: string | null;
   deploy_lock_session: string | null;
   deploy_lock_at: string | null;
@@ -142,7 +142,7 @@ export function checkRecoveryEligibility(
       return {
         eligible: false,
         reason: 'recovering_in_progress',
-        message: `Project is in status ${status}, cannot continue recovery`,
+        message: `Project is in status ${status ?? 'unknown'}, cannot continue recovery`,
       };
     }
   }

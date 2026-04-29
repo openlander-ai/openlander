@@ -194,6 +194,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const mappings = ctx.db.listDomainMappings();
     const projectDomains = new Map<string, { projectName: string; domains: string[] }>();
     for (const mapping of mappings) {
+      if (!mapping.project_id) continue;
       const existing = projectDomains.get(mapping.project_id);
       if (existing) {
         existing.domains.push(mapping.domain);

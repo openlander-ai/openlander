@@ -5,6 +5,15 @@ import { runtimeIncidents } from '../schema.drizzle.js';
 import type { RuntimeIncidentRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
 
+/**
+ * Post-0012: runtime_incidents is service-scoped. Callers still pass
+ * `projectId` for vocabulary continuity; the repo translates to the
+ * canonical deployable service id.
+ */
+function projectIdToServiceId(projectId: string): string {
+  return projectId.endsWith('__svc') ? projectId : `${projectId}__svc`;
+}
+
 export class RuntimeIncidentRepo {
   constructor(
     private readonly db: DrizzleClient,
@@ -30,7 +39,7 @@ export class RuntimeIncidentRepo {
       .insert(runtimeIncidents)
       .values({
         id,
-        project_id: opts.projectId,
+        service_id: projectIdToServiceId(opts.projectId),
         environment_id: opts.environmentId ?? null,
         category: opts.category,
         exit_code: opts.exitCode ?? null,
@@ -48,9 +57,12 @@ export class RuntimeIncidentRepo {
   }
 
   getIncident(id: string): RuntimeIncidentRow | undefined {
-    return this.db.select().from(runtimeIncidents).where(eq(runtimeIncidents.id, id)).get() as
+    const row = this.db.select().from(runtimeIncidents).where(eq(runtimeIncidents.id, id)).get() as
       | RuntimeIncidentRow
       | undefined;
+    if (!row) return undefined;
+    // Back-compat: hydrate deprecated project_id from service_id (strip __svc).
+    return { ...row, project_id: row.service_id.replace(/__svc$/, '') };
   }
 
   /** @param _serverId - Reserved for future server-side filtering. Currently ignored. */
@@ -59,13 +71,14 @@ export class RuntimeIncidentRepo {
     opts?: { resolved?: boolean },
     _serverId?: string,
   ): RuntimeIncidentRow[] {
+    const serviceId = projectIdToServiceId(projectId);
     if (opts?.resolved === undefined) {
       return this.db
         .select()
         .from(runtimeIncidents)
-        .where(eq(runtimeIncidents.project_id, projectId))
+        .where(eq(runtimeIncidents.service_id, serviceId))
         .orderBy(desc(runtimeIncidents.created_at))
-        .all() as RuntimeIncidentRow[];
+        .all();
     }
 
     return this.db
@@ -73,12 +86,12 @@ export class RuntimeIncidentRepo {
       .from(runtimeIncidents)
       .where(
         and(
-          eq(runtimeIncidents.project_id, projectId),
+          eq(runtimeIncidents.service_id, serviceId),
           eq(runtimeIncidents.resolved, opts.resolved ? 1 : 0),
         ),
       )
       .orderBy(desc(runtimeIncidents.created_at))
-      .all() as RuntimeIncidentRow[];
+      .all();
   }
 
   listUnresolved(): RuntimeIncidentRow[] {
@@ -87,7 +100,7 @@ export class RuntimeIncidentRepo {
       .from(runtimeIncidents)
       .where(eq(runtimeIncidents.resolved, 0))
       .orderBy(desc(runtimeIncidents.created_at))
-      .all() as RuntimeIncidentRow[];
+      .all();
   }
 
   /**
@@ -102,7 +115,7 @@ export class RuntimeIncidentRepo {
       .where(eq(runtimeIncidents.resolved, 1))
       .orderBy(desc(runtimeIncidents.resolved_at))
       .limit(limit)
-      .all() as RuntimeIncidentRow[];
+      .all();
   }
 
   resolveIncident(id: string): void {

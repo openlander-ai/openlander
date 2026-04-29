@@ -93,14 +93,16 @@ export function autoInjectServiceEnv(params: {
 
   const existingConnections = params.db.listServiceConnectionsByProject(params.projectId);
   const hasSameTypeConnection = existingConnections.some((connection) => {
-    if (connection.service_id === params.serviceId) {
+    if (connection.service_id_provider === params.serviceId) {
       return false;
     }
-    const connectedService = params.db.getService(connection.service_id);
+    const connectedService = params.db.getService(connection.service_id_provider);
     if (!connectedService) {
       return false;
     }
-    return normalizeServiceType(connectedService.type) === normalizeServiceType(params.serviceType);
+    // Post-0012: `type` column dropped; `kind` holds the canonical service type.
+    const svcType = connectedService.kind;
+    return normalizeServiceType(svcType) === normalizeServiceType(params.serviceType);
   });
 
   const envKey = hasSameTypeConnection

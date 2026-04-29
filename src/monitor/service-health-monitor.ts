@@ -124,7 +124,7 @@ export class ServiceHealthMonitor {
   }
 
   async checkService(service: ServiceRow): Promise<ServiceCheckResult> {
-    const containerRef = service.container_id ?? service.container_name;
+    const containerRef = service.container_id ?? service.container_name ?? '';
 
     try {
       const info = await this.docker.inspectContainer(containerRef);
@@ -142,7 +142,7 @@ export class ServiceHealthMonitor {
 
   private async runServiceCheck(service: ServiceRow): Promise<void> {
     // Filter ensures container_id is not null, but we keep the fallback for defensive safety
-    const containerRef = service.container_id ?? service.container_name;
+    const containerRef = service.container_id ?? service.container_name ?? '';
 
     try {
       const info = await this.docker.inspectContainer(containerRef);
@@ -150,8 +150,8 @@ export class ServiceHealthMonitor {
       if (!info.State.Running) {
         if (service.status === 'running') {
           this.db.updateService(service.id, { status: 'stopped' });
-          const projects = this.db.listServiceConnectionsByService(service.id);
-          const affectedProjects = [...new Set(projects.map((project) => project.project_id))];
+          const conns = this.db.listServiceConnectionsByService(service.id);
+          const affectedProjects = [...new Set(conns.map((c) => c.service_id_consumer))];
 
           this.recordServiceDownIncident(service, affectedProjects);
 
@@ -226,9 +226,9 @@ export class ServiceHealthMonitor {
           );
           // Record incident only on transition (status was 'running' before)
           if (service.status === 'running') {
-            const projects = this.db.listServiceConnectionsByService(service.id);
-            const affectedProjects = [...new Set(projects.map((p) => p.project_id))];
-            this.recordServiceDownIncident(service, affectedProjects);
+            const conns2 = this.db.listServiceConnectionsByService(service.id);
+            const affectedProjects2 = [...new Set(conns2.map((c) => c.service_id_consumer))];
+            this.recordServiceDownIncident(service, affectedProjects2);
           }
         }
         return;
@@ -250,10 +250,10 @@ export class ServiceHealthMonitor {
       }
 
       this.db.updateService(service.id, { status: 'error' });
-      const projects = this.db.listServiceConnectionsByService(service.id);
-      const affectedProjects = [...new Set(projects.map((project) => project.project_id))];
+      const conns3 = this.db.listServiceConnectionsByService(service.id);
+      const affectedProjects3 = [...new Set(conns3.map((c) => c.service_id_consumer))];
 
-      this.recordServiceDownIncident(service, affectedProjects);
+      this.recordServiceDownIncident(service, affectedProjects3);
     }
   }
 
@@ -264,7 +264,7 @@ export class ServiceHealthMonitor {
         category: 'service_down',
         errorSnippet: JSON.stringify({
           serviceName: service.name,
-          serviceType: service.kind ?? 'unknown',
+          serviceType: service.kind,
           affectedProjects,
         }),
       });

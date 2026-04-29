@@ -84,27 +84,27 @@ describe('migration 0009 smoke (empty DB)', () => {
     expect(phaseC.cnt).toBeGreaterThanOrEqual(1);
   });
 
-  it('new projects table has group columns plus retained legacy columns (P1 back-compat)', () => {
+  it('new projects table has group columns (post-0012: deployable cols moved to services)', () => {
     const cols = new Set(getColumnNames(sqlite, 'projects'));
-    // Plan §6.2 group-only columns
+    // Plan §6.2 group-only columns — these survive through 0012
     for (const c of ['id', 'name', 'repo_url', 'branch', 'archived_at', 'created_at',
                      'updated_at', 'server_id']) {
       expect(cols.has(c)).toBe(true);
     }
-    // P1 back-compat retained from legacy projects shape (deprecated; trimmed
-    // post-P3). Plan §6.5 backward-compat helper note.
+    // Post-0012 (Phase G): all 25 deployable/legacy cols dropped from projects.
+    // These were P1 back-compat in 0009 but are gone after 0012.
     for (const c of ['status', 'assigned_port', 'parent_project_id', 'build_method']) {
-      expect(cols.has(c)).toBe(true);
+      expect(cols.has(c)).toBe(false);
     }
   });
 
-  it('new services table has the unified deployable+managed shape', () => {
+  it('new services table has the unified deployable+managed shape (post-0012)', () => {
     const cols = new Set(getColumnNames(sqlite, 'services'));
     // Required core
     for (const c of ['id', 'project_id', 'name', 'kind', 'parent_service_id']) {
       expect(cols.has(c)).toBe(true);
     }
-    // Deployable-specific
+    // Deployable-specific columns — survive 0012
     for (const c of [
       'status',
       'assigned_port',
@@ -121,13 +121,15 @@ describe('migration 0009 smoke (empty DB)', () => {
     ]) {
       expect(cols.has(c)).toBe(true);
     }
-    // Legacy managed-only columns retained for P1 back-compat
-    for (const c of ['type', 'image', 'port', 'env_vars', 'credentials']) {
-      expect(cols.has(c)).toBe(true);
+    // credentials survives through 1.0 per ADR.
+    expect(cols.has('credentials')).toBe(true);
+    // Post-0012 (Phase C): legacy managed-only cols dropped from services.
+    for (const c of ['type', 'image', 'port', 'env_vars']) {
+      expect(cols.has(c)).toBe(false);
     }
   });
 
-  it('FK Phase F: 11 tables receive their column changes (additive)', () => {
+  it('FK Phase F+0012: per-deployable tables use service_id; connections/deps fully rebuilt', () => {
     expect(getColumnNames(sqlite, 'environments')).toContain('service_id');
     expect(getColumnNames(sqlite, 'env_vars')).toContain('service_id');
     expect(getColumnNames(sqlite, 'deploy_logs')).toContain('service_id');
@@ -135,21 +137,25 @@ describe('migration 0009 smoke (empty DB)', () => {
     expect(getColumnNames(sqlite, 'runtime_incidents')).toContain('service_id');
     expect(getColumnNames(sqlite, 'deploy_configs')).toContain('service_id');
     expect(getColumnNames(sqlite, 'service_ops_overrides')).toContain('service_id');
-    // service_connections: ADD service_id_app/service_id_db alongside
-    // legacy project_id/service_id (P1 back-compat).
+    // service_connections: post-0012 Phase D renamed service_id_app/db →
+    // service_id_consumer/provider; legacy project_id/service_id/service_id_app/
+    // service_id_db all dropped.
     const scCols = new Set(getColumnNames(sqlite, 'service_connections'));
-    expect(scCols.has('service_id_app')).toBe(true);
-    expect(scCols.has('service_id_db')).toBe(true);
-    expect(scCols.has('project_id')).toBe(true);
-    expect(scCols.has('service_id')).toBe(true);
-    // project_dependencies: ADD source_service_id/target_managed_service_id
-    // alongside legacy source_project_id/target_project_id/target_service_id.
+    expect(scCols.has('service_id_consumer')).toBe(true);
+    expect(scCols.has('service_id_provider')).toBe(true);
+    expect(scCols.has('service_id_app')).toBe(false);
+    expect(scCols.has('service_id_db')).toBe(false);
+    expect(scCols.has('project_id')).toBe(false);
+    expect(scCols.has('service_id')).toBe(false);
+    // project_dependencies: post-0012 Phase E promoted source_service_id,
+    // renamed target_managed_service_id → target_service_id; legacy
+    // source_project_id/target_project_id/target_managed_service_id all dropped.
     const pdCols = new Set(getColumnNames(sqlite, 'project_dependencies'));
     expect(pdCols.has('source_service_id')).toBe(true);
-    expect(pdCols.has('target_managed_service_id')).toBe(true);
-    expect(pdCols.has('source_project_id')).toBe(true);
-    expect(pdCols.has('target_project_id')).toBe(true);
     expect(pdCols.has('target_service_id')).toBe(true);
+    expect(pdCols.has('target_managed_service_id')).toBe(false);
+    expect(pdCols.has('source_project_id')).toBe(false);
+    expect(pdCols.has('target_project_id')).toBe(false);
   });
 
   it('foreign_key_check returns no violations on the migrated empty DB', () => {

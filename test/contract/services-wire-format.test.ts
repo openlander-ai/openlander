@@ -257,16 +257,17 @@ describe('PR 2.5 — services wire-format stability (HTTP)', () => {
     expect(svc.port).toBe(5432);
   });
 
-  it('createService repo writes both legacy and canonical columns', () => {
+  it('createService repo writes canonical columns (post-0012: type/image/port dropped)', () => {
     const svc = db.getService(serviceId);
     expect(svc).toBeDefined();
-    // Canonical columns must be populated at write time
+    // Canonical columns populated at write time — source of truth post-0012
     expect(svc!.kind).toBe('postgres');
     expect(svc!.image_url).toBe('postgres:17-alpine');
     expect(svc!.assigned_port).toBe(5432);
-    // Legacy columns also still present (for 0012 Phase C backward compat)
-    expect(svc!.type).toBe('postgres');
-    expect(svc!.image).toBe('postgres:17-alpine');
-    expect(svc!.port).toBe(5432);
+    // Post-0012 Phase C: legacy type/image/port columns dropped from services.
+    // These are now undefined (column gone from schema).
+    expect(svc!.type).toBeUndefined();
+    expect(svc!.image).toBeUndefined();
+    expect(svc!.port).toBeUndefined();
   });
 });

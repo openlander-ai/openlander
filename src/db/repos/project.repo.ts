@@ -1,17 +1,4 @@
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  exists,
-  inArray,
-  isNotNull,
-  isNull,
-  ne,
-  or,
-  sql,
-} from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import {
   OpenLanderError,
   ProjectAlreadyExistsError,
@@ -22,7 +9,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { buildSetValues } from '../helpers.js';
 import { environments, projects, services } from '../schema.drizzle.js';
-import type { EnvironmentRow, PendingFixRow, ProjectRow } from '../types.js';
+import type { EnvironmentRow, PendingFixRow, ProjectRow, ServiceRow } from '../types.js';
 
 /**
  * Project row plus pre-fetched derived metadata, to let callers render lists
@@ -32,7 +19,7 @@ import type { EnvironmentRow, PendingFixRow, ProjectRow } from '../types.js';
 export interface ProjectWithMetadata {
   project: ProjectRow;
   environments: EnvironmentRow[];
-  /** Number of child projects (for compose parents). 0 means non-parent. */
+  /** Number of child services (compose-children) under this group. */
   childCount: number;
 }
 
@@ -60,8 +47,8 @@ export class ProjectRepo {
     dockerfilePath?: string;
     dockerTarget?: string;
     buildContext?: string;
-    buildMethod?: ProjectRow['build_method'];
-    source?: ProjectRow['source'];
+    buildMethod?: 'dockerfile' | 'compose' | null;
+    source?: 'git' | 'image';
     imageUrl?: string;
     imageCmd?: string[];
     containerPort?: number;
@@ -83,6 +70,8 @@ export class ProjectRepo {
     }
 
     try {
+      // Post-0012: projects table is group-only; deployable runtime fields
+      // live on the canonical services row inserted below.
       this.db
         .insert(projects)
         .values({
@@ -90,23 +79,14 @@ export class ProjectRepo {
           name: project.name,
           repo_url: project.repoUrl,
           branch: project.branch ?? 'main',
-          parent_project_id: parentProjectId,
-          dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
-          docker_target: project.dockerTarget ?? null,
-          build_context: project.buildContext ?? null,
-          build_method: buildMethod,
-          source,
-          image_url: project.imageUrl ?? null,
-          image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
-          container_port: project.containerPort ?? null,
         })
         .run();
 
-      // Insert backing service row mirroring 0009 Phase D convention.
+      // Insert backing service row.
       // - Standalone / compose-parent: project_id = self id.
       // - Compose-child: project_id = parent group id.
-      // The id || '__svc' convention is required by the listProjects EXISTS
-      // subquery and the schema comment at environments.service_id.
+      // The id || '__svc' convention is used by getDeployableForProject and
+      // related canonical-resolution helpers across the codebase.
       this.db
         .insert(services)
         .values({
@@ -115,6 +95,8 @@ export class ProjectRepo {
           name: `${project.name}__svc`,
           kind,
           parent_service_id: parentProjectId ? `${parentProjectId}__svc` : null,
+          status: 'stopped',
+          visibility: 'internal',
           source,
           build_method: buildMethod,
           dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
@@ -139,42 +121,89 @@ export class ProjectRepo {
     return created;
   }
 
+  /**
+   * Merges the canonical `${id}__svc` service row's deployable fields back
+   * onto the ProjectRow for backward-compat. All 25 columns dropped in 0012
+   * Phase G are re-populated from the services table so existing callers that
+   * read `project.status`, `project.visibility`, etc. continue to work.
+   */
+  private hydrateDeployable(row: ProjectRow): ProjectRow {
+    const svc = this.db
+      .select()
+      .from(services)
+      .where(eq(services.id, `${row.id}__svc`))
+      .get() as ServiceRow | undefined;
+    if (!svc) return row;
+    return {
+      ...row,
+      status: svc.status,
+      visibility: svc.visibility,
+      assigned_port: svc.assigned_port,
+      container_id: svc.container_id,
+      image_tag: svc.image_tag,
+      previous_image_tag: svc.previous_image_tag,
+      public_url: svc.public_url,
+      dockerfile_path: svc.dockerfile_path,
+      docker_target: svc.docker_target,
+      build_context: svc.build_context,
+      build_method: svc.build_method,
+      source: svc.source as ProjectRow['source'],
+      image_url: svc.image_url,
+      image_cmd: svc.image_cmd,
+      container_port: svc.container_port,
+      pending_fix: svc.pending_fix,
+      access_code: svc.access_code,
+      access_code_iv: svc.access_code_iv,
+      is_preview: svc.is_preview as ProjectRow['is_preview'],
+      pr_number: svc.pr_number,
+      project_type: svc.project_type,
+      health_check_strategy: svc.health_check_strategy,
+      health_check_path: svc.health_check_path,
+      recovering_started_at: svc.recovering_started_at,
+      // Derive parent_project_id from parent_service_id (strip __svc suffix).
+      parent_project_id: svc.parent_service_id ? svc.parent_service_id.replace(/__svc$/, '') : null,
+    };
+  }
+
   getProject(id: string): ProjectRow | undefined {
-    return this.db.select().from(projects).where(eq(projects.id, id)).get() as
+    const row = this.db.select().from(projects).where(eq(projects.id, id)).get() as
       | ProjectRow
       | undefined;
+    if (!row) return undefined;
+    return this.hydrateDeployable(row);
   }
 
   getProjectByName(name: string): ProjectRow | undefined {
-    return this.db.select().from(projects).where(eq(projects.name, name)).get() as
+    const row = this.db.select().from(projects).where(eq(projects.name, name)).get() as
       | ProjectRow
       | undefined;
+    if (!row) return undefined;
+    return this.hydrateDeployable(row);
   }
 
-  /** @param _serverId - Reserved for future server-side filtering. Currently ignored. */
+  /**
+   * Post-0012: projects has no `status` column; the optional status filter
+   * scopes to services.status of the group's deployable rows. Compose-child
+   * services are excluded from the predicate (they share their parent group
+   * but represent inner deployables).
+   *
+   * @param _serverId - Reserved for future server-side filtering. Currently ignored.
+   */
   listProjects(
-    status?: ProjectRow['status'],
+    status?: 'running' | 'stopped' | 'building' | 'error' | 'recovering' | null,
     opts?: { includeArchived?: boolean },
     _serverId?: string,
   ): ProjectRow[] {
-    // Always exclude the synthesized __orphan_managed group (post-0009).
     const conditions = [
       ne(projects.id, ORPHAN_MANAGED_GROUP_ID),
-      // Transitional: only return projects with at least one non-compose-child service.
-      // Compose-child rows in `projects` are 0011 reconstructions kept for FK integrity;
-      // 0012 Phase F deletes them and this exists() becomes redundant.
-      // See .omc/plans/ralplan-data-model-A-completion.md (Principle 3, PR 5 cleanup).
-      exists(
-        this.db
-          .select({ one: sql<number>`1` })
-          .from(services)
-          .where(and(eq(services.project_id, projects.id), ne(services.kind, 'compose-child'))),
-      ),
+      // Post-0012: exclude compose-child project rows (their service has kind
+      // 'compose-child' and project_id = parent group id, NOT their own id).
+      // Guard: only keep projects whose OWN service (id = projects.id || '__svc')
+      // is NOT a compose-child. Compose-children have no service row with
+      // project_id = their own id that is non-compose-child.
+      sql`NOT EXISTS (SELECT 1 FROM services s WHERE s.id = (${projects.id} || '__svc') AND s.kind = 'compose-child')`,
     ];
     if (status) {
-      // PR 4.5: filter by canonical services status so this predicate survives
-      // migration 0012 dropping projects.status. Semantics are identical today
-      // (updateProject dual-write keeps both columns in sync).
       conditions.push(
         sql`EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND s.kind != 'compose-child' AND s.status = ${status})`,
       );
@@ -182,25 +211,65 @@ export class ProjectRepo {
     if (!opts?.includeArchived) {
       conditions.push(isNull(projects.archived_at));
     }
-    return this.db
+    const rows = this.db
       .select()
       .from(projects)
       .where(and(...conditions))
       .orderBy(desc(projects.updated_at))
       .all() as ProjectRow[];
+    if (rows.length === 0) return rows;
+    // Batch-hydrate deployable fields from the canonical __svc service rows.
+    const svcIds = rows.map((r) => `${r.id}__svc`);
+    const svcRows = this.db
+      .select()
+      .from(services)
+      .where(inArray(services.id, svcIds))
+      .all() as ServiceRow[];
+    const svcById = new Map<string, ServiceRow>();
+    for (const s of svcRows) svcById.set(s.id, s);
+    return rows.map((row) => {
+      const svc = svcById.get(`${row.id}__svc`);
+      if (!svc) return row;
+      return {
+        ...row,
+        status: svc.status,
+        visibility: svc.visibility,
+        assigned_port: svc.assigned_port,
+        container_id: svc.container_id,
+        image_tag: svc.image_tag,
+        previous_image_tag: svc.previous_image_tag,
+        public_url: svc.public_url,
+        dockerfile_path: svc.dockerfile_path,
+        docker_target: svc.docker_target,
+        build_context: svc.build_context,
+        build_method: svc.build_method,
+        source: svc.source as ProjectRow['source'],
+        image_url: svc.image_url,
+        image_cmd: svc.image_cmd,
+        container_port: svc.container_port,
+        pending_fix: svc.pending_fix,
+        access_code: svc.access_code,
+        access_code_iv: svc.access_code_iv,
+        is_preview: svc.is_preview as ProjectRow['is_preview'],
+        pr_number: svc.pr_number,
+        project_type: svc.project_type,
+        health_check_strategy: svc.health_check_strategy,
+        health_check_path: svc.health_check_path,
+        recovering_started_at: svc.recovering_started_at,
+        parent_project_id: svc.parent_service_id
+          ? svc.parent_service_id.replace(/__svc$/, '')
+          : null,
+      };
+    });
   }
 
   /**
    * Batch fetch projects + their environments + child counts in a single
    * pass over the projects table and at most two follow-up queries
    * (one for environments, one for child counts) keyed by project id.
-   *
-   * Replaces the per-row N+1 pattern in /api/projects (one query per project
-   * for environments, isParentProject, and getChildProjects) with O(3)
-   * queries total. See ListProjectsWithMetadata test for the contract.
    */
   listProjectsWithMetadata(
-    status?: ProjectRow['status'],
+    status?: 'running' | 'stopped' | 'building' | 'error' | 'recovering' | null,
     opts?: { includeArchived?: boolean },
   ): ProjectWithMetadata[] {
     const projectRows = this.listProjects(status, opts);
@@ -210,30 +279,43 @@ export class ProjectRepo {
 
     const projectIds = projectRows.map((p) => p.id);
 
-    // Single query: all environments for these projects, ordered as
-    // EnvironmentRepo.getEnvironmentsByProject does so consumers see the
-    // same ordering they would have gotten before.
-    const envRows = this.db
-      .select()
-      .from(environments)
-      .where(inArray(environments.project_id, projectIds))
-      .orderBy(asc(environments.created_at))
-      .all() as EnvironmentRow[];
+    // Post-0012: environments are scoped to service_id. We pull all services
+    // belonging to these groups and then their environments.
+    const groupServices = this.db
+      .select({ id: services.id, project_id: services.project_id })
+      .from(services)
+      .where(inArray(services.project_id, projectIds))
+      .all() as Array<{ id: string; project_id: string | null }>;
+
+    const projectIdByServiceId = new Map<string, string>();
+    for (const s of groupServices) {
+      if (s.project_id) projectIdByServiceId.set(s.id, s.project_id);
+    }
+
+    const serviceIds = groupServices.map((s) => s.id);
+    const envRows =
+      serviceIds.length === 0
+        ? []
+        : (this.db
+            .select()
+            .from(environments)
+            .where(inArray(environments.service_id, serviceIds))
+            .orderBy(asc(environments.created_at))
+            .all() as EnvironmentRow[]);
 
     const envByProject = new Map<string, EnvironmentRow[]>();
     for (const env of envRows) {
-      const list = envByProject.get(env.project_id);
+      const projectId = projectIdByServiceId.get(env.service_id);
+      if (!projectId) continue;
+      const list = envByProject.get(projectId);
       if (list) {
         list.push(env);
       } else {
-        envByProject.set(env.project_id, [env]);
+        envByProject.set(projectId, [env]);
       }
     }
 
-    // Single query: compose-child service counts grouped by parent project id.
-    // PR 4 Fix 2: count compose-child rows in `services` (canonical source)
-    // instead of child project rows — after 0012 drops compose-child from
-    // `projects`, the old query would return 0 for every stack.
+    // Compose-child counts grouped by parent project id.
     const childCountRows = this.db
       .select({ parentId: services.project_id, cnt: count() })
       .from(services)
@@ -255,131 +337,125 @@ export class ProjectRepo {
     }));
   }
 
+  /**
+   * Post-0012: projects has only group-scoped fields (name, repo_url,
+   * branch). Deployable runtime fields (status, ports, container_id, etc.)
+   * are written via ServiceRepo or service-manager directly. The accepted
+   * update keys here are limited to the persisted columns on `projects`.
+   */
   updateProject(
     id: string,
     updates: Partial<{
-      status: ProjectRow['status'];
-      visibility: ProjectRow['visibility'];
-      assignedPort: number | null;
+      branch: string;
+      repoUrl: string | null;
+      // @deprecated service-scoped fields — routed to the ${id}__svc service row.
+      // These exist for backward-compat with pipeline/monitor callers that have
+      // not yet been migrated to call updateService() directly.
+      status: string;
+      visibility: string;
       containerId: string | null;
+      assignedPort: number | null;
+      imageUrl: string | null;
       imageTag: string | null;
       previousImageTag: string | null;
-      publicUrl: string | null;
-      parentProjectId: string | null;
-      dockerfilePath: string;
-      dockerTarget: string | null;
-      buildContext: string | null;
-      buildMethod: ProjectRow['build_method'];
-      source: ProjectRow['source'];
-      imageUrl: string | null;
-      imageCmd: string[] | null;
       containerPort: number | null;
-      pendingFix: string | null;
+      publicUrl: string | null;
+      source: string;
+      buildMethod: string | null;
+      buildContext: string | null;
+      dockerfilePath: string | null;
+      dockerTarget: string | null;
+      imageCmd: string | null;
+      isPreview: number | null;
+      prNumber: number | null;
       accessCode: string | null;
       accessCodeIv: string | null;
-      isPreview: 0 | 1;
-      prNumber: number | null;
-      branch: string;
-      projectType: ProjectRow['project_type'];
-      healthCheckStrategy: ProjectRow['health_check_strategy'];
-      healthCheckPath: string | null;
+      parentProjectId: string | null;
       recoveringStartedAt: string | null;
+      pendingFix: string | null;
     }>,
   ): void {
-    const setValues = buildSetValues(updates, {
-      status: 'status',
-      visibility: 'visibility',
-      assignedPort: 'assigned_port',
-      containerId: 'container_id',
-      imageTag: 'image_tag',
-      previousImageTag: 'previous_image_tag',
-      publicUrl: 'public_url',
-      parentProjectId: 'parent_project_id',
-      dockerfilePath: 'dockerfile_path',
-      dockerTarget: 'docker_target',
-      buildContext: 'build_context',
-      buildMethod: 'build_method',
-      source: 'source',
-      imageUrl: 'image_url',
-      containerPort: 'container_port',
-      pendingFix: 'pending_fix',
-      accessCode: 'access_code',
-      accessCodeIv: 'access_code_iv',
-      isPreview: 'is_preview',
-      prNumber: 'pr_number',
+    // Group-scoped fields — write to projects table.
+    const projectSetValues = buildSetValues(updates, {
       branch: 'branch',
-      projectType: 'project_type',
-      healthCheckStrategy: 'health_check_strategy',
-      healthCheckPath: 'health_check_path',
-      recoveringStartedAt: 'recovering_started_at',
+      repoUrl: 'repo_url',
     });
-    if (updates.imageCmd !== undefined) {
-      setValues.image_cmd = updates.imageCmd === null ? null : JSON.stringify(updates.imageCmd);
+    if (Object.keys(projectSetValues).length > 0) {
+      this.db
+        .update(projects)
+        .set({ ...projectSetValues, updated_at: sql`CURRENT_TIMESTAMP` })
+        .where(eq(projects.id, id))
+        .run();
     }
-    if (Object.keys(setValues).length === 0) return;
 
-    this.db
-      .update(projects)
-      .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
-      .where(eq(projects.id, id))
-      .run();
-
-    // PR 4.5 write-through: keep the canonical `services` row in sync for
-    // deployable columns until migration 0012 drops the legacy `projects`
-    // duplicates. Without this mirror, canonical-first readers (added in
-    // PR 4.5) would return stale services rows after `updateProject` calls
-    // that bypass `service-manager`. The write is a no-op when no `__svc`
-    // row exists (managed-only / pre-0009 rows). Once 0012 lands, this
-    // block becomes the only writer (PR 5 will delete the projects-table
-    // update above and drop the duplicate columns).
-    const serviceSetValues: Record<string, unknown> = {};
-    for (const [src, dst] of [
-      ['status', 'status'],
-      ['assigned_port', 'assigned_port'],
-      ['container_id', 'container_id'],
-      ['container_port', 'container_port'],
-      ['image_tag', 'image_tag'],
-      ['previous_image_tag', 'previous_image_tag'],
-      ['public_url', 'public_url'],
-      ['build_method', 'build_method'],
-      ['source', 'source'],
-      ['dockerfile_path', 'dockerfile_path'],
-      ['docker_target', 'docker_target'],
-      ['build_context', 'build_context'],
-      ['image_url', 'image_url'],
-      ['image_cmd', 'image_cmd'],
-      ['pending_fix', 'pending_fix'],
-      ['access_code', 'access_code'],
-      ['access_code_iv', 'access_code_iv'],
-      ['recovering_started_at', 'recovering_started_at'],
-    ] as const) {
-      if (src in setValues) {
-        serviceSetValues[dst] = setValues[src];
-      }
+    // Service-scoped fields — route to the canonical ${id}__svc service row.
+    const svcSetValues: Partial<typeof services.$inferInsert> = {};
+    if (updates.status !== undefined)
+      svcSetValues.status = updates.status as (typeof services.$inferInsert)['status'];
+    if (updates.visibility !== undefined) svcSetValues.visibility = updates.visibility;
+    if (updates.containerId !== undefined) svcSetValues.container_id = updates.containerId;
+    if (updates.assignedPort !== undefined) svcSetValues.assigned_port = updates.assignedPort;
+    if (updates.imageUrl !== undefined) svcSetValues.image_url = updates.imageUrl;
+    if (updates.imageTag !== undefined) svcSetValues.image_tag = updates.imageTag;
+    if (updates.previousImageTag !== undefined)
+      svcSetValues.previous_image_tag = updates.previousImageTag;
+    if (updates.containerPort !== undefined) svcSetValues.container_port = updates.containerPort;
+    if (updates.publicUrl !== undefined) svcSetValues.public_url = updates.publicUrl;
+    if (updates.source !== undefined) svcSetValues.source = updates.source;
+    if (updates.buildMethod !== undefined) svcSetValues.build_method = updates.buildMethod;
+    if (updates.buildContext !== undefined) svcSetValues.build_context = updates.buildContext;
+    if (updates.dockerfilePath !== undefined) svcSetValues.dockerfile_path = updates.dockerfilePath;
+    if (updates.dockerTarget !== undefined) svcSetValues.docker_target = updates.dockerTarget;
+    if (updates.imageCmd !== undefined) svcSetValues.image_cmd = updates.imageCmd;
+    if (updates.isPreview !== undefined) svcSetValues.is_preview = updates.isPreview;
+    if (updates.prNumber !== undefined) svcSetValues.pr_number = updates.prNumber;
+    if (updates.accessCode !== undefined) svcSetValues.access_code = updates.accessCode;
+    if (updates.accessCodeIv !== undefined) svcSetValues.access_code_iv = updates.accessCodeIv;
+    if (updates.parentProjectId !== undefined) {
+      // parentProjectId maps to parent_service_id: ${parentId}__svc convention.
+      svcSetValues.parent_service_id = updates.parentProjectId
+        ? `${updates.parentProjectId}__svc`
+        : null;
     }
-    if (Object.keys(serviceSetValues).length > 0) {
+    if (updates.recoveringStartedAt !== undefined)
+      svcSetValues.recovering_started_at = updates.recoveringStartedAt;
+    if (updates.pendingFix !== undefined) svcSetValues.pending_fix = updates.pendingFix;
+
+    if (Object.keys(svcSetValues).length > 0) {
       this.db
         .update(services)
-        .set({ ...serviceSetValues, updated_at: sql`CURRENT_TIMESTAMP` })
+        .set({ ...svcSetValues, updated_at: sql`CURRENT_TIMESTAMP` })
         .where(eq(services.id, `${id}__svc`))
         .run();
     }
   }
 
   setPendingFix(projectId: string, pendingFix: PendingFixRow): void {
-    this.updateProject(projectId, {
-      pendingFix: JSON.stringify(pendingFix),
-    });
+    // Post-0012: pending_fix is a service-row column. Persist via the
+    // canonical `<id>__svc` row.
+    this.db
+      .update(services)
+      .set({ pending_fix: JSON.stringify(pendingFix), updated_at: sql`CURRENT_TIMESTAMP` })
+      .where(eq(services.id, `${projectId}__svc`))
+      .run();
   }
 
   consumePendingFix(projectId: string): string | null {
     return this.sqlite.transaction(() => {
-      const project = this.getProject(projectId);
-      const rawPendingFix = project?.pending_fix ?? null;
+      const svc = this.db
+        .select({ pending_fix: services.pending_fix })
+        .from(services)
+        .where(eq(services.id, `${projectId}__svc`))
+        .get();
+      const rawPendingFix = svc?.pending_fix ?? null;
       if (!rawPendingFix) {
         return null;
       }
-      this.updateProject(projectId, { pendingFix: null });
+      this.db
+        .update(services)
+        .set({ pending_fix: null, updated_at: sql`CURRENT_TIMESTAMP` })
+        .where(eq(services.id, `${projectId}__svc`))
+        .run();
       return rawPendingFix;
     })();
   }
@@ -389,7 +465,16 @@ export class ProjectRepo {
     if (!project) {
       throw new ProjectNotFoundError(id);
     }
-    if (project.status === 'building') {
+    // Post-0012: check environments for building status (services table has no 'building' state;
+    // building is tracked per-environment in environments.status).
+    const buildingEnv = this.db
+      .select({ id: environments.id })
+      .from(environments)
+      .where(
+        and(eq(environments.service_id, `${id}__svc`), sql`${environments.status} = 'building'`),
+      )
+      .get();
+    if (buildingEnv) {
       throw new OpenLanderError(
         'Cannot archive a project that is currently building',
         'ARCHIVE_BUILDING_PROJECT',
@@ -398,21 +483,9 @@ export class ProjectRepo {
       );
     }
     const archivedAt = new Date().toISOString();
-    // PR 4.5 write-through: mirror archive to canonical services row so that
-    // canonical-first readers don't see stale runtime state after archiving.
-    // `services` has `archived_at` (migration 0011), so we mirror all cleared
-    // deployable columns plus archived_at. This is a no-op if the __svc row
-    // doesn't exist (pre-0009 rows).
     this.db
       .update(projects)
-      .set({
-        archived_at: archivedAt,
-        assigned_port: null,
-        container_id: null,
-        image_tag: null,
-        status: 'stopped',
-        updated_at: sql`CURRENT_TIMESTAMP`,
-      })
+      .set({ archived_at: archivedAt, updated_at: sql`CURRENT_TIMESTAMP` })
       .where(eq(projects.id, id))
       .run();
     this.db
@@ -430,15 +503,9 @@ export class ProjectRepo {
   }
 
   unarchiveProject(id: string): void {
-    // PR 4.5 write-through: mirror unarchive to canonical services row so that
-    // canonical-first readers see the correct post-unarchive state.
     this.db
       .update(projects)
-      .set({
-        archived_at: null,
-        status: 'stopped',
-        updated_at: sql`CURRENT_TIMESTAMP`,
-      })
+      .set({ archived_at: null, updated_at: sql`CURRENT_TIMESTAMP` })
       .where(eq(projects.id, id))
       .run();
     this.db
@@ -468,32 +535,64 @@ export class ProjectRepo {
   }
 
   deleteProject(id: string): void {
+    // Cascade-delete child projects whose service row is a child of this group.
+    const childSvcs = this.db
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.parent_service_id, `${id}__svc`))
+      .all() as Array<{ id: string }>;
+    for (const s of childSvcs) {
+      const childProjectId = s.id.replace(/__svc$/, '');
+      this.db.delete(projects).where(eq(projects.id, childProjectId)).run();
+    }
     this.db.delete(projects).where(eq(projects.id, id)).run();
   }
 
+  /**
+   * Post-0012: compose hierarchy lives exclusively on services.parent_service_id.
+   * Returns the legacy ProjectRow shape for the parent group of any compose-children
+   * — callers that need ProjectRow data resolve through getComposeChildProjects.
+   */
   getChildProjects(parentId: string): ProjectRow[] {
-    return this.db
-      .select()
-      .from(projects)
-      .where(eq(projects.parent_project_id, parentId))
-      .orderBy(asc(projects.name))
-      .all() as ProjectRow[];
+    // Find services whose parent_service_id = parent's __svc id.
+    // The child service id follows the ${childProjectId}__svc convention,
+    // so we strip __svc to get the child project id, then fetch + hydrate.
+    const childSvcs = this.db
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.parent_service_id, `${parentId}__svc`))
+      .orderBy(asc(services.name))
+      .all() as Array<{ id: string }>;
+    if (childSvcs.length === 0) return [];
+    const childProjectIds = childSvcs.map((s) => s.id.replace(/__svc$/, ''));
+    return childProjectIds.flatMap((cid) => {
+      const row = this.getProject(cid);
+      return row ? [row] : [];
+    });
   }
 
   getPreviewProjects(parentProjectId: string): ProjectRow[] {
-    return this.db
-      .select()
-      .from(projects)
-      .where(and(eq(projects.parent_project_id, parentProjectId), eq(projects.is_preview, 1)))
-      .orderBy(desc(projects.updated_at))
-      .all() as ProjectRow[];
+    // Post-0012: preview flag lives on the service row. Find child services
+    // with is_preview = 1 under this parent, then fetch + hydrate their project rows.
+    const previewSvcs = this.db
+      .select({ id: services.id })
+      .from(services)
+      .where(
+        and(eq(services.parent_service_id, `${parentProjectId}__svc`), eq(services.is_preview, 1)),
+      )
+      .all() as Array<{ id: string }>;
+    if (previewSvcs.length === 0) return [];
+    return previewSvcs.flatMap((s) => {
+      const row = this.getProject(s.id.replace(/__svc$/, ''));
+      return row ? [row] : [];
+    });
   }
 
   isParentProject(id: string): boolean {
     const row = this.db
       .select({ cnt: count() })
-      .from(projects)
-      .where(eq(projects.parent_project_id, id))
+      .from(services)
+      .where(eq(services.parent_service_id, `${id}__svc`))
       .get();
     return (row?.cnt ?? 0) > 0;
   }
@@ -573,9 +672,7 @@ export class ProjectRepo {
   // 1.0 GA B3: default aligned with `PROJECT_LOCK_TIMEOUT_MS` (30min in
   // `src/llm/agent-pool.ts`, 30min) so the in-memory project lock and
   // the persisted DB lock expire in the same window — also matches
-  // recovery-policy.ts:DEFAULT_LOCK_STALE_MS. Bumped 15→30 (Codex Day 16)
-  // so slow first-builds (Rails / Next.js cold start ≈ 20-25min) do not
-  // evict mid-build and reintroduce BUG-002.
+  // recovery-policy.ts:DEFAULT_LOCK_STALE_MS.
   cleanExpiredDeployLocks(timeoutMinutes = 30): number {
     this.db
       .update(projects)

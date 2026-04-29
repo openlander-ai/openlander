@@ -42,9 +42,7 @@ export class EnvVarRepo {
             eq(envVars.key, key),
           );
 
-    const existing = this.db.select({ id: envVars.id }).from(envVars).where(whereClause).get() as
-      | { id: string }
-      | undefined;
+    const existing = this.db.select({ id: envVars.id }).from(envVars).where(whereClause).get();
 
     if (existing) {
       this.db.update(envVars).set({ value }).where(eq(envVars.id, existing.id)).run();

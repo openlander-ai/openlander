@@ -21,7 +21,7 @@ export class CircuitBreakerRepo {
       .select()
       .from(circuitBreakerState)
       .where(eq(circuitBreakerState.project_id, projectId))
-      .get() as CircuitBreakerRow | undefined;
+      .get();
   }
 
   upsert(projectId: string, data: Partial<CircuitBreakerRow>): void {
@@ -166,7 +166,7 @@ export class CircuitBreakerRepo {
   }
 
   findAll(): CircuitBreakerRow[] {
-    return this.db.select().from(circuitBreakerState).all() as CircuitBreakerRow[];
+    return this.db.select().from(circuitBreakerState).all();
   }
 
   findAllOpen(): string[] {

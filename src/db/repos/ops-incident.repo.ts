@@ -42,9 +42,7 @@ export class OpsIncidentRepo {
   }
 
   findById(id: string): OpsIncidentRow | undefined {
-    return this.db.select().from(opsIncidents).where(eq(opsIncidents.id, id)).get() as
-      | OpsIncidentRow
-      | undefined;
+    return this.db.select().from(opsIncidents).where(eq(opsIncidents.id, id)).get();
   }
 
   findByProjectId(projectId: string, limit?: number): OpsIncidentRow[] {
@@ -55,10 +53,10 @@ export class OpsIncidentRepo {
       .orderBy(desc(opsIncidents.created_at));
 
     if (limit) {
-      return baseQuery.limit(limit).all() as OpsIncidentRow[];
+      return baseQuery.limit(limit).all();
     }
 
-    return baseQuery.all() as OpsIncidentRow[];
+    return baseQuery.all();
   }
 
   findActive(projectId: string): OpsIncidentRow | undefined {
@@ -72,7 +70,7 @@ export class OpsIncidentRepo {
         ),
       )
       .orderBy(desc(opsIncidents.created_at))
-      .get() as OpsIncidentRow | undefined;
+      .get();
   }
 
   findAllActive(): OpsIncidentRow[] {
@@ -81,7 +79,7 @@ export class OpsIncidentRepo {
       .from(opsIncidents)
       .where(inArray(opsIncidents.status, ['open', 'active']))
       .orderBy(desc(opsIncidents.created_at))
-      .all() as OpsIncidentRow[];
+      .all();
   }
 
   findByDateRange(from: number, to: number, searchText?: string): OpsIncidentRow[] {
@@ -99,7 +97,7 @@ export class OpsIncidentRepo {
       .from(opsIncidents)
       .where(and(...conditions))
       .orderBy(desc(opsIncidents.created_at))
-      .all() as OpsIncidentRow[];
+      .all();
   }
 
   findBySearch(searchText: string, limit?: number): OpsIncidentRow[] {
@@ -116,10 +114,10 @@ export class OpsIncidentRepo {
       .orderBy(desc(opsIncidents.created_at));
 
     if (limit) {
-      return baseQuery.limit(limit).all() as OpsIncidentRow[];
+      return baseQuery.limit(limit).all();
     }
 
-    return baseQuery.all() as OpsIncidentRow[];
+    return baseQuery.all();
   }
 
   updateStatus(
@@ -128,7 +126,7 @@ export class OpsIncidentRepo {
     extra?: { resolved_at?: number; escalated_at?: number },
   ): void {
     const setValues: Record<string, unknown> = {
-      status: status as 'open' | 'active' | 'resolved' | 'escalated',
+      status: status,
     };
     if (extra?.resolved_at !== undefined) {
       setValues.resolved_at = extra.resolved_at;
@@ -156,7 +154,7 @@ export class OpsIncidentRepo {
       'actions_taken',
     );
     if (data.status !== undefined) {
-      setValues.status = data.status as 'open' | 'active' | 'resolved' | 'escalated';
+      setValues.status = data.status;
     }
 
     if (Object.keys(setValues).length === 0) return;

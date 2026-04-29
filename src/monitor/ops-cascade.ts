@@ -56,9 +56,10 @@ export class CascadeDetector {
       for (const service of services) {
         const connections = this.ctx.db.listServiceConnectionsByService(service.id);
         for (const conn of connections) {
-          const existing = graph.get(conn.service_id) ?? [];
-          existing.push(conn.project_id);
-          graph.set(conn.service_id, existing);
+          // provider → consumers mapping (canonical post-0012 field names)
+          const existing = graph.get(conn.service_id_provider) ?? [];
+          existing.push(conn.service_id_consumer);
+          graph.set(conn.service_id_provider, existing);
         }
       }
     } catch (err) {

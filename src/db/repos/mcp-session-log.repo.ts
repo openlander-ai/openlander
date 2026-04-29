@@ -43,6 +43,6 @@ export class McpSessionLogRepo {
       .from(mcpSessionLog)
       .orderBy(desc(mcpSessionLog.disconnected_at))
       .limit(limit)
-      .all() as McpSessionLogRow[];
+      .all();
   }
 }

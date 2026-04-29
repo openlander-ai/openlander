@@ -5,6 +5,14 @@ import { environments } from '../schema.drizzle.js';
 import type { EnvironmentRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
 
+/**
+ * Post-0012: environments are service-scoped. Callers still pass `projectId`
+ * for vocabulary continuity; the repo translates to the canonical service id.
+ */
+function projectIdToServiceId(projectId: string): string {
+  return projectId.endsWith('__svc') ? projectId : `${projectId}__svc`;
+}
+
 export class EnvironmentRepo {
   constructor(
     private readonly db: DrizzleClient,
@@ -29,7 +37,7 @@ export class EnvironmentRepo {
       .insert(environments)
       .values({
         id: environment.id,
-        project_id: environment.projectId,
+        service_id: projectIdToServiceId(environment.projectId),
         type: environment.type,
         branch: environment.branch,
         status: environment.status ?? 'idle',
@@ -47,18 +55,24 @@ export class EnvironmentRepo {
   }
 
   getEnvironment(id: string): EnvironmentRow | undefined {
-    return this.db.select().from(environments).where(eq(environments.id, id)).get() as
+    const row = this.db.select().from(environments).where(eq(environments.id, id)).get() as
       | EnvironmentRow
       | undefined;
+    if (!row) return undefined;
+    // Back-compat: hydrate deprecated project_id from service_id (strip __svc).
+    return { ...row, project_id: row.service_id.replace(/__svc$/, '') };
   }
 
   getEnvironmentsByProject(projectId: string): EnvironmentRow[] {
-    return this.db
+    const rows = this.db
       .select()
       .from(environments)
-      .where(eq(environments.project_id, projectId))
+      .where(eq(environments.service_id, projectIdToServiceId(projectId)))
       .orderBy(asc(environments.created_at))
       .all() as EnvironmentRow[];
+    // Back-compat: hydrate deprecated project_id from projectId parameter so
+    // callers that read env.project_id continue to work through 1.0.
+    return rows.map((r) => ({ ...r, project_id: projectId }));
   }
 
   updateEnvironment(

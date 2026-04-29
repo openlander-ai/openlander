@@ -718,7 +718,7 @@ export class DeployPipeline {
           ? {
               source,
               imageUrl: config.imageUrl,
-              imageCmd: config.imageCmd,
+              imageCmd: config.imageCmd ? JSON.stringify(config.imageCmd) : null,
               containerPort: config.containerPort,
             }
           : {}),
@@ -727,7 +727,7 @@ export class DeployPipeline {
       this.db.updateProject(projectId, {
         source,
         imageUrl: config.imageUrl,
-        imageCmd: config.imageCmd,
+        imageCmd: config.imageCmd ? JSON.stringify(config.imageCmd) : null,
         containerPort: config.containerPort,
       });
     }
@@ -1012,7 +1012,7 @@ export class DeployPipeline {
         imageTag,
         dockerfilePath,
         previousEnvironmentImageTag: preservedPreviousTag ?? environment.image_tag,
-        previousProjectImageTag: preservedPreviousTag ?? project.image_tag,
+        previousProjectImageTag: preservedPreviousTag ?? project.image_tag ?? null,
         shouldSyncProjectState: true,
         config: deployConfig,
         buildLog,
@@ -1480,7 +1480,7 @@ export class DeployPipeline {
       const redeploySource = redeployDeployable?.source ?? project.source;
       const redeployAssignedPort = redeployDeployable?.assigned_port ?? project.assigned_port;
       const currentRunningTag = redeployImageTag;
-      let redeployPreviousTag: string | null = currentRunningTag;
+      let redeployPreviousTag: string | null = currentRunningTag ?? null;
       if (redeploySource !== 'image' && currentRunningTag) {
         if (currentRunningTag !== redeployPreviousLabel) {
           try {

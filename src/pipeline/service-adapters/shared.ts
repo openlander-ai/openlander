@@ -18,7 +18,7 @@ export async function execInServiceContainer(
   command: string[],
   options?: ExecOptions,
 ): Promise<ContainerExecResult> {
-  const containerId = service.container_id ?? service.container_name;
+  const containerId = service.container_id ?? service.container_name ?? '';
   const timeoutMs = options?.timeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS;
   const maxBytes = options?.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
 

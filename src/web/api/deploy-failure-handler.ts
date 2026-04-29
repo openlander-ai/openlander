@@ -427,7 +427,7 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
       const deployable = ctx.db.getDeployableForProject(project.id);
       const dockerfilePath = deployable?.dockerfile_path ?? project.dockerfile_path;
       const scanResult = scanRepoEnvVars(clonePath, {
-        dockerfilePath,
+        dockerfilePath: dockerfilePath ?? undefined,
       });
 
       const allStoredKeys = new Set<string>();

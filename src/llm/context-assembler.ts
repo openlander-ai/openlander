@@ -131,12 +131,13 @@ export function buildIncidentBriefing(incidents: RuntimeIncidentRow[], db: Datab
 
   const incidentsByProject = new Map<string, RuntimeIncidentRow[]>();
   for (const incident of incidents) {
-    const projectIncidents = incidentsByProject.get(incident.project_id);
+    const key = incident.service_id;
+    const projectIncidents = incidentsByProject.get(key);
     if (projectIncidents) {
       projectIncidents.push(incident);
       continue;
     }
-    incidentsByProject.set(incident.project_id, [incident]);
+    incidentsByProject.set(key, [incident]);
   }
 
   const lines: string[] = ['⚠️ Active incidents:'];
@@ -251,13 +252,13 @@ function formatProjectLine(p: ProjectRow, svc?: ServiceRow | null): string {
   // Container name follows ol-{name} naming convention (only shown when not stopped)
   const containerName = status !== 'stopped' ? ` [ol-${p.name}]` : '';
 
-  return `  ${statusIcon} ${p.name} (${status})${containerName}${url ? ` — ${url}` : ''}`;
+  return `  ${statusIcon} ${p.name} (${status ?? 'unknown'})${containerName}${url ? ` — ${url}` : ''}`;
 }
 
 function formatProjectSummary(p: ProjectRow, svc?: ServiceRow | null): string {
   const status = svc?.status ?? p.status;
   const statusIcon = status === 'running' ? '🟢' : status === 'error' ? '🔴' : '⚪';
-  return `  ${statusIcon} ${p.name} (${status})`;
+  return `  ${statusIcon} ${p.name} (${status ?? 'unknown'})`;
 }
 
 function buildGlobalProjectLines(projects: ProjectRow[], db: Database): string {

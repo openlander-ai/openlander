@@ -79,6 +79,26 @@ function applyBaselineThrough0005(sqlite: SqliteDatabase): void {
   }
 }
 
+/**
+ * Apply migration 0006 directly (statement-by-statement), not via migrate().
+ * This tests the backfill SQL in isolation without running 0009-0012 which
+ * drop `recovering_started_at` and other columns from projects in Phase G.
+ */
+function applyOnly0006(sqlite: SqliteDatabase): void {
+  sqlite.exec('PRAGMA foreign_keys = OFF');
+  try {
+    for (const stmt of readMigrationStatements('0006_compose_path_and_recovering_watchdog')) {
+      try {
+        sqlite.exec(stmt);
+      } catch {
+        // idempotent — skip already-applied
+      }
+    }
+  } finally {
+    sqlite.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
 function runFullMigration(
   drizzle: ReturnType<typeof createDrizzleDatabase>['db'],
   sqlite: SqliteDatabase,
@@ -116,8 +136,9 @@ describe('Migration 0006 — recovering_started_at backfill (Major 1)', () => {
       )
       .run();
 
-    // Apply 0006
-    runFullMigration(drizzle, sqlite);
+    // Apply only 0006 (not the full stack): 0009-0012 drop recovering_started_at
+    // from projects in Phase G, so a full migrate() would make the SELECT below fail.
+    applyOnly0006(sqlite);
 
     const row = sqlite
       .prepare('SELECT recovering_started_at FROM projects WHERE id = ?')
@@ -129,8 +150,10 @@ describe('Migration 0006 — recovering_started_at backfill (Major 1)', () => {
   });
 
   it('does NOT overwrite recovering_started_at when it is already set', () => {
-    // Apply all migrations first so the column exists
-    runFullMigration(drizzle, sqlite);
+    // Apply only through 0006 so the projects schema still has legacy columns.
+    // Post-0012 Phase G drops status/dockerfile_path/source/recovering_started_at.
+    applyBaselineThrough0005(sqlite);
+    applyOnly0006(sqlite);
 
     const explicitTimestamp = '2026-04-20T10:00:00.000Z';
     sqlite
@@ -165,7 +188,8 @@ describe('Migration 0006 — recovering_started_at backfill (Major 1)', () => {
       )
       .run();
 
-    runFullMigration(drizzle, sqlite);
+    // Apply only 0006 so the legacy columns (status, recovering_started_at) still exist.
+    applyOnly0006(sqlite);
 
     const row = sqlite
       .prepare('SELECT recovering_started_at FROM projects WHERE id = ?')
@@ -187,7 +211,8 @@ describe('Migration 0006 — recovering_started_at backfill (Major 1)', () => {
       )
       .run();
 
-    runFullMigration(drizzle, sqlite);
+    // Apply only 0006 so the legacy columns (status, recovering_started_at) still exist.
+    applyOnly0006(sqlite);
 
     const rows = sqlite
       .prepare('SELECT id, recovering_started_at FROM projects ORDER BY id')

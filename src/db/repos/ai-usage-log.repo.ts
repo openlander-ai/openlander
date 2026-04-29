@@ -62,7 +62,7 @@ export class AiUsageLogRepo {
       .from(aiUsageLog)
       .where(eq(aiUsageLog.project_id, projectId))
       .orderBy(desc(aiUsageLog.created_at))
-      .all() as AiUsageLogRow[];
+      .all();
   }
 
   /**
@@ -77,7 +77,7 @@ export class AiUsageLogRepo {
       .from(aiUsageLog)
       .where(and(gte(aiUsageLog.created_at, fromIso), lte(aiUsageLog.created_at, toIso)))
       .orderBy(desc(aiUsageLog.created_at))
-      .all() as AiUsageLogRow[];
+      .all();
   }
 
   findRecent(opts: { limit: number } & AiUsageLogFilterOptions): AiUsageLogRow[] {
@@ -89,7 +89,7 @@ export class AiUsageLogRepo {
       .where(whereClause)
       .orderBy(desc(aiUsageLog.created_at))
       .limit(opts.limit)
-      .all() as AiUsageLogRow[];
+      .all();
   }
 
   countAll(opts?: AiUsageLogFilterOptions): number {
@@ -98,7 +98,7 @@ export class AiUsageLogRepo {
       .select({ count: sql<number>`COUNT(*)` })
       .from(aiUsageLog)
       .where(whereClause)
-      .get() as { count: number } | undefined;
+      .get();
 
     return row?.count ?? 0;
   }
@@ -123,13 +123,7 @@ export class AiUsageLogRepo {
       })
       .from(aiUsageLog)
       .where(whereClause)
-      .get() as
-      | {
-          totalInputTokens: number;
-          totalOutputTokens: number;
-          totalCostUsd: number | null;
-        }
-      | undefined;
+      .get();
 
     return {
       totalInputTokens: result?.totalInputTokens ?? 0,
@@ -153,13 +147,7 @@ export class AiUsageLogRepo {
       })
       .from(aiUsageLog)
       .where(whereClause)
-      .get() as
-      | {
-          totalInputTokens: number;
-          totalOutputTokens: number;
-          totalCostUsd: number | null;
-        }
-      | undefined;
+      .get();
 
     return {
       totalInputTokens: result?.totalInputTokens ?? 0,

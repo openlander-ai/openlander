@@ -202,7 +202,7 @@ export class ServiceManager {
    *  - Subsequent services of the same type → prefixed key (e.g. MYDB_DATABASE_URL)
    */
   getSuggestedEnv(service: ServiceRow): Array<{ key: string; value: string }> {
-    const serviceKind = service.kind ?? 'unknown';
+    const serviceKind = service.kind;
     const baseKey = DEFAULT_ENV_KEYS[serviceKind];
     if (!baseKey) {
       return [];
@@ -216,7 +216,7 @@ export class ServiceManager {
 
     const existing = this.db
       .listServices()
-      .filter((s) => (s.kind ?? 'unknown') === serviceKind && s.id !== service.id);
+      .filter((s) => s.kind === serviceKind && s.id !== service.id);
 
     if (serviceKind === 'minio') {
       const user = (credentials?.['user'] as string | undefined) ?? '';
@@ -262,7 +262,7 @@ export class ServiceManager {
     let alreadyConnected = 0;
 
     for (const service of services) {
-      const containerRef = service.container_id ?? service.container_name;
+      const containerRef = service.container_id ?? service.container_name ?? '';
       if (!containerRef) {
         continue;
       }
@@ -353,7 +353,6 @@ export class ServiceManager {
     }
 
     const userEnv = this.toEnvPairs(opts.envVars);
-    const userEnvJson = opts.envVars ? JSON.stringify(opts.envVars) : undefined;
 
     let type: string;
     let image: string;
@@ -506,7 +505,6 @@ export class ServiceManager {
       image,
       containerName,
       port: hostPort,
-      envVars: userEnvJson,
       credentials: credentialsJson,
     });
 
@@ -525,7 +523,7 @@ export class ServiceManager {
       throw new ServiceNotFoundError(id);
     }
 
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     await this.docker.startContainer(containerId);
     this.db.updateService(id, { status: 'running' });
     this.invalidateServiceCardSummaryCache();
@@ -537,7 +535,7 @@ export class ServiceManager {
       throw new ServiceNotFoundError(id);
     }
 
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     await this.docker.stopContainer(containerId);
     this.db.updateService(id, { status: 'stopped' });
     this.invalidateServiceCardSummaryCache();
@@ -564,7 +562,7 @@ export class ServiceManager {
       warning = `Service "${service.name}" is connected to ${count} project(s): ${projectNames}. These projects may fail to start if they depend on this service.`;
     }
 
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     try {
       await this.docker.stopContainer(containerId);
     } catch (error) {
@@ -603,8 +601,7 @@ export class ServiceManager {
 
     // Redis: flush in-memory data to disk (BGSAVE) before volume backup.
     // Without this, the RDB dump file may not exist or be stale, leading to empty backups.
-    const isRedis =
-      (service.kind ?? 'unknown') === 'redis' || (service.image_url ?? '').includes('redis');
+    const isRedis = service.kind === 'redis' || (service.image_url ?? '').includes('redis');
     if (isRedis) {
       try {
         const initialResult = await execInServiceContainer(this.docker, service, [
@@ -766,7 +763,7 @@ export class ServiceManager {
       return refreshed;
     }
 
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     try {
       const info = await this.docker.inspectContainer(containerId);
       const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
@@ -792,7 +789,7 @@ export class ServiceManager {
   async getLogs(id: string, lines = 100): Promise<string> {
     const service = this.getRequiredService(id);
     const tail = Number.isInteger(lines) && lines > 0 ? lines : 100;
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     return this.docker.getLogs(containerId, tail);
   }
 
@@ -952,7 +949,7 @@ export class ServiceManager {
       };
     }
 
-    const containerRef = service.container_id ?? service.container_name;
+    const containerRef = service.container_id ?? service.container_name ?? '';
     try {
       const info = await this.docker.inspectContainer(containerRef);
       const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
@@ -1030,7 +1027,7 @@ export class ServiceManager {
 
     let diskUsageBytes: number | null = null;
     try {
-      const dataMountPath = this.getDataMountPath(service.kind ?? 'unknown');
+      const dataMountPath = this.getDataMountPath(service.kind);
       const result = await execInServiceContainer(this.docker, service, [
         'du',
         '-sb',
@@ -1049,7 +1046,7 @@ export class ServiceManager {
     let memoryUsageBytes: number | null = null;
     let memoryLimitBytes: number | null = null;
     try {
-      const containerId = service.container_id ?? service.container_name;
+      const containerId = service.container_id ?? service.container_name ?? '';
       const rawStats = (await this.docker.getContainerStats(containerId)) as {
         cpu_stats: {
           cpu_usage: { total_usage: number; percpu_usage?: number[] };
@@ -1075,7 +1072,7 @@ export class ServiceManager {
     let activeConnections: number | null = null;
     let maxConnections: number | null = null;
     try {
-      const adapter = getServiceAdapter(service.kind ?? 'unknown');
+      const adapter = getServiceAdapter(service.kind);
       if (adapter) {
         const connectionStats = await adapter.getConnectionStats(service, this.docker);
         activeConnections = connectionStats.activeConnections;
@@ -1099,7 +1096,7 @@ export class ServiceManager {
     const envVars = this.db.getEnvVars(projectId);
     const allValues = Object.values(envVars).join(' ');
     const services = this.db.listServices();
-    return services.filter((s) => allValues.includes(s.container_name));
+    return services.filter((s) => s.container_name != null && allValues.includes(s.container_name));
   }
 
   getConnectedProjects(serviceId: string): Array<{ id: string; name: string }> {
@@ -1115,9 +1112,9 @@ export class ServiceManager {
       for (const env of environments) {
         allEnvValues.push(...Object.values(this.db.getEnvVars(project.id, env.id)));
       }
-      const hasConnection = allEnvValues.some(
-        (value) => typeof value === 'string' && value.includes(containerName),
-      );
+      const hasConnection =
+        containerName != null &&
+        allEnvValues.some((value) => typeof value === 'string' && value.includes(containerName));
       if (hasConnection) {
         connected.push({ id: project.id, name: project.name });
       }
@@ -1129,7 +1126,7 @@ export class ServiceManager {
   async listDatabases(serviceId: string): Promise<ListedDatabase[]> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    const serviceKind = service.kind ?? 'unknown';
+    const serviceKind = service.kind;
     const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
       throw new ServiceOperationUnsupportedError('Database listing', serviceKind);
@@ -1141,7 +1138,7 @@ export class ServiceManager {
   async listUsers(serviceId: string): Promise<ListedUser[]> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    const serviceKind = service.kind ?? 'unknown';
+    const serviceKind = service.kind;
     const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
       throw new ServiceOperationUnsupportedError('User listing', serviceKind);
@@ -1155,7 +1152,7 @@ export class ServiceManager {
     await this.ensureServiceContainerRunning(service);
     assertSafeDatabaseName(dbName);
 
-    const serviceKind = service.kind ?? 'unknown';
+    const serviceKind = service.kind;
     const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
       throw new ServiceOperationUnsupportedError('Database creation', serviceKind);
@@ -1179,7 +1176,7 @@ export class ServiceManager {
       assertSafeDatabaseName(grants.database);
     }
 
-    const serviceKind = service.kind ?? 'unknown';
+    const serviceKind = service.kind;
     const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
       throw new ServiceOperationUnsupportedError('User creation', serviceKind);
@@ -1191,7 +1188,7 @@ export class ServiceManager {
   async listBuckets(serviceId: string): Promise<Array<{ name: string; createdAt: string }>> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    const serviceKind = service.kind ?? 'unknown';
+    const serviceKind = service.kind;
     if (serviceKind !== 'minio') {
       throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', serviceKind);
     }
@@ -1203,7 +1200,7 @@ export class ServiceManager {
   async createBucket(serviceId: string, bucketName: string): Promise<void> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    const serviceKind = service.kind ?? 'unknown';
+    const serviceKind = service.kind;
     if (serviceKind !== 'minio') {
       throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', serviceKind);
     }
@@ -1215,7 +1212,7 @@ export class ServiceManager {
   async deleteBucket(serviceId: string, bucketName: string): Promise<void> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    const serviceKind = service.kind ?? 'unknown';
+    const serviceKind = service.kind;
     if (serviceKind !== 'minio') {
       throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', serviceKind);
     }
@@ -1321,7 +1318,7 @@ export class ServiceManager {
   }
 
   private async ensureServiceContainerRunning(service: ServiceRow): Promise<void> {
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     try {
       const info = await this.docker.inspectContainer(containerId);
       if (!info.State.Running) {

@@ -152,7 +152,7 @@ export class MySqlAdapter implements ServiceAdapter {
       database: dbName,
       user: credentials.user,
       password: credentials.password,
-      connectionString: this.getConnectionString(service.container_name, hostPort, {
+      connectionString: this.getConnectionString(service.container_name ?? '', hostPort ?? 0, {
         user: credentials.user,
         password: credentials.password,
         database: dbName,
@@ -194,7 +194,7 @@ export class MySqlAdapter implements ServiceAdapter {
       database,
       user: options.username,
       password: options.password,
-      connectionString: this.getConnectionString(service.container_name, hostPort, {
+      connectionString: this.getConnectionString(service.container_name ?? '', hostPort ?? 0, {
         user: options.username,
         password: options.password,
         database,

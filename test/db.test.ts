@@ -466,7 +466,7 @@ describe('Database', () => {
       expect(updated!.container_port).toBe(8080);
     });
 
-    it('backfill SQL copies container_port from projects to environments', () => {
+    it('backfill SQL copies container_port from services to environments', () => {
       db.updateProject('p1', { containerPort: 3000 });
 
       db.updateEnvironment(
@@ -475,8 +475,10 @@ describe('Database', () => {
       );
 
       const sqlite = (db as unknown as { sqlite: { exec: (sql: string) => void } }).sqlite;
+      // Post-0012: container_port lives on services (not projects); environments
+      // reference services via service_id. The backfill pattern is updated accordingly.
       sqlite.exec(
-        'UPDATE environments SET container_port = (SELECT container_port FROM projects WHERE id = environments.project_id) WHERE container_port IS NULL',
+        'UPDATE environments SET container_port = (SELECT container_port FROM services WHERE id = environments.service_id) WHERE container_port IS NULL',
       );
 
       const env = db.getEnvironmentsByProject('p1').find((e) => e.type === 'production');

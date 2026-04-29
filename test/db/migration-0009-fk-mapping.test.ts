@@ -239,7 +239,7 @@ describe('migration 0009 — per-table FK mapping', () => {
     expect(row.service_id).toBe('p-ops-1__svc');
   });
 
-  it('service_connections: ADD service_id_app/service_id_db (P1 additive)', () => {
+  it('service_connections: post-0012 Phase D uses service_id_consumer/provider', () => {
     insertProject('p-sc-1', 'sctest');
     // Insert a managed service in the legacy services table
     sqlite
@@ -257,23 +257,21 @@ describe('migration 0009 — per-table FK mapping', () => {
 
     run0009(drizzle, sqlite);
 
+    // Post-0012 Phase D: service_id_app/db renamed to service_id_consumer/provider;
+    // legacy project_id/service_id columns dropped.
     const row = sqlite
       .prepare(
-        'SELECT project_id, service_id, service_id_app, service_id_db FROM service_connections WHERE id = ?',
+        'SELECT service_id_consumer, service_id_provider FROM service_connections WHERE id = ?',
       )
       .get('sc-1') as {
-      project_id: string;
-      service_id: string;
-      service_id_app: string;
-      service_id_db: string;
+      service_id_consumer: string;
+      service_id_provider: string;
     };
-    expect(row.project_id).toBe('p-sc-1');
-    expect(row.service_id).toBe('sv-1');
-    expect(row.service_id_app).toBe('p-sc-1__svc');
-    expect(row.service_id_db).toBe('sv-1');
+    expect(row.service_id_consumer).toBe('p-sc-1__svc');
+    expect(row.service_id_provider).toBe('sv-1');
   });
 
-  it('project_dependencies: ADD source_service_id, target_managed_service_id (P1 additive)', () => {
+  it('project_dependencies: post-0012 Phase E uses source_service_id/target_service_id', () => {
     insertProject('p-pd-1', 'pdtest');
     insertProject('p-pd-2', 'pdtest2');
     sqlite
@@ -286,21 +284,21 @@ describe('migration 0009 — per-table FK mapping', () => {
 
     run0009(drizzle, sqlite);
 
+    // Post-0012 Phase E: source_service_id and target_service_id are the canonical
+    // columns (target_managed_service_id renamed → target_service_id).
+    // Legacy source_project_id/target_project_id/target_managed_service_id dropped.
     const row = sqlite
       .prepare(
-        `SELECT source_project_id, target_project_id, target_service_id,
-                source_service_id, target_managed_service_id
+        `SELECT source_service_id, target_service_id
          FROM project_dependencies WHERE id = ?`,
       )
       .get('pd-1') as {
-      source_project_id: string;
-      target_project_id: string;
-      target_service_id: string | null;
       source_service_id: string;
-      target_managed_service_id: string | null;
+      target_service_id: string | null;
     };
-    expect(row.source_project_id).toBe('p-pd-1');
     expect(row.source_service_id).toBe('p-pd-1__svc');
+    // target was NULL (project-to-project dep with no managed target) — stays NULL
+    expect(row.target_service_id).toBeNull();
   });
 
   describe('contestation tests (the 4 ambiguous tables)', () => {
@@ -416,7 +414,7 @@ describe('migration 0009 — per-table FK mapping', () => {
     expect(violations).toEqual([]);
   });
 
-  it('Phase E normalizes legacy services.type to canonical kind enum', () => {
+  it('Phase E normalizes legacy services.type to canonical kind enum (post-0012: only kind survives)', () => {
     // Production data found 'postgresql' / 'pgvector' / 'flaresolverr' on
     // managed services — none match the new kind CHECK enum verbatim. Phase E
     // must normalize via CASE so the migration doesn't trip the constraint.
@@ -439,8 +437,8 @@ describe('migration 0009 — per-table FK mapping', () => {
     // postgres instances on 5432). Phase E does NOT copy legacy `port`
     // into the post-migration `assigned_port` column (which is UNIQUE for
     // deployable host-port allocation); managed rows get assigned_port
-    // NULL and keep their internal port in the legacy `port` column.
-    // This fixture deliberately collides ports to assert that.
+    // NULL. Post-0012 Phase C drops `type` and `port` from services entirely.
+    // This fixture deliberately collides ports to assert assigned_port stays NULL.
     for (const fix of legacyTypes) {
       sqlite
         .prepare(
@@ -453,21 +451,16 @@ describe('migration 0009 — per-table FK mapping', () => {
     run0009(drizzle, sqlite);
 
     for (const fix of legacyTypes) {
+      // Post-0012: type and port columns no longer exist; only kind and assigned_port.
       const row = sqlite
-        .prepare('SELECT kind, type, assigned_port, port FROM services WHERE id = ?')
+        .prepare('SELECT kind, assigned_port FROM services WHERE id = ?')
         .get(fix.id) as {
         kind: string;
-        type: string;
         assigned_port: number | null;
-        port: number | null;
       };
       expect(row.kind, `kind for legacy type=${fix.type}`).toBe(fix.expected);
-      // Original legacy type preserved verbatim in the additive `type` column.
-      expect(row.type, `legacy type preserved for ${fix.id}`).toBe(fix.type);
       // assigned_port stays NULL on managed rows (UNIQUE collision avoidance).
       expect(row.assigned_port, `assigned_port NULL for managed ${fix.id}`).toBeNull();
-      // Legacy `port` (container-internal) preserved.
-      expect(row.port, `legacy port preserved for ${fix.id}`).toBe(5432);
     }
   });
 });
