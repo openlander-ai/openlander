@@ -80,6 +80,7 @@ function createCtx(
       createDeployLog: vi.fn(),
       updateDeployLog: vi.fn(),
       getProjectLogs: vi.fn().mockReturnValue([]),
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     },
     env: { get: vi.fn().mockReturnValue({}), set: vi.fn(), list: vi.fn().mockReturnValue([]) },
     deployQueue: { acquire: vi.fn().mockResolvedValue(vi.fn()) },

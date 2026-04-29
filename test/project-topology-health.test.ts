@@ -67,6 +67,7 @@ function createCtx(opts: {
       getProjectByName: vi.fn(() => null),
       getChildProjects: vi.fn(() => []),
       findDependenciesByProject: vi.fn(() => []),
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     },
     docker: {
       inspectContainer,

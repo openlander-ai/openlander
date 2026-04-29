@@ -60,6 +60,7 @@ function buildCtx(serviceCount: number) {
       getProjectByName: vi.fn(() => null),
       getChildProjects: vi.fn(() => children),
       findDependenciesByProject: vi.fn(() => []),
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     },
     docker: {
       inspectContainer,

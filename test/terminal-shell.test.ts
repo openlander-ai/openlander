@@ -76,6 +76,7 @@ function createTestHarness(execFactory: (cmd: string[]) => ExecMock) {
       getSession: vi.fn().mockReturnValue(null),
       createSession: vi.fn(),
       deleteSession: vi.fn(),
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     },
     docker: {
       inspectContainer: vi.fn().mockResolvedValue({ State: { Running: true } }),
