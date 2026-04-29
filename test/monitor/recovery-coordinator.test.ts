@@ -34,6 +34,9 @@ function createMockDb(projectOverrides?: Partial<MockProject>) {
 
   const db = {
     getProject: vi.fn((projectId: string) => (projectId === project.id ? project : undefined)),
+    // PR 4.5: canonical-first reads need this helper; default to undefined
+    // so legacy `projects` fields drive the test snapshot.
+    getDeployableForProject: vi.fn().mockReturnValue(undefined),
     updateProject: vi.fn((projectId: string, updates: { status?: string }) => {
       if (projectId === project.id && updates.status) {
         project.status = updates.status;

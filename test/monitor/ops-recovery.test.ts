@@ -79,6 +79,8 @@ function createMockContext(): MockContext {
         previous_image_tag: 'openlander/project-1:prev',
         deploy_lock_session: null,
       })),
+      // PR 4.5: canonical-first reads need this helper.
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
       resetCircuitBreaker: vi.fn(),
       updateOpsIncidentStatus: vi.fn(),
       updateOpsIncident: vi.fn(),

@@ -65,6 +65,8 @@ function makeDb(overrides: Partial<Database> = {}): Database {
       deploy_lock_session: null,
       deploy_lock_at: null,
     })),
+    // PR 4.5: canonical-first reads need this helper.
+    getDeployableForProject: vi.fn().mockReturnValue(undefined),
     updateProject: vi.fn(),
     isCircuitBreakerOpen: vi.fn(() => false),
     ...overrides,
