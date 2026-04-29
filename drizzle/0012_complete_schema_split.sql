@@ -43,15 +43,99 @@
 -- =====================================================================
 -- Phase A — Pre-flight assertions.
 --
--- Five UNIQUE-shape pre-flight queries (ADR table). Each must return 0 rows.
--- SQLite's RAISE(ABORT, ...) is only valid inside a trigger body, so we use
--- a temp-table-trigger pattern: BEFORE INSERT on _0012_assert with a WHEN
--- clause that evaluates the violation predicate and RAISEs if it's true.
--- The INSERT then fires the trigger; on a clean DB the trigger's WHEN is
--- false and the INSERT proceeds harmlessly. Cleanup at the end of Phase A.
+-- Two assertion groups per the temp-table-trigger pattern:
+--   A.1 NULL-orphan assertions: any row with a NULL FK that would be
+--       silently dropped by Phase B's INSERT…SELECT → ABORT so no data
+--       is lost without operator knowledge.
+--   A.2 UNIQUE-shape assertions: duplicate rows on the new UNIQUE keys
+--       that Phase B will enforce → ABORT before the table-rebuild fails.
+--
+-- SQLite's RAISE(ABORT, ...) is only valid inside a trigger body, so we
+-- use a temp-table-trigger pattern: BEFORE INSERT on _0012_assert with a
+-- WHEN clause that evaluates the violation predicate and RAISEs if true.
+-- The INSERT fires all registered triggers at once; on a clean DB every
+-- trigger's WHEN is false and the INSERT proceeds harmlessly.
+-- Cleanup drops all temp objects at the end of Phase A.
 -- =====================================================================
 CREATE TEMP TABLE _0012_assert (probe INTEGER);
 --> statement-breakpoint
+
+-- ---- A.1 NULL-orphan assertions (data-safety) ----------------------
+
+-- environments: any row with NULL service_id would be silently dropped
+-- during the Phase B rebuild INSERT…WHERE service_id IS NOT NULL.
+CREATE TEMP TRIGGER _0012_assert_environments_null_service_id
+BEFORE INSERT ON _0012_assert
+WHEN EXISTS (SELECT 1 FROM environments WHERE service_id IS NULL LIMIT 1)
+BEGIN
+  SELECT RAISE(ABORT, '0012 phase A: environments has rows with NULL service_id; manual data cleanup required before running 0012');
+END;
+--> statement-breakpoint
+
+-- deploy_configs: same pattern.
+CREATE TEMP TRIGGER _0012_assert_deploy_configs_null_service_id
+BEFORE INSERT ON _0012_assert
+WHEN EXISTS (SELECT 1 FROM deploy_configs WHERE service_id IS NULL LIMIT 1)
+BEGIN
+  SELECT RAISE(ABORT, '0012 phase A: deploy_configs has rows with NULL service_id; manual data cleanup required before running 0012');
+END;
+--> statement-breakpoint
+
+-- deploy_logs: same pattern.
+CREATE TEMP TRIGGER _0012_assert_deploy_logs_null_service_id
+BEFORE INSERT ON _0012_assert
+WHEN EXISTS (SELECT 1 FROM deploy_logs WHERE service_id IS NULL LIMIT 1)
+BEGIN
+  SELECT RAISE(ABORT, '0012 phase A: deploy_logs has rows with NULL service_id; manual data cleanup required before running 0012');
+END;
+--> statement-breakpoint
+
+-- domain_mappings: same pattern.
+CREATE TEMP TRIGGER _0012_assert_domain_mappings_null_service_id
+BEFORE INSERT ON _0012_assert
+WHEN EXISTS (SELECT 1 FROM domain_mappings WHERE service_id IS NULL LIMIT 1)
+BEGIN
+  SELECT RAISE(ABORT, '0012 phase A: domain_mappings has rows with NULL service_id; manual data cleanup required before running 0012');
+END;
+--> statement-breakpoint
+
+-- runtime_incidents: same pattern.
+CREATE TEMP TRIGGER _0012_assert_runtime_incidents_null_service_id
+BEFORE INSERT ON _0012_assert
+WHEN EXISTS (SELECT 1 FROM runtime_incidents WHERE service_id IS NULL LIMIT 1)
+BEGIN
+  SELECT RAISE(ABORT, '0012 phase A: runtime_incidents has rows with NULL service_id; manual data cleanup required before running 0012');
+END;
+--> statement-breakpoint
+
+-- service_ops_overrides: same pattern.
+CREATE TEMP TRIGGER _0012_assert_service_ops_overrides_null_service_id
+BEFORE INSERT ON _0012_assert
+WHEN EXISTS (SELECT 1 FROM service_ops_overrides WHERE service_id IS NULL LIMIT 1)
+BEGIN
+  SELECT RAISE(ABORT, '0012 phase A: service_ops_overrides has rows with NULL service_id; manual data cleanup required before running 0012');
+END;
+--> statement-breakpoint
+
+-- service_connections: Phase D drops rows where either FK is NULL.
+CREATE TEMP TRIGGER _0012_assert_service_connections_null_fk
+BEFORE INSERT ON _0012_assert
+WHEN EXISTS (SELECT 1 FROM service_connections WHERE service_id_app IS NULL OR service_id_db IS NULL LIMIT 1)
+BEGIN
+  SELECT RAISE(ABORT, '0012 phase A: service_connections has rows with NULL service_id_app or service_id_db; manual data cleanup required before running 0012');
+END;
+--> statement-breakpoint
+
+-- project_dependencies: Phase E drops rows where source_service_id is NULL.
+CREATE TEMP TRIGGER _0012_assert_project_dependencies_null_source
+BEFORE INSERT ON _0012_assert
+WHEN EXISTS (SELECT 1 FROM project_dependencies WHERE source_service_id IS NULL LIMIT 1)
+BEGIN
+  SELECT RAISE(ABORT, '0012 phase A: project_dependencies has rows with NULL source_service_id; manual data cleanup required before running 0012');
+END;
+--> statement-breakpoint
+
+-- ---- A.2 UNIQUE-shape assertions -----------------------------------
 
 CREATE TEMP TRIGGER _0012_assert_environments_unique
 BEFORE INSERT ON _0012_assert
@@ -132,11 +216,28 @@ BEGIN
 END;
 --> statement-breakpoint
 
--- Trigger fires now; if any pre-flight assertion's WHEN is true, the
--- migration aborts here. If all are clean, the INSERT proceeds.
+-- All triggers fire on this single INSERT. If any WHEN is true the
+-- migration aborts here with a descriptive message. On a clean DB the
+-- INSERT proceeds harmlessly and all temp objects are cleaned up below.
 INSERT INTO _0012_assert (probe) VALUES (1);
 --> statement-breakpoint
 
+DROP TRIGGER _0012_assert_environments_null_service_id;
+--> statement-breakpoint
+DROP TRIGGER _0012_assert_deploy_configs_null_service_id;
+--> statement-breakpoint
+DROP TRIGGER _0012_assert_deploy_logs_null_service_id;
+--> statement-breakpoint
+DROP TRIGGER _0012_assert_domain_mappings_null_service_id;
+--> statement-breakpoint
+DROP TRIGGER _0012_assert_runtime_incidents_null_service_id;
+--> statement-breakpoint
+DROP TRIGGER _0012_assert_service_ops_overrides_null_service_id;
+--> statement-breakpoint
+DROP TRIGGER _0012_assert_service_connections_null_fk;
+--> statement-breakpoint
+DROP TRIGGER _0012_assert_project_dependencies_null_source;
+--> statement-breakpoint
 DROP TRIGGER _0012_assert_environments_unique;
 --> statement-breakpoint
 DROP TRIGGER _0012_assert_deploy_configs_unique;
@@ -183,8 +284,7 @@ INSERT INTO environments_new (
 SELECT id, service_id, type, branch, status, assigned_port,
   container_id, image_tag, previous_image_tag, public_url, container_port,
   created_at, updated_at, server_id
-FROM environments
-WHERE service_id IS NOT NULL;
+FROM environments;
 --> statement-breakpoint
 DROP TABLE environments;
 --> statement-breakpoint
@@ -207,8 +307,7 @@ CREATE TABLE deploy_configs_new (
 --> statement-breakpoint
 INSERT INTO deploy_configs_new (id, service_id, config_json, config_version, created_at, updated_at)
 SELECT id, service_id, config_json, config_version, created_at, updated_at
-FROM deploy_configs
-WHERE service_id IS NOT NULL;
+FROM deploy_configs;
 --> statement-breakpoint
 DROP TABLE deploy_configs;
 --> statement-breakpoint
@@ -242,8 +341,7 @@ INSERT INTO deploy_logs_new (
 SELECT id, service_id, environment_id, status, trigger_source, trigger_detail,
   commit_sha, commit_message, build_log, runtime_log, duration_ms,
   created_at, server_id
-FROM deploy_logs
-WHERE service_id IS NOT NULL;
+FROM deploy_logs;
 --> statement-breakpoint
 DROP TABLE deploy_logs;
 --> statement-breakpoint
@@ -269,8 +367,7 @@ INSERT INTO domain_mappings_new (
   id, service_id, domain, cloudflare_zone_id, cloudflare_dns_record_id, status, created_at
 )
 SELECT id, service_id, domain, cloudflare_zone_id, cloudflare_dns_record_id, status, created_at
-FROM domain_mappings
-WHERE service_id IS NOT NULL;
+FROM domain_mappings;
 --> statement-breakpoint
 DROP TABLE domain_mappings;
 --> statement-breakpoint
@@ -305,8 +402,7 @@ INSERT INTO runtime_incidents_new (
 SELECT id, service_id, environment_id, category, exit_code, error_snippet,
   container_image, container_uptime_ms, restart_count, diagnosis,
   resolved, resolved_at, created_at, server_id
-FROM runtime_incidents
-WHERE service_id IS NOT NULL;
+FROM runtime_incidents;
 --> statement-breakpoint
 DROP TABLE runtime_incidents;
 --> statement-breakpoint
@@ -328,8 +424,7 @@ CREATE TABLE service_ops_overrides_new (
 --> statement-breakpoint
 INSERT INTO service_ops_overrides_new (id, service_id, overrides_json, created_at, updated_at)
 SELECT id, service_id, overrides_json, created_at, updated_at
-FROM service_ops_overrides
-WHERE service_id IS NOT NULL;
+FROM service_ops_overrides;
 --> statement-breakpoint
 DROP TABLE service_ops_overrides;
 --> statement-breakpoint
@@ -383,8 +478,7 @@ INSERT INTO service_connections_new (
 )
 SELECT id, service_id_app, service_id_db, environment_id,
   auto_injected_env_keys, created_at, server_id
-FROM service_connections
-WHERE service_id_app IS NOT NULL AND service_id_db IS NOT NULL;
+FROM service_connections;
 --> statement-breakpoint
 DROP TABLE service_connections;
 --> statement-breakpoint
@@ -420,8 +514,7 @@ INSERT INTO project_dependencies_new (
   id, source_service_id, target_service_id, dependency_type, source, created_at
 )
 SELECT id, source_service_id, target_managed_service_id, dependency_type, source, created_at
-FROM project_dependencies
-WHERE source_service_id IS NOT NULL;
+FROM project_dependencies;
 --> statement-breakpoint
 DROP TABLE project_dependencies;
 --> statement-breakpoint

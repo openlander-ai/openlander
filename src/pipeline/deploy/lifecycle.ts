@@ -71,6 +71,7 @@ export class ContainerLifecycle {
     // PR 4.5: canonical-first read of container_id with `??` fallback to
     // legacy `projects` column through migration 0012.
     const startDeployable = project ? this.db.getDeployableForProject(projectId) : undefined;
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const startContainerId = startDeployable?.container_id ?? project?.container_id;
     if (!project || !startContainerId) {
       if (hasChildren) {
@@ -115,6 +116,7 @@ export class ContainerLifecycle {
     const project = this.db.getProject(projectId);
     // PR 4.5: canonical-first read of container_id.
     const stopDeployable = project ? this.db.getDeployableForProject(projectId) : undefined;
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const stopContainerId = stopDeployable?.container_id ?? project?.container_id;
     if (!project || !stopContainerId) {
       await this.stateManager.transition(projectId, 'stopped', 'container-manual-stop');

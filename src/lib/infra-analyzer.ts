@@ -285,10 +285,13 @@ export function analyzeInfrastructure(
   }
 
   // Cross-reference with existing services
+  // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
   const existingTypes = new Set(existingServices.map((s) => s.type as DetectedServiceType));
   const available: AvailableService[] = existingServices
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     .filter((s) => detectedTypes.has(s.type as DetectedServiceType))
     .map((s) => ({
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       type: s.type as DetectedServiceType,
       name: s.name,
       id: s.id,

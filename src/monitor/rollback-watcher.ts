@@ -65,6 +65,7 @@ export class RollbackWatcher {
     const project = this.db.getProject(projectId);
     // PR 4.5: canonical-first read of previous_image_tag with `??` fallback.
     const deployable = this.db.getDeployableForProject(projectId);
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const previousImageTag = deployable?.previous_image_tag ?? project?.previous_image_tag;
     if (!previousImageTag) return;
 

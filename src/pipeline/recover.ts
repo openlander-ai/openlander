@@ -144,7 +144,8 @@ async function recoverService(
 
     const envVars: Record<string, string> = {};
     // env_vars column is @deprecated but has no canonical per-service equivalent yet (1.1)
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
+
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const rawEnvVars = service.env_vars;
     if (rawEnvVars) {
       const parsed = JSON.parse(rawEnvVars) as Array<{ key: string; value: string }>;

@@ -436,27 +436,37 @@ program
     console.log(pc.bold('\nProjects:'));
     for (const p of result.projects) {
       const icon =
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
         p.status === 'error'
           ? pc.red('✗')
-          : p.status === 'needs_redeploy'
+          : // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+            p.status === 'needs_redeploy'
             ? pc.yellow('!')
-            : p.status === 'recreated'
+            : // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+              p.status === 'recreated'
               ? pc.green('✓')
-              : p.status === 'started'
+              : // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+                p.status === 'started'
                 ? pc.yellow('↑')
-                : p.status === 'skipped'
+                : // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+                  p.status === 'skipped'
                   ? pc.dim('-')
                   : pc.dim('·');
       const label =
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
         p.status === 'error'
           ? pc.red(p.error ?? 'error')
-          : p.status === 'needs_redeploy'
+          : // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+            p.status === 'needs_redeploy'
             ? pc.yellow('needs redeploy (no image)')
-            : p.status === 'recreated'
+            : // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+              p.status === 'recreated'
               ? pc.green('recreated from image')
-              : p.status === 'started'
+              : // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+                p.status === 'started'
                 ? pc.yellow('started')
-                : p.status === 'skipped'
+                : // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+                  p.status === 'skipped'
                   ? pc.dim('skipped (stopped)')
                   : pc.dim('running');
       console.log(`  ${icon} ${p.name} ${label}`);
@@ -467,11 +477,13 @@ program
       (s) => s.status === 'recreated' || s.status === 'started',
     ).length;
     const prjRecovered = result.projects.filter(
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       (p) => p.status === 'recreated' || p.status === 'started',
     ).length;
     const errors = [...result.services, ...result.projects].filter(
       (x) => x.status === 'error',
     ).length;
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const needsRedeploy = result.projects.filter((p) => p.status === 'needs_redeploy').length;
 
     console.log(

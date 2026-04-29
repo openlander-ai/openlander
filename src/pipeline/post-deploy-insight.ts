@@ -121,6 +121,7 @@ async function checkHealth(ctx: InsightContext, db: Database, locale: Locale): P
   const project = db.getProject(ctx.projectId);
   // PR 4.5: canonical-first read of assigned_port with `??` fallback.
   const deployable = project ? db.getDeployableForProject(ctx.projectId) : undefined;
+  // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
   const assignedPort = deployable?.assigned_port ?? project?.assigned_port;
   if (!project || assignedPort == null) {
     return {

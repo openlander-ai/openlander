@@ -107,6 +107,7 @@ export class PostmortemGenerator {
       const projectName = project?.name ?? projectId;
       // PR 4.5: canonical-first status read with `??` fallback.
       const deployable = project ? this.db.getDeployableForProject(projectId) : undefined;
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       const status = deployable?.status ?? project?.status;
 
       // Skip non-running projects — no postmortem needed

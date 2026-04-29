@@ -55,7 +55,7 @@ export default tseslint.config(
       ],
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
       '@typescript-eslint/no-import-type-side-effects': 'error',
-      'openlander-internal/no-dropped-columns': 'warn',
+      'openlander-internal/no-dropped-columns': 'error',
       // Deprecated fields on ProjectRow/ServiceRow are intentional 1.0 back-compat
       // shims (0012 Phase G). The custom no-dropped-columns rule is the enforcement
       // gate; no-deprecated would produce noise on every transitional read site.

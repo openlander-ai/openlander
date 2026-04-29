@@ -402,7 +402,9 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
     name: project.name,
     repo_url: project.repo_url,
     branch: project.branch,
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     parent_project_id: project.parent_project_id,
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     visibility: project.visibility,
     server_id: project.server_id,
     project_type: projectType,
@@ -703,6 +705,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           id: p.id,
           name: p.name,
           status: projectStatus,
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           visibility: p.visibility,
           source: projectSource,
           repoUrl: p.repo_url,
@@ -720,6 +723,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           ...(imageUrl ? { imageUrl } : {}),
           createdAt: normalizeTimestamp(p.created_at),
           updatedAt: normalizeTimestamp(p.updated_at),
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           parentProjectId: p.parent_project_id,
           isCompose: childCount > 0,
           serviceCount: childCount,
@@ -2052,6 +2056,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     // PR 4 canonical-first: assigned_port from deployable services row.
     const shareDeployable = ctx.db.getDeployableForProject(project.id);
     const sharePort = shareDeployable?.assigned_port ?? project.assigned_port;
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     if (project.visibility !== 'quick-share' && project.visibility !== 'shared') {
       if (!sharePort) {
         return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);

@@ -116,6 +116,7 @@ export function setupRecoveryPostmortemAutomation({
         // PR 4.5: canonical-first status read with `??` fallback to legacy
         // `projects` column through migration 0012.
         const deployable = project ? db.getDeployableForProject(payload.projectId) : undefined;
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
         const status = deployable?.status ?? project?.status;
         if (!project || status !== 'running') {
           return;

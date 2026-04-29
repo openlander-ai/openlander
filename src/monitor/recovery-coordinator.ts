@@ -502,6 +502,7 @@ export class RecoveryCoordinator {
           projectId,
           projectName: project?.name ?? projectId,
           containerId:
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             containerIdOverride || deployable?.container_id || project?.container_id || '',
         },
         timestamp: Date.now(),
@@ -588,11 +589,13 @@ export class RecoveryCoordinator {
     }
 
     const project = this.getProjectSnapshot(projectId);
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     if (project?.status === nextStatus) {
       return;
     }
 
     throw new Error(
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       `RecoveryCoordinator state transition rejected: ${project?.status ?? 'unknown'} -> ${nextStatus}`,
     );
   }

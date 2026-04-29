@@ -1343,6 +1343,7 @@ export class DeployPipeline {
         const project = this.db.getProject(deployment.projectId);
         // PR 4.5: canonical-first read of container_id with `??` fallback.
         const deployableForHealth = this.db.getDeployableForProject(deployment.projectId);
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
         const containerId = deployableForHealth?.container_id ?? project?.container_id;
         if (!containerId) {
           log.warn(

@@ -1312,8 +1312,8 @@ export class ComposePipeline {
   }
 
   private resolveComposeServiceImageTag(service: ComposeService, projectName: string): string {
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     if (service.image && service.image.length > 0) {
-      // eslint-disable-line openlander-internal/no-dropped-columns
       return service.image; // eslint-disable-line openlander-internal/no-dropped-columns
     }
 

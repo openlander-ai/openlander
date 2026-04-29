@@ -151,6 +151,7 @@ export class CloudflareTunnelManager {
     // PR 4.5: canonical-first read of assigned_port with `??` fallback to
     // legacy `projects` column through migration 0012.
     const deployable = project ? this.db.getDeployableForProject(projectId) : undefined;
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const assignedPort = deployable?.assigned_port ?? project?.assigned_port;
     if (!project || !assignedPort) {
       this.traefikLabels.delete(projectId);

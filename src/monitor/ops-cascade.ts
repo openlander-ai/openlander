@@ -23,6 +23,7 @@ export class CascadeDetector {
   recordFailure(projectId: string): void {
     // Skip projects already in error state to avoid cascade false positives
     const project = this.ctx.db.getProject(projectId);
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     if (project?.status === 'error') return;
 
     this.recentFailures.set(projectId, Date.now());

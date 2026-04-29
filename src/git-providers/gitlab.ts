@@ -184,6 +184,7 @@ function mapRepo(project: GitLabProject): GitRepo {
     htmlUrl: project.web_url,
     cloneUrl: project.http_url_to_repo,
     sshUrl: project.ssh_url_to_repo,
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     isPrivate: project.visibility === 'private',
     defaultBranch: project.default_branch ?? 'main',
     language: project.language,

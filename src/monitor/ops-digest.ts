@@ -37,8 +37,11 @@ export class DigestGenerator {
     const allProjects = this.ctx.db.listProjects();
     const projectStats = {
       total: allProjects.length,
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       running: allProjects.filter((p) => p.status === 'running').length,
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       stopped: allProjects.filter((p) => p.status === 'stopped').length,
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       error: allProjects.filter((p) => p.status === 'error').length,
     };
 

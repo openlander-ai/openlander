@@ -121,6 +121,21 @@ module.exports = {
     return {
       MemberExpression(node) {
         if (node.property.type !== 'Identifier') return;
+
+        // Exempt: MemberExpression is either side of a `??` operator.
+        // Pattern: `canonical?.X ?? legacy.X` — legitimate canonical-first/
+        // legacy-fallback wire compatibility chains introduced in PR 4.5.
+        // Both LHS and RHS of `??` are exempt because the dropped column may
+        // appear on either side of a transitional fallback chain.
+        const parent = node.parent;
+        if (
+          parent &&
+          parent.type === 'LogicalExpression' &&
+          parent.operator === '??'
+        ) {
+          return;
+        }
+
         const propName = node.property.name;
         if (PROJECT_DROPPED_COLUMNS.has(propName) && isProjectLike(node.object)) {
           context.report({

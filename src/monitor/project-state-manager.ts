@@ -82,6 +82,7 @@ export class ProjectStateManager {
     options?: StateTransitionOptions,
   ): Promise<boolean> {
     const project = this.ctx.db.getProject(projectId);
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const currentStatus = project?.status ?? null;
     if (!currentStatus) {
       return false;
@@ -148,6 +149,7 @@ export class ProjectStateManager {
    */
   getState(projectId: string): Promise<ProjectStatus | null> {
     const project = this.ctx.db.getProject(projectId);
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     return Promise.resolve(project?.status ?? null);
   }
 

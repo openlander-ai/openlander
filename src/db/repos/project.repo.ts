@@ -520,12 +520,58 @@ export class ProjectRepo {
   }
 
   listArchivedProjects(): ProjectRow[] {
-    return this.db
+    const rows = this.db
       .select()
       .from(projects)
       .where(and(isNotNull(projects.archived_at), ne(projects.id, ORPHAN_MANAGED_GROUP_ID)))
       .orderBy(desc(projects.updated_at))
       .all() as ProjectRow[];
+    if (rows.length === 0) return rows;
+    // Batch-hydrate deployable fields from the canonical __svc service rows,
+    // matching the pattern used by listProjects() so archived-project
+    // consumers receive the full legacy runtime shape.
+    const svcIds = rows.map((r) => `${r.id}__svc`);
+    const svcRows = this.db
+      .select()
+      .from(services)
+      .where(inArray(services.id, svcIds))
+      .all() as ServiceRow[];
+    const svcById = new Map<string, ServiceRow>();
+    for (const s of svcRows) svcById.set(s.id, s);
+    return rows.map((row) => {
+      const svc = svcById.get(`${row.id}__svc`);
+      if (!svc) return row;
+      return {
+        ...row,
+        status: svc.status,
+        visibility: svc.visibility,
+        assigned_port: svc.assigned_port,
+        container_id: svc.container_id,
+        image_tag: svc.image_tag,
+        previous_image_tag: svc.previous_image_tag,
+        public_url: svc.public_url,
+        dockerfile_path: svc.dockerfile_path,
+        docker_target: svc.docker_target,
+        build_context: svc.build_context,
+        build_method: svc.build_method,
+        source: svc.source as ProjectRow['source'],
+        image_url: svc.image_url,
+        image_cmd: svc.image_cmd,
+        container_port: svc.container_port,
+        pending_fix: svc.pending_fix,
+        access_code: svc.access_code,
+        access_code_iv: svc.access_code_iv,
+        is_preview: svc.is_preview as ProjectRow['is_preview'],
+        pr_number: svc.pr_number,
+        project_type: svc.project_type,
+        health_check_strategy: svc.health_check_strategy,
+        health_check_path: svc.health_check_path,
+        recovering_started_at: svc.recovering_started_at,
+        parent_project_id: svc.parent_service_id
+          ? svc.parent_service_id.replace(/__svc$/, '')
+          : null,
+      };
+    });
   }
 
   isArchived(id: string): boolean {
