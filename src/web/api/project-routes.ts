@@ -770,74 +770,103 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const project = getProjectOrThrow(c, ctx);
 
     try {
+      // Post-grouping: a project is a group with N deployable services.
+      // List services as topology nodes. Falls back to legacy compose-child
+      // projects for backward compatibility (pre-grouping data).
+      const groupServices = ctx.db.getDeployablesByGroup(project.id);
       const childProjects = ctx.db.getChildProjects(project.id);
-      const nodes = childProjects.length > 0 ? childProjects : [project];
+      const useServices = groupServices.length > 0;
 
-      const nodeIds = new Set(nodes.map((n) => n.id));
+      const nodeIds = new Set(
+        useServices
+          ? groupServices.map((s) => s.id)
+          : (childProjects.length > 0 ? childProjects : [project]).map((n) => n.id),
+      );
 
       // Build dependsOn map: for each node, find its project_dependencies
       // whose target_service_id is another node in this topology.
       const dependsOnMap = new Map<string, string[]>();
-      for (const node of nodes) {
-        const deps = ctx.db.findDependenciesByProject(node.id);
+      const dependencyIdSource = useServices
+        ? groupServices.map((s) => s.id.replace(/__svc$/, ''))
+        : (childProjects.length > 0 ? childProjects : [project]).map((n) => n.id);
+      for (const lookupId of dependencyIdSource) {
+        const deps = ctx.db.findDependenciesByProject(lookupId);
         const siblingDeps = deps
           .map((d) => d.target_service_id)
           .filter((sid): sid is string => sid !== null && nodeIds.has(sid));
-        dependsOnMap.set(node.id, siblingDeps);
+        const nodeId = useServices ? `${lookupId}__svc` : lookupId;
+        dependsOnMap.set(nodeId, siblingDeps);
       }
 
       // Determine kind: 'Database' for known db service types, else 'Application'
-      function resolveKind(name: string): 'Application' | 'Database' {
-        const lower = name.toLowerCase();
+      function resolveKind(kindOrName: string): 'Application' | 'Database' {
+        const lower = kindOrName.toLowerCase();
         if (/postgres|mysql|mariadb|mongo|redis|sqlite|clickhouse|minio/.test(lower)) {
           return 'Database';
         }
         return 'Application';
       }
 
-      // Inspect health for all nodes in parallel — but funnel through
-      // a per-container 15s TTL cache + in-flight dedupe so rapid
-      // repeat polls (UI re-renders, multiple tabs) collapse to a
-      // single Docker call instead of N×services per poll.
-      const serviceNodes = await Promise.all(
-        nodes.map(async (node) => {
-          // PR 4 canonical-first: each topology node renders deployable
-          // runtime fields. Read from the services row (canonical) when
-          // available; fall back to legacy projects columns through 0012.
-          const deployable = ctx.db.getDeployableForProject(node.id);
-          const port = deployable?.assigned_port ?? node.assigned_port ?? null;
-          const url = port ? getProjectUrl(node.name) : null;
-          const image =
-            deployable?.image_url ??
-            node.image_url ??
-            deployable?.image_tag ??
-            node.image_tag ??
-            `${node.name}:latest`;
-          const kind = resolveKind(node.name);
-
-          // Hydrate the runtime probe with canonical container_id + status
-          // so per-node CPU / health collapses to the canonical source
-          // pre-0012 too.
-          const runtimeNode: TopologyNode = {
-            container_id: deployable?.container_id ?? node.container_id,
-            status: deployable?.status ?? node.status ?? null,
-          };
-          const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
-
-          return {
-            id: node.id,
-            name: node.name,
-            kind,
-            image,
-            health: runtime.health,
-            port,
-            url,
-            cpu: runtime.cpuDisplay,
-            mem: runtime.memDisplay,
-            dependsOn: dependsOnMap.get(node.id) ?? [],
-          };
-        }),
-      );
+      // Inspect health for all nodes in parallel — funneled through
+      // per-container 15s TTL cache + in-flight dedupe.
+      const serviceNodes = useServices
+        ? await Promise.all(
+            groupServices.map(async (svc) => {
+              const port = svc.assigned_port ?? null;
+              // Display name strips __svc suffix and group-name prefix.
+              const displayName = svc.name.replace(/__svc$/, '');
+              const url = port ? getProjectUrl(displayName) : null;
+              const image = svc.image_url ?? svc.image_tag ?? `${displayName}:latest`;
+              const kind = resolveKind(svc.kind);
+              const runtime = await getTopologyNodeRuntime(ctx, {
+                container_id: svc.container_id,
+                status: svc.status ?? null,
+              });
+              return {
+                id: svc.id,
+                name: displayName,
+                kind,
+                image,
+                health: runtime.health,
+                port,
+                url,
+                cpu: runtime.cpuDisplay,
+                mem: runtime.memDisplay,
+                dependsOn: dependsOnMap.get(svc.id) ?? [],
+              };
+            }),
+          )
+        : await Promise.all(
+            (childProjects.length > 0 ? childProjects : [project]).map(async (node) => {
+              const deployable = ctx.db.getDeployableForProject(node.id);
+              const port = deployable?.assigned_port ?? node.assigned_port ?? null;
+              const url = port ? getProjectUrl(node.name) : null;
+              const image =
+                deployable?.image_url ??
+                node.image_url ??
+                deployable?.image_tag ??
+                node.image_tag ??
+                `${node.name}:latest`;
+              const kind = resolveKind(node.name);
+              const runtimeNode: TopologyNode = {
+                container_id: deployable?.container_id ?? node.container_id,
+                status: deployable?.status ?? node.status ?? null,
+              };
+              const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
+              return {
+                id: node.id,
+                name: node.name,
+                kind,
+                image,
+                health: runtime.health,
+                port,
+                url,
+                cpu: runtime.cpuDisplay,
+                mem: runtime.memDisplay,
+                dependsOn: dependsOnMap.get(node.id) ?? [],
+              };
+            }),
+          );
 
       return c.json({ services: serviceNodes });
     } catch (err) {
