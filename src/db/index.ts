@@ -507,6 +507,19 @@ function bridgeLegacyDatabase(sqlite: SqliteDatabase, migrationsFolder: string):
     return;
   }
 
+  // Post-migration guard: `__drizzle_migrations` exists ⇒ the database has
+  // already gone through Drizzle's migrator at least once. The bridge's job
+  // is purely to convert pre-0001 legacy schemas; running its idempotent
+  // baseline pass on a post-migration DB causes `backfillMissingColumns` to
+  // re-ADD columns that later migrations (notably 0012's schema split)
+  // explicitly dropped. Observed regression: 35 cols on `projects` after
+  // ~62 PM2 restarts post-0012 ship. Skip the bridge once Drizzle history
+  // is present — the migrator handles forward progress on its own.
+  if (tableNames.has('__drizzle_migrations')) {
+    log.debug('bridge skipped: __drizzle_migrations present (post-migration DB)');
+    return;
+  }
+
   const needsEnvVarRebuild =
     tableNames.has('env_vars') && !getTableColumns(sqlite, 'env_vars').has('environment_id');
   const needsDeployLogRebuild =
