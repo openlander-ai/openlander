@@ -225,12 +225,15 @@ export class ProjectRepo {
       }
     }
 
-    // Single query: child counts grouped by parent_project_id.
+    // Single query: compose-child service counts grouped by parent project id.
+    // PR 4 Fix 2: count compose-child rows in `services` (canonical source)
+    // instead of child project rows — after 0012 drops compose-child from
+    // `projects`, the old query would return 0 for every stack.
     const childCountRows = this.db
-      .select({ parentId: projects.parent_project_id, cnt: count() })
-      .from(projects)
-      .where(inArray(projects.parent_project_id, projectIds))
-      .groupBy(projects.parent_project_id)
+      .select({ parentId: services.project_id, cnt: count() })
+      .from(services)
+      .where(and(inArray(services.project_id, projectIds), eq(services.kind, 'compose-child')))
+      .groupBy(services.project_id)
       .all() as Array<{ parentId: string | null; cnt: number }>;
 
     const childCountByParent = new Map<string, number>();

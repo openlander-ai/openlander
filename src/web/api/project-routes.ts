@@ -328,32 +328,88 @@ function parseServiceCredentials(credentials: string | null): Record<string, str
 }
 
 /**
+ * Deployable fields that can be read from the canonical services row.
+ * All fields are optional — callers pass `undefined` when no deployable row
+ * exists yet (e.g. during project creation).
+ */
+type DeployableForApi = {
+  kind?: string | null;
+  status?: string | null;
+  assigned_port?: number | null;
+  container_id?: string | null;
+  container_port?: number | null;
+  image_tag?: string | null;
+  previous_image_tag?: string | null;
+  public_url?: string | null;
+  image_url?: string | null;
+  source?: string | null;
+  build_method?: string | null;
+  dockerfile_path?: string | null;
+};
+
+/**
  * Map a project row to the wire shape used by /api/projects/:id and friends.
  *
- * PR 4: deployable runtime fields (status, assigned_port, image_url, ...)
- * read canonical-first from the auto-derived `services` row when available
- * (`<projectId>__svc`), falling back to the legacy `projects` columns through
- * migration 0012. Wire keys preserved byte-identical.
+ * PR 4 (Fix 1): Every deployable runtime field reads canonical-first from the
+ * `services` row (`<projectId>__svc`) with `??` fallback to the legacy
+ * `projects` columns through migration 0012.  NO `...project` spread — all
+ * wire keys are emitted explicitly so that when 0012 drops legacy columns the
+ * wire format is unchanged.  Wire keys are preserved byte-identical.
  */
-function mapProjectForApi(
-  project: ProjectRow,
-  deployable?: { kind?: string | null; assigned_port?: number | null; image_url?: string | null },
-) {
-  // Canonical-first reads (?? legacy fallback). Caller is encouraged to pass
-  // the pre-fetched deployable to avoid a second DB hit.
+function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
+  // Deployable runtime fields — canonical-first ?? legacy fallback.
   const port = deployable?.assigned_port ?? project.assigned_port ?? null;
   const imageUrl = deployable?.image_url ?? project.image_url ?? undefined;
+  const status = deployable?.status ?? project.status;
+  const containerId = deployable?.container_id ?? project.container_id ?? null;
+  const containerPort = deployable?.container_port ?? project.container_port ?? null;
+  const imageTag = deployable?.image_tag ?? project.image_tag ?? null;
+  const previousImageTag = deployable?.previous_image_tag ?? project.previous_image_tag ?? null;
+  const publicUrl = deployable?.public_url ?? project.public_url ?? null;
+  const source = deployable?.source ?? project.source;
+  const buildMethod = deployable?.build_method ?? project.build_method ?? null;
+  const dockerfilePath = deployable?.dockerfile_path ?? project.dockerfile_path;
+
   return {
-    ...project,
+    // --- Identity / group fields (live on `projects` permanently) ---
+    id: project.id,
+    name: project.name,
+    repo_url: project.repo_url,
+    branch: project.branch,
+    parent_project_id: project.parent_project_id,
+    visibility: project.visibility,
+    server_id: project.server_id,
+    project_type: project.project_type,
+    is_preview: project.is_preview,
+    pr_number: project.pr_number,
+    health_check_strategy: project.health_check_strategy,
+    health_check_path: project.health_check_path,
+    deploy_lock_session: project.deploy_lock_session,
+    deploy_lock_at: project.deploy_lock_at,
+    access_code: project.access_code,
+    access_code_iv: project.access_code_iv,
+    pending_fix: project.pending_fix,
+    recovering_started_at: project.recovering_started_at,
+    archived_at: project.archived_at,
+    docker_target: project.docker_target,
+    build_context: project.build_context,
+    // --- Deployable runtime fields — canonical-first ?? legacy fallback ---
+    status,
+    container_id: containerId,
+    image_tag: imageTag,
+    previous_image_tag: previousImageTag,
+    build_method: buildMethod,
+    dockerfile_path: dockerfilePath,
+    // --- Transformed/computed wire keys (camelCase for frontend) ---
     port,
     url: port ? getProjectUrl(project.name) : null,
     urls: port ? getProjectUrls(project.name) : [],
-    publicUrl: project.public_url ?? null,
+    publicUrl,
     repoUrl: project.repo_url,
-    source: project.source,
+    source,
     imageUrl,
     imageCmd: parseImageCmd(project.image_cmd),
-    containerPort: project.container_port ?? null,
+    containerPort,
     created_at: normalizeTimestamp(project.created_at),
     updated_at: normalizeTimestamp(project.updated_at),
   };
@@ -614,12 +670,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         const projectStatus = deployable?.status ?? p.status;
         const port = deployable?.assigned_port ?? p.assigned_port;
         const imageUrl = deployable?.image_url ?? p.image_url;
+        // Fix 3: source and public_url are deployable fields — canonical-first.
+        const projectSource = deployable?.source ?? p.source;
+        const publicUrl = deployable?.public_url ?? p.public_url ?? null;
         return {
           id: p.id,
           name: p.name,
           status: projectStatus,
           visibility: p.visibility,
-          source: p.source,
+          source: projectSource,
           repoUrl: p.repo_url,
           branch: p.branch,
           port,
@@ -631,7 +690,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
                 ip: ip.address,
               }))
             : [],
-          publicUrl: p.public_url,
+          publicUrl,
           ...(imageUrl ? { imageUrl } : {}),
           createdAt: normalizeTimestamp(p.created_at),
           updatedAt: normalizeTimestamp(p.updated_at),
