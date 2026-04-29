@@ -101,15 +101,22 @@
     --ol-bg-app: var(--bg);
     --ol-panel: var(--panel);
     --ol-panel-2: var(--panel-2);
-    --ol-border: var(--border);
+    /* Bypass --border alias for the same reason as --ol-primary above:
+       shadcn's HSL channel format clobbers tokens.css's oklch in the cascade. */
+    --ol-border: oklch(0.915 0.003 250);
     --ol-border-subtle: var(--border-subtle);
     --ol-border-strong: var(--border-strong);
     --ol-fg: var(--fg);
     --ol-fg-muted: var(--fg-muted);
     --ol-fg-subtle: var(--fg-subtle);
-    --ol-primary: var(--primary);
-    --ol-primary-soft: var(--primary-soft);
-    --ol-primary-fg: var(--primary-fg);
+    /* Bypass --primary alias: shadcn redefines --primary as HSL channels
+       (e.g. "152 45% 45%") in index.css for `hsl(var(--primary))` consumers.
+       tokens.css's --primary (oklch) loses the cascade fight against the
+       layered shadcn redeclaration, so var(--ol-primary) was resolving to
+       channel-only invalid CSS → transparent backgrounds. */
+    --ol-primary: oklch(0.62 0.16 152);
+    --ol-primary-soft: oklch(0.95 0.04 152);
+    --ol-primary-fg: oklch(1 0 0);
     --ol-success: var(--success);
     --ol-success-soft: var(--success-soft);
     --ol-warning: var(--warning);
