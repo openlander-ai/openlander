@@ -1206,11 +1206,12 @@ export class DeployPipeline {
       };
     });
 
-    const existingChildren = this.db.getChildProjects(parentId);
+    // PR 2: fetch existing children via services.parent_service_id.
+    const existingChildren = this.db.getComposeChildProjects(parentId);
     detectMonorepoDependencies(services, parentName, (serviceName) => {
       const envVarsToScan: Record<string, string> = {};
       const childName = `${parentName}/${serviceName}`;
-      const existingChild = existingChildren.find((child) => child.name === childName);
+      const existingChild = existingChildren.find((c) => c.name === childName);
 
       if (existingChild) {
         Object.assign(envVarsToScan, this.env.getAll(existingChild.id));
@@ -1225,9 +1226,7 @@ export class DeployPipeline {
 
     const serviceNames = new Set(services.map((s) => s.name));
     if (serviceNames.has('app') && !serviceNames.has('main')) {
-      const legacyChildren = this.db
-        .getChildProjects(parentId)
-        .filter((c) => c.name === `${parentName}/main`);
+      const legacyChildren = existingChildren.filter((c) => c.name === `${parentName}/main`);
       for (const child of legacyChildren) {
         if (child.container_id) {
           try {
@@ -2005,8 +2004,9 @@ export class DeployPipeline {
       return;
     }
 
-    const children = this.db.getChildProjects(projectId);
-    if (children.length > 0) {
+    // PR 2: check compose children via services.parent_service_id.
+    const childProjects = this.db.getComposeChildProjects(projectId);
+    if (childProjects.length > 0) {
       await this.lifecycle.stop(projectId);
       this.closeTunnel(projectId);
       return;
@@ -2060,8 +2060,9 @@ export class DeployPipeline {
     while (queue.length > 0) {
       const current = queue.shift();
       if (!current) continue;
-      const children = this.db.getChildProjects(current);
-      for (const child of children) {
+      // PR 2: fetch compose children via services.parent_service_id.
+      const childProjects = this.db.getComposeChildProjects(current);
+      for (const child of childProjects) {
         if (descendants.has(child.id)) continue;
         descendants.add(child.id);
         queue.push(child.id);

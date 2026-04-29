@@ -538,10 +538,12 @@ describe('ComposePipeline', () => {
       expect(workerChild).toBeDefined();
       expect(workerChild?.container_id).toBe('container-ol-stack-worker');
 
-      const originalGetChildProjects = db.getChildProjects.bind(db);
-      const getChildProjectsMock = vi
-        .spyOn(db, 'getChildProjects')
-        .mockImplementation((projectId) => originalGetChildProjects(projectId));
+      // PR 2: compose child lookup now uses getComposeChildProjects (via services.parent_service_id)
+      // instead of getChildProjects (via projects.parent_project_id).
+      const originalGetComposeChildProjects = db.getComposeChildProjects.bind(db);
+      const getComposeChildProjectsMock = vi
+        .spyOn(db, 'getComposeChildProjects')
+        .mockImplementation((projectId) => originalGetComposeChildProjects(projectId));
       const deleteProjectMock = vi.spyOn(db, 'deleteProject');
 
       writeFileSync(
@@ -559,7 +561,7 @@ describe('ComposePipeline', () => {
       });
 
       expect(secondDeploy.success).toBe(true);
-      expect(getChildProjectsMock).toHaveBeenCalledWith(firstDeploy.parentProjectId);
+      expect(getComposeChildProjectsMock).toHaveBeenCalledWith(firstDeploy.parentProjectId);
       expect(deleteProjectMock).toHaveBeenCalledWith(workerChild!.id);
       expect(stopContainerMock).toHaveBeenCalledWith('container-ol-stack-worker');
       expect(removeContainerMock).toHaveBeenCalledWith('container-ol-stack-worker');

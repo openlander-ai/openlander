@@ -551,6 +551,21 @@ export class Database implements AuthDatabase {
   updateService(id: string, updates: Parameters<ServiceRepo['updateService']>[1]) { this.serviceRepo.updateService(id, updates); }
   deleteService(id: string) { this.serviceRepo.deleteService(id); }
   getComposeChildren(parentServiceId: string) { return this.serviceRepo.getComposeChildren(parentServiceId); }
+  /**
+   * PR 2 helper: look up compose-child ProjectRows via services.parent_service_id.
+   * Replaces `getChildProjects(parentId)` in pipeline code so the hierarchy
+   * traversal goes through services table while downstream code still gets
+   * ProjectRow (with container_id, status, etc. still on projects until PR 5).
+   */
+  getComposeChildProjects(parentProjectId: string): ProjectRow[] {
+    const childServices = this.serviceRepo.getComposeChildren(`${parentProjectId}__svc`);
+    return childServices
+      .map((svc) => {
+        const childProjectId = svc.id.replace(/__svc$/, '');
+        return this.projectRepo.getProject(childProjectId);
+      })
+      .filter((p): p is ProjectRow => p !== undefined);
+  }
   getDeployablesByGroup(projectId: string) { return this.serviceRepo.getDeployablesByGroup(projectId); }
   createServiceConnection(opts: Parameters<ServiceConnectionRepo['createConnection']>[0]) { return this.serviceConnectionRepo.createConnection(opts); }
   getServiceConnection(id: string) { return this.serviceConnectionRepo.getConnection(id); }

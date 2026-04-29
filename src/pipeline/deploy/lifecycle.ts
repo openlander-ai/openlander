@@ -59,9 +59,9 @@ export class ContainerLifecycle {
   }
 
   async start(projectId: string): Promise<void> {
-    const children = this.db
-      .listProjects()
-      .filter((project) => project.parent_project_id === projectId);
+    // PR 2: switch compose-child lookup from parent_project_id scan to
+    // services.parent_service_id via getComposeChildProjects.
+    const children = this.db.getComposeChildProjects(projectId);
     const hasChildren = children.length > 0;
     if (children.length > 0) {
       await Promise.all(children.map((child) => this.start(child.id)));
@@ -102,9 +102,8 @@ export class ContainerLifecycle {
   async stop(projectId: string): Promise<void> {
     this.coordinator?.suppressProject(projectId, 60_000);
 
-    const children = this.db
-      .listProjects()
-      .filter((project) => project.parent_project_id === projectId);
+    // PR 2: switch compose-child lookup to services.parent_service_id.
+    const children = this.db.getComposeChildProjects(projectId);
     if (children.length > 0) {
       await Promise.all(children.map((child) => this.stop(child.id)));
     }
@@ -140,9 +139,8 @@ export class ContainerLifecycle {
   }
 
   async remove(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
-    const children = this.db
-      .listProjects()
-      .filter((project) => project.parent_project_id === projectId);
+    // PR 2: switch compose-child lookup to services.parent_service_id.
+    const children = this.db.getComposeChildProjects(projectId);
     if (children.length > 0) {
       await Promise.all(children.map((child) => this.remove(child.id, tunnelManager)));
     }
@@ -181,9 +179,8 @@ export class ContainerLifecycle {
       );
     }
 
-    const children = this.db
-      .listProjects(undefined, { includeArchived: false })
-      .filter((candidate) => candidate.parent_project_id === projectId);
+    // PR 2: switch compose-child lookup to services.parent_service_id.
+    const children = this.db.getComposeChildProjects(projectId);
     for (const child of children) {
       await this.archive(child.id, tunnelManager);
     }
