@@ -79,7 +79,10 @@ export const envToolDefs: ToolDef[] = [
         };
       }
 
-      if (changed && project.status === 'running') {
+      // PR 4.5: canonical-first status read.
+      const setEnvDeployable = appCtx.db.getDeployableForProject(project.id);
+      const setEnvStatus = setEnvDeployable?.status ?? project.status;
+      if (changed && setEnvStatus === 'running') {
         // 1.0 GA: per-project lock instead of global DeployQueue.
         const envSessionId = `mcp-set-env-${project.id}-${Date.now().toString(36)}`;
         const memLockAcquired = appCtx.agentPool
@@ -176,11 +179,14 @@ export const envToolDefs: ToolDef[] = [
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
       const project = getProjectByName(appCtx, projectName);
-      if (!project.assigned_port) {
+      // PR 4.5: canonical-first port read.
+      const exposeDeployable = appCtx.db.getDeployableForProject(project.id);
+      const exposePort = exposeDeployable?.assigned_port ?? project.assigned_port;
+      if (!exposePort) {
         throw new Error('Project is not running — deploy it first');
       }
 
-      const url = await appCtx.pipeline.exposeTunnel(project.id, project.assigned_port);
+      const url = await appCtx.pipeline.exposeTunnel(project.id, exposePort);
       return {
         status: 'exposed',
         project: projectName,
