@@ -160,7 +160,10 @@ export class ProjectHealthMonitor {
       return;
     }
 
-    if ((project.status !== 'running' && project.status !== 'error') || project.archived_at) {
+    // PR 4.5: canonical-first status read with `??` fallback.
+    const deployable = this.db.getDeployableForProject(projectId);
+    const status = deployable?.status ?? project.status;
+    if ((status !== 'running' && status !== 'error') || project.archived_at) {
       return;
     }
 

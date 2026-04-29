@@ -251,15 +251,11 @@ export class OpsAgent {
 
     // Skip projects not in running/error state — no recovery needed
     const project = this.ctx.db.getProject(projectId);
-    if (
-      !project ||
-      (project.status !== 'running' && project.status !== 'error') ||
-      project.archived_at
-    ) {
-      log.debug(
-        { projectId, status: project?.status },
-        'Skipping crash event for non-running project',
-      );
+    // PR 4.5: canonical-first status read with `??` fallback.
+    const deployable = project ? this.ctx.db.getDeployableForProject(projectId) : undefined;
+    const status = deployable?.status ?? project?.status;
+    if (!project || (status !== 'running' && status !== 'error') || project.archived_at) {
+      log.debug({ projectId, status }, 'Skipping crash event for non-running project');
       return;
     }
 

@@ -440,9 +440,14 @@ export class RecoveryPipeline {
     }
 
     const project = this.ctx.db.getProject(context.projectId);
-    if (!project || project.archived_at || project.status === 'stopped') {
+    // PR 4.5: canonical-first status read with `??` fallback.
+    const diagDeployable = project
+      ? this.ctx.db.getDeployableForProject(context.projectId)
+      : undefined;
+    const diagStatus = diagDeployable?.status ?? project?.status;
+    if (!project || project.archived_at || diagStatus === 'stopped') {
       log.debug(
-        { projectId: context.projectId, status: project?.status },
+        { projectId: context.projectId, status: diagStatus },
         'Skipping LLM diagnosis — project not active',
       );
       return null;
@@ -519,8 +524,13 @@ export class RecoveryPipeline {
     const portConflictPattern = /eaddrinuse|address already in use|bind: address already in use/i;
     if (portConflictPattern.test(logs)) {
       const project = this.ctx.db.getProject(context.projectId);
-      if (project?.assigned_port != null) {
-        const resolved = await this.resolvePortConflict(context, project.assigned_port);
+      // PR 4.5: canonical-first read of assigned_port with `??` fallback.
+      const portDeployable = project
+        ? this.ctx.db.getDeployableForProject(context.projectId)
+        : undefined;
+      const portAssigned = portDeployable?.assigned_port ?? project?.assigned_port;
+      if (portAssigned != null) {
+        const resolved = await this.resolvePortConflict(context, portAssigned);
         notes.push(
           resolved ? 'Port-conflict resolution attempted' : 'Port-conflict resolution failed',
         );
@@ -567,7 +577,12 @@ export class RecoveryPipeline {
     reason: string,
   ): Promise<'recovered' | 'escalated'> {
     const project = this.ctx.db.getProject(context.projectId);
-    if (!project?.previous_image_tag) {
+    // PR 4.5: canonical-first read of previous_image_tag with `??` fallback.
+    const rollbackDeployable = project
+      ? this.ctx.db.getDeployableForProject(context.projectId)
+      : undefined;
+    const previousImageTag = rollbackDeployable?.previous_image_tag ?? project?.previous_image_tag;
+    if (!previousImageTag) {
       return await this.escalate(context, `${reason}; no previous image available for rollback`);
     }
 
@@ -583,7 +598,7 @@ export class RecoveryPipeline {
     this.addIncidentEvent(
       context.incidentId,
       'action_taken',
-      `Step rollback: attempting rollback to ${project.previous_image_tag}`,
+      `Step rollback: attempting rollback to ${previousImageTag}`,
     );
 
     try {

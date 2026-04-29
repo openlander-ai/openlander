@@ -94,7 +94,15 @@ export class RollbackWatcher {
     if (!watcher) return;
 
     const project = this.db.getProject(projectId);
-    if (!project || project.status === 'stopped') {
+    if (!project) {
+      this.stopWatching(projectId);
+      return;
+    }
+    // PR 4.5: canonical-first reads with `??` fallback to legacy columns.
+    const deployable = this.db.getDeployableForProject(projectId);
+    const status = deployable?.status ?? project.status;
+    const previousImageTag = deployable?.previous_image_tag ?? project.previous_image_tag;
+    if (status === 'stopped') {
       this.stopWatching(projectId);
       return;
     }
@@ -111,7 +119,7 @@ export class RollbackWatcher {
     );
 
     if (watcher.consecutiveFailures >= this.FAILURE_THRESHOLD) {
-      if (project.previous_image_tag) {
+      if (previousImageTag) {
         if (this.options?.onRegressionSignal) {
           // Delegate recovery decision to RecoveryCoordinator via RuntimeSignal
           const signal: RuntimeSignal = {
@@ -131,7 +139,7 @@ export class RollbackWatcher {
             projectId,
             projectName: project.name,
             consecutiveFailures: watcher.consecutiveFailures,
-            previousImageTag: project.previous_image_tag,
+            previousImageTag,
           });
         }
       }

@@ -50,9 +50,13 @@ export class ContainerAlertHandler {
 
   private async handleRuntimeCrash(projectId: string, error: string): Promise<void> {
     const project = this.db.getProject(projectId);
-    if (!project?.container_id) return;
+    if (!project) return;
+    // PR 4.5: canonical-first read of container_id with `??` fallback.
+    const deployable = this.db.getDeployableForProject(projectId);
+    const containerId = deployable?.container_id ?? project.container_id;
+    if (!containerId) return;
 
-    const key = `container-crash:${project.container_id}`;
+    const key = `container-crash:${containerId}`;
     const suggestion = `Check the container logs for errors using "get_logs ${project.name}" and investigate the root cause. The application may be crashing on startup.`;
 
     await this.alertMonitor.upsertAlert(key, {
@@ -62,7 +66,7 @@ export class ContainerAlertHandler {
       details: {
         projectId: project.id,
         projectName: project.name,
-        containerId: project.container_id,
+        containerId,
       },
       suggestion,
     });
