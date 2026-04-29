@@ -1,4 +1,17 @@
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm';
 import {
   OpenLanderError,
   ProjectAlreadyExistsError,
@@ -330,11 +343,18 @@ export class ProjectRepo {
       }
     }
 
-    // Compose-child counts grouped by parent project id.
+    // Total deployable services per project group (excludes managed-service kinds:
+    // postgres/mysql/redis/mongo/minio). Counts compose-children + git/image/compose
+    // services. This is the "serviceCount" badge shown in /api/projects.
     const childCountRows = this.db
       .select({ parentId: services.project_id, cnt: count() })
       .from(services)
-      .where(and(inArray(services.project_id, projectIds), eq(services.kind, 'compose-child')))
+      .where(
+        and(
+          inArray(services.project_id, projectIds),
+          notInArray(services.kind, ['postgres', 'mysql', 'redis', 'mongo', 'minio']),
+        ),
+      )
       .groupBy(services.project_id)
       .all() as Array<{ parentId: string | null; cnt: number }>;
 
