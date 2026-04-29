@@ -267,12 +267,12 @@ function backfillProductionEnvironments(sqlite: SqliteDatabase): void {
         project.id,
         `${project.id}__svc`,
         project.branch ?? 'main',
-        project.status ?? 'idle', // eslint-disable-line openlander-internal/no-dropped-columns
-        project.assigned_port ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
-        project.container_id ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
-        project.image_tag ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
-        project.previous_image_tag ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
-        project.public_url ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
+        project.status ?? 'idle',
+        project.assigned_port ?? null,
+        project.container_id ?? null,
+        project.image_tag ?? null,
+        project.previous_image_tag ?? null,
+        project.public_url ?? null,
         null,
         project.created_at ?? new Date().toISOString(),
         project.updated_at ?? new Date().toISOString(),
@@ -282,12 +282,12 @@ function backfillProductionEnvironments(sqlite: SqliteDatabase): void {
         `${project.id}-production`,
         project.id,
         project.branch ?? 'main',
-        project.status ?? 'idle', // eslint-disable-line openlander-internal/no-dropped-columns
-        project.assigned_port ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
-        project.container_id ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
-        project.image_tag ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
-        project.previous_image_tag ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
-        project.public_url ?? null, // eslint-disable-line openlander-internal/no-dropped-columns
+        project.status ?? 'idle',
+        project.assigned_port ?? null,
+        project.container_id ?? null,
+        project.image_tag ?? null,
+        project.previous_image_tag ?? null,
+        project.public_url ?? null,
         null,
         project.created_at ?? new Date().toISOString(),
         project.updated_at ?? new Date().toISOString(),
@@ -587,10 +587,13 @@ export class Database implements AuthDatabase {
     this.db = db;
     this.sqlite.exec('PRAGMA foreign_keys = OFF');
     try {
-      bridgeLegacyDatabase(this.sqlite, migrationsFolder);
-      // Backup-or-bust prelude — runs BEFORE migrate() so the disk file
-      // captures pre-0012 state. Throws if backup write fails.
+      // Backup-or-bust prelude — runs FIRST, before any DB mutation. If
+      // bridgeLegacyDatabase or migrate() fails midway, the on-disk
+      // backup represents the original pre-mutation state, not a
+      // partially-bridged hybrid. Pending-detection only reads
+      // __drizzle_migrations row count, so it works without the bridge.
       backupOrBustForMigration0012(this.sqlite, dbPath);
+      bridgeLegacyDatabase(this.sqlite, migrationsFolder);
       migrate(this.db as Parameters<typeof migrate>[0], {
         migrationsFolder,
       });
