@@ -681,26 +681,28 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const projectsWithMeta = ctx.db.listProjectsWithMetadata(status, { includeArchived });
     const ips = getAllIps();
 
-    // PR 4 canonical-first batch lookup: pre-fetch each project's deployable
-    // services row (id = `<projectId>__svc`) so per-row wire emission can
-    // read canonical kind/image_url/assigned_port/status without N+1
-    // round-trips. Falls back to legacy `projects` columns through 0012.
-    const deployableById = new Map<string, ReturnType<typeof ctx.db.getDeployableForProject>>();
-    for (const { project: p } of projectsWithMeta) {
-      deployableById.set(p.id, ctx.db.getDeployableForProject(p.id));
-    }
-
+    // CCG perf #3 (Codex 2026-04-30): the per-row pre-fetch loop here was
+    // an N+1 — listProjectsWithMetadata → listProjects already batch-hydrates
+    // every row from its `<id>__svc` service (project.repo.ts:251), so
+    // p.status / p.assigned_port / p.image_url / p.source / p.public_url
+    // are already canonical-first. With include_archived=true on dogfood
+    // mini that loop was ~131 round-trips for nothing.
     return c.json({
       count: projectsWithMeta.length,
       projects: projectsWithMeta.map(({ project: p, environments, childCount, isCompose }) => {
-        const deployable = deployableById.get(p.id);
-        // Canonical-first reads (?? legacy fallback). Wire keys preserved.
-        const projectStatus = deployable?.status ?? p.status;
-        const port = deployable?.assigned_port ?? p.assigned_port;
-        const imageUrl = deployable?.image_url ?? p.image_url;
-        // Fix 3: source and public_url are deployable fields — canonical-first.
-        const projectSource = deployable?.source ?? p.source;
-        const publicUrl = deployable?.public_url ?? p.public_url ?? null;
+        // Wire shape unchanged — the same canonical fields, just read off p
+        // directly instead of through getDeployableForProject(p.id). The
+        // `p` object is the listProjects-hydrated row (project.repo.ts:251):
+        // status / assigned_port / image_url come from the __svc service,
+        // not the dropped projects-table columns. The lint rule's name-based
+        // check would flag the read; the data is already canonical.
+        /* eslint-disable openlander-internal/no-dropped-columns */
+        const projectStatus = p.status;
+        const port = p.assigned_port;
+        const imageUrl = p.image_url;
+        const projectSource = p.source;
+        const publicUrl = p.public_url ?? null;
+        /* eslint-enable openlander-internal/no-dropped-columns */
         return {
           id: p.id,
           name: p.name,
@@ -773,9 +775,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       // Post-grouping: a project is a group with N deployable services.
       // List services as topology nodes. Falls back to legacy compose-child
       // projects for backward compatibility (pre-grouping data).
+      // CCG perf #4 (Codex 2026-04-30): only run the legacy getChildProjects
+      // path when the group has no services. The previous unconditional call
+      // ran a query + N getProject() round-trips for every grouped project,
+      // even though the result was discarded by useServices=true.
       const groupServices = ctx.db.getDeployablesByGroup(project.id);
-      const childProjects = ctx.db.getChildProjects(project.id);
       const useServices = groupServices.length > 0;
+      const childProjects = useServices ? [] : ctx.db.getChildProjects(project.id);
 
       const nodeIds = new Set(
         useServices

@@ -166,20 +166,18 @@ export function createSystemRoutes(ctx: AppContext): Hono {
 
   api.get('/services', async (c) => {
     try {
-      // v5.2: this endpoint backs /managed-services in the UI. Filter the
-      // listWithCardSummary result down to managed kinds (postgres / mysql /
-      // redis / mongo / minio) so deployable services don't leak into the
-      // managed-services view. Card summary still does its inspect+health
-      // work for the kept set; deployables are excluded *after* that work
-      // (acceptable cost — kept for simplicity over a per-kind branch in the
-      // service manager).
-      const services = await ctx.serviceManager.listWithCardSummary();
-      const wire = services
-        .filter((svc) => (MANAGED_SERVICE_KINDS as readonly string[]).includes(svc.kind))
-        .map((svc) => {
-          const envVars = ctx.db.getEnvVars(svc.id);
-          return toServiceWire(svc, envVars);
-        });
+      // /managed-services UI surface. Pass kindIn into listWithCardSummary so
+      // the Docker inspect+health fan-out only runs for the ~10 managed rows
+      // instead of 30+ services (the post-filter approach in v5.2 still
+      // inspected every container before discarding deployables — Codex perf
+      // finding #1, 2026-04-30).
+      const services = await ctx.serviceManager.listWithCardSummary({
+        kindIn: MANAGED_SERVICE_KINDS,
+      });
+      const wire = services.map((svc) => {
+        const envVars = ctx.db.getEnvVars(svc.id);
+        return toServiceWire(svc, envVars);
+      });
       return c.json(wire);
     } catch (err) {
       log.debug({ err }, 'List services failed');

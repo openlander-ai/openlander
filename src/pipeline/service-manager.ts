@@ -178,8 +178,15 @@ const DEFAULT_ENV_KEYS: Record<string, string> = {
 };
 
 export class ServiceManager {
-  private serviceCardSummaryCache: { expiresAt: number; data: ServiceCardSummary[] } | null = null;
-  private serviceCardSummaryInFlight: Promise<ServiceCardSummary[]> | null = null;
+  private serviceCardSummaryCache: {
+    key: string;
+    expiresAt: number;
+    data: ServiceCardSummary[];
+  } | null = null;
+  private serviceCardSummaryInFlight: {
+    key: string;
+    promise: Promise<ServiceCardSummary[]>;
+  } | null = null;
   private serviceCardSummaryEpoch = 0;
 
   constructor(
@@ -879,19 +886,37 @@ export class ServiceManager {
     return { status: inspection.status, healthStatus: inspection.healthStatus };
   }
 
-  async listWithCardSummary(): Promise<ServiceCardSummary[]> {
-    const cached = this.serviceCardSummaryCache;
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.data;
+  /**
+   * Card-summary listing with cached Docker inspect+health for each service.
+   *
+   * `kindIn`: when provided, filter services BEFORE the Docker fan-out so we
+   * don't waste inspect work on rows the caller will discard. Backs the
+   * /managed-services page (~10 managed rows) instead of all 30+ services
+   * (CCG perf finding #1, Codex 2026-04-30).
+   *
+   * The cache is keyed on the filter so a future "all services" caller
+   * doesn't get a managed-only payload back from a stale entry.
+   */
+  async listWithCardSummary(opts?: {
+    kindIn?: readonly ServiceRow['kind'][];
+  }): Promise<ServiceCardSummary[]> {
+    const kindIn = opts?.kindIn ?? null;
+    const cacheKey = kindIn ? `kinds:${[...kindIn].sort().join(',')}` : 'all';
+    const cachedEntry = this.serviceCardSummaryCache;
+    if (cachedEntry && cachedEntry.key === cacheKey && cachedEntry.expiresAt > Date.now()) {
+      return cachedEntry.data;
     }
 
-    if (this.serviceCardSummaryInFlight) {
-      return this.serviceCardSummaryInFlight;
+    if (this.serviceCardSummaryInFlight && this.serviceCardSummaryInFlight.key === cacheKey) {
+      return this.serviceCardSummaryInFlight.promise;
     }
 
     const epoch = this.serviceCardSummaryEpoch;
     const loadPromise = (async () => {
-      const services = this.db.listServices();
+      const allServices = this.db.listServices();
+      const services = kindIn
+        ? allServices.filter((s) => (kindIn as readonly string[]).includes(s.kind))
+        : allServices;
       const summaries = await Promise.all(
         services.map(async (service) => {
           const inspection = await this.inspectServiceContainer(service);
@@ -912,6 +937,7 @@ export class ServiceManager {
 
       if (this.serviceCardSummaryEpoch === epoch) {
         this.serviceCardSummaryCache = {
+          key: cacheKey,
           expiresAt: Date.now() + SERVICE_CARD_SUMMARY_CACHE_TTL_MS,
           data: summaries,
         };
@@ -920,12 +946,20 @@ export class ServiceManager {
       return summaries;
     })();
 
-    this.serviceCardSummaryInFlight = loadPromise;
+    this.serviceCardSummaryInFlight = { key: cacheKey, promise: loadPromise };
 
     try {
       return await loadPromise;
     } finally {
-      if (this.serviceCardSummaryInFlight === loadPromise) {
+      // Race guard: clear in-flight only if it still points at this load.
+      // ESLint's type-narrowing flags this as always-truthy, but at runtime
+      // another caller may have superseded the in-flight slot during the
+      // await above — the truthiness check is intentional.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (
+        this.serviceCardSummaryInFlight &&
+        this.serviceCardSummaryInFlight.promise === loadPromise
+      ) {
         this.serviceCardSummaryInFlight = null;
       }
     }
