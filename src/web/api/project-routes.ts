@@ -69,6 +69,34 @@ const TOPOLOGY_NODE_CACHE_TTL_MS = 15_000;
 const topologyNodeCache = new Map<string, { ts: number; value: TopologyNodeRuntime }>();
 const topologyNodeInFlight = new Map<string, Promise<TopologyNodeRuntime>>();
 
+/**
+ * Cap how many Docker inspect+stats calls fly in parallel during a single
+ * topology cold-load. Six is a balance: enough to keep the wall-time short
+ * for a 30-node group, low enough that the Docker socket / daemon doesn't
+ * thrash. The TTL cache + in-flight dedupe above already collapse repeat
+ * polls — this only matters for the cold path.
+ */
+const TOPOLOGY_INSPECT_CONCURRENCY = 6;
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const idx = cursor++;
+      const item = items[idx];
+      if (item === undefined) continue;
+      results[idx] = await worker(item, idx);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 function invalidateTopologyNodeCache(containerId: string | null | undefined): void {
   if (!containerId) return;
   topologyNodeCache.delete(containerId);
@@ -813,37 +841,38 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         return 'Application';
       }
 
-      // Inspect health for all nodes in parallel — funneled through
-      // per-container 15s TTL cache + in-flight dedupe.
+      // Inspect health for all nodes — funneled through per-container 15s
+      // TTL cache + in-flight dedupe + a 6-wide concurrency limiter so a
+      // 30-node group doesn't open 60 simultaneous Docker calls.
       const serviceNodes = useServices
-        ? await Promise.all(
-            groupServices.map(async (svc) => {
-              const port = svc.assigned_port ?? null;
-              // Display name strips __svc suffix and group-name prefix.
-              const displayName = svc.name.replace(/__svc$/, '');
-              const url = port ? getProjectUrl(displayName) : null;
-              const image = svc.image_url ?? svc.image_tag ?? `${displayName}:latest`;
-              const kind = resolveKind(svc.kind);
-              const runtime = await getTopologyNodeRuntime(ctx, {
-                container_id: svc.container_id,
-                status: svc.status ?? null,
-              });
-              return {
-                id: svc.id,
-                name: displayName,
-                kind,
-                image,
-                health: runtime.health,
-                port,
-                url,
-                cpu: runtime.cpuDisplay,
-                mem: runtime.memDisplay,
-                dependsOn: dependsOnMap.get(svc.id) ?? [],
-              };
-            }),
-          )
-        : await Promise.all(
-            (childProjects.length > 0 ? childProjects : [project]).map(async (node) => {
+        ? await mapWithConcurrency(groupServices, TOPOLOGY_INSPECT_CONCURRENCY, async (svc) => {
+            const port = svc.assigned_port ?? null;
+            // Display name strips __svc suffix and group-name prefix.
+            const displayName = svc.name.replace(/__svc$/, '');
+            const url = port ? getProjectUrl(displayName) : null;
+            const image = svc.image_url ?? svc.image_tag ?? `${displayName}:latest`;
+            const kind = resolveKind(svc.kind);
+            const runtime = await getTopologyNodeRuntime(ctx, {
+              container_id: svc.container_id,
+              status: svc.status ?? null,
+            });
+            return {
+              id: svc.id,
+              name: displayName,
+              kind,
+              image,
+              health: runtime.health,
+              port,
+              url,
+              cpu: runtime.cpuDisplay,
+              mem: runtime.memDisplay,
+              dependsOn: dependsOnMap.get(svc.id) ?? [],
+            };
+          })
+        : await mapWithConcurrency(
+            childProjects.length > 0 ? childProjects : [project],
+            TOPOLOGY_INSPECT_CONCURRENCY,
+            async (node) => {
               const deployable = ctx.db.getDeployableForProject(node.id);
               const port = deployable?.assigned_port ?? node.assigned_port ?? null;
               const url = port ? getProjectUrl(node.name) : null;
@@ -871,7 +900,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
                 mem: runtime.memDisplay,
                 dependsOn: dependsOnMap.get(node.id) ?? [],
               };
-            }),
+            },
           );
 
       return c.json({ services: serviceNodes });
