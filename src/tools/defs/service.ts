@@ -90,12 +90,24 @@ export const serviceToolDefs: ToolDef[] = [
       'Create a service. Supports template, custom image, or template + custom image combo (auto-credentials with custom image).',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
+      const targetProjectId = args['target_project_id'] as string | undefined;
       const result = await appCtx.serviceManager.create({
         name: args['name'] as string,
         template: args['template'] as string | undefined,
         image: args['image'] as string | undefined,
         port: args['port'] as number | undefined,
       });
+
+      let attachWarning: string | undefined;
+      let resolvedProjectId: string | undefined;
+      if (targetProjectId) {
+        try {
+          const moved = appCtx.db.attachServiceToProject(result.id, targetProjectId);
+          resolvedProjectId = moved.targetProjectId;
+        } catch (err) {
+          attachWarning = `attach to ${targetProjectId} failed: ${err instanceof Error ? err.message : String(err)}`;
+        }
+      }
 
       const suggestedEnv = appCtx.serviceManager.getSuggestedEnv(result);
 
@@ -116,6 +128,8 @@ export const serviceToolDefs: ToolDef[] = [
           port: legacyPort,
           credentials: parseServiceCredentials(result.credentials),
         },
+        ...(resolvedProjectId ? { attached_to: resolvedProjectId } : {}),
+        ...(attachWarning ? { warnings: [attachWarning] } : {}),
         suggested_env: suggestedEnv,
         externalAccess: getServiceExternalAccess(legacyPort ?? null),
         _agent_guidance: {

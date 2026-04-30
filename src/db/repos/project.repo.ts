@@ -34,6 +34,8 @@ export interface ProjectWithMetadata {
   environments: EnvironmentRow[];
   /** Number of child services (compose-children) under this group. */
   childCount: number;
+  /** True when the group contains at least one `compose-child` or a `compose` parent service. */
+  isCompose: boolean;
 }
 
 const log = createModuleLogger('project-repo');
@@ -310,14 +312,19 @@ export class ProjectRepo {
     // Post-0012: environments are scoped to service_id. We pull all services
     // belonging to these groups and then their environments.
     const groupServices = this.db
-      .select({ id: services.id, project_id: services.project_id })
+      .select({ id: services.id, project_id: services.project_id, kind: services.kind })
       .from(services)
       .where(inArray(services.project_id, projectIds))
-      .all() as Array<{ id: string; project_id: string | null }>;
+      .all() as Array<{ id: string; project_id: string | null; kind: string }>;
 
     const projectIdByServiceId = new Map<string, string>();
+    const isComposeByProject = new Map<string, boolean>();
     for (const s of groupServices) {
-      if (s.project_id) projectIdByServiceId.set(s.id, s.project_id);
+      if (!s.project_id) continue;
+      projectIdByServiceId.set(s.id, s.project_id);
+      if (s.kind === 'compose' || s.kind === 'compose-child') {
+        isComposeByProject.set(s.project_id, true);
+      }
     }
 
     const serviceIds = groupServices.map((s) => s.id);
@@ -346,13 +353,17 @@ export class ProjectRepo {
     // Total deployable services per project group (excludes managed-service kinds:
     // postgres/mysql/redis/mongo/minio). Counts compose-children + git/image/compose
     // services. This is the "serviceCount" badge shown in /api/projects.
+    // Count actual deployables: plain git/image services + compose children.
+    // Skip managed DBs (postgres etc.) and skip the synthetic 'compose' parent
+    // metadata service — users think of compose as "3 services," not "1 parent
+    // + 3 children = 4," so omit the parent meta from the badge.
     const childCountRows = this.db
       .select({ parentId: services.project_id, cnt: count() })
       .from(services)
       .where(
         and(
           inArray(services.project_id, projectIds),
-          notInArray(services.kind, ['postgres', 'mysql', 'redis', 'mongo', 'minio']),
+          notInArray(services.kind, ['postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose']),
         ),
       )
       .groupBy(services.project_id)
@@ -369,6 +380,7 @@ export class ProjectRepo {
       project,
       environments: envByProject.get(project.id) ?? [],
       childCount: childCountByParent.get(project.id) ?? 0,
+      isCompose: isComposeByProject.get(project.id) ?? false,
     }));
   }
 
@@ -627,6 +639,95 @@ export class ProjectRepo {
       this.db.delete(projects).where(eq(projects.id, childProjectId)).run();
     }
     this.db.delete(projects).where(eq(projects.id, id)).run();
+  }
+
+  /**
+   * v5 (target_project_id flow): move a freshly-deployed service from its
+   * temp project into an existing target group, then drop the temp project.
+   * Mirrors the manual SQL pattern used to merge hotdeal/quickpoll on dogfood.
+   *
+   * The pipeline still creates a single-svc temp project per deploy. After the
+   * deploy resolves, the MCP/REST handler calls this to relocate the service
+   * under the user-specified target group. Per-deployable FK tables (env, deploy
+   * configs/logs, domain mappings, runtime incidents, service ops overrides)
+   * point at services.id so they ride along automatically. Project-scoped tables
+   * (env_vars, timeline_events, secret_files, project_ops_overrides) are
+   * relocated with `UPDATE OR IGNORE` — on env_vars (project_id, key) UNIQUE
+   * collision the target's row wins, matching the hotdeal/quickpoll resolution.
+   *
+   * Throws if either side is missing or if source == target.
+   */
+  attachServiceToProject(
+    serviceId: string,
+    targetProjectId: string,
+  ): { sourceProjectId: string; targetProjectId: string } {
+    return this.sqlite.transaction(() => {
+      const svc = this.db
+        .select({ project_id: services.project_id })
+        .from(services)
+        .where(eq(services.id, serviceId))
+        .get();
+      if (!svc) {
+        throw new RepoPersistenceError('service', serviceId);
+      }
+      const sourceProjectId = svc.project_id;
+
+      if (sourceProjectId === targetProjectId) {
+        return { sourceProjectId, targetProjectId };
+      }
+
+      const target = this.db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(eq(projects.id, targetProjectId))
+        .get();
+      if (!target) {
+        throw new ProjectNotFoundError(targetProjectId);
+      }
+
+      this.db
+        .update(services)
+        .set({ project_id: targetProjectId, updated_at: sql`CURRENT_TIMESTAMP` })
+        .where(eq(services.id, serviceId))
+        .run();
+
+      // env_vars (project_id, key) UNIQUE — UPDATE OR IGNORE then drop the
+      // collision losers. Same shape as the hotdeal/quickpoll merge SQL.
+      this.sqlite
+        .prepare('UPDATE OR IGNORE env_vars SET project_id = ? WHERE project_id = ?')
+        .run(targetProjectId, sourceProjectId);
+      this.sqlite.prepare('DELETE FROM env_vars WHERE project_id = ?').run(sourceProjectId);
+
+      // timeline_events: project_id FK only, no UNIQUE — straight UPDATE.
+      this.sqlite
+        .prepare('UPDATE timeline_events SET project_id = ? WHERE project_id = ?')
+        .run(targetProjectId, sourceProjectId);
+
+      // secret_files (project_id, filename) UNIQUE — UPDATE OR IGNORE then
+      // drop the leftover collision losers under the temp project.
+      this.sqlite
+        .prepare('UPDATE OR IGNORE secret_files SET project_id = ? WHERE project_id = ?')
+        .run(targetProjectId, sourceProjectId);
+      this.sqlite.prepare('DELETE FROM secret_files WHERE project_id = ?').run(sourceProjectId);
+
+      // service_ops_overrides was renamed/repointed in 0009/0012 and now
+      // keys on service_id, not project_id — the row rides along with the
+      // service automatically via the FK. No project-id rewrite needed.
+
+      // webhook_configs is project-specific; the temp project's webhook
+      // (auto-created by deploy) shouldn't leak into the target group.
+      this.sqlite.prepare('DELETE FROM webhook_configs WHERE project_id = ?').run(sourceProjectId);
+
+      // Synthetic groups (the managed-service pool) are never deleted —
+      // they're the catch-all for rows that haven't been attached to a real
+      // project yet. Real per-deploy temp groups *are* deleted so the project
+      // list doesn't fill with stub rows.
+      if (sourceProjectId !== ORPHAN_MANAGED_GROUP_ID) {
+        this.db.delete(projects).where(eq(projects.id, sourceProjectId)).run();
+      }
+
+      return { sourceProjectId, targetProjectId };
+    })();
   }
 
   /**

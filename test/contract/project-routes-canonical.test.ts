@@ -353,11 +353,15 @@ describe('PR 4 — /api/projects/:id/topology wire shape', () => {
 
 describe('PR 4 Fix 2 — serviceCount uses canonical services table', () => {
   it('GET /projects list shows serviceCount=3 for compose stack with 3 compose-child service rows', async () => {
-    // Seed parent compose group
+    // Seed parent compose group. `buildMethod: 'compose'` makes the
+    // auto-created `stack-h__svc` row's kind = 'compose' (matches production
+    // flow). Without this, createProject defaults to kind='git' and the parent
+    // gets miscounted as a deployable.
     db.createProject({
       id: 'stack-h',
       name: 'mystack-h',
       repoUrl: 'https://github.com/test/mystack-h',
+      buildMethod: 'compose',
     });
 
     // Use createDrizzleDatabase on the same DB file to insert compose-child
@@ -398,7 +402,10 @@ describe('PR 4 Fix 2 — serviceCount uses canonical services table', () => {
     expect(stack!.isCompose).toBe(true);
   });
 
-  it('GET /projects shows serviceCount=0 for plain git project with no compose-child services', async () => {
+  it('GET /projects shows serviceCount=1 for plain git project (its own deployable counts)', async () => {
+    // Post-PR-95 contract: serviceCount counts all deployable services in the
+    // group (excluding managed DBs and the compose parent meta). A plain git
+    // project has its own `<id>__svc` deployable, so the count is 1, not 0.
     db.createProject({
       id: 'proj-plain',
       name: 'app-plain',
@@ -413,7 +420,7 @@ describe('PR 4 Fix 2 — serviceCount uses canonical services table', () => {
 
     const proj = body.projects.find((p) => p.id === 'proj-plain');
     expect(proj).toBeDefined();
-    expect(proj!.serviceCount).toBe(0);
+    expect(proj!.serviceCount).toBe(1);
     expect(proj!.isCompose).toBe(false);
   });
 });

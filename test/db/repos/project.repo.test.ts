@@ -308,17 +308,18 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
   });
 
   it('returns each project paired with its environments and child count', () => {
-    repo.createProject({ id: 'parent-1', name: 'compose-app', repoUrl: 'https://x/y' });
+    // Parent is built via compose (mirrors production: createProject sets the
+    // backing svc kind='compose' when buildMethod='compose'). The compose
+    // parent meta is excluded from childCount; only the children count.
+    repo.createProject({
+      id: 'parent-1',
+      name: 'compose-app',
+      repoUrl: 'https://x/y',
+      buildMethod: 'compose',
+    });
     repo.createProject({ id: 'child-a', name: 'svc-a', repoUrl: '', parentProjectId: 'parent-1' });
     repo.createProject({ id: 'child-b', name: 'svc-b', repoUrl: '', parentProjectId: 'parent-1' });
     repo.createProject({ id: 'standalone', name: 'lone-app', repoUrl: 'https://x/z' });
-
-    // Services required by the transitional EXISTS subquery in listProjects.
-    // Parent gets kind='compose'; children are NOT returned by listProjects (no
-    // non-compose-child service under their own project_id — per 0009 Phase D
-    // compose-child services point at the parent group, not the child project_id).
-    insertServiceForProject(sqlite, 'parent-1', 'compose');
-    insertServiceForProject(sqlite, 'standalone', 'git');
 
     envRepo.createEnvironment({
       id: 'parent-1-prod',
@@ -348,9 +349,12 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
 
     expect(byId.get('parent-1')?.environments).toHaveLength(2);
     expect(byId.get('parent-1')?.childCount).toBe(2);
+    expect(byId.get('parent-1')?.isCompose).toBe(true);
 
+    // Post-PR-95: a plain project's own deployable counts as 1.
     expect(byId.get('standalone')?.environments).toHaveLength(1);
-    expect(byId.get('standalone')?.childCount).toBe(0);
+    expect(byId.get('standalone')?.childCount).toBe(1);
+    expect(byId.get('standalone')?.isCompose).toBe(false);
 
     // child-a is no longer returned by listProjects (filtered by EXISTS subquery)
     expect(byId.has('child-a')).toBe(false);
@@ -391,17 +395,29 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
     expect(batched.length).toBe(21);
 
     // Parity: every row's environments + childCount should match per-row queries.
+    // Post-PR-95 contract: childCount counts every deployable service in the
+    // group (compose-children + plain git/image), excluding managed DBs and
+    // the synthetic 'compose' parent meta. Mirror that here per-row.
+    const MANAGED_AND_META: ReadonlySet<string> = new Set([
+      'postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose',
+    ]);
     for (const row of batched) {
       const expectedEnvs = envRepo.getEnvironmentsByProject(row.project.id);
       expect(row.environments.map((e) => e.id).sort()).toEqual(
         expectedEnvs.map((e) => e.id).sort(),
       );
 
-      const expectedChildren = repo.getChildProjects(row.project.id).length;
+      const groupSvcs = sqlite
+        .prepare('SELECT kind FROM services WHERE project_id = ?')
+        .all(row.project.id) as Array<{ kind: string }>;
+      const expectedChildren = groupSvcs.filter((s) => !MANAGED_AND_META.has(s.kind)).length;
       expect(row.childCount).toBe(expectedChildren);
 
-      // isCompose semantic check: childCount > 0 ⇔ isParentProject
-      expect(row.childCount > 0).toBe(repo.isParentProject(row.project.id));
+      // isCompose now derives from actual compose markers, not childCount.
+      const hasComposeMarker = groupSvcs.some(
+        (s) => s.kind === 'compose' || s.kind === 'compose-child',
+      );
+      expect(row.isCompose).toBe(hasComposeMarker);
     }
   });
 

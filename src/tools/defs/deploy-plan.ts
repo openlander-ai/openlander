@@ -226,6 +226,7 @@ export const deployPlanToolDefs: ToolDef[] = [
       const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
       const expose = (args['expose'] as boolean | undefined) ?? false;
       const domain = (args['domain'] as string | undefined) ?? undefined;
+      const targetProjectId = (args['target_project_id'] as string | undefined) ?? undefined;
 
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
@@ -340,6 +341,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         const runPostDeploy = async (): Promise<{
           extra: Record<string, unknown>;
           warnings: string[];
+          projectIdOverride?: string;
         }> => {
           const extra: Record<string, unknown> = {};
           const warnings: string[] = [];
@@ -365,7 +367,21 @@ export const deployPlanToolDefs: ToolDef[] = [
               );
             }
           }
-          return { extra, warnings };
+          let projectIdOverride: string | undefined;
+          if (targetProjectId) {
+            try {
+              const serviceId = `${proj.id}__svc`;
+              const moved = appCtx.db.attachServiceToProject(serviceId, targetProjectId);
+              extra.attached_to = moved.targetProjectId;
+              extra.merged_from = moved.sourceProjectId;
+              projectIdOverride = moved.targetProjectId;
+            } catch (err) {
+              warnings.push(
+                `attach to ${targetProjectId} failed: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          }
+          return { extra, warnings, projectIdOverride };
         };
 
         const resolveSuccess = (
@@ -373,6 +389,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           timedOut: boolean,
           postDeploy?: Record<string, unknown>,
           postDeployWarnings?: string[],
+          projectIdOverride?: string,
         ): void => {
           if (settled) return;
           settled = true;
@@ -381,7 +398,7 @@ export const deployPlanToolDefs: ToolDef[] = [
             plan_id: plan.plan_id,
             status: 'done',
             project_name: result.project_name,
-            project_id: projectId,
+            project_id: projectIdOverride ?? projectId,
             urls: payload.url ? [payload.url] : getProjectUrls(result.project_name),
             internal_host: projectContainerName(result.project_name),
             docker_host: getDockerHostType(),
@@ -465,10 +482,10 @@ export const deployPlanToolDefs: ToolDef[] = [
 
         const unsubSuccess = eventBus.on('deploy:success', (payload) => {
           if (!matchesProject(payload)) return;
-          if (expose || domain) {
+          if (expose || domain || targetProjectId) {
             void runPostDeploy()
-              .then(({ extra, warnings }) => {
-                resolveSuccess(payload, false, extra, warnings);
+              .then(({ extra, warnings, projectIdOverride }) => {
+                resolveSuccess(payload, false, extra, warnings, projectIdOverride);
               })
               .catch(() => {
                 resolveSuccess(payload, false);
@@ -492,10 +509,10 @@ export const deployPlanToolDefs: ToolDef[] = [
         const currentJob = appCtx.jobManager.getStatus(projectId);
         if (currentJob && (currentJob.phase === 'done' || currentJob.phase === 'failed')) {
           if (currentJob.phase === 'done') {
-            if (expose || domain) {
+            if (expose || domain || targetProjectId) {
               void runPostDeploy()
-                .then(({ extra, warnings }) => {
-                  resolveSuccess({}, false, extra, warnings);
+                .then(({ extra, warnings, projectIdOverride }) => {
+                  resolveSuccess({}, false, extra, warnings, projectIdOverride);
                 })
                 .catch(() => {
                   resolveSuccess({}, false);

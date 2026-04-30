@@ -59,6 +59,9 @@ function buildCtx(serviceCount: number) {
       ),
       getProjectByName: vi.fn(() => null),
       getChildProjects: vi.fn(() => children),
+      // PR #96 added getDeployablesByGroup to the topology code path. Empty
+      // array forces the legacy getChildProjects fallback used by this fixture.
+      getDeployablesByGroup: vi.fn(() => []),
       findDependenciesByProject: vi.fn(() => []),
       getDeployableForProject: vi.fn().mockReturnValue(undefined),
     },

@@ -230,6 +230,12 @@ export const createServiceSchema = z.object({
     .max(65535)
     .optional()
     .describe('Port number (required when using image without template)'),
+  target_project_id: z
+    .string()
+    .optional()
+    .describe(
+      'Attach the new service to an existing project group instead of the default __orphan_managed pool. When omitted, managed services land in the global managed pool (1.0 default).',
+    ),
 });
 
 export const serviceNameSchema = z.object({
@@ -622,6 +628,12 @@ export const deploySchema = z
       .optional()
       .describe(
         'Map a custom domain after deploy succeeds (requires Cloudflare config). Example: api.myapp.com. Requires wait=true.',
+      ),
+    target_project_id: z
+      .string()
+      .optional()
+      .describe(
+        'Attach the new deployable as an additional service under an existing project group instead of creating a fresh project. The deployable receives a unique service id (the project keeps its existing services). Use this to add a worker/api/web sibling to an existing app group.',
       ),
   })
   .refine(

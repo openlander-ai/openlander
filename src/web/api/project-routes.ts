@@ -692,7 +692,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     return c.json({
       count: projectsWithMeta.length,
-      projects: projectsWithMeta.map(({ project: p, environments, childCount }) => {
+      projects: projectsWithMeta.map(({ project: p, environments, childCount, isCompose }) => {
         const deployable = deployableById.get(p.id);
         // Canonical-first reads (?? legacy fallback). Wire keys preserved.
         const projectStatus = deployable?.status ?? p.status;
@@ -725,7 +725,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           updatedAt: normalizeTimestamp(p.updated_at),
           // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           parentProjectId: p.parent_project_id,
-          isCompose: childCount > 0,
+          isCompose,
           serviceCount: childCount,
           environments: environments.map((env) => mapEnvironment(p.name, env)),
         };

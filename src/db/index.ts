@@ -671,6 +671,7 @@ export class Database implements AuthDatabase {
   setPendingFix(projectId: string, pendingFix: Parameters<ProjectRepo['setPendingFix']>[1]) { this.projectRepo.setPendingFix(projectId, pendingFix); }
   consumePendingFix(projectId: string) { return this.projectRepo.consumePendingFix(projectId); }
   deleteProject(id: string) { this.projectRepo.deleteProject(id); }
+  attachServiceToProject(serviceId: string, targetProjectId: string) { return this.projectRepo.attachServiceToProject(serviceId, targetProjectId); }
   getChildProjects(parentId: string) { return this.projectRepo.getChildProjects(parentId); }
   getPreviewProjects(parentProjectId: string) { return this.projectRepo.getPreviewProjects(parentProjectId); }
   isParentProject(id: string) { return this.projectRepo.isParentProject(id); }

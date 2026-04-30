@@ -66,6 +66,8 @@ function createCtx(opts: {
       getProject: vi.fn((id: string) => (id === 'p1' ? project : null)),
       getProjectByName: vi.fn(() => null),
       getChildProjects: vi.fn(() => []),
+      // PR #96 added getDeployablesByGroup to the topology code path.
+      getDeployablesByGroup: vi.fn(() => []),
       findDependenciesByProject: vi.fn(() => []),
       getDeployableForProject: vi.fn().mockReturnValue(undefined),
     },
