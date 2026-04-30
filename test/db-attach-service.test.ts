@@ -48,12 +48,16 @@ describe('Database.attachServiceToProject', () => {
     db.setEnvVar('src', 'DATABASE_URL', 'postgres://src');
     db.setEnvVar('src', 'NEW_VAR', 'src-only');
 
-    db.attachServiceToProject('src__svc', 'target');
+    const result = db.attachServiceToProject('src__svc', 'target');
 
     const merged = db.getEnvVars('target');
     expect(merged['DATABASE_URL']).toBe('postgres://target'); // target wins on collision
     expect(merged['API_KEY']).toBe('target-secret'); // target's existing
     expect(merged['NEW_VAR']).toBe('src-only'); // moved from src
+
+    // CCG #3: collision losers are reported back so the tool can surface them.
+    expect(result.droppedEnvVarKeys).toEqual(['DATABASE_URL']);
+    expect(result.droppedSecretFiles).toEqual([]);
 
     expect(db.getEnvVars('src')).toEqual({}); // source project gone
   });

@@ -91,6 +91,19 @@ export const serviceToolDefs: ToolDef[] = [
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
       const targetProjectId = args['target_project_id'] as string | undefined;
+
+      // Pre-flight (CCG #2): if target_project_id is set, verify the project
+      // exists BEFORE provisioning the service. A typo otherwise creates the
+      // managed service in __orphan_managed and then surfaces only as a
+      // warning string — easy to miss.
+      if (targetProjectId && !appCtx.db.getProject(targetProjectId)) {
+        return {
+          status: 'failed',
+          error: 'TARGET_PROJECT_NOT_FOUND',
+          message: `target_project_id "${targetProjectId}" does not exist. Verify the id with list_projects before retrying.`,
+        };
+      }
+
       const result = await appCtx.serviceManager.create({
         name: args['name'] as string,
         template: args['template'] as string | undefined,
@@ -100,10 +113,14 @@ export const serviceToolDefs: ToolDef[] = [
 
       let attachWarning: string | undefined;
       let resolvedProjectId: string | undefined;
+      let droppedKeys: string[] | undefined;
       if (targetProjectId) {
         try {
           const moved = appCtx.db.attachServiceToProject(result.id, targetProjectId);
           resolvedProjectId = moved.targetProjectId;
+          if (moved.droppedEnvVarKeys.length > 0 || moved.droppedSecretFiles.length > 0) {
+            droppedKeys = [...moved.droppedEnvVarKeys, ...moved.droppedSecretFiles];
+          }
         } catch (err) {
           attachWarning = `attach to ${targetProjectId} failed: ${err instanceof Error ? err.message : String(err)}`;
         }
@@ -129,6 +146,12 @@ export const serviceToolDefs: ToolDef[] = [
           credentials: parseServiceCredentials(result.credentials),
         },
         ...(resolvedProjectId ? { attached_to: resolvedProjectId } : {}),
+        ...(droppedKeys && resolvedProjectId
+          ? {
+              dropped_on_attach: droppedKeys,
+              _agent_notice: `${String(droppedKeys.length)} env var(s) / secret file(s) collided with target group keys and were dropped (target wins). Re-set them on ${resolvedProjectId} if needed.`,
+            }
+          : {}),
         ...(attachWarning ? { warnings: [attachWarning] } : {}),
         suggested_env: suggestedEnv,
         externalAccess: getServiceExternalAccess(legacyPort ?? null),

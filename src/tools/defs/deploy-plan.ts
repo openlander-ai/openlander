@@ -228,6 +228,31 @@ export const deployPlanToolDefs: ToolDef[] = [
       const domain = (args['domain'] as string | undefined) ?? undefined;
       const targetProjectId = (args['target_project_id'] as string | undefined) ?? undefined;
 
+      // Pre-flight target_project_id checks (CCG findings #1, #2):
+      //   #1 (1.0 blocker): wait=false bypasses runPostDeploy, so the
+      //      attach step never runs. The deploy completes but stays in a
+      //      temp project forever. Reject the combination.
+      //   #2 (major): a typo in target_project_id used to silently land as
+      //      a warning AFTER the container ran. Validate up front so a bad
+      //      id fails the call before any Docker work starts.
+      if (targetProjectId) {
+        if (!wait) {
+          return {
+            status: 'failed',
+            error: 'INVALID_ARGS',
+            message:
+              'target_project_id requires wait=true. The attach step runs only after deploy completion; with wait=false the deploy would stay in a temp project. Re-call with wait=true (default).',
+          };
+        }
+        if (!appCtx.db.getProject(targetProjectId)) {
+          return {
+            status: 'failed',
+            error: 'TARGET_PROJECT_NOT_FOUND',
+            message: `target_project_id "${targetProjectId}" does not exist. Verify the id with list_projects before retrying.`,
+          };
+        }
+      }
+
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
         branch: (args['branch'] as string | undefined) ?? undefined,
@@ -375,9 +400,23 @@ export const deployPlanToolDefs: ToolDef[] = [
               extra.attached_to = moved.targetProjectId;
               extra.merged_from = moved.sourceProjectId;
               projectIdOverride = moved.targetProjectId;
+              // CCG #3: surface env_var / secret_file collision losers so the
+              // user knows what target-side keys won and which source-side
+              // values were dropped on attach.
+              if (moved.droppedEnvVarKeys.length > 0 || moved.droppedSecretFiles.length > 0) {
+                extra.dropped_on_attach = [...moved.droppedEnvVarKeys, ...moved.droppedSecretFiles];
+                const droppedTotal =
+                  moved.droppedEnvVarKeys.length + moved.droppedSecretFiles.length;
+                warnings.push(
+                  `${String(droppedTotal)} env var(s) / secret file(s) collided with target group keys and were dropped (target wins). Re-set them on ${moved.targetProjectId} if needed.`,
+                );
+              }
             } catch (err) {
+              // CCG #2: post-success attach failure is "partial success" —
+              // the container is running but not in the target group. Make
+              // it loud, not a warning footnote.
               warnings.push(
-                `attach to ${targetProjectId} failed: ${err instanceof Error ? err.message : String(err)}`,
+                `PARTIAL SUCCESS: deploy completed but attach to ${targetProjectId} failed (${err instanceof Error ? err.message : String(err)}). The service is running under temp project ${proj.id}. Re-attach manually, or stop+remove and retry.`,
               );
             }
           }

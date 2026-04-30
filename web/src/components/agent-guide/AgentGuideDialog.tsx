@@ -98,7 +98,11 @@ export function AgentGuideDialog({
         <div className="flex flex-col gap-3 px-5 py-4">
           {connected ? (
             <AgentIdentityStrip
-              agentName="Claude"
+              // v5.2.1 (CCG / Gemini): the MCP session contract today doesn't
+              // expose the connecting client's name (Claude vs Cursor vs
+              // Windsurf). Use a generic label until the backend captures
+              // clientInfo.name on connect — better-than-wrong.
+              agentName="Your agent"
               lastActiveLabel={lastSession ? timeAgo(lastSession.lastActivityAt) : 'just now'}
             />
           ) : (

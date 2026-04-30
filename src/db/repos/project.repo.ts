@@ -660,7 +660,14 @@ export class ProjectRepo {
   attachServiceToProject(
     serviceId: string,
     targetProjectId: string,
-  ): { sourceProjectId: string; targetProjectId: string } {
+  ): {
+    sourceProjectId: string;
+    targetProjectId: string;
+    /** env_var keys that lost the UNIQUE(project_id, key) race — target won. */
+    droppedEnvVarKeys: string[];
+    /** secret_file filenames that lost the UNIQUE(project_id, filename) race. */
+    droppedSecretFiles: string[];
+  } {
     return this.sqlite.transaction(() => {
       const svc = this.db
         .select({ project_id: services.project_id })
@@ -673,7 +680,12 @@ export class ProjectRepo {
       const sourceProjectId = svc.project_id;
 
       if (sourceProjectId === targetProjectId) {
-        return { sourceProjectId, targetProjectId };
+        return {
+          sourceProjectId,
+          targetProjectId,
+          droppedEnvVarKeys: [],
+          droppedSecretFiles: [],
+        };
       }
 
       const target = this.db
@@ -691,32 +703,64 @@ export class ProjectRepo {
         .where(eq(services.id, serviceId))
         .run();
 
-      // env_vars (project_id, key) UNIQUE — UPDATE OR IGNORE then drop the
-      // collision losers. Same shape as the hotdeal/quickpoll merge SQL.
-      this.sqlite
-        .prepare('UPDATE OR IGNORE env_vars SET project_id = ? WHERE project_id = ?')
-        .run(targetProjectId, sourceProjectId);
-      this.sqlite.prepare('DELETE FROM env_vars WHERE project_id = ?').run(sourceProjectId);
+      // CCG #4: when source is __orphan_managed (the synthetic pool that
+      // hosts every managed service), do NOT migrate project-scoped rows.
+      // Those rows belong to the pool's many sibling services, not the one
+      // we're attaching, and migrating them would sweep unrelated data.
+      // Today create_service doesn't create env_vars / timeline_events on
+      // the pool, so this is a defensive guard against future regressions.
+      const isPoolSource = sourceProjectId === ORPHAN_MANAGED_GROUP_ID;
 
-      // timeline_events: project_id FK only, no UNIQUE — straight UPDATE.
-      this.sqlite
-        .prepare('UPDATE timeline_events SET project_id = ? WHERE project_id = ?')
-        .run(targetProjectId, sourceProjectId);
+      const droppedEnvVarKeys: string[] = [];
+      const droppedSecretFiles: string[] = [];
 
-      // secret_files (project_id, filename) UNIQUE — UPDATE OR IGNORE then
-      // drop the leftover collision losers under the temp project.
-      this.sqlite
-        .prepare('UPDATE OR IGNORE secret_files SET project_id = ? WHERE project_id = ?')
-        .run(targetProjectId, sourceProjectId);
-      this.sqlite.prepare('DELETE FROM secret_files WHERE project_id = ?').run(sourceProjectId);
+      if (!isPoolSource) {
+        // env_vars (project_id, key) UNIQUE. CCG #3: capture the collision
+        // losers BEFORE we drop them so the caller can surface "key X was
+        // dropped because the target already had it".
+        const envVarLosers = this.sqlite
+          .prepare(
+            `SELECT key FROM env_vars
+             WHERE project_id = ?
+               AND key IN (SELECT key FROM env_vars WHERE project_id = ?)`,
+          )
+          .all(sourceProjectId, targetProjectId) as Array<{ key: string }>;
+        droppedEnvVarKeys.push(...envVarLosers.map((row) => row.key));
+        this.sqlite
+          .prepare('UPDATE OR IGNORE env_vars SET project_id = ? WHERE project_id = ?')
+          .run(targetProjectId, sourceProjectId);
+        this.sqlite.prepare('DELETE FROM env_vars WHERE project_id = ?').run(sourceProjectId);
 
-      // service_ops_overrides was renamed/repointed in 0009/0012 and now
-      // keys on service_id, not project_id — the row rides along with the
-      // service automatically via the FK. No project-id rewrite needed.
+        // timeline_events: project_id FK only, no UNIQUE — straight UPDATE.
+        this.sqlite
+          .prepare('UPDATE timeline_events SET project_id = ? WHERE project_id = ?')
+          .run(targetProjectId, sourceProjectId);
 
-      // webhook_configs is project-specific; the temp project's webhook
-      // (auto-created by deploy) shouldn't leak into the target group.
-      this.sqlite.prepare('DELETE FROM webhook_configs WHERE project_id = ?').run(sourceProjectId);
+        // secret_files (project_id, filename) UNIQUE — same collision-capture
+        // pattern as env_vars.
+        const secretLosers = this.sqlite
+          .prepare(
+            `SELECT filename FROM secret_files
+             WHERE project_id = ?
+               AND filename IN (SELECT filename FROM secret_files WHERE project_id = ?)`,
+          )
+          .all(sourceProjectId, targetProjectId) as Array<{ filename: string }>;
+        droppedSecretFiles.push(...secretLosers.map((row) => row.filename));
+        this.sqlite
+          .prepare('UPDATE OR IGNORE secret_files SET project_id = ? WHERE project_id = ?')
+          .run(targetProjectId, sourceProjectId);
+        this.sqlite.prepare('DELETE FROM secret_files WHERE project_id = ?').run(sourceProjectId);
+
+        // service_ops_overrides was renamed/repointed in 0009/0012 and now
+        // keys on service_id, not project_id — the row rides along with the
+        // service automatically via the FK. No project-id rewrite needed.
+
+        // webhook_configs is project-specific; the temp project's webhook
+        // (auto-created by deploy) shouldn't leak into the target group.
+        this.sqlite
+          .prepare('DELETE FROM webhook_configs WHERE project_id = ?')
+          .run(sourceProjectId);
+      }
 
       // Synthetic groups (the managed-service pool) are never deleted —
       // they're the catch-all for rows that haven't been attached to a real
@@ -726,7 +770,7 @@ export class ProjectRepo {
         this.db.delete(projects).where(eq(projects.id, sourceProjectId)).run();
       }
 
-      return { sourceProjectId, targetProjectId };
+      return { sourceProjectId, targetProjectId, droppedEnvVarKeys, droppedSecretFiles };
     })();
   }
 
