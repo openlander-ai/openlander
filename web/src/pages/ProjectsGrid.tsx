@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronDown, Folder, MoreHorizontal, Plus } from 'lucide-react';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { OuterCard } from '@/components/Shell/OuterCard';
+import { AgentGuideDialog } from '@/components/agent-guide';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/types';
 
@@ -77,6 +78,7 @@ export function ProjectsGrid() {
   const navigate = useNavigate();
   const { projects, loading } = useProjectsContext();
   const [q, setQ] = useState('');
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const filtered = projects.filter((p) => !q || p.name.toLowerCase().includes(q.toLowerCase()));
 
@@ -88,7 +90,7 @@ export function ProjectsGrid() {
         actions={
           <button
             type="button"
-            onClick={() => navigate('/projects/new')}
+            onClick={() => setGuideOpen(true)}
             className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:opacity-90"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -119,7 +121,7 @@ export function ProjectsGrid() {
             </div>
             <button
               type="button"
-              onClick={() => navigate('/projects/new')}
+              onClick={() => setGuideOpen(true)}
               className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
@@ -182,6 +184,9 @@ export function ProjectsGrid() {
                         <span className="truncate text-[14px] font-medium text-[color:var(--ol-fg)]">
                           {p.name}
                         </span>
+                        {/* p is the frontend Project type (lib/api wire shape) — `status` is a
+                            wire-format field, hydrated from services.* server-side post-0012. */}
+                        {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
                         <StatusPill status={p.status} />
                       </div>
                       <div className="flex items-center gap-3 text-[11.5px] text-[color:var(--ol-fg-muted)]">
@@ -213,6 +218,8 @@ export function ProjectsGrid() {
           </>
         )}
       </OuterCard>
+
+      <AgentGuideDialog open={guideOpen} onOpenChange={setGuideOpen} kind="add-service" />
     </div>
   );
 }

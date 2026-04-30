@@ -11,7 +11,6 @@ import {
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/Shell/AppShell';
 import { SetupScreen } from '@/components/setup/SetupScreen';
-import { NewProjectFlow } from '@/pages/NewProjectFlow';
 import { ProjectsGrid } from '@/pages/ProjectsGrid';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ServicesPage } from '@/pages/ServicesPage';
@@ -257,7 +256,9 @@ function App() {
                   <Route path="/overview" element={<Navigate to="/home" replace />} />
                   <Route path="/deployments" element={<DeploymentsList />} />
                   <Route path="/projects" element={<ProjectsGrid />} />
-                  <Route path="/projects/new" element={<NewProjectFlow />} />
+                  {/* v5: New-project wizard retired — humans hit the
+                      AgentGuideDialog from /projects. Stale links still resolve. */}
+                  <Route path="/projects/new" element={<Navigate to="/projects" replace />} />
                   <Route
                     path="/projects/:id/deployments/:deployId"
                     element={

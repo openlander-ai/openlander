@@ -146,6 +146,11 @@ export function CommandPalette() {
     ];
 
     const projectItems: CommandItem[] = [];
+    /* `project.status` here is the frontend Project wire-shape field
+       (lib/api projects). The mapper hydrates it server-side from
+       services.* post-0012, so reads on the client are wire-format,
+       not dropped DB columns. */
+    /* eslint-disable openlander-internal/no-dropped-columns */
     for (const project of projects) {
       projectItems.push({
         id: `go-${project.id}`,
@@ -203,15 +208,20 @@ export function CommandPalette() {
         });
       }
     }
+    /* eslint-enable openlander-internal/no-dropped-columns */
 
     const systemItems: CommandItem[] = [
       {
+        // v5: the "New Project" wizard route was retired; the only human-side
+        // entry point is the AgentGuideDialog on the Projects page. Keep the
+        // command available but reroute so the "+ New Project" button is
+        // immediately visible to the user.
         id: 'new-project',
         label: 'New Project',
         description: t('command.deployNewRepo'),
         icon: <Plus className="h-4 w-4" />,
         action: () => {
-          navigate('/new');
+          navigate('/projects');
           close();
         },
         keywords: 'deploy create add',

@@ -26,6 +26,7 @@ import { InfraMap } from '@/components/Shell/InfraMap';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
 import { SettingsTab } from '@/components/project/SettingsTab';
+import { AgentGuideDialog } from '@/components/agent-guide';
 import { type ServiceNode } from '@/lib/projectTopology';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useIsBelowMd } from '@/hooks/use-viewport';
@@ -55,6 +56,7 @@ export function ProjectView() {
   const realProject = projects.find((p) => p.id === projectId) ?? null;
   const { services, isMockFallback } = useProjectTopology(projectId || null);
   const isBelowMd = useIsBelowMd();
+  const [guideOpen, setGuideOpen] = useState(false);
 
   // Derive display-only fields from real project data
   const projectInitials = realProject
@@ -156,9 +158,19 @@ export function ProjectView() {
         }
         subtitle={realProject?.repoUrl ?? undefined}
         actions={
-          <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
-            updated {projectUpdatedAt} · created {projectCreatedAt}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
+              updated {projectUpdatedAt} · created {projectCreatedAt}
+            </span>
+            <button
+              type="button"
+              onClick={() => setGuideOpen(true)}
+              className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:opacity-90"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add service
+            </button>
+          </div>
         }
         bodyClassName="p-0"
       >
@@ -175,7 +187,11 @@ export function ProjectView() {
           labelledBy="project-services"
           className="p-0"
         >
-          <ServicesPanel services={services} onOpen={openService} />
+          <ServicesPanel
+            services={services}
+            onOpen={openService}
+            onAddService={() => setGuideOpen(true)}
+          />
         </TabPanel>
         <TabPanel
           active={activeTab === 'activity'}
@@ -209,6 +225,13 @@ export function ProjectView() {
           )}
         </TabPanel>
       </OuterCard>
+
+      <AgentGuideDialog
+        open={guideOpen}
+        onOpenChange={setGuideOpen}
+        kind="add-service"
+        projectName={realProject?.name ?? projectId}
+      />
     </div>
   );
 }
@@ -218,9 +241,11 @@ export function ProjectView() {
 function ServicesPanel({
   services,
   onOpen,
+  onAddService,
 }: {
   services: ServiceNode[];
   onOpen: (id: string) => void;
+  onAddService: () => void;
 }) {
   if (services.length === 0) {
     return (
@@ -230,6 +255,7 @@ function ServicesPanel({
         </p>
         <button
           type="button"
+          onClick={onAddService}
           className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -268,7 +294,11 @@ function ServicesPanel({
                   <HealthPill health={s.health} />
                 </div>
                 <div className="ol-mono mt-0.5 truncate text-[11.5px] text-[color:var(--ol-fg-muted)]">
+                  {/* `s` is the frontend ServiceNode shape (lib/projectTopology), not a DB row;
+                      `image` and `port` are wire-format fields, not the dropped service columns. */}
+                  {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
                   {s.image}
+                  {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
                   {s.port != null && <span> · :{s.port}</span>}
                 </div>
               </div>

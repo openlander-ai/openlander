@@ -72,6 +72,20 @@ const SECTIONS: NavSection[] = [
     label: 'Workspace',
     items: [
       { id: 'home', label: 'Home', icon: Home, to: '/home' },
+      // v5: "Your Agent" promoted to WORKSPACE slot #2. Agent presence is the
+      // primary operational signal in OpenLander — the operator that drives
+      // every deploy lives over MCP, so the sidebar shows it second only to
+      // Home. Frontend route stays /mcp-server (the backend serves the JSON-RPC
+      // MCP protocol at /mcp, so the UI surface keeps the suffix to avoid a
+      // route collision).
+      {
+        id: 'your-agent',
+        label: 'Your Agent',
+        icon: Bot,
+        to: '/mcp-server',
+        matches: startsWith('/mcp-server'),
+        badgeDot: 'ok',
+      },
       {
         id: 'projects',
         label: 'Projects',
@@ -111,16 +125,6 @@ const SECTIONS: NavSection[] = [
         icon: Server,
         to: '/settings/web-server',
         matches: startsWith('/settings/web-server'),
-      },
-      {
-        id: 'mcp',
-        label: 'MCP Server',
-        // Frontend route is /mcp-server because the backend serves a JSON-RPC
-        // MCP protocol endpoint at /mcp (no content-negotiation; backend wins
-        // the route). Renaming the UI surface avoids the conflict.
-        icon: Bot,
-        to: '/mcp-server',
-        badgeDot: 'ok',
       },
     ],
   },

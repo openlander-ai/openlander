@@ -58,10 +58,10 @@ export function MCPServer() {
         title={
           <span className="flex items-center gap-2">
             <Bot className="h-4 w-4 text-[color:var(--ol-primary)]" />
-            MCP Server
+            Your Agent
           </span>
         }
-        subtitle="Where Claude and other agents reach OpenLander."
+        subtitle="The MCP endpoint Claude (or any MCP-capable agent) connects to."
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <StatusTile

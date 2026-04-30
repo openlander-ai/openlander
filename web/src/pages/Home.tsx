@@ -18,6 +18,7 @@ import { ChevronRight } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
 import { TriggerChip } from '@/components/Shell/DeployRow';
+import { AgentGuideDialog } from '@/components/agent-guide';
 import { useActivityFeed } from '@/hooks/use-activity-feed';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useProjectTopology } from '@/hooks/use-project-topology';
@@ -88,6 +89,9 @@ export function Home() {
     let healthy = 0;
     let crashed = 0;
     for (const p of projects) {
+      // p is the frontend Project type (lib/api wire shape) — `status` is a
+      // wire-format field, hydrated from services.* server-side post-0012.
+      // eslint-disable-next-line openlander-internal/no-dropped-columns
       if (p.status === 'error') crashed += 1;
       else healthy += 1;
     }
@@ -95,6 +99,8 @@ export function Home() {
   }, [projects]);
 
   const allHealthy = tally.crashed === 0;
+
+  const [guideOpen, setGuideOpen] = useState(false);
 
   // Fetch the most recent deploy across all projects
   const [lastDeployState, setLastDeployState] = useState<LastDeployState | null>(null);
@@ -268,7 +274,7 @@ export function Home() {
             No projects yet.{' '}
             <button
               type="button"
-              onClick={() => navigate('/projects/new')}
+              onClick={() => setGuideOpen(true)}
               className="text-[color:var(--ol-primary)] underline underline-offset-2"
             >
               Create one
@@ -277,6 +283,7 @@ export function Home() {
         ) : (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {projects.slice(0, 6).map((p) => {
+              // eslint-disable-next-line openlander-internal/no-dropped-columns
               const state = p.status === 'error' ? 'crashed' : 'healthy';
               return (
                 <button
@@ -354,6 +361,8 @@ export function Home() {
           onOpenService={(project, service) => navigate(`/services/${service}?project=${project}`)}
         />
       </OuterCard>
+
+      <AgentGuideDialog open={guideOpen} onOpenChange={setGuideOpen} kind="add-service" />
     </div>
   );
 }
