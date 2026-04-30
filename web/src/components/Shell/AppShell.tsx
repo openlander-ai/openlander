@@ -165,8 +165,9 @@ export function AppShell() {
             <TopBar
               crumbs={crumbs}
               onToggleSidebar={isBelowMd ? () => setIsMobileSidebarOpen(true) : onToggleSidebar}
-              agentState="connected"
-              lastAgentAction="Just now"
+              // agentState + lastAgentAction now read internally via
+              // useMcpStatus (no more hardcoded "Just now"). Test fixtures
+              // can still override by passing the prop.
             />
             <main className="min-h-0 flex-1 overflow-auto p-6">
               <Outlet />

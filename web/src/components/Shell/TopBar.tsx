@@ -5,11 +5,14 @@
  *   [Sidebar toggle] · [Breadcrumb crumbs] ............... [Agent Command Center chip]
  *
  * The Agent chip is the agent-first identity statement at the top right
- * edge — connection state pip + last-action timestamp. Clicking it
- * navigates to /mcp. (PR2 will wire it to a popover or panel.)
+ * edge — connection state pip + last-action timestamp. v5 wiring (CCG
+ * follow-up): the chip now reads live MCP session state via useMcpStatus
+ * (no more hardcoded "Just now") and clicking it navigates to /activity
+ * so the user can see what the agent actually did, in time order.
  */
 import { Bot, ChevronRight, PanelLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useMcpStatus } from '@/hooks/use-mcp-status';
 import { cn } from '@/lib/utils';
 
 export interface Crumb {
@@ -21,18 +24,42 @@ export interface Crumb {
 export interface TopBarProps {
   crumbs?: Crumb[];
   onToggleSidebar?: () => void;
+  /** Override live state from useMcpStatus (test fixtures only). */
   agentState?: 'connected' | 'reconnecting' | 'disconnected';
-  /** e.g. "Just now", "12m ago" */
+  /** Override live last-active label (test fixtures only). e.g. "Just now". */
   lastAgentAction?: string;
+}
+
+function timeAgo(iso: string): string {
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${String(m)}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${String(h)}h ago`;
+  return `${String(Math.floor(h / 24))}d ago`;
 }
 
 export function TopBar({
   crumbs = [],
   onToggleSidebar,
-  agentState = 'connected',
-  lastAgentAction = 'Just now',
+  agentState: agentStateOverride,
+  lastAgentAction: lastAgentActionOverride,
 }: TopBarProps) {
   const navigate = useNavigate();
+  const { status } = useMcpStatus();
+  const sessions = status?.sessions ?? [];
+  const live = status != null;
+  const liveAgentState: 'connected' | 'disconnected' =
+    sessions.length > 0 ? 'connected' : 'disconnected';
+  const lastSession = sessions[0];
+  const liveLastAction = lastSession ? timeAgo(lastSession.lastActivityAt) : 'idle';
+
+  // Test/fixture overrides win when explicitly set; otherwise read live state.
+  // The pre-fetch placeholder ("idle") shows briefly before the first
+  // /api/mcp/status round-trip lands.
+  const agentState = agentStateOverride ?? (live ? liveAgentState : 'disconnected');
+  const lastAgentAction = lastAgentActionOverride ?? liveLastAction;
 
   return (
     <header
@@ -78,12 +105,12 @@ export function TopBar({
 
       <button
         type="button"
-        onClick={() => navigate('/mcp')}
+        onClick={() => navigate('/activity')}
         className={cn(
           'flex items-center gap-2 rounded-full border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5',
           'text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]',
         )}
-        title="Agent Command Center · MCP"
+        title="Agent activity — see what your agent did"
       >
         <span
           aria-hidden
