@@ -40,6 +40,15 @@ jobs:
       - name: Install backend dependencies
         run: npm ci
 
+      # tsc -b first so type errors fail CI fast (before the slower
+      # contract-tests pre/post-test backend boot). Develop-bound PRs
+      # don't currently hit the main-only ci.yml workflow which would
+      # otherwise type-check the web frontend, so this is the only gate
+      # catching latent web/src type errors before they merge.
+      - name: Type check web
+        working-directory: web
+        run: npx tsc -b
+
       - name: Run contract tests
         working-directory: web
         run: npm run test:contract
