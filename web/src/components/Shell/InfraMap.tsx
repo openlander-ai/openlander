@@ -108,7 +108,7 @@ function InfraMapEmpty() {
           <Box className="h-3 w-3" />
         </span>
         <span className="text-[color:var(--ol-fg-muted)]">
-          No services yet — your topology will appear here once you create one.
+          No services yet — tell your agent to deploy and the topology fills in.
         </span>
       </div>
     </section>
@@ -505,6 +505,9 @@ function NodePopover({
         </dd>
         <dt className="text-[color:var(--ol-fg-subtle)]">image</dt>
         <dd className="ol-mono break-all text-[11px] text-[color:var(--ol-fg-muted)]">
+          {/* `service` is the frontend ServiceNode wire shape (lib/projectTopology),
+              not a DB row — `image` is a wire-format field. */}
+          {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
           {service.image}
         </dd>
         {service.cpu !== '—' && (

@@ -169,7 +169,7 @@ export function Home() {
           {/* Headline */}
           <h1 className="text-[15px] font-medium leading-snug text-[color:var(--ol-fg)]">
             {tally.total === 0 ? (
-              <>No projects yet. Create your first project to get started.</>
+              <>No projects yet. Tell your agent to deploy — projects show up here as it works.</>
             ) : allHealthy ? (
               <>
                 All <b className="font-semibold">{tally.total}</b> service

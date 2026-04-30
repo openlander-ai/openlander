@@ -121,11 +121,11 @@ export function ProjectsGrid() {
             </div>
             <div>
               <h3 className="text-[14px] font-semibold text-[color:var(--ol-fg)]">
-                You don&apos;t have any projects yet
+                Tell your agent to deploy something
               </h3>
               <p className="mt-1.5 max-w-sm text-[13px] text-[color:var(--ol-fg-muted)]">
-                A project bundles related services — web, api, worker, db — that share environment
-                and deploy together.
+                Paste a prompt like <span className="ol-mono">Deploy github.com/myorg/myapp</span>{' '}
+                into your agent and it&apos;ll show up here.
               </p>
             </div>
             <button

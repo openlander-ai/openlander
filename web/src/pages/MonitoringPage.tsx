@@ -180,7 +180,7 @@ export function MonitoringPage() {
           </div>
         ) : !snapshot || snapshot.total === 0 ? (
           <div className="py-10 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
-            No services yet. Deploy a project to see metrics here.
+            No services yet. Tell your agent to deploy — metrics appear here.
           </div>
         ) : snapshot.services.length === 0 ? (
           <div className="flex flex-col gap-1 py-10 text-center">

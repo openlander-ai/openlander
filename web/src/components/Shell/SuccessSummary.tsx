@@ -39,7 +39,7 @@ export function SuccessSummary({
     >
       <h4 className="flex items-center gap-2 text-[13.5px] font-semibold text-[color:var(--ol-fg)]">
         <CheckCircle className="h-4 w-4 text-[color:var(--ol-success)]" />
-        Deployment succeeded
+        Deploy succeeded
         {duration && (
           <span className="ol-mono text-[11.5px] font-normal text-[color:var(--ol-fg-muted)]">
             · {duration}
