@@ -11,6 +11,7 @@
  * counts, per-tool histogram) are deferred to 1.1; the page intentionally
  * does not invent numbers.
  */
+import { useState } from 'react';
 import { Bot, Cable, Copy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { OuterCard } from '@/components/Shell/OuterCard';
@@ -32,7 +33,20 @@ function formatRelative(iso: string): string {
 
 export function MCPServer() {
   const navigate = useNavigate();
-  const { status: mcpStatus, loading: mcpLoading, error: mcpError } = useMcpStatus();
+  const {
+    status: mcpStatus,
+    loading: mcpLoading,
+    error: mcpError,
+    disconnect: disconnectMcp,
+  } = useMcpStatus();
+  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+
+  const handleDisconnect = async (sessionId: string) => {
+    if (disconnectingId) return;
+    setDisconnectingId(sessionId);
+    await disconnectMcp(sessionId);
+    setDisconnectingId(null);
+  };
   const { events: mcpEvents } = useActivityFeed({ limit: 20, actor: 'mcp' });
 
   // Derive the MCP endpoint from the current page origin as the best
@@ -156,7 +170,7 @@ export function MCPServer() {
             Connected agents
           </span>
         }
-        subtitle="Live MCP sessions snapshot."
+        subtitle="Live MCP sessions. Disconnect terminates the session immediately."
       >
         {mcpError ? (
           <div className="py-6 text-center text-[13px] text-[color:var(--ol-error)]">
@@ -212,6 +226,15 @@ export function MCPServer() {
                 <div className="shrink-0 text-right text-[11.5px] text-[color:var(--ol-fg-muted)]">
                   last call · {formatRelative(s.lastActivityAt)}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => void handleDisconnect(s.id)}
+                  disabled={disconnectingId === s.id}
+                  className="shrink-0 rounded-md border border-[color:var(--ol-border-subtle)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-error)] hover:text-[color:var(--ol-error)] disabled:cursor-progress disabled:opacity-60"
+                  aria-label={`Disconnect session ${s.id}`}
+                >
+                  {disconnectingId === s.id ? 'Disconnecting…' : 'Disconnect'}
+                </button>
               </div>
             ))}
           </div>

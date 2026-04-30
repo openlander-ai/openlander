@@ -13,7 +13,7 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
-import { getMcpSessionsSnapshot } from '../../mcp/server.js';
+import { getMcpSessionsSnapshot, terminateMcpSession } from '../../mcp/server.js';
 import {
   COMPOSITE_REGISTRY,
   DEPLOY_ACTIONS,
@@ -78,6 +78,15 @@ export function createMcpStatusRoutes(_ctx: AppContext): Hono {
       actions,
     };
     return c.json(body);
+  });
+
+  api.delete('/mcp/sessions/:id', (c) => {
+    const sid = c.req.param('id');
+    const ok = terminateMcpSession(sid);
+    if (!ok) {
+      return c.json({ error: 'NOT_FOUND', message: 'MCP session not found' }, 404);
+    }
+    return c.json({ status: 'terminated', id: sid });
   });
 
   return api;

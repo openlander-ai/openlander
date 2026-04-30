@@ -193,6 +193,39 @@ export interface McpSessionSnapshot {
  * so the UI can show "who is connected" without leaking internal session
  * objects (Server / Transport refs).
  */
+/**
+ * Terminate an MCP session by id. Closes the underlying transport and
+ * removes it from the in-memory map so /api/mcp/status reflects the
+ * disconnect immediately. Records the close in mcp_session_log.
+ *
+ * Returns true when a session matched and was closed; false when the
+ * id was not found in either the HTTP or SSE registries.
+ */
+export function terminateMcpSession(sid: string): boolean {
+  // The wire-side id is truncated to 12 chars by /api/mcp/status, so
+  // accept either a full uuid or its 12-char prefix.
+  const matchHttp = (mapKey: string) => mapKey === sid || mapKey.slice(0, 12) === sid;
+  const matchSse = matchHttp;
+
+  for (const [mapKey, session] of sessions.entries()) {
+    if (!matchHttp(mapKey)) continue;
+    if (session.heartbeatInterval) clearInterval(session.heartbeatInterval);
+    if (session.ttlTimeout) clearTimeout(session.ttlTimeout);
+    void session.transport.close();
+    sessions.delete(mapKey);
+    log.info({ sessionId: mapKey }, 'MCP HTTP session terminated by admin');
+    return true;
+  }
+  for (const [mapKey, session] of sseSessions.entries()) {
+    if (!matchSse(mapKey)) continue;
+    void session.transport.close();
+    sseSessions.delete(mapKey);
+    log.info({ sessionId: mapKey }, 'MCP SSE session terminated by admin');
+    return true;
+  }
+  return false;
+}
+
 export function getMcpSessionsSnapshot(): McpSessionSnapshot[] {
   const out: McpSessionSnapshot[] = [];
   for (const [id, s] of sessions.entries()) {

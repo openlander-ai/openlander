@@ -40,6 +40,9 @@ export interface UseMcpStatusReturn {
   loading: boolean;
   error: string | null;
   refetch: () => void;
+  /** DELETE /api/mcp/sessions/:id and refresh the status snapshot.
+   *  Resolves to true on a 2xx server response, false otherwise. */
+  disconnect: (sessionId: string) => Promise<boolean>;
 }
 
 export function useMcpStatus(): UseMcpStatusReturn {
@@ -63,7 +66,23 @@ export function useMcpStatus(): UseMcpStatusReturn {
     }
   }, []);
 
+  const disconnect = useCallback(
+    async (sessionId: string): Promise<boolean> => {
+      try {
+        const res = await fetchWithAuth(`/api/mcp/sessions/${encodeURIComponent(sessionId)}`, {
+          method: 'DELETE',
+        });
+        if (!res.ok) return false;
+        await fetchStatus();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [fetchStatus],
+  );
+
   usePollingTask(fetchStatus, { intervalMs: POLL_MS });
 
-  return { status, loading, error, refetch: fetchStatus };
+  return { status, loading, error, refetch: fetchStatus, disconnect };
 }
