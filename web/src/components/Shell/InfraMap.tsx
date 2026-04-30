@@ -47,28 +47,20 @@ interface InfraMapProps {
   isDemo?: boolean;
 }
 
+// ServiceHealth is wire-locked to 'healthy' | 'crashed' (see
+// projectTopology.ts:28 + services-zod.ts:49). The CSS in InfraMap.css
+// also defines hooks for 'degraded' / 'restarting' / 'starting' /
+// 'stopped' / 'running' / 'recovering' / 'unknown' so the visual can
+// support a richer state set if/when the wire opens up — those classes
+// are dead today but cheap to keep.
 const HEALTH_PULSE: Record<ServiceHealth, boolean> = {
   healthy: false,
-  running: false,
   crashed: true,
-  degraded: false,
-  restarting: false,
-  starting: false,
-  stopped: false,
-  recovering: false,
-  unknown: false,
 };
 
 const HEALTH_LABEL: Record<ServiceHealth, string> = {
   healthy: 'healthy',
-  running: 'running',
   crashed: 'crashed',
-  degraded: 'degraded',
-  restarting: 'restarting',
-  starting: 'starting',
-  stopped: 'stopped',
-  recovering: 'recovering',
-  unknown: 'unknown',
 };
 
 export function InfraMap(props: InfraMapProps) {
@@ -384,7 +376,7 @@ function TopologyNode({
           )}
         </span>
         <span className="topology-node-label">{service.name}</span>
-        {!dense && service.health !== 'healthy' && service.health !== 'running' && (
+        {!dense && service.health !== 'healthy' && (
           <span className={`topology-node-status h-${service.health}`}>{label}</span>
         )}
       </button>
@@ -442,7 +434,7 @@ function NodePopover({
 // HealthSummary
 
 function HealthSummary({ counts }: { counts: Record<ServiceHealth, number> }) {
-  const order: ServiceHealth[] = ['crashed', 'restarting', 'degraded', 'running', 'healthy'];
+  const order: ServiceHealth[] = ['crashed', 'healthy'];
   const items = order.map((k) => ({ k, n: counts[k] || 0 })).filter((x) => x.n > 0);
   if (items.length === 1 && items[0].k === 'healthy') {
     return (
@@ -526,14 +518,7 @@ function orderForFlow(services: ServiceNode[]): ServiceNode[] {
 function countByHealth(services: ServiceNode[]): Record<ServiceHealth, number> {
   const out: Record<ServiceHealth, number> = {
     healthy: 0,
-    running: 0,
     crashed: 0,
-    degraded: 0,
-    restarting: 0,
-    starting: 0,
-    stopped: 0,
-    recovering: 0,
-    unknown: 0,
   };
   for (const s of services) out[s.health] = (out[s.health] ?? 0) + 1;
   return out;

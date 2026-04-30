@@ -278,7 +278,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           labelledBy="service-general"
           className="p-5"
         >
-          <GeneralTab service={service} onEditConfig={() => setActiveTab('settings')} />
+          <GeneralTab service={service} onEditConfig={() => setActiveTab('advanced')} />
         </TabPanel>
 
         <TabPanel
