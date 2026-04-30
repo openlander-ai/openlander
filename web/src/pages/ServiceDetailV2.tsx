@@ -458,20 +458,30 @@ function GeneralTab({ service, onEditConfig }: { service: ServiceNode; onEditCon
 }
 
 function EnvironmentTab({ service, projectName }: { service: ServiceNode; projectName?: string }) {
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideKind, setGuideKind] = useState<'set-env-var' | 'delete-env-var' | null>(null);
   return (
     <>
       <SubCard
         title="Environment variables"
         action={
-          <button
-            type="button"
-            onClick={() => setGuideOpen(true)}
-            className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
-          >
-            <Plus className="h-3 w-3" />
-            Add
-          </button>
+          <span className="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setGuideKind('delete-env-var')}
+              className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-error)] hover:text-[color:var(--ol-error)]"
+            >
+              <Trash2 className="h-3 w-3" />
+              Remove
+            </button>
+            <button
+              type="button"
+              onClick={() => setGuideKind('set-env-var')}
+              className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+            >
+              <Plus className="h-3 w-3" />
+              Add / set
+            </button>
+          </span>
         }
       >
         <KvList
@@ -484,32 +494,46 @@ function EnvironmentTab({ service, projectName }: { service: ServiceNode; projec
           valueClassName="ol-mono break-all text-[12px]"
         />
       </SubCard>
-      <AgentGuideDialog
-        open={guideOpen}
-        onOpenChange={setGuideOpen}
-        kind="set-env-var"
-        projectName={projectName}
-        serviceName={service.name}
-      />
+      {guideKind && (
+        <AgentGuideDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setGuideKind(null);
+          }}
+          kind={guideKind}
+          projectName={projectName}
+          serviceName={service.name}
+        />
+      )}
     </>
   );
 }
 
 function DomainsTab({ service, projectName }: { service: ServiceNode; projectName?: string }) {
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideKind, setGuideKind] = useState<'add-domain' | 'remove-domain' | null>(null);
   return (
     <>
       <SubCard
         title="Domains"
         action={
-          <button
-            type="button"
-            onClick={() => setGuideOpen(true)}
-            className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
-          >
-            <Plus className="h-3 w-3" />
-            Add domain
-          </button>
+          <span className="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setGuideKind('remove-domain')}
+              className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-error)] hover:text-[color:var(--ol-error)]"
+            >
+              <Trash2 className="h-3 w-3" />
+              Detach
+            </button>
+            <button
+              type="button"
+              onClick={() => setGuideKind('add-domain')}
+              className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+            >
+              <Plus className="h-3 w-3" />
+              Add domain
+            </button>
+          </span>
         }
       >
         <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3">
@@ -527,13 +551,18 @@ function DomainsTab({ service, projectName }: { service: ServiceNode; projectNam
           Auto-issued via sslip.io. Add a custom domain to override.
         </p>
       </SubCard>
-      <AgentGuideDialog
-        open={guideOpen}
-        onOpenChange={setGuideOpen}
-        kind="add-domain"
-        projectName={projectName}
-        serviceName={service.name}
-      />
+      {guideKind && (
+        <AgentGuideDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setGuideKind(null);
+          }}
+          kind={guideKind}
+          projectName={projectName}
+          serviceName={service.name}
+          domain={service.url ?? undefined}
+        />
+      )}
     </>
   );
 }
