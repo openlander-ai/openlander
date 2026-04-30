@@ -600,6 +600,35 @@ export class ComposePipeline {
       this.jobManager?.trackJob(childId, childName);
     }
 
+    // Persist compose `depends_on` into project_dependencies so the
+    // topology endpoint surfaces edges between sibling services. The
+    // table is otherwise only populated by managed-DB connect actions,
+    // which leaves compose stacks edge-less in the InfraMap.
+    //
+    // Idempotent across redeploys: clear the source-side deps first,
+    // then re-insert from the freshly parsed compose graph. Targets
+    // outside this compose project are skipped (we can only resolve
+    // service-name → child-id within the current stack).
+    for (const composeService of filteredComposeProject.services) {
+      const sourceChildId = childrenByService.get(composeService.name);
+      if (!sourceChildId) continue;
+      this.db.deleteProjectDependenciesByProject(sourceChildId);
+      for (const depName of composeService.dependsOn ?? []) {
+        const targetChildId = childrenByService.get(depName);
+        if (!targetChildId) continue;
+        try {
+          this.db.createProjectDependency({
+            source_project_id: sourceChildId,
+            target_project_id: targetChildId,
+            dependency_type: 'custom',
+            source: 'auto',
+          });
+        } catch {
+          // best-effort — duplicate / FK race shouldn't fail the deploy
+        }
+      }
+    }
+
     const deployOnlyActive = Boolean(config.services && config.services.length > 0);
     if (!deployOnlyActive) {
       const composeServiceNames = new Set(composeProject.services.map((service) => service.name));
