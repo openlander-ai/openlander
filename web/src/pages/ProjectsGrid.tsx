@@ -114,18 +114,18 @@ export function ProjectsGrid() {
             ))}
           </div>
         ) : filtered.length === 0 && !q ? (
-          /* ── Empty state (v4-exact copy) ── */
+          /* ── Empty state (v5-exact copy) ── */
           <div className="flex flex-col items-center gap-4 py-16 text-center">
             <div className="grid h-12 w-12 place-items-center rounded-xl bg-[color:var(--ol-panel-2)]">
               <Folder className="h-6 w-6 text-[color:var(--ol-fg-muted)]" />
             </div>
             <div>
               <h3 className="text-[14px] font-semibold text-[color:var(--ol-fg)]">
-                Tell your agent to deploy something
+                You don&apos;t have any projects yet
               </h3>
-              <p className="mt-1.5 max-w-sm text-[13px] text-[color:var(--ol-fg-muted)]">
-                Paste a prompt like <span className="ol-mono">Deploy github.com/myorg/myapp</span>{' '}
-                into your agent and it&apos;ll show up here.
+              <p className="mt-1.5 max-w-md text-[13px] text-[color:var(--ol-fg-muted)]">
+                A project bundles related services — web, api, worker, db — that share environment
+                and deploy together.
               </p>
             </div>
             <button

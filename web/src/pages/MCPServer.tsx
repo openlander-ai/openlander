@@ -34,7 +34,7 @@ function formatRelative(iso: string): string {
 export function MCPServer() {
   const navigate = useNavigate();
   const { serverStatus } = useSystemStatus();
-  const { status: mcpStatus } = useMcpStatus();
+  const { status: mcpStatus, loading: mcpLoading, error: mcpError } = useMcpStatus();
   const { events: mcpEvents } = useActivityFeed({ limit: 20, actor: 'mcp' });
 
   // Derive the MCP endpoint from the current page origin as the best
@@ -129,34 +129,46 @@ export function MCPServer() {
             Connected agents
           </span>
         }
-        subtitle="Live MCP sessions. Disconnecting terminates the session immediately."
+        subtitle="Live MCP sessions snapshot."
       >
-        {!mcpStatus || mcpStatus.totalConnected === 0 ? (
+        {mcpError ? (
+          <div className="py-6 text-center text-[13px] text-[color:var(--ol-error)]">
+            Failed to load MCP status: {mcpError}
+          </div>
+        ) : mcpLoading && !mcpStatus ? (
+          <div className="py-6 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
+            Checking sessions…
+          </div>
+        ) : !mcpStatus || mcpStatus.totalConnected === 0 ? (
           <div className="py-6 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
             No active sessions. Connect an agent to see it here.
           </div>
         ) : (
           <div className="flex flex-col divide-y divide-[color:var(--ol-border-subtle)]">
             {mcpStatus.sessions.map((s) => (
-              <div
-                key={s.id}
-                className="flex items-center justify-between gap-3 py-2 text-[12.5px]"
-              >
-                <span className="flex items-center gap-2">
-                  <span
-                    aria-hidden
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: 'var(--ol-success)' }}
-                  />
-                  <span className="ol-mono text-[color:var(--ol-fg)]">{s.id}</span>
-                  <span className="rounded bg-[color:var(--ol-panel-2)] px-1.5 py-0.5 text-[10.5px] uppercase tracking-wide text-[color:var(--ol-fg-muted)]">
-                    {s.transport}
-                  </span>
-                </span>
-                <span className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
-                  connected {formatRelative(s.connectedAt)} · last seen{' '}
-                  {formatRelative(s.lastActivityAt)}
-                </span>
+              <div key={s.id} className="flex items-center gap-3 py-3">
+                <div
+                  aria-hidden
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[color:var(--ol-panel-2)] text-[color:var(--ol-primary)]"
+                >
+                  <Bot className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="ol-mono truncate text-[12.5px] font-medium text-[color:var(--ol-fg)]">
+                      {s.id}
+                    </span>
+                    <span className="shrink-0 rounded bg-[color:var(--ol-panel-2)] px-1.5 py-0.5 text-[10.5px] uppercase tracking-wide text-[color:var(--ol-fg-muted)]">
+                      {s.transport}
+                    </span>
+                  </div>
+                  <div className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
+                    connected {formatRelative(s.connectedAt)}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right text-[11.5px] text-[color:var(--ol-fg-muted)]">
+                  last call · {formatRelative(s.lastActivityAt)}
+                </div>
               </div>
             ))}
           </div>
