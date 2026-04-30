@@ -158,6 +158,12 @@ interface McpSession {
    *  it or initialize hasn't completed yet. */
   clientName?: string;
   clientVersion?: string;
+  /** Set when `onsessionclosed` fires. The session entry stays in the
+   *  map until `ttlTimeout` runs (5min later) so any in-flight close
+   *  cleanup can find it, but `closed: true` lets readers like
+   *  getMcpSessionsSnapshot filter it out so /api/mcp/status doesn't
+   *  over-report a torn-down session as still connected. Codex MEDIUM. */
+  closed?: boolean;
 }
 
 interface McpSseSession {
@@ -229,6 +235,7 @@ export function terminateMcpSession(sid: string): boolean {
 export function getMcpSessionsSnapshot(): McpSessionSnapshot[] {
   const out: McpSessionSnapshot[] = [];
   for (const [id, s] of sessions.entries()) {
+    if (s.closed) continue;
     out.push({
       id,
       transport: 'http',
@@ -296,12 +303,17 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
 
     if (sessionId) {
       const session = sessions.get(sessionId);
-      if (!session) {
+      if (!session || session.closed) {
         return c.json(
           { jsonrpc: '2.0', error: { code: -32001, message: 'Session not found' }, id: null },
           404,
         );
       }
+      // Real activity: bump lastActivity here so /api/mcp/status reports
+      // when the client *actually* spoke to us. The previous heartbeat-
+      // driven update made every idle session look like it had just
+      // called something (Codex MEDIUM, 2026-04-30).
+      session.lastActivity = Date.now();
       return session.transport.handleRequest(c.req.raw);
     }
 
@@ -335,9 +347,9 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
           lastActivity: now,
         };
 
-        session.heartbeatInterval = setInterval(() => {
-          session.lastActivity = Date.now();
-        }, 30_000);
+        // No heartbeat: lastActivity is bumped at the actual
+        // handleRequest call site so the value reflects real client
+        // activity rather than the 30s polling tick.
 
         sessions.set(sid, session);
         log.info({ sessionId: sid }, 'MCP HTTP session created');
@@ -345,6 +357,12 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
       onsessionclosed: (sid) => {
         const session = sessions.get(sid);
         if (session) {
+          // Mark closed so getMcpSessionsSnapshot filters it out of the
+          // status surface. The map entry stays around until ttlTimeout
+          // fires (5 min) so any re-entrant close paths can still find
+          // it for cleanup. Codex MEDIUM (over-report). 2026-04-30.
+          session.closed = true;
+
           // Audit log persistence — record the disconnect moment so the
           // /api/activity feed can synthesize mcp_disconnected events that
           // survive process restarts. Best-effort: a DB error here must not
