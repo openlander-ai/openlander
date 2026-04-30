@@ -320,7 +320,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           labelledBy="service-logs"
           className="p-0"
         >
-          <RuntimeLogsTab projectId={projectId} />
+          <RuntimeLogsTab projectId={projectId} serviceId={service.id} />
         </TabPanel>
 
         <TabPanel
@@ -603,7 +603,7 @@ function DeploymentsTab({
   );
 }
 
-function RuntimeLogsTab({ projectId }: { projectId: string | null }) {
+function RuntimeLogsTab({ projectId, serviceId }: { projectId: string | null; serviceId: string }) {
   if (!projectId) {
     return (
       <div className="px-6 py-12 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
@@ -613,7 +613,7 @@ function RuntimeLogsTab({ projectId }: { projectId: string | null }) {
   }
   return (
     <div className="h-[calc(100vh-260px)] min-h-[420px]">
-      <ConsoleLogViewer projectId={projectId} />
+      <ConsoleLogViewer projectId={projectId} serviceId={serviceId} />
     </div>
   );
 }

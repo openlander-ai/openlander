@@ -2847,13 +2847,86 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   // GET /projects/:p/services/:s/logs
+  //
+  // Per-service container logs. Supports both modes:
+  //   - default JSON snapshot (?lines=N) for the static viewer
+  //   - SSE/ndjson stream (?follow=true) for the live ConsoleLogViewer
+  //
+  // Falls back to 404 if the service id doesn't resolve under the named
+  // project. Multi-service compose stacks land here (one service per
+  // child) so the live tail is scoped to a single container instead of
+  // the project-level interleave used by /projects/:id/logs.
   api.get('/projects/:p/services/:s/logs', async (c) => {
-    return withServiceAsId(c, async (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
-      const lines = parseInt(cx.req.query('lines') ?? '50', 10);
-      const logs = await ctx.pipeline.getLogs(project.id, lines);
-      return cx.json({ project: project.name, logs });
-    });
+    const projectParam = c.req.param('p');
+    const serviceId = c.req.param('s');
+    const project = ctx.db.getProject(projectParam) ?? ctx.db.getProjectByName(projectParam);
+    if (!project) {
+      return c.json(
+        { error: 'PROJECT_NOT_FOUND', message: `Project ${projectParam} not found` },
+        404,
+      );
+    }
+    const service = ctx.db.getService(serviceId);
+    if (!service) {
+      return c.json({ error: 'SERVICE_NOT_FOUND', message: `Service ${serviceId} not found` }, 404);
+    }
+    if (service.project_id !== project.id) {
+      return c.json(
+        {
+          error: 'SERVICE_NOT_IN_PROJECT',
+          message: `Service ${serviceId} does not belong to project ${project.id}`,
+        },
+        404,
+      );
+    }
+
+    const containerId = service.container_id ?? service.container_name ?? '';
+    const follow = c.req.query('follow');
+
+    if (follow && containerId) {
+      return stream(c, async (s) => {
+        c.header('Content-Type', 'application/x-ndjson');
+        try {
+          const logStream = await ctx.docker.getLogStream(containerId, { tail: 50 });
+
+          logStream.on('data', (chunk: Buffer) => {
+            const headerSize = 8;
+            const streamType = chunk[0] === 1 ? 'stdout' : 'stderr';
+            const line = chunk.subarray(headerSize).toString('utf8').trim();
+
+            if (line) {
+              const logEntry = {
+                line,
+                stream: streamType,
+                time: new Date().toISOString(),
+              };
+              void s.write(JSON.stringify(logEntry) + '\n');
+            }
+          });
+
+          logStream.on('end', () => {
+            void s.close();
+          });
+
+          logStream.on('error', () => {
+            void s.close();
+          });
+
+          s.onAbort(() => {
+            // Stream cleans up automatically on abort.
+          });
+        } catch (err) {
+          log.debug({ err, serviceId }, 'Per-service log streaming failed');
+          void s.write(JSON.stringify({ error: 'Failed to stream logs' }) + '\n');
+          void s.close();
+        }
+      });
+    }
+
+    const lines = parseInt(c.req.query('lines') ?? '50', 10);
+    const tail = Number.isInteger(lines) && lines > 0 ? lines : 50;
+    const logs = containerId ? await ctx.docker.getLogs(containerId, tail) : '';
+    return c.json({ project: project.name, service: service.name, logs });
   });
 
   // GET /projects/:p/services/:s/env

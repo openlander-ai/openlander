@@ -32,10 +32,14 @@ function formatLogTime(isoString: string): string {
 
 interface LogViewerProps {
   projectId: string;
+  /** Optional service id. When set, the stream is scoped to that
+   *  service's container instead of the project-level interleave —
+   *  multi-service compose stacks need this to avoid mixing logs. */
+  serviceId?: string;
   toolbarActions?: React.ReactNode;
 }
 
-export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
+export function LogViewer({ projectId, serviceId, toolbarActions }: LogViewerProps) {
   const { t } = useLanguage();
   const [filters, setFilters] = useState<
     Pick<ConsoleFilterState, 'searchMode' | 'searchQuery' | 'logLevel'>
@@ -64,6 +68,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
     loadOlder,
   } = useLogStream({
     projectId,
+    serviceId,
     enabled: true,
   });
   const isFollowing = followMode === 'follow';
