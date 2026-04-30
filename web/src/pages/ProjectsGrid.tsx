@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, Folder, MoreHorizontal, Plus } from 'lucide-react';
 import { useProjectsContext } from '@/hooks/use-projects-context';
+import { useProjects } from '@/hooks/use-projects';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { AgentGuideDialog } from '@/components/agent-guide';
 import { cn } from '@/lib/utils';
@@ -76,7 +77,15 @@ function timeAgo(dateStr: string): string {
 
 export function ProjectsGrid() {
   const navigate = useNavigate();
-  const { projects, loading } = useProjectsContext();
+  const ctx = useProjectsContext();
+  const [showArchived, setShowArchived] = useState(false);
+  // When the toggle is off (default), reuse the shared context so we don't
+  // double-poll. When on, mount a per-page useProjects(true) so archived
+  // rows show alongside live ones — they don't need to bleed into Sidebar /
+  // Home / CommandPalette where the context is consumed. The hook's
+  // `enabled` flag suppresses polling while the toggle is off.
+  const archivedView = useProjects(true, { enabled: showArchived });
+  const { projects, loading } = showArchived ? archivedView : ctx;
   const [q, setQ] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
 
@@ -149,6 +158,19 @@ export function ProjectsGrid() {
               </button>
               <button
                 type="button"
+                onClick={() => setShowArchived((v) => !v)}
+                aria-pressed={showArchived}
+                className={cn(
+                  'rounded-md border px-2.5 py-1.5 text-[12.5px] transition-colors',
+                  showArchived
+                    ? 'border-[color:var(--ol-border-strong)] bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg)]'
+                    : 'border-[color:var(--ol-border)] text-[color:var(--ol-fg-muted)] hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]',
+                )}
+              >
+                {showArchived ? 'Hide archived' : 'Show archived'}
+              </button>
+              <button
+                type="button"
                 className="flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] px-2.5 py-1.5 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
               >
                 Newest first
@@ -163,56 +185,70 @@ export function ProjectsGrid() {
                   No projects match &quot;{q}&quot;
                 </div>
               ) : (
-                filtered.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => navigate(`/projects/${p.id}`)}
-                    className="group flex w-full items-center gap-3 rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-4 py-3 text-left transition-colors hover:border-[color:var(--ol-border)] hover:bg-[color:var(--ol-panel)]"
-                  >
-                    {/* Project icon */}
-                    <span
-                      aria-hidden
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-[color:var(--ol-border)] text-[12px] font-semibold text-[color:var(--ol-fg-muted)]"
-                    >
-                      {p.name.slice(0, 2).toUpperCase()}
-                    </span>
-
-                    {/* Meta */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-[14px] font-medium text-[color:var(--ol-fg)]">
-                          {p.name}
-                        </span>
-                        {/* p is the frontend Project type (lib/api wire shape) — `status` is a
-                            wire-format field, hydrated from services.* server-side post-0012. */}
-                        {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
-                        <StatusPill status={p.status} />
-                      </div>
-                      <div className="flex items-center gap-3 text-[11.5px] text-[color:var(--ol-fg-muted)]">
-                        {p.serviceCount != null && (
-                          <span>
-                            {p.serviceCount} service{p.serviceCount === 1 ? '' : 's'}
-                          </span>
-                        )}
-                        <span>Deployed {timeAgo(p.updatedAt)}</span>
-                        <span className="ml-auto text-[color:var(--ol-fg-subtle)]">
-                          Created {timeAgo(p.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* More */}
+                filtered.map((p) => {
+                  const isArchived = p.archived_at != null;
+                  return (
                     <button
+                      key={p.id}
                       type="button"
-                      aria-label="More options"
-                      onClick={(e) => e.stopPropagation()}
-                      className="grid h-7 w-7 place-items-center rounded-md text-[color:var(--ol-fg-subtle)] opacity-0 transition-opacity hover:bg-[color:var(--ol-panel)] hover:text-[color:var(--ol-fg)] group-hover:opacity-100"
+                      onClick={() => navigate(`/projects/${p.id}`)}
+                      className={cn(
+                        'group flex w-full items-center gap-3 rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-4 py-3 text-left transition-colors hover:border-[color:var(--ol-border)] hover:bg-[color:var(--ol-panel)]',
+                        isArchived && 'opacity-60',
+                      )}
                     >
-                      <MoreHorizontal className="h-4 w-4" />
+                      {/* Project icon */}
+                      <span
+                        aria-hidden
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-[color:var(--ol-border)] text-[12px] font-semibold text-[color:var(--ol-fg-muted)]"
+                      >
+                        {p.name.slice(0, 2).toUpperCase()}
+                      </span>
+
+                      {/* Meta */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-[14px] font-medium text-[color:var(--ol-fg)]">
+                            {p.name}
+                          </span>
+                          {isArchived ? (
+                            <span className="inline-flex items-center rounded-full bg-[color:var(--ol-panel)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--ol-fg-muted)]">
+                              Archived
+                            </span>
+                          ) : (
+                            <>
+                              {/* p is the frontend Project type (lib/api wire shape) — `status` is a
+                                wire-format field, hydrated from services.* server-side post-0012. */}
+                              {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
+                              <StatusPill status={p.status} />
+                            </>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-[11.5px] text-[color:var(--ol-fg-muted)]">
+                          {p.serviceCount != null && (
+                            <span>
+                              {p.serviceCount} service{p.serviceCount === 1 ? '' : 's'}
+                            </span>
+                          )}
+                          <span>Deployed {timeAgo(p.updatedAt)}</span>
+                          <span className="ml-auto text-[color:var(--ol-fg-subtle)]">
+                            Created {timeAgo(p.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* More */}
+                      <button
+                        type="button"
+                        aria-label="More options"
+                        onClick={(e) => e.stopPropagation()}
+                        className="grid h-7 w-7 place-items-center rounded-md text-[color:var(--ol-fg-subtle)] opacity-0 transition-opacity hover:bg-[color:var(--ol-panel)] hover:text-[color:var(--ol-fg)] group-hover:opacity-100"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
                     </button>
-                  </button>
-                ))
+                  );
+                })
               )}
             </div>
           </>

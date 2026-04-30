@@ -10,7 +10,14 @@
  *
  * Tab switching uses ProjectTabs which gives us WAI-ARIA arrow-key
  * tablist for free.
+ *
+ * Lint note: this file reads `service.image` / `service.port` /
+ * `service.type` off the frontend ServiceNode wire shape (lib/projectTopology),
+ * not the DB row. The no-dropped-columns rule's name-based check would
+ * misfire here, so the rule is disabled file-wide; the canonical-column
+ * contract is enforced server-side.
  */
+/* eslint-disable openlander-internal/no-dropped-columns */
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -31,6 +38,7 @@ import {
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { LogViewer } from '@/components/Shell/LogViewer';
+import { AgentGuideDialog } from '@/components/agent-guide';
 import { Sparkline } from '@/components/Shell/Sparkline';
 import { DeployRow } from '@/components/Shell/DeployRow';
 import { type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
@@ -279,7 +287,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           labelledBy="service-environment"
           className="p-5"
         >
-          <EnvironmentTab />
+          <EnvironmentTab service={service} projectName={project?.name ?? undefined} />
         </TabPanel>
 
         <TabPanel
@@ -288,7 +296,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           labelledBy="service-domains"
           className="p-5"
         >
-          <DomainsTab service={service} />
+          <DomainsTab service={service} projectName={project?.name ?? undefined} />
         </TabPanel>
 
         <TabPanel
@@ -431,62 +439,84 @@ function GeneralTab({ service }: { service: ServiceNode }) {
   );
 }
 
-function EnvironmentTab() {
+function EnvironmentTab({ service, projectName }: { service: ServiceNode; projectName?: string }) {
+  const [guideOpen, setGuideOpen] = useState(false);
   return (
-    <SubCard
-      title="Environment variables"
-      action={
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
-        >
-          <Plus className="h-3 w-3" />
-          Add
-        </button>
-      }
-    >
-      <KvList
-        rows={[
-          ['DATABASE_URL', 'postgres://hotdeal:••••••@postgres:5432/hotdeal'],
-          ['REDIS_URL', 'redis://redis:6379'],
-          ['SCRAPE_INTERVAL', '300'],
-          ['NODE_ENV', 'production'],
-        ]}
-        valueClassName="ol-mono break-all text-[12px]"
+    <>
+      <SubCard
+        title="Environment variables"
+        action={
+          <button
+            type="button"
+            onClick={() => setGuideOpen(true)}
+            className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+          >
+            <Plus className="h-3 w-3" />
+            Add
+          </button>
+        }
+      >
+        <KvList
+          rows={[
+            ['DATABASE_URL', 'postgres://hotdeal:••••••@postgres:5432/hotdeal'],
+            ['REDIS_URL', 'redis://redis:6379'],
+            ['SCRAPE_INTERVAL', '300'],
+            ['NODE_ENV', 'production'],
+          ]}
+          valueClassName="ol-mono break-all text-[12px]"
+        />
+      </SubCard>
+      <AgentGuideDialog
+        open={guideOpen}
+        onOpenChange={setGuideOpen}
+        kind="set-env-var"
+        projectName={projectName}
+        serviceName={service.name}
       />
-    </SubCard>
+    </>
   );
 }
 
-function DomainsTab({ service }: { service: ServiceNode }) {
+function DomainsTab({ service, projectName }: { service: ServiceNode; projectName?: string }) {
+  const [guideOpen, setGuideOpen] = useState(false);
   return (
-    <SubCard
-      title="Domains"
-      action={
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
-        >
-          <Plus className="h-3 w-3" />
-          Add domain
-        </button>
-      }
-    >
-      <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3">
-        <div className="flex items-center gap-2">
-          <Globe className="h-3.5 w-3.5 text-[color:var(--ol-primary)]" />
-          <span className="ol-mono break-all text-[12px] text-[color:var(--ol-primary)]">
-            {service.url ?? '—'}
-          </span>
-          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-[color:var(--ol-success-soft)] px-2 py-0.5 text-[10px] font-medium text-[color:var(--ol-success)]">
-            SSL
-          </span>
+    <>
+      <SubCard
+        title="Domains"
+        action={
+          <button
+            type="button"
+            onClick={() => setGuideOpen(true)}
+            className="inline-flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+          >
+            <Plus className="h-3 w-3" />
+            Add domain
+          </button>
+        }
+      >
+        <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3">
+          <div className="flex items-center gap-2">
+            <Globe className="h-3.5 w-3.5 text-[color:var(--ol-primary)]" />
+            <span className="ol-mono break-all text-[12px] text-[color:var(--ol-primary)]">
+              {service.url ?? '—'}
+            </span>
+            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-[color:var(--ol-success-soft)] px-2 py-0.5 text-[10px] font-medium text-[color:var(--ol-success)]">
+              SSL
+            </span>
+          </div>
         </div>
-      </div>
-      <p className="mt-2.5 text-[12px] text-[color:var(--ol-fg-muted)]">
-        Auto-issued via sslip.io. Add a custom domain to override.
-      </p>
-    </SubCard>
+        <p className="mt-2.5 text-[12px] text-[color:var(--ol-fg-muted)]">
+          Auto-issued via sslip.io. Add a custom domain to override.
+        </p>
+      </SubCard>
+      <AgentGuideDialog
+        open={guideOpen}
+        onOpenChange={setGuideOpen}
+        kind="add-domain"
+        projectName={projectName}
+        serviceName={service.name}
+      />
+    </>
   );
 }
 
