@@ -73,14 +73,24 @@ function ServiceDots({ projectId, onDotClick }: ServiceDotsProps) {
           title={`${svc.name} · ${svc.health}`}
           onClick={(e) => onDotClick(projectId, svc.id, e)}
           className={cn(
-            'h-2 w-2 shrink-0 rounded-full border transition-opacity hover:opacity-70',
-            svc.health === 'healthy'
-              ? 'border-transparent bg-[color:var(--ol-success)]'
-              : svc.health === 'crashed'
-                ? 'border-transparent bg-[color:var(--ol-error)]'
-                : 'border-[color:var(--ol-fg-subtle)] bg-transparent',
+            'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[11px] leading-none transition-colors',
+            'border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]',
+            'hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]',
           )}
-        />
+        >
+          <span
+            aria-hidden="true"
+            className={cn(
+              'h-1.5 w-1.5 shrink-0 rounded-full',
+              svc.health === 'healthy'
+                ? 'bg-[color:var(--ol-success)]'
+                : svc.health === 'crashed'
+                  ? 'bg-[color:var(--ol-error)]'
+                  : 'bg-[color:var(--ol-fg-subtle)]',
+            )}
+          />
+          <span className="max-w-[140px] truncate">{svc.name}</span>
+        </button>
       ))}
       {overflow > 0 && (
         <span className="text-[10px] leading-none text-[color:var(--ol-fg-muted)]">
