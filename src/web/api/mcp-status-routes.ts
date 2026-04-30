@@ -28,6 +28,11 @@ export interface McpStatusSession {
   transport: 'http' | 'sse';
   connectedAt: string; // ISO 8601
   lastActivityAt: string; // ISO 8601
+  /** clientInfo from the MCP initialize handshake. Optional — older
+   *  clients may not send clientInfo, and pre-handshake sessions
+   *  haven't received it yet. */
+  clientName?: string;
+  clientVersion?: string;
 }
 
 export interface McpStatusResponse {
@@ -61,6 +66,8 @@ export function createMcpStatusRoutes(_ctx: AppContext): Hono {
       transport: s.transport,
       connectedAt: new Date(s.connectedAt).toISOString(),
       lastActivityAt: new Date(s.lastActivityAt).toISOString(),
+      clientName: s.clientName,
+      clientVersion: s.clientVersion,
     }));
 
     const body: McpStatusResponse = {

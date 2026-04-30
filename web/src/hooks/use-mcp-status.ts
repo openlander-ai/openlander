@@ -17,6 +17,10 @@ export interface McpSessionView {
   transport: 'http' | 'sse';
   connectedAt: string;
   lastActivityAt: string;
+  /** clientInfo.name from the MCP initialize handshake. Undefined for
+   *  older clients or pre-handshake sessions. */
+  clientName?: string;
+  clientVersion?: string;
 }
 
 export interface McpStatusSnapshot {

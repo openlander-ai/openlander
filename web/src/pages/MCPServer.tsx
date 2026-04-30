@@ -182,15 +182,31 @@ export function MCPServer() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="ol-mono truncate text-[12.5px] font-medium text-[color:var(--ol-fg)]">
-                      {s.id}
-                    </span>
+                    {s.clientName ? (
+                      <span className="truncate text-[12.5px] font-medium text-[color:var(--ol-fg)]">
+                        {s.clientName}
+                        {s.clientVersion && (
+                          <span className="ml-1.5 text-[10.5px] font-normal text-[color:var(--ol-fg-muted)]">
+                            v{s.clientVersion}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="ol-mono truncate text-[12.5px] font-medium text-[color:var(--ol-fg)]">
+                        {s.id}
+                      </span>
+                    )}
                     <span className="shrink-0 rounded bg-[color:var(--ol-panel-2)] px-1.5 py-0.5 text-[10.5px] uppercase tracking-wide text-[color:var(--ol-fg-muted)]">
                       {s.transport}
                     </span>
                   </div>
-                  <div className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
-                    connected {formatRelative(s.connectedAt)}
+                  <div className="flex items-center gap-2 text-[11.5px] text-[color:var(--ol-fg-muted)]">
+                    {s.clientName && (
+                      <span className="ol-mono shrink-0 text-[10.5px] text-[color:var(--ol-fg-subtle)]">
+                        {s.id}
+                      </span>
+                    )}
+                    <span>connected {formatRelative(s.connectedAt)}</span>
                   </div>
                 </div>
                 <div className="shrink-0 text-right text-[11.5px] text-[color:var(--ol-fg-muted)]">

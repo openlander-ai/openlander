@@ -152,6 +152,12 @@ interface McpSession {
    *  TTL-driven transport.close()) which would write a duplicate
    *  `mcp_session_log` row. Codex CCG HIGH. */
   closeRecorded?: boolean;
+  /** clientInfo.name from the MCP initialize handshake (e.g. "Claude
+   *  Code", "Cursor", "Cline"). Captured via `server.oninitialized` →
+   *  `server.getClientVersion()`. Undefined if the client never sent
+   *  it or initialize hasn't completed yet. */
+  clientName?: string;
+  clientVersion?: string;
 }
 
 interface McpSseSession {
@@ -159,6 +165,8 @@ interface McpSseSession {
   transport: SSEServerTransport; // eslint-disable-line @typescript-eslint/no-deprecated
   connectedAt: number;
   lastActivity: number;
+  clientName?: string;
+  clientVersion?: string;
 }
 
 // Module-scope session registries so /api/mcp/status can enumerate active
@@ -173,6 +181,11 @@ export interface McpSessionSnapshot {
   transport: 'http' | 'sse';
   connectedAt: number;
   lastActivityAt: number;
+  /** clientInfo.name from MCP initialize handshake (e.g. "Claude Code",
+   *  "Cursor"). Undefined for sessions that connected before this field
+   *  shipped or for clients that don't send clientInfo. */
+  clientName?: string;
+  clientVersion?: string;
 }
 
 /**
@@ -188,6 +201,8 @@ export function getMcpSessionsSnapshot(): McpSessionSnapshot[] {
       transport: 'http',
       connectedAt: s.connectedAt,
       lastActivityAt: s.lastActivity,
+      clientName: s.clientName,
+      clientVersion: s.clientVersion,
     });
   }
   for (const [id, s] of sseSessions.entries()) {
@@ -196,6 +211,8 @@ export function getMcpSessionsSnapshot(): McpSessionSnapshot[] {
       transport: 'sse',
       connectedAt: s.connectedAt,
       lastActivityAt: s.lastActivity,
+      clientName: s.clientName,
+      clientVersion: s.clientVersion,
     });
   }
   return out.sort((a, b) => b.connectedAt - a.connectedAt);
@@ -256,9 +273,27 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
     }
 
     const server = createMcpServerInstance(ctx);
+    let httpSessionId: string | null = null;
+    server.oninitialized = () => {
+      // MCP `initialize` handshake completed — `getClientVersion()` now
+      // returns the agent's `Implementation` (clientInfo.name + version).
+      // Persist on the session record so /api/mcp/status can surface a
+      // friendly identity instead of the opaque session UUID.
+      const info = server.getClientVersion();
+      if (!info || !httpSessionId) return;
+      const session = sessions.get(httpSessionId);
+      if (!session) return;
+      session.clientName = info.name;
+      session.clientVersion = info.version;
+      log.info(
+        { sessionId: httpSessionId, clientName: info.name, clientVersion: info.version },
+        'MCP HTTP session client identified',
+      );
+    };
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
       onsessioninitialized: (sid) => {
+        httpSessionId = sid;
         const now = Date.now();
         const session: McpSession = {
           server,
@@ -350,6 +385,24 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
       connectedAt: Date.now(),
       lastActivity: Date.now(),
     });
+
+    // Capture clientInfo on initialize. See HTTP transport above.
+    server.oninitialized = () => {
+      const info = server.getClientVersion();
+      if (!info) return;
+      const session = sseSessions.get(transport.sessionId);
+      if (!session) return;
+      session.clientName = info.name;
+      session.clientVersion = info.version;
+      log.info(
+        {
+          sessionId: transport.sessionId,
+          clientName: info.name,
+          clientVersion: info.version,
+        },
+        'MCP SSE session client identified',
+      );
+    };
 
     outgoing.on('close', () => {
       const session = sseSessions.get(transport.sessionId);
