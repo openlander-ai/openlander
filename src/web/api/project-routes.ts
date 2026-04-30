@@ -2854,10 +2854,17 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // GET /projects/:p/services/:s/deployments
   api.get('/projects/:p/services/:s/deployments', (c) => {
     return withServiceAsId(c, (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+      // 404 if project missing (throws ProjectNotFoundError), discard the row.
+      getProjectOrThrow(cx, ctx);
       const limit = parseInt(cx.req.query('limit') ?? '50', 10);
       const environmentId = cx.req.query('environmentId');
-      const deployLogs = ctx.db.getDeployLogs(project.id, limit, environmentId);
+      // CCG #5 (post-0012 multi-svc gap): the legacy call passed project.id,
+      // which projectIdToServiceId resolved to `${project.id}__svc` — fine for
+      // single-svc projects but invisible for sibling services in a grouped
+      // project. Pass the canonical service id from the URL so each service's
+      // deploy history shows up under its own detail page.
+      const serviceId = cx.req.param('s') ?? '';
+      const deployLogs = ctx.db.getDeployLogs(serviceId, limit, environmentId);
       return cx.json({
         count: deployLogs.length,
         deployments: deployLogs.map((dl) => ({
