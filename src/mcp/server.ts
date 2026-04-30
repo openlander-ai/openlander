@@ -207,6 +207,17 @@ export interface McpSessionSnapshot {
  * Returns true when a session matched and was closed; false when the
  * id was not found in either the HTTP or SSE registries.
  */
+/**
+ * Format the in-memory clientInfo as a single string for the
+ * mcp_session_log.client_info column. Returns null when the session
+ * never received an MCP `initialize` (e.g. transport closed before the
+ * client's clientInfo arrived) so the audit row stays honest.
+ */
+function formatClientInfoForLog(s: { clientName?: string; clientVersion?: string }): string | null {
+  if (!s.clientName) return null;
+  return s.clientVersion ? `${s.clientName} v${s.clientVersion}` : s.clientName;
+}
+
 export function terminateMcpSession(sid: string, ctx: AppContext): boolean {
   // The wire-side id is truncated to 12 chars by /api/mcp/status, so
   // accept either a full uuid or its 12-char prefix.
@@ -227,6 +238,7 @@ export function terminateMcpSession(sid: string, ctx: AppContext): boolean {
           transport: 'http',
           connectedAt: session.connectedAt,
           disconnectedAt: Date.now(),
+          clientInfo: formatClientInfoForLog(session),
         });
       } catch (err) {
         log.warn({ sessionId: mapKey, err }, 'Failed to persist MCP HTTP admin-terminate close');
@@ -251,6 +263,7 @@ export function terminateMcpSession(sid: string, ctx: AppContext): boolean {
         transport: 'sse',
         connectedAt: session.connectedAt,
         disconnectedAt: Date.now(),
+        clientInfo: formatClientInfoForLog(session),
       });
     } catch (err) {
       log.warn({ sessionId: mapKey, err }, 'Failed to persist MCP SSE admin-terminate close');
@@ -416,6 +429,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
                 transport: 'http',
                 connectedAt: session.connectedAt,
                 disconnectedAt: Date.now(),
+                clientInfo: formatClientInfoForLog(session),
               });
             } catch (err) {
               log.warn({ sessionId: sid, err }, 'Failed to persist MCP HTTP session close');
@@ -515,6 +529,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
             transport: 'sse',
             connectedAt: session.connectedAt,
             disconnectedAt: Date.now(),
+            clientInfo: formatClientInfoForLog(session),
           });
         } catch (err) {
           log.warn(

@@ -193,6 +193,16 @@ export function createActivityRoutes(ctx: AppContext): Hono {
       const mcpSessions = getMcpSessionsSnapshot();
       for (const s of mcpSessions) {
         const { at, relTs } = relativeTime(s.connectedAt, now);
+        // Prefer the captured clientInfo.name (with version when present)
+        // so the activity feed reads "Claude Code v0.5.21 connected" rather
+        // than the opaque transport tag. Falls back to the legacy
+        // "MCP agent connected (HTTP)" form for sessions that landed before
+        // initialize completed or for clients that don't send clientInfo.
+        const identity = s.clientName
+          ? s.clientVersion
+            ? `${s.clientName} v${s.clientVersion}`
+            : s.clientName
+          : `MCP agent (${s.transport.toUpperCase()})`;
         events.push({
           id: `mcp-${s.id}`,
           actor: 'mcp',
@@ -201,8 +211,8 @@ export function createActivityRoutes(ctx: AppContext): Hono {
           relTs,
           project: null,
           service: null,
-          title: `MCP agent connected (${s.transport.toUpperCase()})`,
-          detail: `session ${s.id.slice(0, 8)}`,
+          title: `${identity} connected`,
+          detail: `session ${s.id.slice(0, 8)} · ${s.transport.toUpperCase()}`,
         });
       }
 
@@ -212,6 +222,10 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         if (!Number.isFinite(ms)) continue;
         const { at, relTs } = relativeTime(ms, now);
         const durationSec = Math.max(0, Math.floor((s.disconnected_at - s.connected_at) / 1000));
+        // mcp_session_log.client_info is the formatted "Name vX.Y.Z" string
+        // captured at close time. Older rows pre-dating clientInfo
+        // persistence stay null and fall back to the legacy title shape.
+        const identity = s.client_info ?? `MCP agent (${s.transport.toUpperCase()})`;
         events.push({
           id: `mcp-close-${s.id}`,
           actor: 'mcp',
@@ -220,8 +234,8 @@ export function createActivityRoutes(ctx: AppContext): Hono {
           relTs,
           project: null,
           service: null,
-          title: `MCP agent disconnected (${s.transport.toUpperCase()})`,
-          detail: `session ${s.session_id.slice(0, 8)} · lasted ${String(durationSec)}s`,
+          title: `${identity} disconnected`,
+          detail: `session ${s.session_id.slice(0, 8)} · ${s.transport.toUpperCase()} · lasted ${String(durationSec)}s`,
         });
       }
     }
