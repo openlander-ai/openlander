@@ -33,13 +33,23 @@ export function resolveDeploymentLogSource(
 ): { project: ProjectRow; deployLog: DeployLogRow | null } | null {
   const deployLog = ctx.db.getDeployLog(id) ?? null;
   if (deployLog) {
-    const project = ctx.db.getProject(deployLog.project_id ?? '');
+    // Post-0012: deploy_logs.service_id is the canonical FK. Walk
+    // through the service row to find the parent project.
+    const service = ctx.db.getService(deployLog.service_id);
+    if (!service) return null;
+    const project = ctx.db.getProject(service.project_id);
     if (!project) return null;
     return { project, deployLog };
   }
 
-  // Fallback: in-flight deploy uses projectId until the post-mortem
-  // deploy_logs row is created.
+  // Fallback: in-flight deploy keyed by service id (post-0012) or
+  // project id (legacy) until the post-mortem deploy_logs row lands.
+  const serviceMatch = ctx.db.getService(id);
+  if (serviceMatch) {
+    const project = ctx.db.getProject(serviceMatch.project_id);
+    if (!project) return null;
+    return { project, deployLog: null };
+  }
   const project = ctx.db.getProject(id);
   if (!project) return null;
   return { project, deployLog: null };
