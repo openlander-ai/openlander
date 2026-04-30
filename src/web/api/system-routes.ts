@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
 import type { ServiceRow } from '../../db/types.js';
-import { kindToLegacyType } from '../../db/repos/service.repo.js';
+import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { createGitProvider } from '../../git-providers/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getSystemStats, formatStatsSummary } from '../../monitor/stats.js';
@@ -33,6 +33,11 @@ function toServiceWire(
 ): ServiceRow & { type: string; image: string; env_vars: string | null } {
   return {
     ...service,
+    // v5.2: strip the internal `__svc` suffix so the wire-format name
+    // matches what the topology + project services endpoints already emit.
+    // The suffix is an artifact of the post-0009 service-id convention and
+    // never belongs in human-facing surfaces.
+    name: service.name.replace(/__svc$/, ''),
     type: service.type ?? kindToLegacyType(service.kind),
     image: service.image ?? service.image_url ?? '',
     port: service.port ?? service.assigned_port ?? undefined,
@@ -161,11 +166,20 @@ export function createSystemRoutes(ctx: AppContext): Hono {
 
   api.get('/services', async (c) => {
     try {
+      // v5.2: this endpoint backs /managed-services in the UI. Filter the
+      // listWithCardSummary result down to managed kinds (postgres / mysql /
+      // redis / mongo / minio) so deployable services don't leak into the
+      // managed-services view. Card summary still does its inspect+health
+      // work for the kept set; deployables are excluded *after* that work
+      // (acceptable cost — kept for simplicity over a per-kind branch in the
+      // service manager).
       const services = await ctx.serviceManager.listWithCardSummary();
-      const wire = services.map((svc) => {
-        const envVars = ctx.db.getEnvVars(svc.id);
-        return toServiceWire(svc, envVars);
-      });
+      const wire = services
+        .filter((svc) => (MANAGED_SERVICE_KINDS as readonly string[]).includes(svc.kind))
+        .map((svc) => {
+          const envVars = ctx.db.getEnvVars(svc.id);
+          return toServiceWire(svc, envVars);
+        });
       return c.json(wire);
     } catch (err) {
       log.debug({ err }, 'List services failed');
