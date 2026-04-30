@@ -1,48 +1,40 @@
+/* eslint-disable openlander-internal/no-dropped-columns */
 /**
- * InfraMap — Round 4 PR4 React Flow rewrite.
+ * InfraMap — v5 design (Round 4 PR4 React Flow rewrite is gone).
  *
- * The crooked-edge problem in the previous SVG-bezier impl was caused
- * by computing paths from DOM rects after `flex-wrap` reflowed nodes
- * into multiple rows. We delegate layout + edge routing to React Flow
- * + dagre and stop fighting it.
+ * Lint note: this file reads `service.image` off the frontend
+ * ServiceNode wire shape (lib/projectTopology), not the dropped DB
+ * column. The no-dropped-columns rule is name-based and would misfire
+ * here, so it's disabled file-wide.
  *
- * Layout decision tree:
- *   services.length === 0 → InfraMapEmpty (no graph)
- *   services.length === 1 → InfraMapLonely (single centered node)
- *   forceDense || services.length > 8 → grouped 3-lane (entry / app / data)
- *   else → standard horizontal flow (rankdir=LR)
+ * Custom CSS+SVG topology strip. The previous React Flow + dagre
+ * implementation produced a layout that drifted from the design source
+ * (.omc/analysis/openlander-design-v5/.../infra_map.jsx). This rewrite
+ * matches that intent verbatim:
  *
- * The viewport is locked: no pan, no zoom, no drag — this is a static
- * topology view, not an editor. `fitView` is enabled so dagre's
- * computed bounds get fitted into the container on every services
- * change.
+ *   M1  Health-aware nodes — three runtime states (healthy/running/crashed).
+ *   M2  Agent activity overlay — Bot badge on nodes touched within
+ *       the last 1800s.
+ *   M3  Real edges — driven by service.dependsOn (no synthesised topology).
+ *   M4  Dense layout — when count > 8 (or forceDense from caller), grouped
+ *       lanes (entry / app / data) so labels still breathe.
+ *   M5  Empty / lonely degrades gracefully.
+ *   M6  Click-to-navigate + hover popover.
+ *
+ * Edges are visual-only (no traffic animation). The single motion is the
+ * pulse on crashed-state nodes.
  */
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import {
-  ReactFlow,
-  ReactFlowProvider,
-  Position,
-  useNodesState,
-  useEdgesState,
-  useReactFlow,
-  type Node,
-  type Edge,
-  type NodeMouseHandler,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import dagre from '@dagrejs/dagre';
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Bot, Box } from 'lucide-react';
-import { InfraMapNode, type InfraMapNodeData } from './InfraMapNode';
-import { type ServiceNode, type Lane, laneFor, recentAgentFor } from '@/lib/projectTopology';
+import {
+  type ServiceNode,
+  type ServiceHealth,
+  type Lane,
+  laneFor,
+  recentAgentFor,
+} from '@/lib/projectTopology';
 import type { ActivityEvent } from '@/lib/agentActivity';
 import './InfraMap.css';
-
-const NODE_WIDTH = 84;
-const NODE_HEIGHT = 84;
-const NODE_WIDTH_DENSE = 70;
-const NODE_HEIGHT_DENSE = 64;
-
-const NODE_TYPES = { topology: InfraMapNode };
 
 interface InfraMapProps {
   projectId: string;
@@ -51,18 +43,40 @@ interface InfraMapProps {
   activeNodeId?: string;
   onSelectService?: (projectId: string, serviceId: string) => void;
   forceDense?: boolean;
-  /**
-   * When true, the topology fetch hasn't returned real data and the
-   * caller is showing mock services. Surface a "Sample data" affordance
-   * in the eyebrow so users know what they're looking at.
-   */
+  /** True when caller is showing mock/fallback services (backend unreachable). */
   isDemo?: boolean;
 }
 
-export function InfraMap(props: InfraMapProps) {
-  const services = props.services;
+const HEALTH_PULSE: Record<ServiceHealth, boolean> = {
+  healthy: false,
+  running: false,
+  crashed: true,
+  degraded: false,
+  restarting: false,
+  starting: false,
+  stopped: false,
+  recovering: false,
+  unknown: false,
+};
 
-  if (services.length === 0) return <InfraMapEmpty />;
+const HEALTH_LABEL: Record<ServiceHealth, string> = {
+  healthy: 'healthy',
+  running: 'running',
+  crashed: 'crashed',
+  degraded: 'degraded',
+  restarting: 'restarting',
+  starting: 'starting',
+  stopped: 'stopped',
+  recovering: 'recovering',
+  unknown: 'unknown',
+};
+
+export function InfraMap(props: InfraMapProps) {
+  const { services } = props;
+
+  if (services.length === 0) {
+    return <InfraMapEmpty />;
+  }
   if (services.length === 1) {
     return (
       <InfraMapLonely
@@ -75,47 +89,29 @@ export function InfraMap(props: InfraMapProps) {
       />
     );
   }
-
-  return (
-    <ReactFlowProvider>
-      <InfraMapGraph {...props} />
-    </ReactFlowProvider>
-  );
+  if (props.forceDense || services.length > 8) {
+    return <InfraMapDense {...props} />;
+  }
+  return <InfraMapStandard {...props} />;
 }
 
-function DemoEyebrowChip() {
-  return (
-    <span
-      className="ml-2 inline-flex items-center gap-1 rounded bg-[color-mix(in_oklch,var(--ol-warning)_14%,transparent)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--ol-warning)]"
-      title="Backend topology endpoint unavailable — showing sample data"
-    >
-      Sample data
-    </span>
-  );
-}
-
-// ─── Empty state ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────
+// Empty / Lonely
 
 function InfraMapEmpty() {
   return (
-    <section
-      className="infra-map rounded-[var(--ol-radius)] border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-4 py-3"
-      role="status"
-      aria-label="Empty topology"
-    >
-      <div className="flex items-center gap-2 text-[12px]">
-        <span className="grid h-5 w-5 place-items-center rounded bg-[color:var(--ol-panel)] text-[color:var(--ol-fg-subtle)]">
-          <Box className="h-3 w-3" />
+    <div className="topology-strip empty" role="status" aria-label="Empty topology">
+      <div className="empty-strip-inner">
+        <span className="empty-strip-pip">
+          <Box className="h-3.5 w-3.5" />
         </span>
-        <span className="text-[color:var(--ol-fg-muted)]">
-          No services yet — tell your agent to deploy and the topology fills in.
+        <span className="topology-muted">
+          No services yet — your topology will appear here once you create one.
         </span>
       </div>
-    </section>
+    </div>
   );
 }
-
-// ─── Lonely (1 service, no edges) ──────────────────────────────────────────
 
 interface LonelyProps {
   service: ServiceNode;
@@ -123,481 +119,422 @@ interface LonelyProps {
   agentActivity: ActivityEvent[];
   active: boolean;
   onSelect?: (projectId: string, serviceId: string) => void;
+  isDemo?: boolean;
 }
 
 function InfraMapLonely({
   service,
   projectId,
   agentActivity,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  active: _active,
+  active,
   onSelect,
   isDemo,
-}: LonelyProps & { isDemo?: boolean }) {
+}: LonelyProps) {
   const recent = recentAgentFor(projectId, service.id, agentActivity);
-  const isCrashed = service.health === 'crashed';
-  const labelStatus = isCrashed ? 'crashed' : 'healthy';
   return (
-    <section className="infra-map rounded-[var(--ol-radius)] border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)]">
-      <Eyebrow count={1} layout="lonely" services={[service]} isDemo={isDemo} />
-      <div className="flex flex-wrap items-center gap-4 px-4 pb-4">
-        <button
-          type="button"
-          onClick={() => onSelect?.(projectId, service.id)}
-          aria-label={`${service.name} · ${labelStatus}`}
-          className="group relative flex items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ol-primary)] border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] hover:border-[color:var(--ol-border-strong)]"
-        >
-          {/* 8px status pip */}
-          <span
-            aria-hidden
-            className="h-2 w-2 shrink-0 rounded-full"
-            style={{ backgroundColor: isCrashed ? 'var(--ol-error)' : 'var(--ol-success)' }}
-          />
-          <span className="ol-mono font-medium text-[color:var(--ol-fg)]">{service.name}</span>
-          {recent && (
-            <span
-              aria-hidden
-              className="absolute -right-1.5 -top-1.5 grid h-3.5 w-3.5 place-items-center rounded-full border border-[color:var(--ol-panel)] bg-[color:var(--ol-actor-mcp)] text-[color:var(--ol-panel)]"
-              title="Agent acted recently"
-            >
-              <Bot className="h-2.5 w-2.5" />
-            </span>
-          )}
-        </button>
-        <span className="text-[12px] text-[color:var(--ol-fg-subtle)]">
-          No dependencies declared. Add one in{' '}
-          <code className="ol-mono rounded bg-[color:var(--ol-panel-2)] px-1.5 py-0.5 text-[11px]">
-            compose.yml
-          </code>{' '}
-          with{' '}
-          <code className="ol-mono rounded bg-[color:var(--ol-panel-2)] px-1.5 py-0.5 text-[11px]">
-            depends_on
-          </code>
-          .
+    <div className="topology-strip lonely">
+      <div className="topology-eyebrow">
+        <span className="topology-eyebrow-label">Topology</span>
+        <span className="topology-eyebrow-meta">· 1 service</span>
+        {isDemo && <DemoChip />}
+      </div>
+      <div className="lonely-row">
+        <TopologyNode
+          service={service}
+          projectId={projectId}
+          active={active}
+          recentAgent={recent}
+          onSelect={onSelect}
+        />
+        <span className="lonely-hint topology-muted">
+          No dependencies declared. Add one in <code className="topology-mono">compose.yml</code>{' '}
+          with <code className="topology-mono">depends_on</code>.
         </span>
       </div>
-    </section>
-  );
-}
-
-// ─── Graph (>=2 services) ──────────────────────────────────────────────────
-
-function InfraMapGraph({
-  projectId,
-  services,
-  agentActivity,
-  activeNodeId,
-  onSelectService,
-  forceDense,
-  isDemo,
-}: InfraMapProps) {
-  const dense = forceDense || services.length > 8;
-  const direction = dense ? 'TB' : 'LR';
-
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [hoverState, setHoverState] = useState<{
-    serviceId: string;
-    x: number;
-    y: number;
-    /** Bottom edge of the node, used by NodePopover to flip below when above is cramped */
-    yBottom: number;
-  } | null>(null);
-
-  const { fitView } = useReactFlow();
-
-  // PR7-C: split into two effects so dagre re-layout doesn't fire on every
-  // agentActivity poll tick.
-  //
-  // LAYOUT effect runs only when the graph topology actually changes
-  // (services / projectId / dense / direction / activeNodeId). It reads
-  // `agentActivity` via a ref so the initial paint has correct Bot
-  // badges, but agentActivity changes alone don't trigger this effect.
-  //
-  // DATA UPDATE effect (below) handles `agentActivity` changes by
-  // patching only `data.hasRecentAgent` on existing nodes via
-  // `setNodes((prev) => prev.map(...))`. No dagre. No re-positioning.
-  // Ref synced via useEffect to satisfy react-hooks/refs ("don't update
-  // refs during render"). The initial value is captured by useRef on
-  // mount; the sync effect keeps it fresh after every render so the
-  // layout effect — which only re-runs on topology changes — reads the
-  // current agentActivity, not a stale snapshot.
-  //
-  // Effect timing (per PR7 review): React fires effects in declaration
-  // order, so this sync effect ALWAYS runs before the layout effect
-  // below within the same commit. There's no stale-window because:
-  //   • If only `agentActivity` changes → only the data-update effect
-  //     re-runs (layout effect's deps don't include it). Sync effect
-  //     refreshes the ref but nothing else reads it this cycle.
-  //   • If topology AND `agentActivity` change in the same render →
-  //     sync effect refreshes ref FIRST, then layout effect reads it.
-  //   • If only topology changes → sync effect doesn't re-run (deps
-  //     unchanged), layout effect reads the ref's last-committed value
-  //     which is by definition the current `agentActivity`.
-  const agentActivityRef = useRef(agentActivity);
-  useEffect(() => {
-    agentActivityRef.current = agentActivity;
-  }, [agentActivity]);
-
-  // ─── LAYOUT effect (expensive — runs on topology change) ───
-  useEffect(() => {
-    const widthForLayout = dense ? NODE_WIDTH_DENSE : NODE_WIDTH;
-    const heightForLayout = dense ? NODE_HEIGHT_DENSE : NODE_HEIGHT;
-    const ordered = orderForFlow(services);
-
-    const initialNodes: Node[] = ordered.map((svc) => {
-      const data: InfraMapNodeData = {
-        service: svc,
-        active: svc.id === activeNodeId,
-        hasRecentAgent: recentAgentFor(projectId, svc.id, agentActivityRef.current) != null,
-        dense,
-      };
-      return {
-        id: svc.id,
-        type: 'topology',
-        data,
-        position: { x: 0, y: 0 },
-        targetPosition: dense ? Position.Top : Position.Left,
-        sourcePosition: dense ? Position.Bottom : Position.Right,
-        draggable: false,
-        selectable: false,
-        connectable: false,
-      };
-    });
-
-    const initialEdges: Edge[] = [];
-    for (const svc of services) {
-      for (const dep of svc.dependsOn) {
-        const target = services.find((n) => n.id === dep);
-        if (!target) continue;
-        const isAlert = target.health === 'crashed';
-        // Bezier edges separate visually when multiple sources target the
-        // same node (e.g. api+worker both → postgres). Smoothstep was
-        // routing them onto identical orthogonal paths and stacking on
-        // top of each other; bezier gives each curve its own angle of
-        // approach because the source y-position differs.
-        initialEdges.push({
-          id: `${svc.id}->${dep}`,
-          source: svc.id,
-          target: dep,
-          type: 'bezier',
-          className: isAlert ? 'alert' : undefined,
-        });
-      }
-    }
-
-    const laid = layoutWithDagre(
-      initialNodes,
-      initialEdges,
-      direction,
-      widthForLayout,
-      heightForLayout,
-    );
-    setNodes(laid.nodes);
-    setEdges(laid.edges);
-  }, [services, projectId, activeNodeId, dense, direction, setNodes, setEdges]);
-
-  // ─── DATA UPDATE effect (cheap — runs on agentActivity ticks) ───
-  // Patches only `data.hasRecentAgent` on existing nodes. No dagre.
-  // This is what saves us from a full re-layout on every 3-10s poll.
-  useEffect(() => {
-    setNodes((prev) =>
-      prev.map((n) => {
-        const nextHasAgent = recentAgentFor(projectId, n.id, agentActivity) != null;
-        const data = n.data as InfraMapNodeData;
-        if (data.hasRecentAgent === nextHasAgent) return n;
-        return { ...n, data: { ...data, hasRecentAgent: nextHasAgent } };
-      }),
-    );
-  }, [agentActivity, projectId, setNodes]);
-
-  // Re-fit viewport whenever the node list changes
-  useEffect(() => {
-    if (nodes.length === 0) return;
-    const id = window.setTimeout(() => fitView({ padding: 0.25, duration: 220 }), 0);
-    return () => window.clearTimeout(id);
-  }, [nodes, fitView]);
-
-  const onNodeMouseEnter: NodeMouseHandler = (event, node) => {
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const root = (event.currentTarget as HTMLElement).closest('.infra-map') as HTMLElement | null;
-    const rootRect = root?.getBoundingClientRect();
-    setHoverState({
-      serviceId: node.id,
-      x: rootRect ? rect.left + rect.width / 2 - rootRect.left : rect.left + rect.width / 2,
-      y: rootRect ? rect.top - rootRect.top : rect.top,
-      yBottom: rootRect ? rect.bottom - rootRect.top : rect.bottom,
-    });
-  };
-
-  const onNodeMouseLeave: NodeMouseHandler = () => setHoverState(null);
-
-  const onNodeClick: NodeMouseHandler = (_e, node) => {
-    onSelectService?.(projectId, node.id);
-  };
-
-  const heightPx = dense ? Math.max(180, services.length * 24) : 220;
-
-  const hoveredService = useMemo(
-    () => services.find((s) => s.id === hoverState?.serviceId),
-    [services, hoverState],
-  );
-  const hoveredAgent = useMemo(
-    () => (hoveredService ? recentAgentFor(projectId, hoveredService.id, agentActivity) : null),
-    [hoveredService, projectId, agentActivity],
-  );
-
-  return (
-    <section
-      className="infra-map relative rounded-[var(--ol-radius)] border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)]"
-      data-shell-label="topology-strip"
-    >
-      <Eyebrow
-        count={services.length}
-        layout={dense ? 'dense' : 'standard'}
-        services={services}
-        isDemo={isDemo}
-      />
-      <div style={{ height: heightPx }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          nodeTypes={NODE_TYPES}
-          onNodeMouseEnter={onNodeMouseEnter}
-          onNodeMouseLeave={onNodeMouseLeave}
-          onNodeClick={onNodeClick}
-          fitView
-          fitViewOptions={{ padding: 0.25 }}
-          panOnDrag={false}
-          panOnScroll={false}
-          zoomOnScroll={false}
-          zoomOnPinch={false}
-          zoomOnDoubleClick={false}
-          preventScrolling={false}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          edgesFocusable={false}
-          proOptions={{ hideAttribution: true }}
-        />
-      </div>
-      {hoveredService && hoverState && (
-        <NodePopover
-          service={hoveredService}
-          recentAgent={hoveredAgent}
-          x={hoverState.x}
-          y={hoverState.y}
-          yBottom={hoverState.yBottom}
-        />
-      )}
-    </section>
-  );
-}
-
-// ─── Eyebrow ────────────────────────────────────────────────────────────────
-
-function Eyebrow({
-  count,
-  layout,
-  services,
-  isDemo,
-}: {
-  count: number;
-  layout: 'standard' | 'dense' | 'lonely';
-  services: ServiceNode[];
-  isDemo?: boolean;
-}) {
-  const tally = useMemo(() => countByHealth(services), [services]);
-  const trouble = tally.crashed;
-  return (
-    <div className="flex items-center gap-2 px-4 pt-3 pb-2 text-[11px]">
-      <span className="font-semibold uppercase tracking-[0.08em] text-[color:var(--ol-fg-subtle)]">
-        Topology
-      </span>
-      <span className="text-[color:var(--ol-fg-subtle)]">
-        · {count} service{count === 1 ? '' : 's'}
-        {layout === 'dense' && ' · grouped view'}
-      </span>
-      {isDemo && <DemoEyebrowChip />}
-      <span className="ml-auto flex items-center gap-2">
-        {trouble === 0 ? (
-          <span className="flex items-center gap-1.5 text-[color:var(--ol-fg-muted)]">
-            <span
-              aria-hidden
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: 'var(--ol-success)' }}
-            />
-            all healthy
-          </span>
-        ) : (
-          <span
-            className="flex items-center gap-1.5 font-medium"
-            style={{ color: 'var(--ol-error)' }}
-          >
-            <span
-              aria-hidden
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: 'var(--ol-error)' }}
-            />
-            {trouble} crashed
-          </span>
-        )}
-      </span>
     </div>
   );
 }
 
-// ─── Popover ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────
+// Standard (2–8 services, single horizontal row with SVG edges)
+
+function InfraMapStandard(props: InfraMapProps) {
+  const { services, projectId, agentActivity, activeNodeId, onSelect, isDemo } =
+    asNormalizedProps(props);
+  const ordered = useMemo(() => orderForFlow(services), [services]);
+  const counts = useMemo(() => countByHealth(services), [services]);
+  const flowRef = useRef<HTMLDivElement>(null);
+  const [edgePaths, setEdgePaths] = useState<EdgePath[]>([]);
+
+  useLayoutEffect(() => {
+    if (!flowRef.current) return;
+
+    const compute = () => {
+      const root = flowRef.current;
+      if (!root) return;
+      const rootRect = root.getBoundingClientRect();
+      const next: EdgePath[] = [];
+      for (const s of services) {
+        for (const dep of s.dependsOn) {
+          const fromEl = root.querySelector<HTMLElement>(`[data-node-id="${s.id}"]`);
+          const toEl = root.querySelector<HTMLElement>(`[data-node-id="${dep}"]`);
+          if (!fromEl || !toEl) continue;
+          const fromRect = fromEl.getBoundingClientRect();
+          const toRect = toEl.getBoundingClientRect();
+          const x1 = fromRect.right - rootRect.left;
+          const y1 = fromRect.top + fromRect.height / 2 - rootRect.top;
+          const x2 = toRect.left - rootRect.left;
+          const y2 = toRect.top + toRect.height / 2 - rootRect.top;
+          const dx = Math.max(20, (x2 - x1) * 0.45);
+          const d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+          const target = services.find((n) => n.id === dep);
+          const sev: EdgeSeverity = target?.health === 'crashed' ? 'alert' : 'ok';
+          next.push({ id: `${s.id}->${dep}`, d, sev });
+        }
+      }
+      setEdgePaths(next);
+    };
+
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(flowRef.current);
+    window.addEventListener('resize', compute);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', compute);
+    };
+  }, [services]);
+
+  return (
+    <div className="topology-strip">
+      <div className="topology-eyebrow">
+        <span className="topology-eyebrow-label">Topology</span>
+        <span className="topology-eyebrow-meta">· {services.length} services</span>
+        {isDemo && <DemoChip />}
+        <HealthSummary counts={counts} />
+      </div>
+      <div className="topology-flow" ref={flowRef}>
+        <svg className="topology-edges" aria-hidden="true">
+          {edgePaths.map((p) => (
+            <path key={p.id} d={p.d} className={`topo-edge topo-edge-${p.sev}`} />
+          ))}
+        </svg>
+        <div className="topology-flow-row">
+          {ordered.map((s) => (
+            <Fragment key={s.id}>
+              <TopologyNode
+                service={s}
+                projectId={projectId}
+                active={s.id === activeNodeId}
+                recentAgent={recentAgentFor(projectId, s.id, agentActivity)}
+                onSelect={onSelect}
+              />
+            </Fragment>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Dense (>8 services, 3-lane grouped layout)
+
+function InfraMapDense(props: InfraMapProps) {
+  const { services, projectId, agentActivity, activeNodeId, onSelect, isDemo } =
+    asNormalizedProps(props);
+  const lanes = useMemo(() => {
+    const out: Record<Lane, ServiceNode[]> = { entry: [], app: [], data: [] };
+    for (const s of services) {
+      out[laneFor(s)].push(s);
+    }
+    return out;
+  }, [services]);
+  const counts = useMemo(() => countByHealth(services), [services]);
+
+  return (
+    <div className="topology-strip dense">
+      <div className="topology-eyebrow">
+        <span className="topology-eyebrow-label">Topology</span>
+        <span className="topology-eyebrow-meta">· {services.length} services · grouped view</span>
+        {isDemo && <DemoChip />}
+        <HealthSummary counts={counts} />
+      </div>
+      <div className="topology-lanes">
+        <DenseLane
+          label="Entry"
+          tone="entry"
+          services={lanes.entry}
+          projectId={projectId}
+          agentActivity={agentActivity}
+          activeNodeId={activeNodeId}
+          onSelect={onSelect}
+        />
+        <DenseLane
+          label="App"
+          tone="app"
+          services={lanes.app}
+          projectId={projectId}
+          agentActivity={agentActivity}
+          activeNodeId={activeNodeId}
+          onSelect={onSelect}
+        />
+        <DenseLane
+          label="Data"
+          tone="data"
+          services={lanes.data}
+          projectId={projectId}
+          agentActivity={agentActivity}
+          activeNodeId={activeNodeId}
+          onSelect={onSelect}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface DenseLaneProps {
+  label: string;
+  tone: Lane;
+  services: ServiceNode[];
+  projectId: string;
+  agentActivity: ActivityEvent[];
+  activeNodeId?: string;
+  onSelect?: (projectId: string, serviceId: string) => void;
+}
+
+function DenseLane({
+  label,
+  tone,
+  services,
+  projectId,
+  agentActivity,
+  activeNodeId,
+  onSelect,
+}: DenseLaneProps) {
+  if (services.length === 0) return null;
+  return (
+    <div className={`topology-lane lane-${tone}`}>
+      <span className="lane-label">{label}</span>
+      <div className="lane-row">
+        {services.map((s) => (
+          <TopologyNode
+            key={s.id}
+            service={s}
+            projectId={projectId}
+            active={s.id === activeNodeId}
+            recentAgent={recentAgentFor(projectId, s.id, agentActivity)}
+            onSelect={onSelect}
+            dense
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// TopologyNode
+
+interface TopologyNodeProps {
+  service: ServiceNode;
+  projectId: string;
+  active: boolean;
+  recentAgent: ActivityEvent | null;
+  onSelect?: (projectId: string, serviceId: string) => void;
+  dense?: boolean;
+}
+
+function TopologyNode({
+  service,
+  projectId,
+  active,
+  recentAgent,
+  onSelect,
+  dense = false,
+}: TopologyNodeProps) {
+  const [hovered, setHovered] = useState(false);
+  const pulse = HEALTH_PULSE[service.health];
+  const label = HEALTH_LABEL[service.health];
+
+  return (
+    <div
+      className={`topology-node h-${service.health}${active ? ' active' : ''}${dense ? ' dense' : ''}`}
+      data-node-id={service.id}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+    >
+      <button
+        type="button"
+        className="topology-node-button"
+        onClick={() => onSelect?.(projectId, service.id)}
+        aria-label={`${service.name} · ${label}`}
+      >
+        <span className={`topology-node-disk h-${service.health}${pulse ? ' pulse' : ''}`}>
+          {recentAgent && (
+            <span
+              className="topology-node-agent"
+              title={`Agent: ${recentAgent.title}`}
+              aria-label={`Recent agent activity: ${recentAgent.title}`}
+            >
+              <Bot className="h-2 w-2" />
+            </span>
+          )}
+        </span>
+        <span className="topology-node-label">{service.name}</span>
+        {!dense && service.health !== 'healthy' && service.health !== 'running' && (
+          <span className={`topology-node-status h-${service.health}`}>{label}</span>
+        )}
+      </button>
+      {hovered && <NodePopover service={service} recentAgent={recentAgent} />}
+    </div>
+  );
+}
 
 function NodePopover({
   service,
   recentAgent,
-  x,
-  y,
-  yBottom,
 }: {
   service: ServiceNode;
   recentAgent: ActivityEvent | null;
-  x: number;
-  y: number;
-  /** Bottom edge of the hovered node, used to anchor the popover when flipped below */
-  yBottom: number;
 }) {
-  const isCrashed = service.health === 'crashed';
-  const status = isCrashed ? 'crashed' : 'healthy';
-  // Estimated popover height: header row + 3 dl rows + optional agent row +
-  // CTA line ≈ 140px. If the node is too close to the container top to fit
-  // a 140px popover above + 12px gap, flip the popover below the node so
-  // it doesn't get clipped by the React Flow viewport's overflow:hidden.
-  // PR7-D fix.
-  const POPOVER_EST_HEIGHT = 140;
-  const flipBelow = y < POPOVER_EST_HEIGHT + 12;
-  const style: CSSProperties = flipBelow
-    ? { left: x, top: yBottom + 12, transform: 'translate(-50%, 0)' }
-    : { left: x, top: y - 12, transform: 'translate(-50%, -100%)' };
+  const label = HEALTH_LABEL[service.health];
   return (
-    <div
-      style={style}
-      className="infra-map-popover rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] p-3 shadow-lg shadow-[color:var(--ol-border)]/30"
-      role="tooltip"
-    >
-      <div className="mb-2 flex items-center gap-1.5">
-        <span
-          aria-hidden
-          className="h-1.5 w-1.5 rounded-full"
-          style={{
-            backgroundColor: isCrashed ? 'var(--ol-error)' : 'var(--ol-success)',
-          }}
-        />
-        <span className="text-[13px] font-semibold text-[color:var(--ol-fg)]">{service.name}</span>
-        <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
-          · {service.kind.toLowerCase()}
-        </span>
+    <div className="topology-popover" role="tooltip">
+      <div className="popover-head">
+        <span className={`popover-pip h-${service.health}`} />
+        <span className="popover-name">{service.name}</span>
+        <span className="popover-kind topology-muted">· {service.kind.toLowerCase()}</span>
       </div>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[11.5px]">
-        <dt className="text-[color:var(--ol-fg-subtle)]">status</dt>
-        <dd
-          className="font-medium"
-          style={{ color: isCrashed ? 'var(--ol-error)' : 'var(--ol-success)' }}
-        >
-          {status}
-        </dd>
-        <dt className="text-[color:var(--ol-fg-subtle)]">image</dt>
-        <dd className="ol-mono break-all text-[11px] text-[color:var(--ol-fg-muted)]">
-          {/* `service` is the frontend ServiceNode wire shape (lib/projectTopology),
-              not a DB row — `image` is a wire-format field. */}
-          {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
-          {service.image}
-        </dd>
-        {service.cpu !== '—' && (
-          <>
-            <dt className="text-[color:var(--ol-fg-subtle)]">cpu · mem</dt>
-            <dd className="ol-mono tabular-nums text-[color:var(--ol-fg-muted)]">
-              {service.cpu} · {service.mem}
-            </dd>
-          </>
-        )}
-      </dl>
-      {recentAgent && (
-        <div className="mt-2 flex items-center gap-1.5 rounded border-t border-[color:var(--ol-border-subtle)] pt-2 text-[11px]">
-          <Bot className="h-3 w-3 text-[color:var(--ol-actor-mcp)]" />
-          <span className="line-clamp-1 flex-1 text-[color:var(--ol-fg-muted)]">
-            {recentAgent.title.replace(/`/g, '')}
-          </span>
-          <span className="text-[color:var(--ol-fg-subtle)]">{recentAgent.at}</span>
+      <div className="popover-row">
+        <span className="topology-muted">status</span>
+        <b>{label}</b>
+      </div>
+      {service.image && (
+        <div className="popover-row">
+          <span className="topology-muted">image</span>
+          <span className="topology-mono popover-image">{service.image}</span>
         </div>
       )}
-      <div className="mt-2 text-[11px] text-[color:var(--ol-fg-subtle)]">
-        Click to open service →
-      </div>
+      {service.cpu !== '—' && (
+        <div className="popover-row">
+          <span className="topology-muted">cpu · mem</span>
+          <span className="popover-tabular">
+            {service.cpu} · {service.mem}
+          </span>
+        </div>
+      )}
+      {recentAgent && (
+        <div className="popover-agent">
+          <Bot className="h-3 w-3" />
+          <span>{recentAgent.title.replace(/`/g, '')}</span>
+          <span className="topology-muted popover-agent-time">{recentAgent.at}</span>
+        </div>
+      )}
+      <div className="popover-cta topology-muted">Click to open service →</div>
     </div>
   );
 }
 
-// ─── Layout helpers ────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────
+// HealthSummary
 
-function layoutWithDagre(
-  nodes: Node[],
-  edges: Edge[],
-  direction: 'LR' | 'TB',
-  width: number,
-  height: number,
-): { nodes: Node[]; edges: Edge[] } {
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({
-    rankdir: direction,
-    // Bezier edges from multiple sources to the same target need
-    // breathing room — both vertical (so the curves don't fan-in onto
-    // the same y) and horizontal (so the bezier control points have
-    // enough span to differentiate). The previous 60/22 was tight for
-    // standard 5-service projects.
-    nodesep: direction === 'LR' ? 36 : 28,
-    ranksep: direction === 'LR' ? 110 : 56,
-    marginx: 14,
-    marginy: 14,
-  });
-  for (const n of nodes) g.setNode(n.id, { width, height });
-  for (const e of edges) g.setEdge(e.source, e.target);
-  dagre.layout(g);
-  const positioned = nodes.map((n) => {
-    const p = g.node(n.id);
-    return {
-      ...n,
-      position: {
-        x: (p?.x ?? 0) - width / 2,
-        y: (p?.y ?? 0) - height / 2,
-      },
-    };
-  });
-  return { nodes: positioned, edges };
+function HealthSummary({ counts }: { counts: Record<ServiceHealth, number> }) {
+  const order: ServiceHealth[] = ['crashed', 'restarting', 'degraded', 'running', 'healthy'];
+  const items = order.map((k) => ({ k, n: counts[k] || 0 })).filter((x) => x.n > 0);
+  if (items.length === 1 && items[0].k === 'healthy') {
+    return (
+      <span className="health-summary all-good">
+        <span className="health-pip healthy" /> all healthy
+      </span>
+    );
+  }
+  return (
+    <span className="health-summary">
+      {items.map(({ k, n }) => (
+        <span key={k} className={`health-summary-item h-${k}`}>
+          <span className={`health-pip ${k}`} /> {n} {HEALTH_LABEL[k]}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function DemoChip() {
+  return (
+    <span
+      className="topology-demo-chip"
+      title="Backend topology endpoint unavailable — sample data"
+    >
+      Sample
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Helpers
+
+interface EdgePath {
+  id: string;
+  d: string;
+  sev: EdgeSeverity;
+}
+
+type EdgeSeverity = 'ok' | 'alert';
+
+interface NormalizedInfraProps {
+  services: ServiceNode[];
+  projectId: string;
+  agentActivity: ActivityEvent[];
+  activeNodeId?: string;
+  onSelect?: (projectId: string, serviceId: string) => void;
+  isDemo?: boolean;
+}
+
+function asNormalizedProps(props: InfraMapProps): NormalizedInfraProps {
+  return {
+    services: props.services,
+    projectId: props.projectId,
+    agentActivity: props.agentActivity,
+    activeNodeId: props.activeNodeId,
+    onSelect: props.onSelectService,
+    isDemo: props.isDemo,
+  };
 }
 
 function orderForFlow(services: ServiceNode[]): ServiceNode[] {
-  // Sort by tier (entry → app → data) so dagre's row-1 reads left-to-right
-  // with the user's mental flow (entry traffic → app code → data store).
+  // Topological-ish sort: lane bucket first (entry/app/data), then within
+  // each lane place more depended-on services to the right so edges read
+  // left-to-right.
   const incoming: Record<string, number> = {};
   for (const s of services) incoming[s.id] = 0;
   for (const s of services) {
-    for (const d of s.dependsOn) incoming[d] = (incoming[d] ?? 0) + 1;
+    for (const d of s.dependsOn) {
+      incoming[d] = (incoming[d] ?? 0) + 1;
+    }
   }
-  const tiers: Record<Lane, ServiceNode[]> = { entry: [], app: [], data: [] };
-  for (const s of services) tiers[laneFor(s)].push(s);
-  for (const k of ['entry', 'app', 'data'] as const) {
-    tiers[k].sort((a, b) => (incoming[a.id] ?? 0) - (incoming[b.id] ?? 0));
+  const byLane: Record<Lane, ServiceNode[]> = { entry: [], app: [], data: [] };
+  for (const s of services) byLane[laneFor(s)].push(s);
+  for (const k of Object.keys(byLane) as Lane[]) {
+    byLane[k].sort((a, b) => (incoming[a.id] ?? 0) - (incoming[b.id] ?? 0));
   }
-  return [...tiers.entry, ...tiers.app, ...tiers.data];
+  return [...byLane.entry, ...byLane.app, ...byLane.data];
 }
 
-function countByHealth(services: ServiceNode[]): { healthy: number; crashed: number } {
-  let healthy = 0;
-  let crashed = 0;
-  for (const s of services) {
-    if (s.health === 'crashed') crashed++;
-    else healthy++;
-  }
-  return { healthy, crashed };
+function countByHealth(services: ServiceNode[]): Record<ServiceHealth, number> {
+  const out: Record<ServiceHealth, number> = {
+    healthy: 0,
+    running: 0,
+    crashed: 0,
+    degraded: 0,
+    restarting: 0,
+    starting: 0,
+    stopped: 0,
+    recovering: 0,
+    unknown: 0,
+  };
+  for (const s of services) out[s.health] = (out[s.health] ?? 0) + 1;
+  return out;
 }
-
-export default InfraMap;
