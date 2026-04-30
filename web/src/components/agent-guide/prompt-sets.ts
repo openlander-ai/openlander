@@ -1,4 +1,16 @@
-export type AgentGuideKind = 'add-service' | 'add-managed-db' | 'add-domain' | 'scale-service';
+export type AgentGuideKind =
+  | 'add-service'
+  | 'add-managed-db'
+  | 'add-domain'
+  | 'scale-service'
+  // v5.1 (dead-button audit follow-up): destructive + generative actions
+  // that should also route through the agent for the same reasons as the
+  // four kinds above (single source of truth, reasoning trail, honest UX).
+  | 'delete-service'
+  | 'remove-domain'
+  | 'set-env-var'
+  | 'delete-env-var'
+  | 'wire-managed-db';
 
 export interface AgentGuidePrompt {
   text: string;
@@ -14,6 +26,12 @@ export interface AgentGuideContent {
 export interface AgentGuideContext {
   projectName?: string;
   serviceName?: string;
+  /** Optional env var key context — used by set-env-var / delete-env-var prompts. */
+  envVarKey?: string;
+  /** Optional domain context — used by remove-domain prompts. */
+  domain?: string;
+  /** Optional managed-service name context — used by wire-managed-db prompts. */
+  managedServiceName?: string;
 }
 
 export function getAgentGuideContent(
@@ -84,5 +102,82 @@ export function getAgentGuideContent(
           },
         ],
       };
+    case 'delete-service':
+      return {
+        heading: 'Tell your agent to remove this service',
+        lead: 'Service removal goes through your agent so the reasoning — and any preflight check — lives in your chat history. Containers, env vars, and DNS are cleaned up together.',
+        prompts: [
+          {
+            text: `Stop and remove ${serviceName} from ${projectName}. Drop its env vars but keep any managed DB it referenced.`,
+          },
+          {
+            text: `Remove ${serviceName} from ${projectName} and any managed DB it was the only consumer of.`,
+            hint: 'Use this only when the managed DB is no longer needed by anything else.',
+          },
+        ],
+      };
+    case 'remove-domain': {
+      const domain = ctx.domain ?? 'app.example.com';
+      return {
+        heading: 'Tell your agent which domain to detach',
+        lead: 'Domain detachment, DNS deactivation, and cert revocation run through MCP so the agent can confirm propagation and stop traffic cleanly.',
+        prompts: [
+          {
+            text: `Detach ${domain} from ${serviceName} and tell me when DNS has propagated.`,
+          },
+          {
+            text: `Move ${domain} off ${serviceName} and over to staging.`,
+            hint: 'Useful when promoting/demoting between environments.',
+          },
+        ],
+      };
+    }
+    case 'set-env-var': {
+      const key = ctx.envVarKey ?? 'KEY_NAME';
+      return {
+        heading: 'Tell your agent which env var to set',
+        lead: 'Env var changes flow through the agent so secrets land in the right scope and the redeploy is queued automatically.',
+        prompts: [
+          {
+            text: `Set ${key} on ${projectName} to <value> and redeploy.`,
+            hint: 'Replace `<value>` before pasting.',
+          },
+          {
+            text: `Set ${key} only on ${serviceName} (not the whole ${projectName} group) and redeploy ${serviceName}.`,
+          },
+        ],
+      };
+    }
+    case 'delete-env-var': {
+      const key = ctx.envVarKey ?? 'KEY_NAME';
+      return {
+        heading: 'Tell your agent which env var to remove',
+        lead: 'Env var removals go through the agent so the redeploy and any consumer-impact check are part of the same operation.',
+        prompts: [
+          {
+            text: `Remove ${key} from ${projectName} and redeploy.`,
+          },
+          {
+            text: `Remove ${key} from every service in ${projectName} and confirm none of them still reference it.`,
+          },
+        ],
+      };
+    }
+    case 'wire-managed-db': {
+      const managed = ctx.managedServiceName ?? 'cache';
+      return {
+        heading: 'Tell your agent which project to wire',
+        lead: `${managed} is provisioned but not yet wired. Hand the agent a target project and an env var key — it'll set the connection string and queue a redeploy.`,
+        prompts: [
+          {
+            text: `Wire ${managed} into ${projectName} as DATABASE_URL.`,
+          },
+          {
+            text: `Wire ${managed} into ${projectName} as a service-scoped REDIS_URL on ${serviceName}.`,
+            hint: 'Use the service-scoped form when only one service should see the variable.',
+          },
+        ],
+      };
+    }
   }
 }

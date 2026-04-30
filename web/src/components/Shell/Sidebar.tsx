@@ -41,6 +41,7 @@ import { cn } from '@/lib/utils';
 import { BRAND } from '@/lib/brand';
 import { logout } from '@/lib/api/auth';
 import { useProjectsContext } from '@/hooks/use-projects-context';
+import { useMcpStatus } from '@/hooks/use-mcp-status';
 
 interface NavItem {
   id: string;
@@ -171,6 +172,13 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
   const { projects, loading, error } = useProjectsContext();
   const projectsBadge: string | null =
     loading || error || projects.length === 0 ? null : String(projects.length);
+  // v5.1: agent dot now reflects real MCP connection state (sessions count
+  // from /api/mcp/status). Was hardcoded 'ok' — that misled users when no
+  // agent was actually connected and conflicted with the AgentGuideDialog's
+  // Mode A/B branch (which already reads the same hook).
+  const { status: mcpStatus } = useMcpStatus();
+  const agentDot: 'ok' | 'warning' | null =
+    mcpStatus == null ? null : mcpStatus.totalConnected > 0 ? 'ok' : 'warning';
 
   const isActive = (item: NavItem): boolean => {
     if (item.matches) return item.matches(location.pathname);
@@ -217,6 +225,10 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
                 // useProjects() hook above. All other items use their
                 // static `item.badge` (currently none, but reserved).
                 const displayBadge = item.id === 'projects' ? projectsBadge : (item.badge ?? null);
+                // Live dot for the Your Agent entry — green when at least one
+                // MCP session is connected, amber otherwise. All other items
+                // fall back to the static `item.badgeDot`.
+                const displayDot = item.id === 'your-agent' ? agentDot : (item.badgeDot ?? null);
                 return (
                   <li key={item.id}>
                     <button
@@ -239,12 +251,12 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
                       {!collapsed && (
                         <span className="flex-1 truncate text-left">{item.label}</span>
                       )}
-                      {!collapsed && item.badgeDot && (
+                      {!collapsed && displayDot && (
                         <span
                           aria-hidden
                           className={cn(
                             'h-1.5 w-1.5 rounded-full',
-                            item.badgeDot === 'ok'
+                            displayDot === 'ok'
                               ? 'bg-[color:var(--ol-success)]'
                               : 'bg-[color:var(--ol-warning)]',
                           )}

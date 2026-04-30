@@ -26,6 +26,12 @@ export interface AgentGuideDialogProps {
   kind: AgentGuideKind;
   projectName?: string;
   serviceName?: string;
+  /** Optional env var key (set-env-var / delete-env-var prompts). */
+  envVarKey?: string;
+  /** Optional domain (remove-domain prompts). */
+  domain?: string;
+  /** Optional managed-service name (wire-managed-db prompts). */
+  managedServiceName?: string;
 }
 
 function timeAgo(iso: string): string {
@@ -44,6 +50,9 @@ export function AgentGuideDialog({
   kind,
   projectName,
   serviceName,
+  envVarKey,
+  domain,
+  managedServiceName,
 }: AgentGuideDialogProps) {
   const navigate = useNavigate();
   const { status } = useMcpStatus();
@@ -51,7 +60,13 @@ export function AgentGuideDialog({
   const connected = sessions.length > 0;
   const lastSession = sessions[0];
 
-  const content = getAgentGuideContent(kind, { projectName, serviceName });
+  const content = getAgentGuideContent(kind, {
+    projectName,
+    serviceName,
+    envVarKey,
+    domain,
+    managedServiceName,
+  });
 
   const handleSetupAgent = () => {
     onOpenChange(false);

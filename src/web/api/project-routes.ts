@@ -1044,7 +1044,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       count: deployables.length,
       services: deployables.map((svc) => ({
         id: svc.id,
-        name: svc.name,
+        // v5.1: strip the `__svc` suffix from the display name. The suffix is
+        // an internal convention from the post-0009 service-id scheme and
+        // should never reach the user (the topology endpoint already does
+        // this — same treatment here for the deployables list).
+        name: svc.name.replace(/__svc$/, ''),
         kind: svc.kind,
         status: svc.status,
         assigned_port: svc.assigned_port,

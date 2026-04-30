@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageEmptyState } from '@/components/ui/page-empty-state';
 import { Badge } from '@/components/ui/badge';
-import { getServices, getServiceTemplates, type Service, type ServiceTemplate } from '@/lib/api';
+import { getServices, type Service } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Plus, Database } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 
-import { CreateServiceDialog } from '@/components/service/CreateServiceDialog';
+import { AgentGuideDialog } from '@/components/agent-guide';
 
 function getRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -43,17 +43,13 @@ export function ServicesPage() {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [services, setServices] = useState<Service[]>([]);
-  const [templates, setTemplates] = useState<ServiceTemplate[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [showCreate, setShowCreate] = useState(false);
-  const [createMode, setCreateMode] = useState<'template' | 'custom'>('template');
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const fetchServices = async () => {
     try {
-      const [svcs, tmpls] = await Promise.all([getServices(), getServiceTemplates()]);
+      const svcs = await getServices();
       setServices(svcs);
-      setTemplates(tmpls);
     } catch (err) {
       console.error('Failed to fetch services:', err);
     } finally {
@@ -65,10 +61,7 @@ export function ServicesPage() {
     fetchServices();
   }, []);
 
-  const openCreate = () => {
-    setCreateMode('template');
-    setShowCreate(true);
-  };
+  const openCreate = () => setGuideOpen(true);
 
   const statusLabel = (status: string) => {
     if (status === 'running') return t('services.status.running');
@@ -114,10 +107,7 @@ export function ServicesPage() {
             description={t('services.empty.description')}
             action={
               <button
-                onClick={() => {
-                  setCreateMode('template');
-                  setShowCreate(true);
-                }}
+                onClick={openCreate}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-agent text-white font-medium hover:bg-agent/90 transition-colors"
               >
                 <Plus className="h-4 w-4" />
@@ -126,6 +116,7 @@ export function ServicesPage() {
             }
           />
         </div>
+        <AgentGuideDialog open={guideOpen} onOpenChange={setGuideOpen} kind="add-managed-db" />
       </div>
     );
   }
@@ -133,13 +124,7 @@ export function ServicesPage() {
   return (
     <div className="flex flex-col h-full w-full">
       <div className="p-6 xl:p-8 space-y-6">
-        <CreateServiceDialog
-          open={showCreate}
-          onOpenChange={setShowCreate}
-          templates={templates}
-          onSuccess={fetchServices}
-          initialMode={createMode}
-        />
+        <AgentGuideDialog open={guideOpen} onOpenChange={setGuideOpen} kind="add-managed-db" />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <button
@@ -164,6 +149,12 @@ export function ServicesPage() {
               >
                 <div className="space-y-3">
                   <div>
+                    {/* `service` here is the lib/api Service wire shape, not a
+                        DB row. `type`/`image`/`port` are wire-format fields the
+                        backend hydrates from canonical kind/image_url/assigned_port
+                        (see kindToLegacyType). The lint rule's name-based check
+                        misfires on the wire-shape object. */}
+                    {/* eslint-disable openlander-internal/no-dropped-columns */}
                     <div className="flex items-center justify-between mb-1.5">
                       <div className="flex items-center gap-2 min-w-0">
                         <div
@@ -209,6 +200,7 @@ export function ServicesPage() {
                     </span>
                     <span className="font-mono">:{service.port}</span>
                   </div>
+                  {/* eslint-enable openlander-internal/no-dropped-columns */}
 
                   <div className="grid grid-cols-3 gap-2 text-[11px]">
                     <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
