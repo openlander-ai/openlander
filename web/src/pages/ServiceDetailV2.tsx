@@ -34,6 +34,8 @@ import {
   Rocket,
   Settings as SettingsIcon,
   ScrollText,
+  Sliders,
+  Trash2,
 } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
@@ -334,16 +336,9 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           active={activeTab === 'advanced'}
           panelId="servicepanel-advanced"
           labelledBy="service-advanced"
-          className="p-8"
+          className="p-5"
         >
-          <div className="flex flex-col items-center gap-2 text-center">
-            <span className="grid h-9 w-9 place-items-center rounded-md bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-subtle)]">
-              <Cpu className="h-4 w-4" />
-            </span>
-            <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
-              Network, resources, and entrypoint overrides land here.
-            </p>
-          </div>
+          <AdvancedTab service={service} projectName={project?.name ?? undefined} />
         </TabPanel>
       </OuterCard>
 
@@ -590,6 +585,99 @@ function RuntimeLogsTab({ projectId }: { projectId: string | null }) {
   return (
     <div className="h-[calc(100vh-260px)] min-h-[420px]">
       <ConsoleLogViewer projectId={projectId} />
+    </div>
+  );
+}
+
+type AdvancedActionKind = 'scale-service' | 'wire-managed-db' | 'delete-service';
+
+function AdvancedTab({ service, projectName }: { service: ServiceNode; projectName?: string }) {
+  const [guide, setGuide] = useState<AdvancedActionKind | null>(null);
+
+  const items: Array<{
+    kind: AdvancedActionKind;
+    icon: React.ReactNode;
+    title: string;
+    body: string;
+    danger?: boolean;
+  }> = [
+    {
+      kind: 'scale-service',
+      icon: <Sliders className="h-4 w-4" />,
+      title: 'Scale resources',
+      body: 'Open an agent guide for bumping CPU/memory or replica count. The agent owns the redeploy.',
+    },
+    {
+      kind: 'wire-managed-db',
+      icon: <Database className="h-4 w-4" />,
+      title: 'Wire a managed database',
+      body: 'Hand the agent a managed service + env var key — it sets the connection string and queues a redeploy.',
+    },
+    {
+      kind: 'delete-service',
+      icon: <Trash2 className="h-4 w-4" />,
+      title: 'Delete this service',
+      body: 'Containers, env vars, and DNS are cleaned up together. Reasoning lives in the agent chat.',
+      danger: true,
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
+        Service-level actions that route through your agent. Network and entrypoint overrides land
+        here in 1.0.x.
+      </p>
+      <div className="flex flex-col gap-2">
+        {items.map((item) => (
+          <button
+            key={item.kind}
+            type="button"
+            onClick={() => setGuide(item.kind)}
+            className={cn(
+              'flex items-start gap-3 rounded-md border bg-[color:var(--ol-panel)] px-4 py-3 text-left transition-colors',
+              item.danger
+                ? 'border-[color:var(--ol-border-subtle)] hover:border-[color:var(--ol-error)] hover:bg-[color-mix(in_oklch,var(--ol-error)_6%,transparent)]'
+                : 'border-[color:var(--ol-border-subtle)] hover:border-[color:var(--ol-border-strong)] hover:bg-[color:var(--ol-panel-2)]',
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                'grid h-8 w-8 shrink-0 place-items-center rounded-md',
+                item.danger
+                  ? 'bg-[color-mix(in_oklch,var(--ol-error)_10%,transparent)] text-[color:var(--ol-error)]'
+                  : 'bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]',
+              )}
+            >
+              {item.icon}
+            </span>
+            <span className="flex flex-col gap-0.5">
+              <span
+                className={cn(
+                  'text-[13px] font-medium',
+                  item.danger ? 'text-[color:var(--ol-error)]' : 'text-[color:var(--ol-fg)]',
+                )}
+              >
+                {item.title}
+              </span>
+              <span className="text-[11.5px] text-[color:var(--ol-fg-muted)]">{item.body}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+      {guide && (
+        <AgentGuideDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setGuide(null);
+          }}
+          kind={guide}
+          projectName={projectName}
+          serviceName={service.name}
+          managedServiceName={guide === 'wire-managed-db' ? service.name : undefined}
+        />
+      )}
     </div>
   );
 }
