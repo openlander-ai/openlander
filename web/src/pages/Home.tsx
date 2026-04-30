@@ -39,7 +39,25 @@ interface ServiceDotsProps {
 }
 
 function ServiceDots({ projectId, onDotClick }: ServiceDotsProps) {
-  const { services, isLoading } = useProjectTopology(projectId);
+  // CCG perf #5 (Codex 2026-04-30): Home renders one ServiceDots per
+  // project card, so on a 7-project workspace we'd cold-fan-out 7
+  // /api/projects/:id/topology calls (each triggering N Docker inspect/stats
+  // round-trips on the backend) before initial paint settles. Defer the
+  // hook so the page paints first; dots fade in ~600ms later. The 600ms
+  // is staggered using projectId hash so the 7 calls don't all fire at
+  // the same tick.
+  const [enabled, setEnabled] = useState(false);
+  useEffect(() => {
+    // 0-300ms jitter based on projectId so concurrent fetches spread
+    // across ticks instead of saturating the Docker socket.
+    let h = 0;
+    for (let i = 0; i < projectId.length; i++) h = (h * 31 + projectId.charCodeAt(i)) | 0;
+    const jitter = Math.abs(h) % 300;
+    const t = setTimeout(() => setEnabled(true), 600 + jitter);
+    return () => clearTimeout(t);
+  }, [projectId]);
+
+  const { services, isLoading } = useProjectTopology(enabled ? projectId : null);
 
   if (isLoading || services.length === 0) return null;
 
