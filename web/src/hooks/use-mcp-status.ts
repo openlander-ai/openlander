@@ -23,6 +23,12 @@ export interface McpStatusSnapshot {
   endpoint: string;
   totalConnected: number;
   sessions: McpSessionView[];
+  /** Composite tool names registered with the MCP server (what an MCP
+   *  client sees from `tools/list`). Optional for back-compat: older
+   *  servers may not surface this field. */
+  tools?: string[];
+  /** Total underlying action count across all composites. */
+  actions?: number;
 }
 
 export interface UseMcpStatusReturn {

@@ -17,7 +17,6 @@ import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
 import { useActivityFeed } from '@/hooks/use-activity-feed';
 import { useMcpStatus } from '@/hooks/use-mcp-status';
-import { useSystemStatus } from '@/hooks/use-system-status';
 
 function formatRelative(iso: string): string {
   const ts = Date.parse(iso);
@@ -33,7 +32,6 @@ function formatRelative(iso: string): string {
 
 export function MCPServer() {
   const navigate = useNavigate();
-  const { serverStatus } = useSystemStatus();
   const { status: mcpStatus, loading: mcpLoading, error: mcpError } = useMcpStatus();
   const { events: mcpEvents } = useActivityFeed({ limit: 20, actor: 'mcp' });
 
@@ -42,14 +40,32 @@ export function MCPServer() {
   const mcpEndpoint =
     typeof window !== 'undefined' ? `${window.location.hostname}/mcp` : 'your-server/mcp';
 
-  // Proxy status gives us a lightweight "is the server reachable" signal.
-  const proxyOk = serverStatus?.proxy?.status === 'running';
-  const statusLabel = proxyOk ? 'Connected' : serverStatus ? 'Degraded' : 'Checking…';
-  const statusColor = proxyOk
-    ? 'var(--ol-success)'
-    : serverStatus
-      ? 'var(--ol-warning)'
-      : 'var(--ol-fg-muted)';
+  // Status is driven by the MCP server itself, not by the HTTP proxy. A
+  // successful /api/mcp/status fetch means the server is reachable;
+  // totalConnected > 0 promotes the label from "Listening" to "Connected".
+  let statusLabel: string;
+  let statusColor: string;
+  if (mcpError) {
+    statusLabel = 'Unreachable';
+    statusColor = 'var(--ol-error)';
+  } else if (!mcpStatus) {
+    statusLabel = mcpLoading ? 'Checking…' : 'Unknown';
+    statusColor = 'var(--ol-fg-muted)';
+  } else if (mcpStatus.totalConnected > 0) {
+    statusLabel = 'Connected';
+    statusColor = 'var(--ol-success)';
+  } else {
+    statusLabel = 'Listening';
+    statusColor = 'var(--ol-fg-muted)';
+  }
+  const proxyOk = statusLabel === 'Connected';
+  const toolNames = mcpStatus?.tools ?? [];
+  const toolCount = toolNames.length;
+  const actionCount = mcpStatus?.actions ?? 0;
+  const stripPrefix = (s: string) => s.replace(/^openlander_/, '');
+  const toolFooter = toolNames.length
+    ? `${toolNames.slice(0, 4).map(stripPrefix).join(', ')}${toolNames.length > 4 ? ', …' : ''}`
+    : '—';
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
@@ -58,10 +74,10 @@ export function MCPServer() {
         title={
           <span className="flex items-center gap-2">
             <Bot className="h-4 w-4 text-[color:var(--ol-primary)]" />
-            Your Agent
+            MCP Server
           </span>
         }
-        subtitle="The MCP endpoint Claude (or any MCP-capable agent) connects to."
+        subtitle="Where Claude and other agents reach OpenLander."
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <StatusTile
@@ -84,7 +100,11 @@ export function MCPServer() {
                 {statusLabel}
               </span>
             }
-            footer="Proxy health via /api/server/status"
+            footer={
+              mcpStatus
+                ? `${String(mcpStatus.totalConnected)} session${mcpStatus.totalConnected === 1 ? '' : 's'}`
+                : 'via /api/mcp/status'
+            }
           />
           <StatusTile
             label="Endpoint"
@@ -112,11 +132,18 @@ export function MCPServer() {
           <StatusTile
             label="Tools exposed"
             value={
-              <span className="text-[20px] font-semibold tabular-nums text-[color:var(--ol-fg)]">
-                70
+              <span className="flex items-baseline gap-2">
+                <span className="text-[20px] font-semibold tabular-nums text-[color:var(--ol-fg)]">
+                  {toolCount || '—'}
+                </span>
+                {actionCount > 0 && (
+                  <span className="text-[11px] text-[color:var(--ol-fg-muted)]">
+                    · {String(actionCount)} actions
+                  </span>
+                )}
               </span>
             }
-            footer="deploy, logs, restart, scale, env, …"
+            footer={toolFooter}
           />
         </div>
       </OuterCard>

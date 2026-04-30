@@ -14,6 +14,14 @@ import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
 import { getMcpSessionsSnapshot } from '../../mcp/server.js';
+import {
+  COMPOSITE_REGISTRY,
+  DEPLOY_ACTIONS,
+  PROJECT_ACTIONS,
+  SERVICE_ACTIONS,
+  MANAGED_SERVICE_ACTIONS,
+  MONITOR_ACTIONS,
+} from '../../mcp/composite-tools.js';
 
 export interface McpStatusSession {
   id: string; // truncated session ID (first 12 chars)
@@ -26,10 +34,25 @@ export interface McpStatusResponse {
   endpoint: string;
   totalConnected: number;
   sessions: McpStatusSession[];
+  /** Composite tool names registered with the MCP server. These are what
+   *  an MCP client sees from `tools/list`. Each composite dispatches N
+   *  underlying actions (see `actions` for the total). */
+  tools: string[];
+  /** Total underlying action count across all composites (excludes the
+   *  platform admin set, which is gated separately). */
+  actions: number;
 }
 
 export function createMcpStatusRoutes(_ctx: AppContext): Hono {
   const api = new Hono();
+
+  const tools = Object.keys(COMPOSITE_REGISTRY);
+  const actions =
+    DEPLOY_ACTIONS.length +
+    PROJECT_ACTIONS.length +
+    SERVICE_ACTIONS.length +
+    MANAGED_SERVICE_ACTIONS.length +
+    MONITOR_ACTIONS.length;
 
   api.get('/mcp/status', (c) => {
     const snapshot = getMcpSessionsSnapshot();
@@ -44,6 +67,8 @@ export function createMcpStatusRoutes(_ctx: AppContext): Hono {
       endpoint: '/mcp',
       totalConnected: sessions.length,
       sessions,
+      tools,
+      actions,
     };
     return c.json(body);
   });
