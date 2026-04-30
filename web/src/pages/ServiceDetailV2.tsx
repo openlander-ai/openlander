@@ -38,12 +38,12 @@ import {
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { LogViewer } from '@/components/Shell/LogViewer';
+import { LogViewer as ConsoleLogViewer } from '@/components/logs/LogViewer';
 import { AgentGuideDialog } from '@/components/agent-guide';
 import { Sparkline } from '@/components/Shell/Sparkline';
 import { DeployRow } from '@/components/Shell/DeployRow';
 import { type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
 import { useProjectsContext } from '@/hooks/use-projects-context';
-import { LOG_SCRIPT_BASE } from '@/lib/logScripts';
 import { useProjectTopology } from '@/hooks/use-project-topology';
 import { useServiceHealth } from '@/hooks/use-service-health';
 import { useServiceMetrics } from '@/hooks/use-service-metrics';
@@ -318,7 +318,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           labelledBy="service-logs"
           className="p-0"
         >
-          <RuntimeLogsTab />
+          <RuntimeLogsTab projectId={projectId} />
         </TabPanel>
 
         <TabPanel
@@ -579,10 +579,17 @@ function DeploymentsTab({
   );
 }
 
-function RuntimeLogsTab() {
+function RuntimeLogsTab({ projectId }: { projectId: string | null }) {
+  if (!projectId) {
+    return (
+      <div className="px-6 py-12 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
+        Logs unavailable until the project context resolves.
+      </div>
+    );
+  }
   return (
     <div className="h-[calc(100vh-260px)] min-h-[420px]">
-      <LogViewer variant="runtime" outcome="success" scriptOverride={LOG_SCRIPT_BASE.slice(-25)} />
+      <ConsoleLogViewer projectId={projectId} />
     </div>
   );
 }
