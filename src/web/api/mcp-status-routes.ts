@@ -48,7 +48,7 @@ export interface McpStatusResponse {
   actions: number;
 }
 
-export function createMcpStatusRoutes(_ctx: AppContext): Hono {
+export function createMcpStatusRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   const tools = Object.keys(COMPOSITE_REGISTRY);
@@ -82,7 +82,7 @@ export function createMcpStatusRoutes(_ctx: AppContext): Hono {
 
   api.delete('/mcp/sessions/:id', (c) => {
     const sid = c.req.param('id');
-    const ok = terminateMcpSession(sid);
+    const ok = terminateMcpSession(sid, ctx);
     if (!ok) {
       return c.json({ error: 'NOT_FOUND', message: 'MCP session not found' }, 404);
     }

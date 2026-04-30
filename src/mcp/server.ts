@@ -207,7 +207,7 @@ export interface McpSessionSnapshot {
  * Returns true when a session matched and was closed; false when the
  * id was not found in either the HTTP or SSE registries.
  */
-export function terminateMcpSession(sid: string): boolean {
+export function terminateMcpSession(sid: string, ctx: AppContext): boolean {
   // The wire-side id is truncated to 12 chars by /api/mcp/status, so
   // accept either a full uuid or its 12-char prefix.
   const matchHttp = (mapKey: string) => mapKey === sid || mapKey.slice(0, 12) === sid;
@@ -215,6 +215,24 @@ export function terminateMcpSession(sid: string): boolean {
 
   for (const [mapKey, session] of sessions.entries()) {
     if (!matchHttp(mapKey)) continue;
+    // Record the close in mcp_session_log. The SDK's transport.close()
+    // does NOT trigger our `onsessionclosed` callback (only an MCP
+    // DELETE request does), so admin terminations must persist the
+    // audit row themselves. Codex CCG (2026-05-01).
+    if (!session.closeRecorded) {
+      session.closeRecorded = true;
+      try {
+        ctx.db.recordMcpSessionClose({
+          sessionId: mapKey,
+          transport: 'http',
+          connectedAt: session.connectedAt,
+          disconnectedAt: Date.now(),
+        });
+      } catch (err) {
+        log.warn({ sessionId: mapKey, err }, 'Failed to persist MCP HTTP admin-terminate close');
+      }
+    }
+    session.closed = true;
     if (session.heartbeatInterval) clearInterval(session.heartbeatInterval);
     if (session.ttlTimeout) clearTimeout(session.ttlTimeout);
     void session.transport.close();
@@ -224,6 +242,19 @@ export function terminateMcpSession(sid: string): boolean {
   }
   for (const [mapKey, session] of sseSessions.entries()) {
     if (!matchSse(mapKey)) continue;
+    // Same audit concern as the HTTP branch above. The SSE
+    // outgoing.on('close') handler races with our delete here; record
+    // first so the close row is guaranteed.
+    try {
+      ctx.db.recordMcpSessionClose({
+        sessionId: mapKey,
+        transport: 'sse',
+        connectedAt: session.connectedAt,
+        disconnectedAt: Date.now(),
+      });
+    } catch (err) {
+      log.warn({ sessionId: mapKey, err }, 'Failed to persist MCP SSE admin-terminate close');
+    }
     void session.transport.close();
     sseSessions.delete(mapKey);
     log.info({ sessionId: mapKey }, 'MCP SSE session terminated by admin');
@@ -319,7 +350,14 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
 
     const server = createMcpServerInstance(ctx);
     let httpSessionId: string | null = null;
+    let httpClientCaptured = false;
     server.oninitialized = () => {
+      // One-shot guard: the SDK's `oninitialized` can fire on duplicate
+      // initialize notifications (Codex CCG 2026-05-01). The streamable
+      // HTTP transport rejects re-initialize so this is mostly defense
+      // in depth, but it keeps `clientName` from being stomped by a
+      // racing notification mid-session.
+      if (httpClientCaptured) return;
       // MCP `initialize` handshake completed — `getClientVersion()` now
       // returns the agent's `Implementation` (clientInfo.name + version).
       // Persist on the session record so /api/mcp/status can surface a
@@ -330,6 +368,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
       if (!session) return;
       session.clientName = info.name;
       session.clientVersion = info.version;
+      httpClientCaptured = true;
       log.info(
         { sessionId: httpSessionId, clientName: info.name, clientVersion: info.version },
         'MCP HTTP session client identified',
@@ -387,6 +426,12 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
             clearInterval(session.heartbeatInterval);
           }
 
+          // Re-entrant close events (concurrent DELETEs) would otherwise
+          // schedule multiple TTL timers. Codex CCG 2026-05-01.
+          if (session.ttlTimeout) {
+            clearTimeout(session.ttlTimeout);
+          }
+
           session.ttlTimeout = setTimeout(
             () => {
               void session.transport.close();
@@ -438,13 +483,19 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
     });
 
     // Capture clientInfo on initialize. See HTTP transport above.
+    let sseClientCaptured = false;
     server.oninitialized = () => {
+      // Legacy SSE accepts re-initialize per protocol 2024-11-05, so a
+      // racing initialize notification could stomp a previously-captured
+      // clientName. One-shot guard. Codex CCG 2026-05-01.
+      if (sseClientCaptured) return;
       const info = server.getClientVersion();
       if (!info) return;
       const session = sseSessions.get(transport.sessionId);
       if (!session) return;
       session.clientName = info.name;
       session.clientVersion = info.version;
+      sseClientCaptured = true;
       log.info(
         {
           sessionId: transport.sessionId,
