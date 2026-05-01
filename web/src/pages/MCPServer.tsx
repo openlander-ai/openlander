@@ -73,13 +73,10 @@ export function MCPServer() {
     statusColor = 'var(--ol-fg-muted)';
   }
   const proxyOk = statusLabel === 'Connected';
-  const toolNames = mcpStatus?.tools ?? [];
-  const toolCount = toolNames.length;
   const actionCount = mcpStatus?.actions ?? 0;
-  const stripPrefix = (s: string) => s.replace(/^openlander_/, '');
-  const toolFooter = toolNames.length
-    ? `${toolNames.slice(0, 4).map(stripPrefix).join(', ')}${toolNames.length > 4 ? ', …' : ''}`
-    : '—';
+  // Verb footer instead of composite namespace nouns: namespaces read like
+  // server internals to a human, verbs read as "what an agent can do".
+  const toolFooter = 'deploy, restart, scale, logs, env, …';
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
@@ -146,15 +143,8 @@ export function MCPServer() {
           <StatusTile
             label="Tools exposed"
             value={
-              <span className="flex items-baseline gap-2">
-                <span className="text-[20px] font-semibold tabular-nums text-[color:var(--ol-fg)]">
-                  {toolCount || '—'}
-                </span>
-                {actionCount > 0 && (
-                  <span className="text-[11px] text-[color:var(--ol-fg-muted)]">
-                    · {String(actionCount)} actions
-                  </span>
-                )}
+              <span className="text-[20px] font-semibold tabular-nums text-[color:var(--ol-fg)]">
+                {actionCount || '—'}
               </span>
             }
             footer={toolFooter}
