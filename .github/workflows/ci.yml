@@ -43,6 +43,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Required for tests in test/web/* that import from web/src/ —
+      # those imports resolve react / ansi-to-html / etc. against
+      # web/node_modules, not the root install. Without this step
+      # vitest test:coverage fails with "Cannot find package
+      # 'ansi-to-html'" / "Cannot find module 'react/index.js'".
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
       - name: Lint
         run: npm run lint
 
