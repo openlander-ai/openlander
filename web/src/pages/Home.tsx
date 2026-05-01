@@ -39,25 +39,7 @@ interface ServiceDotsProps {
 }
 
 function ServiceDots({ projectId, onDotClick }: ServiceDotsProps) {
-  // CCG perf #5 (Codex 2026-04-30): Home renders one ServiceDots per
-  // project card, so on a 7-project workspace we'd cold-fan-out 7
-  // /api/projects/:id/topology calls (each triggering N Docker inspect/stats
-  // round-trips on the backend) before initial paint settles. Defer the
-  // hook so the page paints first; dots fade in ~600ms later. The 600ms
-  // is staggered using projectId hash so the 7 calls don't all fire at
-  // the same tick.
-  const [enabled, setEnabled] = useState(false);
-  useEffect(() => {
-    // 0-300ms jitter based on projectId so concurrent fetches spread
-    // across ticks instead of saturating the Docker socket.
-    let h = 0;
-    for (let i = 0; i < projectId.length; i++) h = (h * 31 + projectId.charCodeAt(i)) | 0;
-    const jitter = Math.abs(h) % 300;
-    const t = setTimeout(() => setEnabled(true), 600 + jitter);
-    return () => clearTimeout(t);
-  }, [projectId]);
-
-  const { services, isLoading } = useProjectTopology(enabled ? projectId : null);
+  const { services, isLoading } = useProjectTopology(projectId);
 
   if (isLoading || services.length === 0) return null;
 
@@ -93,7 +75,10 @@ function ServiceDots({ projectId, onDotClick }: ServiceDotsProps) {
         </button>
       ))}
       {overflow > 0 && (
-        <span className="text-[10px] leading-none text-[color:var(--ol-fg-muted)]">
+        // v5 spec: overflow renders as an inline pill chip matching the
+        // service-dot style (not bare text), so the row reads as one
+        // continuous chip group instead of "chips … plus N".
+        <span className="inline-flex shrink-0 items-center rounded-full border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-2 py-0.5 font-mono text-[11px] leading-none text-[color:var(--ol-fg-muted)]">
           +{overflow}
         </span>
       )}
@@ -141,7 +126,6 @@ export function Home() {
   // which dominated cold-load time on multi-project workspaces.
   const [lastDeployState, setLastDeployState] = useState<LastDeployState | null>(null);
   useEffect(() => {
-    if (projects.length === 0) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -161,7 +145,7 @@ export function Home() {
     return () => {
       cancelled = true;
     };
-  }, [projects]);
+  }, []);
 
   if (loading && projects.length === 0) {
     return (

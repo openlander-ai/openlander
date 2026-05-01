@@ -952,14 +952,8 @@ export class ServiceManager {
       return await loadPromise;
     } finally {
       // Race guard: clear in-flight only if it still points at this load.
-      // ESLint's type-narrowing flags this as always-truthy, but at runtime
-      // another caller may have superseded the in-flight slot during the
-      // await above — the truthiness check is intentional.
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (
-        this.serviceCardSummaryInFlight &&
-        this.serviceCardSummaryInFlight.promise === loadPromise
-      ) {
+      if (this.serviceCardSummaryInFlight?.promise === loadPromise) {
         this.serviceCardSummaryInFlight = null;
       }
     }

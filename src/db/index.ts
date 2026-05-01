@@ -663,6 +663,7 @@ export class Database implements AuthDatabase {
   getProjectByName(name: string) { return this.projectRepo.getProjectByName(name); }
   listProjects(status?: ProjectRow['status'] | null, opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjects(status, opts); }
   listProjectsWithMetadata(status?: ProjectRow['status'] | null, opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjectsWithMetadata(status, opts); }
+  getDeployableServiceCountsByProjectIds(projectIds: string[]) { return this.projectRepo.getDeployableServiceCountsByProjectIds(projectIds); }
   archiveProject(id: string) { this.projectRepo.archiveProject(id); }
   unarchiveProject(id: string) { this.projectRepo.unarchiveProject(id); }
   listArchivedProjects() { return this.projectRepo.listArchivedProjects(); }
@@ -688,6 +689,7 @@ export class Database implements AuthDatabase {
   createEnvironment(environment: Parameters<EnvironmentRepo['createEnvironment']>[0]) { return this.environmentRepo.createEnvironment(environment); }
   getEnvironment(id: string) { return this.environmentRepo.getEnvironment(id); }
   getEnvironmentsByProject(projectId: string) { return this.environmentRepo.getEnvironmentsByProject(projectId); }
+  getEnvironmentsByProjectIds(projectIds: string[]) { return this.environmentRepo.getEnvironmentsByProjectIds(projectIds); }
   updateEnvironment(id: string, updates: Parameters<EnvironmentRepo['updateEnvironment']>[1]) { this.environmentRepo.updateEnvironment(id, updates); }
   deleteEnvironment(id: string) { this.environmentRepo.deleteEnvironment(id); }
   getEnvVars(projectId: string, environmentId?: string) { return this.envVarRepo.getEnvVars(projectId, environmentId); }

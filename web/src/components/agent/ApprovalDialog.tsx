@@ -1,56 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePollingTask } from '@/hooks/use-polling-task';
-import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import {
-  approveActionRun,
-  fetchPendingApprovals,
-  rejectActionRun,
-  listProjects,
-  type ActionRun,
-} from '@/lib/api/projects';
+import { approveActionRun, rejectActionRun } from '@/lib/api/projects';
 import { ShieldAlert, Activity, CheckCircle2, X } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { TOOL_HUMAN_LABELS } from '@/components/ops/utils';
+import { useAppData } from '@/hooks/use-app-data';
 
 export function ApprovalDialog() {
   const { t, language } = useLanguage();
-  const [allPending, setAllPending] = useState<ActionRun[]>([]);
+  const { pendingApprovals, pendingApprovalsError, refreshPendingApprovals, projects } =
+    useAppData();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
-  useEffect(() => {
-    async function initProjects() {
-      try {
-        const projs = await listProjects(true);
-        const map: Record<string, string> = {};
-        for (const p of projs) {
-          map[p.id] = p.name;
-        }
-        setProjectsMap(map);
-      } catch (err) {
-        console.error('Failed to load projects for ApprovalDialog', err);
-      }
+  const projectsMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of projects) {
+      map[p.id] = p.name;
     }
-    void initProjects();
-  }, []);
+    return map;
+  }, [projects]);
 
-  const refreshPending = useCallback(async () => {
-    try {
-      const runs = await fetchPendingApprovals();
-      setAllPending(runs);
-      setError(null);
-    } catch {
-      setError(t('agent.approval.loadFailed'));
-    }
-  }, [t]);
-
-  usePollingTask(refreshPending, { intervalMs: 5000 });
-
-  const pending = allPending[0] ?? null;
-  const remainingCount = allPending.length - 1;
+  const pending = pendingApprovals[0] ?? null;
+  const remainingCount = pendingApprovals.length - 1;
+  const error = actionError ?? (pendingApprovalsError ? t('agent.approval.loadFailed') : null);
 
   const toolName = useMemo(() => {
     const rawTool = pending?.approval_tool ?? 'unknown_tool';
@@ -69,13 +43,14 @@ export function ApprovalDialog() {
     setIsSubmitting(true);
     try {
       await approveActionRun(pending.id);
-      await refreshPending();
+      setActionError(null);
+      await refreshPendingApprovals();
     } catch {
-      setError(t('agent.approval.actionFailed'));
+      setActionError(t('agent.approval.actionFailed'));
     } finally {
       setIsSubmitting(false);
     }
-  }, [pending, refreshPending, t]);
+  }, [pending, refreshPendingApprovals, t]);
 
   const handleReject = useCallback(async () => {
     if (!pending) {
@@ -85,26 +60,19 @@ export function ApprovalDialog() {
     setIsSubmitting(true);
     try {
       await rejectActionRun(pending.id);
-      await refreshPending();
+      setActionError(null);
+      await refreshPendingApprovals();
     } catch {
-      setError(t('agent.approval.actionFailed'));
+      setActionError(t('agent.approval.actionFailed'));
     } finally {
       setIsSubmitting(false);
     }
-  }, [pending, refreshPending, t]);
-
-  const location = useLocation();
+  }, [pending, refreshPendingApprovals, t]);
 
   useEffect(() => {
     setDismissed(false);
   }, [pending?.id]);
 
-  // /operations was retired in Phase 1 hardening (ralplan-monitoring-logs).
-  // No dedicated approvals page in 1.0 — the dialog is now the only
-  // approval surface, so it must render on every page (including
-  // /activity) when there's something pending. Codex CCG flagged the
-  // earlier `/activity` suppression as a launch blocker.
-  void location; // intentionally unused — kept for future per-page rules
   if (!pending || dismissed) {
     return null;
   }

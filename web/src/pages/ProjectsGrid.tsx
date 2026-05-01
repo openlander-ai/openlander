@@ -224,7 +224,10 @@ export function ProjectsGrid() {
                             </>
                           )}
                         </div>
-                        <div className="flex items-center gap-3 text-[11.5px] text-[color:var(--ol-fg-muted)]">
+                        {/* v5 spec: stats strip is visually separated from
+                            the identity row with a 1px top border, 12px
+                            padding-top, and 16px gap (styles.css `.project-card-stats`). */}
+                        <div className="mt-2 flex items-center gap-4 border-t border-[color:var(--ol-border-subtle)] pt-3 text-[11.5px] text-[color:var(--ol-fg-muted)]">
                           {p.serviceCount != null && (
                             <span>
                               {p.serviceCount} service{p.serviceCount === 1 ? '' : 's'}

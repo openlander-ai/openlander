@@ -9,11 +9,11 @@ import { ChatInput } from '@/components/agent/ChatInput';
 import { ChatQuestion } from '@/components/agent/ChatQuestion';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import type { AgentPanelInitialContext } from '@/contexts/agent-panel';
+import { useAppData } from '@/hooks/use-app-data';
 import { useStreamChat } from '@/hooks/use-stream-chat';
-import { dismissQuestion, getSetupStatus, replyQuestion } from '@/lib/api';
+import { dismissQuestion, replyQuestion } from '@/lib/api';
 import type { QuestionAnswer } from '@/lib/chat-types';
 import { useLanguage } from '@/i18n/context.js';
-import { subscribeLlmChanged } from '@/lib/llm-events';
 
 interface AgentPanelProps {
   open: boolean;
@@ -48,34 +48,18 @@ export function AgentPanel({
   onInitialContextConsumed,
 }: AgentPanelProps) {
   const { t } = useLanguage();
-  const [llmConfigured, setLlmConfigured] = useState<boolean | null>(null);
+  const { setupStatus, refreshSetupStatus } = useAppData();
+  const llmConfigured = setupStatus?.llm.ok ?? null;
   const [activeProjectId, setActiveProjectId] = useState<string | undefined>(undefined);
   const sentContextKeyRef = useRef<string | null>(null);
   const chat = useStreamChat();
-
-  const refreshLlmConfigured = useCallback(async () => {
-    getSetupStatus()
-      .then((status) => setLlmConfigured(status.llm.ok))
-      .catch(() => setLlmConfigured(false));
-  }, []);
-
-  useEffect(() => {
-    void refreshLlmConfigured();
-  }, [refreshLlmConfigured]);
 
   useEffect(() => {
     if (!open) {
       return;
     }
-    void refreshLlmConfigured();
-  }, [open, refreshLlmConfigured]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeLlmChanged(() => {
-      void refreshLlmConfigured();
-    });
-    return () => unsubscribe();
-  }, [refreshLlmConfigured]);
+    void refreshSetupStatus();
+  }, [open, refreshSetupStatus]);
 
   useEffect(() => {
     if (!open) {

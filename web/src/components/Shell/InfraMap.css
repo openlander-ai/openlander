@@ -135,6 +135,9 @@
 }
 .lonely-hint {
   font-size: 12px;
+  /* v5 spec (styles.css `.lonely-hint`): cap hint width so long copy
+     wraps before reaching card edge. */
+  max-width: 360px;
 }
 
 /* ── Standard flow ─────────────────────────────────────────────────── */

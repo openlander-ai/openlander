@@ -6,6 +6,7 @@ export interface UsePollingTaskOptions {
   runOnMount?: boolean;
   pauseWhenHidden?: boolean;
   refetchOnVisible?: boolean;
+  skipIfRunning?: boolean;
 }
 
 /**
@@ -22,6 +23,7 @@ export function usePollingTask(
     runOnMount = true,
     pauseWhenHidden = true,
     refetchOnVisible = true,
+    skipIfRunning = true,
   }: UsePollingTaskOptions,
 ): void {
   const taskRef = useRef(task);
@@ -36,11 +38,19 @@ export function usePollingTask(
     }
 
     let intervalId: ReturnType<typeof setInterval> | null = null;
+    let running = false;
 
     const invoke = () => {
-      void Promise.resolve(taskRef.current()).catch(() => {
-        // Individual callers manage their own error state.
-      });
+      if (skipIfRunning && running) return;
+      running = true;
+      void Promise.resolve()
+        .then(() => taskRef.current())
+        .catch(() => {
+          // Individual callers manage their own error state.
+        })
+        .finally(() => {
+          running = false;
+        });
     };
 
     const stop = () => {
@@ -85,5 +95,5 @@ export function usePollingTask(
     // restart the interval on every render when callers pass inline arrow
     // functions, causing fetch-storm regressions (ERR_INSUFFICIENT_RESOURCES
     // observed on Overview under Playwright, 2026-04-22).
-  }, [enabled, intervalMs, pauseWhenHidden, refetchOnVisible, runOnMount]);
+  }, [enabled, intervalMs, pauseWhenHidden, refetchOnVisible, runOnMount, skipIfRunning]);
 }

@@ -1,4 +1,4 @@
-import { asc, eq, sql } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { buildSetValues } from '../helpers.js';
 import { environments } from '../schema.drizzle.js';
@@ -73,6 +73,34 @@ export class EnvironmentRepo {
     // Back-compat: hydrate deprecated project_id from projectId parameter so
     // callers that read env.project_id continue to work through 1.0.
     return rows.map((r) => ({ ...r, project_id: projectId }));
+  }
+
+  getEnvironmentsByProjectIds(projectIds: string[]): Map<string, EnvironmentRow[]> {
+    if (projectIds.length === 0) {
+      return new Map();
+    }
+
+    const uniqueProjectIds = [...new Set(projectIds)];
+    const projectIdByServiceId = new Map(
+      uniqueProjectIds.map((projectId) => [projectIdToServiceId(projectId), projectId]),
+    );
+    const rows = this.db
+      .select()
+      .from(environments)
+      .where(inArray(environments.service_id, [...projectIdByServiceId.keys()]))
+      .orderBy(asc(environments.created_at))
+      .all() as EnvironmentRow[];
+
+    const byProjectId = new Map<string, EnvironmentRow[]>(
+      uniqueProjectIds.map((projectId) => [projectId, []]),
+    );
+    for (const row of rows) {
+      const projectId = projectIdByServiceId.get(row.service_id);
+      if (!projectId) continue;
+      byProjectId.get(projectId)?.push({ ...row, project_id: projectId });
+    }
+
+    return byProjectId;
   }
 
   updateEnvironment(

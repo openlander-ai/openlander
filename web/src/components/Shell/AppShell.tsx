@@ -26,7 +26,7 @@ import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
 import { CommandPalette } from '@/components/command/CommandPalette';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { AgentPanelContext, type AgentPanelInitialContext } from '@/contexts/agent-panel';
-import { ProjectsProvider } from '@/contexts/projects-context';
+import { AppDataProvider } from '@/contexts/app-data-context';
 import { useIsBelowMd } from '@/hooks/use-viewport';
 import { Sidebar } from './Sidebar';
 import { TopBar, type Crumb } from './TopBar';
@@ -139,7 +139,7 @@ export function AppShell() {
 
   return (
     <AgentPanelContext.Provider value={agentPanelContextValue}>
-      <ProjectsProvider>
+      <AppDataProvider>
         <div
           className="ol-shell flex h-screen w-screen overflow-hidden"
           style={{ backgroundColor: 'var(--ol-bg-app)' }}
@@ -184,7 +184,7 @@ export function AppShell() {
           />
           <ApprovalDialog />
         </div>
-      </ProjectsProvider>
+      </AppDataProvider>
     </AgentPanelContext.Provider>
   );
 }

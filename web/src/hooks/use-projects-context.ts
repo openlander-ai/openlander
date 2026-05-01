@@ -24,7 +24,7 @@ export function useProjectsContext(): UseProjectsReturn {
   if (!ctx) {
     throw new Error(
       'useProjectsContext must be used within a <ProjectsProvider>. ' +
-        'Mount it in AppShell so Sidebar/Home/CommandPalette can share a ' +
+        'Mount ProjectsProvider or AppDataProvider in AppShell so consumers can share a ' +
         'single poller.',
     );
   }

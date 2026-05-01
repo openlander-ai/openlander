@@ -293,6 +293,32 @@ export class ProjectRepo {
     });
   }
 
+  getDeployableServiceCountsByProjectIds(projectIds: string[]): Map<string, number> {
+    if (projectIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = this.db
+      .select({ parentId: services.project_id, cnt: count() })
+      .from(services)
+      .where(
+        and(
+          inArray(services.project_id, [...new Set(projectIds)]),
+          notInArray(services.kind, ['postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose']),
+        ),
+      )
+      .groupBy(services.project_id)
+      .all() as Array<{ parentId: string | null; cnt: number }>;
+
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      if (row.parentId) {
+        counts.set(row.parentId, row.cnt);
+      }
+    }
+    return counts;
+  }
+
   /**
    * Batch fetch projects + their environments + child counts in a single
    * pass over the projects table and at most two follow-up queries
@@ -357,24 +383,7 @@ export class ProjectRepo {
     // Skip managed DBs (postgres etc.) and skip the synthetic 'compose' parent
     // metadata service — users think of compose as "3 services," not "1 parent
     // + 3 children = 4," so omit the parent meta from the badge.
-    const childCountRows = this.db
-      .select({ parentId: services.project_id, cnt: count() })
-      .from(services)
-      .where(
-        and(
-          inArray(services.project_id, projectIds),
-          notInArray(services.kind, ['postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose']),
-        ),
-      )
-      .groupBy(services.project_id)
-      .all() as Array<{ parentId: string | null; cnt: number }>;
-
-    const childCountByParent = new Map<string, number>();
-    for (const row of childCountRows) {
-      if (row.parentId) {
-        childCountByParent.set(row.parentId, row.cnt);
-      }
-    }
+    const childCountByParent = this.getDeployableServiceCountsByProjectIds(projectIds);
 
     return projectRows.map((project) => ({
       project,
