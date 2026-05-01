@@ -455,9 +455,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
         return c.json({ error: `Invalid mode: ${mode}` }, 400);
       }
     }
-    const typed = body.automation as
-      | Partial<Record<'restart' | 'diagnosis' | 'apply_fixes' | 'rollback', 'auto' | 'confirm'>>
-      | undefined;
+    const typed = body.automation;
     const existing = ctx.db.getProjectOpsOverride(projectId);
     const merged = { ...existing?.automation, ...typed };
     ctx.db.setProjectOpsOverride(projectId, { automation: merged });

@@ -712,7 +712,7 @@ export class PlanEngine {
       const envUpdate = updates.env;
       if ('provided' in envUpdate) {
         // Structured: { provided: { KEY: "val" } }
-        const structured = envUpdate as { provided?: Record<string, string> };
+        const structured: { provided?: Record<string, string> } = envUpdate;
         if (structured.provided) {
           merged.env.provided = { ...plan.env.provided, ...structured.provided };
         }
