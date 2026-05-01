@@ -52,7 +52,7 @@ import { useServiceMetrics } from '@/hooks/use-service-metrics';
 import { useDeployments } from '@/hooks/use-deployments';
 import { getService, type MetricsRange, type Service } from '@/lib/api/services';
 import { getServiceEnvVars } from '@/lib/api';
-import type { DeployLogSummary } from '@/types';
+import type { DeployLogSummary, Project } from '@/types';
 import { cn } from '@/lib/utils';
 
 type ServiceTabId =
@@ -281,7 +281,11 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           labelledBy="service-general"
           className="p-5"
         >
-          <GeneralTab service={service} onEditConfig={() => setActiveTab('advanced')} />
+          <GeneralTab
+            service={service}
+            project={project}
+            onEditConfig={() => setActiveTab('advanced')}
+          />
         </TabPanel>
 
         <TabPanel
@@ -379,7 +383,15 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
 
 // ─── Tab content ────────────────────────────────────────────────────────────
 
-function GeneralTab({ service, onEditConfig }: { service: ServiceNode; onEditConfig: () => void }) {
+function GeneralTab({
+  service,
+  project,
+  onEditConfig,
+}: {
+  service: ServiceNode;
+  project: Project | null;
+  onEditConfig: () => void;
+}) {
   const handleCopyUrl = () => {
     if (!service.url) return;
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -388,31 +400,42 @@ function GeneralTab({ service, onEditConfig }: { service: ServiceNode; onEditCon
       });
     }
   };
+
+  const sourceRows: [string, string][] = [];
+  if (project?.repoUrl) {
+    const parsed = parseRepoUrl(project.repoUrl);
+    if (parsed) {
+      sourceRows.push(['Provider', parsed.provider]);
+      sourceRows.push(['Repository', parsed.path]);
+    } else {
+      sourceRows.push(['Source', project.repoUrl]);
+    }
+  } else if (service.image) {
+    sourceRows.push(['Source', 'Container image']);
+  }
+  if (project?.branch) {
+    sourceRows.push(['Branch', project.branch]);
+  }
+  if (service.image) {
+    sourceRows.push(['Image', service.image]);
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <SubCard title="Source" actionLabel="Edit" onAction={onEditConfig}>
-          <KvList
-            rows={[
-              ['Provider', 'GitHub'],
-              ['Repository', 'jiho/hotdeal-tracker'],
-              ['Branch', 'main'],
-              ['Build path', './'],
-            ]}
-          />
+          {sourceRows.length === 0 ? (
+            <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">No source configured.</p>
+          ) : (
+            <KvList rows={sourceRows} valueClassName="ol-mono break-all text-[12px]" />
+          )}
         </SubCard>
         <SubCard title="Build" actionLabel="Edit" onAction={onEditConfig}>
-          <KvList
-            rows={[
-              ['Method', 'Dockerfile'],
-              ['Dockerfile', `Dockerfile.${service.id}`],
-              [
-                'Target stage',
-                service.id === 'api' ? 'api' : service.id === 'worker' ? 'worker' : '—',
-              ],
-              ['Cache', 'BuildKit'],
-            ]}
-          />
+          <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
+            Build method is detected on each deploy. Override via the agent —{' '}
+            <span className="ol-mono">openlander_deploy.create_deploy_plan</span> exposes Dockerfile
+            path, target stage, and build context.
+          </p>
         </SubCard>
       </div>
       <SubCard title="Runtime" badge={<HealthBadge health={service.health} />}>
@@ -873,6 +896,27 @@ function SubCard({
       {children}
     </section>
   );
+}
+
+/** Parse a Git remote URL into a friendly Provider + path pair so the
+ *  Source card reads like a UI surface ("GitHub · myorg/myrepo")
+ *  rather than a raw URL. Returns null when the URL doesn't look like
+ *  a recognisable Git remote. */
+function parseRepoUrl(url: string): { provider: string; path: string } | null {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    let provider = host;
+    if (host === 'github.com' || host.endsWith('.github.com')) provider = 'GitHub';
+    else if (host === 'gitlab.com' || host.endsWith('.gitlab.com')) provider = 'GitLab';
+    else if (host === 'bitbucket.org' || host.endsWith('.bitbucket.org')) provider = 'Bitbucket';
+    else if (host === 'codeberg.org') provider = 'Codeberg';
+    const trimmed = u.pathname.replace(/^\//, '').replace(/\.git$/, '');
+    if (!trimmed) return null;
+    return { provider, path: trimmed };
+  } catch {
+    return null;
+  }
 }
 
 /** Heuristic: mask values for keys that look like secrets so the UI
