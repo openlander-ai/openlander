@@ -51,7 +51,7 @@ import { useServiceHealth } from '@/hooks/use-service-health';
 import { useServiceMetrics } from '@/hooks/use-service-metrics';
 import { useDeployments } from '@/hooks/use-deployments';
 import { getService, type MetricsRange, type Service } from '@/lib/api/services';
-import { getServiceEnvVars } from '@/lib/api';
+import { getProjectDomains, getServiceEnvVars, type DomainMapping } from '@/lib/api';
 import type { DeployLogSummary, Project } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -307,7 +307,11 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           labelledBy="service-domains"
           className="p-5"
         >
-          <DomainsTab service={service} projectName={project?.name ?? undefined} />
+          <DomainsTab
+            service={service}
+            projectId={project?.id ?? null}
+            projectName={project?.name ?? undefined}
+          />
         </TabPanel>
 
         <TabPanel
@@ -579,8 +583,38 @@ function EnvironmentTab({
   );
 }
 
-function DomainsTab({ service, projectName }: { service: ServiceNode; projectName?: string }) {
+function DomainsTab({
+  service,
+  projectId,
+  projectName,
+}: {
+  service: ServiceNode;
+  projectId: string | null;
+  projectName?: string;
+}) {
   const [guideKind, setGuideKind] = useState<'add-domain' | 'remove-domain' | null>(null);
+  const [customDomains, setCustomDomains] = useState<DomainMapping[] | null>(null);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const domains = await getProjectDomains(projectId);
+        if (!cancelled) setCustomDomains(domains);
+      } catch {
+        if (!cancelled) setCustomDomains([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  // Pick the domain to seed remove-domain prompts with: prefer the
+  // first custom domain, fall back to the auto-issued service.url.
+  const guideDomain = customDomains?.[0]?.domain ?? service.url ?? undefined;
+
   return (
     <>
       <SubCard
@@ -606,19 +640,45 @@ function DomainsTab({ service, projectName }: { service: ServiceNode; projectNam
           </span>
         }
       >
-        <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3">
-          <div className="flex items-center gap-2">
-            <Globe className="h-3.5 w-3.5 text-[color:var(--ol-primary)]" />
-            <span className="ol-mono break-all text-[12px] text-[color:var(--ol-primary)]">
-              {service.url ?? '—'}
-            </span>
-            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-[color:var(--ol-success-soft)] px-2 py-0.5 text-[10px] font-medium text-[color:var(--ol-success)]">
-              SSL
-            </span>
-          </div>
+        <div className="flex flex-col gap-2">
+          {service.url && (
+            <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3">
+              <div className="flex items-center gap-2">
+                <Globe className="h-3.5 w-3.5 shrink-0 text-[color:var(--ol-primary)]" />
+                <span className="ol-mono min-w-0 flex-1 truncate text-[12px] text-[color:var(--ol-primary)]">
+                  {service.url}
+                </span>
+                <span className="shrink-0 rounded-full bg-[color:var(--ol-panel)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-fg-muted)]">
+                  Auto
+                </span>
+              </div>
+            </div>
+          )}
+          {customDomains?.map((d) => (
+            <div
+              key={d.domain}
+              className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3"
+            >
+              <div className="flex items-center gap-2">
+                <Globe className="h-3.5 w-3.5 shrink-0 text-[color:var(--ol-success)]" />
+                <span className="ol-mono min-w-0 flex-1 truncate text-[12px] text-[color:var(--ol-fg)]">
+                  {d.domain}
+                </span>
+                <span className="shrink-0 rounded-full bg-[color:var(--ol-success-soft)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-success)]">
+                  Custom
+                </span>
+              </div>
+            </div>
+          ))}
+          {!service.url && customDomains !== null && customDomains.length === 0 && (
+            <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
+              No domains attached. Use the agent guide to add one.
+            </p>
+          )}
         </div>
-        <p className="mt-2.5 text-[12px] text-[color:var(--ol-fg-muted)]">
-          Auto-issued via sslip.io. Add a custom domain to override.
+        <p className="mt-2.5 text-[11.5px] text-[color:var(--ol-fg-muted)]">
+          Auto domains route via Traefik on the project network. Custom domains require DNS pointing
+          at this server.
         </p>
       </SubCard>
       {guideKind && (
@@ -630,7 +690,7 @@ function DomainsTab({ service, projectName }: { service: ServiceNode; projectNam
           kind={guideKind}
           projectName={projectName}
           serviceName={service.name}
-          domain={service.url ?? undefined}
+          domain={guideDomain}
         />
       )}
     </>
