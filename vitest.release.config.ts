@@ -1,0 +1,58 @@
+import { defineConfig } from 'vitest/config';
+import path from 'node:path';
+
+export default defineConfig({
+  test: {
+    include: [
+      'test/db/**/*.test.ts',
+      'test/db.test.ts',
+      'test/db-attach-service.test.ts',
+      'test/contract/**/*.test.ts',
+      'test/api/**/*.test.ts',
+      'test/*routes*.test.ts',
+      'test/console-contract.test.ts',
+      'test/env-api-routes.test.ts',
+      'test/auth/**/*.test.ts',
+      'test/github-oauth.test.ts',
+      'test/setup-llm-routes.test.ts',
+      'test/monitor/ops-*.test.ts',
+      'test/monitor/recover*.test.ts',
+      'test/monitor/recovery-*.test.ts',
+      'test/monitor/project-health-monitor.test.ts',
+      'test/monitor/project-state-manager.test.ts',
+      'test/pipeline/approval-gate.test.ts',
+      'test/pipeline/auto-recovery*.test.ts',
+      'test/pipeline/cascade-isolation.test.ts',
+      'test/pipeline/deploy-entry-lock.test.ts',
+      'test/pipeline/mutation-*.test.ts',
+      'test/pipeline/readiness-gate.test.ts',
+      'test/pipeline/redeploy-config-char.test.ts',
+      'test/pipeline/deploy/rollback.test.ts',
+      'test/mcp/**/*.test.ts',
+      'test/mcp-*.test.ts',
+      'test/tool-registry.test.ts',
+      'test/tools/**/*.test.ts',
+      'test/tools/*.test.ts',
+      'test/llm/agent-pool.test.ts',
+      'test/llm/llm-circuit-breaker.test.ts',
+      'test/llm/model-registry*.test.ts',
+    ],
+    exclude: [
+      'e2e/**',
+      'web/**',
+      'test/manual-qa/**',
+      'test/pipeline/docker/**',
+      'test/docker.test.ts',
+      'test/network-service-integration.test.ts',
+      'test/pipeline/image-deploy-e2e.test.ts',
+    ],
+    setupFiles: ['test/setup-release.ts'],
+    testTimeout: 15_000,
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'web/src'),
+      'lucide-react': path.resolve(__dirname, 'test/mocks/lucide-react.ts'),
+    },
+  },
+});
