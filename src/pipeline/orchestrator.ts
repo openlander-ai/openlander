@@ -1,5 +1,10 @@
 import { eventBus, type EventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import {
+  CircuitBreakerOpenError,
+  ProjectArchivedError,
+  ProjectRecoveringError,
+} from '../errors.js';
 
 const log = createModuleLogger('orchestrator');
 
@@ -25,7 +30,14 @@ export interface OrchestrationResult {
   success: boolean;
   services: Array<{
     name: string;
-    status: 'deployed' | 'failed' | 'rolled_back' | 'skipped';
+    status:
+      | 'deployed'
+      | 'failed'
+      | 'rolled_back'
+      | 'skipped'
+      | 'rollback_skipped'
+      | 'rollback_failed_due_to_policy'
+      | 'rollback_failed';
     projectId?: string;
     url?: string;
     error?: string;
@@ -180,21 +192,28 @@ export class DeployOrchestrator {
         }
       }
 
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       if (service.port === undefined) {
         continue;
       }
 
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       if (seenPorts.has(service.port)) {
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
         const conflictingService = seenPorts.get(service.port) ?? 'unknown';
         errors.push(
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           `Port conflict in topology: ${service.name} and ${conflictingService} both request ${String(service.port)}`,
         );
       } else {
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
         seenPorts.set(service.port, service.name);
       }
 
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       if (usedPorts.includes(service.port)) {
         errors.push(
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           `Port conflict with existing services: ${service.name} requests in-use port ${String(service.port)}`,
         );
       }
@@ -312,16 +331,42 @@ export class DeployOrchestrator {
     }
 
     if (failedServiceName) {
+      // Track per-service rollback outcomes so the final status reflects
+      // reality. Day 8 Bug #5: previously the orchestrator silently swallowed
+      // any rollback exception (typically thrown by the pipeline mutation
+      // policy when the service project was archived / recovering / circuit-
+      // open between deploy and rollback) and still labelled the service
+      // `rolled_back`. That hid partial deployments from operators.
+      const rollbackOutcomes = new Map<
+        string,
+        | { kind: 'rolled_back' }
+        | { kind: 'rollback_skipped'; reason: string }
+        | { kind: 'rollback_failed_due_to_policy'; reason: string }
+        | { kind: 'rollback_failed'; reason: string }
+      >();
       for (const service of [...executed].reverse()) {
         try {
           await pipeline.rollbackService(service);
+          rollbackOutcomes.set(service.name, { kind: 'rolled_back' });
         } catch (err) {
-          log.debug({ err, serviceName: service.name }, 'Service rollback failed');
-          const existing = statuses.find((entry) => entry.name === service.name);
-          if (existing) {
-            existing.error = existing.error
-              ? `${existing.error}; rollback failed`
-              : 'rollback failed';
+          log.warn({ err, serviceName: service.name }, 'Service rollback failed');
+          if (
+            err instanceof ProjectArchivedError ||
+            err instanceof ProjectRecoveringError ||
+            err instanceof CircuitBreakerOpenError
+          ) {
+            const reason = err.message;
+            // Policy rejections are operator-set states (archived) or
+            // automatic safety gates (circuit open / recovering). The
+            // service is still deployed — surface as policy-blocked, not
+            // as "rolled back".
+            rollbackOutcomes.set(service.name, {
+              kind: 'rollback_failed_due_to_policy',
+              reason,
+            });
+          } else {
+            const reason = err instanceof Error ? err.message : String(err);
+            rollbackOutcomes.set(service.name, { kind: 'rollback_failed', reason });
           }
         }
       }
@@ -330,12 +375,47 @@ export class DeployOrchestrator {
       const finalStatuses: OrchestrationResult['services'] = topology.services.map((service) => {
         const current = statusByName.get(service.name);
         if (!current) {
-          return { name: service.name, status: 'skipped' as const };
+          // Service was never attempted (e.g., topology fan-out broke before
+          // its layer ran). Mark as rollback-skipped so the operator knows
+          // it's still in whatever state it was before the orchestration.
+          return { name: service.name, status: 'rollback_skipped' as const };
         }
         if (current.status === 'deployed') {
+          const outcome = rollbackOutcomes.get(service.name);
+          if (!outcome) {
+            // Should not happen — every executed service got a rollback
+            // attempt. Defensive: surface as policy-blocked rather than
+            // silently labelling rolled_back.
+            return {
+              ...current,
+              status: 'rollback_skipped' as const,
+              error: current.error
+                ? `${current.error}; rollback was not attempted`
+                : 'rollback was not attempted',
+            };
+          }
+          if (outcome.kind === 'rolled_back') {
+            return { ...current, status: 'rolled_back' as const };
+          }
+          if (outcome.kind === 'rollback_failed_due_to_policy') {
+            return {
+              ...current,
+              status: 'rollback_failed_due_to_policy' as const,
+              error: current.error
+                ? `${current.error}; rollback blocked: ${outcome.reason}`
+                : `rollback blocked: ${outcome.reason}`,
+            };
+          }
+          // F2 (Day 9): Generic rollback failure (non-policy) — distinct from
+          // policy rejections so operators can tell apart "operator-set state
+          // (archived/recovering/circuit-open)" from "Docker / generic error".
+          // The container is still running; surface the underlying reason.
           return {
             ...current,
-            status: 'rolled_back' as const,
+            status: 'rollback_failed' as const,
+            error: current.error
+              ? `${current.error}; rollback failed: ${outcome.reason}`
+              : `rollback failed: ${outcome.reason}`,
           };
         }
         return current;

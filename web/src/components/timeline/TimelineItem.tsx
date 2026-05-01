@@ -172,7 +172,7 @@ export function TimelineItemCard({
         )}
         {!isSuccess && !isError && !isAgentEvent && (
           <div className="p-1.5 rounded-md bg-bg-subtle/50 border border-border">
-            <Activity className="h-3.5 w-3.5 text-secondary-ol" />
+            <Activity className="h-3.5 w-3.5 text-foreground/80" />
           </div>
         )}
       </div>
@@ -192,9 +192,9 @@ export function TimelineItemCard({
               isError && 'text-error font-medium line-clamp-3',
               isAgentEvent && 'text-agent/90 font-sans text-[13px]',
               isCollapsed && isAgentEvent && 'line-clamp-1',
-              isAgentThinking && 'text-secondary-ol',
+              isAgentThinking && 'text-foreground/80',
               isAgentToolCall && 'text-agent/70',
-              isAgentMessage && 'text-primary-ol',
+              isAgentMessage && 'text-foreground',
             )}
             title={isError ? item.title : undefined}
           >
@@ -218,7 +218,7 @@ export function TimelineItemCard({
                 )}
               </button>
             )}
-            <span className="text-xs font-mono text-muted-ol opacity-70">
+            <span className="text-xs font-mono text-muted-foreground opacity-70">
               {formatTime(item.timestamp)}
             </span>
           </div>
@@ -244,7 +244,7 @@ export function TimelineItemCard({
               <summary className="text-xs font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
                 Arguments ▾
               </summary>
-              <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+              <pre className="mt-1.5 text-xs font-mono text-muted-foreground bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
                 {JSON.stringify(item.toolArguments, null, 2)}
               </pre>
             </details>
@@ -255,7 +255,7 @@ export function TimelineItemCard({
             <summary className="text-xs font-mono text-error/70 cursor-pointer hover:text-error transition-colors select-none">
               Build log ▾
             </summary>
-            <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+            <pre className="mt-1.5 text-xs font-mono text-muted-foreground bg-bg-terminal border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
               {item.detail.slice(-2000)}
             </pre>
           </details>

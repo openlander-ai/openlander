@@ -27,7 +27,16 @@ import {
 import type { ContainerExecResult } from './service-adapters/types.js';
 import type { Docker } from './docker.js';
 import { allocatePort } from './port.js';
-import { isDockerNotFoundError } from '../errors.js';
+import {
+  isDockerNotFoundError,
+  RepoPersistenceError,
+  ServiceConfigError,
+  ServiceContainerStateError,
+  ServiceInUseError,
+  ServiceNotFoundError,
+  ServiceOperationError,
+  ServiceOperationUnsupportedError,
+} from '../errors.js';
 
 const log = createModuleLogger('service-manager');
 const SERVICE_CARD_SUMMARY_CACHE_TTL_MS = 15_000;
@@ -42,9 +51,13 @@ type ServiceCardSummary = ServiceRow & {
 
 export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   postgresql: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
+  // Canonical alias so version resolution works when service.kind='postgres'
+  postgres: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
   mysql: ['9', '8'],
   redis: ['8-alpine', '7-alpine'],
   mongodb: ['8', '7'],
+  // Canonical alias so version resolution works when service.kind='mongo'
+  mongo: ['8', '7'],
   minio: ['RELEASE.2024-11-07T00-52-20Z', 'latest'],
   rabbitmq: ['4.0-management-alpine', '3.13-management-alpine'],
 };
@@ -64,17 +77,28 @@ export interface ServiceTemplate {
   env: (creds: { user: string; password: string; database: string }) => string[];
 }
 
+const postgresTemplate: ServiceTemplate = {
+  type: 'postgresql',
+  image: 'postgres:16-alpine',
+  port: 5432,
+  env: (c) => [
+    `POSTGRES_USER=${c.user}`,
+    `POSTGRES_PASSWORD=${c.password}`,
+    `POSTGRES_DB=${c.database}`,
+  ],
+};
+
+const mongoTemplate: ServiceTemplate = {
+  type: 'mongodb',
+  image: 'mongo:7',
+  port: 27017,
+  env: (c) => [`MONGO_INITDB_ROOT_USERNAME=${c.user}`, `MONGO_INITDB_ROOT_PASSWORD=${c.password}`],
+};
+
 export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
-  postgresql: {
-    type: 'postgresql',
-    image: 'postgres:16-alpine',
-    port: 5432,
-    env: (c) => [
-      `POSTGRES_USER=${c.user}`,
-      `POSTGRES_PASSWORD=${c.password}`,
-      `POSTGRES_DB=${c.database}`,
-    ],
-  },
+  postgresql: postgresTemplate,
+  // Canonical alias — legacyTypeToKind() maps 'postgresql'→'postgres'
+  postgres: postgresTemplate,
   mysql: {
     type: 'mysql',
     image: 'mysql:8',
@@ -92,15 +116,9 @@ export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
     port: 6379,
     env: () => [],
   },
-  mongodb: {
-    type: 'mongodb',
-    image: 'mongo:7',
-    port: 27017,
-    env: (c) => [
-      `MONGO_INITDB_ROOT_USERNAME=${c.user}`,
-      `MONGO_INITDB_ROOT_PASSWORD=${c.password}`,
-    ],
-  },
+  mongodb: mongoTemplate,
+  // Canonical alias — legacyTypeToKind() maps 'mongodb'→'mongo'
+  mongo: mongoTemplate,
   minio: {
     type: 'minio',
     image: 'minio/minio:RELEASE.2024-11-07T00-52-20Z',
@@ -130,22 +148,45 @@ export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
   },
 };
 
+export const SERVICE_MEMORY_LIMITS: Record<
+  string,
+  { memoryLimitBytes: number; cpuShares: number }
+> = {
+  postgresql: { memoryLimitBytes: 536870912, cpuShares: 512 }, // 512MB
+  postgres: { memoryLimitBytes: 536870912, cpuShares: 512 }, // canonical alias
+  mysql: { memoryLimitBytes: 536870912, cpuShares: 512 }, // 512MB
+  redis: { memoryLimitBytes: 134217728, cpuShares: 256 }, // 128MB
+  mongodb: { memoryLimitBytes: 1073741824, cpuShares: 1024 }, // 1GB
+  mongo: { memoryLimitBytes: 1073741824, cpuShares: 1024 }, // canonical alias
+  minio: { memoryLimitBytes: 268435456, cpuShares: 512 }, // 256MB
+  rabbitmq: { memoryLimitBytes: 268435456, cpuShares: 512 }, // 256MB
+};
+
 /**
  * Standard env var key for each built-in service type.
  * First service of a type gets the standard key; subsequent ones are prefixed.
  */
 const DEFAULT_ENV_KEYS: Record<string, string> = {
   postgresql: 'DATABASE_URL',
+  postgres: 'DATABASE_URL', // canonical alias
   mysql: 'DATABASE_URL',
   redis: 'REDIS_URL',
   mongodb: 'MONGODB_URL',
+  mongo: 'MONGODB_URL', // canonical alias
   minio: 'S3_ENDPOINT',
   rabbitmq: 'RABBITMQ_URL',
 };
 
 export class ServiceManager {
-  private serviceCardSummaryCache: { expiresAt: number; data: ServiceCardSummary[] } | null = null;
-  private serviceCardSummaryInFlight: Promise<ServiceCardSummary[]> | null = null;
+  private serviceCardSummaryCache: {
+    key: string;
+    expiresAt: number;
+    data: ServiceCardSummary[];
+  } | null = null;
+  private serviceCardSummaryInFlight: {
+    key: string;
+    promise: Promise<ServiceCardSummary[]>;
+  } | null = null;
   private serviceCardSummaryEpoch = 0;
 
   constructor(
@@ -168,7 +209,8 @@ export class ServiceManager {
    *  - Subsequent services of the same type → prefixed key (e.g. MYDB_DATABASE_URL)
    */
   getSuggestedEnv(service: ServiceRow): Array<{ key: string; value: string }> {
-    const baseKey = DEFAULT_ENV_KEYS[service.type];
+    const serviceKind = service.kind;
+    const baseKey = DEFAULT_ENV_KEYS[serviceKind];
     if (!baseKey) {
       return [];
     }
@@ -181,9 +223,9 @@ export class ServiceManager {
 
     const existing = this.db
       .listServices()
-      .filter((s) => s.type === service.type && s.id !== service.id);
+      .filter((s) => s.kind === serviceKind && s.id !== service.id);
 
-    if (service.type === 'minio') {
+    if (serviceKind === 'minio') {
       const user = (credentials?.['user'] as string | undefined) ?? '';
       const password = (credentials?.['password'] as string | undefined) ?? '';
       const prefix =
@@ -227,7 +269,7 @@ export class ServiceManager {
     let alreadyConnected = 0;
 
     for (const service of services) {
-      const containerRef = service.container_id ?? service.container_name;
+      const containerRef = service.container_id ?? service.container_name ?? '';
       if (!containerRef) {
         continue;
       }
@@ -314,11 +356,10 @@ export class ServiceManager {
     const hasImage = typeof opts.image === 'string';
 
     if (!hasTemplate && !hasImage) {
-      throw new Error('Provide at least one of template or image');
+      throw new ServiceConfigError('Provide at least one of template or image');
     }
 
     const userEnv = this.toEnvPairs(opts.envVars);
-    const userEnvJson = opts.envVars ? JSON.stringify(opts.envVars) : undefined;
 
     let type: string;
     let image: string;
@@ -333,7 +374,9 @@ export class ServiceManager {
       const templateId = opts.template as string;
       const template = SERVICE_TEMPLATES[templateId];
       if (!template) {
-        throw new Error(`Unsupported service template: ${templateId}`);
+        throw new ServiceConfigError(`Unsupported service template: ${templateId}`, {
+          templateId,
+        });
       }
 
       type = template.type;
@@ -382,10 +425,10 @@ export class ServiceManager {
       }
     } else {
       if (!opts.image) {
-        throw new Error('image is required when template is not provided');
+        throw new ServiceConfigError('image is required when template is not provided');
       }
       if (opts.port === undefined) {
-        throw new Error('port is required when using custom image');
+        throw new ServiceConfigError('port is required when using custom image');
       }
 
       type = this.extractTypeFromImage(opts.image);
@@ -398,7 +441,7 @@ export class ServiceManager {
     }
 
     if (!Number.isInteger(port) || port <= 0) {
-      throw new Error(`Invalid service port: ${String(port)}`);
+      throw new ServiceConfigError(`Invalid service port: ${String(port)}`, { port });
     }
 
     const containerPort = port;
@@ -427,6 +470,11 @@ export class ServiceManager {
       }
     }
 
+    const memLimits = SERVICE_MEMORY_LIMITS[type] ?? {
+      memoryLimitBytes: 536870912,
+      cpuShares: 512,
+    };
+
     const containerId = await this.docker.runServiceContainer({
       imageTag: image,
       name: containerName,
@@ -435,6 +483,8 @@ export class ServiceManager {
       envVars: envRecord,
       serviceName: opts.name,
       volumeBinds: [`${volumeName}:${dataMountPath}`],
+      memoryLimitBytes: memLimits.memoryLimitBytes,
+      cpuShares: memLimits.cpuShares,
       ...(containerHealthcheck ? { healthcheck: containerHealthcheck } : {}),
       ...(containerCmd ? { cmd: containerCmd } : {}),
     });
@@ -462,7 +512,6 @@ export class ServiceManager {
       image,
       containerName,
       port: hostPort,
-      envVars: userEnvJson,
       credentials: credentialsJson,
     });
 
@@ -470,7 +519,7 @@ export class ServiceManager {
     this.invalidateServiceCardSummaryCache();
     const created = this.db.getService(id);
     if (!created) {
-      throw new Error(`Failed to create service: ${id}`);
+      throw new RepoPersistenceError('service', id);
     }
     return created;
   }
@@ -478,10 +527,10 @@ export class ServiceManager {
   async start(id: string): Promise<void> {
     const service = this.db.getService(id);
     if (!service) {
-      throw new Error(`Service not found: ${id}`);
+      throw new ServiceNotFoundError(id);
     }
 
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     await this.docker.startContainer(containerId);
     this.db.updateService(id, { status: 'running' });
     this.invalidateServiceCardSummaryCache();
@@ -490,10 +539,10 @@ export class ServiceManager {
   async stop(id: string): Promise<void> {
     const service = this.db.getService(id);
     if (!service) {
-      throw new Error(`Service not found: ${id}`);
+      throw new ServiceNotFoundError(id);
     }
 
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     await this.docker.stopContainer(containerId);
     this.db.updateService(id, { status: 'stopped' });
     this.invalidateServiceCardSummaryCache();
@@ -505,25 +554,22 @@ export class ServiceManager {
   ): Promise<{ warning?: string; connected_projects?: Array<{ id: string; name: string }> }> {
     const service = this.db.getService(id);
     if (!service) {
-      throw new Error(`Service not found: ${id}`);
+      throw new ServiceNotFoundError(id);
     }
 
     // Check for connected projects before deletion
     const connectedProjects = this.getConnectedProjects(id);
     let warning: string | undefined;
     if (connectedProjects.length > 0) {
+      if (!options?.force) {
+        throw new ServiceInUseError(service.name, connectedProjects);
+      }
       const projectNames = connectedProjects.map((p) => p.name).join(', ');
       const count = String(connectedProjects.length);
-      if (!options?.force) {
-        throw new Error(
-          `Service "${service.name}" is referenced by ${count} project(s): ${projectNames}. ` +
-            `Remove the service references from their environment variables first, or use force to remove anyway.`,
-        );
-      }
       warning = `Service "${service.name}" is connected to ${count} project(s): ${projectNames}. These projects may fail to start if they depend on this service.`;
     }
 
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     try {
       await this.docker.stopContainer(containerId);
     } catch (error) {
@@ -562,7 +608,7 @@ export class ServiceManager {
 
     // Redis: flush in-memory data to disk (BGSAVE) before volume backup.
     // Without this, the RDB dump file may not exist or be stale, leading to empty backups.
-    const isRedis = service.type === 'redis' || service.image.includes('redis');
+    const isRedis = service.kind === 'redis' || (service.image_url ?? '').includes('redis');
     if (isRedis) {
       try {
         const initialResult = await execInServiceContainer(this.docker, service, [
@@ -610,13 +656,19 @@ export class ServiceManager {
 
     const { StatusCode: backupExitCode } = await this.docker.waitForContainer(backupContainerId);
     if (backupExitCode !== 0) {
-      throw new Error(
+      throw new ServiceOperationError(
+        'backup',
         `Backup failed with exit code ${String(backupExitCode)} for service: ${service.id}`,
+        { serviceId: service.id, exitCode: backupExitCode },
       );
     }
 
     if (!existsSync(backupPath)) {
-      throw new Error(`Backup file not found after backup: ${backupPath}`);
+      throw new ServiceOperationError(
+        'backup',
+        `Backup file not found after backup: ${backupPath}`,
+        { backupPath },
+      );
     }
     const size = statSync(backupPath).size;
 
@@ -629,7 +681,10 @@ export class ServiceManager {
     const backupFilename = `${backupId}.tar.gz`;
     const backupPath = join(backupDir, backupFilename);
     if (!existsSync(backupPath)) {
-      throw new Error(`Backup not found: ${backupPath}`);
+      throw new ServiceOperationError('restore', `Backup not found: ${backupPath}`, {
+        backupId,
+        backupPath,
+      });
     }
 
     const volumeName = this.getVolumeName(service.name);
@@ -650,8 +705,10 @@ export class ServiceManager {
       const { StatusCode: restoreExitCode } =
         await this.docker.waitForContainer(restoreContainerId);
       if (restoreExitCode !== 0) {
-        throw new Error(
+        throw new ServiceOperationError(
+          'restore',
           `Restore failed with exit code ${String(restoreExitCode)} for service: ${service.id}`,
+          { serviceId: service.id, exitCode: restoreExitCode },
         );
       }
     } finally {
@@ -708,12 +765,12 @@ export class ServiceManager {
       }
       const refreshed = this.db.getService(id);
       if (!refreshed) {
-        throw new Error(`Service not found: ${id}`);
+        throw new ServiceNotFoundError(id);
       }
       return refreshed;
     }
 
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     try {
       const info = await this.docker.inspectContainer(containerId);
       const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
@@ -731,7 +788,7 @@ export class ServiceManager {
 
     const refreshed = this.db.getService(id);
     if (!refreshed) {
-      throw new Error(`Service not found: ${id}`);
+      throw new ServiceNotFoundError(id);
     }
     return refreshed;
   }
@@ -739,7 +796,7 @@ export class ServiceManager {
   async getLogs(id: string, lines = 100): Promise<string> {
     const service = this.getRequiredService(id);
     const tail = Number.isInteger(lines) && lines > 0 ? lines : 100;
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     return this.docker.getLogs(containerId, tail);
   }
 
@@ -770,19 +827,96 @@ export class ServiceManager {
     };
   }
 
-  async listWithCardSummary(): Promise<ServiceCardSummary[]> {
-    const cached = this.serviceCardSummaryCache;
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.data;
+  /**
+   * Phase E_NEW Task 5 — recorder hook for the v4 service detail
+   * sparkline. Called from `ServiceHealthMonitor.runServiceCheck` on
+   * each tick (default cadence 30s) so the time-series in
+   * `service_metrics` accumulates one sample per service per tick.
+   * Pure no-op for non-running services; we don't want to pollute the
+   * sparkline with zero rows just because the container isn't up.
+   *
+   * `req` (requests/sec) and `err` (error rate %) are not yet sourced —
+   * the deploy pipeline doesn't surface per-service request counters
+   * today. We persist `0` for both rather than `null` because the
+   * sparkline is happier with zeros than with gaps; the contract is
+   * unchanged. p95 and request_count similarly default to null/0
+   * until a request-counting layer lands (post-1.0 follow-up).
+   */
+  async recordMetricSample(serviceId: string): Promise<void> {
+    const service = this.db.getService(serviceId);
+    if (!service || service.status !== 'running') {
+      return;
     }
 
-    if (this.serviceCardSummaryInFlight) {
-      return this.serviceCardSummaryInFlight;
+    const runtime = await this.collectRuntimeStats(service);
+    const memMb =
+      runtime.memoryUsageBytes !== null
+        ? Math.round((runtime.memoryUsageBytes / (1024 * 1024)) * 10) / 10
+        : 0;
+
+    this.db.recordServiceMetricSample({
+      serviceId,
+      recordedAt: Date.now(),
+      cpu: runtime.cpuPercent ?? 0,
+      mem: memMb,
+      req: 0,
+      err: 0,
+      p95LatencyMs: null,
+      requestCount: 0,
+    });
+  }
+
+  /**
+   * Phase E_NEW Task 4 — minimal Docker inspect projection used by
+   * `GET /api/services/:id/health`. Reads the same source that the
+   * card-summary path reads (`info.State.Health?.Status`) and returns
+   * the raw `(status, healthStatus)` pair so the route can project
+   * onto the v4 3-state vocabulary (`healthy | crashed | running`).
+   *
+   * `healthStatus` is `null` when the container does not declare a
+   * Docker `HEALTHCHECK`; we only return strings exactly as Docker
+   * reports them (`'healthy'`, `'unhealthy'`, `'starting'`).
+   */
+  async getInspectionHealth(id: string): Promise<{
+    status: ServiceRow['status'];
+    healthStatus: string | null;
+  }> {
+    const service = this.getRequiredService(id);
+    const inspection = await this.inspectServiceContainer(service);
+    return { status: inspection.status, healthStatus: inspection.healthStatus };
+  }
+
+  /**
+   * Card-summary listing with cached Docker inspect+health for each service.
+   *
+   * `kindIn`: when provided, filter services BEFORE the Docker fan-out so we
+   * don't waste inspect work on rows the caller will discard. Backs the
+   * /managed-services page (~10 managed rows) instead of all 30+ services
+   * (CCG perf finding #1, Codex 2026-04-30).
+   *
+   * The cache is keyed on the filter so a future "all services" caller
+   * doesn't get a managed-only payload back from a stale entry.
+   */
+  async listWithCardSummary(opts?: {
+    kindIn?: readonly ServiceRow['kind'][];
+  }): Promise<ServiceCardSummary[]> {
+    const kindIn = opts?.kindIn ?? null;
+    const cacheKey = kindIn ? `kinds:${[...kindIn].sort().join(',')}` : 'all';
+    const cachedEntry = this.serviceCardSummaryCache;
+    if (cachedEntry && cachedEntry.key === cacheKey && cachedEntry.expiresAt > Date.now()) {
+      return cachedEntry.data;
+    }
+
+    if (this.serviceCardSummaryInFlight && this.serviceCardSummaryInFlight.key === cacheKey) {
+      return this.serviceCardSummaryInFlight.promise;
     }
 
     const epoch = this.serviceCardSummaryEpoch;
     const loadPromise = (async () => {
-      const services = this.db.listServices();
+      const allServices = this.db.listServices();
+      const services = kindIn
+        ? allServices.filter((s) => (kindIn as readonly string[]).includes(s.kind))
+        : allServices;
       const summaries = await Promise.all(
         services.map(async (service) => {
           const inspection = await this.inspectServiceContainer(service);
@@ -803,6 +937,7 @@ export class ServiceManager {
 
       if (this.serviceCardSummaryEpoch === epoch) {
         this.serviceCardSummaryCache = {
+          key: cacheKey,
           expiresAt: Date.now() + SERVICE_CARD_SUMMARY_CACHE_TTL_MS,
           data: summaries,
         };
@@ -811,12 +946,14 @@ export class ServiceManager {
       return summaries;
     })();
 
-    this.serviceCardSummaryInFlight = loadPromise;
+    this.serviceCardSummaryInFlight = { key: cacheKey, promise: loadPromise };
 
     try {
       return await loadPromise;
     } finally {
-      if (this.serviceCardSummaryInFlight === loadPromise) {
+      // Race guard: clear in-flight only if it still points at this load.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (this.serviceCardSummaryInFlight?.promise === loadPromise) {
         this.serviceCardSummaryInFlight = null;
       }
     }
@@ -840,7 +977,7 @@ export class ServiceManager {
       };
     }
 
-    const containerRef = service.container_id ?? service.container_name;
+    const containerRef = service.container_id ?? service.container_name ?? '';
     try {
       const info = await this.docker.inspectContainer(containerRef);
       const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
@@ -918,7 +1055,7 @@ export class ServiceManager {
 
     let diskUsageBytes: number | null = null;
     try {
-      const dataMountPath = this.getDataMountPath(service.type);
+      const dataMountPath = this.getDataMountPath(service.kind);
       const result = await execInServiceContainer(this.docker, service, [
         'du',
         '-sb',
@@ -937,7 +1074,7 @@ export class ServiceManager {
     let memoryUsageBytes: number | null = null;
     let memoryLimitBytes: number | null = null;
     try {
-      const containerId = service.container_id ?? service.container_name;
+      const containerId = service.container_id ?? service.container_name ?? '';
       const rawStats = (await this.docker.getContainerStats(containerId)) as {
         cpu_stats: {
           cpu_usage: { total_usage: number; percpu_usage?: number[] };
@@ -963,7 +1100,7 @@ export class ServiceManager {
     let activeConnections: number | null = null;
     let maxConnections: number | null = null;
     try {
-      const adapter = getServiceAdapter(service.type);
+      const adapter = getServiceAdapter(service.kind);
       if (adapter) {
         const connectionStats = await adapter.getConnectionStats(service, this.docker);
         activeConnections = connectionStats.activeConnections;
@@ -987,7 +1124,7 @@ export class ServiceManager {
     const envVars = this.db.getEnvVars(projectId);
     const allValues = Object.values(envVars).join(' ');
     const services = this.db.listServices();
-    return services.filter((s) => allValues.includes(s.container_name));
+    return services.filter((s) => s.container_name != null && allValues.includes(s.container_name));
   }
 
   getConnectedProjects(serviceId: string): Array<{ id: string; name: string }> {
@@ -1003,9 +1140,9 @@ export class ServiceManager {
       for (const env of environments) {
         allEnvValues.push(...Object.values(this.db.getEnvVars(project.id, env.id)));
       }
-      const hasConnection = allEnvValues.some(
-        (value) => typeof value === 'string' && value.includes(containerName),
-      );
+      const hasConnection =
+        containerName != null &&
+        allEnvValues.some((value) => typeof value === 'string' && value.includes(containerName));
       if (hasConnection) {
         connected.push({ id: project.id, name: project.name });
       }
@@ -1017,9 +1154,10 @@ export class ServiceManager {
   async listDatabases(serviceId: string): Promise<ListedDatabase[]> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    const adapter = getServiceAdapter(service.type);
+    const serviceKind = service.kind;
+    const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
-      throw new Error(`Database listing is not supported for service type: ${service.type}`);
+      throw new ServiceOperationUnsupportedError('Database listing', serviceKind);
     }
 
     return adapter.listDatabases(service, this.docker);
@@ -1028,9 +1166,10 @@ export class ServiceManager {
   async listUsers(serviceId: string): Promise<ListedUser[]> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    const adapter = getServiceAdapter(service.type);
+    const serviceKind = service.kind;
+    const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
-      throw new Error(`User listing is not supported for service type: ${service.type}`);
+      throw new ServiceOperationUnsupportedError('User listing', serviceKind);
     }
 
     return adapter.listUsers(service, this.docker);
@@ -1041,9 +1180,10 @@ export class ServiceManager {
     await this.ensureServiceContainerRunning(service);
     assertSafeDatabaseName(dbName);
 
-    const adapter = getServiceAdapter(service.type);
+    const serviceKind = service.kind;
+    const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
-      throw new Error(`Database creation is not supported for service type: ${service.type}`);
+      throw new ServiceOperationUnsupportedError('Database creation', serviceKind);
     }
 
     return adapter.createDatabase(service, dbName, this.docker);
@@ -1064,9 +1204,10 @@ export class ServiceManager {
       assertSafeDatabaseName(grants.database);
     }
 
-    const adapter = getServiceAdapter(service.type);
+    const serviceKind = service.kind;
+    const adapter = getServiceAdapter(serviceKind);
     if (!adapter) {
-      throw new Error(`User creation is not supported for service type: ${service.type}`);
+      throw new ServiceOperationUnsupportedError('User creation', serviceKind);
     }
 
     return adapter.createUser(service, { username, password: userPassword, grants }, this.docker);
@@ -1075,10 +1216,9 @@ export class ServiceManager {
   async listBuckets(serviceId: string): Promise<Array<{ name: string; createdAt: string }>> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    if (service.type !== 'minio') {
-      throw new Error(
-        `Bucket operations are only supported for MinIO services, got: ${service.type}`,
-      );
+    const serviceKind = service.kind;
+    if (serviceKind !== 'minio') {
+      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', serviceKind);
     }
 
     const adapter = new MinioAdapter();
@@ -1088,10 +1228,9 @@ export class ServiceManager {
   async createBucket(serviceId: string, bucketName: string): Promise<void> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    if (service.type !== 'minio') {
-      throw new Error(
-        `Bucket operations are only supported for MinIO services, got: ${service.type}`,
-      );
+    const serviceKind = service.kind;
+    if (serviceKind !== 'minio') {
+      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', serviceKind);
     }
 
     const adapter = new MinioAdapter();
@@ -1101,10 +1240,9 @@ export class ServiceManager {
   async deleteBucket(serviceId: string, bucketName: string): Promise<void> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    if (service.type !== 'minio') {
-      throw new Error(
-        `Bucket operations are only supported for MinIO services, got: ${service.type}`,
-      );
+    const serviceKind = service.kind;
+    if (serviceKind !== 'minio') {
+      throw new ServiceOperationUnsupportedError('Bucket operations (MinIO only)', serviceKind);
     }
 
     const adapter = new MinioAdapter();
@@ -1171,7 +1309,7 @@ export class ServiceManager {
   ): string {
     const adapter = getServiceAdapter(type);
     if (!adapter) {
-      throw new Error(`Unsupported service type: ${type}`);
+      throw new ServiceOperationUnsupportedError('Connection string', type);
     }
 
     return adapter.getConnectionString(containerName, port, creds);
@@ -1202,21 +1340,32 @@ export class ServiceManager {
   private getRequiredService(serviceId: string): ServiceRow {
     const service = this.db.getService(serviceId);
     if (!service) {
-      throw new Error(`Service not found: ${serviceId}`);
+      throw new ServiceNotFoundError(serviceId);
     }
     return service;
   }
 
   private async ensureServiceContainerRunning(service: ServiceRow): Promise<void> {
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     try {
       const info = await this.docker.inspectContainer(containerId);
       if (!info.State.Running) {
-        throw new Error(`Service container is not running: ${service.id}`);
+        throw new ServiceContainerStateError(
+          service.id,
+          'stopped',
+          `Service container is not running: ${service.id}`,
+        );
       }
     } catch (error) {
+      if (error instanceof ServiceContainerStateError) {
+        throw error;
+      }
       if (isDockerNotFoundError(error)) {
-        throw new Error(`Service container not found: ${service.id}`);
+        throw new ServiceContainerStateError(
+          service.id,
+          'missing',
+          `Service container not found: ${service.id}`,
+        );
       }
       throw error;
     }

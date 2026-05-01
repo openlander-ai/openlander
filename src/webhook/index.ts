@@ -1,9 +1,17 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
+import { nanoid } from 'nanoid';
+
 import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
+import type { AgentPool } from '../llm/agent-pool.js';
 import type { DeployPipeline } from '../pipeline/deploy.js';
 import { createModuleLogger } from '../lib/logger.js';
+import {
+  CircuitBreakerOpenError,
+  ProjectArchivedError,
+  ProjectRecoveringError,
+} from '../errors.js';
 
 const log = createModuleLogger('webhook');
 
@@ -39,11 +47,70 @@ export interface ParsedPREvent {
 
 const textEncoder = new TextEncoder();
 
+/**
+ * Map a pipeline mutation-policy error to a graceful "skipped" webhook result.
+ *
+ * Returns `null` for non-policy errors so the caller can rethrow / log.
+ * Push events MUST NOT crash a webhook just because the project is archived,
+ * recovering, or under an open circuit breaker — those are operator-set states
+ * and the push itself is still a valid event.
+ *
+ * Day 9 F5: also returns the structured `reason` so the caller can emit a
+ * `webhook:skipped` activity event.
+ */
+function mapPolicySkip(
+  err: unknown,
+  projectId: string,
+): { result: WebhookResult; reason: 'archived' | 'recovering' | 'circuit_broken' } | null {
+  if (err instanceof ProjectArchivedError) {
+    return {
+      result: {
+        accepted: true,
+        projectId,
+        message: 'Project is archived; webhook redeploy skipped.',
+      },
+      reason: 'archived',
+    };
+  }
+  if (err instanceof ProjectRecoveringError) {
+    return {
+      result: {
+        accepted: true,
+        projectId,
+        message: 'Project is recovering; webhook redeploy skipped.',
+      },
+      reason: 'recovering',
+    };
+  }
+  if (err instanceof CircuitBreakerOpenError) {
+    return {
+      result: {
+        accepted: true,
+        projectId,
+        message: 'Circuit breaker open; webhook redeploy skipped.',
+      },
+      reason: 'circuit_broken',
+    };
+  }
+  return null;
+}
+
 export class WebhookManager {
   constructor(
     private readonly pipeline: DeployPipeline,
     private readonly db: Database,
+    // Day 8 Bug #4: webhook no longer emits deploy:start (the pipeline owns
+    // that emit). Day 9 F5: webhook does emit `webhook:skipped` when policy
+    // gracefully refuses the redeploy so operators see the push event in the
+    // activity feed instead of "I pushed but nothing happened".
     private readonly events: EventBus,
+    // 1.0 GA: optional agent pool so webhook redeploys go through the same
+    // per-project lock as UI / agent / MCP triggers. Without this, a webhook
+    // push during an in-flight UI redeploy bypassed the in-memory lock and
+    // raced through to the DB-level `withDeployLock` (which would silently
+    // skip without a typed 409). Optional so existing tests can keep
+    // instantiating without the dependency.
+    private readonly agentPool?: AgentPool,
   ) {}
 
   generateSecret(projectId: string): string {
@@ -147,44 +214,135 @@ export class WebhookManager {
       }
     }
 
-    await this.events.emit('deploy:start', {
-      projectId,
-      repoUrl: parsed.repoUrl || project.repo_url || '',
-    });
-
+    // Day 8 Bug #4: Do NOT emit `deploy:start` from the webhook — the
+    // pipeline (redeploy / deployEnvironment) emits it itself, AFTER the
+    // mutation policy clears. Emitting here pre-policy caused stale
+    // active-project state in `questionBridge` and false "started" entries
+    // in the activity feed whenever the policy short-circuited (archived /
+    // recovering / circuit-open).
     if (targetEnvironment) {
-      const deployResult = await this.pipeline.deployEnvironment(projectId, targetEnvironment.id, {
-        trigger: 'webhook',
-      });
-      if (!deployResult.success) {
+      // 1.0 GA: same per-project lock as the redeploy branch below, so a
+      // webhook environment deploy that races with another mutation is
+      // rejected at the in-memory boundary with a typed `webhook:skipped`.
+      const envLockSessionId = `webhook-env-${source}-${projectId}-${nanoid(6)}`;
+      const envLockAcquired = this.agentPool
+        ? this.agentPool.acquireProjectLock(projectId, envLockSessionId)
+        : true;
+      if (!envLockAcquired) {
+        const lock = this.agentPool?.getProjectLock(projectId);
+        const message = `Project is busy (held by ${lock?.sessionId ?? 'another session'}); webhook environment deploy queued/skipped.`;
+        await this.emitWebhookSkipped(projectId, 'recovering', source, message);
+        return {
+          accepted: true,
+          projectId,
+          message,
+        };
+      }
+      try {
+        const deployResult = await this.pipeline.deployEnvironment(
+          projectId,
+          targetEnvironment.id,
+          { trigger: 'webhook' },
+        );
+        if (!deployResult.success) {
+          return {
+            accepted: false,
+            projectId,
+            message: deployResult.error ?? 'Environment deploy failed.',
+          };
+        }
+
+        return {
+          accepted: true,
+          projectId,
+          message: `Deploy triggered for ${targetEnvironment.type} environment (${parsed.branch}@${parsed.commitSha}).`,
+        };
+      } catch (err) {
+        const skip = mapPolicySkip(err, projectId);
+        if (skip) {
+          await this.emitWebhookSkipped(projectId, skip.reason, source, skip.result.message);
+          return skip.result;
+        }
+        throw err;
+      } finally {
+        if (this.agentPool) {
+          this.agentPool.releaseProjectLock(projectId, envLockSessionId);
+        }
+      }
+    }
+
+    // 1.0 GA: take the per-project lock so a webhook push during an in-flight
+    // UI / agent / MCP redeploy is rejected at the in-memory boundary instead
+    // of silently colliding at the DB layer. Without an agent pool (legacy
+    // tests, headless mode) we fall through unchanged.
+    const lockSessionId = `webhook-${source}-${projectId}-${nanoid(6)}`;
+    const lockAcquired = this.agentPool
+      ? this.agentPool.acquireProjectLock(projectId, lockSessionId)
+      : true;
+    if (!lockAcquired) {
+      const lock = this.agentPool?.getProjectLock(projectId);
+      const message = `Project is busy (held by ${lock?.sessionId ?? 'another session'}); webhook redeploy queued/skipped.`;
+      await this.emitWebhookSkipped(projectId, 'recovering', source, message);
+      return {
+        accepted: true,
+        projectId,
+        message,
+      };
+    }
+
+    try {
+      const redeploy = await this.pipeline.redeploy(projectId);
+      if (!redeploy.success) {
         return {
           accepted: false,
           projectId,
-          message: deployResult.error ?? 'Environment deploy failed.',
+          message: redeploy.error ?? 'Redeploy failed.',
         };
       }
 
       return {
         accepted: true,
         projectId,
-        message: `Deploy triggered for ${targetEnvironment.type} environment (${parsed.branch}@${parsed.commitSha}).`,
+        message: `Redeploy triggered for ${parsed.branch}@${parsed.commitSha}.`,
       };
+    } catch (err) {
+      const skip = mapPolicySkip(err, projectId);
+      if (skip) {
+        await this.emitWebhookSkipped(projectId, skip.reason, source, skip.result.message);
+        return skip.result;
+      }
+      throw err;
+    } finally {
+      if (this.agentPool) {
+        this.agentPool.releaseProjectLock(projectId, lockSessionId);
+      }
     }
+  }
 
-    const redeploy = await this.pipeline.redeploy(projectId);
-    if (!redeploy.success) {
-      return {
-        accepted: false,
+  /**
+   * Day 9 F5: emit `webhook:skipped` so the activity feed surfaces the
+   * silently-refused webhook. Without this, operators see "I pushed but
+   * nothing happened" with zero trace.
+   */
+  private async emitWebhookSkipped(
+    projectId: string,
+    reason: 'archived' | 'recovering' | 'circuit_broken',
+    source: WebhookSource,
+    message?: string,
+  ): Promise<void> {
+    try {
+      await this.events.emit('webhook:skipped', {
         projectId,
-        message: redeploy.error ?? 'Redeploy failed.',
-      };
+        reason,
+        source,
+        ...(message ? { message } : {}),
+      });
+    } catch (err) {
+      log.warn(
+        { err, projectId, reason, source },
+        'Failed to emit webhook:skipped event (non-fatal)',
+      );
     }
-
-    return {
-      accepted: true,
-      projectId,
-      message: `Redeploy triggered for ${parsed.branch}@${parsed.commitSha}.`,
-    };
   }
 
   private resolvePushEnvironment(

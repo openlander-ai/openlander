@@ -25,7 +25,7 @@ fixes the Dockerfile, and retries. No manual debugging.
 
 Key features:
 - AI auto-recovery (supports Gemini free tier, OpenAI, Ollama)
-- 60+ MCP tools (deploy directly from Cursor/Claude Code)
+- 70+ MCP actions (deploy directly from Cursor/Claude Code)
 - Traefik auto-routing with SSL
 - Blue-green deploys, rollback, health monitoring
 - SQLite — no external DB needed
@@ -90,7 +90,7 @@ error and retries with a fix.
 **What it does:**
 - Git URL → Docker build → Traefik routing → SSL — all automatic
 - If the build fails, AI figures out why and fixes it
-- 60+ MCP tools (deploy from Cursor/Claude Code)
+- 70+ MCP actions (deploy from Cursor/Claude Code)
 - Runs on a single VPS, SQLite, no external dependencies
 
 **What it doesn't do (yet):**
@@ -159,7 +159,7 @@ It works with:
 No AI? It still works — AI is optional.
 
 Tweet 5:
-60+ MCP tools built in.
+70+ MCP actions built in.
 Deploy directly from Cursor or Claude Code.
 No browser needed.
 
@@ -268,8 +268,8 @@ I'm actively maintaining this and fixing things fast.
 ```
 Coolify is great and more mature (51K stars, 4 years of development).
 The main difference is AI auto-recovery — when builds fail, OpenLander
-uses AI to analyze the error and fix it automatically. Also, 60+ MCP
-tools let you deploy directly from Cursor/Claude Code.
+uses AI to analyze the error and fix it automatically. Also, 70+ MCP
+actions let you deploy directly from Cursor/Claude Code.
 
 If you're happy with Coolify, there's no reason to switch.
 If the AI recovery sounds useful, give OpenLander a try.

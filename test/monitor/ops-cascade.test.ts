@@ -16,10 +16,11 @@ function createMockCtx() {
       listServices: vi.fn(() => [{ id: 'svc-postgres', name: 'postgres' }]),
       listServiceConnectionsByService: vi.fn((serviceId: string) => {
         if (serviceId === 'svc-postgres') {
+          // Post-0012: canonical field names are service_id_provider / service_id_consumer.
           return [
-            { service_id: 'svc-postgres', project_id: 'proj-1' },
-            { service_id: 'svc-postgres', project_id: 'proj-2' },
-            { service_id: 'svc-postgres', project_id: 'proj-3' },
+            { service_id_provider: 'svc-postgres', service_id_consumer: 'proj-1' },
+            { service_id_provider: 'svc-postgres', service_id_consumer: 'proj-2' },
+            { service_id_provider: 'svc-postgres', service_id_consumer: 'proj-3' },
           ];
         }
         return [];
@@ -93,8 +94,8 @@ describe('CascadeDetector', () => {
       mockCtx.db.listServiceConnectionsByService.mockImplementation((serviceId: string) => {
         if (serviceId === 'svc-postgres') {
           return [
-            { service_id: 'svc-postgres', project_id: 'proj-1' },
-            { service_id: 'svc-postgres', project_id: 'proj-2' },
+            { service_id_provider: 'svc-postgres', service_id_consumer: 'proj-1' },
+            { service_id_provider: 'svc-postgres', service_id_consumer: 'proj-2' },
           ];
         }
         return [];

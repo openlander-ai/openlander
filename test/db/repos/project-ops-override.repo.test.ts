@@ -17,7 +17,13 @@ describe('ProjectOpsOverrideRepo', () => {
     db = dbInstance.db;
     repo = new ProjectOpsOverrideRepo(db, sqlite);
     projectRepo = new ProjectRepo(db, sqlite);
-    migrate(db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    // 0009 drops parent tables; mirror src/db/index.ts:435-443 production path.
+    sqlite.exec('PRAGMA foreign_keys = OFF');
+    try {
+      migrate(db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    } finally {
+      sqlite.exec('PRAGMA foreign_keys = ON');
+    }
 
     projectRepo.createProject({
       id: 'proj-1',

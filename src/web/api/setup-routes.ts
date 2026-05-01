@@ -8,6 +8,7 @@ import type { LLMConfig } from '../../llm/index.js';
 import type { LLMProviderType } from '../../llm/providers.js';
 import { LLM_PROVIDERS } from '../../llm/providers.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { isAuthenticated } from '../middleware/auth.js';
 import { createCloudflareSetupRoutes } from './setup/cloudflare-routes.js';
 import { createGithubSetupRoutes } from './setup/github-routes.js';
 import { createMcpSetupRoutes } from './setup/mcp-routes.js';
@@ -101,6 +102,19 @@ export function createSetupRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   api.get('/setup/status', async (c) => {
+    const hasPassword = ctx.db.isPasswordSet();
+
+    // Day 14 follow-up to Day 13 M5: short-circuit anonymous calls before
+    // we even hit Docker / Traefik / config. Once a password is set the
+    // unauthenticated UI only needs to know `hasPassword` so it can render
+    // the login form — leaking docker state, LLM provider/model, or
+    // GitHub username is the recon primitive we want to remove. Returning
+    // a constant shape (no `ready: true|false` bit either) also denies the
+    // attacker a "is this install fully configured yet?" signal.
+    if (hasPassword && !isAuthenticated(c)) {
+      return c.json({ ok: true, hasPassword: true });
+    }
+
     const [dockerStatus, traefikOk] = await Promise.all([
       ctx.docker.status(),
       ctx.traefik.isRunning().catch(() => false),
@@ -109,7 +123,6 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     const config = loadConfig();
     const dockerOk = dockerStatus.state === 'running';
     const llmStatus = getLlmRuntimeStatus(config, ctx.llmVerified);
-    const hasPassword = ctx.db.isPasswordSet();
 
     const ready = dockerOk && hasPassword;
 

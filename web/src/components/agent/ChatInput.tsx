@@ -62,7 +62,7 @@ export function ChatInput({ onSend, isStreaming, onAbort }: ChatInputProps) {
         placeholder={isStreaming ? 'Agent is thinking...' : 'Send a message...'}
         rows={1}
         className={cn(
-          'flex-1 resize-none rounded-lg border border-border bg-bg-app px-3 py-2 text-sm text-primary-ol placeholder:text-muted-ol',
+          'flex-1 resize-none rounded-lg border border-border bg-bg-app px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground',
           'focus:outline-none focus:ring-1 focus:ring-border',
           'disabled:opacity-50 disabled:cursor-not-allowed',
         )}
@@ -84,7 +84,7 @@ export function ChatInput({ onSend, isStreaming, onAbort }: ChatInputProps) {
             'shrink-0 h-9 w-9 rounded-lg flex items-center justify-center transition-colors',
             canSend
               ? 'bg-agent text-white hover:bg-agent/90'
-              : 'bg-bg-subtle text-muted-ol cursor-not-allowed',
+              : 'bg-bg-subtle text-muted-foreground cursor-not-allowed',
           )}
         >
           <ArrowUp className="h-4 w-4" />

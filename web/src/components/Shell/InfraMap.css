@@ -1,0 +1,455 @@
+/*
+ * InfraMap — v5 design parity.
+ *
+ * Custom CSS matching the topology strip in
+ * .omc/analysis/openlander-design-v5/.../styles.css. The previous
+ * React Flow-driven implementation is gone; this stylesheet now
+ * carries the entire visual grammar.
+ */
+
+/* ── Strip frame ──────────────────────────────────────────────────── */
+.topology-strip {
+  background: var(--ol-panel);
+  border: 1px solid var(--ol-border-subtle);
+  border-radius: 10px;
+  padding: 10px 14px 12px;
+  position: relative;
+  overflow: visible;
+}
+.topology-strip.empty {
+  padding: 12px 16px;
+}
+
+.topology-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.topology-eyebrow-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--ol-fg-subtle);
+}
+.topology-eyebrow-meta {
+  font-size: 11px;
+  color: var(--ol-fg-muted);
+}
+.topology-muted {
+  color: var(--ol-fg-muted);
+}
+.topology-mono {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 11.5px;
+}
+.topology-demo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: color-mix(in oklch, var(--ol-warning) 14%, transparent);
+  color: var(--ol-warning);
+}
+
+/* ── Health summary ───────────────────────────────────────────────── */
+.health-summary {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 10px;
+  font-size: 11.5px;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.health-summary.all-good {
+  color: var(--ol-success);
+}
+.health-summary-item {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--ol-fg-muted);
+}
+.health-summary-item.h-crashed {
+  color: var(--ol-error);
+}
+.health-summary-item.h-restarting,
+.health-summary-item.h-degraded {
+  color: var(--ol-warning);
+}
+
+.health-pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ol-success);
+  display: inline-block;
+}
+.health-pip.healthy {
+  background: var(--ol-success);
+}
+.health-pip.degraded,
+.health-pip.restarting {
+  background: var(--ol-warning);
+}
+.health-pip.crashed {
+  background: var(--ol-error);
+}
+.health-pip.starting {
+  background: var(--ol-primary);
+}
+.health-pip.stopped,
+.health-pip.unknown,
+.health-pip.recovering,
+.health-pip.running {
+  background: var(--ol-fg-subtle);
+}
+
+/* ── Empty / Lonely ───────────────────────────────────────────────── */
+.empty-strip-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+.empty-strip-pip {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--ol-panel-2);
+  border: 1px dashed var(--ol-border-strong);
+  display: grid;
+  place-items: center;
+  color: var(--ol-fg-subtle);
+}
+
+.lonely-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.lonely-hint {
+  font-size: 12px;
+  /* v5 spec (styles.css `.lonely-hint`): cap hint width so long copy
+     wraps before reaching card edge. */
+  max-width: 360px;
+}
+
+/* ── Standard flow ─────────────────────────────────────────────────── */
+.topology-flow {
+  position: relative;
+  min-height: 56px;
+}
+.topology-flow-row {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 1;
+}
+.topology-edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  overflow: visible;
+}
+.topo-edge {
+  fill: none;
+  stroke: var(--ol-border-strong);
+  stroke-width: 1.25;
+  opacity: 0.65;
+}
+.topo-edge-alert {
+  stroke: var(--ol-error);
+  opacity: 0.75;
+  stroke-dasharray: 4 3;
+  animation: ol-edge-flow 1.6s linear infinite;
+}
+@keyframes ol-edge-flow {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+/* ── Node ─────────────────────────────────────────────────────────── */
+.topology-node {
+  position: relative;
+}
+.topology-node-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px 6px 8px;
+  border: 1px solid var(--ol-border-subtle);
+  background: var(--ol-panel-2);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    transform 120ms ease,
+    box-shadow 120ms ease;
+  color: inherit;
+  font: inherit;
+}
+.topology-node-button:hover {
+  border-color: var(--ol-border-strong);
+  transform: translateY(-1px);
+}
+.topology-node-button:focus-visible {
+  outline: none;
+  border-color: var(--ol-primary);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--ol-primary) 30%, transparent);
+}
+.topology-node.active .topology-node-button {
+  border-color: var(--ol-primary);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--ol-primary) 25%, transparent);
+}
+.topology-node.dense .topology-node-button {
+  padding: 5px 9px 5px 7px;
+}
+
+.topology-node-disk {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--ol-fg-subtle);
+}
+.topology-node-disk.h-healthy {
+  background: var(--ol-success);
+}
+.topology-node-disk.h-degraded,
+.topology-node-disk.h-restarting {
+  background: var(--ol-warning);
+}
+.topology-node-disk.h-crashed {
+  background: var(--ol-error);
+}
+.topology-node-disk.h-starting {
+  background: var(--ol-primary);
+}
+.topology-node-disk.h-stopped,
+.topology-node-disk.h-recovering,
+.topology-node-disk.h-unknown,
+.topology-node-disk.h-running {
+  background: var(--ol-fg-subtle);
+}
+.topology-node-disk.pulse::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0.55;
+  animation: topo-node-pulse 1.6s ease-out infinite;
+}
+@keyframes topo-node-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.topology-node-agent {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ol-primary);
+  color: white;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--ol-panel);
+}
+.topology-node-agent svg {
+  width: 7px;
+  height: 7px;
+}
+
+.topology-node-label {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 12px;
+  color: var(--ol-fg);
+}
+.topology-node-status {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--ol-panel);
+}
+.topology-node-status.h-degraded,
+.topology-node-status.h-restarting {
+  color: var(--ol-warning);
+}
+.topology-node-status.h-crashed {
+  color: var(--ol-error);
+}
+.topology-node-status.h-starting {
+  color: var(--ol-primary);
+}
+
+/* ── Popover ──────────────────────────────────────────────────────── */
+.topology-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  min-width: 260px;
+  max-width: 320px;
+  padding: 10px 12px;
+  border: 1px solid var(--ol-border-strong);
+  background: var(--ol-panel);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px -8px color-mix(in oklch, black 30%, transparent);
+  pointer-events: none;
+  animation: ol-popover-in 0.12s ease-out both;
+}
+@keyframes ol-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.popover-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--ol-border-subtle);
+  margin-bottom: 6px;
+}
+.popover-pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ol-success);
+}
+.popover-pip.h-crashed {
+  background: var(--ol-error);
+}
+.popover-pip.h-degraded,
+.popover-pip.h-restarting {
+  background: var(--ol-warning);
+}
+.popover-pip.h-starting {
+  background: var(--ol-primary);
+}
+.popover-pip.h-stopped,
+.popover-pip.h-recovering,
+.popover-pip.h-running,
+.popover-pip.h-unknown {
+  background: var(--ol-fg-subtle);
+}
+.popover-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ol-fg);
+}
+.popover-kind {
+  font-size: 11px;
+}
+.popover-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11.5px;
+  padding: 2px 0;
+}
+.popover-row b {
+  color: var(--ol-fg);
+  font-weight: 600;
+}
+.popover-image {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ol-fg);
+}
+.popover-tabular {
+  font-variant-numeric: tabular-nums;
+  color: var(--ol-fg);
+}
+.popover-agent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--ol-primary) 10%, transparent);
+  color: var(--ol-fg);
+  font-size: 11.5px;
+}
+.popover-agent-time {
+  font-size: 10.5px;
+  margin-left: auto;
+}
+.popover-cta {
+  margin-top: 6px;
+  font-size: 10.5px;
+  text-align: right;
+}
+
+/* ── Dense layout (>8 services) ───────────────────────────────────── */
+.topology-strip.dense .topology-lanes {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  row-gap: 8px;
+}
+.topology-lane {
+  display: contents;
+}
+.topology-lane .lane-label {
+  align-self: center;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--ol-fg-subtle);
+  padding-right: 12px;
+}
+.topology-lane .lane-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .topology-node-disk.pulse::after {
+    animation: none;
+    opacity: 0.55;
+  }
+  .topo-edge-alert {
+    animation: none;
+  }
+  .topology-popover {
+    animation: none;
+  }
+}

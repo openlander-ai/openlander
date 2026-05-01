@@ -10,80 +10,36 @@ import {
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 
-export const projects = sqliteTable(
-  'projects',
-  {
-    id: text('id').primaryKey(),
-    name: text('name').notNull().unique(),
-    repo_url: text('repo_url'),
-    branch: text('branch').default('main'),
-    status: text('status', {
-      enum: ['running', 'stopped', 'building', 'error', 'recovering'],
-    }).default('stopped'),
-    visibility: text('visibility', {
-      enum: ['internal', 'quick-share', 'shared', 'production'],
-    }).default('internal'),
-    assigned_port: integer('assigned_port').unique(),
-    container_id: text('container_id'),
-    image_tag: text('image_tag'),
-    previous_image_tag: text('previous_image_tag'),
-    public_url: text('public_url'),
-    parent_project_id: text('parent_project_id').references((): AnySQLiteColumn => projects.id, {
-      onDelete: 'cascade',
-    }),
-    dockerfile_path: text('dockerfile_path').default('Dockerfile'),
-    docker_target: text('docker_target'),
-    build_context: text('build_context'),
-    build_method: text('build_method', { enum: ['dockerfile', 'compose'] }),
-    source: text('source').notNull().default('git'),
-    image_url: text('image_url'),
-    image_cmd: text('image_cmd'),
-    container_port: integer('container_port'),
-    pending_fix: text('pending_fix'),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
-    archived_at: text('archived_at'),
-    deploy_lock_session: text('deploy_lock_session'),
-    deploy_lock_at: text('deploy_lock_at'),
-    access_code: text('access_code'),
-    access_code_iv: text('access_code_iv'),
-    is_preview: integer('is_preview').default(0),
-    pr_number: integer('pr_number'),
-    project_type: text('project_type', { enum: ['web', 'worker'] })
-      .notNull()
-      .default('web'),
-    health_check_strategy: text('health_check_strategy', { enum: ['http', 'tcp', 'exec', 'none'] }),
-    health_check_path: text('health_check_path'),
-    server_id: text('server_id').notNull().default('local'),
-  },
-  (table) => [
-    check(
-      'projects_status_check',
-      sql`${table.status} IN ('running', 'stopped', 'building', 'error', 'recovering')`,
-    ),
-    check(
-      'projects_visibility_check',
-      sql`${table.visibility} IN ('internal', 'quick-share', 'shared', 'production')`,
-    ),
-    check('projects_build_method_check', sql`${table.build_method} IN ('dockerfile', 'compose')`),
-    check('projects_is_preview_check', sql`${table.is_preview} IN (0, 1)`),
-    check('projects_project_type_check', sql`${table.project_type} IN ('web', 'worker')`),
-    check(
-      'projects_health_check_strategy_check',
-      sql`${table.health_check_strategy} IN ('http', 'tcp', 'exec', 'none')`,
-    ),
-    check('projects_source_check', sql`${table.source} IN ('git', 'image')`),
-    index('idx_projects_parent').on(table.parent_project_id),
-  ],
-);
+/**
+ * Post-0012 `projects` table — group-only shape.
+ *
+ * 25 deprecated deployable columns dropped in migration 0012 Phase G.
+ * Final shape = 8 group columns + 2 deploy-lock columns (kept on projects
+ * per ADR §"Deploy-lock relocation" option (c); 1.2 follow-up moves locks
+ * to a dedicated table).
+ */
+export const projects = sqliteTable('projects', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  repo_url: text('repo_url'),
+  branch: text('branch').default('main'),
+  archived_at: text('archived_at'),
+  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  server_id: text('server_id').notNull().default('local'),
+  // Deploy lock (group-scoped — see ADR §"Deploy-lock relocation").
+  deploy_lock_session: text('deploy_lock_session'),
+  deploy_lock_at: text('deploy_lock_at'),
+});
 
 export const environments = sqliteTable(
   'environments',
   {
     id: text('id').primaryKey(),
-    project_id: text('project_id')
+    /** Post-0012: canonical FK is service_id; legacy project_id dropped. */
+    service_id: text('service_id')
       .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
+      .references(() => services.id, { onDelete: 'cascade' }),
     type: text('type', { enum: ['production', 'development'] }).notNull(),
     branch: text('branch').notNull().default('main'),
     status: text('status', { enum: ['running', 'stopped', 'building', 'error', 'idle'] }).default(
@@ -105,8 +61,8 @@ export const environments = sqliteTable(
       'environments_status_check',
       sql`${table.status} IN ('running', 'stopped', 'building', 'error', 'idle')`,
     ),
-    uniqueIndex('environments_project_type_unique').on(table.project_id, table.type),
-    index('idx_environments_project').on(table.project_id),
+    uniqueIndex('environments_service_type_unique').on(table.service_id, table.type),
+    index('idx_environments_service').on(table.service_id),
   ],
 );
 
@@ -114,9 +70,17 @@ export const envVars = sqliteTable(
   'env_vars',
   {
     id: text('id').primaryKey(),
+    /**
+     * Group-scoped (project_id is the group id). Compose stacks share their
+     * parent group's env_vars at deploy time (src/pipeline/compose.ts) — this
+     * column stays at the group level. env_vars is one of the few tables
+     * that intentionally stays group-scoped (§6.1 group-scoped FK matrix).
+     */
     project_id: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
+    /** Optional service-scoped override; NULL = group-shared. */
+    service_id: text('service_id').references(() => services.id, { onDelete: 'cascade' }),
     environment_id: text('environment_id').references(() => environments.id, {
       onDelete: 'cascade',
     }),
@@ -135,9 +99,10 @@ export const deployLogs = sqliteTable(
   'deploy_logs',
   {
     id: text('id').primaryKey(),
-    project_id: text('project_id')
+    /** Post-0012: deployable-scoped FK; legacy project_id dropped. */
+    service_id: text('service_id')
       .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
+      .references(() => services.id, { onDelete: 'cascade' }),
     environment_id: text('environment_id').references(() => environments.id, {
       onDelete: 'cascade',
     }),
@@ -155,7 +120,7 @@ export const deployLogs = sqliteTable(
   (table) => [
     check('deploy_logs_status_check', sql`${table.status} IN ('success', 'failed', 'cancelled')`),
     check('deploy_logs_trigger_check', sql`${table.trigger} IN ('chat', 'webhook', 'api')`),
-    index('idx_deploy_logs_project').on(table.project_id),
+    index('idx_deploy_logs_service').on(table.service_id),
     index('idx_deploy_logs_environment').on(table.environment_id),
   ],
 );
@@ -184,9 +149,10 @@ export const domainMappings = sqliteTable(
   'domain_mappings',
   {
     id: text('id').primaryKey(),
-    project_id: text('project_id')
+    /** Post-0012: deployable-scoped FK; legacy project_id dropped. */
+    service_id: text('service_id')
       .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
+      .references(() => services.id, { onDelete: 'cascade' }),
     domain: text('domain').notNull().unique(),
     cloudflare_zone_id: text('cloudflare_zone_id'),
     cloudflare_dns_record_id: text('cloudflare_dns_record_id'),
@@ -195,7 +161,7 @@ export const domainMappings = sqliteTable(
   },
   (table) => [
     check('domain_mappings_status_check', sql`${table.status} IN ('active', 'pending', 'error')`),
-    index('idx_domain_mappings_project').on(table.project_id),
+    index('idx_domain_mappings_service').on(table.service_id),
   ],
 );
 
@@ -255,39 +221,120 @@ export const globalSecrets = sqliteTable(
   (table) => [index('idx_global_secrets_key').on(table.key)],
 );
 
+/**
+ * Post-0012 `services` table — unified deployable + managed services.
+ *
+ * Phase C of migration 0012 dropped: type, image, port, env_vars,
+ * deploy_lock_session, deploy_lock_at. credentials STAYS through 1.0
+ * per ADR §"services legacy column rename strategy" (deferred to 1.1
+ * paired with managed-services secret refactor).
+ */
 export const services = sqliteTable(
   'services',
   {
     id: text('id').primaryKey(),
+    project_id: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
     name: text('name').notNull().unique(),
-    type: text('type').notNull(),
-    image: text('image').notNull(),
+    kind: text('kind', {
+      enum: [
+        'git',
+        'image',
+        'compose',
+        'compose-child',
+        'postgres',
+        'mysql',
+        'redis',
+        'mongo',
+        'minio',
+      ],
+    }).notNull(),
+    parent_service_id: text('parent_service_id').references((): AnySQLiteColumn => services.id, {
+      onDelete: 'cascade',
+    }),
+    // Deployable-specific (NULL for managed)
     status: text('status', { enum: ['running', 'stopped', 'error'] }).default('stopped'),
+    visibility: text('visibility'),
+    assigned_port: integer('assigned_port').unique(),
     container_id: text('container_id'),
-    container_name: text('container_name').notNull().unique(),
-    port: integer('port').notNull(),
-    env_vars: text('env_vars'),
+    container_name: text('container_name'),
+    container_port: integer('container_port'),
+    image_tag: text('image_tag'),
+    previous_image_tag: text('previous_image_tag'),
+    public_url: text('public_url'),
+    dockerfile_path: text('dockerfile_path').default('Dockerfile'),
+    docker_target: text('docker_target'),
+    build_context: text('build_context'),
+    build_method: text('build_method'),
+    source: text('source').notNull().default('git'),
+    image_url: text('image_url'),
+    image_cmd: text('image_cmd'),
+    pending_fix: text('pending_fix'),
+    access_code: text('access_code'),
+    access_code_iv: text('access_code_iv'),
+    is_preview: integer('is_preview').default(0),
+    pr_number: integer('pr_number'),
+    project_type: text('project_type').notNull().default('web'),
+    health_check_strategy: text('health_check_strategy'),
+    health_check_path: text('health_check_path'),
+    recovering_started_at: text('recovering_started_at'),
+    /**
+     * @deprecated 1.1 — drops paired with managed-services secret refactor.
+     * Kept through 1.0 because managed services today carry encrypted
+     * credentials inline; replacement is `service_connections.auto_injected_env_keys`
+     * with secret-files-backed values.
+     */
     credentials: text('credentials'),
+    // Common
     created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    archived_at: text('archived_at'),
     server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
-    check('services_status_check', sql`${table.status} IN ('running', 'stopped', 'error')`),
-    index('idx_services_type').on(table.type),
+    check(
+      'services_kind_check',
+      sql`${table.kind} IN ('git', 'image', 'compose', 'compose-child', 'postgres', 'mysql', 'redis', 'mongo', 'minio')`,
+    ),
+    index('idx_services_project').on(table.project_id),
+    index('idx_services_kind').on(table.kind),
+    index('idx_services_parent').on(table.parent_service_id),
   ],
 );
 
+/**
+ * Service kind enum — see plan §6.3. Used by callers that branch on
+ * deployable vs managed, or compose vs compose-child.
+ */
+export type ServiceKind =
+  | 'git'
+  | 'image'
+  | 'compose'
+  | 'compose-child'
+  | 'postgres'
+  | 'mysql'
+  | 'redis'
+  | 'mongo'
+  | 'minio';
+
+/**
+ * Post-0012 service_connections — consumer/provider model.
+ *
+ * Renamed from service_id_app/service_id_db → service_id_consumer/
+ * service_id_provider in migration 0012 Phase D. Legacy project_id +
+ * service_id columns dropped in the same phase.
+ */
 export const serviceConnections = sqliteTable(
   'service_connections',
   {
     id: text('id')
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
-    project_id: text('project_id')
+    service_id_consumer: text('service_id_consumer')
       .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
-    service_id: text('service_id')
+      .references(() => services.id, { onDelete: 'cascade' }),
+    service_id_provider: text('service_id_provider')
       .notNull()
       .references(() => services.id, { onDelete: 'cascade' }),
     environment_id: text('environment_id').references(() => environments.id, {
@@ -300,9 +347,12 @@ export const serviceConnections = sqliteTable(
     server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
-    uniqueIndex('service_connections_project_service_idx').on(table.project_id, table.service_id),
-    index('idx_service_connections_project').on(table.project_id),
-    index('idx_service_connections_service').on(table.service_id),
+    uniqueIndex('service_connections_consumer_provider_idx').on(
+      table.service_id_consumer,
+      table.service_id_provider,
+    ),
+    index('idx_service_connections_consumer').on(table.service_id_consumer),
+    index('idx_service_connections_provider').on(table.service_id_provider),
   ],
 );
 
@@ -312,9 +362,10 @@ export const runtimeIncidents = sqliteTable(
     id: text('id')
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
-    project_id: text('project_id')
+    /** Post-0012: deployable-scoped FK; legacy project_id dropped. */
+    service_id: text('service_id')
       .notNull()
-      .references(() => projects.id, { onDelete: 'cascade' }),
+      .references(() => services.id, { onDelete: 'cascade' }),
     environment_id: text('environment_id').references(() => environments.id),
     category: text('category').notNull(),
     exit_code: integer('exit_code'),
@@ -331,7 +382,7 @@ export const runtimeIncidents = sqliteTable(
     server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
-    index('idx_runtime_incidents_project').on(table.project_id),
+    index('idx_runtime_incidents_service').on(table.service_id),
     index('idx_runtime_incidents_resolved').on(table.resolved),
   ],
 );
@@ -340,32 +391,41 @@ export const deploy_configs = sqliteTable(
   'deploy_configs',
   {
     id: text('id').primaryKey(),
-    project_id: text('project_id')
+    /** Post-0012: deployable-scoped FK; legacy project_id dropped. */
+    service_id: text('service_id')
       .notNull()
       .unique()
-      .references(() => projects.id, { onDelete: 'cascade' }),
+      .references(() => services.id, { onDelete: 'cascade' }),
     config_json: text('config_json').notNull(),
     config_version: integer('config_version').notNull().default(1),
     created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
-  (table) => [index('idx_deploy_configs_project').on(table.project_id)],
+  (table) => [index('idx_deploy_configs_service').on(table.service_id)],
 );
 
-export const project_ops_overrides = sqliteTable(
-  'project_ops_overrides',
+/**
+ * Post-0012 service_ops_overrides — service-scoped overrides.
+ * Renamed from project_ops_overrides in 0009; FK fully repointed in 0012.
+ */
+export const serviceOpsOverrides = sqliteTable(
+  'service_ops_overrides',
   {
     id: text('id').primaryKey(),
-    project_id: text('project_id')
+    /** Post-0012: deployable-scoped FK; legacy project_id dropped. */
+    service_id: text('service_id')
       .notNull()
       .unique()
-      .references(() => projects.id, { onDelete: 'cascade' }),
+      .references(() => services.id, { onDelete: 'cascade' }),
     overrides_json: text('overrides_json').notNull(),
     created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
-  (table) => [index('idx_project_ops_overrides_project').on(table.project_id)],
+  (table) => [index('idx_service_ops_overrides_service').on(table.service_id)],
 );
+
+/** Back-compat alias for the renamed table; existing repo references this name. */
+export const project_ops_overrides = serviceOpsOverrides;
 
 export const secretFiles = sqliteTable(
   'secret_files',
@@ -597,12 +657,17 @@ export const circuitBreakerState = sqliteTable(
   ],
 );
 
+/**
+ * Post-0012 project_dependencies — service-scoped only.
+ *
+ * Phase E dropped legacy source_project_id, target_project_id, and the
+ * additive target_managed_service_id was promoted to target_service_id.
+ */
 export const projectDependencies = sqliteTable(
   'project_dependencies',
   {
     id: text('id').notNull().primaryKey(),
-    source_project_id: text('source_project_id').notNull(),
-    target_project_id: text('target_project_id'),
+    source_service_id: text('source_service_id').notNull(),
     target_service_id: text('target_service_id'),
     dependency_type: text('dependency_type', {
       enum: ['database', 'api', 'cache', 'queue', 'storage', 'custom'],
@@ -615,11 +680,35 @@ export const projectDependencies = sqliteTable(
     created_at: text('created_at').notNull().default(''),
   },
   (table) => [
-    index('idx_project_dependencies_source').on(table.source_project_id),
-    index('idx_project_dependencies_target_project').on(table.target_project_id),
+    index('idx_project_dependencies_source').on(table.source_service_id),
     index('idx_project_dependencies_target_service').on(table.target_service_id),
   ],
 );
+
+/**
+ * Migration 0009 audit table — append-only log of every source-row -> target-row
+ * remap performed by the project/service split. Plan §6.3 / §6.5.
+ *
+ * Post-0012 the table accumulates 45 additional rows recording column drops,
+ * FK repoints, and UNIQUE rebuilds done by 0012 Phases C/D/E/G/H.
+ */
+export const migration0009Audit = sqliteTable('migration_0009_audit', {
+  phase: text('phase').notNull(),
+  source_table: text('source_table').notNull(),
+  source_id: text('source_id').notNull(),
+  target_table: text('target_table').notNull(),
+  target_id: text('target_id').notNull(),
+  kind: text('kind'),
+  created_at: integer('created_at').notNull(),
+});
+
+export type Migration0009AuditRow = typeof migration0009Audit.$inferSelect;
+export type NewMigration0009Audit = typeof migration0009Audit.$inferInsert;
+
+export type ServiceTableRow = typeof services.$inferSelect;
+export type NewServiceTableRow = typeof services.$inferInsert;
+export type ProjectTableRow = typeof projects.$inferSelect;
+export type NewProjectTableRow = typeof projects.$inferInsert;
 
 export type ProjectDependencyRow = typeof projectDependencies.$inferSelect;
 export type NewProjectDependency = typeof projectDependencies.$inferInsert;
@@ -635,6 +724,63 @@ export type OpsIncidentEventRow = typeof opsIncidentEvents.$inferSelect;
 export type NewOpsIncidentEvent = typeof opsIncidentEvents.$inferInsert;
 export type CircuitBreakerRow = typeof circuitBreakerState.$inferSelect;
 export type NewCircuitBreaker = typeof circuitBreakerState.$inferInsert;
+
+/**
+ * Phase E_NEW Task 5 — time-series metrics for v4 service detail
+ * sparkline. Recorded by the existing stats collection path (one row
+ * per service per sample interval) and aggregated on read by
+ * `GET /api/services/:id/metrics`. Independent from `service_stats`
+ * (which is a single row per service representing the most-recent
+ * snapshot) because the v4 sparkline needs historical retention.
+ */
+export const serviceMetrics = sqliteTable(
+  'service_metrics',
+  {
+    service_id: text('service_id')
+      .notNull()
+      .references(() => services.id, { onDelete: 'cascade' }),
+    /** Wall-clock millisecond timestamp of the sample (epoch ms). */
+    recorded_at: integer('recorded_at').notNull(),
+    /** CPU percent, 0–100*N where N is core count. */
+    cpu: real('cpu').notNull().default(0),
+    /** Memory usage in MB. */
+    mem: real('mem').notNull().default(0),
+    /** Requests-per-second since the last sample. */
+    req: real('req').notNull().default(0),
+    /** Error rate as percent (e.g. 0.4 = 0.4%). */
+    err: real('err').notNull().default(0),
+    /** p95 latency in ms — optional, for the aggregate read field. */
+    p95_latency_ms: real('p95_latency_ms'),
+    /** Per-sample request count, for the aggregate totalRequests read field. */
+    request_count: integer('request_count').notNull().default(0),
+  },
+  (table) => [
+    index('idx_service_metrics_service_recorded').on(table.service_id, table.recorded_at),
+  ],
+);
+
+export type ServiceMetricRow = typeof serviceMetrics.$inferSelect;
+export type NewServiceMetric = typeof serviceMetrics.$inferInsert;
+
+/**
+ * Phase E_NEW Task 7 — generic key/value settings table for the
+ * notifications webhook (single-row keyed on `'notification_webhook'`)
+ * and any future single-tenant configuration that doesn't merit a
+ * dedicated table. Value is opaque JSON text — callers parse against
+ * their own schema.
+ */
+export const settings = sqliteTable(
+  'settings',
+  {
+    key: text('key').primaryKey(),
+    value: text('value').notNull(),
+    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (_table) => [],
+);
+
+export type SettingsRow = typeof settings.$inferSelect;
+export type NewSetting = typeof settings.$inferInsert;
 
 export const activityLog = sqliteTable(
   'activity_log',
@@ -662,6 +808,27 @@ export const activityLog = sqliteTable(
 export type ActivityLogRow = typeof activityLog.$inferSelect;
 export type NewActivityLog = typeof activityLog.$inferInsert;
 
+/**
+ * Per-session audit log for the MCP transport. One row per closed session;
+ * powers `mcp_disconnected` synthesis on the v4 /api/activity feed (live
+ * sessions are read directly from the in-memory snapshot).
+ */
+export const mcpSessionLog = sqliteTable(
+  'mcp_session_log',
+  {
+    id: text('id').primaryKey(),
+    session_id: text('session_id').notNull(),
+    transport: text('transport', { enum: ['http', 'sse'] }).notNull(),
+    connected_at: integer('connected_at').notNull(),
+    disconnected_at: integer('disconnected_at').notNull(),
+    client_info: text('client_info'),
+  },
+  (table) => [index('idx_mcp_session_log_disconnected_at').on(table.disconnected_at)],
+);
+
+export type McpSessionLogRow = typeof mcpSessionLog.$inferSelect;
+export type NewMcpSessionLog = typeof mcpSessionLog.$inferInsert;
+
 export const drizzleSchema = {
   projects,
   environments,
@@ -676,6 +843,7 @@ export const drizzleSchema = {
   serviceConnections,
   runtimeIncidents,
   deploy_configs,
+  serviceOpsOverrides,
   secretFiles,
   deployPlans,
   auth,
@@ -686,5 +854,9 @@ export const drizzleSchema = {
   opsIncidentEvents,
   circuitBreakerState,
   projectDependencies,
+  serviceMetrics,
+  settings,
   activityLog,
+  mcpSessionLog,
+  migration0009Audit,
 };

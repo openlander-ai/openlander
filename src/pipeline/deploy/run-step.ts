@@ -5,6 +5,13 @@ import type { Docker } from '../docker.js';
 import { containerName as projectContainerName } from '../helpers.js';
 import { allocatePort, clearPortScanCache, releasePortReservation } from '../port.js';
 import { buildTraefikLabels, getEnvironmentProjectHostname } from '../traefik.js';
+import {
+  deserializeConfig,
+  loadResourceLimitsForProject,
+  serializeConfig,
+  CONFIG_VERSION,
+} from '../config-snapshot.js';
+import { buildResourceLimitConfig } from '../docker/types.js';
 
 export interface RunConfig {
   imageTag: string;
@@ -38,6 +45,20 @@ export class ContainerRunner {
       envType,
     );
 
+    let resourceLimits = loadResourceLimitsForProject(this.db, config.projectId);
+    if (!resourceLimits) {
+      resourceLimits = buildResourceLimitConfig('small', null);
+      const configRow = this.db.loadDeployConfig(config.projectId);
+      const existingSnapshot = configRow
+        ? (deserializeConfig(configRow.config_json)?.snapshot ?? {})
+        : {};
+      this.db.saveDeployConfig(
+        config.projectId,
+        serializeConfig({ ...existingSnapshot, resourceProfile: 'small' as const }),
+        CONFIG_VERSION,
+      );
+    }
+
     const containerName = projectContainerName(config.containerName ?? config.projectName);
     await this.docker.safeRemoveContainer(containerName);
 
@@ -68,6 +89,7 @@ export class ContainerRunner {
           network: getPolicy(envType).networkName,
           secretFiles: config.secretFiles,
           restartPolicy: config.restartPolicy,
+          resourceLimits: resourceLimits ?? undefined,
         });
 
         releasePortReservation(port);

@@ -81,11 +81,13 @@ export function SecuritySettingsTab() {
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Key className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-sm font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-foreground">
             {t('settings.security.apiToken')}
           </h2>
         </div>
-        <p className="text-xs font-body text-muted-ol">{t('settings.security.apiTokenDesc')}</p>
+        <p className="text-xs font-body text-muted-foreground">
+          {t('settings.security.apiTokenDesc')}
+        </p>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-4">
           <div className="flex items-center gap-3">
@@ -100,7 +102,7 @@ export function SecuritySettingsTab() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 text-muted-ol hover:text-primary-ol"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                 onClick={() => setShowToken(!showToken)}
               >
                 {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -132,18 +134,18 @@ export function SecuritySettingsTab() {
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Lock className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-sm font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-foreground">
             {t('settings.security.changePassword')}
           </h2>
         </div>
-        <p className="text-xs font-body text-muted-ol">
+        <p className="text-xs font-body text-muted-foreground">
           {t('settings.security.changePasswordDesc')}
         </p>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4">
           <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-primary-ol">
+              <label className="text-sm font-medium text-foreground">
                 {t('settings.security.currentPassword')}
               </label>
               <Input
@@ -155,7 +157,7 @@ export function SecuritySettingsTab() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-primary-ol">
+              <label className="text-sm font-medium text-foreground">
                 {t('settings.security.newPassword')}
               </label>
               <Input
@@ -167,7 +169,7 @@ export function SecuritySettingsTab() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-primary-ol">
+              <label className="text-sm font-medium text-foreground">
                 {t('settings.security.confirmNewPassword')}
               </label>
               <Input

@@ -66,6 +66,8 @@ describe('ProjectHealthMonitor', () => {
     const db = {
       getProject,
       listProjects,
+      // PR 4.5: canonical-first reads need this helper.
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     } as unknown as Database;
     const events = {
       emit,

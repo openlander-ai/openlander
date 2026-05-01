@@ -5,6 +5,12 @@ import type { RuntimeSignal } from '../health/types.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { ProjectStateManager, ProjectStatus } from './project-state-manager.js';
 import { consumeMcpDeploy } from '../pipeline/auto-recovery.js';
+import {
+  checkRecoveryEligibility,
+  type EligibilityReason as PolicyEligibilityReason,
+  type RecoveryEligibilityContext,
+  type RecoveryTrigger,
+} from './recovery-policy.js';
 
 const log = createModuleLogger('recovery-coordinator');
 
@@ -17,21 +23,26 @@ function createFallbackStateManager(db: Database): Pick<ProjectStateManager, 'tr
   };
 }
 
-type EligibilityReason =
-  | 'project_not_found'
+/**
+ * Coordinator-layer reasons (config / operator / status). Infrastructure
+ * invariants (archived / stopped / lock / breaker / budget) come from
+ * {@link PolicyEligibilityReason} via recovery-policy.ts.
+ */
+type CoordinatorEligibilityReason =
   | `status_${string}`
-  | 'archived'
   | 'ai_disabled'
   | 'operator_suppressed'
-  | 'global_budget_exceeded'
-  | 'circuit_breaker_open'
   | 'incident_active';
+
+type EligibilityReason = CoordinatorEligibilityReason | PolicyEligibilityReason;
 
 interface ProjectSnapshot {
   name: string;
-  status: string;
+  status?: string | null;
   archived_at: string | null;
   container_id: string | null;
+  deploy_lock_session: string | null;
+  deploy_lock_at: string | null;
 }
 
 export interface EligibilityResult {
@@ -145,37 +156,8 @@ export class RecoveryCoordinator {
     log.info('RecoveryCoordinator stopped');
   }
 
-  checkEligibility(projectId: string): EligibilityResult {
-    const project = this.getProjectSnapshot(projectId);
-    if (!project) {
-      return { eligible: false, reason: 'project_not_found' };
-    }
-
-    if (project.status !== 'running' && project.status !== 'error') {
-      return { eligible: false, reason: `status_${project.status}` };
-    }
-
-    if (project.archived_at) {
-      return { eligible: false, reason: 'archived' };
-    }
-
-    if (!this.getConfig().ai.autoRecovery.enabled) {
-      return { eligible: false, reason: 'ai_disabled' };
-    }
-
-    if (this.isOperatorSuppressed(projectId)) {
-      return { eligible: false, reason: 'operator_suppressed' };
-    }
-
-    if (this.isGlobalBudgetExceeded()) {
-      return { eligible: false, reason: 'global_budget_exceeded' };
-    }
-
-    if (this.db.isCircuitBreakerOpen(projectId)) {
-      return { eligible: false, reason: 'circuit_breaker_open' };
-    }
-
-    return { eligible: true };
+  checkEligibility(projectId: string, trigger?: RecoveryTrigger): EligibilityResult {
+    return this.evaluateEligibility(projectId, trigger ?? 'container_failure');
   }
 
   suppressProject(projectId: string, durationMs: number): void {
@@ -225,22 +207,88 @@ export class RecoveryCoordinator {
   }
 
   shouldContinue(projectId: string): boolean {
+    const result = this.evaluateEligibility(projectId, 'continue_check');
+    return result.eligible;
+  }
+
+  /**
+   * Trigger-aware eligibility evaluation. Coordinator-specific gates (config
+   * flag, operator suppression, status whitelist) run first; infrastructure
+   * invariants (archived/lock/breaker/budget) come from the shared policy
+   * module so all entry points evaluate them identically.
+   *
+   * Used by checkEligibility (public, container/health/deploy triggers) and
+   * shouldContinue (continue_check trigger). Closes the U-P0-4 gap where
+   * shouldContinue did not consult the deploy lock.
+   */
+  private evaluateEligibility(projectId: string, trigger: RecoveryTrigger): EligibilityResult {
     const project = this.getProjectSnapshot(projectId);
-    if (!project || project.status !== 'running' || project.archived_at) {
-      return false;
+    if (!project) {
+      return { eligible: false, reason: 'project_not_found' };
     }
 
+    // PR 4.5: canonical-first read of status with `??` fallback to legacy
+    // `projects` column through migration 0012.
+    const deployable = this.db.getDeployableForProject(projectId);
+    const status = deployable?.status ?? project.status;
+
+    // Coordinator-specific status whitelist (depends on trigger).
+    // checkEligibility legacy behaviour: only running/error are eligible.
+    // shouldContinue legacy behaviour: only running is eligible (recovery may
+    // already have transitioned the project; recovery_in_progress handled by policy).
+    if (trigger === 'continue_check') {
+      if (status !== 'running' && status !== 'recovering') {
+        return { eligible: false, reason: `status_${status ?? 'unknown'}` };
+      }
+    } else {
+      if (status !== 'running' && status !== 'error') {
+        return { eligible: false, reason: `status_${status ?? 'unknown'}` };
+      }
+    }
+
+    if (project.archived_at) {
+      return { eligible: false, reason: 'archived' };
+    }
+
+    // Coordinator-only gates (no equivalent in shared policy).
     if (!this.getConfig().ai.autoRecovery.enabled) {
-      return false;
+      return { eligible: false, reason: 'ai_disabled' };
     }
 
     if (this.isOperatorSuppressed(projectId)) {
-      return false;
+      return { eligible: false, reason: 'operator_suppressed' };
     }
 
-    const hourAgo = Date.now() - 3_600_000;
-    this.llmCallTimestamps = this.llmCallTimestamps.filter((timestamp) => timestamp > hourAgo);
-    return this.llmCallTimestamps.length <= this.maxLlmCallsPerHour;
+    // Delegate the remaining infrastructure invariants (budget, breaker, lock)
+    // to the shared policy so all recovery entry points evaluate them identically.
+    const policyCtx: RecoveryEligibilityContext = {
+      db: this.db,
+      isCircuitBreakerOpen: (id) => this.db.isCircuitBreakerOpen(id),
+      isGlobalBudgetExceeded: () => this.isGlobalBudgetExceeded(),
+    };
+    const policyResult = checkRecoveryEligibility(projectId, trigger, policyCtx);
+    if (!policyResult.eligible) {
+      return { eligible: false, reason: policyResult.reason };
+    }
+
+    return { eligible: true };
+  }
+
+  /**
+   * Map a RuntimeSignal kind to the appropriate RecoveryTrigger so that
+   * eligibility is evaluated with the correct policy (e.g. health_degraded
+   * for probe/regression signals, container_failure for container events).
+   */
+  private static signalTrigger(kind: RuntimeSignal['kind']): RecoveryTrigger {
+    switch (kind) {
+      case 'probe_failed':
+      case 'post_deploy_regression':
+        return 'health_degraded';
+      case 'container_died':
+      case 'container_oom':
+      case 'container_missing':
+        return 'container_failure';
+    }
   }
 
   async ingestRuntimeSignal(signal: RuntimeSignal): Promise<void> {
@@ -255,7 +303,8 @@ export class RecoveryCoordinator {
     this.inFlightProjects.add(signal.projectId);
 
     try {
-      const result = this.checkEligibility(signal.projectId);
+      const trigger = RecoveryCoordinator.signalTrigger(signal.kind);
+      const result = this.checkEligibility(signal.projectId, trigger);
       if (!result.eligible) {
         await this.emitBlocked(signal.projectId, result.reason);
         return;
@@ -301,7 +350,7 @@ export class RecoveryCoordinator {
 
   private async handleHealthDegraded(payload: EventPayload['health:degraded']): Promise<void> {
     try {
-      const result = this.checkEligibility(payload.projectId);
+      const result = this.evaluateEligibility(payload.projectId, 'health_degraded');
       if (!result.eligible) {
         await this.emitBlocked(payload.projectId, result.reason);
         return;
@@ -309,38 +358,24 @@ export class RecoveryCoordinator {
 
       this.recordLlmCall();
 
-      // OpsAgent enqueue (non-critical — failure should not block status update)
-      try {
-        if (this.opsAgent) {
-          const project = this.getProjectSnapshot(payload.projectId);
-          this.opsAgent.enqueue({
-            type: 'deploy:crash',
-            payload: {
-              projectId: payload.projectId,
-              projectName: project?.name ?? payload.projectId,
-              containerId: project?.container_id ?? '',
-            },
-            timestamp: Date.now(),
-          });
-        }
-      } catch (enqueueErr) {
-        log.warn(
-          { err: enqueueErr, projectId: payload.projectId },
-          'Failed to enqueue to OpsAgent, continuing with recovery',
-        );
-      }
+      // Stage B: OpsAgent enqueue (non-critical)
+      this.enqueueOpsAgentForCrash(payload.projectId);
 
+      // Stage C: transition status — failure must abort before stage D so
+      // that recovery:started never fires on a project whose status was not
+      // transitioned (U-P0-2). Partial failure is surfaced via
+      // `recovery:degraded` so it is observable rather than silently swallowed.
       try {
         await this.transitionProjectStatus(payload.projectId, 'recovering', 'recovery-started');
       } catch (statusErr) {
-        log.warn(
-          { err: statusErr, projectId: payload.projectId },
-          'Failed to set status to recovering, continuing with recovery event',
-        );
+        await this.handleStageTransitionFailure(payload.projectId, statusErr, {
+          trigger: 'health:degraded',
+        });
+        return;
       }
 
+      // Stage D: emit recovery:started
       const correlationId = this.opsAgent ? undefined : payload.projectId;
-
       await this.events.emit('recovery:started', {
         projectId: payload.projectId,
         trigger: 'health:degraded',
@@ -362,7 +397,7 @@ export class RecoveryCoordinator {
       | EventPayload['container:missing'],
   ): Promise<void> {
     try {
-      const result = this.checkEligibility(payload.projectId);
+      const result = this.evaluateEligibility(payload.projectId, 'container_failure');
       if (!result.eligible) {
         const unhandledReasons: EligibilityReason[] = [
           'ai_disabled',
@@ -376,41 +411,20 @@ export class RecoveryCoordinator {
         return;
       }
 
-      // Stage B: OpsAgent enqueue (non-critical — failure should not block status update)
-      try {
-        if (this.opsAgent) {
-          const project = this.getProjectSnapshot(payload.projectId);
-          this.opsAgent.enqueue({
-            type: 'deploy:crash',
-            payload: {
-              projectId: payload.projectId,
-              projectName: project?.name ?? payload.projectId,
-              containerId: payload.containerId || project?.container_id || '',
-            },
-            timestamp: Date.now(),
-          });
-        }
-      } catch (enqueueErr) {
-        log.warn(
-          { err: enqueueErr, projectId: payload.projectId },
-          'Failed to enqueue to OpsAgent, continuing with recovery',
-        );
-      }
+      // Stage B: OpsAgent enqueue (non-critical)
+      this.enqueueOpsAgentForCrash(payload.projectId, payload.containerId || undefined);
 
-      // Stage C: Update status to recovering (critical — isolated so D still fires)
+      // Stage C: transition status — failure must abort before stage D
+      // (U-P0-2). Partial failure is surfaced via `recovery:degraded`.
       try {
         await this.transitionProjectStatus(payload.projectId, 'recovering', 'recovery-started');
       } catch (statusErr) {
-        log.warn(
-          { err: statusErr, projectId: payload.projectId },
-          'Failed to set status to recovering, continuing with recovery event',
-        );
+        await this.handleStageTransitionFailure(payload.projectId, statusErr, { trigger });
+        return;
       }
 
-      // Stage D: Emit recovery:started
-      // When OpsAgent is unavailable (null), use projectId as fallback correlationId
+      // Stage D: emit recovery:started
       const correlationId = this.opsAgent ? undefined : payload.projectId;
-
       await this.events.emit('recovery:started', {
         projectId: payload.projectId,
         trigger,
@@ -428,7 +442,7 @@ export class RecoveryCoordinator {
         return;
       }
 
-      const result = this.checkEligibility(payload.projectId);
+      const result = this.evaluateEligibility(payload.projectId, 'deploy_failed');
       if (!result.eligible) {
         await this.emitBlocked(payload.projectId, result.reason);
         return;
@@ -455,7 +469,7 @@ export class RecoveryCoordinator {
         return;
       }
 
-      const result = this.checkEligibility(payload.projectId);
+      const result = this.evaluateEligibility(payload.projectId, 'deploy_failed');
       if (!result.eligible) {
         await this.emitBlocked(payload.projectId, result.reason);
         return;
@@ -465,6 +479,73 @@ export class RecoveryCoordinator {
     } catch (err) {
       log.error({ err, projectId: payload.projectId }, 'Unhandled error in compose:failed handler');
     }
+  }
+
+  /**
+   * Stage B — enqueue ops agent for crash handling. Non-critical: enqueue
+   * failures are logged but do not abort recovery progression. Synchronous
+   * (no await) so it does not change microtask ordering of subsequent stages.
+   * `containerIdOverride` is the container ID from the originating event,
+   * preferred over the DB-cached container_id when available.
+   */
+  private enqueueOpsAgentForCrash(projectId: string, containerIdOverride?: string): void {
+    if (!this.opsAgent) {
+      return;
+    }
+    try {
+      const project = this.getProjectSnapshot(projectId);
+      // PR 4.5: canonical-first read of container_id with `||` fallback.
+      const deployable = this.db.getDeployableForProject(projectId);
+      this.opsAgent.enqueue({
+        type: 'deploy:crash',
+        payload: {
+          projectId,
+          projectName: project?.name ?? projectId,
+          containerId:
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+            containerIdOverride || deployable?.container_id || project?.container_id || '',
+        },
+        timestamp: Date.now(),
+      });
+    } catch (enqueueErr) {
+      log.warn(
+        { err: enqueueErr, projectId },
+        'Failed to enqueue to OpsAgent, continuing with recovery',
+      );
+    }
+  }
+
+  /**
+   * Stage C failure handler — emits both `recovery:degraded` (architectural
+   * partial-failure visibility) and `recovery:blocked` (legacy compat for
+   * existing UI/test consumers). Inlined into the handler call site rather
+   * than wrapped through `withRecoveryStage` so that the success path keeps
+   * its original microtask depth (recovery-coordinator.test.ts dedup test).
+   */
+  private async handleStageTransitionFailure(
+    projectId: string,
+    error: unknown,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    const reason = error instanceof Error ? error.message : String(error);
+    log.warn(
+      { err: error, projectId, ...metadata },
+      'Failed to set status to recovering, aborting recovery to prevent state mismatch',
+    );
+    try {
+      await this.events.emit('recovery:degraded', {
+        projectId,
+        stage: 'transition',
+        reason,
+        metadata,
+      });
+    } catch (emitErr) {
+      log.error(
+        { err: emitErr, projectId, originalReason: reason },
+        'Failed to emit recovery:degraded event',
+      );
+    }
+    await this.emitBlocked(projectId, 'partial_failure_state_transition');
   }
 
   private async emitBlocked(projectId: string, reason?: EligibilityReason): Promise<void> {
@@ -481,13 +562,17 @@ export class RecoveryCoordinator {
     const project = this.getProjectSnapshot(projectId);
     if (!project) return;
 
-    if (project.status === 'recovering') {
+    // PR 4.5: canonical-first status read with `??` fallback.
+    const deployable = this.db.getDeployableForProject(projectId);
+    const status = deployable?.status ?? project.status;
+
+    if (status === 'recovering') {
       await this.transitionProjectStatus(
         projectId,
         nextStatus,
         nextStatus === 'running' ? 'recovery-success' : 'recovery-failed',
       );
-    } else if (nextStatus === 'running' && project.status === 'error') {
+    } else if (nextStatus === 'running' && status === 'error') {
       await this.transitionProjectStatus(projectId, nextStatus, 'recovery-success');
       log.info({ projectId }, 'Restored project status from error to running (defensive recovery)');
     }
@@ -504,11 +589,13 @@ export class RecoveryCoordinator {
     }
 
     const project = this.getProjectSnapshot(projectId);
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     if (project?.status === nextStatus) {
       return;
     }
 
     throw new Error(
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       `RecoveryCoordinator state transition rejected: ${project?.status ?? 'unknown'} -> ${nextStatus}`,
     );
   }

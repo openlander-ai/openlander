@@ -1,24 +1,71 @@
 import { LanguageProvider } from '@/i18n/context';
-import { Component, type ErrorInfo, type ReactNode, useEffect, useState } from 'react';
+import {
+  Component,
+  type ErrorInfo,
+  type ReactNode,
+  Suspense,
+  lazy,
+  useEffect,
+  useState,
+} from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
-import { AppLayout } from '@/components/layout/AppLayout';
+import { AppShell } from '@/components/Shell/AppShell';
 import { SetupScreen } from '@/components/setup/SetupScreen';
-import { NewProjectFlow } from '@/pages/NewProjectFlow';
-import { ProjectDetail } from '@/pages/ProjectDetail';
 import { ProjectsGrid } from '@/pages/ProjectsGrid';
-import { DeploymentDetail } from '@/pages/DeploymentDetail';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ServicesPage } from '@/pages/ServicesPage';
-import { OpsCenterV2 } from '@/pages/OpsCenterV2';
-import { ServiceDetail } from '@/pages/ServiceDetail';
-import { Overview } from '@/pages/Overview';
 import { DeploymentsList } from '@/pages/DeploymentsList';
+import { Home } from '@/pages/Home';
+import { Activity } from '@/pages/Activity';
+import { MCPServer } from '@/pages/MCPServer';
+import { MonitoringPage } from '@/pages/MonitoringPage';
+import { WebServerSettings } from '@/pages/settings/WebServer';
+import { GitProvidersSettings } from '@/pages/settings/GitProviders';
+import { SSHKeysSettings } from '@/pages/settings/SSHKeys';
+import { NotificationsSettings } from '@/pages/settings/Notifications';
 import { useAgentPanel } from '@/contexts/agent-panel';
 import { LoginPage } from '@/pages/LoginPage';
 import { AuthProvider, useAuth } from '@/contexts/auth';
 import './App.css';
 import { getSetupStatus } from '@/lib/api';
 import { Toaster } from 'sonner';
+
+/*
+ * PR8: route-split the four heaviest pages so the initial bundle
+ * doesn't ship `@xyflow/react` (~217 kB gzipped) or the LogViewer's
+ * virtualizer to users who land on /home, /projects, /services, etc.
+ *
+ * Pages chosen:
+ *   - ProjectView + ServiceDetailV2 → both mount InfraMap (react-flow)
+ *   - OpsCenterV2 → mounts DependencyGraph (react-flow) + heavy chart
+ *   - DeploymentDetail → mounts LogViewer (@tanstack/react-virtual)
+ *
+ * The Suspense fallback below is a thin centered spinner; the heavy
+ * chunks load on-demand under 500 ms on local Wi-Fi.
+ */
+const ProjectView = lazy(() =>
+  import('@/pages/ProjectView').then((m) => ({ default: m.ProjectView })),
+);
+const ServiceDetailV2 = lazy(() =>
+  import('@/pages/ServiceDetailV2').then((m) => ({ default: m.ServiceDetailV2 })),
+);
+const DeploymentDetail = lazy(() =>
+  import('@/pages/DeploymentDetail').then((m) => ({ default: m.DeploymentDetail })),
+);
+
+function RouteSuspense({ children }: { children: ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-full items-center justify-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-agent border-t-transparent" />
+        </div>
+      }
+    >
+      {children}
+    </Suspense>
+  );
+}
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -117,7 +164,7 @@ function App() {
           <Toaster
             toastOptions={{
               className: 'bg-bg-panel border-border text-primary-ol font-body',
-              descriptionClassName: 'text-muted-ol',
+              descriptionClassName: 'text-muted-foreground',
             }}
           />
           <BrowserRouter>
@@ -125,29 +172,117 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route
                 path="/setup"
-                element={<SetupScreen onComplete={() => (window.location.href = '/projects')} />}
+                element={<SetupScreen onComplete={() => (window.location.href = '/home')} />}
               />
               <Route element={<SetupGuard />}>
-                <Route element={<AppLayout />}>
-                  <Route path="/overview" element={<Overview />} />
+                {/* Single shell for all authenticated routes (Round 4 PR4
+                    takeover). Legacy AppLayout was deleted; AppShell now
+                    carries CommandPalette / AgentPanel / ApprovalDialog
+                    that the old shell owned. */}
+                <Route element={<AppShell />}>
+                  {/* V2 surfaces */}
+                  <Route path="/home" element={<Home />} />
+                  <Route path="/activity" element={<Activity />} />
+                  {/* /mcp-server because the backend's MCP JSON-RPC endpoint
+                      sits at /mcp (no content-negotiation). */}
+                  <Route path="/mcp-server" element={<MCPServer />} />
+                  <Route path="/monitoring" element={<MonitoringPage />} />
+                  {/* /logs retired in Phase 3a (ralplan-monitoring-logs).
+                      Stale bookmarks land on /activity, where the new Kind
+                      filter chip surfaces deploy/runtime events. */}
+                  <Route path="/logs" element={<Navigate to="/activity" replace />} />
+                  <Route
+                    path="/projects/:id"
+                    element={
+                      <RouteSuspense>
+                        <ProjectView />
+                      </RouteSuspense>
+                    }
+                  />
+                  {/* ── 1.0-rc.1: canonical deployable-service URL ─────────────
+                      `/projects/:p/services/:s` is the canonical route per
+                      GUIDE-01-IA-principles §4 vocabulary (Project = group,
+                      Service = deployable unit). ServiceDetailV2 dispatcher
+                      normalises both URL shapes via useParams() — when this
+                      path matches, params are { p, s }; legacy path gives
+                      { id } plus ?project= query.
+                      rc.2 will deprecate `/services/:id?project=:p` once all
+                      internal callers are migrated to the canonical form. */}
+                  <Route
+                    path="/projects/:p/services/:s"
+                    element={
+                      <RouteSuspense>
+                        <ServiceDetailV2 />
+                      </RouteSuspense>
+                    }
+                  />
+                  {/* Legacy deployable-detail URL — kept live in rc.1 for
+                      bookmark continuity. ServiceDetailV2 accepts ?project=
+                      query param as a fallback. Deprecation: rc.2 will add
+                      a `Deprecation` response header and redirect callers to
+                      the canonical `/projects/:p/services/:s` form. */}
+                  <Route
+                    path="/services/:id"
+                    element={
+                      <RouteSuspense>
+                        <ServiceDetailV2 />
+                      </RouteSuspense>
+                    }
+                  />
+                  {/* Managed services (postgres / mysql / redis / mongo) —
+                      separate from `/services/:id` (deployable detail) so
+                      `services.id` and `projects.id` no longer share a
+                      route prefix. Canonical replacement (`/projects/:p/
+                      services/:s` with kind=database discriminator) lands
+                      in rc.2 once managed services merge into the `services`
+                      table per the schema-split migration. */}
+                  <Route path="/managed-services" element={<ServicesPage />} />
+                  <Route
+                    path="/managed-services/:id"
+                    element={
+                      <RouteSuspense>
+                        <ServiceDetailV2 />
+                      </RouteSuspense>
+                    }
+                  />
+                  <Route path="/settings/web-server" element={<WebServerSettings />} />
+                  <Route path="/settings/git-providers" element={<GitProvidersSettings />} />
+                  <Route path="/settings/ssh-keys" element={<SSHKeysSettings />} />
+                  <Route path="/settings/notifications" element={<NotificationsSettings />} />
+
+                  {/* Legacy pages — kept under V2 chrome until each is
+                      individually rewritten. The visual mismatch is the
+                      acceptable transition state for one launch cycle. */}
+                  <Route path="/overview" element={<Navigate to="/home" replace />} />
                   <Route path="/deployments" element={<DeploymentsList />} />
                   <Route path="/projects" element={<ProjectsGrid />} />
-                  <Route path="/projects/new" element={<NewProjectFlow />} />
+                  {/* v5: New-project wizard retired — humans hit the
+                      AgentGuideDialog from /projects. Stale links still resolve. */}
+                  <Route path="/projects/new" element={<Navigate to="/projects" replace />} />
                   <Route
                     path="/projects/:id/deployments/:deployId"
-                    element={<DeploymentDetail />}
+                    element={
+                      <RouteSuspense>
+                        <DeploymentDetail />
+                      </RouteSuspense>
+                    }
                   />
-                  <Route path="/projects/:id" element={<ProjectDetail />} />
-                  <Route path="/services" element={<ServicesPage />} />
-                  <Route path="/services/:id" element={<ServiceDetail />} />
-                  <Route path="/operations" element={<OpsCenterV2 />} />
-                  <Route path="/ops-v1" element={<Navigate to="/operations" replace />} />
+                  {/* /services list → /managed-services for vocabulary
+                      alignment (1.0 routing fix). The list page is
+                      managed-services-only; deployables are reached via
+                      a project's Services tab, not a top-level list. */}
+                  <Route path="/services" element={<Navigate to="/managed-services" replace />} />
+                  {/* /operations + /ops-v1 retired in Phase 1 hardening
+                      (ralplan-monitoring-logs). Backend /api/ops/* remains
+                      live for ApprovalDialog / Settings / Recovery; only
+                      the OpsCenterV2 page shell is gone. Stale bookmarks
+                      land on /home via the catch-all redirect. */}
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/agent" element={<AgentRouteRedirect />} />
                 </Route>
               </Route>
-              <Route path="/" element={<Navigate to="/overview" replace />} />
-              <Route path="*" element={<Navigate to="/overview" replace />} />
+              <Route path="/" element={<Navigate to="/home" replace />} />
+              <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
           </BrowserRouter>
         </ErrorBoundary>

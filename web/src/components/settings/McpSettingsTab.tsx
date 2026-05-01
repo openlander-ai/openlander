@@ -17,16 +17,16 @@ function CodeBlock({ label, code, mono = true }: { label: string; code: string; 
   const { copy, isCopied } = useCopy();
   return (
     <div className="space-y-1.5">
-      <p className="text-xs font-body text-secondary-ol font-medium">{label}</p>
+      <p className="text-xs font-body text-foreground/80 font-medium">{label}</p>
       <div className="relative rounded-md bg-bg-app border border-border p-3">
         <pre
-          className={`text-xs ${mono ? 'font-mono' : 'font-body'} text-primary-ol whitespace-pre-wrap break-all pr-16 overflow-auto max-h-48`}
+          className={`text-xs ${mono ? 'font-mono' : 'font-body'} text-foreground whitespace-pre-wrap break-all pr-16 overflow-auto max-h-48`}
         >
           {code}
         </pre>
         <button
           onClick={() => void copy(code)}
-          className="absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-1 text-xs rounded bg-bg-subtle hover:bg-bg-subtle/80 text-muted-ol hover:text-secondary-ol transition-colors"
+          className="absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-1 text-xs rounded bg-bg-subtle hover:bg-bg-subtle/80 text-muted-foreground hover:text-foreground/80 transition-colors"
         >
           {isCopied() ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
           {isCopied() ? 'Copied' : 'Copy'}
@@ -51,7 +51,7 @@ function CollapsibleConfig({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 text-sm font-body text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-body text-foreground/80 hover:text-foreground hover:bg-bg-subtle transition-colors"
       >
         <span className="font-medium">{title}</span>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -158,23 +158,25 @@ export function McpSettingsTab() {
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Cable className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-sm font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-foreground">
             {t('settings.mcp.serverTitle')}
           </h2>
         </div>
-        <p className="text-xs font-body text-muted-ol">{t('settings.mcp.serverDescription')}</p>
+        <p className="text-xs font-body text-muted-foreground">
+          {t('settings.mcp.serverDescription')}
+        </p>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-3">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-body font-medium text-secondary-ol w-20 shrink-0">
+            <span className="text-xs font-body font-medium text-foreground/80 w-20 shrink-0">
               {t('settings.mcp.url')}
             </span>
-            <code className="flex-1 text-sm font-mono text-primary-ol bg-bg-app rounded px-3 py-1.5 border border-border truncate">
+            <code className="flex-1 text-sm font-mono text-foreground bg-bg-app rounded px-3 py-1.5 border border-border truncate">
               {mcpUrl}
             </code>
             <button
               onClick={() => void copy(mcpUrl)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-body rounded border border-border bg-bg-app hover:bg-bg-subtle text-secondary-ol hover:text-primary-ol transition-colors shrink-0"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-body rounded border border-border bg-bg-app hover:bg-bg-subtle text-foreground/80 hover:text-foreground transition-colors shrink-0"
             >
               {isCopied() ? (
                 <Check className="w-3.5 h-3.5 text-success" />
@@ -185,10 +187,10 @@ export function McpSettingsTab() {
             </button>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs font-body font-medium text-secondary-ol w-20 shrink-0">
+            <span className="text-xs font-body font-medium text-foreground/80 w-20 shrink-0">
               {t('settings.mcp.token')}
             </span>
-            <code className="flex-1 text-sm font-mono text-muted-ol bg-bg-app rounded px-3 py-1.5 border border-border truncate">
+            <code className="flex-1 text-sm font-mono text-muted-foreground bg-bg-app rounded px-3 py-1.5 border border-border truncate">
               {apiToken ? `${apiToken.slice(0, 7)}••••••••${apiToken.slice(-4)}` : '••••••••••••'}
             </code>
             <a
@@ -200,7 +202,7 @@ export function McpSettingsTab() {
                 ) as HTMLElement;
                 securityTab?.click();
               }}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-body rounded border border-border bg-bg-app hover:bg-bg-subtle text-secondary-ol hover:text-primary-ol transition-colors shrink-0"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-body rounded border border-border bg-bg-app hover:bg-bg-subtle text-foreground/80 hover:text-foreground transition-colors shrink-0"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               {t('settings.mcp.manageToken')}
@@ -212,11 +214,13 @@ export function McpSettingsTab() {
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Zap className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-sm font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-foreground">
             {t('settings.mcp.quickSetupTitle')}
           </h2>
         </div>
-        <p className="text-xs font-body text-muted-ol">{t('settings.mcp.quickSetupDescription')}</p>
+        <p className="text-xs font-body text-muted-foreground">
+          {t('settings.mcp.quickSetupDescription')}
+        </p>
 
         <CodeBlock label={t('settings.mcp.copyPrompt')} code={quickCopyText} />
       </section>
@@ -224,11 +228,13 @@ export function McpSettingsTab() {
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Terminal className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-sm font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-foreground">
             {t('settings.mcp.ideTitle')}
           </h2>
         </div>
-        <p className="text-xs font-body text-muted-ol">{t('settings.mcp.ideDescription')}</p>
+        <p className="text-xs font-body text-muted-foreground">
+          {t('settings.mcp.ideDescription')}
+        </p>
 
         <div className="space-y-2">
           <CollapsibleConfig title="Claude Code">
@@ -257,7 +263,7 @@ export function McpSettingsTab() {
 
           <CollapsibleConfig title={t('settings.mcp.stdioLabel')}>
             <CodeBlock label={t('settings.mcp.runInTerminal')} code={stdioCmd} />
-            <p className="text-xs font-body text-muted-ol">{t('settings.mcp.stdioHint')}</p>
+            <p className="text-xs font-body text-muted-foreground">{t('settings.mcp.stdioHint')}</p>
           </CollapsibleConfig>
         </div>
       </section>

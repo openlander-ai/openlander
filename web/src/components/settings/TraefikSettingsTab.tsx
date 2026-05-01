@@ -153,11 +153,11 @@ export function TraefikSettingsTab() {
           <div className="p-1.5 rounded-md bg-agent/10 text-agent">
             <Network className="h-4 w-4" />
           </div>
-          <h2 className="font-display text-sm font-semibold text-primary-ol">{'Reverse Proxy'}</h2>
+          <h2 className="font-display text-sm font-semibold text-foreground">{'Reverse Proxy'}</h2>
         </div>
 
         {serverStatusLoading ? (
-          <div className="flex items-center gap-2 text-xs font-body text-muted-ol">
+          <div className="flex items-center gap-2 text-xs font-body text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" /> {t('settings.proxy.loading')}
           </div>
         ) : serverStatus ? (
@@ -165,7 +165,7 @@ export function TraefikSettingsTab() {
             {serverStatus.proxy.type === 'none' && (
               <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
-                <p className="text-sm font-body text-primary-ol leading-relaxed">
+                <p className="text-sm font-body text-foreground leading-relaxed">
                   {t('settings.proxy.warning')}
                 </p>
               </div>
@@ -179,14 +179,14 @@ export function TraefikSettingsTab() {
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-500">
                     <Activity className="h-4 w-4" />
                   </div>
-                  <h3 className="font-display font-semibold text-primary-ol">Proxy Engine</h3>
+                  <h3 className="font-display font-semibold text-foreground">Proxy Engine</h3>
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-secondary-ol font-body">Type</span>
+                    <span className="text-foreground/80 font-body">Type</span>
                     <Badge
                       variant="secondary"
-                      className="font-mono bg-bg-subtle text-primary-ol border-border font-medium"
+                      className="font-mono bg-bg-subtle text-foreground border-border font-medium"
                     >
                       {serverStatus.proxy.type === 'none'
                         ? 'None'
@@ -194,7 +194,7 @@ export function TraefikSettingsTab() {
                     </Badge>
                   </div>
                   <div className="flex justify-between items-start text-sm gap-4">
-                    <span className="text-secondary-ol font-body shrink-0 mt-0.5">Status</span>
+                    <span className="text-foreground/80 font-body shrink-0 mt-0.5">Status</span>
                     <span
                       className={cn(
                         'font-mono font-medium text-right break-words leading-tight',
@@ -215,18 +215,20 @@ export function TraefikSettingsTab() {
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
                     <HardDrive className="h-4 w-4" />
                   </div>
-                  <h3 className="font-display font-semibold text-primary-ol">Network Allocation</h3>
+                  <h3 className="font-display font-semibold text-foreground">Network Allocation</h3>
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-secondary-ol font-body">Containers</span>
-                    <span className="font-mono text-primary-ol font-medium">
+                    <span className="text-foreground/80 font-body">Containers</span>
+                    <span className="font-mono text-foreground font-medium">
                       {serverStatus.containers.managed} / {serverStatus.containers.total}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-secondary-ol font-body">{t('settings.proxy.ports')}</span>
-                    <span className="font-mono text-primary-ol font-medium">
+                    <span className="text-foreground/80 font-body">
+                      {t('settings.proxy.ports')}
+                    </span>
+                    <span className="font-mono text-foreground font-medium">
                       {serverStatus.portsInUse.toString()}
                     </span>
                   </div>
@@ -237,10 +239,10 @@ export function TraefikSettingsTab() {
             <div className="rounded-xl border border-border bg-bg-subtle/50 shadow-sm overflow-hidden">
               <div className="flex items-center justify-between gap-4 p-5 border-b border-border bg-bg-subtle/50">
                 <div className="space-y-1">
-                  <h3 className="font-display text-base font-semibold text-primary-ol flex items-center gap-2">
+                  <h3 className="font-display text-base font-semibold text-foreground flex items-center gap-2">
                     <Shield className="w-4 h-4 text-agent" /> Cloudflare Tunnel
                   </h3>
-                  <p className="text-sm font-body text-secondary-ol">
+                  <p className="text-sm font-body text-foreground/80">
                     {t('settings.proxy.cloudflare.description')}
                   </p>
                 </div>
@@ -271,10 +273,10 @@ export function TraefikSettingsTab() {
                 {!cloudflareConnected ? (
                   <div className="space-y-5">
                     <div className="space-y-3 rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4">
-                      <p className="text-sm font-body text-secondary-ol">
+                      <p className="text-sm font-body text-foreground/80">
                         {t('settings.proxy.cloudflare.tokenHelpTitle')}
                       </p>
-                      <p className="text-xs font-body text-muted-ol">
+                      <p className="text-xs font-body text-muted-foreground">
                         {t('settings.proxy.cloudflare.tokenHelpText')}
                       </p>
                       <a
@@ -294,20 +296,20 @@ export function TraefikSettingsTab() {
                         <ExternalLink className="h-4 w-4" />
                       </a>
                       <div className="pt-2 pb-1 space-y-2">
-                        <p className="text-xs font-semibold text-primary-ol">
+                        <p className="text-xs font-semibold text-foreground">
                           {t('settings.proxy.cloudflare.tokenPermissionsLabel')}
                         </p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <div className="rounded border border-border bg-bg-app px-2.5 py-1.5 text-[11px] font-mono text-secondary-ol shadow-sm truncate">
+                          <div className="rounded border border-border bg-bg-app px-2.5 py-1.5 text-[11px] font-mono text-foreground/80 shadow-sm truncate">
                             {t('settings.proxy.cloudflare.tokenPermZone')}
                           </div>
-                          <div className="rounded border border-border bg-bg-app px-2.5 py-1.5 text-[11px] font-mono text-secondary-ol shadow-sm truncate">
+                          <div className="rounded border border-border bg-bg-app px-2.5 py-1.5 text-[11px] font-mono text-foreground/80 shadow-sm truncate">
                             {t('settings.proxy.cloudflare.tokenPermDns')}
                           </div>
-                          <div className="rounded border border-border bg-bg-app px-2.5 py-1.5 text-[11px] font-mono text-secondary-ol shadow-sm truncate">
+                          <div className="rounded border border-border bg-bg-app px-2.5 py-1.5 text-[11px] font-mono text-foreground/80 shadow-sm truncate">
                             {t('settings.proxy.cloudflare.tokenPermTunnel')}
                           </div>
-                          <div className="rounded border border-border bg-bg-app px-2.5 py-1.5 text-[11px] font-mono text-secondary-ol shadow-sm truncate">
+                          <div className="rounded border border-border bg-bg-app px-2.5 py-1.5 text-[11px] font-mono text-foreground/80 shadow-sm truncate">
                             {t('settings.proxy.cloudflare.tokenPermAccount')}
                           </div>
                         </div>
@@ -316,7 +318,7 @@ export function TraefikSettingsTab() {
 
                     <form onSubmit={handleConnectCloudflare} className="space-y-3">
                       <div className="space-y-1.5">
-                        <p className="text-xs font-body text-muted-ol">API Token</p>
+                        <p className="text-xs font-body text-muted-foreground">API Token</p>
                         <div className="flex gap-2">
                           <Input
                             type="password"
@@ -350,7 +352,7 @@ export function TraefikSettingsTab() {
                   <form onSubmit={handleConfigureCloudflare} className="space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <p className="text-xs font-body text-muted-ol">API Token</p>
+                        <p className="text-xs font-body text-muted-foreground">API Token</p>
                         <Input
                           type="text"
                           value={'••••••••••••'}
@@ -359,13 +361,13 @@ export function TraefikSettingsTab() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <p className="text-xs font-body text-muted-ol">Account</p>
-                        <div className="h-9 rounded-md border border-border bg-bg-app px-3 flex items-center text-sm font-mono text-primary-ol">
+                        <p className="text-xs font-body text-muted-foreground">Account</p>
+                        <div className="h-9 rounded-md border border-border bg-bg-app px-3 flex items-center text-sm font-mono text-foreground">
                           {cloudflareAccountName}
                         </div>
                       </div>
                       <div className="space-y-1.5 sm:col-span-2">
-                        <p className="text-xs font-body text-muted-ol">Tunnel</p>
+                        <p className="text-xs font-body text-muted-foreground">Tunnel</p>
                         <select
                           value={cloudflareTunnelId}
                           onChange={(e) => setCloudflareTunnelId(e.target.value)}
@@ -418,13 +420,13 @@ export function TraefikSettingsTab() {
                       <Shield className="h-5 w-5" />
                     </div>
                     <div className="w-full">
-                      <h4 className="text-sm font-semibold text-primary-ol mb-1.5 flex items-center gap-2">
+                      <h4 className="text-sm font-semibold text-foreground mb-1.5 flex items-center gap-2">
                         <span className="bg-agent text-white px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase">
                           Pro Tip
                         </span>
                         {t('settings.proxy.tunnelGuide.title')}
                       </h4>
-                      <p className="text-sm font-body text-secondary-ol mb-5 leading-relaxed">
+                      <p className="text-sm font-body text-foreground/80 mb-5 leading-relaxed">
                         {t('settings.proxy.tunnelGuide.description')}
                       </p>
 
@@ -434,7 +436,7 @@ export function TraefikSettingsTab() {
                           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-agent/10 text-xs font-bold text-agent tracking-tighter">
                             1
                           </span>
-                          <p className="text-sm font-body text-primary-ol">
+                          <p className="text-sm font-body text-foreground">
                             {t('settings.proxy.tunnelGuide.step1')}
                           </p>
                         </div>
@@ -445,7 +447,7 @@ export function TraefikSettingsTab() {
                             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-agent/10 text-xs font-bold text-agent tracking-tighter">
                               2
                             </span>
-                            <p className="text-sm font-body text-primary-ol">
+                            <p className="text-sm font-body text-foreground">
                               {t('settings.proxy.tunnelGuide.step2')}
                             </p>
                           </div>
@@ -462,7 +464,7 @@ export function TraefikSettingsTab() {
                               {isCopied() ? (
                                 <Check className="h-4 w-4 text-success" />
                               ) : (
-                                <Copy className="h-4 w-4 text-muted-ol transition-colors group-hover:text-agent" />
+                                <Copy className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-agent" />
                               )}
                             </button>
                           </div>
@@ -473,7 +475,7 @@ export function TraefikSettingsTab() {
                           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-agent/10 text-xs font-bold text-agent tracking-tighter">
                             3
                           </span>
-                          <p className="text-sm font-body text-primary-ol">
+                          <p className="text-sm font-body text-foreground">
                             {t('settings.proxy.tunnelGuide.step3')}
                           </p>
                         </div>
@@ -492,7 +494,7 @@ export function TraefikSettingsTab() {
           <div className="p-1.5 rounded-md bg-agent/10 text-agent">
             <Server className="h-4 w-4" />
           </div>
-          <h2 className="font-display text-sm font-semibold text-primary-ol">{'Server Scan'}</h2>
+          <h2 className="font-display text-sm font-semibold text-foreground">{'Server Scan'}</h2>
 
           <Button
             type="button"
@@ -508,7 +510,7 @@ export function TraefikSettingsTab() {
         </div>
 
         {!serverStatus ? (
-          <div className="flex items-center gap-2 text-xs font-body text-muted-ol">
+          <div className="flex items-center gap-2 text-xs font-body text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" /> {'Scanning server...'}
           </div>
         ) : (
@@ -516,26 +518,26 @@ export function TraefikSettingsTab() {
             <div className="px-5 py-4 border-b border-[hsl(var(--border))] bg-bg-panel">
               <div className="flex items-center gap-6 text-xs font-body">
                 <div>
-                  <span className="text-muted-ol">{'Total'}:</span>{' '}
-                  <span className="font-medium text-primary-ol">
+                  <span className="text-muted-foreground">{'Total'}:</span>{' '}
+                  <span className="font-medium text-foreground">
                     {serverStatus.containers.total}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-ol">{'Managed'}:</span>{' '}
+                  <span className="text-muted-foreground">{'Managed'}:</span>{' '}
                   <span className="font-medium text-success">
                     {serverStatus.containers.managed}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-ol">{'External'}:</span>{' '}
+                  <span className="text-muted-foreground">{'External'}:</span>{' '}
                   <span className="font-medium text-warning">
                     {serverStatus.containers.external}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-ol">{'Ports'}:</span>{' '}
-                  <span className="font-medium text-primary-ol">{serverStatus.portsInUse}</span>
+                  <span className="text-muted-foreground">{'Ports'}:</span>{' '}
+                  <span className="font-medium text-foreground">{serverStatus.portsInUse}</span>
                 </div>
               </div>
             </div>
@@ -543,7 +545,7 @@ export function TraefikSettingsTab() {
             <div className="p-4">
               {serverStatus.externalContainers && serverStatus.externalContainers.length > 0 ? (
                 <div className="space-y-2">
-                  <p className="text-xs font-body text-muted-ol mb-2">
+                  <p className="text-xs font-body text-muted-foreground mb-2">
                     {t('settings.serverScan.externalDescription')}
                   </p>
                   {serverStatus.externalContainers.map((container) => (
@@ -554,10 +556,10 @@ export function TraefikSettingsTab() {
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="h-2 w-2 rounded-full bg-warning shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-sm font-mono text-primary-ol truncate">
+                          <p className="text-sm font-mono text-foreground truncate">
                             {container.name}
                           </p>
-                          <p className="text-xs font-body text-muted-ol truncate">
+                          <p className="text-xs font-body text-muted-foreground truncate">
                             {container.image.includes('sha256:')
                               ? container.image.substring(0, 19) + '...'
                               : container.image}
@@ -569,7 +571,7 @@ export function TraefikSettingsTab() {
                           {container.ports.map((port) => (
                             <span
                               key={port}
-                              className="text-xs font-mono px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))] text-secondary-ol"
+                              className="text-xs font-mono px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))] text-foreground/80"
                             >
                               :{port}
                             </span>
@@ -582,7 +584,7 @@ export function TraefikSettingsTab() {
               ) : (
                 <div className="text-center py-4">
                   <p className="text-sm font-body text-success">{'All clear'}</p>
-                  <p className="text-xs font-body text-muted-ol mt-1">
+                  <p className="text-xs font-body text-muted-foreground mt-1">
                     {t('settings.serverScan.noExternal')}
                   </p>
                 </div>

@@ -7,7 +7,7 @@ import {
   parseEnvFile,
   formatEnvValue,
 } from './env-inject.js';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { nanoid } from 'nanoid';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
@@ -135,6 +135,13 @@ export interface ComposeServiceStatus {
   status: 'running' | 'stopped' | 'error';
   ports?: string[];
   containerId?: string;
+  /**
+   * Populated when the service is in a partial state (still running but
+   * orchestration rollback was blocked by policy or failed). Lets UI /
+   * monorepo result building distinguish "fully healthy" from
+   * "running but orchestration partially failed".
+   */
+  error?: string;
 }
 
 export interface EnvFileReferenceError {
@@ -327,7 +334,8 @@ export class ComposePipeline {
       } else if (environmentRaw && typeof environmentRaw === 'object') {
         const envObj: Record<string, string> = {};
         for (const [key, envValue] of Object.entries(environmentRaw as Record<string, unknown>)) {
-          envObj[key] = envValue == null ? '' : String(envValue as string | number);
+          // eslint-disable-next-line @typescript-eslint/no-base-to-string
+          envObj[key] = envValue == null ? '' : String(envValue);
         }
         environment = envObj;
       }
@@ -336,7 +344,7 @@ export class ComposePipeline {
       if (Array.isArray(dependsOnRaw)) {
         dependsOn = dependsOnRaw.map((dep) => String(dep));
       } else if (dependsOnRaw && typeof dependsOnRaw === 'object') {
-        dependsOn = Object.keys(dependsOnRaw as Record<string, unknown>);
+        dependsOn = Object.keys(dependsOnRaw);
       }
 
       const portsRaw = serviceObj['ports'];
@@ -469,11 +477,13 @@ export class ComposePipeline {
       name: parentName,
       repoUrl: config.repoUrl,
       branch: config.branch,
-      dockerfilePath: config.composePath,
+      dockerfilePath: relative(config.clonePath, config.composePath),
+      buildMethod: 'compose',
     });
     this.db.updateProject(parentProjectId, {
       status: 'building',
-      dockerfilePath: config.composePath,
+      dockerfilePath: relative(config.clonePath, config.composePath),
+      buildMethod: 'compose',
     });
     this.jobManager?.trackJob(parentProjectId, parentName);
 
@@ -550,18 +560,21 @@ export class ComposePipeline {
         name: parentName,
         repoUrl: config.repoUrl,
         branch: config.branch,
-        dockerfilePath: config.composePath,
+        dockerfilePath: relative(config.clonePath, config.composePath),
+        buildMethod: 'compose',
       });
       this.jobManager?.trackJob(parentProjectId, parentName);
     }
 
     this.db.updateProject(parentProjectId, {
       status: 'building',
-      dockerfilePath: config.composePath,
+      dockerfilePath: relative(config.clonePath, config.composePath),
+      buildMethod: 'compose',
     });
 
     const childrenByService = new Map<string, string>();
-    const existingChildren = this.db.getChildProjects(parentProjectId);
+    // PR 2: fetch existing children via services.parent_service_id.
+    const existingChildren = this.db.getComposeChildProjects(parentProjectId);
     const existingByName = new Map(existingChildren.map((c) => [c.name, c]));
 
     for (const service of filteredComposeProject.services) {
@@ -585,6 +598,35 @@ export class ComposePipeline {
       childrenByService.set(service.name, childId);
       await this.transitionProjectStatus(childId, 'building', 'compose-build-start');
       this.jobManager?.trackJob(childId, childName);
+    }
+
+    // Persist compose `depends_on` into project_dependencies so the
+    // topology endpoint surfaces edges between sibling services. The
+    // table is otherwise only populated by managed-DB connect actions,
+    // which leaves compose stacks edge-less in the InfraMap.
+    //
+    // Idempotent across redeploys: clear the source-side deps first,
+    // then re-insert from the freshly parsed compose graph. Targets
+    // outside this compose project are skipped (we can only resolve
+    // service-name → child-id within the current stack).
+    for (const composeService of filteredComposeProject.services) {
+      const sourceChildId = childrenByService.get(composeService.name);
+      if (!sourceChildId) continue;
+      this.db.deleteProjectDependenciesByProject(sourceChildId);
+      for (const depName of composeService.dependsOn ?? []) {
+        const targetChildId = childrenByService.get(depName);
+        if (!targetChildId) continue;
+        try {
+          this.db.createProjectDependency({
+            source_project_id: sourceChildId,
+            target_project_id: targetChildId,
+            dependency_type: 'custom',
+            source: 'auto',
+          });
+        } catch {
+          // best-effort — duplicate / FK race shouldn't fail the deploy
+        }
+      }
     }
 
     const deployOnlyActive = Boolean(config.services && config.services.length > 0);
@@ -629,6 +671,10 @@ export class ComposePipeline {
           }
 
           // Hard delete intentional: orphaned compose children are not user-created projects and should not be archived.
+          // Also explicitly delete the backing services row: compose-child service rows have
+          // project_id = parentProjectId (not child.id), so the FK cascade on deleteProject
+          // does NOT reach them. The __svc convention is established in createProject().
+          this.db.deleteService(`${child.id}__svc`);
           this.db.deleteProject(child.id);
           removed.push(serviceName);
         }
@@ -804,9 +850,6 @@ export class ComposePipeline {
               throw new Error(`Failed to start compose service ${service.name}`);
             }
 
-            releasePortReservation(hostPort);
-            allocatedHostPort = null;
-
             deploymentByService.set(service.name, {
               containerId,
               port: hostPort,
@@ -819,6 +862,12 @@ export class ComposePipeline {
               assignedPort: hostPort,
               imageTag,
             });
+
+            // Release reservation AFTER the DB write so subsequent allocatePort
+            // calls within the same deploy see the port as used (via DB scan)
+            // and do not re-allocate it to another service.
+            releasePortReservation(hostPort);
+            allocatedHostPort = null;
             this.jobManager?.updatePhase(childId, 'done');
             buildLog += `[compose run ${service.name}] ${containerId.slice(0, 12)} ${String(hostPort)}:${String(containerPort)}\n`;
 
@@ -918,7 +967,8 @@ export class ComposePipeline {
       );
       const reconciledStatuses = filteredComposeProject.services.map((service) => {
         const deployment = deploymentByService.get(service.name);
-        const orchestrationStatus = orchestrationByService.get(service.name)?.status;
+        const orchestrationEntry = orchestrationByService.get(service.name);
+        const orchestrationStatus = orchestrationEntry?.status;
 
         if (deployment && orchestrationStatus === 'deployed') {
           return {
@@ -929,14 +979,39 @@ export class ComposePipeline {
           };
         }
 
+        // F1 (Day 9 Bug #5 follow-up): rollback policy / generic-error paths
+        // mean the container is STILL RUNNING despite the orchestration as a
+        // whole failing. Preserve `running` + container metadata so downstream
+        // child-project rows reflect reality (and operators can see/clean it
+        // up). Without this, the switch fell through to `stopped`, hiding the
+        // partial deployment.
         if (
-          orchestrationStatus === 'failed' ||
-          orchestrationStatus === 'rolled_back' ||
-          orchestrationStatus === 'skipped'
+          deployment &&
+          (orchestrationStatus === 'rollback_failed_due_to_policy' ||
+            orchestrationStatus === 'rollback_failed')
         ) {
           return {
             name: service.name,
-            status: orchestrationStatus === 'skipped' ? ('stopped' as const) : ('error' as const),
+            status: 'running' as const,
+            ports: [`${String(deployment.port)}:${String(deployment.containerPort)}`],
+            containerId: deployment.containerId,
+            error: orchestrationEntry?.error,
+          };
+        }
+
+        if (
+          orchestrationStatus === 'failed' ||
+          orchestrationStatus === 'rolled_back' ||
+          orchestrationStatus === 'skipped' ||
+          orchestrationStatus === 'rollback_skipped'
+        ) {
+          // skipped / rollback_skipped: never deployed → 'stopped'.
+          // failed / rolled_back: actively cleaned up → 'error'.
+          const isStopped =
+            orchestrationStatus === 'skipped' || orchestrationStatus === 'rollback_skipped';
+          return {
+            name: service.name,
+            status: isStopped ? ('stopped' as const) : ('error' as const),
           };
         }
 
@@ -975,13 +1050,26 @@ export class ComposePipeline {
       const failedOrchestration = orchestration.services
         .filter((service) => service.status === 'failed')
         .map((service) => `${service.name}: ${service.error ?? 'unknown error'}`);
+      // F1 (Day 9 Bug #5 follow-up): partial-state services (rollback policy
+      // blocked or rollback failed) are still running but represent a
+      // half-deployed compose project. Surface them in the error message so
+      // operators see "compose succeeded except svc-x is stuck running, see
+      // reason".
+      const partialStateServices = orchestration.services
+        .filter(
+          (service) =>
+            service.status === 'rollback_failed_due_to_policy' ||
+            service.status === 'rollback_failed',
+        )
+        .map((service) => `${service.name}: ${service.error ?? 'rollback skipped'}`);
       const hasError =
         !orchestration.success ||
         reconciledStatuses.some((status) => status.status === 'error') ||
-        failedOrchestration.length > 0;
+        failedOrchestration.length > 0 ||
+        partialStateServices.length > 0;
       const errorMessage =
-        failedOrchestration.length > 0
-          ? `One or more services failed to start (${failedOrchestration.join('; ')})`
+        failedOrchestration.length > 0 || partialStateServices.length > 0
+          ? `One or more services failed to start (${[...failedOrchestration, ...partialStateServices].join('; ')})`
           : hasError
             ? 'One or more services failed to start'
             : undefined;
@@ -1095,7 +1183,8 @@ export class ComposePipeline {
 
   async stopCompose(projectId: string): Promise<void> {
     const parent = this.resolveParentProject(projectId);
-    const children = this.db.getChildProjects(parent.id);
+    // PR 2: fetch compose children via services.parent_service_id.
+    const children = this.db.getComposeChildProjects(parent.id);
 
     for (const child of children) {
       if (child.container_id) {
@@ -1129,10 +1218,11 @@ export class ComposePipeline {
 
   async getServiceLogs(projectId: string, service?: string, lines = 100): Promise<string> {
     const parent = this.resolveParentProject(projectId);
-    const children = this.db.getChildProjects(parent.id);
+    // PR 2: fetch compose children via services.parent_service_id.
+    const children = this.db.getComposeChildProjects(parent.id);
 
     if (service) {
-      const child = children.find((entry) => entry.name === `${parent.name}/${service}`);
+      const child = children.find((c) => c.name === `${parent.name}/${service}`);
       if (!child) {
         throw new Error(`Compose service not found: ${service}`);
       }
@@ -1160,7 +1250,8 @@ export class ComposePipeline {
 
   getServiceStatuses(projectId: string): ComposeServiceStatus[] {
     const parent = this.resolveParentProject(projectId);
-    const children = this.db.getChildProjects(parent.id);
+    // PR 2: fetch compose children via services.parent_service_id.
+    const children = this.db.getComposeChildProjects(parent.id);
     return children.map((child) => {
       const serviceName = child.name.startsWith(`${parent.name}/`)
         ? child.name.slice(parent.name.length + 1)
@@ -1221,13 +1312,18 @@ export class ComposePipeline {
     if (!project) {
       throw new Error(`Project not found: ${projectId}`);
     }
-    if (!project.parent_project_id) {
+    // PR 2: read parent relationship from services.parent_service_id instead of
+    // projects.parent_project_id. Convention: deployable service id = <projectId>__svc.
+    const svc = this.db.getService(`${projectId}__svc`);
+    if (!svc?.parent_service_id) {
+      // No parent service — this is already a top-level group.
       return project;
     }
-
-    const parent = this.db.getProject(project.parent_project_id);
+    // Derive parent project id by stripping the __svc suffix.
+    const parentProjectId = svc.parent_service_id.replace(/__svc$/, '');
+    const parent = this.db.getProject(parentProjectId);
     if (!parent) {
-      throw new Error(`Parent project not found: ${project.parent_project_id}`);
+      throw new Error(`Parent project not found: ${parentProjectId}`);
     }
     return parent;
   }
@@ -1245,8 +1341,9 @@ export class ComposePipeline {
   }
 
   private resolveComposeServiceImageTag(service: ComposeService, projectName: string): string {
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     if (service.image && service.image.length > 0) {
-      return service.image;
+      return service.image; // eslint-disable-line openlander-internal/no-dropped-columns
     }
 
     if (service.build) {

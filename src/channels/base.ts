@@ -451,7 +451,8 @@ export class ChannelManager {
       switch (command) {
         case 'status': {
           const projects = this.ctx.db.listProjects();
-          const lines = projects.map((p) => `${p.name}: ${p.status}`).join('\n') || 'No projects';
+          const lines =
+            projects.map((p) => `${p.name}: ${p.status ?? 'unknown'}`).join('\n') || 'No projects';
           response = `📊 Project Status:\n${lines}`;
           break;
         }

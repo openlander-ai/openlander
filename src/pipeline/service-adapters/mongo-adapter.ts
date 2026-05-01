@@ -31,7 +31,7 @@ export class MongoAdapter implements ServiceAdapter {
   }
 
   async waitForReady(service: ServiceRow, docker: Docker): Promise<void> {
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     await waitUntilReady(
       async () => {
         const logs = await docker.getLogs(containerId, 200);
@@ -113,7 +113,7 @@ export class MongoAdapter implements ServiceAdapter {
     _docker: Docker,
   ): Promise<CreateDatabaseResult> {
     return Promise.reject(
-      new Error(`Database creation is not supported for service type: ${service.type}`),
+      new Error(`Database creation is not supported for service type: ${service.kind}`),
     );
   }
 
@@ -123,7 +123,7 @@ export class MongoAdapter implements ServiceAdapter {
     _docker: Docker,
   ): Promise<CreateUserResult> {
     return Promise.reject(
-      new Error(`User creation is not supported for service type: ${service.type}`),
+      new Error(`User creation is not supported for service type: ${service.kind}`),
     );
   }
 }

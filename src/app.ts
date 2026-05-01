@@ -2,6 +2,7 @@ import { Database } from './db/index.js';
 import { Docker } from './pipeline/docker.js';
 import type { ServerContext } from './pipeline/server-context.js';
 import { createLocalServerContext } from './pipeline/server-context.js';
+import { serializeConfig, deserializeConfig, CONFIG_VERSION } from './pipeline/config-snapshot.js';
 import { DeployPipeline } from './pipeline/deploy.js';
 import { TraefikManager } from './pipeline/traefik.js';
 import { EnvManager } from './pipeline/env.js';
@@ -75,7 +76,7 @@ const POSTMORTEM_CANCEL_EVENTS = [
   'deploy:failed',
 ] as const;
 
-type PostmortemProjectLookup = Pick<Database, 'getProject'>;
+type PostmortemProjectLookup = Pick<Database, 'getProject' | 'getDeployableForProject'>;
 type PostmortemGeneratorLike = Pick<PostmortemGenerator, 'generatePostmortem'>;
 
 interface RecoveryPostmortemAutomationOptions {
@@ -112,7 +113,12 @@ export function setupRecoveryPostmortemAutomation({
         postmortemTimers.delete(payload.projectId);
 
         const project = db.getProject(payload.projectId);
-        if (!project || project.status !== 'running') {
+        // PR 4.5: canonical-first status read with `??` fallback to legacy
+        // `projects` column through migration 0012.
+        const deployable = project ? db.getDeployableForProject(payload.projectId) : undefined;
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+        const status = deployable?.status ?? project?.status;
+        if (!project || status !== 'running') {
           return;
         }
 
@@ -210,12 +216,44 @@ export interface AppContext {
   llmVerified: boolean;
 }
 
+/**
+ * One-time data migration: set resourceProfile='small' as default for all
+ * existing projects that have no resource config in deploy_configs.
+ * Idempotent — safe to run on every startup.
+ */
+function migrateDefaultResourceProfile(db: Database): void {
+  const allProjects = db.listProjects(undefined, { includeArchived: true });
+  let migratedCount = 0;
+
+  for (const project of allProjects) {
+    const configRow = db.loadDeployConfig(project.id);
+    if (!configRow) {
+      const json = serializeConfig({ resourceProfile: 'small' });
+      db.saveDeployConfig(project.id, json, CONFIG_VERSION);
+      migratedCount++;
+    } else {
+      const stored = deserializeConfig(configRow.config_json);
+      if (stored && !stored.snapshot.resourceProfile) {
+        const updatedSnapshot = { ...stored.snapshot, resourceProfile: 'small' as const };
+        const json = serializeConfig(updatedSnapshot);
+        db.saveDeployConfig(project.id, json, CONFIG_VERSION);
+        migratedCount++;
+      }
+    }
+  }
+
+  if (migratedCount > 0) {
+    log.info({ migratedCount }, 'Migration: applied default resource profile to existing projects');
+  }
+}
+
 /** Create the application context from config. */
 export async function createAppContext(
   config: OpenLanderConfig,
   dbPath: string,
 ): Promise<AppContext> {
   const db = new Database(dbPath);
+  migrateDefaultResourceProfile(db);
   const docker = new Docker(config.docker.socketPath || undefined, config.docker.networkName);
   const serverContext = createLocalServerContext(docker);
 
@@ -398,6 +436,14 @@ export async function createAppContext(
       const override = db.getProjectOpsOverride(projectId);
       return resolveAutomationPolicy(opsConfig, override ?? undefined);
     },
+    // 1.0 GA: route recovery through the per-project lock so two different
+    // projects can recover concurrently. Same-project recovery still
+    // serializes through this lock + pipeline boundary.
+    acquireProjectLock: (projectId, sessionId) =>
+      ctx.agentPool ? ctx.agentPool.acquireProjectLock(projectId, sessionId) : true,
+    releaseProjectLock: (projectId, sessionId) => {
+      ctx.agentPool?.releaseProjectLock(projectId, sessionId);
+    },
   });
   coordinator.setDeploymentRecovery((projectId, error, step, buildLog) =>
     recoveryHandlers.handleDeploymentRecovery(projectId, error, step, buildLog),
@@ -455,20 +501,27 @@ export async function createAppContext(
   const containerStateReconciler = new ContainerStateReconciler(docker, db, eventBus, {
     intervalMs: monitorIntervalMs,
   });
-  const serviceHealthMonitor = createServiceHealthMonitor(docker, db, eventBus, {
-    intervalMs: monitorIntervalMs,
-  });
   const systemMaintenanceMonitor = createSystemMaintenanceMonitor(docker, db, eventBus, {
     intervalMs: monitorIntervalMs,
   });
 
   // v0.2: Webhook auto-redeploy
-  const webhookManager = new WebhookManager(pipeline, db, eventBus);
+  // 1.0 GA: pass the agent pool so webhook redeploys participate in the
+  // per-project lock alongside UI / agent / MCP triggers.
+  const webhookManager = new WebhookManager(pipeline, db, eventBus, agentPool ?? undefined);
 
   // v0.2: Cloudflare production tunnels
   const cloudflare = new CloudflareTunnelManager(config.cloudflare, db, eventBus);
 
   const serviceManager = new ServiceManager(docker, db);
+
+  // ServiceHealthMonitor depends on serviceManager for the v4 sparkline
+  // recorder hook (Phase E_NEW Task 5). Construct after serviceManager so
+  // each tick can persist a sample into `service_metrics`.
+  const serviceHealthMonitor = createServiceHealthMonitor(docker, db, eventBus, {
+    intervalMs: monitorIntervalMs,
+    serviceManager,
+  });
 
   try {
     await traefik.ensureAllNetworks();

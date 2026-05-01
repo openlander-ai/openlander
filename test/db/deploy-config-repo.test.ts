@@ -84,7 +84,13 @@ describe('DeployConfigRepo.exists', () => {
     const dbBundle = createDrizzleDatabase(dbPath);
     sqlite = dbBundle.sqlite;
     drizzle = dbBundle.db;
-    migrate(drizzle as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    // 0009 drops parent tables; mirror src/db/index.ts:435-443 production path.
+    sqlite.exec('PRAGMA foreign_keys = OFF');
+    try {
+      migrate(drizzle as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    } finally {
+      sqlite.exec('PRAGMA foreign_keys = ON');
+    }
 
     projectRepo = new ProjectRepo(drizzle, sqlite);
     deployConfigRepo = new DeployConfigRepo(drizzle, sqlite);

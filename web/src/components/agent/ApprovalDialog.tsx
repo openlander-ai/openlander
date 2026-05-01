@@ -1,57 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePollingTask } from '@/hooks/use-polling-task';
-import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import {
-  approveActionRun,
-  fetchPendingApprovals,
-  rejectActionRun,
-  listProjects,
-  type ActionRun,
-} from '@/lib/api/projects';
+import { approveActionRun, rejectActionRun } from '@/lib/api/projects';
 import { ShieldAlert, Activity, CheckCircle2, X } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { TOOL_HUMAN_LABELS } from '@/components/ops/utils';
+import { useAppData } from '@/hooks/use-app-data';
 
 export function ApprovalDialog() {
   const { t, language } = useLanguage();
-  const navigate = useNavigate();
-  const [allPending, setAllPending] = useState<ActionRun[]>([]);
+  const { pendingApprovals, pendingApprovalsError, refreshPendingApprovals, projects } =
+    useAppData();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
-  useEffect(() => {
-    async function initProjects() {
-      try {
-        const projs = await listProjects(true);
-        const map: Record<string, string> = {};
-        for (const p of projs) {
-          map[p.id] = p.name;
-        }
-        setProjectsMap(map);
-      } catch (err) {
-        console.error('Failed to load projects for ApprovalDialog', err);
-      }
+  const projectsMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of projects) {
+      map[p.id] = p.name;
     }
-    void initProjects();
-  }, []);
+    return map;
+  }, [projects]);
 
-  const refreshPending = useCallback(async () => {
-    try {
-      const runs = await fetchPendingApprovals();
-      setAllPending(runs);
-      setError(null);
-    } catch {
-      setError(t('agent.approval.loadFailed'));
-    }
-  }, [t]);
-
-  usePollingTask(refreshPending, { intervalMs: 5000 });
-
-  const pending = allPending[0] ?? null;
-  const remainingCount = allPending.length - 1;
+  const pending = pendingApprovals[0] ?? null;
+  const remainingCount = pendingApprovals.length - 1;
+  const error = actionError ?? (pendingApprovalsError ? t('agent.approval.loadFailed') : null);
 
   const toolName = useMemo(() => {
     const rawTool = pending?.approval_tool ?? 'unknown_tool';
@@ -70,13 +43,14 @@ export function ApprovalDialog() {
     setIsSubmitting(true);
     try {
       await approveActionRun(pending.id);
-      await refreshPending();
+      setActionError(null);
+      await refreshPendingApprovals();
     } catch {
-      setError(t('agent.approval.actionFailed'));
+      setActionError(t('agent.approval.actionFailed'));
     } finally {
       setIsSubmitting(false);
     }
-  }, [pending, refreshPending, t]);
+  }, [pending, refreshPendingApprovals, t]);
 
   const handleReject = useCallback(async () => {
     if (!pending) {
@@ -86,21 +60,20 @@ export function ApprovalDialog() {
     setIsSubmitting(true);
     try {
       await rejectActionRun(pending.id);
-      await refreshPending();
+      setActionError(null);
+      await refreshPendingApprovals();
     } catch {
-      setError(t('agent.approval.actionFailed'));
+      setActionError(t('agent.approval.actionFailed'));
     } finally {
       setIsSubmitting(false);
     }
-  }, [pending, refreshPending, t]);
-
-  const location = useLocation();
+  }, [pending, refreshPendingApprovals, t]);
 
   useEffect(() => {
     setDismissed(false);
   }, [pending?.id]);
 
-  if (!pending || dismissed || location.pathname === '/operations') {
+  if (!pending || dismissed) {
     return null;
   }
 
@@ -117,7 +90,7 @@ export function ApprovalDialog() {
         </div>
         <div className="flex-1">
           <h3 className="text-sm font-semibold text-error mb-1">{t('agent.approval.title')}</h3>
-          <p className="text-xs text-secondary-ol font-medium">
+          <p className="text-xs text-foreground/80 font-medium">
             <span className="font-mono bg-bg-subtle px-1 rounded mr-1.5">{projectName}</span>
             {t('agent.approval.description', { tool: toolName })}
           </p>
@@ -127,7 +100,7 @@ export function ApprovalDialog() {
           className="shrink-0 p-1 rounded-md hover:bg-error/10 transition-colors"
           title="Dismiss"
         >
-          <X className="h-4 w-4 text-muted-ol" />
+          <X className="h-4 w-4 text-muted-foreground" />
         </button>
       </div>
 
@@ -141,7 +114,7 @@ export function ApprovalDialog() {
 
         {pending.error_message && (
           <div className="space-y-1.5">
-            <h4 className="text-[11px] font-semibold text-muted-ol uppercase tracking-wider flex items-center gap-1.5">
+            <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
               <Activity className="h-3 w-3" /> {t('agent.approval.incidentContext')}
             </h4>
             <div className="bg-bg-subtle/50 border border-border p-2.5 rounded-md text-xs font-mono text-error whitespace-pre-wrap max-h-[80px] overflow-y-auto">
@@ -152,10 +125,10 @@ export function ApprovalDialog() {
 
         {pending.plan && (
           <div className="space-y-1.5">
-            <h4 className="text-[11px] font-semibold text-muted-ol uppercase tracking-wider flex items-center gap-1.5">
+            <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
               <CheckCircle2 className="h-3 w-3 text-agent" /> {t('agent.approval.recoveryPlan')}
             </h4>
-            <div className="bg-agent/5 border border-agent/20 p-2.5 rounded-md text-xs font-body text-secondary-ol leading-relaxed max-h-[100px] overflow-y-auto whitespace-pre-wrap">
+            <div className="bg-agent/5 border border-agent/20 p-2.5 rounded-md text-xs font-body text-foreground/80 leading-relaxed max-h-[100px] overflow-y-auto whitespace-pre-wrap">
               {pending.plan}
             </div>
           </div>
@@ -190,13 +163,13 @@ export function ApprovalDialog() {
         </Button>
 
         {remainingCount > 0 && (
-          <button
-            type="button"
-            onClick={() => navigate('/operations')}
-            className="ml-auto text-[11px] text-agent hover:text-agent/80 transition-colors underline underline-offset-2"
-          >
+          // Static count — no destination page exists in 1.0; the dialog
+          // cycles through pending approvals one at a time as the user
+          // resolves them. Was a navigate-to-/operations button in v1
+          // but /operations was retired (ralplan Phase 1).
+          <span className="ml-auto text-[11px] text-agent">
             {t('agent.approval.pendingMore', { count: String(remainingCount) })}
-          </button>
+          </span>
         )}
       </div>
     </div>

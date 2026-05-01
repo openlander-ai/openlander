@@ -32,6 +32,8 @@ function createMockCtx() {
       getCircuitBreakerState: vi.fn(() => null),
       isCircuitBreakerOpen: vi.fn(() => false),
       getProject: vi.fn(() => ({ status: 'running', archived_at: null })),
+      // PR 4.5: canonical-first reads need this helper.
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
       resetCircuitBreaker: vi.fn(),
       getProjectOpsOverride: vi.fn(() => undefined),
       getActionRunsByApprovalStatus: vi.fn(() => []),

@@ -6,6 +6,7 @@ import {
   type OrchestrationPipeline,
   type ServiceTopology,
 } from '../src/pipeline/orchestrator.js';
+import { ProjectArchivedError, CircuitBreakerOpenError } from '../src/errors.js';
 
 describe('DeployOrchestrator', () => {
   it('buildTopology sorts a dependency chain (A -> B -> C)', () => {
@@ -191,5 +192,156 @@ describe('DeployOrchestrator', () => {
 
     expect(result.success).toBe(false);
     expect(result.services[0]?.status).toBe('failed');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Day 8 Bug #5: Compose orchestrator must NOT silently swallow rollback
+  // exceptions and label services as `rolled_back`. When the pipeline
+  // mutation policy rejects the rollback (project archived / recovering /
+  // circuit open), the deployment is still live and must be reported as
+  // such so operators see the partial state.
+  // ---------------------------------------------------------------------------
+  it('executeOrdered surfaces rollback_failed_due_to_policy when policy rejects rollback', async () => {
+    const events = new EventBus();
+    const orchestrator = new DeployOrchestrator(events);
+    const topology = orchestrator.buildTopology(
+      [
+        { name: 'a', dockerfile: 'a/Dockerfile', dependsOn: [] },
+        { name: 'b', dockerfile: 'b/Dockerfile', dependsOn: ['a'] },
+      ],
+      'https://github.com/example/repo',
+      '/tmp/repo',
+      'abc123',
+    );
+
+    const pipeline: OrchestrationPipeline = {
+      deployService: async (service) => {
+        if (service.name === 'b') {
+          return { success: false, error: 'b failed' };
+        }
+        return { success: true, projectId: 'a-id', url: 'http://a.local' };
+      },
+      // Simulate policy rejecting the rollback (archived between deploy
+      // and rollback).
+      rollbackService: vi
+        .fn<OrchestrationPipeline['rollbackService']>()
+        .mockRejectedValue(new ProjectArchivedError('a-id')),
+    };
+
+    const result = await orchestrator.executeOrdered(topology, pipeline);
+
+    expect(result.success).toBe(false);
+    const aStatus = result.services.find((s) => s.name === 'a');
+    expect(aStatus?.status).toBe('rollback_failed_due_to_policy');
+    expect(aStatus?.error).toMatch(/rollback blocked/i);
+    expect(aStatus?.error).toMatch(/archived/i);
+
+    const bStatus = result.services.find((s) => s.name === 'b');
+    expect(bStatus?.status).toBe('failed');
+  });
+
+  it('executeOrdered surfaces rollback_failed_due_to_policy when circuit breaker is open', async () => {
+    const events = new EventBus();
+    const orchestrator = new DeployOrchestrator(events);
+    const topology = orchestrator.buildTopology(
+      [
+        { name: 'svc1', dockerfile: 'svc1/Dockerfile', dependsOn: [] },
+        { name: 'svc2', dockerfile: 'svc2/Dockerfile', dependsOn: ['svc1'] },
+      ],
+      'https://github.com/example/repo',
+      '/tmp/repo',
+      'abc123',
+    );
+
+    const pipeline: OrchestrationPipeline = {
+      deployService: async (service) => {
+        if (service.name === 'svc2') {
+          return { success: false, error: 'svc2 failed' };
+        }
+        return { success: true, projectId: 'svc1-id', url: 'http://svc1.local' };
+      },
+      rollbackService: async () => {
+        throw new CircuitBreakerOpenError('svc1-id');
+      },
+    };
+
+    const result = await orchestrator.executeOrdered(topology, pipeline);
+
+    expect(result.success).toBe(false);
+    const svc1Status = result.services.find((s) => s.name === 'svc1');
+    expect(svc1Status?.status).toBe('rollback_failed_due_to_policy');
+    expect(svc1Status?.error).toMatch(/circuit breaker/i);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Day 9 F2: generic (non-policy) rollback failures must NOT be conflated
+  // with policy rejections. Operators need to tell apart "operator-set state
+  // (archived/recovering/circuit-open)" from "Docker/generic error".
+  // ---------------------------------------------------------------------------
+  it('executeOrdered surfaces rollback_failed (not policy) for generic Docker errors', async () => {
+    const events = new EventBus();
+    const orchestrator = new DeployOrchestrator(events);
+    const topology = orchestrator.buildTopology(
+      [
+        { name: 'a', dockerfile: 'a/Dockerfile', dependsOn: [] },
+        { name: 'b', dockerfile: 'b/Dockerfile', dependsOn: ['a'] },
+      ],
+      'https://github.com/example/repo',
+      '/tmp/repo',
+      'abc123',
+    );
+
+    const pipeline: OrchestrationPipeline = {
+      deployService: async (service) => {
+        if (service.name === 'b') {
+          return { success: false, error: 'b failed' };
+        }
+        return { success: true, projectId: 'a-id', url: 'http://a.local' };
+      },
+      // Generic Docker / runtime error, NOT a policy rejection.
+      rollbackService: async () => {
+        throw new Error('Docker daemon unreachable');
+      },
+    };
+
+    const result = await orchestrator.executeOrdered(topology, pipeline);
+
+    expect(result.success).toBe(false);
+    const aStatus = result.services.find((s) => s.name === 'a');
+    expect(aStatus?.status).toBe('rollback_failed');
+    expect(aStatus?.status).not.toBe('rollback_failed_due_to_policy');
+    expect(aStatus?.error).toMatch(/rollback failed/i);
+    expect(aStatus?.error).toMatch(/Docker daemon/i);
+  });
+
+  it('executeOrdered still labels services rolled_back when rollback succeeds', async () => {
+    // Regression: ensure the new branch did not break the happy path.
+    const events = new EventBus();
+    const orchestrator = new DeployOrchestrator(events);
+    const topology = orchestrator.buildTopology(
+      [
+        { name: 'a', dockerfile: 'a/Dockerfile', dependsOn: [] },
+        { name: 'b', dockerfile: 'b/Dockerfile', dependsOn: ['a'] },
+      ],
+      'https://github.com/example/repo',
+      '/tmp/repo',
+      'abc123',
+    );
+
+    const pipeline: OrchestrationPipeline = {
+      deployService: async (service) => {
+        if (service.name === 'b') {
+          return { success: false, error: 'b failed' };
+        }
+        return { success: true, projectId: 'a-id', url: 'http://a.local' };
+      },
+      rollbackService: vi.fn<OrchestrationPipeline['rollbackService']>().mockResolvedValue(),
+    };
+
+    const result = await orchestrator.executeOrdered(topology, pipeline);
+
+    expect(result.success).toBe(false);
+    const aStatus = result.services.find((s) => s.name === 'a');
+    expect(aStatus?.status).toBe('rolled_back');
   });
 });

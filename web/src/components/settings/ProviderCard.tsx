@@ -37,13 +37,15 @@ export function ProviderCard({ provider, isDeleting, onDelete }: ProviderCardPro
     <div className="rounded-lg border border-border bg-bg-subtle/50 p-4 flex flex-col gap-3 transition-colors hover:bg-bg-subtle">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
-          <div className="flex items-center gap-2 px-2 py-1 rounded bg-bg-app border border-border text-xs font-medium text-primary-ol shrink-0">
+          <div className="flex items-center gap-2 px-2 py-1 rounded bg-bg-app border border-border text-xs font-medium text-foreground shrink-0">
             <span className={cn('h-2 w-2 rounded-full shrink-0', pDef?.color ?? 'bg-gray-400')} />
             {pDef?.label || provider.provider}
           </div>
-          <div className="text-sm font-mono text-muted-ol truncate">{provider.defaultModel}</div>
+          <div className="text-sm font-mono text-muted-foreground truncate">
+            {provider.defaultModel}
+          </div>
           {provider.hasApiKey && (
-            <div className="text-xs font-mono text-muted-ol bg-bg-app px-2 py-0.5 rounded border border-border truncate max-w-[120px]">
+            <div className="text-xs font-mono text-muted-foreground bg-bg-app px-2 py-0.5 rounded border border-border truncate max-w-[120px]">
               {provider.apiKeyPreview}
             </div>
           )}
@@ -54,7 +56,7 @@ export function ProviderCard({ provider, isDeleting, onDelete }: ProviderCardPro
             size="sm"
             onClick={onDelete}
             disabled={isDeleting}
-            className="h-8 w-8 p-0 text-muted-ol hover:text-error"
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-error"
           >
             {isDeleting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -65,7 +67,7 @@ export function ProviderCard({ provider, isDeleting, onDelete }: ProviderCardPro
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-ol">
+      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
         <div className="flex items-center gap-1.5">
           {provider.circuitBreaker?.state === 'open' ? (
             <>
@@ -89,7 +91,9 @@ export function ProviderCard({ provider, isDeleting, onDelete }: ProviderCardPro
                   {t('llmSettings.healthy') || 'Healthy'}
                 </span>
                 {provider.health.latencyMs !== undefined && (
-                  <span className="text-muted-ol/70 ml-1">({provider.health.latencyMs}ms)</span>
+                  <span className="text-muted-foreground/70 ml-1">
+                    ({provider.health.latencyMs}ms)
+                  </span>
                 )}
               </>
             ) : (
@@ -102,7 +106,7 @@ export function ProviderCard({ provider, isDeleting, onDelete }: ProviderCardPro
             )
           ) : (
             <>
-              <HelpCircle className="h-3.5 w-3.5 text-muted-ol/70" />
+              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/70" />
               <span>{t('llmSettings.untested') || 'Untested'}</span>
             </>
           )}
@@ -110,7 +114,7 @@ export function ProviderCard({ provider, isDeleting, onDelete }: ProviderCardPro
 
         {provider.createdAt && (
           <div className="flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5 text-muted-ol/70" />
+            <Clock className="h-3.5 w-3.5 text-muted-foreground/70" />
             <span>
               {t('llmSettings.registeredAt') || 'Registered'} {formatDate(provider.createdAt)}
             </span>

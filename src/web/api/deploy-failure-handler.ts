@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid';
 
 import type { AppContext } from '../../app.js';
 import { eventBus } from '../../events/index.js';
+import { classifyDeployError } from '../../pipeline/error-classifier.js';
 import { scanRepoEnvVars } from '../../pipeline/env-scan.js';
 import { cloneRepo } from '../../pipeline/git.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
@@ -13,6 +14,13 @@ type TerminalFailureInput = {
   step: 'deploy-start' | 'monorepo' | 'orchestrate';
   failedStep: string;
   error: string;
+  /**
+   * 16-key ErrorClass union value from `classifyDeployError`. Forwarded
+   * onto the `deploy:failed` event payload so the SSE log-stream can
+   * surface it on the terminal `event: end` for v4 ErrorSurface.
+   * Phase E_NEW.
+   */
+  errorClass?: string;
 };
 
 export type PlanExecutionDeps = {
@@ -79,6 +87,7 @@ export async function handleTerminalFailure(
       projectId: deps.projectId,
       step: input.step,
       error: input.error,
+      errorClass: input.errorClass,
     });
     return;
   }
@@ -116,6 +125,7 @@ export async function handleTerminalFailure(
       projectId: deps.projectId,
       step: input.step,
       error: input.error,
+      errorClass: input.errorClass,
     });
     return;
   }
@@ -205,6 +215,7 @@ export async function handleTerminalFailure(
       projectId: deps.projectId,
       step: input.step,
       error: input.error,
+      errorClass: input.errorClass,
     });
     return;
   }
@@ -225,10 +236,15 @@ export async function handleTerminalFailure(
           ? `❌ 재시도 배포 시작 실패: ${retryErrMsg}`
           : `❌ Failed to start retry deployment: ${retryErrMsg}`,
       );
+      // Re-classify the retry's error — the retry may surface a different
+      // failure mode than the original (e.g., transient network blip on
+      // first attempt → CONFIG_MISSING on retry).
+      const retryErrorClass = classifyDeployError(retryErr);
       await eventBus.emit('deploy:failed', {
         projectId: deps.projectId,
         step: 'deploy-start',
         error: retryErrMsg,
+        errorClass: retryErrorClass,
       });
     });
 
@@ -284,6 +300,7 @@ export async function handleTerminalFailure(
     projectId: deps.projectId,
     step: input.step,
     error: input.error,
+    errorClass: input.errorClass,
   });
 }
 
@@ -405,8 +422,12 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
     try {
       const cloneResult = await cloneRepo({ repoUrl: project.repo_url, branch: project.branch });
       clonePath = cloneResult.path;
+      // PR 4 canonical-first: dockerfile_path on the deployable services
+      // row supersedes the legacy projects column post-0012.
+      const deployable = ctx.db.getDeployableForProject(project.id);
+      const dockerfilePath = deployable?.dockerfile_path ?? project.dockerfile_path;
       const scanResult = scanRepoEnvVars(clonePath, {
-        dockerfilePath: project.dockerfile_path,
+        dockerfilePath: dockerfilePath ?? undefined,
       });
 
       const allStoredKeys = new Set<string>();

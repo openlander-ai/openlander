@@ -1,6 +1,7 @@
 import type { LanguageModel, ToolSet } from 'ai';
 import type { Database } from '../db/index.js';
-import type { QuestionBridge } from '../lib/question-bridge.js';
+import { LLMConcurrencyExceededError } from '../errors.js';
+import type { QuestionAnswer, QuestionBridge } from '../lib/question-bridge.js';
 import type { ApprovalGate } from '../pipeline/approval-gate.js';
 import { Agent } from './agent.js';
 import type { ContextProvider, LLMProvider } from './prompts.js';
@@ -24,10 +25,26 @@ export const STATE_CHANGING_TOOLS = new Set([
 ]);
 
 /**
- * Stale lock timeout: 5 minutes.
- * If a lock is older than this, it's considered abandoned and can be evicted.
+ * Stale lock timeout: 30 minutes (1.0 GA — Codex Day 16 cumulative cross-check).
+ *
+ * Aligned with the DB-level `cleanExpiredDeployLocks` default AND
+ * `recovery-policy.ts:DEFAULT_LOCK_STALE_MS` so the in-memory project
+ * lock, persisted `deploy_lock_*` columns, and recovery-policy stale
+ * window all expire in the same 30min window.
+ *
+ * Why 30min and not 15min: a slow first-build (Rails monolith with cold
+ * `bundle install` + `assets:precompile`, or a Next.js project with a
+ * fresh dependency tree on a low-end host) can take 20-25min. With a
+ * 15min TTL, the in-memory lock evicts mid-build, a second user click
+ * lets a duplicate redeploy start, and BUG-002 reappears. 30min covers
+ * realistic worst-case builds for 1.0 GA. Anything beyond 30min is
+ * documented in docs/launchpad/first-24h-runbook.md (force-release
+ * workaround) until the 1.0.x heartbeat/lease-renewal lands.
+ *
+ * The watchdog (`RECOVERING_TIMEOUT_MS`) is intentionally longer (60min)
+ * — it frees rows stuck in `recovering` state, not deploy locks.
  */
-export const PROJECT_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
+export const PROJECT_LOCK_TIMEOUT_MS = 30 * 60 * 1000;
 
 interface PoolEntry {
   agent: Agent;
@@ -66,7 +83,15 @@ export class AgentPool {
     if (this.pool.size >= MAX_POOL_SIZE) {
       this.evictOldest();
       if (this.pool.size >= MAX_POOL_SIZE) {
-        return this.createAgent();
+        // Pool is full and every entry is active — refuse the new session
+        // instead of silently spawning an unpooled Agent (which previously
+        // bypassed the hard cap and let LLM concurrency / cost grow without
+        // bound). Caller (e.g. chat-routes) maps this to HTTP 429.
+        let activeCount = 0;
+        for (const entry of this.pool.values()) {
+          if (entry.isActive) activeCount += 1;
+        }
+        throw new LLMConcurrencyExceededError(MAX_POOL_SIZE, activeCount);
       }
     }
 
@@ -144,6 +169,77 @@ export class AgentPool {
     if (this.recoveryAgent) {
       this.recoveryAgent.setQuestionBridge(bridge);
     }
+  }
+
+  /**
+   * Reply to a pending question on whichever active Agent has it.
+   *
+   * The shared QuestionBridge now multiplexes pending entries by `requestId`,
+   * so concurrent agent streams no longer trample each other's resolve
+   * handler. Walks every pooled Agent's bridge (plus the recovery agent and
+   * the shared fallback) and asks each to deliver the answer if it matches
+   * its own pending state. Returns true if any bridge accepted it.
+   */
+  replyToQuestion(requestId: string, answers: QuestionAnswer[]): boolean {
+    let delivered = false;
+    const tryDeliver = (bridge: QuestionBridge | null): void => {
+      if (!bridge || !bridge.hasPending(requestId)) return;
+      bridge.reply(requestId, answers);
+      delivered = true;
+    };
+
+    for (const entry of this.pool.values()) {
+      tryDeliver(entry.agent.getQuestionBridge());
+    }
+    if (this.recoveryAgent) {
+      tryDeliver(this.recoveryAgent.getQuestionBridge());
+    }
+    tryDeliver(this.questionBridge);
+    return delivered;
+  }
+
+  /**
+   * Reject a pending question on whichever active Agent has it. With no
+   * `requestId`, walks every Agent's bridge and the shared bridge to clear
+   * all pending entries (preserves legacy single-slot dismiss semantics).
+   */
+  rejectQuestion(requestId?: string): boolean {
+    let touched = false;
+    const reject = (bridge: QuestionBridge | null): void => {
+      if (!bridge) return;
+      if (requestId === undefined) {
+        if (bridge.hasPending()) {
+          bridge.reject();
+          touched = true;
+        }
+        return;
+      }
+      if (bridge.hasPending(requestId)) {
+        bridge.reject(requestId);
+        touched = true;
+      }
+    };
+
+    for (const entry of this.pool.values()) {
+      reject(entry.agent.getQuestionBridge());
+    }
+    if (this.recoveryAgent) {
+      reject(this.recoveryAgent.getQuestionBridge());
+    }
+    reject(this.questionBridge);
+    return touched;
+  }
+
+  /** True if any Agent (or the shared fallback bridge) has a pending question. */
+  hasPendingQuestion(requestId?: string): boolean {
+    for (const entry of this.pool.values()) {
+      if (entry.agent.getQuestionBridge()?.hasPending(requestId)) return true;
+    }
+    if (this.recoveryAgent?.getQuestionBridge()?.hasPending(requestId)) {
+      return true;
+    }
+    if (this.questionBridge?.hasPending(requestId)) return true;
+    return false;
   }
 
   private createAgent(): Agent {

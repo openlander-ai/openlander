@@ -167,9 +167,58 @@ export function validateApiToken(db: AuthDatabase, token: string): boolean {
 
 /**
  * Core auth service wrapper around auth helpers and DB persistence.
+ *
+ * Setup secret semantics:
+ *  - Generated lazily on the first `getOrCreateSetupSecret()` call when no
+ *    password has been configured. The plaintext value is held in process
+ *    memory only — it is never persisted, so a restart rotates it.
+ *  - Validated with constant-time comparison to mitigate timing attacks.
+ *  - Cleared automatically when a password is successfully provisioned via
+ *    `setupPassword()` so the same secret cannot be reused.
  */
 export class AuthService {
+  private setupSecret: string | null = null;
+
   constructor(private readonly db: AuthDatabase) {}
+
+  /**
+   * Generate (if needed) and return the one-time bootstrap secret used to
+   * authorize the very first password setup. Returns `null` once a password
+   * has already been configured, so callers don't accidentally print a stale
+   * value during runtime.
+   */
+  getOrCreateSetupSecret(): string | null {
+    if (this.db.isPasswordSet()) {
+      this.setupSecret = null;
+      return null;
+    }
+    if (!this.setupSecret) {
+      this.setupSecret = randomBytes(16).toString('hex');
+    }
+    return this.setupSecret;
+  }
+
+  /**
+   * Constant-time validation of a presented setup secret. Returns false when
+   * either no secret has been issued yet or the supplied value does not match.
+   */
+  verifySetupSecret(presented: string | undefined | null): boolean {
+    const expected = this.setupSecret;
+    if (!expected || typeof presented !== 'string' || presented.length === 0) {
+      return false;
+    }
+    const a = Buffer.from(expected);
+    const b = Buffer.from(presented);
+    if (a.length !== b.length) {
+      return false;
+    }
+    return timingSafeEqual(a, b);
+  }
+
+  /** Drop the in-memory secret (called after a successful password setup). */
+  clearSetupSecret(): void {
+    this.setupSecret = null;
+  }
 
   hashPassword(plain: string): string {
     return hashPassword(plain);
@@ -204,7 +253,9 @@ export class AuthService {
   }
 
   setupPassword(password: string): { apiToken: string } {
-    return setupPassword(this.db, password);
+    const result = setupPassword(this.db, password);
+    this.clearSetupSecret();
+    return result;
   }
 
   changePassword(currentPassword: string, newPassword: string): void {

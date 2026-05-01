@@ -196,7 +196,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
         {/* Toolbar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <p className="text-xs font-body text-muted-ol">
+            <p className="text-xs font-body text-muted-foreground">
               {vars.length} {vars.length !== 1 ? 'variables' : 'variable'}
             </p>
           </div>
@@ -254,7 +254,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
         {/* Paste .env modal */}
         {pasteMode && (
           <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle p-3 space-y-2">
-            <p className="text-sm font-body text-secondary-ol">{t('envVars.pasteDescription')}</p>
+            <p className="text-sm font-body text-foreground/80">{t('envVars.pasteDescription')}</p>
             <textarea
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
@@ -262,8 +262,8 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
               rows={6}
               className={cn(
                 'w-full rounded-md px-3 py-2 text-xs font-mono',
-                'bg-bg-app border border-border text-primary-ol',
-                'placeholder:text-muted-ol resize-none',
+                'bg-bg-app border border-border text-foreground',
+                'placeholder:text-muted-foreground resize-none',
                 'focus:outline-none focus:ring-1 focus:ring-agent/40',
               )}
             />
@@ -295,7 +295,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
         {envExampleMode && (
           <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-body text-secondary-ol">
+              <p className="text-sm font-body text-foreground/80">
                 Generated .env.example based on your repository and current environment variables.
               </p>
             </div>
@@ -305,7 +305,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
               rows={8}
               className={cn(
                 'w-full rounded-md px-3 py-2 text-xs font-mono',
-                'bg-bg-app border border-border text-primary-ol',
+                'bg-bg-app border border-border text-foreground',
                 'resize-none focus:outline-none',
               )}
             />
@@ -336,13 +336,15 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
         {/* Env vars table */}
         {vars.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-sm font-body text-secondary-ol">{t('envVars.noEnvVars')}</p>
-            <p className="text-sm font-body text-muted-ol mt-1">{t('envVars.getStarted')}</p>
+            <p className="text-sm font-body text-foreground/80">{t('envVars.noEnvVars')}</p>
+            <p className="text-sm font-body text-muted-foreground mt-1">
+              {t('envVars.getStarted')}
+            </p>
           </div>
         ) : (
           <div className="space-y-1">
             {/* Header */}
-            <div className="grid grid-cols-[1fr_1fr_36px_36px] gap-2 px-2 pb-1 text-xs font-mono text-muted-ol uppercase tracking-wider">
+            <div className="grid grid-cols-[1fr_1fr_36px_36px] gap-2 px-2 pb-1 text-xs font-mono text-muted-foreground uppercase tracking-wider">
               <span>{'Key'}</span>
               <span>{'Value'}</span>
               <span />
@@ -361,8 +363,8 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
                   placeholder={'KEY'}
                   className={cn(
                     'px-2 py-1.5 rounded-md text-xs font-mono',
-                    'bg-bg-app border border-border text-primary-ol',
-                    'placeholder:text-muted-ol',
+                    'bg-bg-app border border-border text-foreground',
+                    'placeholder:text-muted-foreground',
                     'focus:outline-none focus:ring-1 focus:ring-agent/40',
                   )}
                 />
@@ -373,14 +375,14 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
                   placeholder={'value'}
                   className={cn(
                     'px-2 py-1.5 rounded-md text-xs font-mono',
-                    'bg-bg-app border border-border text-primary-ol',
-                    'placeholder:text-muted-ol',
+                    'bg-bg-app border border-border text-foreground',
+                    'placeholder:text-muted-foreground',
                     'focus:outline-none focus:ring-1 focus:ring-agent/40',
                   )}
                 />
                 <button
                   onClick={() => toggleReveal(index)}
-                  className="p-1.5 rounded text-muted-ol hover:text-secondary-ol transition-colors"
+                  className="p-1.5 rounded text-muted-foreground hover:text-foreground/80 transition-colors"
                   title={v.revealed ? 'Hide value' : 'Show value'}
                 >
                   {v.revealed ? (
@@ -391,7 +393,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
                 </button>
                 <button
                   onClick={() => removeVar(index)}
-                  className="p-1.5 rounded text-muted-ol hover:text-error transition-colors opacity-0 group-hover:opacity-100"
+                  className="p-1.5 rounded text-muted-foreground hover:text-error transition-colors opacity-0 group-hover:opacity-100"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

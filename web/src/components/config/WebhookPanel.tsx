@@ -125,10 +125,10 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
     <div className="p-4">
       <div className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-5 space-y-4">
         {webhooks.length === 0 ? (
-          <div className="text-center py-8 text-secondary-ol text-sm font-body">
-            <Webhook className="h-8 w-8 mx-auto mb-3 text-muted-ol" />
+          <div className="text-center py-8 text-foreground/80 text-sm font-body">
+            <Webhook className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
             <p>{t('webhooks.noWebhooks')}</p>
-            <p className="text-xs text-muted-ol mt-1">{t('webhooks.description')}</p>
+            <p className="text-xs text-muted-foreground mt-1">{t('webhooks.description')}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -141,7 +141,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-display font-semibold text-primary-ol capitalize">
+                      <span className="text-sm font-display font-semibold text-foreground capitalize">
                         {webhook.source}
                       </span>
                       <span
@@ -149,7 +149,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                           'text-xs px-1.5 py-0.5 rounded font-body',
                           webhook.enabled
                             ? 'bg-success/10 text-success'
-                            : 'bg-[var(--bg-subtle)] text-muted-ol',
+                            : 'bg-[var(--bg-subtle)] text-muted-foreground',
                         )}
                       >
                         {webhook.enabled ? 'Enabled' : 'Disabled'}
@@ -177,9 +177,9 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
 
                   <div className="space-y-2 text-xs font-body">
                     <div>
-                      <span className="text-muted-ol">{'Webhook URL'}:</span>
+                      <span className="text-muted-foreground">{'Webhook URL'}:</span>
                       <div className="flex items-center gap-1 mt-0.5">
-                        <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-xs text-secondary-ol truncate">
+                        <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-xs text-foreground/80 truncate">
                           {fullUrl}
                         </code>
                         <Button
@@ -198,9 +198,9 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                     </div>
 
                     <div>
-                      <span className="text-muted-ol">{'Secret'}:</span>
+                      <span className="text-muted-foreground">{'Secret'}:</span>
                       <div className="flex items-center gap-1 mt-0.5">
-                        <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-xs text-secondary-ol truncate">
+                        <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-xs text-foreground/80 truncate">
                           {webhook.secret}
                         </code>
                         <Button
@@ -218,9 +218,9 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 text-muted-ol">
+                    <div className="flex items-center gap-2 text-muted-foreground">
                       <span>{'Branch filter'}:</span>
-                      <span className="text-secondary-ol">{webhook.branchFilter}</span>
+                      <span className="text-foreground/80">{webhook.branchFilter}</span>
                     </div>
                   </div>
                 </div>
@@ -235,7 +235,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
               <select
                 value={selectedSource}
                 onChange={(e) => setSelectedSource(e.target.value)}
-                className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-primary-ol capitalize"
+                className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-foreground capitalize"
               >
                 {availableSources.map((s) => (
                   <option key={s} value={s}>
@@ -248,7 +248,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                 value={branchFilter}
                 onChange={(e) => setBranchFilter(e.target.value)}
                 placeholder="main"
-                className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-primary-ol w-24"
+                className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-foreground w-24"
               />
               <Button
                 variant="outline"

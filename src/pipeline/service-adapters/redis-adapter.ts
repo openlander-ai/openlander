@@ -1,5 +1,6 @@
 import type { ServiceRow } from '../../db/index.js';
 import type { Docker } from '../docker.js';
+import { ServiceOperationUnsupportedError } from '../../errors.js';
 import { waitUntilReady } from '../lib/retry.js';
 import { execInServiceContainer } from './shared.js';
 import type {
@@ -24,7 +25,7 @@ export class RedisAdapter implements ServiceAdapter {
   }
 
   async waitForReady(service: ServiceRow, docker: Docker): Promise<void> {
-    const containerId = service.container_id ?? service.container_name;
+    const containerId = service.container_id ?? service.container_name ?? '';
     await waitUntilReady(
       async () => {
         const logs = await docker.getLogs(containerId, 200);
@@ -55,11 +56,11 @@ export class RedisAdapter implements ServiceAdapter {
   }
 
   listDatabases(_service: ServiceRow, _docker: Docker): Promise<ListedDatabase[]> {
-    return Promise.reject(new Error('Database listing is not supported for redis services'));
+    return Promise.reject(new ServiceOperationUnsupportedError('Database listing', 'redis'));
   }
 
   listUsers(_service: ServiceRow, _docker: Docker): Promise<ListedUser[]> {
-    return Promise.reject(new Error('User listing is not supported for redis services'));
+    return Promise.reject(new ServiceOperationUnsupportedError('User listing', 'redis'));
   }
 
   createDatabase(
@@ -67,7 +68,7 @@ export class RedisAdapter implements ServiceAdapter {
     _dbName: string,
     _docker: Docker,
   ): Promise<CreateDatabaseResult> {
-    return Promise.reject(new Error('Database creation is not supported for redis services'));
+    return Promise.reject(new ServiceOperationUnsupportedError('Database creation', 'redis'));
   }
 
   createUser(
@@ -75,6 +76,6 @@ export class RedisAdapter implements ServiceAdapter {
     _options: CreateUserOptions,
     _docker: Docker,
   ): Promise<CreateUserResult> {
-    return Promise.reject(new Error('User creation is not supported for redis services'));
+    return Promise.reject(new ServiceOperationUnsupportedError('User creation', 'redis'));
   }
 }

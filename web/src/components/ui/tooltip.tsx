@@ -30,7 +30,7 @@ export function Tooltip({ children, content, side = 'top' }: TooltipProps) {
       {isOpen && (
         <div
           className={cn(
-            'absolute z-50 px-2 py-1 text-xs font-body text-white bg-primary-ol rounded-md whitespace-nowrap pointer-events-none',
+            'absolute z-50 px-2 py-1 text-xs font-body text-primary-foreground bg-foreground rounded-md whitespace-nowrap pointer-events-none',
             sideClasses[side],
           )}
         >

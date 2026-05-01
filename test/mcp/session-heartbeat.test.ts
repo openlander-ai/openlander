@@ -7,7 +7,7 @@ describe('MCP HTTP Session Heartbeat and TTL', () => {
 
   beforeEach(() => {
     mockCtx = {
-      config: {},
+      config: { server: { baseUrl: 'http://localhost:10114' } },
     } as unknown as AppContext;
     vi.useFakeTimers();
   });

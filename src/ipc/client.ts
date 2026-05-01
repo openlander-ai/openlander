@@ -43,13 +43,6 @@ export interface ActivityEvent {
   user: string;
 }
 
-export interface BuildProgressEvent {
-  type: 'log' | 'status' | 'error' | 'complete';
-  message: string;
-  timestamp: string;
-  projectId: string;
-}
-
 export interface ProjectStats {
   containerId: string;
   cpu: number;
@@ -332,13 +325,6 @@ export class OpenLanderClient {
 
   async *streamActivity(signal?: AbortSignal): AsyncGenerator<ActivityEvent> {
     yield* this.streamNDJSON<ActivityEvent>('/api/activity/stream', signal);
-  }
-
-  async *streamBuildProgress(
-    projectId: string,
-    signal?: AbortSignal,
-  ): AsyncGenerator<BuildProgressEvent> {
-    yield* this.streamNDJSON<BuildProgressEvent>(`/api/projects/${projectId}/build/stream`, signal);
   }
 
   // ---------------------------------------------------------------------------

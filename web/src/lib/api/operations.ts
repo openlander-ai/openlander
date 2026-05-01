@@ -135,6 +135,7 @@ export interface ActivityItem {
     | 'ai:invoked'
     | 'ai:completed'
     | 'recovery:blocked'
+    | 'recovery:degraded'
     | 'recovery:stopped'
     | 'recovery:started';
   severity: 'critical' | 'warning' | 'info';
@@ -176,19 +177,6 @@ export interface CircuitBreakerWithProject {
   resetAt: number | null;
 }
 
-export interface DependencyNode {
-  id: string;
-  type: 'project' | 'service';
-  name: string;
-  status: string | null;
-}
-
-export interface DependencyEdge {
-  source: string;
-  target: string;
-  dependencyType: string;
-}
-
 export async function fetchActivityFeed(opts?: {
   projectId?: string;
   types?: string[];
@@ -216,13 +204,6 @@ export async function fetchAllCircuitBreakers(): Promise<{
   breakers: CircuitBreakerWithProject[];
 }> {
   return apiGet<{ breakers: CircuitBreakerWithProject[] }>('/api/ops/circuit-breakers');
-}
-
-export async function fetchDependencyGraph(): Promise<{
-  nodes: DependencyNode[];
-  edges: DependencyEdge[];
-}> {
-  return apiGet<{ nodes: DependencyNode[]; edges: DependencyEdge[] }>('/api/ops/dependencies');
 }
 
 // === Automation Policy types ===

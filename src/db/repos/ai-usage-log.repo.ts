@@ -13,9 +13,7 @@ export class AiUsageLogRepo {
   constructor(
     private readonly db: DrizzleClient,
     private readonly sqlite: SqliteDatabase,
-  ) {
-    void this.sqlite;
-  }
+  ) {}
 
   /**
    * Create a new AI usage log entry.
@@ -25,30 +23,43 @@ export class AiUsageLogRepo {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
 
-    this.db
-      .insert(aiUsageLog)
-      .values({
+    // Raw better-sqlite3 prepare instead of Drizzle .insert().values() —
+    // observed on dogfood mini PM2 logs: the Drizzle path was throwing
+    // "TypeError: You cannot specify named parameters in two different
+    // objects" from better-sqlite3 session.ts:132 on every ai:usage event.
+    // The collision came from the way Drizzle bundles defaults with explicit
+    // values. Positional binding sidesteps it entirely and the wire shape
+    // is identical.
+    this.sqlite
+      .prepare(
+        `INSERT INTO ai_usage_log (
+          id, project_id, session_id, action_type, model_name, provider,
+          input_tokens, output_tokens, total_tokens, cost_usd, tools_called,
+          result, error_message, error_type, duration_ms, user_id, tenant_id,
+          source, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
         id,
-        project_id: data.project_id ?? null,
-        session_id: data.session_id ?? null,
-        action_type: data.action_type,
-        model_name: data.model_name,
-        provider: data.provider,
-        input_tokens: data.input_tokens,
-        output_tokens: data.output_tokens,
-        total_tokens: data.total_tokens,
-        cost_usd: data.cost_usd ?? null,
-        tools_called: data.tools_called,
-        result: data.result,
-        error_message: data.error_message ?? null,
-        error_type: data.error_type ?? null,
-        duration_ms: data.duration_ms,
-        user_id: data.user_id ?? null,
-        tenant_id: data.tenant_id ?? null,
-        source: data.source ?? null,
-        created_at: createdAt,
-      })
-      .run();
+        data.project_id ?? null,
+        data.session_id ?? null,
+        data.action_type,
+        data.model_name,
+        data.provider,
+        data.input_tokens,
+        data.output_tokens,
+        data.total_tokens,
+        data.cost_usd ?? null,
+        data.tools_called,
+        data.result,
+        data.error_message ?? null,
+        data.error_type ?? null,
+        data.duration_ms,
+        data.user_id ?? null,
+        data.tenant_id ?? null,
+        data.source ?? null,
+        createdAt,
+      );
 
     return id;
   }
@@ -62,7 +73,7 @@ export class AiUsageLogRepo {
       .from(aiUsageLog)
       .where(eq(aiUsageLog.project_id, projectId))
       .orderBy(desc(aiUsageLog.created_at))
-      .all() as AiUsageLogRow[];
+      .all();
   }
 
   /**
@@ -77,7 +88,7 @@ export class AiUsageLogRepo {
       .from(aiUsageLog)
       .where(and(gte(aiUsageLog.created_at, fromIso), lte(aiUsageLog.created_at, toIso)))
       .orderBy(desc(aiUsageLog.created_at))
-      .all() as AiUsageLogRow[];
+      .all();
   }
 
   findRecent(opts: { limit: number } & AiUsageLogFilterOptions): AiUsageLogRow[] {
@@ -89,7 +100,7 @@ export class AiUsageLogRepo {
       .where(whereClause)
       .orderBy(desc(aiUsageLog.created_at))
       .limit(opts.limit)
-      .all() as AiUsageLogRow[];
+      .all();
   }
 
   countAll(opts?: AiUsageLogFilterOptions): number {
@@ -98,7 +109,7 @@ export class AiUsageLogRepo {
       .select({ count: sql<number>`COUNT(*)` })
       .from(aiUsageLog)
       .where(whereClause)
-      .get() as { count: number } | undefined;
+      .get();
 
     return row?.count ?? 0;
   }
@@ -123,13 +134,7 @@ export class AiUsageLogRepo {
       })
       .from(aiUsageLog)
       .where(whereClause)
-      .get() as
-      | {
-          totalInputTokens: number;
-          totalOutputTokens: number;
-          totalCostUsd: number | null;
-        }
-      | undefined;
+      .get();
 
     return {
       totalInputTokens: result?.totalInputTokens ?? 0,
@@ -153,13 +158,7 @@ export class AiUsageLogRepo {
       })
       .from(aiUsageLog)
       .where(whereClause)
-      .get() as
-      | {
-          totalInputTokens: number;
-          totalOutputTokens: number;
-          totalCostUsd: number | null;
-        }
-      | undefined;
+      .get();
 
     return {
       totalInputTokens: result?.totalInputTokens ?? 0,

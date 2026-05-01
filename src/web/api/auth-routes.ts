@@ -10,8 +10,54 @@ const log = createModuleLogger('auth-routes');
 
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60;
 
+/**
+ * Day 14 (M2 polish): classify OAuth callback errors into a small enum
+ * before redirecting back to the SPA. Echoing the raw `err.message` (or
+ * a `code` from the upstream IdP) into a query string is technically
+ * safe under `encodeURIComponent`, but it leaks internal failure modes
+ * to the SPA and any logging proxy in front of it. The slug is stable
+ * across upstream wording changes, so the SPA can render localized
+ * messages without parsing free text.
+ */
+type OAuthErrorSlug = 'denied' | 'expired' | 'config' | 'other';
+
+function classifyOAuthError(input: unknown): OAuthErrorSlug {
+  const text = (
+    input instanceof Error ? input.message : typeof input === 'string' ? input : ''
+  ).toLowerCase();
+  if (!text) return 'other';
+  if (
+    text.includes('access_denied') ||
+    text.includes('denied') ||
+    text.includes('consent_required')
+  ) {
+    return 'denied';
+  }
+  if (text.includes('expired') || text.includes('invalid_grant')) {
+    return 'expired';
+  }
+  if (
+    text.includes('not configured') ||
+    text.includes('client_id') ||
+    text.includes('client_secret')
+  ) {
+    return 'config';
+  }
+  return 'other';
+}
+
 const pkceVerifiersByState = new Map<string, { verifier: string; createdAt: number }>();
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+/**
+ * Day 12 (MAJOR #4): hard cap on the in-memory PKCE verifier map. Prevents
+ * an attacker from exhausting RAM by hitting `/auth/google/start` faster than
+ * the 10-minute TTL sweep can reclaim entries. When the cap is reached we
+ * evict the single oldest entry (LRU-by-creation) so a legitimate concurrent
+ * burst can still proceed.
+ *
+ * 1.0.x followup: persist to DB so multi-process deployments share state.
+ */
+const PKCE_STATE_MAX_ENTRIES = 100;
 
 function getSessionCookieToken(cookieHeader: string): string | null {
   const match = cookieHeader.match(/(?:^|;\s*)ol_session=([^;]*)/);
@@ -27,6 +73,43 @@ function cleanExpiredOAuthStates(): void {
   }
 }
 
+/**
+ * Insert a new PKCE state with a hard size cap. If the map is full after the
+ * scheduled TTL sweep, evict the oldest live entry by `createdAt`. Map
+ * iteration order is insertion order, so the first key is the oldest.
+ */
+function setPkceVerifierWithCap(
+  state: string,
+  entry: { verifier: string; createdAt: number },
+): void {
+  if (pkceVerifiersByState.size >= PKCE_STATE_MAX_ENTRIES) {
+    const oldestKey = pkceVerifiersByState.keys().next().value;
+    if (oldestKey !== undefined) {
+      pkceVerifiersByState.delete(oldestKey);
+    }
+  }
+  pkceVerifiersByState.set(state, entry);
+}
+
+/**
+ * Test-only accessors for the in-memory PKCE state map. Exported so the
+ * size-cap and TTL behaviour can be exercised in isolation without driving
+ * the full OAuth roundtrip. Do not consume from production code.
+ */
+export const __pkceTestHooks = {
+  set: setPkceVerifierWithCap,
+  get size() {
+    return pkceVerifiersByState.size;
+  },
+  has(state: string) {
+    return pkceVerifiersByState.has(state);
+  },
+  clear() {
+    pkceVerifiersByState.clear();
+  },
+  maxEntries: PKCE_STATE_MAX_ENTRIES,
+};
+
 export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Hono {
   const api = new Hono();
 
@@ -35,9 +118,24 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       return c.json({ error: 'Password already configured' }, 403);
     }
 
-    const body = await c.req.json<{ password: string }>();
+    const body = await c.req.json<{ password: string; setupSecret?: string }>();
     if (!body.password) {
       return c.json({ error: 'Password is required' }, 400);
+    }
+
+    if (!authService.verifySetupSecret(body.setupSecret)) {
+      log.warn(
+        { hasSecret: typeof body.setupSecret === 'string' && body.setupSecret.length > 0 },
+        'Setup-password attempt rejected: invalid or missing setup secret',
+      );
+      return c.json(
+        {
+          error: 'INVALID_SETUP_SECRET',
+          message:
+            'A valid one-time setup secret is required. Check the OpenLander server console for the secret printed on startup.',
+        },
+        401,
+      );
     }
 
     const { apiToken } = authService.setupPassword(body.password);
@@ -157,6 +255,12 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
   });
 
   api.get('/auth/google/start', (c) => {
+    const cookieHeader = c.req.header('cookie') || '';
+    const sessionToken = getSessionCookieToken(cookieHeader);
+    if (!sessionToken || !authService.validateSession(sessionToken)) {
+      return c.json({ error: 'AUTH_REQUIRED' }, 401);
+    }
+
     if (!ctx) {
       return c.json({ error: 'OAuth not available' }, 500);
     }
@@ -171,7 +275,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
     const { verifier, challenge } = generatePkce();
     const state = randomBytes(16).toString('hex');
 
-    pkceVerifiersByState.set(state, { verifier, createdAt: Date.now() });
+    setPkceVerifierWithCap(state, { verifier, createdAt: Date.now() });
 
     const callbackUrl = `${ctx.config.server.baseUrl}/api/auth/callback/google`;
     const authUrl = getGoogleAuthUrl(googleConfig.clientId, callbackUrl, challenge, state);
@@ -180,6 +284,11 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
   });
 
   api.get('/auth/callback/google', async (c) => {
+    // Note: we deliberately DO NOT check the session cookie here. The redirect
+    // from accounts.google.com is cross-site, so a SameSite=Strict cookie will
+    // not be attached. Authentication is established by the state parameter:
+    // it can only have been issued by /auth/google/start (which requires a
+    // session), is single-use, and expires after 10 minutes (validated below).
     if (!ctx) {
       return c.json({ error: 'OAuth not available' }, 500);
     }
@@ -190,7 +299,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
 
     if (error) {
       log.error({ error }, 'Google OAuth callback error');
-      return c.redirect(`${ctx.config.server.baseUrl}/?oauth_error=${encodeURIComponent(error)}`);
+      return c.redirect(`${ctx.config.server.baseUrl}/?oauth_error=${classifyOAuthError(error)}`);
     }
 
     if (!code || !state) {
@@ -235,8 +344,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       return c.redirect(`${ctx.config.server.baseUrl}/?oauth_success=google`);
     } catch (err) {
       log.error({ err }, 'Google OAuth code exchange failed');
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      return c.redirect(`${ctx.config.server.baseUrl}/?oauth_error=${encodeURIComponent(msg)}`);
+      return c.redirect(`${ctx.config.server.baseUrl}/?oauth_error=${classifyOAuthError(err)}`);
     }
   });
 

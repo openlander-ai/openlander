@@ -90,7 +90,8 @@ export class ProjectHealthMonitor {
       };
     }
 
-    const profile = resolveMonitoringProfile(project);
+    const deployable = this.db.getDeployableForProject(projectId);
+    const profile = resolveMonitoringProfile(project, deployable);
     if (profile.health.strategy === 'none') {
       this.consecutiveFailures.set(projectId, 0);
       return {
@@ -100,10 +101,12 @@ export class ProjectHealthMonitor {
       };
     }
 
+    // PR 4.5: canonical-first read of runtime columns with `??` fallback.
+    const deployableForProbe = this.db.getDeployableForProject(projectId);
     const probeContext: ProbeContext = {
       projectId,
-      containerId: project.container_id ?? '',
-      assignedPort: project.assigned_port ?? undefined,
+      containerId: deployableForProbe?.container_id ?? project.container_id ?? '',
+      assignedPort: deployableForProbe?.assigned_port ?? project.assigned_port ?? undefined,
     };
 
     const probeConfig = {
@@ -160,7 +163,10 @@ export class ProjectHealthMonitor {
       return;
     }
 
-    if ((project.status !== 'running' && project.status !== 'error') || project.archived_at) {
+    // PR 4.5: canonical-first status read with `??` fallback.
+    const deployable = this.db.getDeployableForProject(projectId);
+    const status = deployable?.status ?? project.status;
+    if ((status !== 'running' && status !== 'error') || project.archived_at) {
       return;
     }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Database, Users, Plus, Copy, Loader2, Check } from 'lucide-react';
 import { toast } from 'sonner';
+import { useLanguage } from '@/i18n/context';
 import {
   getServiceDatabases,
   getServiceUsers,
@@ -37,6 +38,7 @@ interface ServiceDatabasesTabProps {
 }
 
 export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
+  const { t } = useLanguage();
   const { copy, isCopied } = useCopy();
   const [databases, setDatabases] = useState<ServiceDatabase[]>([]);
   const [users, setUsers] = useState<ServiceUser[]>([]);
@@ -134,7 +136,11 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
   };
 
   if (loading) {
-    return <div className="text-sm text-muted-ol animate-pulse">Loading databases...</div>;
+    return (
+      <div className="text-sm text-muted-foreground animate-pulse">
+        {t('services.detail.loadingDatabases')}
+      </div>
+    );
   }
 
   if (error) {
@@ -145,7 +151,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
     <div className="space-y-8 max-w-4xl">
       <section>
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2 text-sm font-medium text-primary-ol">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Database className="h-4 w-4" />
             Databases
           </div>
@@ -156,7 +162,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
         </div>
 
         {databases.length === 0 ? (
-          <div className="text-sm text-muted-ol bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-8 text-center">
+          <div className="text-sm text-muted-foreground bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-8 text-center">
             No databases found.
           </div>
         ) : (
@@ -184,8 +190,8 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
                   className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex flex-col justify-between"
                 >
                   <div>
-                    <div className="font-mono text-sm text-primary-ol mb-1">{db.name}</div>
-                    <div className="text-xs text-muted-ol">{formatBytes(db.sizeBytes)}</div>
+                    <div className="font-mono text-sm text-foreground mb-1">{db.name}</div>
+                    <div className="text-xs text-muted-foreground">{formatBytes(db.sizeBytes)}</div>
                   </div>
                   {connString && (
                     <div className="mt-4 flex justify-end">
@@ -213,7 +219,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
 
       <section>
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2 text-sm font-medium text-primary-ol">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Users className="h-4 w-4" />
             Users
           </div>
@@ -224,7 +230,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
         </div>
 
         {users.length === 0 ? (
-          <div className="text-sm text-muted-ol bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-8 text-center">
+          <div className="text-sm text-muted-foreground bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-8 text-center">
             No users found.
           </div>
         ) : (
@@ -234,10 +240,10 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
                 key={user.name}
                 className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-3 flex items-center gap-3"
               >
-                <div className="h-8 w-8 rounded-full bg-primary-ol/10 flex items-center justify-center shrink-0">
-                  <Users className="h-4 w-4 text-primary-ol" />
+                <div className="h-8 w-8 rounded-full bg-foreground/10 flex items-center justify-center shrink-0">
+                  <Users className="h-4 w-4 text-foreground" />
                 </div>
-                <div className="font-mono text-sm text-primary-ol truncate">{user.name}</div>
+                <div className="font-mono text-sm text-foreground truncate">{user.name}</div>
               </div>
             ))}
           </div>
@@ -251,7 +257,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
           </DialogHeader>
           <form onSubmit={handleCreateDatabase} className="space-y-4 mt-4">
             <div>
-              <label className="block text-sm font-medium text-primary-ol mb-1">
+              <label className="block text-sm font-medium text-foreground mb-1">
                 Database Name
               </label>
               <Input
@@ -282,7 +288,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
           </DialogHeader>
           <form onSubmit={handleCreateUser} className="space-y-4 mt-4">
             <div>
-              <label className="block text-sm font-medium text-primary-ol mb-1">Username</label>
+              <label className="block text-sm font-medium text-foreground mb-1">Username</label>
               <Input
                 value={newUsername}
                 onChange={(e) => setNewUsername(e.target.value)}
@@ -292,7 +298,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-primary-ol mb-1">
+              <label className="block text-sm font-medium text-foreground mb-1">
                 Password (Optional)
               </label>
               <Input
@@ -303,12 +309,12 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-primary-ol mb-1">
+              <label className="block text-sm font-medium text-foreground mb-1">
                 Grant Access To (Optional)
               </label>
               <Select value={newUserDatabase} onValueChange={setNewUserDatabase}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a database" />
+                  <SelectValue placeholder={t('services.detail.selectDatabase')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None (Create user only)</SelectItem>

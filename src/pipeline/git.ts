@@ -9,9 +9,11 @@ import {
   GitAuthError,
   GitRepoNotFoundError,
   GitBranchNotFoundError,
+  UnsafeRepoUrlError,
 } from '../errors.js';
 import { loadConfig } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { checkUrlSafety, GIT_ALLOWED_SCHEMES } from '../lib/url-safety.js';
 
 const log = createModuleLogger('git');
 
@@ -61,6 +63,12 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
 
   // Normalize URL: prepend https:// if no protocol specified
   let normalizedUrl = normalizeRepoUrl(repoUrl);
+
+  // Day 13 M3 (SSRF): reject internal/loopback hosts and non-network schemes
+  // *after* normalization so `github.com/foo/bar` and `git@github.com:foo/bar`
+  // both flow through the same allow-list. This runs before any token
+  // injection so we never leak credentials at an attacker-chosen host.
+  assertSafeRepoUrl(normalizedUrl);
   // When SSH key is configured and URL is HTTPS, convert to SSH immediately
   // (SSH key is useless for HTTPS cloning — must use git@host:path format)
   if (sshKeyPath && normalizedUrl.startsWith('http')) {
@@ -188,6 +196,47 @@ function toSshUrl(url: string): string | null {
   // Only convert known hosts
   if (!['github.com', 'gitlab.com', 'bitbucket.org'].some((h) => host.includes(h))) return null;
   return `git@${host}:${path}`;
+}
+
+/**
+ * Day 13 M3: validate that the (already normalized) clone URL targets a
+ * legitimate external host with a network scheme we know how to clone over.
+ *
+ * Accepts:
+ *   - http:// and https:// URLs
+ *   - ssh:// URLs
+ *   - SCP-style `git@host:path` (rewritten to `ssh://git@host/path` for the
+ *     parse + safety check, then the original is left untouched for git)
+ *
+ * Rejects:
+ *   - file://, javascript:, data:, gopher:, and any unknown scheme
+ *   - localhost, 127.x, 0.x, 169.254.x, 10/8, 172.16/12, 192.168/16
+ *   - `*.local` and `*.localhost` mDNS names
+ *   - the AWS/GCP metadata endpoint
+ *   - URLs with userinfo (passwords/tokens) embedded by the caller — token
+ *     injection happens later in this module under our own control.
+ *
+ * Throws `UnsafeRepoUrlError` (HTTP 400) on rejection so API callers get
+ * a stable machine-readable code instead of a vague clone failure.
+ */
+export function assertSafeRepoUrl(repoUrl: string): void {
+  // SCP-style `git@host:path` is not parseable by URL — translate it to
+  // `ssh://git@host/path` for the safety check only. The original string
+  // is what we hand to git.
+  let urlForCheck = repoUrl;
+  const scpMatch = /^([\w.-]+)@([^:]+):(.+)$/.exec(repoUrl);
+  if (scpMatch && !repoUrl.includes('://')) {
+    const [, user, host, path] = scpMatch;
+    urlForCheck = `ssh://${user ?? 'git'}@${host ?? ''}/${path ?? ''}`;
+  }
+
+  const result = checkUrlSafety(urlForCheck, {
+    allowedSchemes: GIT_ALLOWED_SCHEMES,
+    allowUserInfo: true,
+  });
+  if (!result.ok) {
+    throw new UnsafeRepoUrlError(repoUrl, result.reason ?? 'unsafe URL');
+  }
 }
 
 function isGitBranchNotFoundMessage(message: string): boolean {

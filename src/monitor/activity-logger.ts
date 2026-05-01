@@ -50,12 +50,15 @@ const PERSISTED_EVENT_TYPES: EventType[] = [
   'recovery:approval-auto-skipped',
   'recovery:approval-resolved',
   'recovery:blocked',
+  'recovery:degraded',
   'recovery:stopped',
   'recovery:started',
   'ai:invoked',
   'ai:completed',
   'alert:new',
   'alert:resolved',
+  // Day 9 F5: surface webhook policy-skips so operators see the inbound push.
+  'webhook:skipped',
 ];
 
 export class ActivityLogger {

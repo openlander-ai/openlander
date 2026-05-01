@@ -102,17 +102,17 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
           <Zap className="h-8 w-8 text-agent" />
         </div>
         <div className="space-y-2">
-          <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
+          <h2 className="font-display text-2xl font-bold text-foreground tracking-tight">
             {t('setup.mcp.title')}
           </h2>
-          <p className="text-sm font-body text-secondary-ol">{t('setup.mcp.subtitle')}</p>
+          <p className="text-sm font-body text-foreground/80">{t('setup.mcp.subtitle')}</p>
         </div>
 
         {/* Quick copy block */}
         <div className="space-y-2 text-left">
-          <p className="text-sm font-body text-secondary-ol">{t('setup.mcp.copyPrompt')}</p>
+          <p className="text-sm font-body text-foreground/80">{t('setup.mcp.copyPrompt')}</p>
           <div className="relative bg-bg-panel border border-border rounded-lg p-4">
-            <pre className="text-xs font-mono text-primary-ol whitespace-pre-wrap break-all pr-8">
+            <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-all pr-8">
               {quickCopyText}
             </pre>
             <div className="absolute top-2 right-2">
@@ -126,7 +126,7 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
           <button
             type="button"
             onClick={() => setShowManual(!showManual)}
-            className="w-full flex items-center justify-between px-4 py-3 text-sm font-body text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle/50 transition-colors"
+            className="w-full flex items-center justify-between px-4 py-3 text-sm font-body text-foreground/80 hover:text-foreground hover:bg-bg-subtle/50 transition-colors"
           >
             <span className="flex items-center gap-1.5">
               <ChevronRight className="h-4 w-4" /> {t('setup.mcp.manualSetup')}
@@ -137,9 +137,9 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
           {showManual && (
             <div className="px-4 pb-4 space-y-4 border-t border-border">
               <div className="space-y-1 pt-3">
-                <p className="text-xs font-body text-secondary-ol font-medium">Claude Code</p>
+                <p className="text-xs font-body text-foreground/80 font-medium">Claude Code</p>
                 <div className="relative bg-bg-app rounded p-3">
-                  <code className="text-xs font-mono text-primary-ol break-all pr-8 block">
+                  <code className="text-xs font-mono text-foreground break-all pr-8 block">
                     {claudeCodeCmd}
                   </code>
                   <div className="absolute top-1.5 right-1.5">
@@ -149,11 +149,11 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
               </div>
 
               <div className="space-y-1">
-                <p className="text-xs font-body text-secondary-ol font-medium">
+                <p className="text-xs font-body text-foreground/80 font-medium">
                   Cursor (.cursor/mcp.json)
                 </p>
                 <div className="relative bg-bg-app rounded p-3">
-                  <pre className="text-xs font-mono text-primary-ol break-all pr-8 overflow-auto max-h-40">
+                  <pre className="text-xs font-mono text-foreground break-all pr-8 overflow-auto max-h-40">
                     {cursorConfig}
                   </pre>
                   <div className="absolute top-1.5 right-1.5">
@@ -163,11 +163,11 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
               </div>
 
               <div className="space-y-1">
-                <p className="text-xs font-body text-secondary-ol font-medium">
+                <p className="text-xs font-body text-foreground/80 font-medium">
                   Windsurf (~/.codeium/windsurf/mcp_config.json)
                 </p>
                 <div className="relative bg-bg-app rounded p-3">
-                  <pre className="text-xs font-mono text-primary-ol break-all pr-8 overflow-auto max-h-40">
+                  <pre className="text-xs font-mono text-foreground break-all pr-8 overflow-auto max-h-40">
                     {windsurfConfig}
                   </pre>
                   <div className="absolute top-1.5 right-1.5">
@@ -177,11 +177,11 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
               </div>
 
               <div className="space-y-1">
-                <p className="text-xs font-body text-secondary-ol font-medium">
+                <p className="text-xs font-body text-foreground/80 font-medium">
                   Claude Desktop (claude_desktop_config.json)
                 </p>
                 <div className="relative bg-bg-app rounded p-3">
-                  <pre className="text-xs font-mono text-primary-ol break-all pr-8 overflow-auto max-h-40">
+                  <pre className="text-xs font-mono text-foreground break-all pr-8 overflow-auto max-h-40">
                     {claudeDesktopConfig}
                   </pre>
                   <div className="absolute top-1.5 right-1.5">
@@ -191,11 +191,11 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
               </div>
 
               <div className="space-y-1">
-                <p className="text-xs font-body text-secondary-ol font-medium">
+                <p className="text-xs font-body text-foreground/80 font-medium">
                   VS Code (.vscode/mcp.json)
                 </p>
                 <div className="relative bg-bg-app rounded p-3">
-                  <pre className="text-xs font-mono text-primary-ol break-all pr-8 overflow-auto max-h-40">
+                  <pre className="text-xs font-mono text-foreground break-all pr-8 overflow-auto max-h-40">
                     {vscodeConfig}
                   </pre>
                   <div className="absolute top-1.5 right-1.5">
@@ -205,9 +205,9 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
               </div>
 
               <div className="space-y-1">
-                <p className="text-xs font-body text-secondary-ol font-medium">stdio (local)</p>
+                <p className="text-xs font-body text-foreground/80 font-medium">stdio (local)</p>
                 <div className="relative bg-bg-app rounded p-3">
-                  <code className="text-xs font-mono text-primary-ol pr-8 block">{stdioCmd}</code>
+                  <code className="text-xs font-mono text-foreground pr-8 block">{stdioCmd}</code>
                   <div className="absolute top-1.5 right-1.5">
                     <CopyButton text={stdioCmd} />
                   </div>
@@ -225,7 +225,7 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
           <Button
             onClick={onNext}
             variant="outline"
-            className="flex-1 font-body border-border text-secondary-ol"
+            className="flex-1 font-body border-border text-foreground/80"
           >
             {t('setup.mcp.skipForNow')}
           </Button>

@@ -5,7 +5,7 @@ import type {
   Environment,
   Project,
 } from '../../types';
-import type { BuildStreamEvent } from '../event-types';
+import { fetchWithAuth } from './auth.js';
 import { apiDelete, apiGet, apiPost, apiPostVoid } from './client';
 
 interface BackendEnvironment {
@@ -284,6 +284,43 @@ export async function getProjectDeployments(
   return data.deployments;
 }
 
+/** A DeployLogSummary plus the project + service it belongs to. The
+ *  global feed (Home / dashboards) needs to render which project a
+ *  deploy was for, so the aggregate /api/deployments/recent endpoint
+ *  ships these flat alongside each row. */
+export interface RecentDeployment extends DeployLogSummary {
+  projectId: string;
+  projectName: string;
+  serviceId: string;
+  serviceName: string;
+}
+
+/** Fetches env vars for a single deployable service. Wraps
+ *  /api/projects/:p/services/:s/env. The wire shape matches the
+ *  legacy /projects/:id/env (project, envVars). */
+export async function getServiceEnvVars(
+  projectId: string,
+  serviceId: string,
+): Promise<Record<string, string>> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/services/${encodeURIComponent(serviceId)}/env`,
+  );
+  if (!res.ok) throw new Error('Failed to fetch env vars');
+  const data = (await res.json()) as { envVars?: Record<string, string> };
+  return data.envVars ?? {};
+}
+
+/** Fetches the N most recent deploy_logs across all projects in a
+ *  single round-trip. Replaces the per-project fan-out previously
+ *  performed by Home.tsx. */
+export async function getRecentDeployments(limit = 20): Promise<RecentDeployment[]> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  const res = await fetch(`/api/deployments/recent?${query.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch recent deployments');
+  const data = (await res.json()) as { deployments: RecentDeployment[] };
+  return data.deployments;
+}
+
 export interface ConnectedService {
   id: string;
   name: string;
@@ -326,15 +363,6 @@ export async function disconnectProjectService(
   serviceId: string,
 ): Promise<void> {
   return apiDelete(`/api/projects/${projectId}/services/${serviceId}`);
-}
-
-export async function getProjectTimeline(id: string): Promise<BuildStreamEvent[]> {
-  const res = await fetch(`/api/projects/${id}/timeline`);
-  if (!res.ok) {
-    throw new Error('Failed to fetch timeline events');
-  }
-  const data = (await res.json()) as { events?: BuildStreamEvent[] };
-  return data.events ?? [];
 }
 
 export async function getDeploymentDetail(
@@ -623,4 +651,47 @@ export async function scanProjectEnvVars(
   return apiPost<ProjectEnvScanResult>(`/api/projects/${projectId}/env/scan`, {
     environment,
   });
+}
+
+export interface ResourceLimitsResponse {
+  profile: 'micro' | 'small' | 'medium' | 'large' | 'custom' | null;
+  memory: {
+    limitBytes: number;
+    reservationBytes: number;
+    swapBytes: number;
+  } | null;
+  cpu: {
+    shares: number;
+  } | null;
+  warnings?: string[];
+}
+
+export interface UpdateResourceLimitsRequest {
+  profile: 'micro' | 'small' | 'medium' | 'large' | 'custom';
+  memoryMb?: number;
+}
+
+export async function getProjectResources(projectId: string): Promise<ResourceLimitsResponse> {
+  const res = await fetchWithAuth(`/api/projects/${projectId}/resources`);
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to fetch project resources');
+  }
+  return res.json();
+}
+
+export async function updateProjectResources(
+  projectId: string,
+  data: UpdateResourceLimitsRequest,
+): Promise<ResourceLimitsResponse> {
+  const res = await fetchWithAuth(`/api/projects/${projectId}/resources`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to update project resources');
+  }
+  return res.json();
 }

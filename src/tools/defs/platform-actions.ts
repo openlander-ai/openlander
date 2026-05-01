@@ -112,12 +112,16 @@ export const platformActionToolDefs: ToolDef[] = [
         [];
 
       for (const project of context.appCtx.db.listProjects()) {
-        if (project.container_id === null) {
+        // PR 4.5: canonical-first read of container_id with `??` fallback to
+        // legacy `projects` column through migration 0012.
+        const deployable = context.appCtx.db.getDeployableForProject(project.id);
+        const containerId = deployable?.container_id ?? project.container_id;
+        if (!containerId) {
           continue;
         }
 
         try {
-          await context.appCtx.docker.inspectContainer(project.container_id);
+          await context.appCtx.docker.inspectContainer(containerId);
           continue;
         } catch (error) {
           if (!isDockerNotFoundError(error)) {
@@ -133,8 +137,8 @@ export const platformActionToolDefs: ToolDef[] = [
           type: 'mark_error',
           target: project.name,
           detail: dryRun
-            ? `container missing: ${project.container_id}`
-            : `status updated to error (missing container: ${project.container_id})`,
+            ? `container missing: ${containerId}`
+            : `status updated to error (missing container: ${containerId})`,
         });
       }
 
@@ -196,10 +200,7 @@ export const platformActionToolDefs: ToolDef[] = [
 
       let inspected: { Name?: string; Config?: { Labels?: Record<string, string> } };
       try {
-        inspected = (await context.appCtx.docker.inspectContainer(containerId)) as {
-          Name?: string;
-          Config?: { Labels?: Record<string, string> };
-        };
+        inspected = await context.appCtx.docker.inspectContainer(containerId);
       } catch (error) {
         if (isDockerNotFoundError(error)) {
           return { status: 'not_found', container_id: containerId };

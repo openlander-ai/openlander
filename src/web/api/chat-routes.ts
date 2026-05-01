@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
+import { LLMConcurrencyExceededError } from '../../errors.js';
 import type { QuestionAnswer } from '../../lib/question-bridge.js';
 import type { ChatStreamEvent } from '../../types/agent-events.js';
 import type { ContextScope } from '../../llm/context-assembler.js';
@@ -41,7 +42,15 @@ export function createChatRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'Another message is being processed for this session' }, 429);
     }
 
-    const agent = ctx.agentPool.getOrCreate(sessionId);
+    let agent;
+    try {
+      agent = ctx.agentPool.getOrCreate(sessionId);
+    } catch (err) {
+      if (err instanceof LLMConcurrencyExceededError) {
+        return c.json(err.toJSON(), 429);
+      }
+      throw err;
+    }
     activeStreams.set(sessionId, true);
 
     const stream = new ReadableStream<Uint8Array>({

@@ -210,7 +210,11 @@ export class DockerEventListener {
     if (!projectId) return;
 
     const project = this.db.getProject(projectId);
-    if (!project || project.status !== 'running' || project.archived_at) return;
+    if (!project) return;
+    // PR 4.5: canonical-first status read with `??` fallback.
+    const oomDeployable = this.db.getDeployableForProject(projectId);
+    const oomStatus = oomDeployable?.status ?? project.status;
+    if (oomStatus !== 'running' || project.archived_at) return;
 
     await this.events.emit('container:oom', {
       projectId,
@@ -243,7 +247,11 @@ export class DockerEventListener {
     if (!projectId) return;
 
     const project = this.db.getProject(projectId);
-    if (!project || project.status !== 'running') return;
+    if (!project) return;
+    // PR 4.5: canonical-first status read with `??` fallback.
+    const dieDeployable = this.db.getDeployableForProject(projectId);
+    const dieStatus = dieDeployable?.status ?? project.status;
+    if (dieStatus !== 'running') return;
     if (project.archived_at) return;
 
     this.recentCrashes.set(containerId, Date.now());

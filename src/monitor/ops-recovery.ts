@@ -15,6 +15,7 @@ import type {
 } from '../pipeline/approval-gate.js';
 import { resolveContainerUrl } from '../pipeline/url-resolver.js';
 import type { ConfigurableRecoveryStep, RecoveryAutomationPolicy } from './ops-types.js';
+import { checkRecoveryEligibility } from './recovery-policy.js';
 
 const log = createModuleLogger('ops-recovery');
 
@@ -201,31 +202,23 @@ export class RecoveryPipeline {
 
   private async runRecoverySequence(context: RecoveryContext): Promise<RecoveryOutcome> {
     const { projectId, containerId, incidentId } = context;
-    const project = this.ctx.db.getProject(projectId);
 
-    if (!project || project.archived_at || project.status === 'stopped') {
+    // Single source of truth for eligibility — same invariants as
+    // RecoveryCoordinator. Stale deploy locks (>30 min) are now treated as
+    // expired here too, matching the policy applied elsewhere.
+    const eligibility = checkRecoveryEligibility(projectId, 'ops_sequence', {
+      db: this.ctx.db,
+    });
+    if (!eligibility.eligible) {
+      const description =
+        eligibility.reason === 'deploy_in_progress'
+          ? 'Deploy lock is held by another process — recovery skipped'
+          : 'Project not found or inactive — recovery skipped';
       log.info(
-        { projectId, status: project?.status },
-        'Project not found or inactive — skipping recovery',
+        { projectId, reason: eligibility.reason, message: eligibility.message },
+        'Ops recovery skipped by eligibility policy',
       );
-      this.addIncidentEvent(
-        incidentId,
-        'interrupted',
-        'Project not found or inactive — recovery skipped',
-      );
-      return 'skipped';
-    }
-
-    if (project.deploy_lock_session) {
-      this.addIncidentEvent(
-        incidentId,
-        'interrupted',
-        'Deploy lock is held by another process — recovery skipped',
-      );
-      log.info(
-        { projectId, lockSession: project.deploy_lock_session },
-        'Deploy lock held — skipping',
-      );
+      this.addIncidentEvent(incidentId, 'interrupted', description);
       return 'skipped';
     }
 
@@ -409,7 +402,10 @@ export class RecoveryPipeline {
       });
 
       const project = this.ctx.db.getProject(projectId);
-      const port = project?.assigned_port;
+      // PR 4.5: canonical-first read of assigned_port with `??` fallback.
+      const deployable = this.ctx.db.getDeployableForProject(projectId);
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+      const port = deployable?.assigned_port ?? project?.assigned_port;
       const containerRunning = await this.isContainerRunning(containerId);
       const httpHealthy = typeof port === 'number' ? await this.isHttpHealthy(port) : false;
 
@@ -447,9 +443,15 @@ export class RecoveryPipeline {
     }
 
     const project = this.ctx.db.getProject(context.projectId);
-    if (!project || project.archived_at || project.status === 'stopped') {
+    // PR 4.5: canonical-first status read with `??` fallback.
+    const diagDeployable = project
+      ? this.ctx.db.getDeployableForProject(context.projectId)
+      : undefined;
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+    const diagStatus = diagDeployable?.status ?? project?.status;
+    if (!project || project.archived_at || diagStatus === 'stopped') {
       log.debug(
-        { projectId: context.projectId, status: project?.status },
+        { projectId: context.projectId, status: diagStatus },
         'Skipping LLM diagnosis — project not active',
       );
       return null;
@@ -526,8 +528,14 @@ export class RecoveryPipeline {
     const portConflictPattern = /eaddrinuse|address already in use|bind: address already in use/i;
     if (portConflictPattern.test(logs)) {
       const project = this.ctx.db.getProject(context.projectId);
-      if (project?.assigned_port != null) {
-        const resolved = await this.resolvePortConflict(context, project.assigned_port);
+      // PR 4.5: canonical-first read of assigned_port with `??` fallback.
+      const portDeployable = project
+        ? this.ctx.db.getDeployableForProject(context.projectId)
+        : undefined;
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+      const portAssigned = portDeployable?.assigned_port ?? project?.assigned_port;
+      if (portAssigned != null) {
+        const resolved = await this.resolvePortConflict(context, portAssigned);
         notes.push(
           resolved ? 'Port-conflict resolution attempted' : 'Port-conflict resolution failed',
         );
@@ -574,18 +582,29 @@ export class RecoveryPipeline {
     reason: string,
   ): Promise<'recovered' | 'escalated'> {
     const project = this.ctx.db.getProject(context.projectId);
-    if (!project?.previous_image_tag) {
+    // PR 4.5: canonical-first read of previous_image_tag with `??` fallback.
+    const rollbackDeployable = project
+      ? this.ctx.db.getDeployableForProject(context.projectId)
+      : undefined;
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+    const previousImageTag = rollbackDeployable?.previous_image_tag ?? project?.previous_image_tag;
+    if (!previousImageTag) {
       return await this.escalate(context, `${reason}; no previous image available for rollback`);
     }
 
-    if (project.deploy_lock_session) {
+    // Use the unified policy so rollback honours the same stale-lock window as
+    // every other recovery entry point.
+    const lockEligibility = checkRecoveryEligibility(context.projectId, 'ops_sequence', {
+      db: this.ctx.db,
+    });
+    if (!lockEligibility.eligible && lockEligibility.reason === 'deploy_in_progress') {
       return await this.escalate(context, `${reason}; deploy lock held during rollback`);
     }
 
     this.addIncidentEvent(
       context.incidentId,
       'action_taken',
-      `Step rollback: attempting rollback to ${project.previous_image_tag}`,
+      `Step rollback: attempting rollback to ${previousImageTag}`,
     );
 
     try {

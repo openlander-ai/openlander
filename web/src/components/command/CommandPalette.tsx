@@ -1,6 +1,11 @@
+// 1.0-rc.2 (data-model fullsplit): the palette searches across groups
+// (formerly projects). Per-service drill-in stays under the legacy
+// `/services/:id?project=:p` URL — App.tsx redirects to the canonical
+// `/projects/:p/services/:s` shape since rc.1, so palette deep-links
+// keep working without per-action rewires.
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useProjects } from '@/hooks/use-projects';
+import { useProjectsContext } from '@/hooks/use-projects-context';
 import { redeployProject, stopProject } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
@@ -56,7 +61,7 @@ export function CommandPalette() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const { projects } = useProjects();
+  const { projects } = useProjectsContext();
 
   const { t } = useLanguage();
   // Cmd+K / Ctrl+K toggle
@@ -119,13 +124,13 @@ export function CommandPalette() {
       },
       {
         id: 'nav-services',
-        label: 'Services',
+        label: 'Managed Services',
         icon: <Database className="h-4 w-4" />,
         action: () => {
-          navigate('/services');
+          navigate('/managed-services');
           close();
         },
-        keywords: 'database redis postgres',
+        keywords: 'database redis postgres mysql mongo managed services',
       },
       {
         id: 'settings',
@@ -141,6 +146,11 @@ export function CommandPalette() {
     ];
 
     const projectItems: CommandItem[] = [];
+    /* `project.status` here is the frontend Project wire-shape field
+       (lib/api projects). The mapper hydrates it server-side from
+       services.* post-0012, so reads on the client are wire-format,
+       not dropped DB columns. */
+    /* eslint-disable openlander-internal/no-dropped-columns */
     for (const project of projects) {
       projectItems.push({
         id: `go-${project.id}`,
@@ -183,26 +193,35 @@ export function CommandPalette() {
 
         projectItems.push({
           id: `logs-${project.id}`,
-          label: `Logs: ${project.name}`,
-          description: 'View container logs',
+          label: `Activity: ${project.name}`,
+          description: 'Project activity timeline (deploys, config changes, agent calls)',
           icon: <Terminal className="h-4 w-4" />,
           action: () => {
-            navigate(`/projects/${project.id}?tab=console`);
+            // V2 takeover: ProjectViewV2 has Services / Activity tabs. The pre-V2
+            // `?tab=console` deep-link no longer applies; route to the Activity
+            // tab as the closest analog. Per-service runtime logs live under
+            // /services/:id (Logs tab) — those are exposed by ServiceDetailV2.
+            navigate(`/projects/${project.id}?tab=activity`);
             close();
           },
-          keywords: 'console output stderr',
+          keywords: 'console output stderr activity log',
         });
       }
     }
+    /* eslint-enable openlander-internal/no-dropped-columns */
 
     const systemItems: CommandItem[] = [
       {
+        // v5: the "New Project" wizard route was retired; the only human-side
+        // entry point is the AgentGuideDialog on the Projects page. Keep the
+        // command available but reroute so the "+ New Project" button is
+        // immediately visible to the user.
         id: 'new-project',
         label: 'New Project',
         description: t('command.deployNewRepo'),
         icon: <Plus className="h-4 w-4" />,
         action: () => {
-          navigate('/new');
+          navigate('/projects');
           close();
         },
         keywords: 'deploy create add',
@@ -322,16 +341,16 @@ export function CommandPalette() {
         <div className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel shadow-2xl shadow-black/10 overflow-hidden flex flex-col">
           {/* Search input */}
           <div className="flex items-center gap-3 px-4 border-b border-[hsl(var(--border))]">
-            <Search className="h-4 w-4 text-muted-ol shrink-0" />
+            <Search className="h-4 w-4 text-muted-foreground shrink-0" />
             <input
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={t('command.searchPlaceholder')}
-              className="flex-1 py-3 bg-transparent text-sm font-body text-primary-ol placeholder:text-muted-ol focus:outline-none"
+              className="flex-1 py-3 bg-transparent text-sm font-body text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-mono text-muted-ol bg-bg-subtle border border-border">
+            <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-mono text-muted-foreground bg-bg-subtle border border-border">
               <Command className="h-2.5 w-2.5" />K
             </kbd>
           </div>
@@ -349,29 +368,29 @@ export function CommandPalette() {
                   className={cn(
                     'w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors',
                     selectedIndex === 0
-                      ? 'bg-agent/10 text-primary-ol'
-                      : 'text-secondary-ol hover:bg-bg-subtle/50',
+                      ? 'bg-agent/10 text-foreground'
+                      : 'text-foreground/80 hover:bg-bg-subtle/50',
                   )}
                 >
                   <Bot className={cn('h-4 w-4', selectedIndex === 0 ? 'text-agent' : 'text-ai')} />
                   <div className="flex-1">
                     <p className="text-sm">Ask AI: "{query}"</p>
-                    <p className="text-xs text-muted-ol">Open Agent Chat with this query</p>
+                    <p className="text-xs text-muted-foreground">Open Agent Chat with this query</p>
                   </div>
                   {selectedIndex === 0 && (
-                    <span className="text-xs font-mono text-muted-ol">↵</span>
+                    <span className="text-xs font-mono text-muted-foreground">↵</span>
                   )}
                 </button>
               </div>
             ) : flatFiltered.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <p className="text-sm font-body text-muted-ol">{t('command.noResults')}</p>
+                <p className="text-sm font-body text-muted-foreground">{t('command.noResults')}</p>
               </div>
             ) : (
               groups.map((group) =>
                 group.items.length > 0 ? (
                   <div key={group.id}>
-                    <p className="px-4 py-1.5 text-xs uppercase tracking-[0.08em] font-mono text-muted-ol">
+                    <p className="px-4 py-1.5 text-xs uppercase tracking-[0.08em] font-mono text-muted-foreground">
                       {group.heading}
                     </p>
                     {group.items.map((item) => {
@@ -384,14 +403,16 @@ export function CommandPalette() {
                           className={cn(
                             'w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors',
                             currentIndex === selectedIndex
-                              ? 'bg-agent/10 text-primary-ol'
-                              : 'text-secondary-ol hover:bg-bg-subtle/50',
+                              ? 'bg-agent/10 text-foreground'
+                              : 'text-foreground/80 hover:bg-bg-subtle/50',
                           )}
                         >
                           <span
                             className={cn(
                               'shrink-0',
-                              currentIndex === selectedIndex ? 'text-agent' : 'text-muted-ol',
+                              currentIndex === selectedIndex
+                                ? 'text-agent'
+                                : 'text-muted-foreground',
                             )}
                           >
                             {item.icon}
@@ -399,13 +420,15 @@ export function CommandPalette() {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-body truncate">{item.label}</p>
                             {item.description && (
-                              <p className="text-xs font-body text-muted-ol truncate">
+                              <p className="text-xs font-body text-muted-foreground truncate">
                                 {item.description}
                               </p>
                             )}
                           </div>
                           {currentIndex === selectedIndex && (
-                            <span className="text-xs font-mono text-muted-ol shrink-0">↵</span>
+                            <span className="text-xs font-mono text-muted-foreground shrink-0">
+                              ↵
+                            </span>
                           )}
                         </button>
                       );
@@ -417,7 +440,7 @@ export function CommandPalette() {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center gap-4 px-4 py-2 border-t border-[hsl(var(--border))] text-xs font-mono text-muted-ol bg-bg-panel">
+          <div className="flex items-center gap-4 px-4 py-2 border-t border-[hsl(var(--border))] text-xs font-mono text-muted-foreground bg-bg-panel">
             <span className="flex items-center gap-1">
               <kbd className="px-1 py-0.5 rounded bg-bg-subtle border border-border">↑↓</kbd>{' '}
               navigate

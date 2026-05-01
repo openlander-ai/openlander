@@ -7,7 +7,7 @@ import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('db-migration');
 import { createDrizzleDatabase, type DrizzleClient, type SqliteDatabase } from './drizzle.js';
-import { environments, projects } from './schema.drizzle.js';
+import { environments, services } from './schema.drizzle.js';
 import { ProjectRepo } from './repos/project.repo.js';
 import { EnvironmentRepo } from './repos/environment.repo.js';
 import { EnvVarRepo } from './repos/env-var.repo.js';
@@ -17,6 +17,7 @@ import { ServiceRepo } from './repos/service.repo.js';
 import { ServiceConnectionRepo } from './repos/service-connection.repo.js';
 import { RuntimeIncidentRepo } from './repos/runtime-incident.repo.js';
 import { DeployLogRepo } from './repos/deploy-log.repo.js';
+import { McpSessionLogRepo } from './repos/mcp-session-log.repo.js';
 import { TimelineRepo } from './repos/timeline.repo.js';
 import { DomainMappingRepo } from './repos/domain-mapping.repo.js';
 import { OAuthRepo } from './repos/oauth.repo.js';
@@ -33,6 +34,8 @@ import { CircuitBreakerRepo } from './repos/circuit-breaker.repo.js';
 import { ProjectDependencyRepo } from './repos/project-dependency.repo.js';
 import { ProjectOpsOverrideRepo } from './repos/project-ops-override.repo.js';
 import { ActivityLogRepo } from './repos/activity-log.repo.js';
+import { ServiceMetricRepo } from './repos/service-metric.repo.js';
+import { SettingsRepo } from './repos/settings.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 import type { ProjectOpsOverride } from '../monitor/ops-types.js';
@@ -186,49 +189,110 @@ function createEnvironmentsTable(sqlite: SqliteDatabase): void {
   sqlite.exec(
     'CREATE UNIQUE INDEX IF NOT EXISTS environments_assigned_port_unique ON environments(assigned_port)',
   );
-  sqlite.exec(
-    'CREATE UNIQUE INDEX IF NOT EXISTS environments_project_type_unique ON environments(project_id, type)',
-  );
-  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id)');
+  // Post-0012: environments uses service_id instead of project_id; skip legacy
+  // project_id index creation if the column was already dropped by migration 0012.
+  const envCols = getTableColumns(sqlite, 'environments');
+  if (envCols.has('project_id')) {
+    sqlite.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS environments_project_type_unique ON environments(project_id, type)',
+    );
+    sqlite.exec('CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id)');
+  }
 }
 
 function backfillProductionEnvironments(sqlite: SqliteDatabase): void {
-  const projectsToBackfill = sqlite
-    .prepare('SELECT * FROM projects')
-    .all() as LegacyProjectRuntimeRow[];
-  const insertEnvironment = sqlite.prepare(`
-    INSERT OR IGNORE INTO environments (
-      id,
-      project_id,
-      type,
-      branch,
-      status,
-      assigned_port,
-      container_id,
-      image_tag,
-      previous_image_tag,
-      public_url,
-      container_port,
-      created_at,
-      updated_at
-    ) VALUES (?, ?, 'production', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  // Post-0012: environments uses service_id; the legacy project_id backfill
+  // path is only valid for pre-0009 schemas. Skip if already migrated.
+  const envCols = getTableColumns(sqlite, 'environments');
+  if (!envCols.has('project_id')) return;
+
+  // Post-0009: service_id column exists on environments. The INSERT must
+  // populate it (= project_id || '__svc') so that 0012 Phase A's NULL-orphan
+  // assertion does not fire on rows inserted here (e.g. __orphan_managed).
+  const hasServiceIdCol = envCols.has('service_id');
+
+  // When service_id col exists (post-0009), only backfill projects that have a
+  // corresponding __svc service row. The synthetic __orphan_managed group row
+  // has no __svc service row and must be skipped to avoid FK orphans post-0012.
+  const projectsToBackfill = hasServiceIdCol
+    ? (sqlite
+        .prepare(
+          `SELECT p.* FROM projects p
+           WHERE EXISTS (SELECT 1 FROM services s WHERE s.id = (p.id || '__svc'))`,
+        )
+        .all() as LegacyProjectRuntimeRow[])
+    : (sqlite.prepare('SELECT * FROM projects').all() as LegacyProjectRuntimeRow[]);
+
+  const insertEnvironment = hasServiceIdCol
+    ? sqlite.prepare(`
+        INSERT OR IGNORE INTO environments (
+          id,
+          project_id,
+          service_id,
+          type,
+          branch,
+          status,
+          assigned_port,
+          container_id,
+          image_tag,
+          previous_image_tag,
+          public_url,
+          container_port,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, 'production', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+    : sqlite.prepare(`
+        INSERT OR IGNORE INTO environments (
+          id,
+          project_id,
+          type,
+          branch,
+          status,
+          assigned_port,
+          container_id,
+          image_tag,
+          previous_image_tag,
+          public_url,
+          container_port,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, 'production', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
 
   for (const project of projectsToBackfill) {
-    insertEnvironment.run(
-      `${project.id}-production`,
-      project.id,
-      project.branch ?? 'main',
-      project.status ?? 'idle',
-      project.assigned_port ?? null,
-      project.container_id ?? null,
-      project.image_tag ?? null,
-      project.previous_image_tag ?? null,
-      project.public_url ?? null,
-      null,
-      project.created_at ?? new Date().toISOString(),
-      project.updated_at ?? new Date().toISOString(),
-    );
+    if (hasServiceIdCol) {
+      insertEnvironment.run(
+        `${project.id}-production`,
+        project.id,
+        `${project.id}__svc`,
+        project.branch ?? 'main',
+        project.status ?? 'idle',
+        project.assigned_port ?? null,
+        project.container_id ?? null,
+        project.image_tag ?? null,
+        project.previous_image_tag ?? null,
+        project.public_url ?? null,
+        null,
+        project.created_at ?? new Date().toISOString(),
+        project.updated_at ?? new Date().toISOString(),
+      );
+    } else {
+      insertEnvironment.run(
+        `${project.id}-production`,
+        project.id,
+        project.branch ?? 'main',
+        project.status ?? 'idle',
+        project.assigned_port ?? null,
+        project.container_id ?? null,
+        project.image_tag ?? null,
+        project.previous_image_tag ?? null,
+        project.public_url ?? null,
+        null,
+        project.created_at ?? new Date().toISOString(),
+        project.updated_at ?? new Date().toISOString(),
+      );
+    }
   }
 }
 
@@ -307,6 +371,85 @@ function rebuildLegacyDeployLogs(sqlite: SqliteDatabase): void {
   );
 }
 
+/**
+ * Backup-or-bust prelude for the 0012 schema-split migration.
+ *
+ * Plan §"PR 5 Backup-or-bust prelude": before the Drizzle migrator runs,
+ * detect whether 0012 is pending and (if so) copy the DB file to a
+ * timestamped `.pre-1.0-a-completion.bak` sidecar. If the copy fails, ABORT
+ * the migration — the runtime must NOT proceed without a verified backup
+ * because 0012 drops 25+6 columns and table-rebuilds 6 per-deployable
+ * tables; a partial run would corrupt operational data.
+ *
+ * Backup retention: 7 days minimum (operator-managed). The file path is
+ * logged at info level so the rollback runbook can locate it without
+ * reaching into the dbPath directory directly.
+ */
+function backupOrBustForMigration0012(sqlite: SqliteDatabase, dbPath: string): string | null {
+  // In-memory DBs are non-persistent and never need a backup; tests using
+  // ':memory:' would otherwise fail trying to copyFileSync from a missing
+  // path.
+  if (dbPath === ':memory:' || !existsSync(dbPath)) {
+    return null;
+  }
+
+  // Detect whether 0012 has already been applied. If __drizzle_migrations
+  // doesn't exist or doesn't have a row count >= 12, assume 0012 is pending.
+  let alreadyApplied = false;
+  try {
+    const tables = sqlite
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = '__drizzle_migrations'",
+      )
+      .all() as Array<{ name: string }>;
+    if (tables.length > 0) {
+      const row = sqlite.prepare('SELECT COUNT(*) AS cnt FROM __drizzle_migrations').get() as
+        | { cnt: number }
+        | undefined;
+      // 0012 is index 12 in the journal; >= 13 entries means 0012 ran.
+      alreadyApplied = (row?.cnt ?? 0) >= 13;
+    }
+  } catch (err) {
+    log.debug({ err }, '0012 backup-or-bust pending-check failed; assuming pending');
+  }
+
+  if (alreadyApplied) return null;
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = `${dbPath}.pre-1.0-a-completion.${timestamp}.bak`;
+
+  try {
+    // WAL-safe backup via VACUUM INTO. SQLite is in WAL mode (src/db/drizzle.ts).
+    // Plain copyFileSync would capture the main DB file without checkpointing,
+    // potentially missing pages still in the -wal sidecar — restoring such a
+    // copy yields an inconsistent database. VACUUM INTO acquires a read lock,
+    // reads all pages including WAL-buffered ones, and writes a self-contained
+    // copy to the destination atomically. No checkpoint dance needed.
+    //
+    // Note: BEGIN IMMEDIATE is intentionally not used here — Drizzle's migrator
+    // manages its own BEGIN/COMMIT per migration file. The backup IS the rollback
+    // path: if migrate() fails mid-flight, restore backupPath to dbPath to
+    // return to the last consistent state.
+    const escapedBackup = backupPath.replace(/'/g, "''");
+    sqlite.exec(`VACUUM INTO '${escapedBackup}'`);
+    log.info(
+      { backupPath, dbPath },
+      '[migrate:0012] backup-or-bust wrote WAL-safe pre-migration backup via VACUUM INTO',
+    );
+    return backupPath;
+  } catch (err) {
+    log.error(
+      { err, dbPath, backupPath },
+      '[migrate:0012] backup-or-bust FAILED — aborting migration',
+    );
+    throw new Error(
+      `Backup-or-bust prelude failed: could not copy ${dbPath} -> ${backupPath}. ` +
+        `Migration 0012 will not proceed without a verified backup. ` +
+        `Underlying error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 function applyAndRecordAllMigrations(sqlite: SqliteDatabase, migrationsFolder: string): void {
   const journal = JSON.parse(
     readFileSync(path.join(migrationsFolder, 'meta/_journal.json'), 'utf8'),
@@ -345,9 +488,35 @@ function applyAndRecordAllMigrations(sqlite: SqliteDatabase, migrationsFolder: s
   }
 }
 
+/**
+ * bridgeLegacyDatabase runs BEFORE the Drizzle migrator. It backfills the
+ * `environment_id` column on `env_vars` and `deploy_logs` for databases
+ * that pre-date migration 0001. It does NOT touch `projects` or `services`
+ * structure — those are owned by the regular migration sequence.
+ *
+ * The 0009_split_projects_services migration that follows in the next
+ * migration step (rc.2 P1) is the canonical project/service split. The
+ * bridge is unchanged: it sees the pre-0009 shape (legacy projects + legacy
+ * services tables), and 0009 atomically transitions both to the new shape
+ * inside its own transaction. Plan §6.5 verifies that the bridge does not
+ * conflict with 0009.
+ */
 function bridgeLegacyDatabase(sqlite: SqliteDatabase, migrationsFolder: string): void {
   const tableNames = getTableNames(sqlite);
   if (!tableNames.has('projects')) {
+    return;
+  }
+
+  // Post-migration guard: `__drizzle_migrations` exists ⇒ the database has
+  // already gone through Drizzle's migrator at least once. The bridge's job
+  // is purely to convert pre-0001 legacy schemas; running its idempotent
+  // baseline pass on a post-migration DB causes `backfillMissingColumns` to
+  // re-ADD columns that later migrations (notably 0012's schema split)
+  // explicitly dropped. Observed regression: 35 cols on `projects` after
+  // ~62 PM2 restarts post-0012 ship. Skip the bridge once Drizzle history
+  // is present — the migrator handles forward progress on its own.
+  if (tableNames.has('__drizzle_migrations')) {
+    log.debug('bridge skipped: __drizzle_migrations present (post-migration DB)');
     return;
   }
 
@@ -396,6 +565,7 @@ export class Database implements AuthDatabase {
   private readonly serviceConnectionRepo: ServiceConnectionRepo;
   private readonly runtimeIncidentRepo: RuntimeIncidentRepo;
   private readonly deployLogRepo: DeployLogRepo;
+  private readonly mcpSessionLogRepo: McpSessionLogRepo;
   private readonly timelineRepo: TimelineRepo;
   private readonly domainMappingRepo: DomainMappingRepo;
   private readonly oauthRepo: OAuthRepo;
@@ -412,6 +582,8 @@ export class Database implements AuthDatabase {
   private readonly projectDependencyRepo: ProjectDependencyRepo;
   private readonly projectOpsOverrideRepo: ProjectOpsOverrideRepo;
   private readonly activityLogRepo: ActivityLogRepo;
+  private readonly serviceMetricRepo: ServiceMetricRepo;
+  private readonly settingsRepo: SettingsRepo;
 
   constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
@@ -428,6 +600,12 @@ export class Database implements AuthDatabase {
     this.db = db;
     this.sqlite.exec('PRAGMA foreign_keys = OFF');
     try {
+      // Backup-or-bust prelude — runs FIRST, before any DB mutation. If
+      // bridgeLegacyDatabase or migrate() fails midway, the on-disk
+      // backup represents the original pre-mutation state, not a
+      // partially-bridged hybrid. Pending-detection only reads
+      // __drizzle_migrations row count, so it works without the bridge.
+      backupOrBustForMigration0012(this.sqlite, dbPath);
       bridgeLegacyDatabase(this.sqlite, migrationsFolder);
       migrate(this.db as Parameters<typeof migrate>[0], {
         migrationsFolder,
@@ -458,6 +636,7 @@ export class Database implements AuthDatabase {
     this.serviceConnectionRepo = new ServiceConnectionRepo(this.db, this.sqlite);
     this.runtimeIncidentRepo = new RuntimeIncidentRepo(this.db, this.sqlite);
     this.deployLogRepo = new DeployLogRepo(this.db, this.sqlite);
+    this.mcpSessionLogRepo = new McpSessionLogRepo(this.db, this.sqlite);
     this.timelineRepo = new TimelineRepo(this.db, this.sqlite);
     this.domainMappingRepo = new DomainMappingRepo(this.db, this.sqlite);
     this.oauthRepo = new OAuthRepo(this.db, this.sqlite);
@@ -474,13 +653,17 @@ export class Database implements AuthDatabase {
     this.projectDependencyRepo = new ProjectDependencyRepo(this.db, this.sqlite);
     this.projectOpsOverrideRepo = new ProjectOpsOverrideRepo(this.db, this.sqlite);
     this.activityLogRepo = new ActivityLogRepo(this.db, this.sqlite);
+    this.serviceMetricRepo = new ServiceMetricRepo(this.db, this.sqlite);
+    this.settingsRepo = new SettingsRepo(this.db, this.sqlite);
     this.actionRunRepo.markStaleAsFailedOnStartup();
   }
 
   createProject(project: Parameters<ProjectRepo['createProject']>[0]): ProjectRow { const created = this.projectRepo.createProject(project); this.environmentRepo.createEnvironment({ id: `${project.id}-production`, projectId: created.id, type: 'production', branch: project.branch ?? 'main' }); return created; }
   getProject(id: string) { return this.projectRepo.getProject(id); }
   getProjectByName(name: string) { return this.projectRepo.getProjectByName(name); }
-  listProjects(status?: ProjectRow['status'], opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjects(status, opts); }
+  listProjects(status?: ProjectRow['status'] | null, opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjects(status, opts); }
+  listProjectsWithMetadata(status?: ProjectRow['status'] | null, opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjectsWithMetadata(status, opts); }
+  getDeployableServiceCountsByProjectIds(projectIds: string[]) { return this.projectRepo.getDeployableServiceCountsByProjectIds(projectIds); }
   archiveProject(id: string) { this.projectRepo.archiveProject(id); }
   unarchiveProject(id: string) { this.projectRepo.unarchiveProject(id); }
   listArchivedProjects() { return this.projectRepo.listArchivedProjects(); }
@@ -489,6 +672,7 @@ export class Database implements AuthDatabase {
   setPendingFix(projectId: string, pendingFix: Parameters<ProjectRepo['setPendingFix']>[1]) { this.projectRepo.setPendingFix(projectId, pendingFix); }
   consumePendingFix(projectId: string) { return this.projectRepo.consumePendingFix(projectId); }
   deleteProject(id: string) { this.projectRepo.deleteProject(id); }
+  attachServiceToProject(serviceId: string, targetProjectId: string) { return this.projectRepo.attachServiceToProject(serviceId, targetProjectId); }
   getChildProjects(parentId: string) { return this.projectRepo.getChildProjects(parentId); }
   getPreviewProjects(parentProjectId: string) { return this.projectRepo.getPreviewProjects(parentProjectId); }
   isParentProject(id: string) { return this.projectRepo.isParentProject(id); }
@@ -497,10 +681,15 @@ export class Database implements AuthDatabase {
     return this.projectRepo.releaseDeployLock(projectId, sessionId);
   }
   getDeployLockInfo(projectId: string) { return this.projectRepo.getDeployLockInfo(projectId); }
-  cleanExpiredDeployLocks(timeoutMinutes = 10) { return this.projectRepo.cleanExpiredDeployLocks(timeoutMinutes); }
+  // 1.0 GA B3 + Codex Day 16 follow-up: default aligned with
+  // PROJECT_LOCK_TIMEOUT_MS (30min in src/llm/agent-pool.ts) AND
+  // recovery-policy.ts:DEFAULT_LOCK_STALE_MS so in-memory + DB lock TTLs
+  // + recovery stale window all share a single 30-min boundary.
+  cleanExpiredDeployLocks(timeoutMinutes = 30) { return this.projectRepo.cleanExpiredDeployLocks(timeoutMinutes); }
   createEnvironment(environment: Parameters<EnvironmentRepo['createEnvironment']>[0]) { return this.environmentRepo.createEnvironment(environment); }
   getEnvironment(id: string) { return this.environmentRepo.getEnvironment(id); }
   getEnvironmentsByProject(projectId: string) { return this.environmentRepo.getEnvironmentsByProject(projectId); }
+  getEnvironmentsByProjectIds(projectIds: string[]) { return this.environmentRepo.getEnvironmentsByProjectIds(projectIds); }
   updateEnvironment(id: string, updates: Parameters<EnvironmentRepo['updateEnvironment']>[1]) { this.environmentRepo.updateEnvironment(id, updates); }
   deleteEnvironment(id: string) { this.environmentRepo.deleteEnvironment(id); }
   getEnvVars(projectId: string, environmentId?: string) { return this.envVarRepo.getEnvVars(projectId, environmentId); }
@@ -520,8 +709,35 @@ export class Database implements AuthDatabase {
   createService(service: Parameters<ServiceRepo['createService']>[0]) { return this.serviceRepo.createService(service); }
   getService(id: string) { return this.serviceRepo.getService(id); }
   listServices() { return this.serviceRepo.listServices(); }
+  getServices(opts?: Parameters<ServiceRepo['getServices']>[0]) { return this.serviceRepo.getServices(opts); }
   updateService(id: string, updates: Parameters<ServiceRepo['updateService']>[1]) { this.serviceRepo.updateService(id, updates); }
   deleteService(id: string) { this.serviceRepo.deleteService(id); }
+  getComposeChildren(parentServiceId: string) { return this.serviceRepo.getComposeChildren(parentServiceId); }
+  /**
+   * PR 2 helper: look up compose-child ProjectRows via services.parent_service_id.
+   * Replaces `getChildProjects(parentId)` in pipeline code so the hierarchy
+   * traversal goes through services table while downstream code still gets
+   * ProjectRow (with container_id, status, etc. still on projects until PR 5).
+   */
+  getComposeChildProjects(parentProjectId: string): ProjectRow[] {
+    const childServices = this.serviceRepo.getComposeChildren(`${parentProjectId}__svc`);
+    return childServices
+      .map((svc) => {
+        const childProjectId = svc.id.replace(/__svc$/, '');
+        return this.projectRepo.getProject(childProjectId);
+      })
+      .filter((p): p is ProjectRow => p !== undefined);
+  }
+  getDeployablesByGroup(projectId: string) { return this.serviceRepo.getDeployablesByGroup(projectId); }
+  /**
+   * PR 4 helper: resolve the auto-derived deployable services row for a
+   * project group. Convention from `createProject`: deployable services use
+   * id = `<projectId>__svc`. Used by web/api route handlers to read
+   * canonical (kind/image_url/assigned_port/status/container_id/...)
+   * fields with `??` fallback to the legacy `projects` columns through
+   * migration 0012.
+   */
+  getDeployableForProject(projectId: string) { return this.serviceRepo.getService(`${projectId}__svc`); }
   createServiceConnection(opts: Parameters<ServiceConnectionRepo['createConnection']>[0]) { return this.serviceConnectionRepo.createConnection(opts); }
   getServiceConnection(id: string) { return this.serviceConnectionRepo.getConnection(id); }
   getServiceConnectionByProjectAndService(projectId: string, serviceId: string) { return this.serviceConnectionRepo.getConnectionByProjectAndService(projectId, serviceId); }
@@ -534,13 +750,17 @@ export class Database implements AuthDatabase {
   getRuntimeIncident(id: string) { return this.runtimeIncidentRepo.getIncident(id); }
   listRuntimeIncidentsByProject(projectId: string, opts?: Parameters<RuntimeIncidentRepo['listByProject']>[1]) { return this.runtimeIncidentRepo.listByProject(projectId, opts); }
   listUnresolvedRuntimeIncidents() { return this.runtimeIncidentRepo.listUnresolved(); }
+  listRecentResolvedRuntimeIncidents(limit = 50) { return this.runtimeIncidentRepo.listRecentResolved(limit); }
   resolveRuntimeIncident(id: string) { this.runtimeIncidentRepo.resolveIncident(id); }
   updateRuntimeIncidentDiagnosis(id: string, diagnosis: string) { this.runtimeIncidentRepo.updateDiagnosis(id, diagnosis); }
   createDeployLog(log: Parameters<DeployLogRepo['createDeployLog']>[0]) { this.deployLogRepo.createDeployLog(log); }
   getDeployLogs(projectId: string, limit = 20, environmentId?: string) { return this.deployLogRepo.getDeployLogs(projectId, limit, environmentId); }
+  listRecentDeployLogsAcrossProjects(limit = 100) { return this.deployLogRepo.listRecentAcrossProjects(limit); }
   getLastDeployLog(projectId: string, environmentId?: string) { return this.deployLogRepo.getLastDeployLog(projectId, environmentId); }
   getDeployLog(deployId: string) { return this.deployLogRepo.getDeployLog(deployId); }
   updateRuntimeLog(deployId: string, runtimeLog: string) { this.deployLogRepo.updateRuntimeLog(deployId, runtimeLog); }
+  recordMcpSessionClose(opts: Parameters<McpSessionLogRepo['recordClose']>[0]) { this.mcpSessionLogRepo.recordClose(opts); }
+  listRecentClosedMcpSessions(limit = 50) { return this.mcpSessionLogRepo.listRecentClosed(limit); }
   createTimelineEvent(event: Parameters<TimelineRepo['createTimelineEvent']>[0]) { this.timelineRepo.createTimelineEvent(event); }
   getTimelineEvents(projectId: string, limit = 200) { return this.timelineRepo.getTimelineEvents(projectId, limit); }
   deleteTimelineEvents(projectId: string) { this.timelineRepo.deleteTimelineEvents(projectId); }
@@ -573,7 +793,7 @@ export class Database implements AuthDatabase {
   getSession() { return this.authRepo.getSession(); }
   createSession(token: string, createdAt: number, expiresAt: number) { this.authRepo.createSession(token, createdAt, expiresAt); }
   deleteSession() { this.authRepo.deleteSession(); }
-  getUsedPorts(): number[] { const projectPorts = this.db.select({ assigned_port: projects.assigned_port }).from(projects).where(isNotNull(projects.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); const envPorts = this.db.select({ assigned_port: environments.assigned_port }).from(environments).where(isNotNull(environments.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); return [...new Set([...projectPorts, ...envPorts])]; }
+  getUsedPorts(): number[] { const servicePorts = this.db.select({ assigned_port: services.assigned_port }).from(services).where(isNotNull(services.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); const envPorts = this.db.select({ assigned_port: environments.assigned_port }).from(environments).where(isNotNull(environments.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); return [...new Set([...servicePorts, ...envPorts])]; }
   createAiUsageLog(data: Parameters<AiUsageLogRepo['create']>[0]) { return this.aiUsageLogRepo.create(data); }
   getAiUsageLogsByProject(projectId: string) { return this.aiUsageLogRepo.findByProjectId(projectId); }
   getAiUsageLogsByDateRange(from: Date, to: Date) { return this.aiUsageLogRepo.findByDateRange(from, to); }
@@ -635,6 +855,14 @@ export class Database implements AuthDatabase {
   findActivityLogRecent(limit?: number, filters?: { project_id?: string; activity_type?: string; severity?: string; correlation_id?: string }) { return this.activityLogRepo.findRecent(limit, filters); }
   findActivityLogSinceFiltered(lastUlid: string, limit?: number, filters?: { project_id?: string; activity_type?: string; severity?: string; correlation_id?: string }) { return this.activityLogRepo.findSinceFiltered(lastUlid, limit, filters); }
   deleteActivityLogOlderThan(isoDate: string) { return this.activityLogRepo.deleteOlderThan(isoDate); }
+  recordServiceMetricSample(sample: Parameters<ServiceMetricRepo['recordMetricSample']>[0]) { this.serviceMetricRepo.recordMetricSample(sample); }
+  listServiceMetricsSince(serviceId: string, fromMs: number) { return this.serviceMetricRepo.listMetricsSince(serviceId, fromMs); }
+  hasAnyServiceMetrics(serviceId: string) { return this.serviceMetricRepo.hasAnyMetrics(serviceId); }
+  getLastServiceMetricAt(serviceId: string) { return this.serviceMetricRepo.getLastSampleAt(serviceId); }
+  getLatestServiceMetric(serviceId: string) { return this.serviceMetricRepo.getLatestSample(serviceId); }
+  getSetting(key: string) { return this.settingsRepo.getSetting(key); }
+  upsertSetting(key: string, value: string) { this.settingsRepo.upsertSetting(key, value); }
+  deleteSetting(key: string) { return this.settingsRepo.deleteSetting(key); }
   transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
   close() { this.sqlite.close(); }
 }

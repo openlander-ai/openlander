@@ -1,12 +1,23 @@
 import { nanoid } from 'nanoid';
-import { DeployLockedError, ProjectNotFoundError } from '../../errors.js';
+import {
+  CircuitBreakerOpenError,
+  DeployLockedError,
+  ProjectArchivedError,
+  ProjectNotFoundError,
+  ProjectRecoveringError,
+} from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { parseDBTimestamp } from '../../lib/parse-db-timestamp.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getProjectUrls } from '../../pipeline/traefik.js';
-import { buildDeployLockedResponse, tryAcquireDeployLockOrResponse } from './helpers.js';
+import {
+  buildDeployLockedResponse,
+  buildPolicyRejectionResponse,
+  tryAcquireDeployLockOrResponse,
+  tryRejectIfNotMutable,
+} from './helpers.js';
 import type { ToolDef } from './types.js';
 import {
   cleanupPreviewSchema,
@@ -60,11 +71,27 @@ export const deployToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
+      const policyRejection = tryRejectIfNotMutable(project, context);
+      if (policyRejection) {
+        return policyRejection;
+      }
       const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
       if (lockResult) {
         return lockResult;
       }
-      const release = await context.appCtx.deployQueue.acquire();
+      // 1.0 GA: replaced global DeployQueue with per-project lock so two
+      // different projects can rollback concurrently. The DB lock acquired
+      // above by `tryAcquireDeployLockOrResponse` plus this in-memory lock
+      // both reject same-project concurrent rollback.
+      const memLockAcquired = context.appCtx.agentPool
+        ? context.appCtx.agentPool.acquireProjectLock(project.id, toolSessionId)
+        : true;
+      if (!memLockAcquired) {
+        const lock = context.appCtx.agentPool?.getProjectLock(project.id);
+        return buildDeployLockedResponse(
+          new DeployLockedError(project.id, lock?.sessionId ?? 'unknown'),
+        );
+      }
       let result;
       try {
         result = await context.appCtx.pipeline.rollback(project.id, undefined, toolSessionId);
@@ -72,9 +99,18 @@ export const deployToolDefs: ToolDef[] = [
         if (err instanceof DeployLockedError) {
           return buildDeployLockedResponse(err);
         }
+        // Race-window: project was archived / sent to recovering / circuit
+        // tripped between the sync pre-check and the pipeline boundary check.
+        if (
+          err instanceof ProjectArchivedError ||
+          err instanceof ProjectRecoveringError ||
+          err instanceof CircuitBreakerOpenError
+        ) {
+          return buildPolicyRejectionResponse(err, project.name);
+        }
         throw err;
       } finally {
-        release();
+        context.appCtx.agentPool?.releaseProjectLock(project.id, toolSessionId);
       }
       return {
         ...result,
@@ -111,6 +147,13 @@ export const deployToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
+      // Fire-and-forget pre-check: surface archived/recovering/circuit-open
+      // immediately instead of returning a fake "deploying" success while
+      // the pipeline boundary silently rejects in the background.
+      const policyRejection = tryRejectIfNotMutable(project, context);
+      if (policyRejection) {
+        return policyRejection;
+      }
       const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
       if (lockResult) {
         return lockResult;
@@ -127,6 +170,17 @@ export const deployToolDefs: ToolDef[] = [
             log.warn(
               { err, projectId: project.id },
               'Blue-green deploy skipped: project lock is held',
+            );
+            return;
+          }
+          if (
+            err instanceof ProjectArchivedError ||
+            err instanceof ProjectRecoveringError ||
+            err instanceof CircuitBreakerOpenError
+          ) {
+            log.warn(
+              { err, projectId: project.id, code: err.code },
+              'Blue-green deploy rejected by mutation policy mid-flight',
             );
             return;
           }
@@ -231,6 +285,7 @@ export const deployToolDefs: ToolDef[] = [
               health: (() => {
                 try {
                   const project = appCtx.db.getProjectByName(job.projectName);
+                  // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
                   return project?.status ?? 'unknown';
                 } catch {
                   return 'unknown';
@@ -301,6 +356,7 @@ export const deployToolDefs: ToolDef[] = [
         if (!project) {
           const plans = appCtx.db.listDeployPlans(projectName);
           const activePlan = plans.find((p) => {
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             return p.status === 'executing' || p.status === 'ready' || p.status === 'draft';
           });
           if (activePlan) {

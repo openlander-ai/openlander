@@ -20,9 +20,11 @@ import { resolveEnvVars } from './resolve-env.js';
 
 import {
   ContainerNotFoundError,
-  DeployLockedError,
+  ImagePullError,
   InvalidProjectNameError,
+  MissingImageUrlError,
   PreflightCheckError,
+  ProjectNotFoundError,
   isDockerNotFoundError,
 } from '../errors.js';
 import { preflightCheckOrThrow } from './preflight.js';
@@ -32,6 +34,8 @@ import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
 import { getPolicy, type OpenLanderConfig } from '../config/index.js';
+import { withDeployLock } from '../db/repos/deploy-lock-helper.js';
+import { assertProjectMutable } from './mutation-policy.js';
 
 import {
   extractProjectName,
@@ -53,6 +57,7 @@ import type { ProbeContext } from '../health/types.js';
 import { BuildExecutor } from './deploy/build-step.js';
 import { ContainerRunner } from './deploy/run-step.js';
 import { getImageExposedPort, mapPullError } from './image-utils.js';
+import { loadResourceLimitsForProject } from './config-snapshot.js';
 
 import {
   buildProject,
@@ -139,6 +144,10 @@ export interface ProjectConfig {
   imageCmd?: string[];
   /** Port the application listens on inside the container */
   containerPort?: number;
+  /** Resource profile for memory/CPU limits */
+  resourceProfile?: 'micro' | 'small' | 'medium' | 'large' | 'custom' | null;
+  /** Memory limit in bytes */
+  memoryLimitBytes?: number | null;
 }
 
 /**
@@ -460,6 +469,11 @@ export class DeployPipeline {
     // Check if project with this name already exists
     const existing = this.db.getProjectByName(projectName);
     if (existing) {
+      // Pipeline boundary policy: blocks archived/recovering/circuit-open projects
+      // for callers that bypass the API route (e.g. webhook branch-target,
+      // /api/deploy/start, plan engine, AI-approved fix flow).
+      assertProjectMutable(existing, { db: this.db });
+
       const isStale = existing.status === 'error';
       if (isStale) {
         this.db.updateProject(existing.id, {
@@ -533,18 +547,26 @@ export class DeployPipeline {
     void this.deploy(config)
       .then((result) => {
         if (!result.success) {
+          // deploy() already emitted deploy:failed in its own catch path —
+          // no need to re-emit here, just record bookkeeping.
           this.recordBackgroundFailure(
             projectId,
             result.error ?? 'Deploy returned failure',
             trigger,
+            { emitTerminalEvent: false },
           );
         }
       })
       .catch((err: unknown) => {
+        // Deploy threw before its own try/catch could emit deploy:failed
+        // (e.g., preflight throw, project state throw, unexpected crash).
+        // We must emit the terminal event so listeners (plan-engine deploy
+        // lock release, questionBridge active-project clear) wake up.
         this.recordBackgroundFailure(
           projectId,
           err instanceof Error ? err.message : String(err),
           trigger,
+          { emitTerminalEvent: true },
         );
       });
   }
@@ -553,6 +575,7 @@ export class DeployPipeline {
     projectId: string,
     errMsg: string,
     trigger: 'chat' | 'webhook' | 'api' = 'api',
+    options: { emitTerminalEvent?: boolean } = {},
   ): void {
     log.error({ projectId, error: errMsg }, 'Background deploy failed');
     this.jobManager?.updatePhase(projectId, 'failed', errMsg);
@@ -562,22 +585,33 @@ export class DeployPipeline {
     }
     try {
       const lastLog = this.db.getLastDeployLog(projectId);
-      if (lastLog?.status === 'failed') {
-        return;
+      if (lastLog?.status !== 'failed') {
+        const environments = this.db.getEnvironmentsByProject(projectId);
+        const envId = environments[0]?.id;
+        this.db.createDeployLog({
+          id: nanoid(12),
+          projectId,
+          environmentId: envId,
+          status: 'failed',
+          trigger,
+          buildLog: `[fatal] Deploy crashed before build: ${errMsg}`,
+          durationMs: 0,
+        });
       }
-      const environments = this.db.getEnvironmentsByProject(projectId);
-      const envId = environments[0]?.id;
-      this.db.createDeployLog({
-        id: nanoid(12),
-        projectId,
-        environmentId: envId,
-        status: 'failed',
-        trigger,
-        buildLog: `[fatal] Deploy crashed before build: ${errMsg}`,
-        durationMs: 0,
-      });
     } catch {
       // best-effort — outer catch already logged the error
+    }
+
+    if (options.emitTerminalEvent) {
+      // Emit deploy:failed so terminal-event listeners (plan-engine lock
+      // release, questionBridge active project clear, activity logger) wake
+      // up. Without this, fire-and-forget crash paths leave the plan-engine
+      // deploy lock stale until the 30-minute reconciliation window.
+      void eventBus.emit('deploy:failed', {
+        projectId,
+        step: 'startup',
+        error: errMsg,
+      });
     }
   }
 
@@ -614,8 +648,11 @@ export class DeployPipeline {
     // otherwise create a new one (synchronous callers like redeploy, CLI)
     const projectId = config._projectId ?? nanoid(12);
 
+    // Day 12 (MAJOR #1): bootstrap the DB row before acquiring the lock.
+    // `acquireDeployLock` runs an UPDATE WHERE id = projectId — without the
+    // row, changes() returns 0 and we'd spuriously throw DeployLockedError
+    // on the very first top-level call.
     if (!config._projectId) {
-      // Create project record in DB (skipped when called from startDeploy)
       this.db.createProject({
         id: projectId,
         name: projectName,
@@ -632,23 +669,65 @@ export class DeployPipeline {
       });
       await this.transitionProjectState(projectId, 'building', 'deploy-started');
       this.jobManager?.trackJob(projectId, projectName);
-    } else if (config.branch) {
+    }
+
+    // Day 12 (MAJOR #1): every entry point is now lock-protected. When the
+    // caller (redeploy, plan-engine, blue-green MCP tool) already holds the
+    // lock it surfaces the session via `_lockSessionId` and we run inline
+    // so the outer caller keeps owning the release lifecycle. Otherwise we
+    // mint a session and wrap the body in `withDeployLock` so the explicit
+    // POST /api/projects/deploy → pipeline.deploy fallback path (no agent)
+    // and CLI / fire-and-forget callers cannot overlap with another deploy.
+    return this.runWithDeployLockIfTopLevel(projectId, config._lockSessionId, (sessionId) =>
+      this.deployInner({ ...config, _lockSessionId: sessionId }, projectId, projectName, trigger),
+    );
+  }
+
+  /**
+   * Wraps `fn` in `withDeployLock` only when `existingSessionId` is undefined
+   * (top-level entry). Otherwise re-uses the caller's session and skips the
+   * acquire/release pair so the outer `withDeployLock` keeps owning the lock.
+   */
+  private async runWithDeployLockIfTopLevel<T>(
+    projectId: string,
+    existingSessionId: string | undefined,
+    fn: (sessionId: string) => Promise<T>,
+  ): Promise<T> {
+    if (existingSessionId) {
+      return fn(existingSessionId);
+    }
+    const sessionId = `deploy-${nanoid(12)}`;
+    return withDeployLock(this.db, { projectId, sessionId }, () => fn(sessionId));
+  }
+
+  private async deployInner(
+    config: ProjectConfig,
+    projectId: string,
+    projectName: string,
+    trigger: 'chat' | 'webhook' | 'api',
+  ): Promise<DeployResult> {
+    const source = config.source ?? 'git';
+
+    // Project row creation now lives in deploy() so we can acquire the lock
+    // immediately after. Here we only apply caller overrides for existing
+    // rows (config._projectId set by startDeploy or by an outer pipeline call).
+    if (config._projectId && config.branch) {
       this.db.updateProject(projectId, {
         branch: config.branch,
         ...(source === 'image'
           ? {
               source,
               imageUrl: config.imageUrl,
-              imageCmd: config.imageCmd,
+              imageCmd: config.imageCmd ? JSON.stringify(config.imageCmd) : null,
               containerPort: config.containerPort,
             }
           : {}),
       });
-    } else if (source === 'image') {
+    } else if (config._projectId && source === 'image') {
       this.db.updateProject(projectId, {
         source,
         imageUrl: config.imageUrl,
-        imageCmd: config.imageCmd,
+        imageCmd: config.imageCmd ? JSON.stringify(config.imageCmd) : null,
         containerPort: config.containerPort,
       });
     }
@@ -664,6 +743,16 @@ export class DeployPipeline {
         if (error instanceof PreflightCheckError) {
           await this.transitionProjectState(projectId, 'error', 'deploy-build-error');
           this.jobManager?.updatePhase(projectId, 'failed', error.message);
+          // F3 (Day 9): preflight failure path also returns success:false
+          // without emitting deploy:failed → fireAndForget assumed deploy()
+          // owned the emit and skipped it. Make this a guaranteed terminal
+          // event so plan-engine lock release / questionBridge active project
+          // clear / activity logger always wake up.
+          await eventBus.emit('deploy:failed', {
+            projectId,
+            step: 'preflight',
+            error: error.message,
+          });
           return {
             success: false,
             projectId,
@@ -712,21 +801,46 @@ export class DeployPipeline {
     const startTime = Date.now();
     const project = this.db.getProject(projectId);
     if (!project) {
+      // F3 (Day 9): emit deploy:failed before returning so terminal-event
+      // listeners (plan-engine deploy lock release, questionBridge active-
+      // project clear, activity logger) wake up. The race window is:
+      // startDeploy returns → fireAndForgetDeploy starts background → project
+      // is deleted → background path lands here. Without this emit, the
+      // pre-existing fireAndForget contract (`emitTerminalEvent: false` when
+      // deploy() returns success:false) leaves locks stale until the 30-minute
+      // reconciliation window.
+      const errorMsg = `Project not found: ${projectId}`;
+      await eventBus.emit('deploy:failed', {
+        projectId,
+        step: 'lookup',
+        error: errorMsg,
+      });
       return {
         success: false,
         projectId,
         projectName: 'unknown',
-        error: `Project not found: ${projectId}`,
+        error: errorMsg,
         buildDurationMs: Date.now() - startTime,
       };
     }
+    // Pipeline boundary policy: blocks archived/recovering/circuit-open projects.
+    // Throws ProjectArchivedError / ProjectRecoveringError / CircuitBreakerOpenError (409).
+    assertProjectMutable(project, { db: this.db });
     const environment = this.db.getEnvironment(environmentId);
     if (!environment || environment.project_id !== projectId) {
+      // F3 (Day 9): see above — same terminal-event guarantee for the
+      // environment-disappeared race.
+      const errorMsg = `Environment not found: ${environmentId}`;
+      await eventBus.emit('deploy:failed', {
+        projectId,
+        step: 'lookup',
+        error: errorMsg,
+      });
       return {
         success: false,
         projectId,
         projectName: project.name,
-        error: `Environment not found: ${environmentId}`,
+        error: errorMsg,
         buildDurationMs: Date.now() - startTime,
       };
     }
@@ -736,11 +850,18 @@ export class DeployPipeline {
     const source = deployConfig.source ?? 'git';
     const repoUrl = deployConfig.repoUrl ?? project.repo_url ?? '';
     if (source !== 'image' && !repoUrl) {
+      // F3 (Day 9): same terminal-event guarantee for missing-repo case.
+      const errorMsg = `Missing repo URL for project: ${projectId}`;
+      await eventBus.emit('deploy:failed', {
+        projectId,
+        step: 'config',
+        error: errorMsg,
+      });
       return {
         success: false,
         projectId,
         projectName,
-        error: `Missing repo URL for project: ${projectId}`,
+        error: errorMsg,
         buildDurationMs: Date.now() - startTime,
       };
     }
@@ -815,7 +936,7 @@ export class DeployPipeline {
       if (source === 'image') {
         const imageUrl = deployConfig.imageUrl;
         if (!imageUrl) {
-          throw new Error('Missing image URL for image deployment source');
+          throw new MissingImageUrlError();
         }
 
         await (
@@ -828,7 +949,7 @@ export class DeployPipeline {
           await this.docker.pullImage(imageUrl);
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
-          throw new Error(mapPullError(err));
+          throw new ImagePullError(mapPullError(err));
         }
         await (
           eventBus as unknown as {
@@ -891,7 +1012,7 @@ export class DeployPipeline {
         imageTag,
         dockerfilePath,
         previousEnvironmentImageTag: preservedPreviousTag ?? environment.image_tag,
-        previousProjectImageTag: preservedPreviousTag ?? project.image_tag,
+        previousProjectImageTag: preservedPreviousTag ?? project.image_tag ?? null,
         shouldSyncProjectState: true,
         config: deployConfig,
         buildLog,
@@ -1085,11 +1206,12 @@ export class DeployPipeline {
       };
     });
 
-    const existingChildren = this.db.getChildProjects(parentId);
+    // PR 2: fetch existing children via services.parent_service_id.
+    const existingChildren = this.db.getComposeChildProjects(parentId);
     detectMonorepoDependencies(services, parentName, (serviceName) => {
       const envVarsToScan: Record<string, string> = {};
       const childName = `${parentName}/${serviceName}`;
-      const existingChild = existingChildren.find((child) => child.name === childName);
+      const existingChild = existingChildren.find((c) => c.name === childName);
 
       if (existingChild) {
         Object.assign(envVarsToScan, this.env.getAll(existingChild.id));
@@ -1104,9 +1226,7 @@ export class DeployPipeline {
 
     const serviceNames = new Set(services.map((s) => s.name));
     if (serviceNames.has('app') && !serviceNames.has('main')) {
-      const legacyChildren = this.db
-        .getChildProjects(parentId)
-        .filter((c) => c.name === `${parentName}/main`);
+      const legacyChildren = existingChildren.filter((c) => c.name === `${parentName}/main`);
       for (const child of legacyChildren) {
         if (child.container_id) {
           try {
@@ -1221,7 +1341,10 @@ export class DeployPipeline {
         }
 
         const project = this.db.getProject(deployment.projectId);
-        const containerId = project?.container_id;
+        // PR 4.5: canonical-first read of container_id with `??` fallback.
+        const deployableForHealth = this.db.getDeployableForProject(deployment.projectId);
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+        const containerId = deployableForHealth?.container_id ?? project?.container_id;
         if (!containerId) {
           log.warn(
             { serviceName: service.name },
@@ -1324,23 +1447,12 @@ export class DeployPipeline {
 
     this.validateProjectName(project.name);
 
-    if (project.archived_at) {
-      return {
-        success: false,
-        projectId,
-        projectName: project.name,
-        error: `Project "${project.name}" is archived. Use unarchive_project first, then redeploy.`,
-      };
-    }
+    // Pipeline boundary policy: blocks archived/recovering/circuit-open projects.
+    // Throws ProjectArchivedError / ProjectRecoveringError / CircuitBreakerOpenError (409).
+    assertProjectMutable(project, { db: this.db });
 
     const lockSession = options?.lockSessionId ?? nanoid(12);
-    const locked = this.db.acquireDeployLock(projectId, lockSession);
-    if (!locked) {
-      const lockInfo = this.db.getDeployLockInfo(projectId);
-      throw new DeployLockedError(projectId, lockInfo?.session ?? 'unknown');
-    }
-
-    try {
+    return withDeployLock(this.db, { projectId, sessionId: lockSession }, async () => {
       const targetEnvironment = this.db
         .getEnvironmentsByProject(projectId)
         .find((environment) => environment.type === 'production');
@@ -1363,9 +1475,14 @@ export class DeployPipeline {
 
       const redeployRouteName = getRouteName(project.name);
       const redeployPreviousLabel = `openlander/${redeployRouteName}:previous`;
-      const currentRunningTag = project.image_tag;
-      let redeployPreviousTag: string | null = currentRunningTag;
-      if (project.source !== 'image' && currentRunningTag) {
+      // PR 4.5: canonical-first reads of deployable fields with `??` fallback.
+      const redeployDeployable = this.db.getDeployableForProject(projectId);
+      const redeployImageTag = redeployDeployable?.image_tag ?? project.image_tag;
+      const redeploySource = redeployDeployable?.source ?? project.source;
+      const redeployAssignedPort = redeployDeployable?.assigned_port ?? project.assigned_port;
+      const currentRunningTag = redeployImageTag;
+      let redeployPreviousTag: string | null = currentRunningTag ?? null;
+      if (redeploySource !== 'image' && currentRunningTag) {
         if (currentRunningTag !== redeployPreviousLabel) {
           try {
             await this.docker.tagImage(
@@ -1391,7 +1508,7 @@ export class DeployPipeline {
 
       this.db.updateProject(projectId, { previousImageTag: redeployPreviousTag });
 
-      const previousPort = project.assigned_port ?? undefined;
+      const previousPort = redeployAssignedPort ?? undefined;
 
       await this.transitionProjectState(projectId, 'building', 'deploy-started', {
         containerId: null,
@@ -1415,7 +1532,7 @@ export class DeployPipeline {
           _projectId: projectId,
           _preferredPort: previousPort,
           _lockSessionId: lockSession,
-          _noCacheBuild: project.source === 'image' ? true : options?.noCache,
+          _noCacheBuild: redeploySource === 'image' ? true : options?.noCache,
           environment: 'production',
           ...(options?.cmd && { imageCmd: options.cmd }),
         },
@@ -1423,12 +1540,25 @@ export class DeployPipeline {
       });
 
       return await this.deploy(config);
-    } finally {
-      this.db.releaseDeployLock(projectId, lockSession);
-    }
+    });
   }
 
   private async blueGreenRedeploy(
+    projectId: string,
+    options?: RedeployOptions,
+  ): Promise<DeployResult> {
+    // Day 12 (MAJOR #1): wrap with the same top-level lock guard as deploy().
+    // Today the only caller (redeploy with strategy='blue-green') already
+    // holds the lock and forwards `lockSessionId`, so this is a no-op
+    // re-entry. The wrapper guarantees that any future direct entry point
+    // (Day 5 design doc: "every entry point protected") cannot bypass the
+    // serialization invariant.
+    return this.runWithDeployLockIfTopLevel(projectId, options?.lockSessionId, (sessionId) =>
+      this.blueGreenRedeployInner(projectId, { ...options, lockSessionId: sessionId }),
+    );
+  }
+
+  private async blueGreenRedeployInner(
     projectId: string,
     options?: RedeployOptions,
   ): Promise<DeployResult> {
@@ -1461,9 +1591,12 @@ export class DeployPipeline {
 
       projectName = project.name;
       this.validateProjectName(projectName);
-      blueContainerId = project.container_id ?? undefined;
+      // PR 4.5: canonical-first reads of deployable fields with `??` fallback.
+      const blueDeployable = this.db.getDeployableForProject(projectId);
+      const blueStatus = blueDeployable?.status ?? project.status;
+      blueContainerId = blueDeployable?.container_id ?? project.container_id ?? undefined;
 
-      if (project.status !== 'running' || !blueContainerId) {
+      if (blueStatus !== 'running' || !blueContainerId) {
         return {
           success: false,
           projectId,
@@ -1552,6 +1685,7 @@ export class DeployPipeline {
 
       const greenName = projectContainerName(`${projectName}-green`);
       await this.removeStaleGreenContainer(greenName);
+      const resourceLimits = loadResourceLimitsForProject(this.db, projectId);
 
       greenContainerId = await this.docker.runContainer({
         imageTag,
@@ -1562,6 +1696,7 @@ export class DeployPipeline {
         traefikLabels: { 'traefik.enable': 'false' },
         network: networkName,
         secretFiles,
+        resourceLimits: resourceLimits ?? undefined,
       });
       shouldCleanupGreen = true;
 
@@ -1572,7 +1707,7 @@ export class DeployPipeline {
         url: getProjectUrl(projectName),
       });
 
-      const probeProfile = resolveMonitoringProfile(project);
+      const probeProfile = resolveMonitoringProfile(project, blueDeployable);
       const probeConfig = {
         ...probeProfile.health,
         // Override path if explicitly provided in RedeployOptions
@@ -1617,7 +1752,8 @@ export class DeployPipeline {
         assignedPort: newPort,
         containerPort,
         imageTag,
-        previousImageTag: project.image_tag,
+        // PR 4.5: canonical-first read of previous image tag.
+        previousImageTag: blueDeployable?.image_tag ?? project.image_tag,
       });
       if (prodEnv) {
         this.db.updateEnvironment(prodEnv.id, {
@@ -1826,21 +1962,18 @@ export class DeployPipeline {
   ): Promise<DeployResult> {
     const project = this.db.getProject(projectId);
     if (!project) {
-      return this.rollbackExecutor.rollbackToImage(projectId, environmentId);
+      // Surface missing project explicitly so callers cannot accidentally bypass
+      // the mutation policy + deploy lock by referencing an archived/deleted id.
+      throw new ProjectNotFoundError(projectId);
     }
+
+    // Pipeline boundary policy: blocks archived/recovering/circuit-open projects.
+    assertProjectMutable(project, { db: this.db });
 
     const lockSession = lockSessionId ?? nanoid(12);
-    const locked = this.db.acquireDeployLock(projectId, lockSession);
-    if (!locked) {
-      const lockInfo = this.db.getDeployLockInfo(projectId);
-      throw new DeployLockedError(projectId, lockInfo?.session ?? 'unknown');
-    }
-
-    try {
-      return await this.rollbackExecutor.rollbackToImage(projectId, environmentId);
-    } finally {
-      this.db.releaseDeployLock(projectId, lockSession);
-    }
+    return withDeployLock(this.db, { projectId, sessionId: lockSession }, () =>
+      this.rollbackExecutor.rollbackToImage(projectId, environmentId),
+    );
   }
 
   private async cleanupProjectContainers(
@@ -1883,8 +2016,9 @@ export class DeployPipeline {
       return;
     }
 
-    const children = this.db.getChildProjects(projectId);
-    if (children.length > 0) {
+    // PR 2: check compose children via services.parent_service_id.
+    const childProjects = this.db.getComposeChildProjects(projectId);
+    if (childProjects.length > 0) {
       await this.lifecycle.stop(projectId);
       this.closeTunnel(projectId);
       return;
@@ -1938,8 +2072,9 @@ export class DeployPipeline {
     while (queue.length > 0) {
       const current = queue.shift();
       if (!current) continue;
-      const children = this.db.getChildProjects(current);
-      for (const child of children) {
+      // PR 2: fetch compose children via services.parent_service_id.
+      const childProjects = this.db.getComposeChildProjects(current);
+      for (const child of childProjects) {
         if (descendants.has(child.id)) continue;
         descendants.add(child.id);
         queue.push(child.id);

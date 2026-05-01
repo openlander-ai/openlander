@@ -72,6 +72,8 @@ describe('AlertMonitor', () => {
       listOpsIncidentsByDateRange: vi.fn().mockReturnValue([]),
       listAllActiveOpsIncidents: vi.fn().mockReturnValue([]),
       getProject: vi.fn().mockReturnValue(null),
+      // PR 4.5: canonical-first reads need this helper.
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     } as unknown as Database;
 
     events = {
@@ -182,6 +184,8 @@ describe('AlertMonitor - checkPortConflicts', () => {
       listOpsIncidentsByDateRange: vi.fn().mockReturnValue([]),
       listAllActiveOpsIncidents: vi.fn().mockReturnValue([]),
       getProject: vi.fn().mockReturnValue(null),
+      // PR 4.5: canonical-first reads need this helper.
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
     } as unknown as Database;
 
     events = {

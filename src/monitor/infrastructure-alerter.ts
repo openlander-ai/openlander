@@ -147,13 +147,17 @@ export class InfrastructureAlerter {
     const projects = this.db.listProjects('running');
 
     for (const project of projects) {
-      if (!project.container_id) continue;
+      // PR 4.5: canonical-first read of container_id with `??` fallback to
+      // legacy `projects` column through migration 0012.
+      const deployable = this.db.getDeployableForProject(project.id);
+      const containerId = deployable?.container_id ?? project.container_id;
+      if (!containerId) continue;
 
-      const key = `restart-loop:${project.container_id}`;
+      const key = `restart-loop:${containerId}`;
 
       try {
-        const info = await this.docker.inspectContainer(project.container_id);
-        const restartCount: number = (info.RestartCount as number | undefined) ?? 0;
+        const info = await this.docker.inspectContainer(containerId);
+        const restartCount: number = info.RestartCount;
 
         const startedAt = new Date(info.State.StartedAt);
         const hoursSinceStart = (Date.now() - startedAt.getTime()) / (60 * 60 * 1000);
@@ -174,17 +178,14 @@ export class InfrastructureAlerter {
           details: {
             projectId: project.id,
             projectName: project.name,
-            containerId: project.container_id,
+            containerId,
             restartCount,
             lastStarted: info.State.StartedAt,
           },
           suggestion,
         });
       } catch (err) {
-        log.debug(
-          { err, containerId: project.container_id },
-          'Failed to inspect container for restart check',
-        );
+        log.debug({ err, containerId }, 'Failed to inspect container for restart check');
       }
     }
   }
@@ -231,10 +232,13 @@ export class InfrastructureAlerter {
     const portMap = new Map<number, string[]>();
 
     for (const project of projects) {
-      if (project.assigned_port != null) {
-        const names = portMap.get(project.assigned_port) ?? [];
+      // PR 4.5: canonical-first read of assigned_port with `??` fallback.
+      const deployable = this.db.getDeployableForProject(project.id);
+      const assignedPort = deployable?.assigned_port ?? project.assigned_port;
+      if (assignedPort != null) {
+        const names = portMap.get(assignedPort) ?? [];
         names.push(project.name);
-        portMap.set(project.assigned_port, names);
+        portMap.set(assignedPort, names);
       }
     }
 
@@ -267,12 +271,15 @@ export class InfrastructureAlerter {
     const projects = this.db.listProjects('running');
 
     for (const project of projects) {
-      if (!project.container_id) continue;
+      // PR 4.5: canonical-first read of container_id with `??` fallback.
+      const deployable = this.db.getDeployableForProject(project.id);
+      const containerId = deployable?.container_id ?? project.container_id;
+      if (!containerId) continue;
 
-      const key = `resource-saturation:${project.container_id}`;
+      const key = `resource-saturation:${containerId}`;
 
       try {
-        const statsRaw = await this.docker.getContainerStats(project.container_id);
+        const statsRaw = await this.docker.getContainerStats(containerId);
         const stats = statsRaw as {
           memory_stats?: { usage?: number; limit?: number };
         };
@@ -304,7 +311,7 @@ export class InfrastructureAlerter {
           details: {
             projectId: project.id,
             projectName: project.name,
-            containerId: project.container_id,
+            containerId,
             memoryUsagePercent: Math.round(usagePercent),
             memoryUsageMB: usageMB,
             memoryLimitMB: limitMB,
@@ -312,7 +319,7 @@ export class InfrastructureAlerter {
           suggestion,
         });
       } catch (err) {
-        log.debug({ err, containerId: project.container_id }, 'Failed to check container memory');
+        log.debug({ err, containerId }, 'Failed to check container memory');
       }
     }
   }

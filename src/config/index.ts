@@ -407,7 +407,7 @@ export function getDataDir(): string {
 
 /** Get the default database file path. */
 export function getDbPath(): string {
-  return join(CONFIG_DIR, 'openlander.db');
+  return process.env.OPENLANDER_DB_PATH ?? join(CONFIG_DIR, 'openlander.db');
 }
 
 /** Get the config file path. */

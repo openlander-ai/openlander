@@ -1,218 +1,264 @@
-import { useState, type MouseEvent } from 'react';
+/**
+ * ProjectsGrid — v4 single-column list (Phase C rewrite).
+ *
+ * Matches v4 projects.jsx:
+ *   - Single-column project list (not grid)
+ *   - Controls row: filter input + Tags + Newest first
+ *   - Empty state: "You don't have any projects yet" v4-exact copy
+ *   - StatusPill per project
+ *
+ * 1.0-rc.2 (data-model fullsplit): rows render groups (formerly
+ * projects). The `status` and `serviceCount` fields are P1 additive-
+ * schema fields preserved on group rows during the transition so this
+ * page keeps rendering without a behavioral rewire.
+ */
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutGrid, List, Plus } from 'lucide-react';
-import { ProjectCard } from '@/components/dashboard/ProjectCard';
-import { ProjectTable } from '@/components/dashboard/ProjectTable';
-import { SystemHealthCards } from '@/components/dashboard/SystemHealthCards';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ChevronDown, Folder, MoreHorizontal, Plus } from 'lucide-react';
+import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useProjects } from '@/hooks/use-projects';
-import { useSystemStatus } from '@/hooks/use-system-status';
-import { useLanguage } from '@/i18n/context';
-import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
-import { redeployProject } from '@/lib/api';
+import { OuterCard } from '@/components/Shell/OuterCard';
+import { AgentGuideDialog } from '@/components/agent-guide';
 import { cn } from '@/lib/utils';
+import type { Project } from '@/types';
 
-function getStatusConfig(): Record<
-  string,
-  { label: string; dot: string; badge: string; border: string }
-> {
-  return {
+function getStatusPill(status: Project['status']): { cls: string; label: string } {
+  const map: Record<Project['status'], { cls: string; label: string }> = {
     running: {
-      label: 'Healthy',
-      dot: 'bg-success animate-pulse',
-      badge: 'bg-success/10 text-success border border-success/30',
-      border: 'border-success/20',
-    },
-    stopped: {
-      label: 'Stopped',
-      dot: 'bg-[var(--text-muted)]',
-      badge: 'bg-bg-subtle text-muted-ol border border-border',
-      border: 'border-[hsl(var(--border))]',
+      cls: 'bg-[color-mix(in_oklch,var(--ol-success)_12%,transparent)] text-[color:var(--ol-success)]',
+      label: 'Running',
     },
     building: {
+      cls: 'bg-[color-mix(in_oklch,var(--ol-warning)_12%,transparent)] text-[color:var(--ol-warning)]',
       label: 'Deploying',
-      dot: 'bg-warning animate-pulse-ring',
-      badge: 'bg-warning/10 text-warning border border-warning/30',
-      border: 'border-warning/30',
     },
     error: {
-      label: 'Failed',
-      dot: 'bg-error',
-      badge: 'bg-error/10 text-error border border-error/30',
-      border: 'border-error/30',
+      cls: 'bg-[color-mix(in_oklch,var(--ol-error)_12%,transparent)] text-[color:var(--ol-error)]',
+      label: 'Crashing',
+    },
+    stopped: {
+      cls: 'bg-[color-mix(in_oklch,var(--ol-fg-subtle)_12%,transparent)] text-[color:var(--ol-fg-muted)]',
+      label: 'Stopped',
+    },
+    idle: {
+      cls: 'bg-[color-mix(in_oklch,var(--ol-fg-subtle)_12%,transparent)] text-[color:var(--ol-fg-muted)]',
+      label: 'Idle',
     },
   };
+  return map[status] ?? map.stopped;
+}
+
+function StatusPill({ status }: { status: Project['status'] }) {
+  const { cls, label } = getStatusPill(status);
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium',
+        cls,
+      )}
+    >
+      <span aria-hidden className="h-1 w-1 rounded-full bg-current" />
+      {label}
+    </span>
+  );
+}
+
+function timeAgo(dateStr: string): string {
+  const ts = new Date(dateStr).getTime();
+  if (Number.isNaN(ts)) return '';
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 export function ProjectsGrid() {
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
+  const ctx = useProjectsContext();
   const [showArchived, setShowArchived] = useState(false);
-  const { projects, loading: projectsLoading, refetch } = useProjects(showArchived);
-  const { serverStatus, setupStatus, loading: systemLoading } = useSystemStatus();
-  const { t } = useLanguage();
-  const statusConfig = getStatusConfig();
-  const [redeployingIds, setRedeployingIds] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => {
-    return (localStorage.getItem('openlander-view-mode') as 'grid' | 'table') || 'grid';
-  });
+  // When the toggle is off (default), reuse the shared context so we don't
+  // double-poll. When on, mount a per-page useProjects(true) so archived
+  // rows show alongside live ones — they don't need to bleed into Sidebar /
+  // Home / CommandPalette where the context is consumed. The hook's
+  // `enabled` flag suppresses polling while the toggle is off.
+  const archivedView = useProjects(true, { enabled: showArchived });
+  const { projects, loading } = showArchived ? archivedView : ctx;
+  const [q, setQ] = useState('');
+  const [guideOpen, setGuideOpen] = useState(false);
 
-  const filteredProjects = projects;
-
-  const toggleView = (mode: 'grid' | 'table') => {
-    setViewMode(mode);
-    localStorage.setItem('openlander-view-mode', mode);
-  };
-
-  const handleRedeploy = async (event: MouseEvent, projectId: string) => {
-    event.stopPropagation();
-    if (isMobile) {
-      showMobileToast();
-      return;
-    }
-    setRedeployingIds((prev) => new Set(prev).add(projectId));
-    try {
-      await redeployProject(projectId);
-      refetch();
-    } catch (error) {
-      console.error('Redeploy failed:', error);
-    } finally {
-      setRedeployingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(projectId);
-        return next;
-      });
-    }
-  };
-
-  if (projectsLoading || systemLoading) {
-    return (
-      <div className="p-6 xl:p-8 max-w-7xl mx-auto w-full space-y-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <Skeleton className="h-7 w-32 mb-2" />
-            <Skeleton className="h-4 w-24" />
-          </div>
-          <Skeleton className="h-8 w-28" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
-          {[1, 2, 3, 4].map((index) => (
-            <Skeleton key={index} className="h-[140px] w-full rounded-lg" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const filtered = projects.filter((p) => !q || p.name.toLowerCase().includes(q.toLowerCase()));
 
   return (
-    <div className="p-6 xl:p-8 max-w-7xl mx-auto w-full space-y-8">
-      <SystemHealthCards
-        serverStatus={serverStatus}
-        setupStatus={setupStatus}
-        projects={filteredProjects}
-        onNavigate={navigate}
-        t={t}
-      />
-
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display font-bold text-xl text-primary-ol tracking-tight">
-            Project Overview
-          </h1>
-          <p className="text-sm font-body text-secondary-ol mt-0.5">
-            {filteredProjects.length}{' '}
-            {filteredProjects.length === 1 ? 'project monitored' : 'projects monitored'}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm font-body text-secondary-ol cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-              className="rounded border-border bg-bg-subtle text-agent focus:ring-agent"
-            />
-            {t('projects.filter.showArchived')}
-          </label>
-          <div className="flex items-center gap-1 bg-bg-subtle rounded-lg p-0.5">
-            <button
-              onClick={() => toggleView('grid')}
-              className={cn(
-                'p-1.5 rounded-md transition-colors',
-                viewMode === 'grid'
-                  ? 'bg-bg-panel shadow-sm text-primary-ol'
-                  : 'text-muted-ol hover:text-secondary-ol',
-              )}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => toggleView('table')}
-              className={cn(
-                'p-1.5 rounded-md transition-colors',
-                viewMode === 'table'
-                  ? 'bg-bg-panel shadow-sm text-primary-ol'
-                  : 'text-muted-ol hover:text-secondary-ol',
-              )}
-            >
-              <List className="h-4 w-4" />
-            </button>
-          </div>
+    <div className="mx-auto w-full max-w-5xl">
+      <OuterCard
+        title="Projects"
+        subtitle="Create and manage your projects"
+        actions={
           <button
-            onClick={() => {
-              if (isMobile) {
-                showMobileToast();
-                return;
-              }
-              navigate('/projects/new');
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body bg-agent text-white hover:bg-agent/90 transition-colors"
+            type="button"
+            onClick={() => setGuideOpen(true)}
+            className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:opacity-90"
           >
             <Plus className="h-3.5 w-3.5" />
             New Project
           </button>
-        </div>
-      </div>
+        }
+      >
+        {loading && projects.length === 0 ? (
+          <div className="space-y-2 py-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-16 animate-pulse rounded-md bg-[color:var(--ol-panel-2)]" />
+            ))}
+          </div>
+        ) : filtered.length === 0 && !q ? (
+          /* ── Empty state (v5-exact copy) ── */
+          <div className="flex flex-col items-center gap-4 py-16 text-center">
+            <div className="grid h-12 w-12 place-items-center rounded-xl bg-[color:var(--ol-panel-2)]">
+              <Folder className="h-6 w-6 text-[color:var(--ol-fg-muted)]" />
+            </div>
+            <div>
+              <h3 className="text-[14px] font-semibold text-[color:var(--ol-fg)]">
+                You don&apos;t have any projects yet
+              </h3>
+              <p className="mt-1.5 max-w-md text-[13px] text-[color:var(--ol-fg-muted)]">
+                A project bundles related services — web, api, worker, db — that share environment
+                and deploy together.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGuideOpen(true)}
+              className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:opacity-90"
+            >
+              <Plus className="h-4 w-4" />
+              Create your first project
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* ── Controls row ── */}
+            <div className="mb-3 flex items-center gap-2">
+              <div className="relative min-w-0 flex-1">
+                <input
+                  type="search"
+                  placeholder="Filter projects…"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  className="w-full rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[13px] text-[color:var(--ol-fg)] placeholder:text-[color:var(--ol-fg-subtle)] focus:border-[color:var(--ol-border)] focus:outline-none"
+                />
+              </div>
+              <button
+                type="button"
+                className="rounded-md border border-[color:var(--ol-border)] px-2.5 py-1.5 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+              >
+                Tags
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowArchived((v) => !v)}
+                aria-pressed={showArchived}
+                className={cn(
+                  'rounded-md border px-2.5 py-1.5 text-[12.5px] transition-colors',
+                  showArchived
+                    ? 'border-[color:var(--ol-border-strong)] bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg)]'
+                    : 'border-[color:var(--ol-border)] text-[color:var(--ol-fg-muted)] hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]',
+                )}
+              >
+                {showArchived ? 'Hide archived' : 'Show archived'}
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] px-2.5 py-1.5 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+              >
+                Newest first
+                <ChevronDown className="h-3 w-3" />
+              </button>
+            </div>
 
-      {filteredProjects.length === 0 ? (
-        <button
-          onClick={() => navigate('/projects/new')}
-          className="w-full max-w-md mx-auto flex flex-col items-center gap-4 py-16 px-8 rounded-lg border-2 border-dashed border-[hsl(var(--border))] hover:border-agent/40 bg-bg-panel hover:bg-bg-panel transition-all duration-200 group cursor-pointer"
-        >
-          <div className="p-4 rounded-full bg-agent/10 group-hover:bg-agent/15 transition-colors">
-            <Plus className="h-8 w-8 text-agent" />
-          </div>
-          <div className="text-center">
-            <p className="font-display font-semibold text-primary-ol">
-              {t('projects.deployFirstApp')}
-            </p>
-            <p className="text-sm font-body text-secondary-ol mt-1">
-              {t('projects.connectGithub')}
-            </p>
-          </div>
-        </button>
-      ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
-          {filteredProjects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              statusConfig={statusConfig}
-              redeployingIds={redeployingIds}
-              onNavigate={navigate}
-              onRedeploy={handleRedeploy}
-              t={t}
-            />
-          ))}
-        </div>
-      ) : (
-        <ProjectTable
-          projects={filteredProjects}
-          statusConfig={statusConfig}
-          onNavigate={navigate}
-          t={t}
-        />
-      )}
+            {/* ── Project list ── */}
+            <div className="flex flex-col gap-1">
+              {filtered.length === 0 ? (
+                <div className="py-8 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
+                  No projects match &quot;{q}&quot;
+                </div>
+              ) : (
+                filtered.map((p) => {
+                  const isArchived = p.archived_at != null;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => navigate(`/projects/${p.id}`)}
+                      className={cn(
+                        'group flex w-full items-center gap-3 rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-4 py-3 text-left transition-colors hover:border-[color:var(--ol-border)] hover:bg-[color:var(--ol-panel)]',
+                        isArchived && 'opacity-60',
+                      )}
+                    >
+                      {/* Project icon */}
+                      <span
+                        aria-hidden
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-[color:var(--ol-border)] text-[12px] font-semibold text-[color:var(--ol-fg-muted)]"
+                      >
+                        {p.name.slice(0, 2).toUpperCase()}
+                      </span>
+
+                      {/* Meta */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-[14px] font-medium text-[color:var(--ol-fg)]">
+                            {p.name}
+                          </span>
+                          {isArchived ? (
+                            <span className="inline-flex items-center rounded-full bg-[color:var(--ol-panel)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--ol-fg-muted)]">
+                              Archived
+                            </span>
+                          ) : (
+                            <>
+                              {/* p is the frontend Project type (lib/api wire shape) — `status` is a
+                                wire-format field, hydrated from services.* server-side post-0012. */}
+                              {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
+                              <StatusPill status={p.status} />
+                            </>
+                          )}
+                        </div>
+                        {/* v5 spec: stats strip is visually separated from
+                            the identity row with a 1px top border, 12px
+                            padding-top, and 16px gap (styles.css `.project-card-stats`). */}
+                        <div className="mt-2 flex items-center gap-4 border-t border-[color:var(--ol-border-subtle)] pt-3 text-[11.5px] text-[color:var(--ol-fg-muted)]">
+                          {p.serviceCount != null && (
+                            <span>
+                              {p.serviceCount} service{p.serviceCount === 1 ? '' : 's'}
+                            </span>
+                          )}
+                          <span>Deployed {timeAgo(p.updatedAt)}</span>
+                          <span className="ml-auto text-[color:var(--ol-fg-subtle)]">
+                            Created {timeAgo(p.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* More */}
+                      <button
+                        type="button"
+                        aria-label="More options"
+                        onClick={(e) => e.stopPropagation()}
+                        className="grid h-7 w-7 place-items-center rounded-md text-[color:var(--ol-fg-subtle)] opacity-0 transition-opacity hover:bg-[color:var(--ol-panel)] hover:text-[color:var(--ol-fg)] group-hover:opacity-100"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </>
+        )}
+      </OuterCard>
+
+      <AgentGuideDialog open={guideOpen} onOpenChange={setGuideOpen} kind="add-service" />
     </div>
   );
 }

@@ -58,7 +58,7 @@ export class AlertMonitor {
     this.infrastructureAlerter = new InfrastructureAlerter(docker, db, this, {
       intervalMs: this.options.intervalMs,
     });
-    this.containerAlertHandler = new ContainerAlertHandler(db, events, this);
+    this.containerAlertHandler = new ContainerAlertHandler(docker, db, events, this);
   }
 
   start(intervalMs?: number): void {

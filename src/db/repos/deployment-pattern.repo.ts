@@ -20,7 +20,7 @@ export class DeploymentPatternRepo {
       .from(deploymentPatterns)
       .where(eq(deploymentPatterns.project_id, projectId))
       .orderBy(desc(deploymentPatterns.created_at))
-      .all() as DeploymentPatternRow[];
+      .all();
   }
 
   /**
@@ -37,7 +37,7 @@ export class DeploymentPatternRepo {
           eq(deploymentPatterns.error_signature, signature),
         ),
       )
-      .get() as DeploymentPatternRow | undefined;
+      .get();
   }
 
   /**
@@ -123,7 +123,7 @@ export class DeploymentPatternRepo {
       .select()
       .from(deploymentPatterns)
       .orderBy(desc(deploymentPatterns.last_seen_at))
-      .all() as DeploymentPatternRow[];
+      .all();
   }
 
   /**
@@ -136,6 +136,6 @@ export class DeploymentPatternRepo {
       .where(eq(deploymentPatterns.project_id, projectId))
       .orderBy(desc(deploymentPatterns.success_count))
       .limit(limit)
-      .all() as DeploymentPatternRow[];
+      .all();
   }
 }

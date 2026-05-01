@@ -1,8 +1,10 @@
-import { asc, eq, sql } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { buildSetValues } from '../helpers.js';
 import { environments } from '../schema.drizzle.js';
+import { deployableServiceIdToProjectId, projectIdToDeployableServiceId } from '../service-ids.js';
 import type { EnvironmentRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 export class EnvironmentRepo {
   constructor(
@@ -28,7 +30,7 @@ export class EnvironmentRepo {
       .insert(environments)
       .values({
         id: environment.id,
-        project_id: environment.projectId,
+        service_id: projectIdToDeployableServiceId(environment.projectId),
         type: environment.type,
         branch: environment.branch,
         status: environment.status ?? 'idle',
@@ -41,23 +43,57 @@ export class EnvironmentRepo {
       .run();
 
     const created = this.getEnvironment(environment.id);
-    if (!created) throw new Error(`Failed to create environment ${environment.id}`);
+    if (!created) throw new RepoPersistenceError('environment', environment.id);
     return created;
   }
 
   getEnvironment(id: string): EnvironmentRow | undefined {
-    return this.db.select().from(environments).where(eq(environments.id, id)).get() as
+    const row = this.db.select().from(environments).where(eq(environments.id, id)).get() as
       | EnvironmentRow
       | undefined;
+    if (!row) return undefined;
+    // Back-compat: hydrate deprecated project_id from the canonical service_id.
+    return { ...row, project_id: deployableServiceIdToProjectId(row.service_id) };
   }
 
   getEnvironmentsByProject(projectId: string): EnvironmentRow[] {
-    return this.db
+    const rows = this.db
       .select()
       .from(environments)
-      .where(eq(environments.project_id, projectId))
+      .where(eq(environments.service_id, projectIdToDeployableServiceId(projectId)))
       .orderBy(asc(environments.created_at))
       .all() as EnvironmentRow[];
+    // Back-compat: hydrate deprecated project_id from projectId parameter so
+    // callers that read env.project_id continue to work through 1.0.
+    return rows.map((r) => ({ ...r, project_id: projectId }));
+  }
+
+  getEnvironmentsByProjectIds(projectIds: string[]): Map<string, EnvironmentRow[]> {
+    if (projectIds.length === 0) {
+      return new Map();
+    }
+
+    const uniqueProjectIds = [...new Set(projectIds)];
+    const projectIdByServiceId = new Map(
+      uniqueProjectIds.map((projectId) => [projectIdToDeployableServiceId(projectId), projectId]),
+    );
+    const rows = this.db
+      .select()
+      .from(environments)
+      .where(inArray(environments.service_id, [...projectIdByServiceId.keys()]))
+      .orderBy(asc(environments.created_at))
+      .all() as EnvironmentRow[];
+
+    const byProjectId = new Map<string, EnvironmentRow[]>(
+      uniqueProjectIds.map((projectId) => [projectId, []]),
+    );
+    for (const row of rows) {
+      const projectId = projectIdByServiceId.get(row.service_id);
+      if (!projectId) continue;
+      byProjectId.get(projectId)?.push({ ...row, project_id: projectId });
+    }
+
+    return byProjectId;
   }
 
   updateEnvironment(

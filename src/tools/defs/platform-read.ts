@@ -204,6 +204,15 @@ export const platformReadToolDefs: ToolDef[] = [
       const dockerIds = new Set(managedContainers.map((container) => container.id));
       const dockerNames = new Set(managedContainers.map((container) => container.name));
 
+      // PR 4.5: batch-resolve deployable rows so each container_id read uses
+      // canonical-first with `??` fallback to legacy `projects` columns
+      // through migration 0012.
+      const deployableContainerIds = new Map<string, string | null>();
+      for (const p of projects) {
+        const d = appCtx.db.getDeployableForProject(p.id);
+        deployableContainerIds.set(p.id, d?.container_id ?? p.container_id ?? null);
+      }
+
       const orphanContainers = managedContainers
         .filter((container) => {
           if (container.labels?.['openlander.role']) {
@@ -224,16 +233,20 @@ export const platformReadToolDefs: ToolDef[] = [
         }));
 
       const ghostRecords = projects
-        .filter((project) => project.container_id !== null && !dockerIds.has(project.container_id))
+        .filter((project) => {
+          const cid = deployableContainerIds.get(project.id);
+          return cid !== null && cid !== undefined && !dockerIds.has(cid);
+        })
         .map((project) => ({
           project_id: project.id,
           project_name: project.name,
-          container_id: project.container_id,
+          container_id: deployableContainerIds.get(project.id) ?? null,
         }));
 
       const healthy = projects
         .filter((project) => {
-          if (project.container_id && dockerIds.has(project.container_id)) {
+          const cid = deployableContainerIds.get(project.id);
+          if (cid && dockerIds.has(cid)) {
             return true;
           }
           return dockerNames.has(projectContainerName(project.name));
@@ -241,7 +254,7 @@ export const platformReadToolDefs: ToolDef[] = [
         .map((project) => ({
           project_id: project.id,
           project_name: project.name,
-          container_id: project.container_id,
+          container_id: deployableContainerIds.get(project.id) ?? null,
         }));
 
       return {

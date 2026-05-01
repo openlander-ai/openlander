@@ -57,7 +57,13 @@ describe('ActivityLogRepo', () => {
   beforeEach(() => {
     const db = createDrizzleDatabase(':memory:');
     sqlite = db.sqlite;
-    migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    // 0009 drops parent tables; mirror src/db/index.ts:435-443 production path.
+    sqlite.exec('PRAGMA foreign_keys = OFF');
+    try {
+      migrate(db.db as Parameters<typeof migrate>[0], { migrationsFolder: './drizzle' });
+    } finally {
+      sqlite.exec('PRAGMA foreign_keys = ON');
+    }
     repo = new ActivityLogRepo(db.db, db.sqlite);
   });
 
@@ -473,5 +479,45 @@ describe('buildActivityEvent', () => {
     } as never);
     expect(event).not.toBeNull();
     expect(event!.projectName).toBe('unknown-proj');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Day 8 Bug #1: recovery:degraded must surface through the activity event
+  // mapper so the SSE feed and persisted activity_log show partial-failure
+  // recovery events. Codex's Day 7 audit found that recovery:degraded was
+  // wired through ActivityLogger but missing from the SSE eventTypes filter
+  // in routes.ts and ops-routes.ts.
+  // ---------------------------------------------------------------------------
+  it('builds a recovery:degraded ActivityEvent with the correct mapped type and status', () => {
+    const event = buildActivityEvent(mockDb, 'recovery:degraded', {
+      projectId: 'proj-1',
+      stage: 'B',
+      reason: 'partial step failure',
+    } as never);
+
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe('recovery:degraded');
+    expect(event!.status).toBe('failed');
+    expect(event!.severity).toBe('warning');
+    expect(event!.title).toContain('partial');
+    expect(event!.reason).toBe('partial step failure');
+    expect(event!.rawType).toBe('recovery:degraded');
+    expect(event!.projectName).toBe('alpha-service');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Day 8 Bug #1: recovery:degraded MUST be present in the ops SSE event-type
+// allowlist so the streaming `/api/ops/activity` endpoint doesn't filter it
+// out before reaching the client. The companion routes.ts allowlist was
+// retired when the orphan `/api/activity` (DB-backed activity_log feed) was
+// replaced by the v4 cross-actor activity endpoint, so only the ops-routes
+// guard remains.
+// ---------------------------------------------------------------------------
+describe('SSE event type allowlist (Day 8 Bug #1)', () => {
+  it('ops-routes.ts ActivityItem type union includes recovery:degraded', async () => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync('src/web/api/ops-routes.ts', 'utf8');
+    expect(source).toMatch(/'recovery:degraded'/);
   });
 });

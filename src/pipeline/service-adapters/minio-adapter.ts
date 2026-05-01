@@ -1,5 +1,6 @@
 import type { ServiceRow } from '../../db/index.js';
 import type { Docker } from '../docker.js';
+import { ServiceConfigError, ServiceOperationUnsupportedError } from '../../errors.js';
 import { waitUntilReady } from '../lib/retry.js';
 import { resolveContainerUrl } from '../url-resolver.js';
 import { execInServiceContainer } from './shared.js';
@@ -15,19 +16,25 @@ import type {
 
 function parseMinioCredentials(service: ServiceRow): { user: string; password: string } {
   if (!service.credentials) {
-    throw new Error(`Service credentials not available: ${service.id}`);
+    throw new ServiceConfigError(`Service credentials not available: ${service.id}`, {
+      serviceId: service.id,
+    });
   }
 
   const parsed = JSON.parse(service.credentials) as unknown;
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`Invalid MinIO credentials payload: ${service.id}`);
+    throw new ServiceConfigError(`Invalid MinIO credentials payload: ${service.id}`, {
+      serviceId: service.id,
+    });
   }
 
   const record = parsed as Record<string, unknown>;
   const user = record['user'];
   const password = record['password'];
   if (typeof user !== 'string' || typeof password !== 'string') {
-    throw new Error(`Incomplete MinIO credentials: ${service.id}`);
+    throw new ServiceConfigError(`Incomplete MinIO credentials: ${service.id}`, {
+      serviceId: service.id,
+    });
   }
 
   return { user, password };
@@ -45,9 +52,11 @@ export class MinioAdapter implements ServiceAdapter {
   }
 
   async waitForReady(service: ServiceRow, _docker: Docker): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    const hostPort = service.assigned_port ?? service.port;
     await waitUntilReady(
       async () => {
-        const response = await fetch(`${resolveContainerUrl(service.port)}/minio/health/live`, {
+        const response = await fetch(`${resolveContainerUrl(hostPort ?? 0)}/minio/health/live`, {
           signal: AbortSignal.timeout(2000),
         });
         if (!response.ok) {
@@ -67,11 +76,11 @@ export class MinioAdapter implements ServiceAdapter {
   }
 
   listDatabases(_service: ServiceRow, _docker: Docker): Promise<ListedDatabase[]> {
-    return Promise.reject(new Error('Database listing is not supported for minio services'));
+    return Promise.reject(new ServiceOperationUnsupportedError('Database listing', 'minio'));
   }
 
   listUsers(_service: ServiceRow, _docker: Docker): Promise<ListedUser[]> {
-    return Promise.reject(new Error('User listing is not supported for minio services'));
+    return Promise.reject(new ServiceOperationUnsupportedError('User listing', 'minio'));
   }
 
   createDatabase(
@@ -79,7 +88,7 @@ export class MinioAdapter implements ServiceAdapter {
     _dbName: string,
     _docker: Docker,
   ): Promise<CreateDatabaseResult> {
-    return Promise.reject(new Error('Database creation is not supported for minio services'));
+    return Promise.reject(new ServiceOperationUnsupportedError('Database creation', 'minio'));
   }
 
   createUser(
@@ -87,7 +96,7 @@ export class MinioAdapter implements ServiceAdapter {
     _options: CreateUserOptions,
     _docker: Docker,
   ): Promise<CreateUserResult> {
-    return Promise.reject(new Error('User creation is not supported for minio services'));
+    return Promise.reject(new ServiceOperationUnsupportedError('User creation', 'minio'));
   }
 
   async setupAlias(service: ServiceRow, docker: Docker): Promise<void> {

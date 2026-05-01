@@ -9,11 +9,11 @@ import { ChatInput } from '@/components/agent/ChatInput';
 import { ChatQuestion } from '@/components/agent/ChatQuestion';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import type { AgentPanelInitialContext } from '@/contexts/agent-panel';
+import { useAppData } from '@/hooks/use-app-data';
 import { useStreamChat } from '@/hooks/use-stream-chat';
-import { dismissQuestion, getSetupStatus, replyQuestion } from '@/lib/api';
+import { dismissQuestion, replyQuestion } from '@/lib/api';
 import type { QuestionAnswer } from '@/lib/chat-types';
 import { useLanguage } from '@/i18n/context.js';
-import { subscribeLlmChanged } from '@/lib/llm-events';
 
 interface AgentPanelProps {
   open: boolean;
@@ -48,34 +48,18 @@ export function AgentPanel({
   onInitialContextConsumed,
 }: AgentPanelProps) {
   const { t } = useLanguage();
-  const [llmConfigured, setLlmConfigured] = useState<boolean | null>(null);
+  const { setupStatus, refreshSetupStatus } = useAppData();
+  const llmConfigured = setupStatus?.llm.ok ?? null;
   const [activeProjectId, setActiveProjectId] = useState<string | undefined>(undefined);
   const sentContextKeyRef = useRef<string | null>(null);
   const chat = useStreamChat();
-
-  const refreshLlmConfigured = useCallback(async () => {
-    getSetupStatus()
-      .then((status) => setLlmConfigured(status.llm.ok))
-      .catch(() => setLlmConfigured(false));
-  }, []);
-
-  useEffect(() => {
-    void refreshLlmConfigured();
-  }, [refreshLlmConfigured]);
 
   useEffect(() => {
     if (!open) {
       return;
     }
-    void refreshLlmConfigured();
-  }, [open, refreshLlmConfigured]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeLlmChanged(() => {
-      void refreshLlmConfigured();
-    });
-    return () => unsubscribe();
-  }, [refreshLlmConfigured]);
+    void refreshSetupStatus();
+  }, [open, refreshSetupStatus]);
 
   useEffect(() => {
     if (!open) {
@@ -159,7 +143,7 @@ export function AgentPanel({
             <div className="flex-1 min-w-0 min-h-0">
               <div className="flex flex-col h-full">
                 <div className="shrink-0 px-4 py-3.5 border-b border-border/50 bg-bg-panel backdrop-blur-sm">
-                  <h2 className="text-sm font-medium text-primary-ol">{t('agent.aiDiagnosis')}</h2>
+                  <h2 className="text-sm font-medium text-foreground">{t('agent.aiDiagnosis')}</h2>
                 </div>
 
                 {chat.messages.some((message) => message.role !== 'system') || chat.isStreaming ? (
@@ -180,10 +164,10 @@ export function AgentPanel({
                   <div className="flex-1 flex items-center justify-center px-6">
                     <div className="text-center space-y-2">
                       <div className="mx-auto h-12 w-12 rounded-full bg-bg-subtle flex items-center justify-center">
-                        <Bot className="h-6 w-6 text-muted-ol" />
+                        <Bot className="h-6 w-6 text-muted-foreground" />
                       </div>
-                      <h3 className="text-sm font-medium text-primary-ol">진단 준비 중</h3>
-                      <p className="text-xs text-muted-ol">
+                      <h3 className="text-sm font-medium text-foreground">진단 준비 중</h3>
+                      <p className="text-xs text-muted-foreground">
                         Diagnose 버튼으로 전달된 에러 컨텍스트를 분석합니다.
                       </p>
                     </div>

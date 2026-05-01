@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
 
 import type { AppContext } from '../../app.js';
-import type { OpsIncidentEventRow, OpsIncidentRow } from '../../db/types.js';
+import type { OpsIncidentEventRow, OpsIncidentRow, ProjectRow } from '../../db/types.js';
 import { updateConfig } from '../../config/index.js';
 import { resolveAutomationPolicy, isAutopilot } from '../../monitor/ops-config-resolver.js';
 import { DEFAULT_OPS_CONFIG, DEFAULT_RECOVERY_AUTOMATION } from '../../monitor/ops-types.js';
@@ -10,6 +10,27 @@ import { getPostmortemInstance } from '../../monitor/postmortem.js';
 import { createModuleLogger } from '../../lib/logger.js';
 
 const log = createModuleLogger('ops-routes');
+
+/**
+ * Per-request memoizer for `ctx.db.listProjects()`. Each handler invocation
+ * creates a fresh memoizer; the first call hits the DB and subsequent calls
+ * within the same request reuse the cached array.
+ *
+ * Day 14 (Codex Day 9 N+1 audit): the unified activity feed and several
+ * sibling endpoints used to invoke `listProjects()` once per code path,
+ * which under SSE follow-mode produced O(subscribers x cycles) DB calls.
+ * Memoizing per request removes the duplication without introducing any
+ * cross-request cache (each SSE flush still gets fresh data).
+ */
+function makeProjectsMemo(ctx: AppContext): () => ProjectRow[] {
+  let cache: ProjectRow[] | undefined;
+  return () => {
+    if (cache === undefined) {
+      cache = ctx.db.listProjects();
+    }
+    return cache;
+  };
+}
 
 interface ActivityItem {
   id: string;
@@ -25,6 +46,7 @@ interface ActivityItem {
     | 'ai:invoked'
     | 'ai:completed'
     | 'recovery:blocked'
+    | 'recovery:degraded'
     | 'recovery:stopped'
     | 'recovery:started';
   severity: 'critical' | 'warning' | 'info';
@@ -185,7 +207,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       const events = ctx.db.listOpsIncidentEventsByIncidentIds(page.map((incident) => incident.id));
       const eventsByIncidentId = groupEventsByIncidentId(events);
 
-      const projects = ctx.db.listProjects();
+      const getProjects = makeProjectsMemo(ctx);
+      const projects = getProjects();
       const projectMap = new Map(projects.map((p) => [p.id, p.name]));
 
       return c.json({
@@ -247,7 +270,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
   api.get('/agent/active', (c) => {
     try {
-      const projects = ctx.db.listProjects();
+      const getProjects = makeProjectsMemo(ctx);
+      const projects = getProjects();
       const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
       const activeRuns = projects
         .flatMap((project) => ctx.db.getRunningActionRuns(project.id))
@@ -357,7 +381,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
   api.get('/circuit-breakers', (c) => {
     try {
       const allBreakers = ctx.db.listAllCircuitBreakers();
-      const projects = ctx.db.listProjects();
+      const getProjects = makeProjectsMemo(ctx);
+      const projects = getProjects();
       const projectMap = new Map(projects.map((p) => [p.id, p.name]));
       const breakers = allBreakers
         .map((b) => ({
@@ -457,7 +482,14 @@ export function createOpsRoutes(ctx: AppContext): Hono {
   api.get('/activity', (c) => {
     const isFollow = c.req.query('follow') === 'true';
 
+    // Per-flush memoizer — each fetchActivities call gets its own fresh
+    // listProjects() result. In SSE follow mode this means O(1) DB call
+    // per cycle even if future code paths inside fetchActivities add more
+    // project lookups. Cache lives only for the duration of one fetch,
+    // so concurrent SSE clients still see freshly committed projects on
+    // each 2-second flush.
     const fetchActivities = (sinceParam?: string) => {
+      const getProjects = makeProjectsMemo(ctx);
       const projectId = c.req.query('projectId');
       const types = c.req.query('types')?.split(',').filter(Boolean) ?? [];
       const severity = c.req.query('severity');
@@ -468,7 +500,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       const fromParam = c.req.query('from');
       const toParam = c.req.query('to');
 
-      const projects = ctx.db.listProjects();
+      const projects = getProjects();
       const projectMap = new Map(projects.map((p) => [p.id, p.name]));
       const activities: ActivityItem[] = [];
 
@@ -775,7 +807,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
   api.get('/dependencies', (c) => {
     try {
-      const projects = ctx.db.listProjects();
+      const getProjects = makeProjectsMemo(ctx);
+      const projects = getProjects();
       const services = ctx.db.listServices();
       const dependencies = ctx.db.findAllProjectDependencies();
 
@@ -789,20 +822,21 @@ export function createOpsRoutes(ctx: AppContext): Hono {
           id: p.id,
           type: 'project' as const,
           name: p.name,
-          status: p.status,
+          // Fix 3: status is a deployable field — canonical-first ?? legacy fallback.
+          status: ctx.db.getDeployableForProject(p.id)?.status ?? p.status ?? '',
         })),
         ...services.map((s) => ({
           id: s.id,
           type: 'service' as const,
           name: s.name,
-          status: s.status,
+          status: s.status ?? '',
         })),
       ];
 
       const edges = dependencies
         .map((dep) => ({
-          source: dep.source_project_id,
-          target: dep.target_project_id ?? dep.target_service_id ?? '',
+          source: dep.source_service_id,
+          target: dep.target_service_id ?? '',
           dependencyType: dep.dependency_type,
         }))
         .filter((e) => e.target !== '');

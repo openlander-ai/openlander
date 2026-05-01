@@ -1,4 +1,5 @@
 import { Loader2, Settings, Shield, Globe, Github, Bot, Cable, Activity } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useLanguage } from '@/i18n/context';
 import { useSetup } from '@/hooks/use-setup';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -11,9 +12,18 @@ import { AiSettingsTab } from '@/components/settings/AiSettingsTab';
 import { McpSettingsTab } from '@/components/settings/McpSettingsTab';
 import { OperationsSettings } from '@/components/settings/OperationsSettings';
 
+const VALID_TABS = ['system', 'security', 'proxy', 'github', 'ai', 'operations', 'mcp'] as const;
+type SettingsTab = (typeof VALID_TABS)[number];
+
+function normalizeTab(raw: string | null): SettingsTab {
+  return (VALID_TABS as readonly string[]).includes(raw ?? '') ? (raw as SettingsTab) : 'system';
+}
+
 export function SettingsPage() {
   const { status, loading, refetch } = useSetup();
   const { t } = useLanguage();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = normalizeTab(searchParams.get('tab'));
 
   if (loading && !status) {
     return (
@@ -24,23 +34,17 @@ export function SettingsPage() {
   }
 
   const triggerClass =
-    'flex items-center gap-2 px-3 py-2.5 font-body text-sm rounded-md md:rounded-l-none md:rounded-r-md border-l-2 border-transparent data-[state=active]:bg-bg-subtle data-[state=active]:text-primary-ol data-[state=active]:font-medium data-[state=active]:border-primary-ol text-secondary-ol shadow-none transition-all hover:text-primary-ol hover:bg-bg-subtle/50 whitespace-nowrap w-full !justify-start';
+    'flex items-center gap-2 w-full !justify-start text-left px-3 py-2 rounded-md text-xs font-body transition-colors shadow-none data-[state=active]:shadow-none data-[state=active]:bg-bg-subtle data-[state=active]:text-foreground data-[state=active]:font-medium text-foreground/80 hover:text-foreground hover:bg-bg-subtle/50 whitespace-nowrap';
 
   return (
-    <div className="w-full max-w-[1200px] p-4 md:p-8 space-y-8">
-      <div className="border-b border-[hsl(var(--border))] pb-6">
-        <h1 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
-          {t('settings.title')}
-        </h1>
-        <p className="text-sm font-body text-secondary-ol mt-1">{t('settings.description')}</p>
-      </div>
-
+    <div className="flex flex-col h-full w-full">
       <Tabs
-        defaultValue="system"
-        className="flex flex-col md:flex-row gap-6 md:gap-8 min-h-[600px] items-start relative"
+        value={activeTab}
+        onValueChange={(next) => setSearchParams({ tab: next })}
+        className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden"
       >
-        {/* Sidebar Tabs */}
-        <TabsList className="flex flex-row md:flex-col h-auto w-full md:w-56 bg-transparent p-0 gap-1 justify-start md:items-stretch shrink-0 overflow-x-auto md:overflow-visible border-b md:border-none md:border-r border-[hsl(var(--border))] pb-2 md:pb-0 md:pr-4 md:sticky md:top-10">
+        {/* Sidebar Tabs — matches ProjectDetail SettingsTab nav */}
+        <TabsList className="flex flex-row md:flex-col h-auto md:h-full w-full md:w-48 bg-bg-panel p-3 gap-1 justify-start md:items-stretch shrink-0 overflow-x-auto md:overflow-y-auto border-b md:border-b-0 md:border-r border-[hsl(var(--border))]">
           <TabsTrigger value="system" className={triggerClass}>
             <Settings className="w-4 h-4 shrink-0" />
             {t('settings.tabs.system')}
@@ -57,7 +61,6 @@ export function SettingsPage() {
             <Github className="w-4 h-4 shrink-0" />
             {t('settings.tabs.github')}
           </TabsTrigger>
-
           <TabsTrigger value="ai" className={triggerClass}>
             <Bot className="w-4 h-4 shrink-0" />
             {t('settings.ai.title')}
@@ -73,7 +76,7 @@ export function SettingsPage() {
         </TabsList>
 
         {/* Main Content Area */}
-        <div className="flex-1 w-full min-w-0">
+        <div className="flex-1 min-w-0 overflow-auto p-6 xl:p-8">
           <TabsContent
             value="system"
             className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
@@ -98,7 +101,6 @@ export function SettingsPage() {
           >
             <GithubSettingsTab status={status} refetch={refetch} />
           </TabsContent>
-
           <TabsContent
             value="ai"
             className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"

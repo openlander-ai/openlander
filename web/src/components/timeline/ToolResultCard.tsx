@@ -87,7 +87,7 @@ export function ToolResultCard({ item }: ToolResultCardProps) {
           >
             {item.title || `${toolName} result`}
           </p>
-          <span className="text-xs font-mono text-muted-ol shrink-0 mt-0.5">
+          <span className="text-xs font-mono text-muted-foreground shrink-0 mt-0.5">
             {formatTime(item.timestamp)}
           </span>
         </div>

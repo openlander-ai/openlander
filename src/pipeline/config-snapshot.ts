@@ -1,5 +1,6 @@
 import type { ProjectConfig } from './deploy-core.js';
 import type { Database } from '../db/index.js';
+import { buildResourceLimitConfig, type ResourceLimitConfig } from './docker/types.js';
 
 /**
  * Version of the config snapshot format.
@@ -20,6 +21,8 @@ export const PERSISTED_FIELDS = [
   'dockerTarget',
   'buildContext',
   'imageCmd',
+  'resourceProfile',
+  'memoryLimitBytes',
 ] as const;
 
 /**
@@ -44,6 +47,10 @@ export interface DeployConfigSnapshot {
   buildContext?: string;
   /** Command override array for container entrypoint */
   imageCmd?: string[];
+  /** Resource profile for memory/CPU limits */
+  resourceProfile?: 'micro' | 'small' | 'medium' | 'large' | 'custom' | null;
+  /** Memory limit in bytes */
+  memoryLimitBytes?: number | null;
 }
 
 /**
@@ -90,6 +97,12 @@ export function createSnapshot(config: ProjectConfig): DeployConfigSnapshot {
   }
   if (config.imageCmd !== undefined) {
     snapshot.imageCmd = config.imageCmd;
+  }
+  if (config.resourceProfile !== undefined) {
+    snapshot.resourceProfile = config.resourceProfile;
+  }
+  if (config.memoryLimitBytes !== undefined) {
+    snapshot.memoryLimitBytes = config.memoryLimitBytes;
   }
 
   return snapshot;
@@ -147,7 +160,7 @@ export function deserializeConfig(json: string): StoredDeployConfig | null {
 
     return {
       version: obj.version,
-      snapshot: obj.snapshot as DeployConfigSnapshot,
+      snapshot: obj.snapshot,
       savedAt: obj.savedAt,
     };
   } catch {
@@ -174,4 +187,22 @@ export function persistDeployConfig(params: {
   const snapshot = createSnapshot(params.config);
   const json = serializeConfig(snapshot);
   params.db.saveDeployConfig(params.projectId, json, CONFIG_VERSION);
+}
+
+/**
+ * Load resource limits for a project from deploy_configs.
+ * Returns null if no config exists or no resource profile is set.
+ */
+export function loadResourceLimitsForProject(
+  db: Database,
+  projectId: string,
+): ResourceLimitConfig | null {
+  const configRow = db.loadDeployConfig(projectId);
+  if (!configRow) return null;
+  const stored = deserializeConfig(configRow.config_json);
+  if (!stored?.snapshot) return null;
+  return buildResourceLimitConfig(
+    stored.snapshot.resourceProfile ?? null,
+    stored.snapshot.memoryLimitBytes ?? null,
+  );
 }

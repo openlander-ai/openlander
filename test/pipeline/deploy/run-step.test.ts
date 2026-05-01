@@ -17,6 +17,8 @@ function createMockDocker(): Docker {
 function createMockDatabase(): Database {
   return {
     getUsedPorts: vi.fn().mockReturnValue([]),
+    loadDeployConfig: vi.fn().mockReturnValue(undefined),
+    saveDeployConfig: vi.fn(),
   } as unknown as Database;
 }
 

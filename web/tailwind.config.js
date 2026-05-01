@@ -19,7 +19,19 @@ export default {
         '2xl': '1400px',
       },
     },
+    screens: {
+      sm: '640px',
+      md: '768px',
+      lg: '1024px',
+      xl: '1280px',
+      '2xl': '1536px',
+      '3xl': '1920px',
+    },
     extend: {
+      maxWidth: {
+        '8xl': '85rem',
+        '9xl': '95rem',
+      },
       colors: {
         /* shadcn/ui semantic colors */
         border: 'hsl(var(--border))',
@@ -66,11 +78,6 @@ export default {
         success: 'var(--color-success)',
         warning: 'var(--color-warning)',
         error: 'var(--color-error)',
-      },
-      textColor: {
-        'primary-ol': 'var(--text-primary)',
-        'secondary-ol': 'var(--text-secondary)',
-        'muted-ol': 'var(--text-muted)',
       },
       fontFamily: {
         display: ['Inter Variable', 'Inter', 'system-ui', 'sans-serif'],

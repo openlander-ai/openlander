@@ -78,7 +78,7 @@ export function InputRequestCard({
           </div>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-body text-muted-ol">{'Question answered'}</p>
+          <p className="text-sm font-body text-muted-foreground">{'Question answered'}</p>
         </div>
       </div>
     );
@@ -99,11 +99,13 @@ export function InputRequestCard({
           <div key={qIndex} className="space-y-2">
             {/* Question header */}
             {q.header && (
-              <p className="text-xs font-mono text-muted-ol uppercase tracking-wider">{q.header}</p>
+              <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
+                {q.header}
+              </p>
             )}
 
             {/* Question text */}
-            <p className="text-sm font-body text-primary-ol leading-snug">{q.question}</p>
+            <p className="text-sm font-body text-foreground leading-snug">{q.question}</p>
 
             {/* Options (radio/checkbox style) */}
             {q.options.length > 0 && (
@@ -119,8 +121,8 @@ export function InputRequestCard({
                         'w-full text-left px-3 py-2 rounded-md text-sm font-body transition-all duration-150',
                         'border',
                         selected
-                          ? 'bg-agent/10 border-agent/30 text-primary-ol'
-                          : 'bg-bg-subtle/50 border-border hover:border-agent/20 text-secondary-ol',
+                          ? 'bg-agent/10 border-agent/30 text-foreground'
+                          : 'bg-bg-subtle/50 border-border hover:border-agent/20 text-foreground/80',
                         isSubmitting && 'opacity-50 cursor-not-allowed',
                       )}
                     >
@@ -130,7 +132,7 @@ export function InputRequestCard({
                           className={cn(
                             'shrink-0 w-3.5 h-3.5 border flex items-center justify-center transition-colors',
                             q.multiple ? 'rounded-[3px]' : 'rounded-full',
-                            selected ? 'border-agent bg-agent' : 'border-muted-ol',
+                            selected ? 'border-agent bg-agent' : 'border-muted-foreground',
                           )}
                         >
                           {selected && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
@@ -138,7 +140,7 @@ export function InputRequestCard({
                         <span>{opt.label}</span>
                       </span>
                       {opt.description && (
-                        <span className="block ml-[22px] text-xs text-muted-ol mt-0.5">
+                        <span className="block ml-[22px] text-xs text-muted-foreground mt-0.5">
                           {opt.description}
                         </span>
                       )}
@@ -163,7 +165,7 @@ export function InputRequestCard({
               }}
               className={cn(
                 'w-full px-3 py-2 rounded-md text-sm font-body',
-                'bg-bg-app border border-border placeholder:text-muted-ol',
+                'bg-bg-app border border-border placeholder:text-muted-foreground',
                 'focus:outline-none focus:ring-1 focus:ring-agent/40 focus:border-agent/30',
                 'transition-colors',
                 isSubmitting && 'opacity-50 cursor-not-allowed',
@@ -192,7 +194,7 @@ export function InputRequestCard({
             disabled={isSubmitting}
             className={cn(
               'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body',
-              'text-muted-ol hover:text-secondary-ol hover:bg-bg-subtle',
+              'text-muted-foreground hover:text-foreground/80 hover:bg-bg-subtle',
               'transition-colors',
               isSubmitting && 'opacity-50 cursor-not-allowed',
             )}

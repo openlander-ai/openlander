@@ -30,6 +30,9 @@ export function DeploymentsList({
 }: DeploymentsListProps) {
   const navigate = useNavigate();
   const { t } = useLanguage();
+  // 1.0-rc.2: `useDeployments` parameter is now named `serviceId` — for legacy
+  // deployables the value is identical to the historical project id, so we
+  // pass `projectId` straight through without prop renaming on this caller.
   const { deployments, loading, error, refetch } = useDeployments(projectId, projectStatus);
   const filteredDeployments = deployments.filter((deploy) => {
     if (statusFilter === 'all') return true;
@@ -64,8 +67,8 @@ export function DeploymentsList({
     if (error) {
       return (
         <div className="flex flex-col h-full p-6 bg-bg-app">
-          <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm flex flex-col items-center justify-center flex-1 py-12 text-secondary-ol">
-            <History className="h-8 w-8 mb-3 text-muted-ol" />
+          <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm flex flex-col items-center justify-center flex-1 py-12 text-foreground/80">
+            <History className="h-8 w-8 mb-3 text-muted-foreground" />
             <p className="text-sm font-body">{'Failed to load deployments'}</p>
             <Button variant="outline" size="sm" className="mt-3" onClick={refetch}>
               {'Try again'}
@@ -76,8 +79,8 @@ export function DeploymentsList({
     }
 
     <div className="flex flex-col h-full p-6 bg-bg-app">
-      <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm flex flex-col items-center justify-center flex-1 py-12 text-secondary-ol">
-        <History className="h-8 w-8 mb-3 text-muted-ol" />
+      <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm flex flex-col items-center justify-center flex-1 py-12 text-foreground/80">
+        <History className="h-8 w-8 mb-3 text-muted-foreground" />
         <p className="text-sm font-body">
           {statusFilter === 'all'
             ? t('projectDetail.noDeployments')
@@ -116,15 +119,17 @@ export function DeploymentsList({
               >
                 <div className={cn('h-2 w-2 rounded-full shrink-0', statusMeta.dotClass)} />
 
-                <span className="flex items-center gap-1.5 text-sm font-semibold text-primary-ol truncate shrink-0">
-                  <TriggerIcon className="h-3.5 w-3.5 text-muted-ol shrink-0" />
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground truncate shrink-0">
+                  <TriggerIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   {getDeploymentTriggerLabel(deploy.trigger, deploy.triggerDetail)}
                 </span>
                 <span className={cn('text-xs font-body shrink-0', statusMeta.textClass)}>
                   {statusMeta.label}
                 </span>
                 {shortCommitSha && (
-                  <span className="text-xs font-mono text-muted-ol shrink-0">{shortCommitSha}</span>
+                  <span className="text-xs font-mono text-muted-foreground shrink-0">
+                    {shortCommitSha}
+                  </span>
                 )}
 
                 {deploy.failureSummary && (
@@ -135,7 +140,7 @@ export function DeploymentsList({
 
                 <div className="flex-1" />
 
-                <div className="flex items-center gap-3 text-xs font-body text-muted-ol shrink-0">
+                <div className="flex items-center gap-3 text-xs font-body text-muted-foreground shrink-0">
                   {projectBranch && (
                     <span className="flex items-center gap-1">
                       <GitBranch className="h-3 w-3" />

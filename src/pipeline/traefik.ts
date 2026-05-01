@@ -65,7 +65,8 @@ export class TraefikManager {
   private async hasCurrentConfig(): Promise<boolean> {
     try {
       const info = await this.docker.inspectContainer(this.containerName);
-      const cmd: string[] = (info.Config.Cmd as string[] | null) ?? [];
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      const cmd: string[] = info.Config.Cmd ?? [];
       const hasHttpProvider = cmd.some((arg: string) => arg.includes('providers.http.endpoint'));
       const hasCorrectNetwork = cmd.some(
         (arg: string) => arg === `--providers.docker.network=${this.networkName}`,

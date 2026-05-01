@@ -43,6 +43,55 @@
       "when": 1776380000000,
       "tag": "0005_add_error_fields_to_ai_usage_log",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1776480000000,
+      "tag": "0006_compose_path_and_recovering_watchdog",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1776560000000,
+      "tag": "0007_service_metrics_and_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1777000000000,
+      "tag": "0008_mcp_session_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1777500000000,
+      "tag": "0009_split_projects_services",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1777500001000,
+      "tag": "0010_cleanup_compose_child_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1777500002000,
+      "tag": "0011_repoint_deployable_project_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1777500003000,
+      "tag": "0012_complete_schema_split",
+      "breakpoints": true
     }
   ]
 }

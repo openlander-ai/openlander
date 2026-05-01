@@ -3,6 +3,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Play, Square, Trash2, Database, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getStatusDisplay } from '@/lib/status-config';
 import type { Service } from '@/lib/api';
 import { useLanguage } from '@/i18n/context';
 
@@ -16,16 +17,18 @@ interface ServiceHeaderProps {
 
 type StatusConfig = { label: string; color: string; dot: string };
 
-function getStatusConfig(t: (key: string) => string): Record<string, StatusConfig> {
-  return {
-    running: { label: t('services.status.running'), color: 'text-success', dot: 'bg-success' },
-    stopped: {
-      label: t('services.status.stopped'),
-      color: 'text-muted-ol',
-      dot: 'bg-[var(--text-muted)]',
-    },
-    error: { label: t('services.status.error'), color: 'text-error', dot: 'bg-error' },
+function buildStatusConfig(t: (key: string) => string): Record<string, StatusConfig> {
+  const labels: Record<string, string> = {
+    running: t('services.status.running'),
+    stopped: t('services.status.stopped'),
+    error: t('services.status.error'),
   };
+  const out: Record<string, StatusConfig> = {};
+  for (const key of Object.keys(labels)) {
+    const def = getStatusDisplay(key);
+    out[key] = { label: labels[key], color: def.textClass, dot: def.dot };
+  }
+  return out;
 }
 
 export function ServiceHeader({
@@ -37,7 +40,7 @@ export function ServiceHeader({
 }: ServiceHeaderProps) {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const statusConfig = getStatusConfig(t);
+  const statusConfig = buildStatusConfig(t);
   const status = statusConfig[service.status] ?? statusConfig.stopped;
   const isRunning = service.status === 'running';
   const isStopped = service.status === 'stopped';
@@ -48,7 +51,7 @@ export function ServiceHeader({
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate('/services')}
-            className="shrink-0 p-1 rounded hover:bg-secondary-ol/10 text-secondary-ol hover:text-primary-ol transition-colors"
+            className="shrink-0 p-1 rounded hover:bg-muted text-foreground/80 hover:text-foreground transition-colors"
             title={t('services.detail.header.backToServices')}
           >
             <ArrowLeft className="h-4 w-4" />
@@ -56,15 +59,15 @@ export function ServiceHeader({
           <div className={cn('h-3 w-3 rounded-full shrink-0', status.dot)} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate">
+              <h1 className="font-display font-bold text-lg text-foreground tracking-tight truncate">
                 {service.name}
               </h1>
-              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary-ol/10 border border-secondary-ol/20 text-xs font-mono text-secondary-ol">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted border border-border text-xs font-mono text-foreground/80">
                 <Database className="h-3 w-3" />
                 {service.image}
               </div>
             </div>
-            <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-secondary-ol">
+            <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-foreground/80">
               <span className={status.color}>{status.label}</span>
             </div>
           </div>

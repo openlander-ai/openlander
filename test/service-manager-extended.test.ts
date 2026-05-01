@@ -18,10 +18,21 @@ import { ServiceManager } from '../src/pipeline/service-manager.js';
 import { createMockDockerHarness } from './helpers/docker-mocks.js';
 
 function createService(partial: Partial<ServiceRow>): ServiceRow {
+  const legacyType = partial.type ?? 'postgresql';
+  // Map legacy type to canonical kind so production code (which reads kind ?? 'unknown')
+  // resolves the correct adapter instead of falling back to 'unknown'.
+  const typeToKind: Record<string, ServiceRow['kind']> = {
+    postgresql: 'postgres',
+    postgres: 'postgres',
+    mysql: 'mysql',
+    redis: 'redis',
+    mongo: 'mongo',
+    minio: 'minio',
+  };
   return {
     id: partial.id ?? 'svc-1',
     name: partial.name ?? 'shared-pg',
-    type: partial.type ?? 'postgresql',
+    type: legacyType,
     image: partial.image ?? 'postgres:16-alpine',
     status: partial.status ?? 'running',
     container_id: partial.container_id ?? 'svc-1-container',
@@ -37,6 +48,9 @@ function createService(partial: Partial<ServiceRow>): ServiceRow {
       }),
     created_at: partial.created_at ?? '2026-01-01T00:00:00.000Z',
     updated_at: partial.updated_at ?? '2026-01-01T00:00:00.000Z',
+    kind: partial.kind ?? typeToKind[legacyType] ?? 'postgres',
+    image_url: partial.image_url ?? partial.image ?? 'postgres:16-alpine',
+    assigned_port: partial.assigned_port ?? partial.port ?? 5432,
   };
 }
 
@@ -232,7 +246,7 @@ describe('ServiceManager extended DB/user operations', () => {
     const manager = new ServiceManager(dockerHarness.docker, createDbMock([redis]));
 
     await expect(manager.listDatabases('svc-redis')).rejects.toThrow(
-      'Database listing is not supported for redis services',
+      'Database listing is not supported for service type: redis',
     );
   });
 
@@ -252,7 +266,7 @@ describe('ServiceManager extended DB/user operations', () => {
     const manager = new ServiceManager(dockerHarness.docker, createDbMock([redis]));
 
     await expect(manager.listUsers('svc-redis')).rejects.toThrow(
-      'User listing is not supported for redis services',
+      'User listing is not supported for service type: redis',
     );
   });
 
@@ -272,7 +286,7 @@ describe('ServiceManager extended DB/user operations', () => {
     const manager = new ServiceManager(dockerHarness.docker, createDbMock([redis]));
 
     await expect(manager.createDatabase('svc-redis', 'cachedb')).rejects.toThrow(
-      'Database creation is not supported for redis services',
+      'Database creation is not supported for service type: redis',
     );
   });
 
@@ -292,7 +306,7 @@ describe('ServiceManager extended DB/user operations', () => {
     const manager = new ServiceManager(dockerHarness.docker, createDbMock([redis]));
 
     await expect(manager.createUser('svc-redis', 'cache_user')).rejects.toThrow(
-      'User creation is not supported for redis services',
+      'User creation is not supported for service type: redis',
     );
   });
 
@@ -365,6 +379,9 @@ describe('ServiceManager detail/log/stats operations', () => {
       exitCode: 0,
       stdout: '4096\t/var/lib/postgresql/data\n',
     });
+    // postgres adapter getConnectionStats issues 2 psql execs (active count + max_connections)
+    dockerHarness.queueExecResult('svc-stats-container', { exitCode: 0, stdout: '0\n' });
+    dockerHarness.queueExecResult('svc-stats-container', { exitCode: 0, stdout: '' });
     const manager = new ServiceManager(dockerHarness.docker, db);
 
     const stats = await manager.getStats('svc-stats');
@@ -555,5 +572,85 @@ describe('ServiceManager remove with connected projects warning', () => {
     expect(result.warning).toBeUndefined();
     expect(result.connected_projects).toBeUndefined();
     expect(db.deleteService).toHaveBeenCalledWith('svc-redis');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Day 8 Bug #6: ServiceManager raw `throw new Error(...)` replacement.
+// All public methods that previously threw raw Errors should now throw
+// typed OpenLanderError subclasses so HTTP / MCP error handlers can
+// pattern-match on the class.
+// ---------------------------------------------------------------------------
+describe('ServiceManager typed error contract (Day 8 Bug #6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('start() throws ServiceNotFoundError when id is missing', async () => {
+    const { ServiceNotFoundError } = await import('../src/errors.js');
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([]));
+
+    await expect(manager.start('missing-svc')).rejects.toBeInstanceOf(ServiceNotFoundError);
+  });
+
+  it('stop() throws ServiceNotFoundError when id is missing', async () => {
+    const { ServiceNotFoundError } = await import('../src/errors.js');
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([]));
+
+    await expect(manager.stop('missing-svc')).rejects.toBeInstanceOf(ServiceNotFoundError);
+  });
+
+  it('remove() throws ServiceInUseError when projects reference the service (no force)', async () => {
+    const { ServiceInUseError } = await import('../src/errors.js');
+    const service = createService({
+      id: 'svc-pg',
+      name: 'shared-pg',
+      container_name: 'ol-svc-shared-pg',
+    });
+    const db = createDbMock([service], [{ id: 'proj-1', name: 'my-app' }]);
+    db.getEnvVars = vi.fn(() => ({ DATABASE_URL: 'postgresql://ol-svc-shared-pg:5432/db' }));
+
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    await expect(manager.remove('svc-pg')).rejects.toBeInstanceOf(ServiceInUseError);
+  });
+
+  it('create() throws ServiceConfigError when neither template nor image provided', async () => {
+    const { ServiceConfigError } = await import('../src/errors.js');
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([]));
+
+    await expect(manager.create({ name: 'foo' })).rejects.toBeInstanceOf(ServiceConfigError);
+  });
+
+  it('create() throws ServiceConfigError for unsupported template', async () => {
+    const { ServiceConfigError } = await import('../src/errors.js');
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([]));
+
+    await expect(
+      manager.create({ name: 'foo', template: 'nonexistent-db' }),
+    ).rejects.toBeInstanceOf(ServiceConfigError);
+  });
+
+  it('listDatabases() throws ServiceContainerStateError when container is stopped', async () => {
+    const { ServiceContainerStateError } = await import('../src/errors.js');
+    const postgres = createService({
+      id: 'svc-pg',
+      name: 'shared-pg',
+      type: 'postgresql',
+      container_id: 'svc-pg-container',
+    });
+
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.setContainerRunning('svc-pg-container', false);
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([postgres]));
+
+    await expect(manager.listDatabases('svc-pg')).rejects.toBeInstanceOf(
+      ServiceContainerStateError,
+    );
   });
 });

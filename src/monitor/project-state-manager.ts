@@ -57,7 +57,7 @@ type PersistedProjectStatus = ProjectStatus;
  *
  * Responsibilities:
  * - Validate state transitions against VALID_TRANSITIONS
- * - Persist transitions to DB (project.status)
+ * - Persist transitions to DB (project status field)
  * - Emit state:transition events (unless skipEvents:true)
  * - Reconcile Docker state vs DB state (skipEvents:true, no recovery cascade)
  *
@@ -82,7 +82,8 @@ export class ProjectStateManager {
     options?: StateTransitionOptions,
   ): Promise<boolean> {
     const project = this.ctx.db.getProject(projectId);
-    const currentStatus = (project?.status as ProjectStatus | undefined) ?? null;
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+    const currentStatus = project?.status ?? null;
     if (!currentStatus) {
       return false;
     }
@@ -120,7 +121,15 @@ export class ProjectStateManager {
       return false;
     }
 
-    this.ctx.db.updateProject(projectId, { status: persistedStatus });
+    const recoveringUpdate: { recoveringStartedAt?: string | null } =
+      persistedStatus === 'recovering'
+        ? { recoveringStartedAt: new Date().toISOString() }
+        : { recoveringStartedAt: null };
+
+    this.ctx.db.updateProject(projectId, {
+      status: persistedStatus,
+      ...recoveringUpdate,
+    });
 
     if (!options?.skipEvents) {
       await this.ctx.eventBus.emit('project:status-changed', {
@@ -140,7 +149,8 @@ export class ProjectStateManager {
    */
   getState(projectId: string): Promise<ProjectStatus | null> {
     const project = this.ctx.db.getProject(projectId);
-    return Promise.resolve((project?.status as ProjectStatus | undefined) ?? null);
+    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+    return Promise.resolve(project?.status ?? null);
   }
 
   /**
@@ -193,21 +203,26 @@ export class ProjectStateManager {
       return false;
     }
 
+    // PR 4.5: canonical-first reads of container_id/status with `??` fallback.
+    const deployable = this.ctx.db.getDeployableForProject(project.id);
+    const projectContainerId = deployable?.container_id ?? project.container_id;
+    const projectStatus = deployable?.status ?? project.status;
+
     const container = this.findProjectContainer(
       project.id,
       project.name,
-      project.container_id,
+      projectContainerId,
       containers,
     );
     const dockerRunning = container?.status === 'running';
 
-    if (dockerRunning && project.status !== 'running') {
+    if (dockerRunning && projectStatus !== 'running') {
       return this.transition(project.id, 'running', 'docker reconciliation: container is running', {
         skipEvents: true,
       });
     }
 
-    if (!container && (project.status === 'running' || project.status === 'building')) {
+    if (!container && (projectStatus === 'running' || projectStatus === 'building')) {
       return this.transition(project.id, 'stopped', 'docker reconciliation: container missing', {
         skipEvents: true,
       });

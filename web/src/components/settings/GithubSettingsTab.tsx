@@ -67,14 +67,14 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
   return (
     <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
       <div className="flex items-center gap-2">
-        <Github className="h-4 w-4 text-secondary-ol" />
-        <h2 className="font-display text-sm font-semibold text-primary-ol">
+        <Github className="h-4 w-4 text-foreground/80" />
+        <h2 className="font-display text-sm font-semibold text-foreground">
           {'GitHub Connection'}
         </h2>
       </div>
 
       <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-3">
-        <p className="text-sm font-body text-secondary-ol">{t('settings.github.description')}</p>
+        <p className="text-sm font-body text-foreground/80">{t('settings.github.description')}</p>
 
         {status?.github?.ok ? (
           <div className="flex items-center justify-between p-3 rounded-lg border border-success/20 bg-success/5">
@@ -102,10 +102,10 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
         ) : deviceFlow ? (
           <div className="space-y-4">
             <div className="text-center space-y-3">
-              <p className="text-sm font-body text-secondary-ol">
+              <p className="text-sm font-body text-foreground/80">
                 {t('settings.github.enterCode')}
               </p>
-              <p className="font-mono text-2xl tracking-[0.3em] text-primary-ol font-bold">
+              <p className="font-mono text-2xl tracking-[0.3em] text-foreground font-bold">
                 {deviceFlow.userCode}
               </p>
             </div>
@@ -135,7 +135,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
                 {isCopied() ? 'Copied' : 'Copy Code'}
               </Button>
             </div>
-            <div className="flex items-center justify-center gap-2 text-muted-ol">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               <span className="text-xs font-body">{t('settings.github.waiting')}</span>
             </div>
@@ -145,7 +145,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
                 variant="ghost"
                 size="sm"
                 onClick={handleCancelDeviceFlow}
-                className="text-xs font-body text-muted-ol"
+                className="text-xs font-body text-muted-foreground"
               >
                 {'Cancel'}
               </Button>
@@ -168,11 +168,13 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
                 <span className="w-full border-t border-[hsl(var(--border))]" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="bg-bg-panel px-2 text-muted-ol font-body">{'or'}</span>
+                <span className="bg-bg-panel px-2 text-muted-foreground font-body">{'or'}</span>
               </div>
             </div>
 
-            <p className="text-xs font-body text-muted-ol">{t('settings.github.enterToken')}</p>
+            <p className="text-xs font-body text-muted-foreground">
+              {t('settings.github.enterToken')}
+            </p>
             <form onSubmit={handleConnectGithub} className="space-y-3">
               <div className="space-y-2">
                 <Input
@@ -213,7 +215,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
               type="button"
               variant="ghost"
               size="sm"
-              className="gap-1.5 text-xs font-body text-muted-ol"
+              className="gap-1.5 text-xs font-body text-muted-foreground"
               onClick={refetch}
             >
               <RefreshCw className="h-3 w-3" />

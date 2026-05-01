@@ -12,9 +12,15 @@ function getRestartProjectTool(ctx: AppContext) {
 }
 
 function createContext() {
+  // Day 5 mutation policy: tools now sync-check `assertProjectMutable` before
+  // launching fire-and-forget pipeline calls, so the project fixture must
+  // include `archived_at` and `status`, and the db mock must expose
+  // `isCircuitBreakerOpen`.
   const project = {
     id: 'project-1',
     name: 'demo-app',
+    status: 'running',
+    archived_at: null,
   };
 
   const stop = vi.fn(async () => undefined);
@@ -23,6 +29,8 @@ function createContext() {
   const ctx = {
     db: {
       getProjectByName: vi.fn((name: string) => (name === 'demo-app' ? project : undefined)),
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
+      isCircuitBreakerOpen: vi.fn(() => false),
     },
     pipeline: {
       stop,

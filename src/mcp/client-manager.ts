@@ -3,6 +3,7 @@ import type { MCPClient } from '@ai-sdk/mcp';
 import type { ToolSet } from 'ai';
 import type { McpServerEntry } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { checkUrlSafety, MCP_ALLOWED_SCHEMES } from '../lib/url-safety.js';
 
 const log = createModuleLogger('mcp-client');
 
@@ -80,6 +81,20 @@ export class McpClientManager {
     // SSE or HTTP transport
     if (!server.url) {
       throw new Error(`MCP server "${server.name}" uses ${server.transport} but has no url`);
+    }
+
+    // Day 14 follow-up to Day 13 M4: re-check the URL at transport
+    // creation, not just at registration. A registered MCP entry can be
+    // mutated out-of-band (operator edits the config file, restores a
+    // backup, or runs a migration that flips `localhost` back into the
+    // URL). The registration-time check in setup/mcp-routes.ts cannot
+    // catch any of those, so the SSRF guard has to also live on the path
+    // every transport actually traverses.
+    const safety = checkUrlSafety(server.url, { allowedSchemes: MCP_ALLOWED_SCHEMES });
+    if (!safety.ok) {
+      throw new Error(
+        `MCP server "${server.name}" URL refused at runtime: ${safety.reason ?? 'unsafe URL'}`,
+      );
     }
 
     return createMCPClient({

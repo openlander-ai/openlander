@@ -1,7 +1,8 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { getAllIps } from '../../pipeline/traefik.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
-import { isDockerNotFoundError } from '../../errors.js';
+import { isDockerNotFoundError, ServiceNotFoundError } from '../../errors.js';
+import { kindToLegacyType } from '../../db/repos/service.repo.js';
 import type { ToolDef } from './types.js';
 import {
   backupServiceSchema,
@@ -74,7 +75,7 @@ async function getServiceByName(
   const services = await appCtx.serviceManager.list();
   const service = services.find((item) => item.name === serviceName);
   if (!service) {
-    throw new Error(`Service not found: ${serviceName}`);
+    throw new ServiceNotFoundError(serviceName);
   }
   return service;
 }
@@ -89,6 +90,20 @@ export const serviceToolDefs: ToolDef[] = [
       'Create a service. Supports template, custom image, or template + custom image combo (auto-credentials with custom image).',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
+      const targetProjectId = args['target_project_id'] as string | undefined;
+
+      // Pre-flight (CCG #2): if target_project_id is set, verify the project
+      // exists BEFORE provisioning the service. A typo otherwise creates the
+      // managed service in __orphan_managed and then surfaces only as a
+      // warning string — easy to miss.
+      if (targetProjectId && !appCtx.db.getProject(targetProjectId)) {
+        return {
+          status: 'failed',
+          error: 'TARGET_PROJECT_NOT_FOUND',
+          message: `target_project_id "${targetProjectId}" does not exist. Verify the id with list_projects before retrying.`,
+        };
+      }
+
       const result = await appCtx.serviceManager.create({
         name: args['name'] as string,
         template: args['template'] as string | undefined,
@@ -96,20 +111,50 @@ export const serviceToolDefs: ToolDef[] = [
         port: args['port'] as number | undefined,
       });
 
+      let attachWarning: string | undefined;
+      let resolvedProjectId: string | undefined;
+      let droppedKeys: string[] | undefined;
+      if (targetProjectId) {
+        try {
+          const moved = appCtx.db.attachServiceToProject(result.id, targetProjectId);
+          resolvedProjectId = moved.targetProjectId;
+          if (moved.droppedEnvVarKeys.length > 0 || moved.droppedSecretFiles.length > 0) {
+            droppedKeys = [...moved.droppedEnvVarKeys, ...moved.droppedSecretFiles];
+          }
+        } catch (err) {
+          attachWarning = `attach to ${targetProjectId} failed: ${err instanceof Error ? err.message : String(err)}`;
+        }
+      }
+
       const suggestedEnv = appCtx.serviceManager.getSuggestedEnv(result);
 
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      const legacyPort = result.assigned_port ?? result.port;
       return {
         status: 'created',
         service: {
           id: result.id,
           name: result.name,
-          type: result.type,
+          // Wire contract: emit legacy vocabulary (postgresql/mongodb) regardless of
+          // whether legacy `type` column is populated. kindToLegacyType ensures
+          // forward-compat with post-0012 rows where legacy column may be NULL.
+          // eslint-disable-next-line @typescript-eslint/no-deprecated
+          type: result.type ?? kindToLegacyType(result.kind),
           status: result.status,
-          port: result.port,
+          // Wire key preserved; canonical source: assigned_port
+          port: legacyPort,
           credentials: parseServiceCredentials(result.credentials),
         },
+        ...(resolvedProjectId ? { attached_to: resolvedProjectId } : {}),
+        ...(droppedKeys && resolvedProjectId
+          ? {
+              dropped_on_attach: droppedKeys,
+              _agent_notice: `${String(droppedKeys.length)} env var(s) / secret file(s) collided with target group keys and were dropped (target wins). Re-set them on ${resolvedProjectId} if needed.`,
+            }
+          : {}),
+        ...(attachWarning ? { warnings: [attachWarning] } : {}),
         suggested_env: suggestedEnv,
-        externalAccess: getServiceExternalAccess(result.port),
+        externalAccess: getServiceExternalAccess(legacyPort ?? null),
         _agent_guidance: {
           next_steps: [
             'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
@@ -133,17 +178,26 @@ export const serviceToolDefs: ToolDef[] = [
       if (target === 'mcp') {
         return {
           count: services.length,
-          services: services.map((service) => ({
-            id: service.id,
-            name: service.name,
-            type: service.type,
-            status: service.status,
-            port: service.port,
-            network: SHARED_NETWORK_NAME,
-            image: service.image,
-            createdAt: service.created_at,
-            externalAccess: getServiceExternalAccess(service.port),
-          })),
+          services: services.map((service) => {
+            // eslint-disable-next-line @typescript-eslint/no-deprecated
+            const svcPort = service.assigned_port ?? service.port;
+            return {
+              id: service.id,
+              name: service.name,
+              // Wire contract: emit legacy vocabulary (postgresql/mongodb).
+              // eslint-disable-next-line @typescript-eslint/no-deprecated
+              type: service.type ?? kindToLegacyType(service.kind),
+              status: service.status,
+              // Wire key preserved; canonical source: assigned_port
+              port: svcPort,
+              network: SHARED_NETWORK_NAME,
+              // Wire key preserved; canonical first, legacy fallback for pre-migration rows
+              // eslint-disable-next-line @typescript-eslint/no-deprecated
+              image: service.image_url ?? service.image ?? '',
+              createdAt: service.created_at,
+              externalAccess: getServiceExternalAccess(svcPort ?? null),
+            };
+          }),
           _agent_guidance: {
             networking: [
               `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
@@ -156,15 +210,22 @@ export const serviceToolDefs: ToolDef[] = [
 
       return {
         count: services.length,
-        services: services.map((service) => ({
-          id: service.id,
-          name: service.name,
-          type: service.type,
-          status: service.status,
-          port: service.port,
-          containerName: service.container_name,
-          credentials: parseServiceCredentials(service.credentials),
-        })),
+        services: services.map((service) => {
+          // eslint-disable-next-line @typescript-eslint/no-deprecated
+          const svcPort = service.assigned_port ?? service.port;
+          return {
+            id: service.id,
+            name: service.name,
+            // Wire contract: emit legacy vocabulary (postgresql/mongodb).
+            // eslint-disable-next-line @typescript-eslint/no-deprecated
+            type: service.type ?? kindToLegacyType(service.kind),
+            status: service.status,
+            // Wire key preserved; canonical source: assigned_port
+            port: svcPort,
+            containerName: service.container_name,
+            credentials: parseServiceCredentials(service.credentials),
+          };
+        }),
       };
     },
   },
@@ -180,23 +241,22 @@ export const serviceToolDefs: ToolDef[] = [
       const services = await appCtx.serviceManager.list();
       const service = services.find((item) => item.name === serviceName);
       if (!service) {
-        throw new Error(`Service not found: ${serviceName}`);
+        throw new ServiceNotFoundError(serviceName);
       }
 
-      try {
-        const databases = await appCtx.serviceManager.listDatabases(service.id);
-        return {
-          service: service.name,
-          count: databases.length,
-          databases: databases.map((database) => ({
-            name: database.name,
-            sizeBytes: database.sizeBytes,
-          })),
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(message);
-      }
+      // Let typed errors from serviceManager (ServiceOperationUnsupportedError,
+      // ServiceContainerStateError, etc.) propagate to the caller — wrapping
+      // them in raw Error loses the structured `code` / `statusCode` and
+      // breaks `instanceof` matching in HTTP / MCP error handlers.
+      const databases = await appCtx.serviceManager.listDatabases(service.id);
+      return {
+        service: service.name,
+        count: databases.length,
+        databases: databases.map((database) => ({
+          name: database.name,
+          sizeBytes: database.sizeBytes,
+        })),
+      };
     },
     targets: ['agent'],
   },
@@ -213,23 +273,18 @@ export const serviceToolDefs: ToolDef[] = [
       const services = await appCtx.serviceManager.list();
       const service = services.find((item) => item.name === serviceName);
       if (!service) {
-        throw new Error(`Service not found: ${serviceName}`);
+        throw new ServiceNotFoundError(serviceName);
       }
 
-      try {
-        const result = await appCtx.serviceManager.createDatabase(service.id, databaseName);
-        return {
-          status: 'created',
-          service: service.name,
-          database: result.database,
-          user: result.user,
-          password: result.password,
-          connectionString: result.connectionString,
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(message);
-      }
+      const result = await appCtx.serviceManager.createDatabase(service.id, databaseName);
+      return {
+        status: 'created',
+        service: service.name,
+        database: result.database,
+        user: result.user,
+        password: result.password,
+        connectionString: result.connectionString,
+      };
     },
     targets: ['agent'],
   },
@@ -341,21 +396,28 @@ export const serviceToolDefs: ToolDef[] = [
         }
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      const svcPort = service.assigned_port ?? service.port;
       return {
         id: service.id,
         name: service.name,
-        type: service.type,
+        // Wire contract: emit legacy vocabulary (postgresql/mongodb).
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        type: service.type ?? kindToLegacyType(service.kind),
         status: service.status,
         health,
         ...(healthDetail ? { healthDetail } : {}),
-        port: service.port,
+        // Wire key preserved; canonical source: assigned_port
+        port: svcPort,
         network: SHARED_NETWORK_NAME,
-        image: service.image,
+        // Wire key preserved; canonical first, legacy fallback for pre-migration rows
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        image: service.image_url ?? service.image ?? '',
         containerName: service.container_name,
         containerId: service.container_id,
         createdAt: service.created_at,
         updatedAt: service.updated_at,
-        externalAccess: getServiceExternalAccess(service.port),
+        externalAccess: getServiceExternalAccess(svcPort ?? null),
         _agent_guidance: {
           networking: [
             `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
@@ -408,7 +470,9 @@ export const serviceToolDefs: ToolDef[] = [
       const serviceName = args['service_name'] as string;
       const force = (args['force'] as boolean | undefined) ?? false;
       const service = await getServiceByName(appCtx, serviceName);
-      const serviceType = service.type;
+      // Wire contract: emit legacy vocabulary (postgresql/mongodb).
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      const serviceType = service.type ?? kindToLegacyType(service.kind);
       const result = await appCtx.serviceManager.remove(service.id, { force });
       return {
         status: 'removed',
@@ -502,7 +566,7 @@ export const serviceToolDefs: ToolDef[] = [
             service: serviceName,
             status: service.status,
             logs: null,
-            error: `Service "${serviceName}" is in ${service.status} state — container is not running. Logs are unavailable. Try start_service to restart, or check Docker host health.`,
+            error: `Service "${serviceName}" is in ${service.status ?? 'unknown'} state — container is not running. Logs are unavailable. Try start_service to restart, or check Docker host health.`,
           };
         }
         throw error;
@@ -564,17 +628,22 @@ export const serviceToolDefs: ToolDef[] = [
       const internalHost = (credentials?.['host'] as string | undefined) || null;
       const connectionString = (credentials?.['connectionString'] as string | undefined) || null;
 
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      const svcPort = service.assigned_port ?? service.port;
       return {
         service: serviceName,
-        type: service.type,
+        // Wire contract: emit legacy vocabulary (postgresql/mongodb).
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        type: service.type ?? kindToLegacyType(service.kind),
         credentials,
         connectionString,
         host: internalHost,
-        port: (credentials?.['port'] as number | undefined) || service.port,
+        // Wire key preserved; prefer stored credentials port, then canonical assigned_port
+        port: (credentials?.['port'] as number | undefined) || svcPort,
         user: (credentials?.['user'] as string | undefined) || null,
         password: (credentials?.['password'] as string | undefined) || null,
         database: (credentials?.['database'] as string | undefined) || null,
-        externalAccess: getServiceExternalAccess(service.port),
+        externalAccess: getServiceExternalAccess(svcPort ?? null),
         externalConnectionStrings: getExternalConnectionStrings(connectionString, internalHost),
       };
     },

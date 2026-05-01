@@ -4,11 +4,16 @@ import type { AppContext } from '../../src/app.js';
 import { createSharedToolRegistry } from './shared-tool-registry.js';
 
 function createLockedContext(): AppContext {
-  const project = { id: 'proj-1', name: 'locked-app' };
+  // Day 5 mutation policy: pre-check now consults `archived_at`, `status`,
+  // and `db.isCircuitBreakerOpen`. For DEPLOY_LOCKED guard tests the project
+  // must remain mutable so the lock contention is what triggers the response.
+  const project = { id: 'proj-1', name: 'locked-app', status: 'running', archived_at: null };
   return {
     db: {
       getProjectByName: vi.fn((name: string) => (name === 'locked-app' ? project : undefined)),
+      getDeployableForProject: vi.fn().mockReturnValue(undefined),
       acquireDeployLock: vi.fn(() => false),
+      isCircuitBreakerOpen: vi.fn(() => false),
       getDeployLockInfo: vi.fn(() => ({
         session: 'other-session',
         lockedAt: new Date().toISOString(),

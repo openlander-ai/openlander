@@ -17,10 +17,22 @@ export async function streamChat(
     signal,
   });
   if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to start chat stream');
+    throw new Error(await extractErrorMessage(res, 'Failed to start chat stream'));
   }
   return res;
+}
+
+async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
+  const raw = await res.text();
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed.message === 'string') return parsed.message;
+    if (typeof parsed.error === 'string') return parsed.error;
+  } catch {
+    // not JSON — fall through to raw text
+  }
+  return raw;
 }
 
 export async function replyQuestion(requestId: string, answers: QuestionAnswer[]): Promise<void> {
@@ -30,15 +42,13 @@ export async function replyQuestion(requestId: string, answers: QuestionAnswer[]
     body: JSON.stringify({ request_id: requestId, answers }),
   });
   if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to reply to question');
+    throw new Error(await extractErrorMessage(res, 'Failed to reply to question'));
   }
 }
 
 export async function dismissQuestion(): Promise<void> {
   const res = await fetch('/api/question/dismiss', { method: 'POST' });
   if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to dismiss question');
+    throw new Error(await extractErrorMessage(res, 'Failed to dismiss question'));
   }
 }

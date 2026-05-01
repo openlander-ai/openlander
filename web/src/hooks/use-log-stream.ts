@@ -24,7 +24,23 @@ export interface LogStreamState {
 
 interface UseLogStreamOptions {
   projectId: string | undefined;
+  /** Optional service id. When set, the hook scopes the stream to that
+   *  service's container instead of the project-level interleave —
+   *  required for multi-service compose stacks where the project route
+   *  picks a single service's container and shows only its output. */
+  serviceId?: string;
   enabled?: boolean;
+}
+
+/**
+ * Resolve the URL for a log read. Service-scoped reads fall back to the
+ * project-level route when no serviceId is supplied so single-svc
+ * projects keep their existing behaviour.
+ */
+function logUrl(projectId: string, serviceId: string | undefined, query: string): string {
+  return serviceId
+    ? `/api/projects/${projectId}/services/${serviceId}/logs${query}`
+    : `/api/projects/${projectId}/logs${query}`;
 }
 
 interface UseLogStreamReturn extends LogStreamState {
@@ -76,11 +92,12 @@ function stripDockerStreamHeader(line: string): string {
 
 async function fetchLogSnapshot(
   projectId: string,
+  serviceId: string | undefined,
   lineCount: number,
   signal: AbortSignal,
   envParam: string = '',
 ): Promise<LogEntry[]> {
-  const res = await fetch(`/api/projects/${projectId}/logs?lines=${lineCount}${envParam}`, {
+  const res = await fetch(logUrl(projectId, serviceId, `?lines=${lineCount}${envParam}`), {
     signal,
   });
   if (!res.ok) {
@@ -279,6 +296,7 @@ export function parseStreamLine(rawLine: string): ParsedStreamLine {
 
 export function useLogStream({
   projectId,
+  serviceId,
   enabled = true,
 }: UseLogStreamOptions): UseLogStreamReturn {
   const [state, setState] = useState<LogStreamState>(() => createInitialLogStreamState());
@@ -304,6 +322,7 @@ export function useLogStream({
       try {
         const snapshotEntries = await fetchLogSnapshot(
           projectId,
+          serviceId,
           DEFAULT_HISTORY_LINE_COUNT,
           controller.signal,
         );
@@ -323,7 +342,7 @@ export function useLogStream({
         }
       }
 
-      const res = await fetch(`/api/projects/${projectId}/logs?follow=true`, {
+      const res = await fetch(logUrl(projectId, serviceId, '?follow=true'), {
         signal: controller.signal,
       });
 
@@ -395,7 +414,7 @@ export function useLogStream({
       const message = err instanceof Error ? err.message : 'Stream failed';
       setState((current) => setLogConnectionState(current, 'error', message));
     }
-  }, [enabled, projectId]);
+  }, [enabled, projectId, serviceId]);
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -411,7 +430,7 @@ export function useLogStream({
     return () => {
       abortRef.current?.abort();
     };
-  }, [connectStream, enabled, projectId]);
+  }, [connectStream, enabled, projectId, serviceId]);
 
   const clear = useCallback(() => {
     setState((current) => ({
@@ -449,7 +468,7 @@ export function useLogStream({
     setState((current) => ({ ...current, isLoadingOlder: true }));
 
     try {
-      const res = await fetch(`/api/projects/${projectId}/logs?lines=${nextLineCount}`);
+      const res = await fetch(logUrl(projectId, serviceId, `?lines=${nextLineCount}`));
       if (!res.ok) throw new Error(`Logs error: ${res.status}`);
 
       const data = (await res.json()) as { logs?: unknown };
@@ -471,7 +490,7 @@ export function useLogStream({
         isLoadingOlder: false,
       }));
     }
-  }, [projectId]);
+  }, [projectId, serviceId]);
 
   return {
     ...state,

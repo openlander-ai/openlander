@@ -2,6 +2,7 @@ import { asc, eq, inArray } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { opsIncidentEvents } from '../schema.drizzle.js';
 import type { OpsIncidentEventRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 export class OpsIncidentEventRepo {
   constructor(
@@ -42,9 +43,9 @@ export class OpsIncidentEventRepo {
       .select()
       .from(opsIncidentEvents)
       .where(eq(opsIncidentEvents.id, data.id))
-      .get() as OpsIncidentEventRow | undefined;
+      .get();
 
-    if (!created) throw new Error(`Failed to create ops incident event ${data.id}`);
+    if (!created) throw new RepoPersistenceError('ops incident event', data.id);
     return created;
   }
 
@@ -54,7 +55,7 @@ export class OpsIncidentEventRepo {
       .from(opsIncidentEvents)
       .where(eq(opsIncidentEvents.incident_id, incidentId))
       .orderBy(asc(opsIncidentEvents.created_at))
-      .all() as OpsIncidentEventRow[];
+      .all();
   }
 
   findByIncidentIds(incidentIds: string[]): OpsIncidentEventRow[] {
@@ -64,6 +65,6 @@ export class OpsIncidentEventRepo {
       .from(opsIncidentEvents)
       .where(inArray(opsIncidentEvents.incident_id, incidentIds))
       .orderBy(asc(opsIncidentEvents.created_at))
-      .all() as OpsIncidentEventRow[];
+      .all();
   }
 }

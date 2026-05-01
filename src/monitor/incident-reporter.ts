@@ -58,6 +58,9 @@ export class IncidentReporter {
       this.events.on('recovery:exhausted', (payload) => {
         void this.reportRecoveryExhausted(payload);
       }),
+      this.events.on('recovery:degraded', (payload) => {
+        this.trackRecoveryDegraded(payload);
+      }),
     );
   }
 
@@ -67,6 +70,18 @@ export class IncidentReporter {
     }
     this.unsubscribers = [];
     this.incidents.clear();
+  }
+
+  private trackRecoveryDegraded(payload: EventPayload['recovery:degraded']): void {
+    log.warn(
+      {
+        projectId: payload.projectId,
+        stage: payload.stage,
+        reason: payload.reason,
+        metadata: payload.metadata,
+      },
+      'recovery:degraded — partial failure observed during recovery stage',
+    );
   }
 
   private trackRecoveryStart(payload: EventPayload['recovery:start']): void {

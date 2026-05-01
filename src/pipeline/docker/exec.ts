@@ -63,7 +63,7 @@ export class ExecOps {
       AttachStderr: true,
       Tty: opts?.tty ?? true,
     });
-    return (await exec.start({ hijack: true, stdin: true })) as unknown as NodeJS.ReadWriteStream;
+    return await exec.start({ hijack: true, stdin: true });
   }
 
   /** Open an interactive terminal exec with resize support. Returns stream and resize function. */

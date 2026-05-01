@@ -106,13 +106,16 @@ Configure in Settings → LLM.
 
 ## Notifications
 
-When AI takes recovery action, get notified via:
+In 1.0, recovery notifications are delivered by **email** via SMTP. Configure under **Settings → Operations → Channels → Email** (SMTP host, port, auth, from/to addresses).
 
-| Channel      | Setup                                              |
-| ------------ | -------------------------------------------------- |
-| **Slack**    | Settings → Channels → Slack webhook URL            |
-| **Discord**  | Settings → Channels → Discord webhook URL          |
-| **Telegram** | Settings → Channels → Telegram bot token + chat ID |
+| Channel      | Status                  |
+| ------------ | ----------------------- |
+| **Email**    | Supported in 1.0 (SMTP) |
+| **Slack**    | Planned for 1.0.x       |
+| **Discord**  | Planned for 1.0.x       |
+| **Telegram** | Planned for 1.0.x       |
+
+In-app, the OpsCenter **Live** tab is always the authoritative live view regardless of notification setup.
 
 ---
 

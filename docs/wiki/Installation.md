@@ -104,16 +104,20 @@ brew install --cask docker
 
 ## CLI Commands
 
-| Command                            | Description                       |
-| ---------------------------------- | --------------------------------- |
-| `openlander`                       | Start web UI (default port 10114) |
-| `openlander start`                 | Start daemon in background        |
-| `openlander stop`                  | Stop daemon                       |
-| `openlander restart`               | Restart daemon                    |
-| `openlander config`                | Show current config               |
-| `openlander config reset`          | Reset config to defaults          |
-| `openlander config reset-password` | Reset admin password              |
-| `openlander mcp`                   | Start MCP server (stdio mode)     |
+| Command                            | Description                                         |
+| ---------------------------------- | --------------------------------------------------- |
+| `openlander`                       | Start web UI in foreground (default port 10114)     |
+| `openlander start`                 | Alias of `openlander` — also runs in the foreground |
+| `openlander stop`                  | Prints supervisor guidance (no built-in daemon)     |
+| `openlander restart`               | Prints supervisor guidance (no built-in daemon)     |
+| `openlander config`                | Show current config                                 |
+| `openlander config reset`          | Reset config to defaults                            |
+| `openlander config reset-password` | Reset admin password                                |
+| `openlander mcp`                   | Start MCP server (stdio mode)                       |
+
+> **1.0 change**: OpenLander runs in the foreground only. Use systemd / pm2 / docker for background lifecycle (see the [Running as a Service](../../README.md#running-as-a-service) section in README).
+
+> **Single-process only**: OpenLander 1.0 must run as a single process. Do **not** enable PM2 cluster mode (`exec_mode: 'cluster'` / `instances > 1`) or run multiple `openlander` workers behind a load balancer. The first-boot setup secret, the OAuth PKCE verifier map, and the agent pool are in-process state — workers would each generate a different setup secret and fail to share OAuth/session state. Multi-process support is tracked for a future minor release.
 
 ---
 

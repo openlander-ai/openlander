@@ -3,6 +3,7 @@ import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { pickDefined } from '../helpers.js';
 import { opsIncidents } from '../schema.drizzle.js';
 import type { OpsIncidentRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 function escapeLikePattern(text: string): string {
   return text.replace(/%/g, '\\%').replace(/_/g, '\\_');
@@ -36,14 +37,12 @@ export class OpsIncidentRepo {
       .run();
 
     const created = this.findById(data.id);
-    if (!created) throw new Error(`Failed to create ops incident ${data.id}`);
+    if (!created) throw new RepoPersistenceError('ops incident', data.id);
     return created;
   }
 
   findById(id: string): OpsIncidentRow | undefined {
-    return this.db.select().from(opsIncidents).where(eq(opsIncidents.id, id)).get() as
-      | OpsIncidentRow
-      | undefined;
+    return this.db.select().from(opsIncidents).where(eq(opsIncidents.id, id)).get();
   }
 
   findByProjectId(projectId: string, limit?: number): OpsIncidentRow[] {
@@ -54,10 +53,10 @@ export class OpsIncidentRepo {
       .orderBy(desc(opsIncidents.created_at));
 
     if (limit) {
-      return baseQuery.limit(limit).all() as OpsIncidentRow[];
+      return baseQuery.limit(limit).all();
     }
 
-    return baseQuery.all() as OpsIncidentRow[];
+    return baseQuery.all();
   }
 
   findActive(projectId: string): OpsIncidentRow | undefined {
@@ -71,7 +70,7 @@ export class OpsIncidentRepo {
         ),
       )
       .orderBy(desc(opsIncidents.created_at))
-      .get() as OpsIncidentRow | undefined;
+      .get();
   }
 
   findAllActive(): OpsIncidentRow[] {
@@ -80,7 +79,7 @@ export class OpsIncidentRepo {
       .from(opsIncidents)
       .where(inArray(opsIncidents.status, ['open', 'active']))
       .orderBy(desc(opsIncidents.created_at))
-      .all() as OpsIncidentRow[];
+      .all();
   }
 
   findByDateRange(from: number, to: number, searchText?: string): OpsIncidentRow[] {
@@ -98,7 +97,7 @@ export class OpsIncidentRepo {
       .from(opsIncidents)
       .where(and(...conditions))
       .orderBy(desc(opsIncidents.created_at))
-      .all() as OpsIncidentRow[];
+      .all();
   }
 
   findBySearch(searchText: string, limit?: number): OpsIncidentRow[] {
@@ -115,10 +114,10 @@ export class OpsIncidentRepo {
       .orderBy(desc(opsIncidents.created_at));
 
     if (limit) {
-      return baseQuery.limit(limit).all() as OpsIncidentRow[];
+      return baseQuery.limit(limit).all();
     }
 
-    return baseQuery.all() as OpsIncidentRow[];
+    return baseQuery.all();
   }
 
   updateStatus(
@@ -127,7 +126,7 @@ export class OpsIncidentRepo {
     extra?: { resolved_at?: number; escalated_at?: number },
   ): void {
     const setValues: Record<string, unknown> = {
-      status: status as 'open' | 'active' | 'resolved' | 'escalated',
+      status: status,
     };
     if (extra?.resolved_at !== undefined) {
       setValues.resolved_at = extra.resolved_at;
@@ -155,7 +154,7 @@ export class OpsIncidentRepo {
       'actions_taken',
     );
     if (data.status !== undefined) {
-      setValues.status = data.status as 'open' | 'active' | 'resolved' | 'escalated';
+      setValues.status = data.status;
     }
 
     if (Object.keys(setValues).length === 0) return;

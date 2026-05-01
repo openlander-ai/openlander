@@ -13,7 +13,21 @@
  *
  * v0.1: Also emits `question:pending` via EventBus so the web build stream
  *       can forward questions to the frontend timeline.
+ *
+ * v1.0 (concurrent deploys): Pending questions are tracked per `requestId` so
+ *       multiple agents can be in-flight simultaneously without overwriting
+ *       each other's resolve handler.
+ *
+ * v1.0 (stream-scoped handlers): `Agent.chatStream` runs each call inside an
+ *       AsyncLocalStorage-bound handler context (`runWithQuestionHandler`)
+ *       so the `ask_user_question` tool can pick up the right per-stream
+ *       callback at execution time without overwriting the global handler.
+ *       `setQuestionHandler` is preserved as a fallback for non-agent flows
+ *       (deploy-failure-handler, domain-routes) that don't run inside an
+ *       ALS context.
  */
+
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { EventBus } from '../events/index.js';
 
@@ -56,21 +70,54 @@ type TimerApi = {
 
 const timerApi: TimerApi = globalThis as unknown as TimerApi;
 
+interface PendingEntry {
+  resolve: (answers: QuestionAnswer[]) => void;
+  reject: (err: Error) => void;
+  timeout: unknown;
+  projectId: string | null;
+}
+
+/**
+ * Per-stream question-handler context propagated through async tool execution
+ * via `AsyncLocalStorage`. When `Agent.chatStream` runs the AI SDK tool loop
+ * inside `runWithQuestionHandler`, the `ask_user_question` tool reads the
+ * stream-scoped `handler` here and supplies it to `ask()` as an inline
+ * handler — so two concurrent chat streams never trample each other's UI
+ * callback (the prior `setQuestionHandler` global was last-write-wins).
+ */
+const questionHandlerStore = new AsyncLocalStorage<{
+  handler: (request: QuestionRequest) => void;
+}>();
+
+export function runWithQuestionHandler<T>(
+  handler: (request: QuestionRequest) => void,
+  fn: () => T,
+): T {
+  return questionHandlerStore.run({ handler }, fn);
+}
+
+export function getActiveQuestionHandler(): ((request: QuestionRequest) => void) | undefined {
+  return questionHandlerStore.getStore()?.handler;
+}
+
 // ---------------------------------------------------------------------------
 // Bridge
 // ---------------------------------------------------------------------------
 
 export class QuestionBridge {
-  private pendingResolve: ((answers: QuestionAnswer[]) => void) | null = null;
-  private pendingTimeout: unknown = null;
+  /**
+   * Per-requestId pending entries so multiple agents can ask concurrently
+   * without trampling each other's resolve handler.
+   */
+  private pending = new Map<string, PendingEntry>();
   private onQuestion: ((request: QuestionRequest) => void) | null = null;
   private eventBus: EventBus | null = null;
   private activeProjectId: string | null = null;
 
-  private clearPendingTimeout(): void {
-    if (this.pendingTimeout) {
-      timerApi.clearTimeout(this.pendingTimeout);
-      this.pendingTimeout = null;
+  private clearPendingTimeout(entry: PendingEntry): void {
+    if (entry.timeout) {
+      timerApi.clearTimeout(entry.timeout);
+      entry.timeout = null;
     }
   }
 
@@ -84,15 +131,25 @@ export class QuestionBridge {
 
   /**
    * Set the project ID for the currently active deploy.
-   * Called before each deploy so question events carry the right projectId.
+   * Called before each deploy so question events carry the right projectId
+   * when no inline projectId is supplied to `ask()`.
+   *
+   * Best-effort: with concurrent deploys this is overwritten; prefer passing
+   * `projectId` directly via `ask({ projectId, ... })` (callers do this for
+   * agent-driven flows).
    */
   setActiveProject(projectId: string | null): void {
     this.activeProjectId = projectId;
   }
 
   /**
-   * Register the UI handler that will render questions.
-   * Called once at startup when wiring UI ↔ agent.
+   * Register the default UI handler that will render questions.
+   *
+   * Called at startup when wiring UI ↔ agent. Used as a fallback for
+   * non-agent flows (deploy-failure-handler, domain-routes) that call
+   * `ask()` without supplying an inline handler. Agents pass a per-call
+   * handler via `ask({ handler })` so concurrent agent streams don't race
+   * to overwrite this default.
    */
   setQuestionHandler(handler: (request: QuestionRequest) => void): void {
     this.onQuestion = handler;
@@ -101,26 +158,50 @@ export class QuestionBridge {
   /**
    * Called by the ask_user_question tool.
    * Returns a Promise that pauses the agentic loop until the user responds.
+   *
+   * @param request - QuestionRequest (must have a unique `id`).
+   * @param options - Optional inline `handler` (preferred for agent flows, so
+   *                  concurrent streams each get their own callback) and
+   *                  optional `projectId` so the EventBus question:pending
+   *                  payload carries the right project even when
+   *                  `setActiveProject` is racy across concurrent deploys.
    */
-  ask(request: QuestionRequest): Promise<QuestionAnswer[]> {
+  ask(
+    request: QuestionRequest,
+    options?: {
+      handler?: (request: QuestionRequest) => void;
+      projectId?: string;
+    },
+  ): Promise<QuestionAnswer[]> {
     return new Promise<QuestionAnswer[]>((resolve, reject) => {
-      this.pendingResolve = resolve;
-      this.pendingTimeout = timerApi.setTimeout(() => {
-        this.pendingResolve = null;
-        this.pendingTimeout = null;
+      const projectId = options?.projectId ?? this.activeProjectId;
+      const entry: PendingEntry = {
+        resolve,
+        reject,
+        timeout: null,
+        projectId,
+      };
+      entry.timeout = timerApi.setTimeout(() => {
+        const current = this.pending.get(request.id);
+        if (current === entry) {
+          this.pending.delete(request.id);
+        }
         reject(new Error(QUESTION_SESSION_TIMEOUT_MESSAGE));
       }, QUESTION_SESSION_TIMEOUT_MS);
 
+      this.pending.set(request.id, entry);
+
       // Broadcast to EventBus so the web build stream can pick it up
-      if (this.eventBus && this.activeProjectId) {
+      if (this.eventBus && projectId) {
         void this.eventBus.emit('question:pending', {
-          projectId: this.activeProjectId,
+          projectId,
           requestId: request.id,
           questions: request.questions,
         });
       }
 
-      this.onQuestion?.(request);
+      const handler = options?.handler ?? this.onQuestion;
+      handler?.(request);
     });
   }
 
@@ -128,39 +209,65 @@ export class QuestionBridge {
    * Called by the UI when the user submits their answers.
    * Resolves the pending Promise, resuming the agentic loop.
    *
-   * @param requestId - The question request ID (wired for Phase 2 multiplexing).
-   *                    v0.1.0 ignores this internally but the API contract is ready.
+   * @param requestId - The question request ID — looked up against in-flight
+   *                    pending entries so concurrent deploys can be answered
+   *                    independently.
    * @param answers - User's selected answers.
    */
   reply(requestId: string, answers: QuestionAnswer[]): void {
-    this.clearPendingTimeout();
-    const resolve = this.pendingResolve;
-    this.pendingResolve = null;
+    const entry = this.pending.get(requestId);
+    if (!entry) {
+      return;
+    }
+    this.pending.delete(requestId);
+    this.clearPendingTimeout(entry);
 
-    // Broadcast answer event
-    if (this.eventBus && this.activeProjectId) {
+    if (this.eventBus && entry.projectId) {
       void this.eventBus.emit('question:answered', {
-        projectId: this.activeProjectId,
+        projectId: entry.projectId,
         requestId,
       });
     }
 
-    resolve?.(answers);
+    entry.resolve(answers);
   }
 
   /**
    * Called by the UI when the user dismisses/cancels the question.
    * Resolves with empty answers so the LLM knows the user declined.
+   *
+   * @param requestId - Optional explicit requestId. When omitted (legacy
+   *                    callers like channels/base.ts), rejects ALL pending
+   *                    entries — preserves prior single-slot semantics.
    */
-  reject(): void {
-    this.clearPendingTimeout();
-    const resolve = this.pendingResolve;
-    this.pendingResolve = null;
-    resolve?.([]);
+  reject(requestId?: string): void {
+    if (requestId) {
+      const entry = this.pending.get(requestId);
+      if (!entry) {
+        return;
+      }
+      this.pending.delete(requestId);
+      this.clearPendingTimeout(entry);
+      entry.resolve([]);
+      return;
+    }
+
+    // No requestId — clear every pending entry. Used by channel cleanup.
+    const entries = [...this.pending.values()];
+    this.pending.clear();
+    for (const entry of entries) {
+      this.clearPendingTimeout(entry);
+      entry.resolve([]);
+    }
   }
 
-  /** Check if there is a pending question awaiting user response. */
-  hasPending(): boolean {
-    return this.pendingResolve !== null;
+  /**
+   * Check if there is at least one pending question awaiting user response.
+   */
+  hasPending(requestId?: string): boolean {
+    if (requestId) {
+      return this.pending.has(requestId);
+    }
+    return this.pending.size > 0;
   }
 }

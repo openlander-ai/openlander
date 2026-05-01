@@ -30,7 +30,7 @@ CLI (Commander)  →  AppContext  →  Hono HTTP Server
                            (Vite + Tailwind + Radix)
 ```
 
-**Key principle**: Execution is deterministic (rule-based). AI handles error analysis and recovery via RecoveryCoordinator — gated by 7 eligibility conditions, with approval gates for high-risk actions.
+**Key principle**: Execution is deterministic (rule-based). AI handles error analysis and recovery via RecoveryCoordinator — gated by 7 eligibility conditions, with approval gates for high-risk actions. Recovery runs in the background; the in-context `ApprovalDialog` modal is the only user-facing surface for high-risk approvals (no dedicated Operations Center page in 0.1.0).
 
 ### Entry Points
 
@@ -105,7 +105,7 @@ src/
 │   ├── service-manager.ts   #   Infrastructure services
 │   └── service-adapters/    #   DB adapters (postgres, mysql, redis)
 ├── tools/                   # MCP Tool System
-│   ├── defs/                #   ToolDef definitions (20 files, 99 tools)
+│   ├── defs/                #   ToolDef definitions (20 files, 99 tools — internal; MCP surface is 4 composite tools + 11 opt-in platform)
 │   │   ├── types.ts         #   ToolDef interface
 │   │   └── index.ts         #   Registry exports
 │   └── adapters/            #   Protocol adapters
@@ -165,46 +165,54 @@ src/
 └── types/                   # Shared TypeScript types
 
 web/src/                     # React 19 Frontend
-├── App.tsx                  # Router + providers (Auth, Language, Environment)
+├── App.tsx                  # Router + providers (Auth, Language, ProjectsContext, AppData)
 ├── main.tsx                 # Entry point
 ├── index.css                # Tailwind + CSS variables + animations
-├── pages/                   # Page components
-│   ├── ProjectsGrid.tsx     #   Dashboard
-│   ├── ProjectDetail.tsx    #   Project detail
-│   ├── DeploymentsList.tsx  #   Deployments list
-│   ├── DeploymentDetail.tsx #   Deployment detail view
-│   ├── NewProjectFlow.tsx   #   New project wizard
-│   ├── SettingsPage.tsx     #   Settings
-│   ├── ServicesPage.tsx     #   Services list
-│   ├── ServiceDetail.tsx    #   Service detail view
-│   ├── OpsCenterV2.tsx      #   Operations center
-│   ├── Overview.tsx         #   System overview
-│   └── LoginPage.tsx        #   Login
+├── pages/                   # Page components (top-level routes)
+│   ├── Home.tsx             #   Dashboard (/home)
+│   ├── ProjectsGrid.tsx     #   Projects list (/projects)
+│   ├── ProjectView.tsx      #   Project detail (/projects/:id)
+│   ├── ServiceDetailV2.tsx  #   Service detail (/projects/:p/services/:s, /managed-services/:id)
+│   ├── ServicesPage.tsx     #   Managed services list (/managed-services)
+│   ├── DeploymentsList.tsx  #   Cross-project deploy history (/deployments)
+│   ├── DeploymentDetail.tsx #   Deploy detail (/projects/:id/deployments/:deployId)
+│   ├── Activity.tsx         #   Audit log (/activity)
+│   ├── MCPServer.tsx        #   MCP status + connected agents (/mcp-server)
+│   ├── MonitoringPage.tsx   #   System metrics (/monitoring)
+│   ├── SettingsPage.tsx     #   Settings (/settings, 7 tabs)
+│   ├── settings/            #   Settings sub-pages (web-server, git-providers, ssh-keys, notifications)
+│   └── LoginPage.tsx        #   Login (/login)
 ├── components/
 │   ├── ui/                  #   shadcn/ui primitives (button, dialog, select...)
-│   ├── layout/              #   AppLayout, Header, Sidebar
-│   ├── dashboard/           #   ProjectCard, SystemHealthCards
-│   ├── project/             #   OverviewTab, DeploymentsList
-│   ├── settings/            #   Settings tabs
-│   ├── setup/               #   Onboarding steps
-│   ├── timeline/            #   Build timeline, RecoveryCard
-│   ├── logs/                #   LogViewer components
-│   ├── agent/               #   AI agent panel
-│   ├── config/              #   DomainsPanel, EnvVarsTable
+│   ├── Shell/               #   AppShell, Sidebar, TopBar, ActivityTimeline, InfraMap, LogViewer, PhaseRail, SuccessSummary
+│   ├── shared/              #   Cross-page primitives (PageHeader, OuterCard, StatusTile, etc.)
+│   ├── project/             #   OverviewTab, ProjectDetailTabs, deploy/recovery cards
+│   ├── service/             #   Service detail tabs (overview, connection, databases, logs, settings, advanced)
+│   ├── settings/            #   Settings tab content (System, Security, Proxy, GitHub, AI, Operations, MCP)
+│   ├── setup/               #   Onboarding wizard steps
+│   ├── agent/               #   Agent panel chat
+│   ├── agent-guide/         #   AgentGuideDialog (prompts users to use MCP for actions)
 │   ├── command/             #   Command palette
+│   ├── config/              #   DomainsPanel, EnvVarsTable
 │   ├── deploy-terminal/     #   Build/deploy terminal UI
-│   ├── ops/                 #   Operations center components
-│   ├── service/             #   Service management components
-│   └── ...
-├── contexts/                # React Context providers
+│   ├── deploy/              #   Deploy flow components
+│   ├── timeline/            #   ActivityRow, deploy timeline, RecoveryCard
+│   ├── logs/                #   Log viewer atoms
+│   ├── icons/               #   Custom icon set
+│   └── ops/                 #   Legacy: SeverityBadge + utils only (top-level Operations Center page was cut pre-0.1.0; backend ops APIs remain alive for ApprovalDialog and Settings → Operations tab)
+├── contexts/                # React Context providers (no external state lib)
 │   ├── auth.tsx             #   Authentication state
-│   └── agent-panel.tsx      #   AI agent panel state
-├── hooks/                   # Custom hooks (data fetching with polling)
-├── i18n/                    # i18n (context.tsx, en.ts, ko.ts)
+│   ├── projects-context.tsx #   Shared projects list with polling
+│   ├── app-data-context.tsx #   Cross-page shared data
+│   └── agent-panel.tsx      #   AI agent panel open/close state
+├── hooks/                   # Custom hooks (polling-based data fetching)
+├── i18n/                    # i18n (context.tsx, en.ts, ko.ts) — custom lightweight, no i18next
 ├── lib/
 │   ├── api/                 #   API layer (native fetch, no axios)
 │   │   ├── auth.ts, projects.ts, services.ts, system.ts, chat.ts
-│   │   ├── client.ts, index.ts, operations.ts, usage.ts
+│   │   ├── notifications.ts, operations.ts, topology.ts, usage.ts
+│   │   ├── client.ts        #   fetchWithAuth wrapper
+│   │   └── *-zod.ts         #   Zod schemas for response validation
 │   └── utils.ts             #   cn() class merger
 └── types/                   # Frontend types
 
@@ -244,7 +252,28 @@ class OpenLanderError extends Error {
 }
 ```
 
-20+ specific error classes: `GitCloneError`, `DockerBuildError`, `ProjectNotFoundError`, etc. Global error handler in `routes.ts` catches and serializes these.
+30+ specific error classes covering git, docker, deploy, project lifecycle, mutation policy, and repo persistence failures. The Hono server registers a global `onError` in `src/web/server.ts` (and `routes.ts` for the `/api` sub-router) that recognizes `OpenLanderError instanceof` and serializes via `toJSON()`. Anything else falls through to a generic `INTERNAL_ERROR` 500.
+
+**Boundary handlers (where each layer's policy lives)**
+
+| Layer           | Boundary                                                                              | Responsibility                                                                                                                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP            | `app.onError` (`src/web/server.ts`) + `api.onError` (`src/web/api/routes.ts`)         | Serialize typed errors to JSON, log unhandled                                                                                                                                                                                    |
+| Pipeline        | `assertProjectMutable` in `src/pipeline/mutation-policy.ts`                           | Reject mutations on archived / recovering / circuit-broken projects. Called at the top of `pipeline.deploy` (existing-project branch), `pipeline.deployEnvironment`, `pipeline.redeploy`, and `pipeline.rollback`                |
+| Deploy lock     | `withDeployLock` / `acquireDeployLockOrThrow` in `src/db/repos/deploy-lock-helper.ts` | Acquire/release deploy lock; throw `DeployLockedError` on contention. Currently wraps `pipeline.redeploy` and `pipeline.rollback` only. Use the helper instead of hand-rolled `try/finally` when adding new mutation entrypoints |
+| Recovery        | `checkRecoveryEligibility` + `withRecoveryStage` in `src/monitor/recovery-policy.ts`  | Single eligibility decision for all recovery entry points; emit `recovery:degraded` on partial stage failure instead of swallowing                                                                                               |
+| MCP / CLI tools | `tryRejectIfNotMutable` in `src/tools/defs/helpers.ts`                                | Synchronous pre-check so fire-and-forget tools return a clear `rejected_by_policy` response instead of fake "deploying"                                                                                                          |
+
+**Hard rules (enforced via review)**
+
+1. **No silent swallow.** `try { …; } catch { /* nothing */ }` and `catch (e) { log.warn(…) }` followed by continuing the same logical operation are both banned. Use `withRecoveryStage` for stages with downstream consequences, or rethrow.
+2. **No raw `throw new Error('…')` in domain code.** Use a named class from `src/errors.ts`. Add a new typed error if none fits.
+3. **Mutating routes go through pipeline boundary.** Don't invent a new redeploy/rollback path that calls Docker directly. Add the entry to `pipeline.*` so `assertProjectMutable` is enforced. `withDeployLock` is currently wrapped around `pipeline.redeploy` / `pipeline.rollback` only — wrap any new long-running mutation entrypoint in it explicitly so concurrent deploys for the same project are rejected with `DeployLockedError`.
+4. **Cross-cutting checks have one owner.** `deploy_lock_session`, `circuit_breaker_state`, `archived_at` are evaluated by `RecoveryPolicy` / `mutation-policy`. If you need the same predicate, import the helper — don't reimplement.
+5. **Fire-and-forget rejections must be visible.** When you spawn a background task whose policy decision is synchronous (e.g. archived project, circuit open), check before returning success to the caller. The user has to see the rejection.
+6. **`recovery:degraded` is the partial-failure signal.** Emit it from `withRecoveryStage` (free) or directly when a stage fails but the recovery loop continues. Listeners (`incident-reporter`, `activity-logger`) record it; missing it = invisible regression.
+
+When in doubt, grep for the helper before adding inline logic — duplicating the policy is how Day 1-2's web-only fix had to be expanded to the full pipeline boundary in Day 5.
 
 ### Repository Pattern (Database)
 
@@ -276,7 +305,7 @@ interface ToolDef {
 }
 ```
 
-20 tool definition files, 99 tools. Two adapters convert ToolDefs to:
+20 tool definition files, 99 internal tools. The MCP adapter bundles these into **4 composite tools** (`openlander_deploy|_project|_service|_monitor`, 70 actions) exposed by default, plus **11 platform tools** gated by `config.mcp.platformTools`. Two adapters convert ToolDefs to:
 
 - `src/tools/adapters/mcp.ts` — MCP protocol format (4 composite tools)
 - `src/tools/adapters/ai-sdk.ts` — Vercel AI SDK format
@@ -373,17 +402,17 @@ Translation files: `web/src/i18n/en.ts`, `web/src/i18n/ko.ts`. Language stored i
 
 API calls organized by domain in `web/src/lib/api/`:
 
-| File            | Domain                                       |
-| --------------- | -------------------------------------------- |
-| `auth.ts`       | Login, logout, verify, token                 |
-| `projects.ts`   | Project CRUD, deployments, env vars, domains |
-| `services.ts`   | Service management                           |
-| `system.ts`     | System status                                |
-| `chat.ts`       | AI agent chat                                |
-| `client.ts`     | fetchWithAuth wrapper, base fetch utilities  |
-| `index.ts`      | Barrel export for all API modules            |
-| `operations.ts` | Operations center, recovery monitoring       |
-| `usage.ts`      | AI usage tracking, cost summary              |
+| File            | Domain                                                                                                                                                                |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth.ts`       | Login, logout, verify, token                                                                                                                                          |
+| `projects.ts`   | Project CRUD, deployments, env vars, domains                                                                                                                          |
+| `services.ts`   | Service management                                                                                                                                                    |
+| `system.ts`     | System status                                                                                                                                                         |
+| `chat.ts`       | AI agent chat                                                                                                                                                         |
+| `client.ts`     | fetchWithAuth wrapper, base fetch utilities                                                                                                                           |
+| `index.ts`      | Barrel export for all API modules                                                                                                                                     |
+| `operations.ts` | Recovery / approvals API client. Consumed by ApprovalDialog and Settings → Operations tab. (Top-level Operations Center page was cut pre-0.1.0; backend stays alive.) |
+| `usage.ts`      | AI usage tracking, cost summary                                                                                                                                       |
 
 `fetchWithAuth()` auto-redirects to `/login` on 401.
 

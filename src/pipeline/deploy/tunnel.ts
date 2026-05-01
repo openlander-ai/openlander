@@ -53,6 +53,7 @@ export class TunnelManager {
   cleanupStale(): void {
     const projects = this.db.listProjects();
     for (const project of projects) {
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       if (project.visibility === 'quick-share' || project.visibility === 'shared') {
         log.info({ projectId: project.id, name: project.name }, 'Clearing stale tunnel state');
         this.db.updateProject(project.id, {

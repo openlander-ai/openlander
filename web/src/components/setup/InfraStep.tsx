@@ -46,10 +46,10 @@ export function InfraStep({
           <Terminal className="h-8 w-8 text-agent" />
         </div>
         <div className="space-y-2">
-          <h1 className="font-display text-3xl font-bold text-primary-ol tracking-tight">
+          <h1 className="font-display text-3xl font-bold text-foreground tracking-tight">
             {t('setup.welcome.title')}
           </h1>
-          <p className="text-lg font-body text-secondary-ol">{t('setup.welcome.subtitle')}</p>
+          <p className="text-lg font-body text-foreground/80">{t('setup.welcome.subtitle')}</p>
         </div>
 
         {/* Infrastructure status */}
@@ -101,7 +101,9 @@ export function InfraStep({
         </Button>
 
         {!status.docker.ok && (
-          <p className="text-sm font-body text-muted-ol">{t('setup.welcome.dockerRequired')}</p>
+          <p className="text-sm font-body text-muted-foreground">
+            {t('setup.welcome.dockerRequired')}
+          </p>
         )}
       </div>
     </div>

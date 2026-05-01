@@ -58,8 +58,8 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
   if (!hasDetails) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <Monitor className="h-8 w-8 text-muted-ol mb-3" />
-        <p className="text-sm font-body text-secondary-ol">
+        <Monitor className="h-8 w-8 text-muted-foreground mb-3" />
+        <p className="text-sm font-body text-foreground/80">
           No connection information available for this service.
         </p>
       </div>
@@ -70,8 +70,8 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
     <div className="flex flex-col gap-4">
       {creds && (
         <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
-          <h3 className="text-sm font-display font-medium text-primary-ol mb-4 flex items-center gap-2">
-            <Key className="h-4 w-4 text-muted-ol" />
+          <h3 className="text-sm font-display font-medium text-foreground mb-4 flex items-center gap-2">
+            <Key className="h-4 w-4 text-muted-foreground" />
             Credentials
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
@@ -101,9 +101,9 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
                     key === 'connectionString' && 'md:col-span-2',
                   )}
                 >
-                  <span className="text-xs font-body text-secondary-ol">{displayKey}</span>
+                  <span className="text-xs font-body text-foreground/80">{displayKey}</span>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 bg-bg-panel px-2.5 py-1.5 rounded-md border border-[hsl(var(--border))] font-mono text-xs text-primary-ol truncate">
+                    <code className="flex-1 bg-bg-panel px-2.5 py-1.5 rounded-md border border-[hsl(var(--border))] font-mono text-xs text-foreground truncate">
                       {String(value)}
                     </code>
                     <Button
@@ -115,7 +115,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
                       {isCopied(fieldId) ? (
                         <Check className="h-3.5 w-3.5 text-success" />
                       ) : (
-                        <Copy className="h-3.5 w-3.5 text-muted-ol" />
+                        <Copy className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
                     </Button>
                   </div>
@@ -128,8 +128,8 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
 
       {networkIps.length > 0 && typeof creds?.connectionString === 'string' && (
         <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
-          <h3 className="text-sm font-display font-medium text-primary-ol mb-4 flex items-center gap-2">
-            <Network className="h-4 w-4 text-muted-ol" />
+          <h3 className="text-sm font-display font-medium text-foreground mb-4 flex items-center gap-2">
+            <Network className="h-4 w-4 text-muted-foreground" />
             External Access
           </h3>
           <div className="space-y-3">
@@ -147,9 +147,9 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
 
               return (
                 <div key={ip.address} className="flex flex-col gap-1.5">
-                  <span className="text-xs font-body text-secondary-ol">{label}</span>
+                  <span className="text-xs font-body text-foreground/80">{label}</span>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 bg-bg-panel px-2.5 py-1.5 rounded-md border border-[hsl(var(--border))] font-mono text-xs text-primary-ol truncate">
+                    <code className="flex-1 bg-bg-panel px-2.5 py-1.5 rounded-md border border-[hsl(var(--border))] font-mono text-xs text-foreground truncate">
                       {externalConnStr}
                     </code>
                     <Button
@@ -161,7 +161,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
                       {isCopied(fieldId) ? (
                         <Check className="h-3.5 w-3.5 text-success" />
                       ) : (
-                        <Copy className="h-3.5 w-3.5 text-muted-ol" />
+                        <Copy className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
                     </Button>
                   </div>
@@ -174,8 +174,8 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
 
       {!creds && parsedEnv && Object.keys(parsedEnv).length > 0 && (
         <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
-          <h3 className="text-sm font-display font-medium text-primary-ol mb-4 flex items-center gap-2">
-            <Terminal className="h-4 w-4 text-muted-ol" />
+          <h3 className="text-sm font-display font-medium text-foreground mb-4 flex items-center gap-2">
+            <Terminal className="h-4 w-4 text-muted-foreground" />
             Environment Variables
           </h3>
           <div className="grid grid-cols-1 gap-3">
@@ -183,10 +183,10 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
               const fieldId = `${service.id}-env-${key}`;
               return (
                 <div key={key} className="flex items-center gap-2">
-                  <code className="bg-bg-panel px-2.5 py-1.5 rounded-md border border-[hsl(var(--border))] font-mono text-xs text-secondary-ol w-1/3 truncate">
+                  <code className="bg-bg-panel px-2.5 py-1.5 rounded-md border border-[hsl(var(--border))] font-mono text-xs text-foreground/80 w-1/3 truncate">
                     {key}
                   </code>
-                  <code className="flex-1 bg-bg-panel px-2.5 py-1.5 rounded-md border border-[hsl(var(--border))] font-mono text-xs text-primary-ol truncate">
+                  <code className="flex-1 bg-bg-panel px-2.5 py-1.5 rounded-md border border-[hsl(var(--border))] font-mono text-xs text-foreground truncate">
                     {String(value)}
                   </code>
                   <Button
@@ -198,7 +198,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
                     {isCopied(fieldId) ? (
                       <Check className="h-3.5 w-3.5 text-success" />
                     ) : (
-                      <Copy className="h-3.5 w-3.5 text-muted-ol" />
+                      <Copy className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
                   </Button>
                 </div>

@@ -1,5 +1,10 @@
 # v1.0.0 Architecture Decision — Web UI & Agent Interaction Model
 
+> **⚠ Historical — frozen 2026-04-23 (pre-1.0 launch).**
+> This file records a pre-launch architecture decision; the shipped 1.0 may have evolved beyond what is described here.
+> Current state: `docs/RELEASE-NOTES-1.0.md`, `docs/design/calm-ops-refresh.md`, `docs/planning/context/decision-log.md`.
+> Kept in place because `docs/planning/ai-architecture-vision.md` still links here.
+
 **Date**: 2026-03-22
 **Status**: Confirmed
 **Participants**: Human + Oracle + Metis + Momus + Gemini + Claude

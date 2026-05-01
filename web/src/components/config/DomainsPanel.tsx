@@ -15,7 +15,6 @@ import {
   getAllIps,
   type NetworkIp,
   getProjectDomains,
-  getProjectTimeline,
   addProjectDomain,
   removeProjectDomain,
   type DomainMapping,
@@ -36,7 +35,6 @@ import {
   Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { AISparkle } from '@/components/ui/AISparkle';
 
 interface DomainsPanelProps {
   projectId: string;
@@ -107,113 +105,32 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
     fetchProject();
   }, [fetchProject, projectStatus]);
 
+  // Domain AI analysis finalization.
+  //
+  // The previous implementation polled `GET /api/projects/:id/timeline` to
+  // surface live `agent_thinking` / `question_pending` events from the
+  // domain-AI flow. The single-SSE cleanup deleted that route along with
+  // `deploy-timeline-stream-routes.ts`, leaving the call orphaned and the
+  // panel forever stuck on the 404-swallowed silent catch.
+  //
+  // Until the agent-event surface is reattached to a live transport, fall
+  // back to a hard 8s budget — long enough for the backend domain flow to
+  // finish a typical Cloudflare DNS round-trip, short enough that the user
+  // is not staring at a spinner. The InputRequestCard / question-pending
+  // UX path is intentionally degraded; live AI questions for domains will
+  // come back when the new transport ships.
   useEffect(() => {
     if (!domainAiProgress) return;
 
-    let cancelled = false;
-    const seen = new Set<string>();
-    let sawAiEvent = false;
-    let lastEventAt = Date.now();
-
-    const isTerminalStatusMessage = (message: string) => {
-      return (
-        message.includes('User skipped AI-suggested domain env updates') ||
-        message.includes('Triggering redeploy') ||
-        message.includes('Domain env update request timed out')
-      );
-    };
-
-    const poll = async () => {
-      if (cancelled) return;
-
-      try {
-        const events = await getProjectTimeline(projectId);
-        let shouldFinalize = false;
-
-        for (const event of events) {
-          const eventTime = Date.parse(event.timestamp);
-          if (!Number.isFinite(eventTime) || eventTime < domainAiProgress.startedAt - 1500) {
-            continue;
-          }
-
-          const key = event.id ?? `${event.type}|${event.timestamp}|${event.message}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-
-          if (
-            event.type === 'agent_thinking' ||
-            event.type === 'agent_tool_call' ||
-            event.type === 'agent_message' ||
-            event.type === 'agent_tool_result' ||
-            event.type === 'question_pending'
-          ) {
-            sawAiEvent = true;
-            lastEventAt = Date.now();
-          }
-
-          if (event.type === 'agent_thinking') {
-            setDomainAiProgress((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    message: event.message || 'AI 분석 중...',
-                  }
-                : prev,
-            );
-            continue;
-          }
-
-          if (event.type === 'question_pending' && event.questionId && event.questions) {
-            setDomainAiProgress((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    message: event.message,
-                    questionId: event.questionId,
-                    questions: event.questions,
-                    answered: false,
-                  }
-                : prev,
-            );
-            continue;
-          }
-
-          if (event.type === 'status' && isTerminalStatusMessage(event.message)) {
-            shouldFinalize = true;
-            break;
-          }
-
-          if (event.type === 'error' && event.message.startsWith('AI analysis failed:')) {
-            shouldFinalize = true;
-            break;
-          }
-        }
-
-        const elapsedFromStart = Date.now() - domainAiProgress.startedAt;
-        const idleFor = Date.now() - lastEventAt;
-
-        if (
-          shouldFinalize ||
-          (sawAiEvent && idleFor > 5000) ||
-          (!sawAiEvent && elapsedFromStart > 8000)
-        ) {
-          await finalizeDomainAnalysis();
-        }
-      } catch {
-        return;
-      }
-    };
-
-    void poll();
-    const interval = setInterval(() => {
-      void poll();
-    }, 1500);
+    const DOMAIN_AI_PROGRESS_BUDGET_MS = 8000;
+    const timer = setTimeout(() => {
+      void finalizeDomainAnalysis();
+    }, DOMAIN_AI_PROGRESS_BUDGET_MS);
 
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      clearTimeout(timer);
     };
-  }, [domainAiProgress, projectId, finalizeDomainAnalysis]);
+  }, [domainAiProgress, finalizeDomainAnalysis]);
 
   const submitDomainQuestion = useCallback(
     async (questionId: string, answers: QuestionAnswerPayload[]) => {
@@ -365,8 +282,8 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
         {/* Internal URL */}
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-2">
           <div className="flex items-center gap-2">
-            <Wifi className="h-3.5 w-3.5 text-muted-ol" />
-            <span className="text-sm font-display font-semibold text-primary-ol">
+            <Wifi className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-sm font-display font-semibold text-foreground">
               {'Internal URL'}
             </span>
           </div>
@@ -383,7 +300,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               </a>
               <button
                 onClick={() => copyToClipboard(internalUrl, 'internal')}
-                className="p-1 rounded text-muted-ol hover:text-secondary-ol transition-colors"
+                className="p-1 rounded text-muted-foreground hover:text-foreground/80 transition-colors"
               >
                 {isCopied('internal') ? (
                   <Check className="h-3.5 w-3.5 text-success" />
@@ -393,17 +310,17 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               </button>
             </div>
           ) : (
-            <p className="text-xs font-body text-muted-ol">{t('domains.notAvailable')}</p>
+            <p className="text-xs font-body text-muted-foreground">{t('domains.notAvailable')}</p>
           )}
-          <p className="text-xs font-body text-muted-ol">{t('domains.accessibleFrom')}</p>
+          <p className="text-xs font-body text-muted-foreground">{t('domains.accessibleFrom')}</p>
         </div>
 
         {/* Direct Port Access */}
         {assignedPort && networkIps.length > 0 && (
           <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-2">
             <div className="flex items-center gap-2">
-              <Monitor className="h-3.5 w-3.5 text-muted-ol" />
-              <span className="text-sm font-display font-semibold text-primary-ol">
+              <Monitor className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-sm font-display font-semibold text-foreground">
                 {'Direct Access'}
               </span>
             </div>
@@ -422,12 +339,12 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                       {directUrl}
                       <ExternalLink className="h-3 w-3" />
                     </a>
-                    <span className="text-xs font-body text-muted-ol px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))]">
+                    <span className="text-xs font-body text-muted-foreground px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))]">
                       {label}
                     </span>
                     <button
                       onClick={() => copyToClipboard(directUrl, ip.address)}
-                      className="p-1 rounded text-muted-ol hover:text-secondary-ol transition-colors"
+                      className="p-1 rounded text-muted-foreground hover:text-foreground/80 transition-colors"
                     >
                       {isCopied(ip.address) ? (
                         <Check className="h-3.5 w-3.5 text-success" />
@@ -439,7 +356,9 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                 );
               })}
             </div>
-            <p className="text-xs font-body text-muted-ol">{t('domains.directPortAccess')}</p>
+            <p className="text-xs font-body text-muted-foreground">
+              {t('domains.directPortAccess')}
+            </p>
           </div>
         )}
 
@@ -447,8 +366,8 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Globe className="h-3.5 w-3.5 text-muted-ol" />
-              <span className="text-sm font-display font-semibold text-primary-ol">
+              <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-sm font-display font-semibold text-foreground">
                 {'Custom Domains'}
               </span>
             </div>
@@ -473,7 +392,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 w-6 p-0 text-muted-ol hover:text-error shrink-0"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-error shrink-0"
                     onClick={() => handleRemoveDomain(d.domain)}
                     disabled={removingDomain === d.domain}
                   >
@@ -487,7 +406,9 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               ))}
             </div>
           ) : (
-            <p className="text-xs font-body text-muted-ol">{t('domains.noCustomDomains')}</p>
+            <p className="text-xs font-body text-muted-foreground">
+              {t('domains.noCustomDomains')}
+            </p>
           )}
 
           {/* Add domain form */}
@@ -517,7 +438,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                     if (e.key === 'Enter') handleAddDomain();
                   }}
                   placeholder="example.com"
-                  className="flex-1 h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 text-xs font-mono text-primary-ol placeholder:text-muted-ol"
+                  className="flex-1 h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 text-xs font-mono text-foreground placeholder:text-muted-foreground"
                 />
                 <Button
                   variant="outline"
@@ -529,10 +450,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                   {addingDomain ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
-                    <>
-                      {llmConfigured && <AISparkle className="h-3.5 w-3.5" />}
-                      <Plus className="h-3 w-3" />
-                    </>
+                    <Plus className="h-3 w-3" />
                   )}
                   {'Add Domain'}
                 </Button>
@@ -554,13 +472,15 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                       }}
                     />
                   )}
-                  <p className="text-xs font-mono text-muted-ol">
+                  <p className="text-xs font-mono text-muted-foreground">
                     {`domain: ${domainAiProgress.domain}`}
                   </p>
                 </div>
               )}
 
-              <p className="text-xs font-body text-muted-ol">{t('domains.customDomainsHelp')}</p>
+              <p className="text-xs font-body text-muted-foreground">
+                {t('domains.customDomainsHelp')}
+              </p>
             </>
           )}
         </div>
@@ -569,8 +489,8 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Globe className="h-3.5 w-3.5 text-muted-ol" />
-              <span className="text-sm font-display font-semibold text-primary-ol">
+              <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-sm font-display font-semibold text-foreground">
                 {'Public URL'}
               </span>
             </div>
@@ -620,7 +540,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               </a>
               <button
                 onClick={() => copyToClipboard(publicUrl, 'public')}
-                className="p-1 rounded text-muted-ol hover:text-secondary-ol transition-colors"
+                className="p-1 rounded text-muted-foreground hover:text-foreground/80 transition-colors"
               >
                 {isCopied('public') ? (
                   <Check className="h-3.5 w-3.5 text-success" />
@@ -630,10 +550,10 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               </button>
             </div>
           ) : (
-            <p className="text-xs font-body text-muted-ol">{t('domains.notExposed')}</p>
+            <p className="text-xs font-body text-muted-foreground">{t('domains.notExposed')}</p>
           )}
 
-          <p className="text-xs font-body text-muted-ol">
+          <p className="text-xs font-body text-muted-foreground">
             {publicUrl ? t('domains.anyoneWithUrl') : t('domains.requiresRunning')}
           </p>
         </div>

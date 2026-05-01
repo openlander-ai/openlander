@@ -1,10 +1,16 @@
 import { nanoid } from 'nanoid';
-import { DeployLockedError, ProjectNotFoundError } from '../../errors.js';
+import {
+  CircuitBreakerOpenError,
+  DeployLockedError,
+  ProjectArchivedError,
+  ProjectNotFoundError,
+  ProjectRecoveringError,
+} from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
-import { tryAcquireDeployLockOrResponse } from './helpers.js';
+import { tryAcquireDeployLockOrResponse, tryRejectIfNotMutable } from './helpers.js';
 import {
   emptySchema,
   archiveProjectSchema,
@@ -23,22 +29,25 @@ async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1
   const projects = appCtx.db.listProjects();
 
   for (const project of projects) {
-    if (project.status !== 'running' || !project.container_id) {
+    // PR 4.5: canonical-first read of runtime fields with `??` fallback to
+    // legacy `projects` columns through migration 0012.
+    const deployable = appCtx.db.getDeployableForProject(project.id);
+    const status = deployable?.status ?? project.status;
+    const containerId = deployable?.container_id ?? project.container_id;
+
+    if (status !== 'running' || !containerId) {
       continue;
     }
 
     try {
-      const info = await appCtx.docker.inspectContainer(project.container_id);
-      const status = info.State.Running ? 'running' : 'stopped';
+      const info = await appCtx.docker.inspectContainer(containerId);
+      const nextStatus = info.State.Running ? 'running' : 'stopped';
 
-      if (status !== project.status || info.Id !== project.container_id) {
-        appCtx.db.updateProject(project.id, { status, containerId: info.Id });
+      if (nextStatus !== status || info.Id !== containerId) {
+        appCtx.db.updateProject(project.id, { status: nextStatus, containerId: info.Id });
       }
     } catch (err) {
-      log.debug(
-        { err, projectId: project.id, containerId: project.container_id },
-        'Failed to inspect project container',
-      );
+      log.debug({ err, projectId: project.id, containerId }, 'Failed to inspect project container');
       appCtx.db.updateProject(project.id, { status: 'error' });
     }
   }
@@ -59,7 +68,10 @@ export const projectOpsToolDefs: ToolDef[] = [
         throw new ProjectNotFoundError(projectName);
       }
 
-      if (project.status === 'building') {
+      // PR 4.5: canonical-first status read.
+      const deployable = context.appCtx.db.getDeployableForProject(project.id);
+      const projectStatus = deployable?.status ?? project.status;
+      if (projectStatus === 'building') {
         context.appCtx.docker.cancelBuild(project.id);
       }
 
@@ -90,26 +102,44 @@ export const projectOpsToolDefs: ToolDef[] = [
       }
 
       const projects = context.appCtx.db.listProjects();
+      // PR 4.5: batch-resolve deployables once so per-project mapping
+      // reads canonical-first with `??` fallback to the legacy `projects`
+      // columns through migration 0012.
+      const deployables = new Map<
+        string,
+        ReturnType<typeof context.appCtx.db.getDeployableForProject>
+      >();
+      for (const p of projects) {
+        deployables.set(p.id, context.appCtx.db.getDeployableForProject(p.id));
+      }
 
       if (context.target === 'mcp') {
         return {
           count: projects.length,
-          projects: projects.map((project) => ({
-            id: project.id,
-            name: project.name,
-            status: project.status,
-            visibility: project.visibility,
-            repoUrl: project.repo_url,
-            branch: project.branch,
-            port: project.assigned_port,
-            containerName: project.container_id ? projectContainerName(project.name) : null,
-            network: SHARED_NETWORK_NAME,
-            url: project.assigned_port ? getProjectUrl(project.name) : null,
-            urls: project.assigned_port ? getProjectUrls(project.name) : [],
-            publicUrl: project.public_url,
-            createdAt: project.created_at,
-            updatedAt: project.updated_at,
-          })),
+          projects: projects.map((project) => {
+            const deployable = deployables.get(project.id);
+            const status = deployable?.status ?? project.status;
+            const port = deployable?.assigned_port ?? project.assigned_port;
+            const containerId = deployable?.container_id ?? project.container_id;
+            const publicUrl = deployable?.public_url ?? project.public_url;
+            return {
+              id: project.id,
+              name: project.name,
+              status,
+              // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+              visibility: project.visibility,
+              repoUrl: project.repo_url,
+              branch: project.branch,
+              port,
+              containerName: containerId ? projectContainerName(project.name) : null,
+              network: SHARED_NETWORK_NAME,
+              url: port ? getProjectUrl(project.name) : null,
+              urls: port ? getProjectUrls(project.name) : [],
+              publicUrl,
+              createdAt: project.created_at,
+              updatedAt: project.updated_at,
+            };
+          }),
           _agent_guidance: {
             networking: [
               `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
@@ -122,16 +152,24 @@ export const projectOpsToolDefs: ToolDef[] = [
 
       return {
         count: projects.length,
-        projects: projects.map((project) => ({
-          name: project.name,
-          status: project.status,
-          visibility: project.visibility,
-          port: project.assigned_port,
-          containerName: project.container_id ? projectContainerName(project.name) : null,
-          url: project.assigned_port ? getProjectUrl(project.name) : null,
-          publicUrl: project.public_url,
-          repoUrl: project.repo_url,
-        })),
+        projects: projects.map((project) => {
+          const deployable = deployables.get(project.id);
+          const status = deployable?.status ?? project.status;
+          const port = deployable?.assigned_port ?? project.assigned_port;
+          const containerId = deployable?.container_id ?? project.container_id;
+          const publicUrl = deployable?.public_url ?? project.public_url;
+          return {
+            name: project.name,
+            status,
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+            visibility: project.visibility,
+            port,
+            containerName: containerId ? projectContainerName(project.name) : null,
+            url: port ? getProjectUrl(project.name) : null,
+            publicUrl,
+            repoUrl: project.repo_url,
+          };
+        }),
       };
     },
   },
@@ -150,17 +188,65 @@ export const projectOpsToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
+      // Fire-and-forget pre-check: surface archived/recovering/circuit-open
+      // immediately instead of stopping the project + returning a fake
+      // "restarting" success while the pipeline boundary silently rejects.
+      const policyRejection = tryRejectIfNotMutable(project, context);
+      if (policyRejection) {
+        return policyRejection;
+      }
 
-      await context.appCtx.pipeline.stop(project.id);
+      // 1.0 GA: acquire BEFORE stop so a lock-rejected restart does not leave
+      // the project in `stopped` state. Lock failure now keeps the container
+      // running and surfaces a typed `PROJECT_BUSY` response. Same lock then
+      // guards stop + redeploy together.
+      const restartSessionId = `mcp-restart-${nanoid(12)}`;
+      const memLockAcquired = context.appCtx.agentPool
+        ? context.appCtx.agentPool.acquireProjectLock(project.id, restartSessionId)
+        : true;
+      if (!memLockAcquired) {
+        const lock = context.appCtx.agentPool?.getProjectLock(project.id);
+        log.warn(
+          { projectId: project.id, lockedBy: lock?.sessionId },
+          'Restart skipped: project lock already held',
+        );
+        return {
+          status: 'rejected',
+          project: projectName,
+          reason: 'PROJECT_BUSY',
+          message: 'Another deploy is already in progress for this project.',
+        };
+      }
 
-      const release = await context.appCtx.deployQueue.acquire();
+      // Stop is now inside the same lock as the redeploy below. Run it
+      // synchronously (and release the lock if it fails) so we don't leave
+      // the project in the awkward "stopped, lock held, no redeploy" state.
+      try {
+        await context.appCtx.pipeline.stop(project.id);
+      } catch (err) {
+        context.appCtx.agentPool?.releaseProjectLock(project.id, restartSessionId);
+        throw err;
+      }
+
       void context.appCtx.pipeline
         .redeploy(project.id, { noCache })
         .catch((err: unknown) => {
+          if (
+            err instanceof ProjectArchivedError ||
+            err instanceof ProjectRecoveringError ||
+            err instanceof CircuitBreakerOpenError ||
+            err instanceof DeployLockedError
+          ) {
+            log.warn(
+              { err, projectId: project.id, code: err.code },
+              'Restart redeploy rejected mid-flight',
+            );
+            return;
+          }
           log.error({ err, projectId: project.id }, 'Restart redeploy failed');
         })
         .finally(() => {
-          release();
+          context.appCtx.agentPool?.releaseProjectLock(project.id, restartSessionId);
         });
 
       return {
@@ -217,6 +303,13 @@ export const projectOpsToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
+      // Fire-and-forget pre-check: surface archived/recovering/circuit-open
+      // immediately instead of returning a fake "redeploying" success while
+      // the pipeline boundary silently rejects in the background.
+      const policyRejection = tryRejectIfNotMutable(project, context);
+      if (policyRejection) {
+        return policyRejection;
+      }
       const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
       if (lockResult) {
         return lockResult;
@@ -233,6 +326,17 @@ export const projectOpsToolDefs: ToolDef[] = [
         .catch((err: unknown) => {
           if (err instanceof DeployLockedError) {
             log.warn({ err, projectId: project.id }, 'Redeploy skipped: project lock is held');
+            return;
+          }
+          if (
+            err instanceof ProjectArchivedError ||
+            err instanceof ProjectRecoveringError ||
+            err instanceof CircuitBreakerOpenError
+          ) {
+            log.warn(
+              { err, projectId: project.id, code: err.code },
+              'Redeploy rejected by mutation policy mid-flight',
+            );
             return;
           }
           log.error({ err, projectId: project.id }, 'Redeploy failed');
@@ -317,7 +421,10 @@ export const projectOpsToolDefs: ToolDef[] = [
         throw new ProjectNotFoundError(projectName);
       }
 
-      if (project.status === 'building') {
+      // PR 4.5: canonical-first status read.
+      const deployable = context.appCtx.db.getDeployableForProject(project.id);
+      const projectStatus = deployable?.status ?? project.status;
+      if (projectStatus === 'building') {
         context.appCtx.docker.cancelBuild(project.id);
       }
 

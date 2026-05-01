@@ -18,12 +18,36 @@ import { decisionEngine } from '../llm/decision.js';
 import type { PendingFixPatch } from './deploy/helpers.js';
 import { findMatchingPatterns, saveRecoveryPattern } from '../llm/memory.js';
 import type { ConfigurableRecoveryStep, RecoveryAutomationPolicy } from '../monitor/ops-types.js';
+import { withRecoveryStage } from '../monitor/recovery-policy.js';
+import { isLlmUnreachableError } from '../errors.js';
 
 const log = createModuleLogger('auto-recovery');
 
 const RECOVERY_OUTCOME_FALLBACK_TIMEOUT_MS = 300_000;
 const RECOVERY_OUTCOME_MAX_TIMEOUT_MS = 600_000;
 const RECOVERY_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * 1.0 GA — when the LLM provider is unreachable, hold off all LLM-driven
+ * recovery for this long before re-attempting. Prevents tight retry loops
+ * against an offline Ollama / OpenAI endpoint and gives the user time to
+ * restart the provider service. Per-process in-memory; resets on restart.
+ *
+ * 1.0.x backlog: persist via circuit-breaker DB row + emit
+ * `recovery:blocked` event for UI surface.
+ */
+const LLM_UNREACHABLE_COOLDOWN_MS = 30 * 60 * 1000;
+let llmUnreachableCooldownUntilMs = 0;
+
+/**
+ * Test-only helper: reset the in-memory LLM-unreachable cooldown so test
+ * cases don't leak state between runs. Production code should never call
+ * this — the cooldown is intentionally process-lifetime to throttle
+ * recovery against an offline LLM endpoint.
+ */
+export function resetLlmUnreachableCooldownForTests(): void {
+  llmUnreachableCooldownUntilMs = 0;
+}
 
 type RecoveryStrategy = 'recipe' | 'llm';
 
@@ -66,6 +90,15 @@ export interface SetupAutoRecoveryParams {
   config: OpenLanderConfig;
   shouldContinue?: (projectId: string) => boolean;
   getAutomationPolicy?: (projectId: string) => RecoveryAutomationPolicy | null;
+  /**
+   * Optional per-project lock provider. 1.0 GA replaces the global
+   * DeployQueue with `AgentPool.acquireProjectLock` so two different
+   * projects can recover in parallel. Recovery for the same project still
+   * serializes through this lock (and the pipeline boundary's
+   * `withDeployLock`).
+   */
+  acquireProjectLock?: (projectId: string, sessionId: string) => boolean;
+  releaseProjectLock?: (projectId: string, sessionId: string) => void;
 }
 
 export interface AutoRecoveryHandlers {
@@ -286,14 +319,24 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     config,
     shouldContinue: providedShouldContinue,
     getAutomationPolicy,
+    acquireProjectLock,
+    releaseProjectLock,
   } = params;
+  // `deployQueue` is retained for backward compatibility with the
+  // SetupAutoRecoveryParams shape — it's no longer the primary lock since
+  // 1.0 GA. The per-project `acquireProjectLock` parameter is preferred.
+  void deployQueue;
 
   const approvalGate = providedApprovalGate ?? new ApprovalGate();
   const shouldContinue =
     providedShouldContinue ??
     ((projectId: string) => {
       const project = db.getProject(projectId);
-      return Boolean(project && project.status === 'running' && !project.archived_at);
+      if (!project) return false;
+      // PR 4.5: canonical-first status read with `??` fallback.
+      const deployable = db.getDeployableForProject(projectId);
+      const status = deployable?.status ?? project.status;
+      return status === 'running' && !project.archived_at;
     });
 
   let recoveryChain = Promise.resolve();
@@ -353,12 +396,17 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     const normalizedError = normalizeError(error);
     const recoveryStartTime = Date.now();
 
-    let matchingPatterns: ReturnType<typeof findMatchingPatterns> = [];
-    try {
-      matchingPatterns = findMatchingPatterns(db, projectId, error);
-    } catch (patternErr) {
-      log.warn({ err: patternErr, projectId }, 'Failed to lookup recovery patterns');
-    }
+    // U-P0-9 — surface lookup failures via recovery:degraded so they're
+    // visible in metrics, not silently swallowed. Default fallback is empty
+    // matches so the rest of the pipeline proceeds with the LLM/recipe path.
+    const lookupResult = await withRecoveryStage(
+      'execute',
+      { events: eventBus, projectId, metadata: { phase: 'pattern-lookup' } },
+      () => Promise.resolve(findMatchingPatterns(db, projectId, error)),
+    );
+    const matchingPatterns: ReturnType<typeof findMatchingPatterns> = lookupResult.ok
+      ? lookupResult.value
+      : [];
 
     if (matchingPatterns.length > 0) {
       log.info(
@@ -378,12 +426,20 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     const fixActionStr = recipe
       ? JSON.stringify({ strategy, recipe: recipe.title })
       : JSON.stringify({ strategy });
+    // U-P0-10 — wrap save so persistence failures are surfaced via
+    // recovery:degraded rather than silently swallowed. Caller (success/fail
+    // branches below) is fire-and-forget by design.
     const trySavePattern = (success: boolean): void => {
-      try {
-        saveRecoveryPattern(db, projectId, error, fixActionStr, success, plan.category);
-      } catch (patternErr) {
-        log.warn({ err: patternErr, projectId }, 'Failed to save recovery pattern');
-      }
+      withRecoveryStage(
+        'execute',
+        { events: eventBus, projectId, metadata: { phase: 'pattern-save', success } },
+        () => {
+          saveRecoveryPattern(db, projectId, error, fixActionStr, success, plan.category);
+          return Promise.resolve();
+        },
+      ).catch((err: unknown) => {
+        log.error({ err, projectId }, 'unhandled rejection in trySavePattern');
+      });
     };
     const actionRunId = db.createActionRun({
       projectId,
@@ -404,7 +460,23 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     const project = db.getProject(projectId);
     const projectName = project?.name ?? projectId;
 
-    if (strategy === 'llm' && agent) {
+    // 1.0 GA: when the LLM cooldown window is active, force the recipe path
+    // so recovery still makes progress against an offline provider without
+    // tight retry loops. Falls through to the existing programmatic path
+    // below by short-circuiting the agent strategy.
+    const llmCooldownActive = Date.now() < llmUnreachableCooldownUntilMs;
+    if (strategy === 'llm' && agent && llmCooldownActive) {
+      const remainingMs = llmUnreachableCooldownUntilMs - Date.now();
+      log.warn(
+        { projectId, remainingMs },
+        'LLM provider in unreachable cooldown — skipping LLM recovery, falling back to programmatic path',
+      );
+      await emitTimelineMessage(
+        eventBus,
+        projectId,
+        `LLM provider is unreachable. Skipping AI recovery for ${String(Math.ceil(remainingMs / 60000))} more minute(s); falling back to recipe-based recovery.`,
+      );
+    } else if (strategy === 'llm' && agent) {
       await emitTimelineMessage(
         eventBus,
         projectId,
@@ -632,6 +704,29 @@ ${plan.agentGuidance}
 
         return;
       } catch (err) {
+        if (isLlmUnreachableError(err)) {
+          // 1.0 GA: open the LLM-unreachable cooldown so subsequent recovery
+          // attempts skip the LLM path until the provider is reachable
+          // again. Prevents the tight retry loop that crash-loops the host
+          // process under a supervisor when local Ollama / OpenAI is down.
+          llmUnreachableCooldownUntilMs = Date.now() + LLM_UNREACHABLE_COOLDOWN_MS;
+          log.warn(
+            { err, projectId, cooldownUntilMs: llmUnreachableCooldownUntilMs },
+            `LLM unreachable — opening ${String(LLM_UNREACHABLE_COOLDOWN_MS / 60000)}min cooldown, will retry after`,
+          );
+          db.updateActionRunStatus(
+            actionRunId,
+            'failed',
+            'LLM provider unreachable — cooldown opened',
+          );
+          await eventBus.emit('recovery:failed', {
+            projectId,
+            error: `LLM provider unreachable — recovery paused for ${String(LLM_UNREACHABLE_COOLDOWN_MS / 60000)} minutes. Restart the LLM provider (e.g. \`ollama serve\`) and recovery will resume.`,
+            attempt,
+            correlationId: projectId,
+          });
+          return;
+        }
         const errorMessage = err instanceof Error ? err.message : error;
         db.updateActionRunStatus(actionRunId, 'failed', errorMessage);
         log.error({ err, projectId }, 'Auto-recovery agent call failed');
@@ -716,7 +811,12 @@ ${plan.agentGuidance}
         const diagnosis = await buildDebugger.diagnose({
           buildLog: latestBuildLog,
           projectName,
-          imageTag: project?.image_tag ?? `openlander/${projectName}:latest`,
+          // PR 4.5: canonical-first read of image_tag with `??` fallback.
+          imageTag:
+            db.getDeployableForProject(projectId)?.image_tag ??
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+            project?.image_tag ??
+            `openlander/${projectName}:latest`,
           failedStep: mapFailStep(step),
         });
         await emitTimelineMessage(eventBus, projectId, `Debug summary: ${diagnosis.summary}`);
@@ -731,7 +831,28 @@ ${plan.agentGuidance}
         );
       }
 
-      const release = await deployQueue.acquire();
+      // 1.0 GA: per-project lock instead of global queue. If another
+      // session is already deploying this project (e.g. a manual user
+      // redeploy raced ahead) we surface that as a recovery failure rather
+      // than queue-waiting indefinitely.
+      const recoveryLockSession = `auto-recovery-${projectId}-${Date.now().toString(36)}`;
+      const memLockAcquired = acquireProjectLock
+        ? acquireProjectLock(projectId, recoveryLockSession)
+        : true;
+      if (!memLockAcquired) {
+        log.warn(
+          { projectId },
+          'Auto-recovery skipped: project lock already held by another session',
+        );
+        db.updateActionRunStatus(actionRunId, 'failed', 'Project lock already held');
+        await eventBus.emit('recovery:failed', {
+          projectId,
+          error: 'Project lock held by another session — recovery deferred',
+          attempt,
+        });
+        trySavePattern(false);
+        return;
+      }
       let redeploySuccess = false;
       let redeployError = error;
       try {
@@ -742,7 +863,9 @@ ${plan.agentGuidance}
         redeploySuccess = retryResult.success;
         redeployError = retryResult.error ?? error;
       } finally {
-        release();
+        if (releaseProjectLock) {
+          releaseProjectLock(projectId, recoveryLockSession);
+        }
       }
 
       const durationMs = Date.now() - recoveryStartTime;

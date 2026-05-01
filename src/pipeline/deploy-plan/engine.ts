@@ -30,7 +30,7 @@ import type { AutoDetector } from '../auto-detect.js';
 import type { OpenLanderConfig } from '../../config/index.js';
 import type { EventBus } from '../../events/index.js';
 import type { ComposePipeline } from '../compose.js';
-import { DeployLockedError } from '../../errors.js';
+import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
 
 const log = createModuleLogger('plan-engine');
 
@@ -187,6 +187,7 @@ export class PlanEngine {
             name: svc.name,
             dockerfile,
             port,
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             image: svc.image,
             depends_on: svc.dependsOn,
             command: svc.command,
@@ -365,8 +366,10 @@ export class PlanEngine {
   private buildAutoEnvVars(services: PlanService[]): Record<string, string> {
     const autoEnvVars: Record<string, string> = {};
     for (const service of services) {
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       const envVarName = SERVICE_ENV_VARS[service.type];
       if (envVarName) {
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
         autoEnvVars[envVarName] = `${service.type}://localhost`;
       }
     }
@@ -405,15 +408,19 @@ export class PlanEngine {
     const composeBuildServicesWithUrls = params.composeBuildServices?.map((service) => ({
       name: service.name,
       dockerfile: service.dockerfile,
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       port: service.port,
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       image: service.image,
       depends_on: service.depends_on,
       command: service.command,
       entrypoint: service.entrypoint,
       restart: service.restart,
       healthcheck: service.healthcheck,
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       internal_url: service.port
-        ? `http://${composeContainerName(params.projectName, service.name)}:${String(service.port)}`
+        ? // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+          `http://${composeContainerName(params.projectName, service.name)}:${String(service.port)}`
         : `http://${composeContainerName(params.projectName, service.name)}`,
     }));
 
@@ -797,11 +804,13 @@ export class PlanEngine {
 
     if (existingProject) {
       const lockSession = lockSessionId ?? `plan-${planId}`;
-      const locked = this.db.acquireDeployLock(existingProject.id, lockSession);
-      if (!locked) {
-        const lockInfo = this.db.getDeployLockInfo(existingProject.id);
-        throw new DeployLockedError(existingProject.id, lockInfo?.session ?? 'unknown');
-      }
+      // Release happens asynchronously in event listeners (deploy:success /
+      // deploy:failed / compose:up / compose:failed) via `safeReleaseDeployLock`,
+      // so we use the bare acquire helper instead of `withDeployLock`.
+      acquireDeployLockOrThrow(this.db, {
+        projectId: existingProject.id,
+        sessionId: lockSession,
+      });
       lockProjectId = existingProject.id;
     }
 
@@ -823,15 +832,19 @@ export class PlanEngine {
 
       for (const service of plan.services) {
         if (service.action === 'create') {
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           log.info({ serviceType: service.type }, 'Creating service');
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           const serviceName = service.name || `${service.type}-${String(Date.now())}`;
           const created = await this.serviceManager.create({
             name: serviceName,
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             template: service.type,
           });
           // Use created service's credentials for env injection
           if (created.credentials) {
             const creds = JSON.parse(created.credentials) as { connectionString?: string };
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             const envVarName = SERVICE_ENV_VARS[service.type];
             if (envVarName && creds.connectionString) {
               mergedEnv[envVarName] = creds.connectionString;

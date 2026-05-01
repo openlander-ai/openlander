@@ -53,21 +53,26 @@ export function AddProviderForm({ onSubmit, onCancel }: AddProviderFormProps) {
     <div className="rounded-xl border border-border bg-bg-subtle/40 p-5 space-y-5 relative overflow-hidden ring-1 ring-black/5 shadow-sm">
       <div className="absolute top-0 left-0 w-1 h-full bg-agent" />
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-primary-ol">
+        <h3 className="text-sm font-medium text-foreground">
           {t('llmSettings.addProvider') || 'Add Provider'}
         </h3>
-        <Button variant="ghost" size="sm" onClick={onCancel} className="h-8 text-xs text-muted-ol">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onCancel}
+          className="h-8 text-xs text-muted-foreground"
+        >
           {t('llmSettings.cancel') || 'Cancel'}
         </Button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
-          <p className="text-xs font-body text-muted-ol">
+          <p className="text-xs font-body text-muted-foreground">
             {t('llmSettings.provider') || 'Provider'}
           </p>
           <Select value={provider} onValueChange={handleProviderChange}>
-            <SelectTrigger className="w-full bg-bg-app border-border text-primary-ol">
+            <SelectTrigger className="w-full bg-bg-app border-border text-foreground">
               <SelectValue placeholder="Select provider" />
             </SelectTrigger>
             <SelectContent>
@@ -84,7 +89,9 @@ export function AddProviderForm({ onSubmit, onCancel }: AddProviderFormProps) {
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-xs font-body text-muted-ol">{t('llmSettings.apiKey') || 'API Key'}</p>
+          <p className="text-xs font-body text-muted-foreground">
+            {t('llmSettings.apiKey') || 'API Key'}
+          </p>
           <div className="relative">
             <Input
               type={showApiKey ? 'text' : 'password'}
@@ -97,7 +104,7 @@ export function AddProviderForm({ onSubmit, onCancel }: AddProviderFormProps) {
             <button
               type="button"
               onClick={() => setShowApiKey((prev) => !prev)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-ol hover:text-primary-ol flex items-center justify-center p-1 rounded-sm focus:outline-none focus:ring-1 focus:ring-agent"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground flex items-center justify-center p-1 rounded-sm focus:outline-none focus:ring-1 focus:ring-agent"
             >
               {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>

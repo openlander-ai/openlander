@@ -6,7 +6,9 @@ import { eventBus } from '../../events/index.js';
 
 export function createWebhookRoutes(ctx: AppContext): Hono {
   const api = new Hono();
-  const manager = new WebhookManager(ctx.pipeline, ctx.db, eventBus);
+  // 1.0 GA: webhook redeploys take the same per-project lock as UI / agent
+  // / MCP triggers via the AgentPool.
+  const manager = new WebhookManager(ctx.pipeline, ctx.db, eventBus, ctx.agentPool ?? undefined);
 
   api.post('/webhooks/:projectId/github', async (c) => {
     const projectId = c.req.param('projectId');

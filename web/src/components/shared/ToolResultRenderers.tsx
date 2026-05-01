@@ -55,7 +55,7 @@ export function DeployProjectResult({ result }: { result: unknown }) {
   return (
     <div className="mt-2 flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-primary-ol">
+        <span className="text-sm font-medium text-foreground">
           {typeof res.projectName === 'string' ? res.projectName : 'Unknown'}
         </span>
         {typeof res.status === 'string' && <StatusBadge status={res.status} />}
@@ -72,7 +72,7 @@ export function DeployProjectResult({ result }: { result: unknown }) {
         </a>
       )}
       {typeof res.port === 'number' && (
-        <div className="text-xs text-secondary-ol">Port: {res.port}</div>
+        <div className="text-xs text-foreground/80">Port: {res.port}</div>
       )}
     </div>
   );
@@ -87,7 +87,7 @@ export function DeployComposeResult({ result }: { result: unknown }) {
   return (
     <div className="mt-2 flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-primary-ol">
+        <span className="text-sm font-medium text-foreground">
           {typeof res.parentName === 'string' ? res.parentName : 'Compose Project'}
         </span>
         {typeof res.success === 'boolean' && (
@@ -97,7 +97,7 @@ export function DeployComposeResult({ result }: { result: unknown }) {
       {services.length > 0 && (
         <div className="mt-1 border border-border rounded-md overflow-hidden">
           <table className="w-full text-left text-xs">
-            <thead className="bg-bg-subtle text-secondary-ol">
+            <thead className="bg-bg-subtle text-foreground/80">
               <tr>
                 <th className="px-3 py-1.5 font-medium">Service</th>
                 <th className="px-3 py-1.5 font-medium">Container</th>
@@ -122,9 +122,11 @@ export function DeployComposeResult({ result }: { result: unknown }) {
                   : [];
 
                 return (
-                  <tr key={i} className="text-primary-ol">
+                  <tr key={i} className="text-foreground">
                     <td className="px-3 py-1.5">{name}</td>
-                    <td className="px-3 py-1.5 font-mono text-xs text-muted-ol">{container}</td>
+                    <td className="px-3 py-1.5 font-mono text-xs text-muted-foreground">
+                      {container}
+                    </td>
                     <td className="px-3 py-1.5">
                       {status ? <StatusBadge status={status} /> : '-'}
                     </td>
@@ -149,7 +151,7 @@ export function RollbackProjectResult({ result }: { result: unknown }) {
   return (
     <div className="mt-2 flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-primary-ol">
+        <span className="text-sm font-medium text-foreground">
           {typeof res.projectName === 'string' ? res.projectName : 'Unknown'}
         </span>
         {typeof res.success === 'boolean' && (
@@ -157,18 +159,18 @@ export function RollbackProjectResult({ result }: { result: unknown }) {
         )}
       </div>
 
-      <div className="flex items-center gap-2 text-xs text-secondary-ol bg-bg-app/50 p-2 rounded-md border border-border/50">
+      <div className="flex items-center gap-2 text-xs text-foreground/80 bg-bg-app/50 p-2 rounded-md border border-border/50">
         <div className="flex flex-col">
-          <span className="text-xs uppercase tracking-wider text-muted-ol">From</span>
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">From</span>
           <span className="font-mono text-error/80">
             {typeof res.previousImageTag === 'string'
               ? res.previousImageTag.slice(0, 7)
               : 'unknown'}
           </span>
         </div>
-        <span className="text-muted-ol">→</span>
+        <span className="text-muted-foreground">→</span>
         <div className="flex flex-col">
-          <span className="text-xs uppercase tracking-wider text-muted-ol">To</span>
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">To</span>
           <span className="font-mono text-success/80">
             {typeof res.commitSha === 'string' ? res.commitSha.slice(0, 7) : 'unknown'}
           </span>
@@ -201,7 +203,7 @@ export function FixDockerfileResult({ result }: { result: unknown }) {
   return (
     <div className="mt-2 flex flex-col gap-3">
       {typeof res.explanation === 'string' && (
-        <p className="text-sm font-body text-primary-ol leading-relaxed">{res.explanation}</p>
+        <p className="text-sm font-body text-foreground leading-relaxed">{res.explanation}</p>
       )}
 
       {changes.length > 0 && (
@@ -209,7 +211,7 @@ export function FixDockerfileResult({ result }: { result: unknown }) {
           <p className="text-xs font-mono text-agent/80 uppercase tracking-wider">Changes</p>
           <ul className="space-y-1">
             {changes.map((change: unknown, i: number) => (
-              <li key={i} className="text-xs text-secondary-ol flex items-start gap-1.5">
+              <li key={i} className="text-xs text-foreground/80 flex items-start gap-1.5">
                 <span className="text-agent mt-0.5">•</span>
                 <span>{String(change)}</span>
               </li>
@@ -251,7 +253,7 @@ export function FixDockerfileResult({ result }: { result: unknown }) {
           <summary className="text-xs font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
             View Dockerfile ▾
           </summary>
-          <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+          <pre className="mt-1.5 text-xs font-mono text-muted-foreground bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
             {res.dockerfileContent}
           </pre>
         </details>
@@ -270,7 +272,7 @@ export function ListProjectsResult({ result }: { result: unknown }) {
     <div className="mt-2">
       <div className="border border-border rounded-md overflow-hidden">
         <table className="w-full text-left text-xs">
-          <thead className="bg-bg-subtle text-secondary-ol">
+          <thead className="bg-bg-subtle text-foreground/80">
             <tr>
               <th className="px-3 py-1.5 font-medium">Name</th>
               <th className="px-3 py-1.5 font-medium">Status</th>
@@ -293,7 +295,7 @@ export function ListProjectsResult({ result }: { result: unknown }) {
               const url = typeof proj.url === 'string' ? proj.url : null;
 
               return (
-                <tr key={i} className="text-primary-ol">
+                <tr key={i} className="text-foreground">
                   <td className="px-3 py-1.5">{name}</td>
                   <td className="px-3 py-1.5">{status ? <StatusBadge status={status} /> : '-'}</td>
                   <td className="px-3 py-1.5">
@@ -317,7 +319,7 @@ export function ListProjectsResult({ result }: { result: unknown }) {
         </table>
       </div>
       {remaining > 0 && (
-        <div className="mt-1.5 text-xs text-secondary-ol text-center">
+        <div className="mt-1.5 text-xs text-foreground/80 text-center">
           +{remaining} more projects
         </div>
       )}
@@ -343,7 +345,7 @@ export function GetLogsResult({ result }: { result: unknown }) {
       <summary className="text-xs font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
         View logs ▾
       </summary>
-      <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+      <pre className="mt-1.5 text-xs font-mono text-muted-foreground bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
         {displayLogs}
       </pre>
     </details>
@@ -361,14 +363,14 @@ export function StatBar({
 }) {
   return (
     <div className="flex items-center gap-3 text-xs">
-      <span className="w-12 text-secondary-ol">{label}</span>
+      <span className="w-12 text-foreground/80">{label}</span>
       <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
         <div
           className={cn('h-full rounded-full', colorClass)}
           style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
         />
       </div>
-      <span className="w-8 text-right text-primary-ol font-mono">{Math.round(percent)}%</span>
+      <span className="w-8 text-right text-foreground font-mono">{Math.round(percent)}%</span>
     </div>
   );
 }
@@ -404,20 +406,20 @@ export function SetEnvVarsResult({ result }: { result: unknown }) {
   }
 
   if (keys.length === 0) {
-    return <div className="mt-2 text-xs text-secondary-ol">Environment variables updated.</div>;
+    return <div className="mt-2 text-xs text-foreground/80">Environment variables updated.</div>;
   }
 
   return (
     <div className="mt-2">
-      <div className="text-xs text-secondary-ol mb-1.5">Updated keys:</div>
+      <div className="text-xs text-foreground/80 mb-1.5">Updated keys:</div>
       <div className="flex flex-wrap gap-1.5">
         {keys.map((key, i) => (
           <div
             key={i}
-            className="px-2 py-1 rounded bg-bg-subtle border border-border text-xs font-mono text-primary-ol flex items-center gap-1.5"
+            className="px-2 py-1 rounded bg-bg-subtle border border-border text-xs font-mono text-foreground flex items-center gap-1.5"
           >
             <span>{key}</span>
-            <span className="text-muted-ol">***</span>
+            <span className="text-muted-foreground">***</span>
           </div>
         ))}
       </div>
@@ -432,7 +434,7 @@ export function FallbackResult({ result }: { result: unknown }) {
       <summary className="text-xs font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
         View result ▾
       </summary>
-      <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+      <pre className="mt-1.5 text-xs font-mono text-muted-foreground bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
         {JSON.stringify(masked, null, 2)}
       </pre>
     </details>

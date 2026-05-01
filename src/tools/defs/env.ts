@@ -1,6 +1,11 @@
 import type { ToolDef } from './types.js';
 import { getProjectByName, getProductionEnvironmentId } from './helpers.js';
 import {
+  CircuitBreakerOpenError,
+  ProjectArchivedError,
+  ProjectRecoveringError,
+} from '../../errors.js';
+import {
   getEnvVarSchema,
   listEnvVarsSchema,
   listGlobalSecretsSchema,
@@ -74,12 +79,44 @@ export const envToolDefs: ToolDef[] = [
         };
       }
 
-      if (changed && project.status === 'running') {
-        const release = await appCtx.deployQueue.acquire();
+      // PR 4.5: canonical-first status read.
+      const setEnvDeployable = appCtx.db.getDeployableForProject(project.id);
+      const setEnvStatus = setEnvDeployable?.status ?? project.status;
+      if (changed && setEnvStatus === 'running') {
+        // 1.0 GA: per-project lock instead of global DeployQueue.
+        const envSessionId = `mcp-set-env-${project.id}-${Date.now().toString(36)}`;
+        const memLockAcquired = appCtx.agentPool
+          ? appCtx.agentPool.acquireProjectLock(project.id, envSessionId)
+          : true;
+        if (!memLockAcquired) {
+          const lock = appCtx.agentPool?.getProjectLock(project.id);
+          return {
+            status: 'updated_redeploy_skipped',
+            project: projectName,
+            keys: Object.keys(vars),
+            reason: 'PROJECT_BUSY',
+            message: `Env vars saved but redeploy was skipped: another deploy is in progress (session ${lock?.sessionId ?? 'unknown'}).`,
+          };
+        }
         try {
           await appCtx.pipeline.redeploy(project.id);
+        } catch (err) {
+          if (
+            err instanceof ProjectArchivedError ||
+            err instanceof ProjectRecoveringError ||
+            err instanceof CircuitBreakerOpenError
+          ) {
+            return {
+              status: 'updated_redeploy_skipped',
+              project: projectName,
+              keys: Object.keys(vars),
+              reason: err.code,
+              message: `Env vars saved but redeploy was skipped: ${err.message}`,
+            };
+          }
+          throw err;
         } finally {
-          release();
+          appCtx.agentPool?.releaseProjectLock(project.id, envSessionId);
         }
         return {
           status: 'updated_and_redeployed',
@@ -142,11 +179,14 @@ export const envToolDefs: ToolDef[] = [
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
       const project = getProjectByName(appCtx, projectName);
-      if (!project.assigned_port) {
+      // PR 4.5: canonical-first port read.
+      const exposeDeployable = appCtx.db.getDeployableForProject(project.id);
+      const exposePort = exposeDeployable?.assigned_port ?? project.assigned_port;
+      if (!exposePort) {
         throw new Error('Project is not running — deploy it first');
       }
 
-      const url = await appCtx.pipeline.exposeTunnel(project.id, project.assigned_port);
+      const url = await appCtx.pipeline.exposeTunnel(project.id, exposePort);
       return {
         status: 'exposed',
         project: projectName,

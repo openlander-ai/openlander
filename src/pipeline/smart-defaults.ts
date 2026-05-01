@@ -131,7 +131,7 @@ export function generateSmartDefaults(
   );
 
   // 1. Port reuse suggestion
-  const portSuggestion = suggestPort(previousProject);
+  const portSuggestion = suggestPort(db, previousProject);
   if (portSuggestion) {
     suggestions.push(portSuggestion);
   }
@@ -143,7 +143,7 @@ export function generateSmartDefaults(
   }
 
   // 3. Git clone reuse (project still exists → git pull instead)
-  const cloneSuggestion = suggestCloneReuse(previousProject);
+  const cloneSuggestion = suggestCloneReuse(db, previousProject);
   if (cloneSuggestion) {
     suggestions.push(cloneSuggestion);
   }
@@ -197,14 +197,17 @@ function normalizeUrl(url: string): string {
 }
 
 /** Suggest reusing the previous port assignment. */
-function suggestPort(project: ProjectRow): SmartDefault | null {
-  if (project.assigned_port == null) return null;
+function suggestPort(db: Database, project: ProjectRow): SmartDefault | null {
+  // PR 4.5: canonical-first read of assigned_port with `??` fallback.
+  const deployable = db.getDeployableForProject(project.id);
+  const assignedPort = deployable?.assigned_port ?? project.assigned_port;
+  if (assignedPort == null) return null;
 
   return {
-    label: `Keep port ${String(project.assigned_port)}`,
+    label: `Keep port ${String(assignedPort)}`,
     description: `Reuse the same port as previous deployment`,
     category: 'port',
-    data: { port: project.assigned_port },
+    data: { port: assignedPort },
   };
 }
 
@@ -234,10 +237,15 @@ function suggestEnvVars(db: Database, project: ProjectRow): SmartDefault | null 
  * Suggest git pull instead of fresh clone if the project already exists.
  * Only applicable when the project is in a non-error state and has a container.
  */
-function suggestCloneReuse(project: ProjectRow): SmartDefault | null {
+function suggestCloneReuse(db: Database, project: ProjectRow): SmartDefault | null {
+  // PR 4.5: canonical-first reads with `??` fallback.
+  const deployable = db.getDeployableForProject(project.id);
+  const status = deployable?.status ?? project.status;
+  const containerId = deployable?.container_id ?? project.container_id;
+
   // Only suggest reuse if the project exists and has been deployed before
-  if (project.status === 'error') return null;
-  if (!project.container_id && project.status !== 'stopped') return null;
+  if (status === 'error') return null;
+  if (!containerId && status !== 'stopped') return null;
 
   return {
     label: 'Run git pull only',

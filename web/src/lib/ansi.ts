@@ -158,7 +158,7 @@ function syntaxHighlightHTML(html: string): string {
   res = res.replace(
     /(?<!\d)(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)(?::\d{1,5})?(?!\d)/g,
     (match) => {
-      return `<span class="text-muted-ol/60">${match}</span>`;
+      return `<span class="text-muted-foreground/60">${match}</span>`;
     },
   );
 
@@ -194,14 +194,14 @@ function syntaxHighlightHTML(html: string): string {
   // Highlight URL paths inside HTTP requests (e.g. GET /api/v1/feed HTTP/1.1)
   res = res.replace(
     /(\s)(\/[^\s"&]+)(\sHTTP\/(?:1\.1|2|3|\d(?:\.\d)?))/gi,
-    '$1<span class="text-primary-ol/60 italic">$2</span>$3',
+    '$1<span class="text-foreground/60 italic">$2</span>$3',
   );
 
   // Highlight Log Levels (INFO, ERROR, WARN, DEBUG)
   res = res.replace(/(?<=\b|\[)(INFO|ERROR|WARN|WARNING|DEBUG|TRACE)(?=\]|:|\s)/g, (match) => {
     switch (match) {
       case 'INFO':
-        return '<span class="text-secondary-ol font-medium">INFO</span>';
+        return '<span class="text-foreground/80 font-medium">INFO</span>';
       case 'ERROR':
         return '<span class="text-error font-medium">ERROR</span>';
       case 'WARN':
@@ -209,7 +209,7 @@ function syntaxHighlightHTML(html: string): string {
         return '<span class="text-warning font-medium">' + match + '</span>';
       case 'DEBUG':
       case 'TRACE':
-        return '<span class="text-muted-ol">' + match + '</span>';
+        return '<span class="text-muted-foreground">' + match + '</span>';
       default:
         return match;
     }

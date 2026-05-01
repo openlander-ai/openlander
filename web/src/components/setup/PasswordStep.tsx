@@ -14,12 +14,17 @@ export function PasswordStep({ onNext, onBack }: PasswordStepProps) {
   const { t } = useLanguage();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [setupSecret, setSetupSecret] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    if (!setupSecret.trim()) {
+      setError(t('setup.password.secretEmpty'));
+      return;
+    }
     if (password !== confirm) {
       setError(t('setup.password.mismatch'));
       return;
@@ -30,7 +35,7 @@ export function PasswordStep({ onNext, onBack }: PasswordStepProps) {
     }
     setSaving(true);
     try {
-      await setupPassword(password);
+      await setupPassword(password, setupSecret.trim());
       onNext();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to set password');
@@ -46,21 +51,33 @@ export function PasswordStep({ onNext, onBack }: PasswordStepProps) {
           <Lock className="h-8 w-8 text-agent" />
         </div>
         <div className="space-y-2">
-          <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
+          <h2 className="font-display text-2xl font-bold text-foreground tracking-tight">
             {t('setup.password.title')}
           </h2>
-          <p className="text-sm font-body text-secondary-ol">{t('setup.password.subtitle')}</p>
+          <p className="text-sm font-body text-foreground/80">{t('setup.password.subtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 text-left">
           <div className="space-y-2">
+            <Input
+              type="text"
+              placeholder={t('setup.password.secretPlaceholder')}
+              value={setupSecret}
+              onChange={(e) => setSetupSecret(e.target.value)}
+              className="bg-bg-panel border-border font-mono"
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <p className="text-xs font-body text-muted-foreground">
+              {t('setup.password.secretHint')}
+            </p>
             <Input
               type="password"
               placeholder={t('setup.password.placeholder')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="bg-bg-panel border-border"
-              autoFocus
             />
             <Input
               type="password"
@@ -79,7 +96,7 @@ export function PasswordStep({ onNext, onBack }: PasswordStepProps) {
             </Button>
             <Button
               type="submit"
-              disabled={saving || !password || !confirm}
+              disabled={saving || !password || !confirm || !setupSecret.trim()}
               className="flex-1 bg-agent hover:bg-agent/90 text-white font-body"
             >
               {saving ? t('setup.password.saving') : t('setup.password.submit')}

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/auth';
+import { useLanguage } from '@/i18n/context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -10,6 +11,7 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -29,16 +31,16 @@ export function LoginPage() {
     <div className="flex h-screen items-center justify-center bg-bg-app">
       <div className="w-full max-w-sm space-y-6 px-4">
         <div className="text-center space-y-2">
-          <h1 className="font-display text-3xl font-bold text-primary-ol tracking-tight">
+          <h1 className="font-display text-3xl font-bold text-foreground tracking-tight">
             OpenLander
           </h1>
-          <p className="text-sm font-body text-secondary-ol">Sign in to continue</p>
+          <p className="text-sm font-body text-foreground/80">{t('login.signInPrompt')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             type="password"
-            placeholder="Password"
+            placeholder={t('login.password')}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoFocus
@@ -56,7 +58,7 @@ export function LoginPage() {
             disabled={loading || !password}
             className="w-full bg-agent hover:bg-agent/90 text-white font-body"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? t('login.signingIn') : t('login.signIn')}
           </Button>
         </form>
       </div>

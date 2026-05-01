@@ -1,5 +1,10 @@
 # Recovery Architecture Redesign
 
+> **⚠ Historical — frozen 2026-04-23 (pre-1.0 launch).**
+> This file captures the redesign plan at the time of writing and may diverge from the shipped 1.0.
+> Current state: `docs/RELEASE-NOTES-1.0.md`, `docs/wiki/AI-Auto-Recovery.md`, `docs/architecture/deploy-lock-and-mutation-policy-2026-04-21.md`.
+> Kept in place because `docs/postmortem/2026-04-06-infinite-llm-loop.md` and other docs still link here.
+
 > **상태**: ✅ 구현 완료 (2026-04-15). Phase 1a, 1b 모두 구현됨. Phase 2 일부 진행 중.
 >
 > 2026-04-06 사고 대응 + 구조적 재설계.

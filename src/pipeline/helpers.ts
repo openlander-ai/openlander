@@ -47,7 +47,11 @@ export function collectKnownContainerNames<TEnvironment extends { container_id: 
   const knownNames = new Set<string>();
 
   for (const project of projects) {
-    if (project.container_id) knownIds.add(project.container_id);
+    // PR 4.5: per param shape, `container_id` here is supplied by callers
+    // and may originate from either the (legacy) projects column or a
+    // canonical lookup. We just dedupe whatever the caller provides.
+    const projectContainerId = project.container_id ?? null;
+    if (projectContainerId) knownIds.add(projectContainerId);
     knownNames.add(containerName(project.name));
     knownNames.add(containerName(`${project.name}-green`));
     knownNames.add(containerName(`${project.name}-blue`));

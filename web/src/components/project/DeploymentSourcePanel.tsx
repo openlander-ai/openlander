@@ -76,24 +76,24 @@ export function DeploymentSourcePanel({ projectId }: DeploymentSourcePanelProps)
       <div className="space-y-4 p-4">
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-4">
           <div className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4 text-muted-ol" />
-            <span className="text-sm font-display font-semibold text-primary-ol">
+            <GitBranch className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-display font-semibold text-foreground">
               Git Repository
             </span>
           </div>
           <div className="space-y-2">
             <div>
-              <label className="text-xs font-body text-secondary-ol">Repository URL</label>
-              <div className="text-sm font-mono text-primary-ol mt-1">{project.repoUrl}</div>
+              <label className="text-xs font-body text-foreground/80">Repository URL</label>
+              <div className="text-sm font-mono text-foreground mt-1">{project.repoUrl}</div>
             </div>
             {project.branch && (
               <div>
-                <label className="text-xs font-body text-secondary-ol">Branch</label>
-                <div className="text-sm font-mono text-primary-ol mt-1">{project.branch}</div>
+                <label className="text-xs font-body text-foreground/80">Branch</label>
+                <div className="text-sm font-mono text-foreground mt-1">{project.branch}</div>
               </div>
             )}
           </div>
-          <p className="text-xs font-body text-muted-ol">
+          <p className="text-xs font-body text-muted-foreground">
             Git repository settings cannot be changed after project creation.
           </p>
         </div>
@@ -105,13 +105,13 @@ export function DeploymentSourcePanel({ projectId }: DeploymentSourcePanelProps)
     <div className="space-y-4 p-4">
       <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-4">
         <div className="flex items-center gap-2">
-          <Box className="h-4 w-4 text-muted-ol" />
-          <span className="text-sm font-display font-semibold text-primary-ol">Docker Image</span>
+          <Box className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-display font-semibold text-foreground">Docker Image</span>
         </div>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-body font-medium text-secondary-ol">Image URL</label>
+            <label className="text-xs font-body font-medium text-foreground/80">Image URL</label>
             <Input
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
@@ -121,7 +121,7 @@ export function DeploymentSourcePanel({ projectId }: DeploymentSourcePanelProps)
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-body font-medium text-secondary-ol">
+            <label className="text-xs font-body font-medium text-foreground/80">
               Container Port
             </label>
             <Input
@@ -131,13 +131,13 @@ export function DeploymentSourcePanel({ projectId }: DeploymentSourcePanelProps)
               placeholder="e.g., 80, 3000, 8080"
               className="font-mono text-sm"
             />
-            <p className="text-xs font-body text-muted-ol">
+            <p className="text-xs font-body text-muted-foreground">
               The port your application listens on inside the container.
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-body font-medium text-secondary-ol">
+            <label className="text-xs font-body font-medium text-foreground/80">
               Command (Optional)
             </label>
             <Input
@@ -146,7 +146,7 @@ export function DeploymentSourcePanel({ projectId }: DeploymentSourcePanelProps)
               placeholder="e.g., npm start"
               className="font-mono text-sm"
             />
-            <p className="text-xs font-body text-muted-ol">
+            <p className="text-xs font-body text-muted-foreground">
               Override the default command. Space-separated arguments.
             </p>
           </div>

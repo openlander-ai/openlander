@@ -45,6 +45,28 @@ export interface InfrastructureAnalysisResult {
 }
 
 /**
+ * Map canonical `services.kind` (post-0012 taxonomy) to the legacy
+ * `DetectedServiceType` enum used by infra-need matching. The legacy
+ * enum carries the IANA-style names (postgresql, mongodb) that show up
+ * in DATABASE_URL / connection-string heuristics; the canonical kinds
+ * use shorter forms (postgres, mongo). Returns null for kinds that
+ * cannot satisfy any infra need (git/image/compose deployables).
+ */
+function kindToDetectedType(kind: string | null | undefined): DetectedServiceType | null {
+  switch (kind) {
+    case 'postgres':
+      return 'postgresql';
+    case 'mongo':
+      return 'mongodb';
+    case 'mysql':
+    case 'redis':
+      return kind;
+    default:
+      return null;
+  }
+}
+
+/**
  * Dependency patterns to detect service needs from package.json.
  * Maps package names to service types.
  * Exact list from plan: pg, mysql2, ioredis, redis, mongoose, mongodb, @prisma/client, typeorm, drizzle-orm, sequelize
@@ -284,12 +306,24 @@ export function analyzeInfrastructure(
     needs.push({ type, detectedFrom });
   }
 
-  // Cross-reference with existing services
-  const existingTypes = new Set(existingServices.map((s) => s.type as DetectedServiceType));
+  // Cross-reference with existing services. Post-0012 the legacy
+  // services.type column is dropped — `kind` is the canonical taxonomy.
+  // Map canonical kind → DetectedServiceType so reuse detection still
+  // matches infra needs (DATABASE_URL → postgresql, REDIS_URL → redis,
+  // etc.). `git`/`image`/`compose`/`compose-child` kinds are non-managed
+  // deployables and never satisfy infra needs, so map → null and filter.
+  const existingTypes = new Set(
+    existingServices
+      .map((s) => kindToDetectedType(s.kind))
+      .filter((t): t is DetectedServiceType => t !== null),
+  );
   const available: AvailableService[] = existingServices
-    .filter((s) => detectedTypes.has(s.type as DetectedServiceType))
+    .filter((s) => {
+      const dt = kindToDetectedType(s.kind);
+      return dt !== null && detectedTypes.has(dt);
+    })
     .map((s) => ({
-      type: s.type as DetectedServiceType,
+      type: kindToDetectedType(s.kind) as DetectedServiceType,
       name: s.name,
       id: s.id,
     }));

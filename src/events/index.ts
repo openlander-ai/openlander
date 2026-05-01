@@ -86,6 +86,7 @@ export type EventType =
   | 'ai:usage'
   | 'health:degraded'
   | 'recovery:blocked'
+  | 'recovery:degraded'
   | 'recovery:stopped'
   | 'recovery:started'
   | 'recovery:start'
@@ -98,7 +99,11 @@ export type EventType =
   | 'env:new-keys-detected'
   | 'rollback:suggested'
   | 'secret:detected'
-  | 'deploy:diff-analyzed';
+  | 'deploy:diff-analyzed'
+  // Day 9 F5: webhook gracefully skipped due to project policy
+  // (archived / recovering / circuit-open). Surfaces in the activity
+  // feed so operators stop seeing silent push events.
+  | 'webhook:skipped';
 
 export interface EventPayload {
   'deploy:start': {
@@ -174,6 +179,13 @@ export interface EventPayload {
     /** Deploy lock session ID — enables session-scoped lock release in event handlers. */
     sessionId?: string;
     serverId?: string;
+    /**
+     * 16-key ErrorClass union value, populated by `classifyDeployError`
+     * in the orchestrator catch path. Surfaces on the SSE terminal
+     * `event: end` payload so the LogViewer ErrorSurface can render the
+     * v4 narrative-specific copy. Phase E_NEW.
+     */
+    errorClass?: string;
   };
   'deploy:needs-user-action': {
     projectId: string;
@@ -228,7 +240,14 @@ export interface EventPayload {
       success: boolean;
       services: Array<{
         name: string;
-        status: 'deployed' | 'failed' | 'rolled_back' | 'skipped';
+        status:
+          | 'deployed'
+          | 'failed'
+          | 'rolled_back'
+          | 'skipped'
+          | 'rollback_skipped'
+          | 'rollback_failed_due_to_policy'
+          | 'rollback_failed';
         projectId?: string;
         url?: string;
         error?: string;
@@ -336,6 +355,13 @@ export interface EventPayload {
     reason: string;
     serverId?: string;
   };
+  'recovery:degraded': {
+    projectId: string;
+    stage: 'enqueue' | 'transition' | 'emit' | 'execute';
+    reason: string;
+    metadata?: Record<string, unknown>;
+    serverId?: string;
+  };
   'recovery:stopped': {
     projectId: string;
     reason: string;
@@ -435,6 +461,15 @@ export interface EventPayload {
     envTemplateChanged: boolean;
     dockerChanged: boolean;
     depsChanged: boolean;
+  };
+  'webhook:skipped': {
+    projectId: string;
+    /** Why the deploy was skipped — one of the policy boundary errors. */
+    reason: 'archived' | 'recovering' | 'circuit_broken';
+    /** Webhook source ('github' | 'gitlab' | 'bitbucket'). */
+    source: 'github' | 'gitlab' | 'bitbucket';
+    /** Optional human-readable detail (e.g., the underlying error message). */
+    message?: string;
   };
 }
 

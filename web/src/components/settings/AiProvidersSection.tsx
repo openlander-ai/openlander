@@ -146,8 +146,8 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
     <>
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
-          <Key className="h-4 w-4 text-secondary-ol" />
-          <h2 className="font-display text-sm font-semibold text-primary-ol">
+          <Key className="h-4 w-4 text-foreground/80" />
+          <h2 className="font-display text-sm font-semibold text-foreground">
             {t('llmSettings.title') || 'LLM Providers'}
           </h2>
         </div>
@@ -173,7 +173,7 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
             <div className="bg-bg-panel p-3 rounded-full shadow-sm border border-border mb-4">
               <Bot className="h-6 w-6 text-agent/70" />
             </div>
-            <h3 className="mb-4 font-display text-sm font-medium text-primary-ol">
+            <h3 className="mb-4 font-display text-sm font-medium text-foreground">
               {t('llmSettings.noProviders') || 'No AI Providers Configured'}
             </h3>
             <Button
@@ -200,7 +200,7 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
           {providers.length > 0 && !showAddForm && (
             <Button
               variant="outline"
-              className="w-full border-dashed gap-2 text-muted-ol hover:text-primary-ol transition-colors"
+              className="w-full border-dashed gap-2 text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setShowAddForm(true)}
             >
               <Plus className="h-4 w-4" />
@@ -218,7 +218,7 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
             <div className="w-full border-t border-border" />
           </div>
           <div className="relative flex justify-center mb-6">
-            <span className="bg-bg-panel px-3 text-xs font-semibold text-muted-ol uppercase tracking-wider">
+            <span className="bg-bg-panel px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               {t('llmSettings.oauthTitle') || 'OAuth Providers'}
             </span>
           </div>
@@ -270,7 +270,7 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
           </DialogHeader>
           {alternativeProviders.length > 0 ? (
             <div className="space-y-3">
-              <p className="text-sm text-muted-ol">
+              <p className="text-sm text-muted-foreground">
                 {t('llmSettings.selectReplacementProvider') || 'Select a new default provider'}
               </p>
               <Select value={replacementProviderId} onValueChange={setReplacementProviderId}>
@@ -291,7 +291,7 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
               </Select>
             </div>
           ) : (
-            <p className="text-sm text-muted-ol">
+            <p className="text-sm text-muted-foreground">
               {t('llmSettings.noAlternativeProviders') ||
                 'No other providers are available to become the default.'}
             </p>
