@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { serviceMetrics } from '../schema.drizzle.js';
@@ -77,6 +77,23 @@ export class ServiceMetricRepo {
       .limit(1)
       .get();
     return row !== undefined;
+  }
+
+  /**
+   * Latest CPU/mem sample for a service, used by the topology cold
+   * path so /api/projects/:id (and the project list) doesn't have to
+   * fan out one Docker stats RPC per service node. Returns null when
+   * no samples exist.
+   */
+  getLatestSample(serviceId: string): ServiceMetricRow | null {
+    const row = this.db
+      .select()
+      .from(serviceMetrics)
+      .where(eq(serviceMetrics.service_id, serviceId))
+      .orderBy(desc(serviceMetrics.recorded_at))
+      .limit(1)
+      .get();
+    return row ?? null;
   }
 
   /**

@@ -114,6 +114,8 @@ export function __test_resetTopologyNodeCache(): void {
 }
 
 interface TopologyNode {
+  /** Service id used as the service_metrics lookup key. */
+  id: string;
   container_id: string | null;
   status: string | null;
 }
@@ -187,43 +189,35 @@ function registerTopologyCacheInvalidation(ctx: AppContext): void {
   });
 }
 
+/** Service-metrics rows older than this are treated as stale and the
+ *  display falls back to '—'. Matches the monitor's polling cadence
+ *  (sample every 30s, two missed samples ⇒ stale). */
+const TOPOLOGY_METRIC_FRESHNESS_MS = 90_000;
+
 async function fetchTopologyNodeRuntime(
-  ctx: Pick<AppContext, 'docker'>,
+  ctx: Pick<AppContext, 'docker' | 'db'>,
   node: TopologyNode,
 ): Promise<TopologyNodeRuntime> {
   let cpuDisplay = '—';
   let memDisplay = '—';
 
+  // Pull cpu/mem from `service_metrics` instead of fanning out a
+  // Docker stats RPC per node on every cold load. The recorder hook
+  // (ServiceHealthMonitor.runServiceCheck) populates this table on
+  // every poll, so a fresh row is the same number Docker would give
+  // us — minus the per-node 1-2s socket round trip that previously
+  // dominated /api/projects topology fan-out.
   if (node.container_id && node.status === 'running') {
-    try {
-      const rawStats = (await ctx.docker.getContainerStats(node.container_id)) as {
-        cpu_stats: {
-          cpu_usage: { total_usage: number; percpu_usage?: number[] };
-          system_cpu_usage: number;
-          online_cpus?: number;
-        };
-        precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
-        memory_stats: { usage?: number; limit?: number };
-      };
-
-      const cpuDelta =
-        rawStats.cpu_stats.cpu_usage.total_usage - rawStats.precpu_stats.cpu_usage.total_usage;
-      const systemDelta =
-        rawStats.cpu_stats.system_cpu_usage - rawStats.precpu_stats.system_cpu_usage;
-      const cpuCountRaw = rawStats.cpu_stats.cpu_usage.percpu_usage?.length;
-      const cpuCount =
-        cpuCountRaw && cpuCountRaw > 0 ? cpuCountRaw : (rawStats.cpu_stats.online_cpus ?? 1);
-      const cpuPct =
-        systemDelta > 0 ? Math.round((cpuDelta / systemDelta) * cpuCount * 1000) / 10 : 0;
-      cpuDisplay = `${String(cpuPct)}%`;
-
-      const memBytes = rawStats.memory_stats.usage ?? 0;
-      if (memBytes > 0) {
-        const memMb = Math.round(memBytes / (1024 * 1024));
+    const sample = ctx.db.getLatestServiceMetric(node.id);
+    if (sample && Date.now() - sample.recorded_at < TOPOLOGY_METRIC_FRESHNESS_MS) {
+      const cpuPct = Number.isFinite(sample.cpu) ? Math.round(sample.cpu * 10) / 10 : null;
+      if (cpuPct !== null) {
+        cpuDisplay = `${String(cpuPct)}%`;
+      }
+      const memMb = Number.isFinite(sample.mem) ? Math.round(sample.mem) : null;
+      if (memMb !== null) {
         memDisplay = `${String(memMb)} MB`;
       }
-    } catch {
-      // stats unavailable — display stays '—'
     }
   }
 
@@ -270,7 +264,7 @@ async function fetchTopologyNodeRuntime(
  * uniform with the cached path.
  */
 async function getTopologyNodeRuntime(
-  ctx: Pick<AppContext, 'docker'>,
+  ctx: Pick<AppContext, 'docker' | 'db'>,
   node: TopologyNode,
 ): Promise<TopologyNodeRuntime> {
   const containerId = node.container_id;
@@ -853,6 +847,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
             const image = svc.image_url ?? svc.image_tag ?? `${displayName}:latest`;
             const kind = resolveKind(svc.kind);
             const runtime = await getTopologyNodeRuntime(ctx, {
+              id: svc.id,
               container_id: svc.container_id,
               status: svc.status ?? null,
             });
@@ -884,6 +879,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
                 `${node.name}:latest`;
               const kind = resolveKind(node.name);
               const runtimeNode: TopologyNode = {
+                id: deployable?.id ?? `${node.id}__svc`,
                 container_id: deployable?.container_id ?? node.container_id,
                 status: deployable?.status ?? node.status ?? null,
               };
@@ -2538,6 +2534,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
               `${node.name}:latest`;
             const kind = resolveKind(node.name);
             const runtimeNode: TopologyNode = {
+              id: deployable?.id ?? `${node.id}__svc`,
               container_id: deployable?.container_id ?? node.container_id,
               status: deployable?.status ?? node.status ?? null,
             };
