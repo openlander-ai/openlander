@@ -30,7 +30,7 @@ CLI (Commander)  →  AppContext  →  Hono HTTP Server
                            (Vite + Tailwind + Radix)
 ```
 
-**Key principle**: Execution is deterministic (rule-based). AI handles error analysis and recovery via RecoveryCoordinator — gated by 7 eligibility conditions, with approval gates for high-risk actions.
+**Key principle**: Execution is deterministic (rule-based). AI handles error analysis and recovery via RecoveryCoordinator — gated by 7 eligibility conditions, with approval gates for high-risk actions. Recovery runs in the background; the in-context `ApprovalDialog` modal is the only user-facing surface for high-risk approvals (no dedicated Operations Center page in 0.1.0).
 
 ### Entry Points
 
@@ -165,46 +165,54 @@ src/
 └── types/                   # Shared TypeScript types
 
 web/src/                     # React 19 Frontend
-├── App.tsx                  # Router + providers (Auth, Language, Environment)
+├── App.tsx                  # Router + providers (Auth, Language, ProjectsContext, AppData)
 ├── main.tsx                 # Entry point
 ├── index.css                # Tailwind + CSS variables + animations
-├── pages/                   # Page components
-│   ├── ProjectsGrid.tsx     #   Dashboard
-│   ├── ProjectDetail.tsx    #   Project detail
-│   ├── DeploymentsList.tsx  #   Deployments list
-│   ├── DeploymentDetail.tsx #   Deployment detail view
-│   ├── NewProjectFlow.tsx   #   New project wizard
-│   ├── SettingsPage.tsx     #   Settings
-│   ├── ServicesPage.tsx     #   Services list
-│   ├── ServiceDetail.tsx    #   Service detail view
-│   ├── OpsCenterV2.tsx      #   Operations center
-│   ├── Overview.tsx         #   System overview
-│   └── LoginPage.tsx        #   Login
+├── pages/                   # Page components (top-level routes)
+│   ├── Home.tsx             #   Dashboard (/home)
+│   ├── ProjectsGrid.tsx     #   Projects list (/projects)
+│   ├── ProjectView.tsx      #   Project detail (/projects/:id)
+│   ├── ServiceDetailV2.tsx  #   Service detail (/projects/:p/services/:s, /managed-services/:id)
+│   ├── ServicesPage.tsx     #   Managed services list (/managed-services)
+│   ├── DeploymentsList.tsx  #   Cross-project deploy history (/deployments)
+│   ├── DeploymentDetail.tsx #   Deploy detail (/projects/:id/deployments/:deployId)
+│   ├── Activity.tsx         #   Audit log (/activity)
+│   ├── MCPServer.tsx        #   MCP status + connected agents (/mcp-server)
+│   ├── MonitoringPage.tsx   #   System metrics (/monitoring)
+│   ├── SettingsPage.tsx     #   Settings (/settings, 7 tabs)
+│   ├── settings/            #   Settings sub-pages (web-server, git-providers, ssh-keys, notifications)
+│   └── LoginPage.tsx        #   Login (/login)
 ├── components/
 │   ├── ui/                  #   shadcn/ui primitives (button, dialog, select...)
-│   ├── layout/              #   AppLayout, Header, Sidebar
-│   ├── dashboard/           #   ProjectCard, SystemHealthCards
-│   ├── project/             #   OverviewTab, DeploymentsList
-│   ├── settings/            #   Settings tabs
-│   ├── setup/               #   Onboarding steps
-│   ├── timeline/            #   Build timeline, RecoveryCard
-│   ├── logs/                #   LogViewer components
-│   ├── agent/               #   AI agent panel
-│   ├── config/              #   DomainsPanel, EnvVarsTable
+│   ├── Shell/               #   AppShell, Sidebar, TopBar, ActivityTimeline, InfraMap, LogViewer, PhaseRail, SuccessSummary
+│   ├── shared/              #   Cross-page primitives (PageHeader, OuterCard, StatusTile, etc.)
+│   ├── project/             #   OverviewTab, ProjectDetailTabs, deploy/recovery cards
+│   ├── service/             #   Service detail tabs (overview, connection, databases, logs, settings, advanced)
+│   ├── settings/            #   Settings tab content (System, Security, Proxy, GitHub, AI, Operations, MCP)
+│   ├── setup/               #   Onboarding wizard steps
+│   ├── agent/               #   Agent panel chat
+│   ├── agent-guide/         #   AgentGuideDialog (prompts users to use MCP for actions)
 │   ├── command/             #   Command palette
+│   ├── config/              #   DomainsPanel, EnvVarsTable
 │   ├── deploy-terminal/     #   Build/deploy terminal UI
-│   ├── ops/                 #   Operations center components
-│   ├── service/             #   Service management components
-│   └── ...
-├── contexts/                # React Context providers
+│   ├── deploy/              #   Deploy flow components
+│   ├── timeline/            #   ActivityRow, deploy timeline, RecoveryCard
+│   ├── logs/                #   Log viewer atoms
+│   ├── icons/               #   Custom icon set
+│   └── ops/                 #   Legacy: SeverityBadge + utils only (top-level Operations Center page was cut pre-0.1.0; backend ops APIs remain alive for ApprovalDialog and Settings → Operations tab)
+├── contexts/                # React Context providers (no external state lib)
 │   ├── auth.tsx             #   Authentication state
-│   └── agent-panel.tsx      #   AI agent panel state
-├── hooks/                   # Custom hooks (data fetching with polling)
-├── i18n/                    # i18n (context.tsx, en.ts, ko.ts)
+│   ├── projects-context.tsx #   Shared projects list with polling
+│   ├── app-data-context.tsx #   Cross-page shared data
+│   └── agent-panel.tsx      #   AI agent panel open/close state
+├── hooks/                   # Custom hooks (polling-based data fetching)
+├── i18n/                    # i18n (context.tsx, en.ts, ko.ts) — custom lightweight, no i18next
 ├── lib/
 │   ├── api/                 #   API layer (native fetch, no axios)
 │   │   ├── auth.ts, projects.ts, services.ts, system.ts, chat.ts
-│   │   ├── client.ts, index.ts, operations.ts, usage.ts
+│   │   ├── notifications.ts, operations.ts, topology.ts, usage.ts
+│   │   ├── client.ts        #   fetchWithAuth wrapper
+│   │   └── *-zod.ts         #   Zod schemas for response validation
 │   └── utils.ts             #   cn() class merger
 └── types/                   # Frontend types
 
@@ -394,17 +402,17 @@ Translation files: `web/src/i18n/en.ts`, `web/src/i18n/ko.ts`. Language stored i
 
 API calls organized by domain in `web/src/lib/api/`:
 
-| File            | Domain                                       |
-| --------------- | -------------------------------------------- |
-| `auth.ts`       | Login, logout, verify, token                 |
-| `projects.ts`   | Project CRUD, deployments, env vars, domains |
-| `services.ts`   | Service management                           |
-| `system.ts`     | System status                                |
-| `chat.ts`       | AI agent chat                                |
-| `client.ts`     | fetchWithAuth wrapper, base fetch utilities  |
-| `index.ts`      | Barrel export for all API modules            |
-| `operations.ts` | Operations center, recovery monitoring       |
-| `usage.ts`      | AI usage tracking, cost summary              |
+| File            | Domain                                                                                                                                                                |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth.ts`       | Login, logout, verify, token                                                                                                                                          |
+| `projects.ts`   | Project CRUD, deployments, env vars, domains                                                                                                                          |
+| `services.ts`   | Service management                                                                                                                                                    |
+| `system.ts`     | System status                                                                                                                                                         |
+| `chat.ts`       | AI agent chat                                                                                                                                                         |
+| `client.ts`     | fetchWithAuth wrapper, base fetch utilities                                                                                                                           |
+| `index.ts`      | Barrel export for all API modules                                                                                                                                     |
+| `operations.ts` | Recovery / approvals API client. Consumed by ApprovalDialog and Settings → Operations tab. (Top-level Operations Center page was cut pre-0.1.0; backend stays alive.) |
+| `usage.ts`      | AI usage tracking, cost summary                                                                                                                                       |
 
 `fetchWithAuth()` auto-redirects to `/login` on 401.
 

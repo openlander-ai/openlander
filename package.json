@@ -1,6 +1,6 @@
 {
   "name": "openlander",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Self-hosted deployment platform that fixes its own failures",
   "type": "module",
   "bin": {
@@ -17,7 +17,8 @@
     "web/dist",
     "drizzle",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=22.0.0"

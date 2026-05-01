@@ -61,6 +61,71 @@ describe('Environment API routes', () => {
     expect(body.error).toBe('FEATURE_FROZEN');
   });
 
+  it('keeps list/detail/environment APIs aligned on canonical project environments', async () => {
+    db.createProject({
+      id: 'stack',
+      name: 'stack',
+      repoUrl: 'https://github.com/test/stack',
+      buildMethod: 'compose',
+    });
+    db.createProject({
+      id: 'stack-worker',
+      name: 'stack-worker',
+      repoUrl: '',
+      parentProjectId: 'stack',
+    });
+    db.createEnvironment({
+      id: 'stack-development',
+      projectId: 'stack',
+      type: 'development',
+      branch: 'develop',
+    });
+
+    const canonicalEnvIds = db
+      .getEnvironmentsByProject('stack')
+      .map((environment) => environment.id)
+      .sort();
+    const childEnvIds = db
+      .getEnvironmentsByProject('stack-worker')
+      .map((environment) => environment.id);
+    expect(childEnvIds).toContain('stack-worker-production');
+
+    const [listRes, detailRes, envsRes] = await Promise.all([
+      app.request('/api/projects'),
+      app.request('/api/projects/stack'),
+      app.request('/api/projects/stack/environments'),
+    ]);
+
+    expect(listRes.status).toBe(200);
+    expect(detailRes.status).toBe(200);
+    expect(envsRes.status).toBe(200);
+
+    const listBody = (await listRes.json()) as {
+      projects: Array<{ id: string; environments: Array<{ id: string; project_id: string }> }>;
+    };
+    const detailBody = (await detailRes.json()) as {
+      environments: Array<{ id: string; project_id: string }>;
+    };
+    const envsBody = (await envsRes.json()) as {
+      environments: Array<{ id: string; project_id: string }>;
+    };
+
+    const listProject = listBody.projects.find((project) => project.id === 'stack');
+    expect(listProject).toBeDefined();
+
+    for (const environments of [
+      listProject!.environments,
+      detailBody.environments,
+      envsBody.environments,
+    ]) {
+      expect(environments.map((environment) => environment.id).sort()).toEqual(canonicalEnvIds);
+      expect(environments.every((environment) => environment.project_id === 'stack')).toBe(true);
+      expect(environments.map((environment) => environment.id)).not.toContain(
+        'stack-worker-production',
+      );
+    }
+  });
+
   it('GET /api/projects/:id/environments/:envId/env returns inheritance metadata sources', async () => {
     db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/repo' });
 

@@ -38,6 +38,10 @@ import {
   resolveEnvironmentByType,
 } from './helpers/project-helpers.js';
 import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import {
+  deployableServiceIdToProjectId,
+  projectIdToDeployableServiceId,
+} from '../../db/service-ids.js';
 
 const log = createModuleLogger('api');
 
@@ -153,18 +157,20 @@ function registerTopologyCacheInvalidation(ctx: AppContext): void {
             : undefined;
         invalidateTopologyNodeCache(deployable?.container_id ?? project.container_id);
       }
-      // getChildProjects is a Database method but some narrow test
-      // fixtures stub `db` with only the methods they exercise — guard
-      // so the optional cache lookup never crashes the subscription.
-      if (typeof ctx.db.getChildProjects === 'function') {
-        const children = ctx.db.getChildProjects(projectId);
-        for (const child of children) {
-          const childDeployable =
-            typeof ctx.db.getDeployableForProject === 'function'
-              ? ctx.db.getDeployableForProject(child.id)
-              : undefined;
-          invalidateTopologyNodeCache(childDeployable?.container_id ?? child.container_id);
-        }
+      // Prefer service-hierarchy compose children; keep getChildProjects only
+      // as a fixture/back-compat fallback for narrow tests.
+      const children =
+        typeof ctx.db.getComposeChildProjects === 'function'
+          ? ctx.db.getComposeChildProjects(projectId)
+          : typeof ctx.db.getChildProjects === 'function'
+            ? ctx.db.getChildProjects(projectId)
+            : [];
+      for (const child of children) {
+        const childDeployable =
+          typeof ctx.db.getDeployableForProject === 'function'
+            ? ctx.db.getDeployableForProject(child.id)
+            : undefined;
+        invalidateTopologyNodeCache(childDeployable?.container_id ?? child.container_id);
       }
     } catch (err) {
       log.debug({ err, projectId }, 'topology cache invalidation lookup failed');
@@ -207,16 +213,45 @@ async function fetchTopologyNodeRuntime(
   // every poll, so a fresh row is the same number Docker would give
   // us — minus the per-node 1-2s socket round trip that previously
   // dominated /api/projects topology fan-out.
+  const getLatestServiceMetric =
+    typeof ctx.db.getLatestServiceMetric === 'function'
+      ? ctx.db.getLatestServiceMetric.bind(ctx.db)
+      : undefined;
   if (node.container_id && node.status === 'running') {
-    const sample = ctx.db.getLatestServiceMetric(node.id);
-    if (sample && Date.now() - sample.recorded_at < TOPOLOGY_METRIC_FRESHNESS_MS) {
-      const cpuPct = Number.isFinite(sample.cpu) ? Math.round(sample.cpu * 10) / 10 : null;
-      if (cpuPct !== null) {
-        cpuDisplay = `${String(cpuPct)}%`;
+    if (getLatestServiceMetric) {
+      const sample = getLatestServiceMetric(node.id);
+      if (sample && Date.now() - sample.recorded_at < TOPOLOGY_METRIC_FRESHNESS_MS) {
+        const cpuPct = Number.isFinite(sample.cpu) ? Math.round(sample.cpu * 10) / 10 : null;
+        if (cpuPct !== null) {
+          cpuDisplay = `${String(cpuPct)}%`;
+        }
+        const memMb = Number.isFinite(sample.mem) ? Math.round(sample.mem) : null;
+        if (memMb !== null) {
+          memDisplay = `${String(memMb)} MB`;
+        }
       }
-      const memMb = Number.isFinite(sample.mem) ? Math.round(sample.mem) : null;
-      if (memMb !== null) {
-        memDisplay = `${String(memMb)} MB`;
+    } else {
+      // Narrow test fixtures and older embedded contexts may omit the metrics
+      // repo. Keep the legacy Docker stats fallback so topology still works.
+      try {
+        const stats = await ctx.docker.getContainerStats(node.container_id);
+        const s = stats as {
+          cpu_stats: {
+            cpu_usage: { total_usage: number; percpu_usage?: number[] };
+            system_cpu_usage: number;
+            online_cpus?: number;
+          };
+          precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
+          memory_stats: { usage: number; limit: number };
+        };
+        const cpuDelta = s.cpu_stats.cpu_usage.total_usage - s.precpu_stats.cpu_usage.total_usage;
+        const systemDelta = s.cpu_stats.system_cpu_usage - s.precpu_stats.system_cpu_usage;
+        const cpuCount = s.cpu_stats.cpu_usage.percpu_usage?.length ?? s.cpu_stats.online_cpus ?? 1;
+        const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
+        cpuDisplay = `${String(Math.round(cpuPercent * 10) / 10)}%`;
+        memDisplay = `${String(Math.round(s.memory_stats.usage / 1024 / 1024))} MB`;
+      } catch {
+        // Leave displays as '—'; health is still inspected below.
       }
     }
   }
@@ -357,6 +392,8 @@ function parseServiceCredentials(credentials: string | null): Record<string, str
 type DeployableForApi = {
   kind?: string | null;
   status?: string | null;
+  visibility?: ProjectRow['visibility'];
+  parent_service_id?: string | null;
   assigned_port?: number | null;
   container_id?: string | null;
   container_port?: number | null;
@@ -418,16 +455,22 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
   const healthCheckStrategy = deployable?.health_check_strategy ?? project.health_check_strategy;
   const healthCheckPath = deployable?.health_check_path ?? project.health_check_path;
 
+  const parentProjectFallback = project.parent_project_id ?? null;
+  // eslint-disable-next-line openlander-internal/no-dropped-columns -- compatibility alias until project-row deployable fields are removed from callers
+  const visibilityFallback = project.visibility;
+  const parentProjectId = deployable?.parent_service_id
+    ? deployableServiceIdToProjectId(deployable.parent_service_id)
+    : parentProjectFallback;
+  const visibility = deployable?.visibility ?? visibilityFallback;
+
   return {
     // --- Identity / group fields (live on `projects` permanently) ---
     id: project.id,
     name: project.name,
     repo_url: project.repo_url,
     branch: project.branch,
-    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-    parent_project_id: project.parent_project_id,
-    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-    visibility: project.visibility,
+    parent_project_id: parentProjectId,
+    visibility,
     server_id: project.server_id,
     project_type: projectType,
     is_preview: isPreview,
@@ -712,46 +755,35 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     return c.json({
       count: projectsWithMeta.length,
       projects: projectsWithMeta.map(({ project: p, environments, childCount, isCompose }) => {
-        // Wire shape unchanged — the same canonical fields, just read off p
-        // directly instead of through getDeployableForProject(p.id). The
-        // `p` object is the listProjects-hydrated row (project.repo.ts:251):
-        // status / assigned_port / image_url come from the __svc service,
-        // not the dropped projects-table columns. The lint rule's name-based
-        // check would flag the read; the data is already canonical.
-        /* eslint-disable openlander-internal/no-dropped-columns */
-        const projectStatus = p.status;
-        const port = p.assigned_port;
-        const imageUrl = p.image_url;
-        const projectSource = p.source;
-        const publicUrl = p.public_url ?? null;
-        /* eslint-enable openlander-internal/no-dropped-columns */
+        // p is already hydrated by ProjectRepo from its canonical service row;
+        // route through the same mapper as detail endpoints so aliases stay
+        // aligned while the wire shape remains unchanged.
+        const mapped = mapProjectForApi(p);
         return {
-          id: p.id,
-          name: p.name,
-          status: projectStatus,
-          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-          visibility: p.visibility,
-          source: projectSource,
-          repoUrl: p.repo_url,
-          branch: p.branch,
-          port,
-          url: port ? getProjectUrl(p.name) : null,
-          urls: port
+          id: mapped.id,
+          name: mapped.name,
+          status: mapped.status,
+          visibility: mapped.visibility,
+          source: mapped.source,
+          repoUrl: mapped.repoUrl,
+          branch: mapped.branch,
+          port: mapped.port,
+          url: mapped.port ? getProjectUrl(mapped.name) : null,
+          urls: mapped.port
             ? ips.map((ip) => ({
-                url: `http://${p.name}.${ip.address}.sslip.io`,
+                url: `http://${mapped.name}.${ip.address}.sslip.io`,
                 type: ip.type,
                 ip: ip.address,
               }))
             : [],
-          publicUrl,
-          ...(imageUrl ? { imageUrl } : {}),
-          createdAt: normalizeTimestamp(p.created_at),
-          updatedAt: normalizeTimestamp(p.updated_at),
-          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-          parentProjectId: p.parent_project_id,
+          publicUrl: mapped.publicUrl,
+          ...(mapped.imageUrl ? { imageUrl: mapped.imageUrl } : {}),
+          createdAt: mapped.created_at,
+          updatedAt: mapped.updated_at,
+          parentProjectId: mapped.parent_project_id,
           isCompose,
           serviceCount: childCount,
-          environments: environments.map((env) => mapEnvironment(p.name, env)),
+          environments: environments.map((env) => mapEnvironment(mapped.name, env)),
         };
       }),
     });
@@ -803,7 +835,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       // even though the result was discarded by useServices=true.
       const groupServices = ctx.db.getDeployablesByGroup(project.id);
       const useServices = groupServices.length > 0;
-      const childProjects = useServices ? [] : ctx.db.getChildProjects(project.id);
+      const childProjects = useServices
+        ? []
+        : typeof ctx.db.getComposeChildProjects === 'function'
+          ? ctx.db.getComposeChildProjects(project.id)
+          : ctx.db.getChildProjects(project.id);
 
       const nodeIds = new Set(
         useServices
@@ -815,14 +851,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       // whose target_service_id is another node in this topology.
       const dependsOnMap = new Map<string, string[]>();
       const dependencyIdSource = useServices
-        ? groupServices.map((s) => s.id.replace(/__svc$/, ''))
+        ? groupServices.map((s) => deployableServiceIdToProjectId(s.id))
         : (childProjects.length > 0 ? childProjects : [project]).map((n) => n.id);
       for (const lookupId of dependencyIdSource) {
         const deps = ctx.db.findDependenciesByProject(lookupId);
         const siblingDeps = deps
           .map((d) => d.target_service_id)
           .filter((sid): sid is string => sid !== null && nodeIds.has(sid));
-        const nodeId = useServices ? `${lookupId}__svc` : lookupId;
+        const nodeId = useServices ? projectIdToDeployableServiceId(lookupId) : lookupId;
         dependsOnMap.set(nodeId, siblingDeps);
       }
 
@@ -842,7 +878,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         ? await mapWithConcurrency(groupServices, TOPOLOGY_INSPECT_CONCURRENCY, async (svc) => {
             const port = svc.assigned_port ?? null;
             // Display name strips __svc suffix and group-name prefix.
-            const displayName = svc.name.replace(/__svc$/, '');
+            const displayName = deployableServiceIdToProjectId(svc.name);
             const url = port ? getProjectUrl(displayName) : null;
             const image = svc.image_url ?? svc.image_tag ?? `${displayName}:latest`;
             const kind = resolveKind(svc.kind);
@@ -879,7 +915,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
                 `${node.name}:latest`;
               const kind = resolveKind(node.name);
               const runtimeNode: TopologyNode = {
-                id: deployable?.id ?? `${node.id}__svc`,
+                id: deployable?.id ?? projectIdToDeployableServiceId(node.id),
                 container_id: deployable?.container_id ?? node.container_id,
                 status: deployable?.status ?? node.status ?? null,
               };
@@ -1079,7 +1115,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         // an internal convention from the post-0009 service-id scheme and
         // should never reach the user (the topology endpoint already does
         // this — same treatment here for the deployables list).
-        name: svc.name.replace(/__svc$/, ''),
+        name: deployableServiceIdToProjectId(svc.name),
         kind: svc.kind,
         status: svc.status,
         assigned_port: svc.assigned_port,
@@ -1132,7 +1168,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     // Auto-sync dependency
     try {
       ctx.db.createProjectDependency({
-        source_service_id: `${project.id}__svc`,
+        source_service_id: projectIdToDeployableServiceId(project.id),
         target_service_id: serviceId,
         dependency_type:
           serviceKind === 'postgres' || serviceKind === 'mysql'
@@ -2245,9 +2281,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     // `__svc` suffix → parent project id), fall back to the legacy
     // projects.parent_project_id column through migration 0012.
     const preview = ctx.db.getProject(previewId);
-    const previewService = preview ? ctx.db.getService(`${previewId}__svc`) : undefined;
+    const previewService = preview
+      ? ctx.db.getService(projectIdToDeployableServiceId(previewId))
+      : undefined;
     const previewParentId =
-      previewService?.parent_service_id?.replace(/__svc$/, '') ?? preview?.parent_project_id;
+      (previewService?.parent_service_id
+        ? deployableServiceIdToProjectId(previewService.parent_service_id)
+        : null) ?? preview?.parent_project_id;
     if (!preview || previewParentId !== project.id) {
       return c.json({ error: 'PREVIEW_NOT_FOUND', message: 'Preview not found' }, 404);
     }
@@ -2374,7 +2414,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     // Resolve service via the unified table; auto-derived deployables
     // use id = `<projectId>__svc`. Managed services keep their original id.
-    const serviceRow = ctx.db.getService(sParam) ?? ctx.db.getService(`${sParam}__svc`) ?? null;
+    const serviceRow =
+      ctx.db.getService(sParam) ??
+      ctx.db.getService(projectIdToDeployableServiceId(sParam)) ??
+      null;
 
     // Legacy fallback: when :s is the legacy project id (pre-migration
     // shape, test fixtures without 0009 backfill), resolve project ops
@@ -2501,7 +2544,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       // Simpler: inline the same response shape using the resolved project.
       const project = getProjectOrThrow(cx, ctx);
       try {
-        const childProjects = ctx.db.getChildProjects(project.id);
+        const childProjects =
+          typeof ctx.db.getComposeChildProjects === 'function'
+            ? ctx.db.getComposeChildProjects(project.id)
+            : ctx.db.getChildProjects(project.id);
         const nodes = childProjects.length > 0 ? childProjects : [project];
         const nodeIds = new Set(nodes.map((n) => n.id));
         const dependsOnMap = new Map<string, string[]>();
@@ -2534,7 +2580,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
               `${node.name}:latest`;
             const kind = resolveKind(node.name);
             const runtimeNode: TopologyNode = {
-              id: deployable?.id ?? `${node.id}__svc`,
+              id: deployable?.id ?? projectIdToDeployableServiceId(node.id),
               container_id: deployable?.container_id ?? node.container_id,
               status: deployable?.status ?? node.status ?? null,
             };
@@ -2590,7 +2636,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     // services.id either == legacy project_id (rare, pre-migration) or
     // == legacy_project_id + '__svc' for auto-derived deployables, or
     // == original managed_service_id (managed kinds).
-    const service = ctx.db.getService(s) ?? ctx.db.getService(`${s}__svc`) ?? null;
+    const service =
+      ctx.db.getService(s) ?? ctx.db.getService(projectIdToDeployableServiceId(s)) ?? null;
     return { project, service };
   }
 
@@ -2964,7 +3011,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       const limit = parseInt(cx.req.query('limit') ?? '50', 10);
       const environmentId = cx.req.query('environmentId');
       // CCG #5 (post-0012 multi-svc gap): the legacy call passed project.id,
-      // which projectIdToServiceId resolved to `${project.id}__svc` — fine for
+      // which projectIdToDeployableServiceId resolved to `${project.id}__svc` — fine for
       // single-svc projects but invisible for sibling services in a grouped
       // project. Pass the canonical service id from the URL so each service's
       // deploy history shows up under its own detail page.

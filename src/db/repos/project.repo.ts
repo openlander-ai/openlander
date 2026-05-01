@@ -22,6 +22,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { buildSetValues } from '../helpers.js';
 import { environments, projects, services } from '../schema.drizzle.js';
+import { deployableServiceIdToProjectId, projectIdToDeployableServiceId } from '../service-ids.js';
 import type { EnvironmentRow, PendingFixRow, ProjectRow, ServiceRow } from '../types.js';
 
 /**
@@ -108,11 +109,13 @@ export class ProjectRepo {
         // abort the whole transaction so the projects row is never committed.
         tx.insert(services)
           .values({
-            id: `${project.id}__svc`,
+            id: projectIdToDeployableServiceId(project.id),
             project_id: parentProjectId ?? project.id,
             name: `${project.name}__svc`,
             kind,
-            parent_service_id: parentProjectId ? `${parentProjectId}__svc` : null,
+            parent_service_id: parentProjectId
+              ? projectIdToDeployableServiceId(parentProjectId)
+              : null,
             status: 'stopped',
             visibility: 'internal',
             source,
@@ -157,13 +160,7 @@ export class ProjectRepo {
    * Phase G are re-populated from the services table so existing callers that
    * read `project.status`, `project.visibility`, etc. continue to work.
    */
-  private hydrateDeployable(row: ProjectRow): ProjectRow {
-    const svc = this.db
-      .select()
-      .from(services)
-      .where(eq(services.id, `${row.id}__svc`))
-      .get() as ServiceRow | undefined;
-    if (!svc) return row;
+  private mergeDeployable(row: ProjectRow, svc: ServiceRow): ProjectRow {
     return {
       ...row,
       status: svc.status,
@@ -190,9 +187,20 @@ export class ProjectRepo {
       health_check_strategy: svc.health_check_strategy,
       health_check_path: svc.health_check_path,
       recovering_started_at: svc.recovering_started_at,
-      // Derive parent_project_id from parent_service_id (strip __svc suffix).
-      parent_project_id: svc.parent_service_id ? svc.parent_service_id.replace(/__svc$/, '') : null,
+      // Derived compatibility alias; parent hierarchy is canonical on services.
+      parent_project_id: svc.parent_service_id
+        ? deployableServiceIdToProjectId(svc.parent_service_id)
+        : null,
     };
+  }
+
+  private hydrateDeployable(row: ProjectRow): ProjectRow {
+    const svc = this.db
+      .select()
+      .from(services)
+      .where(eq(services.id, projectIdToDeployableServiceId(row.id)))
+      .get() as ServiceRow | undefined;
+    return svc ? this.mergeDeployable(row, svc) : row;
   }
 
   getProject(id: string): ProjectRow | undefined {
@@ -249,7 +257,7 @@ export class ProjectRepo {
       .all() as ProjectRow[];
     if (rows.length === 0) return rows;
     // Batch-hydrate deployable fields from the canonical __svc service rows.
-    const svcIds = rows.map((r) => `${r.id}__svc`);
+    const svcIds = rows.map((r) => projectIdToDeployableServiceId(r.id));
     const svcRows = this.db
       .select()
       .from(services)
@@ -258,38 +266,8 @@ export class ProjectRepo {
     const svcById = new Map<string, ServiceRow>();
     for (const s of svcRows) svcById.set(s.id, s);
     return rows.map((row) => {
-      const svc = svcById.get(`${row.id}__svc`);
-      if (!svc) return row;
-      return {
-        ...row,
-        status: svc.status,
-        visibility: svc.visibility,
-        assigned_port: svc.assigned_port,
-        container_id: svc.container_id,
-        image_tag: svc.image_tag,
-        previous_image_tag: svc.previous_image_tag,
-        public_url: svc.public_url,
-        dockerfile_path: svc.dockerfile_path,
-        docker_target: svc.docker_target,
-        build_context: svc.build_context,
-        build_method: svc.build_method,
-        source: svc.source as ProjectRow['source'],
-        image_url: svc.image_url,
-        image_cmd: svc.image_cmd,
-        container_port: svc.container_port,
-        pending_fix: svc.pending_fix,
-        access_code: svc.access_code,
-        access_code_iv: svc.access_code_iv,
-        is_preview: svc.is_preview as ProjectRow['is_preview'],
-        pr_number: svc.pr_number,
-        project_type: svc.project_type,
-        health_check_strategy: svc.health_check_strategy,
-        health_check_path: svc.health_check_path,
-        recovering_started_at: svc.recovering_started_at,
-        parent_project_id: svc.parent_service_id
-          ? svc.parent_service_id.replace(/__svc$/, '')
-          : null,
-      };
+      const svc = svcById.get(projectIdToDeployableServiceId(row.id));
+      return svc ? this.mergeDeployable(row, svc) : row;
     });
   }
 
@@ -335,44 +313,49 @@ export class ProjectRepo {
 
     const projectIds = projectRows.map((p) => p.id);
 
-    // Post-0012: environments are scoped to service_id. We pull all services
-    // belonging to these groups and then their environments.
+    // Post-0012: environments are scoped to service_id. The /api/projects list
+    // remains backward-compatible with detail routes by returning only each
+    // project's canonical deployable environments, not compose-child service
+    // environments owned by the same group.
+    const canonicalServiceIds = projectIds.map((projectId) =>
+      projectIdToDeployableServiceId(projectId),
+    );
+    const projectIdByCanonicalServiceId = new Map(
+      projectIds.map((projectId) => [projectIdToDeployableServiceId(projectId), projectId]),
+    );
+    const envRows = this.db
+      .select()
+      .from(environments)
+      .where(inArray(environments.service_id, canonicalServiceIds))
+      .orderBy(asc(environments.created_at))
+      .all() as EnvironmentRow[];
+
+    const envByProject = new Map<string, EnvironmentRow[]>();
+    for (const env of envRows) {
+      const projectId = projectIdByCanonicalServiceId.get(env.service_id);
+      if (!projectId) continue;
+      const hydrated = { ...env, project_id: projectId };
+      const list = envByProject.get(projectId);
+      if (list) {
+        list.push(hydrated);
+      } else {
+        envByProject.set(projectId, [hydrated]);
+      }
+    }
+
+    // Compose detection still needs the whole service group so the UI can mark
+    // compose parents even though environments above are canonical-only.
     const groupServices = this.db
       .select({ id: services.id, project_id: services.project_id, kind: services.kind })
       .from(services)
       .where(inArray(services.project_id, projectIds))
       .all() as Array<{ id: string; project_id: string | null; kind: string }>;
 
-    const projectIdByServiceId = new Map<string, string>();
     const isComposeByProject = new Map<string, boolean>();
     for (const s of groupServices) {
       if (!s.project_id) continue;
-      projectIdByServiceId.set(s.id, s.project_id);
       if (s.kind === 'compose' || s.kind === 'compose-child') {
         isComposeByProject.set(s.project_id, true);
-      }
-    }
-
-    const serviceIds = groupServices.map((s) => s.id);
-    const envRows =
-      serviceIds.length === 0
-        ? []
-        : (this.db
-            .select()
-            .from(environments)
-            .where(inArray(environments.service_id, serviceIds))
-            .orderBy(asc(environments.created_at))
-            .all() as EnvironmentRow[]);
-
-    const envByProject = new Map<string, EnvironmentRow[]>();
-    for (const env of envRows) {
-      const projectId = projectIdByServiceId.get(env.service_id);
-      if (!projectId) continue;
-      const list = envByProject.get(projectId);
-      if (list) {
-        list.push(env);
-      } else {
-        envByProject.set(projectId, [env]);
       }
     }
 
@@ -470,7 +453,7 @@ export class ProjectRepo {
     if (updates.parentProjectId !== undefined) {
       // parentProjectId maps to parent_service_id: ${parentId}__svc convention.
       svcSetValues.parent_service_id = updates.parentProjectId
-        ? `${updates.parentProjectId}__svc`
+        ? projectIdToDeployableServiceId(updates.parentProjectId)
         : null;
     }
     if (updates.recoveringStartedAt !== undefined)
@@ -481,7 +464,7 @@ export class ProjectRepo {
       this.db
         .update(services)
         .set({ ...svcSetValues, updated_at: sql`CURRENT_TIMESTAMP` })
-        .where(eq(services.id, `${id}__svc`))
+        .where(eq(services.id, projectIdToDeployableServiceId(id)))
         .run();
     }
   }
@@ -492,7 +475,7 @@ export class ProjectRepo {
     this.db
       .update(services)
       .set({ pending_fix: JSON.stringify(pendingFix), updated_at: sql`CURRENT_TIMESTAMP` })
-      .where(eq(services.id, `${projectId}__svc`))
+      .where(eq(services.id, projectIdToDeployableServiceId(projectId)))
       .run();
   }
 
@@ -501,7 +484,7 @@ export class ProjectRepo {
       const svc = this.db
         .select({ pending_fix: services.pending_fix })
         .from(services)
-        .where(eq(services.id, `${projectId}__svc`))
+        .where(eq(services.id, projectIdToDeployableServiceId(projectId)))
         .get();
       const rawPendingFix = svc?.pending_fix ?? null;
       if (!rawPendingFix) {
@@ -510,7 +493,7 @@ export class ProjectRepo {
       this.db
         .update(services)
         .set({ pending_fix: null, updated_at: sql`CURRENT_TIMESTAMP` })
-        .where(eq(services.id, `${projectId}__svc`))
+        .where(eq(services.id, projectIdToDeployableServiceId(projectId)))
         .run();
       return rawPendingFix;
     })();
@@ -527,7 +510,10 @@ export class ProjectRepo {
       .select({ id: environments.id })
       .from(environments)
       .where(
-        and(eq(environments.service_id, `${id}__svc`), sql`${environments.status} = 'building'`),
+        and(
+          eq(environments.service_id, projectIdToDeployableServiceId(id)),
+          sql`${environments.status} = 'building'`,
+        ),
       )
       .get();
     if (buildingEnv) {
@@ -554,7 +540,7 @@ export class ProjectRepo {
         status: 'stopped',
         updated_at: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(services.id, `${id}__svc`))
+      .where(eq(services.id, projectIdToDeployableServiceId(id)))
       .run();
   }
 
@@ -571,7 +557,7 @@ export class ProjectRepo {
         status: 'stopped',
         updated_at: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(services.id, `${id}__svc`))
+      .where(eq(services.id, projectIdToDeployableServiceId(id)))
       .run();
   }
 
@@ -586,7 +572,7 @@ export class ProjectRepo {
     // Batch-hydrate deployable fields from the canonical __svc service rows,
     // matching the pattern used by listProjects() so archived-project
     // consumers receive the full legacy runtime shape.
-    const svcIds = rows.map((r) => `${r.id}__svc`);
+    const svcIds = rows.map((r) => projectIdToDeployableServiceId(r.id));
     const svcRows = this.db
       .select()
       .from(services)
@@ -595,38 +581,8 @@ export class ProjectRepo {
     const svcById = new Map<string, ServiceRow>();
     for (const s of svcRows) svcById.set(s.id, s);
     return rows.map((row) => {
-      const svc = svcById.get(`${row.id}__svc`);
-      if (!svc) return row;
-      return {
-        ...row,
-        status: svc.status,
-        visibility: svc.visibility,
-        assigned_port: svc.assigned_port,
-        container_id: svc.container_id,
-        image_tag: svc.image_tag,
-        previous_image_tag: svc.previous_image_tag,
-        public_url: svc.public_url,
-        dockerfile_path: svc.dockerfile_path,
-        docker_target: svc.docker_target,
-        build_context: svc.build_context,
-        build_method: svc.build_method,
-        source: svc.source as ProjectRow['source'],
-        image_url: svc.image_url,
-        image_cmd: svc.image_cmd,
-        container_port: svc.container_port,
-        pending_fix: svc.pending_fix,
-        access_code: svc.access_code,
-        access_code_iv: svc.access_code_iv,
-        is_preview: svc.is_preview as ProjectRow['is_preview'],
-        pr_number: svc.pr_number,
-        project_type: svc.project_type,
-        health_check_strategy: svc.health_check_strategy,
-        health_check_path: svc.health_check_path,
-        recovering_started_at: svc.recovering_started_at,
-        parent_project_id: svc.parent_service_id
-          ? svc.parent_service_id.replace(/__svc$/, '')
-          : null,
-      };
+      const svc = svcById.get(projectIdToDeployableServiceId(row.id));
+      return svc ? this.mergeDeployable(row, svc) : row;
     });
   }
 
@@ -641,10 +597,10 @@ export class ProjectRepo {
     const childSvcs = this.db
       .select({ id: services.id })
       .from(services)
-      .where(eq(services.parent_service_id, `${id}__svc`))
+      .where(eq(services.parent_service_id, projectIdToDeployableServiceId(id)))
       .all() as Array<{ id: string }>;
     for (const s of childSvcs) {
-      const childProjectId = s.id.replace(/__svc$/, '');
+      const childProjectId = deployableServiceIdToProjectId(s.id);
       this.db.delete(projects).where(eq(projects.id, childProjectId)).run();
     }
     this.db.delete(projects).where(eq(projects.id, id)).run();
@@ -795,11 +751,11 @@ export class ProjectRepo {
     const childSvcs = this.db
       .select({ id: services.id })
       .from(services)
-      .where(eq(services.parent_service_id, `${parentId}__svc`))
+      .where(eq(services.parent_service_id, projectIdToDeployableServiceId(parentId)))
       .orderBy(asc(services.name))
       .all() as Array<{ id: string }>;
     if (childSvcs.length === 0) return [];
-    const childProjectIds = childSvcs.map((s) => s.id.replace(/__svc$/, ''));
+    const childProjectIds = childSvcs.map((s) => deployableServiceIdToProjectId(s.id));
     return childProjectIds.flatMap((cid) => {
       const row = this.getProject(cid);
       return row ? [row] : [];
@@ -813,12 +769,15 @@ export class ProjectRepo {
       .select({ id: services.id })
       .from(services)
       .where(
-        and(eq(services.parent_service_id, `${parentProjectId}__svc`), eq(services.is_preview, 1)),
+        and(
+          eq(services.parent_service_id, projectIdToDeployableServiceId(parentProjectId)),
+          eq(services.is_preview, 1),
+        ),
       )
       .all() as Array<{ id: string }>;
     if (previewSvcs.length === 0) return [];
     return previewSvcs.flatMap((s) => {
-      const row = this.getProject(s.id.replace(/__svc$/, ''));
+      const row = this.getProject(deployableServiceIdToProjectId(s.id));
       return row ? [row] : [];
     });
   }
@@ -827,7 +786,7 @@ export class ProjectRepo {
     const row = this.db
       .select({ cnt: count() })
       .from(services)
-      .where(eq(services.parent_service_id, `${id}__svc`))
+      .where(eq(services.parent_service_id, projectIdToDeployableServiceId(id)))
       .get();
     return (row?.cnt ?? 0) > 0;
   }

@@ -2,16 +2,9 @@ import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { buildSetValues } from '../helpers.js';
 import { environments } from '../schema.drizzle.js';
+import { deployableServiceIdToProjectId, projectIdToDeployableServiceId } from '../service-ids.js';
 import type { EnvironmentRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
-
-/**
- * Post-0012: environments are service-scoped. Callers still pass `projectId`
- * for vocabulary continuity; the repo translates to the canonical service id.
- */
-function projectIdToServiceId(projectId: string): string {
-  return projectId.endsWith('__svc') ? projectId : `${projectId}__svc`;
-}
 
 export class EnvironmentRepo {
   constructor(
@@ -37,7 +30,7 @@ export class EnvironmentRepo {
       .insert(environments)
       .values({
         id: environment.id,
-        service_id: projectIdToServiceId(environment.projectId),
+        service_id: projectIdToDeployableServiceId(environment.projectId),
         type: environment.type,
         branch: environment.branch,
         status: environment.status ?? 'idle',
@@ -59,15 +52,15 @@ export class EnvironmentRepo {
       | EnvironmentRow
       | undefined;
     if (!row) return undefined;
-    // Back-compat: hydrate deprecated project_id from service_id (strip __svc).
-    return { ...row, project_id: row.service_id.replace(/__svc$/, '') };
+    // Back-compat: hydrate deprecated project_id from the canonical service_id.
+    return { ...row, project_id: deployableServiceIdToProjectId(row.service_id) };
   }
 
   getEnvironmentsByProject(projectId: string): EnvironmentRow[] {
     const rows = this.db
       .select()
       .from(environments)
-      .where(eq(environments.service_id, projectIdToServiceId(projectId)))
+      .where(eq(environments.service_id, projectIdToDeployableServiceId(projectId)))
       .orderBy(asc(environments.created_at))
       .all() as EnvironmentRow[];
     // Back-compat: hydrate deprecated project_id from projectId parameter so
@@ -82,7 +75,7 @@ export class EnvironmentRepo {
 
     const uniqueProjectIds = [...new Set(projectIds)];
     const projectIdByServiceId = new Map(
-      uniqueProjectIds.map((projectId) => [projectIdToServiceId(projectId), projectId]),
+      uniqueProjectIds.map((projectId) => [projectIdToDeployableServiceId(projectId), projectId]),
     );
     const rows = this.db
       .select()

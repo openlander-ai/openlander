@@ -360,6 +360,42 @@ describe('ProjectRepo - listProjectsWithMetadata (N+1 fix)', () => {
     expect(byId.has('child-a')).toBe(false);
   });
 
+  it('does not mix compose-child service environments into parent metadata', () => {
+    repo.createProject({
+      id: 'stack-parent',
+      name: 'stack-parent',
+      repoUrl: 'https://x/stack',
+      buildMethod: 'compose',
+    });
+    repo.createProject({
+      id: 'stack-worker',
+      name: 'stack-worker',
+      repoUrl: '',
+      parentProjectId: 'stack-parent',
+    });
+
+    envRepo.createEnvironment({
+      id: 'stack-parent-prod',
+      projectId: 'stack-parent',
+      type: 'production',
+      branch: 'main',
+    });
+    envRepo.createEnvironment({
+      id: 'stack-worker-prod',
+      projectId: 'stack-worker',
+      type: 'production',
+      branch: 'main',
+    });
+
+    const parent = repo
+      .listProjectsWithMetadata()
+      .find((entry) => entry.project.id === 'stack-parent');
+
+    expect(parent).toBeDefined();
+    expect(parent!.environments.map((env) => env.id)).toEqual(['stack-parent-prod']);
+    expect(parent!.environments.every((env) => env.project_id === 'stack-parent')).toBe(true);
+  });
+
   it('matches per-row legacy behavior (parity check) with O(3) queries', () => {
     // Seed 20 standalone projects + 1 compose parent + 4 compose children.
     // listProjects (via EXISTS) only returns the 20 standalones + 1 parent = 21.
