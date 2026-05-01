@@ -22,7 +22,7 @@ import { AgentGuideDialog } from '@/components/agent-guide';
 import { useActivityFeed } from '@/hooks/use-activity-feed';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useProjectTopology } from '@/hooks/use-project-topology';
-import { getProjectDeployments } from '@/lib/api';
+import { getRecentDeployments } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import type { DeployLogSummary } from '@/types';
@@ -130,32 +130,25 @@ export function Home() {
 
   const [guideOpen, setGuideOpen] = useState(false);
 
-  // Fetch the most recent deploy across all projects
+  // Fetch the most recent deploy across all projects via the
+  // aggregate endpoint. The earlier implementation looped Promise.all
+  // over `projects` and N+1'd `/api/projects/:id/deployments?limit=1`,
+  // which dominated cold-load time on multi-project workspaces.
   const [lastDeployState, setLastDeployState] = useState<LastDeployState | null>(null);
   useEffect(() => {
     if (projects.length === 0) return;
     let cancelled = false;
     void (async () => {
       try {
-        const results = await Promise.all(
-          projects.map(async (p) => {
-            try {
-              const deploys = await getProjectDeployments(p.id, 1);
-              return deploys.length > 0
-                ? { deploy: deploys[0], projectId: p.id, projectName: p.name }
-                : null;
-            } catch {
-              return null;
-            }
-          }),
-        );
+        const recent = await getRecentDeployments(1);
         if (cancelled) return;
-        const valid = results.filter((r): r is LastDeployState => r !== null);
-        if (valid.length === 0) return;
-        const newest = valid.reduce((best, cur) =>
-          cur.deploy.createdAt > best.deploy.createdAt ? cur : best,
-        );
-        setLastDeployState(newest);
+        const newest = recent[0];
+        if (!newest) return;
+        setLastDeployState({
+          deploy: newest,
+          projectId: newest.projectId,
+          projectName: newest.projectName,
+        });
       } catch {
         // silently ignore
       }

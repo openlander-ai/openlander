@@ -284,6 +284,28 @@ export async function getProjectDeployments(
   return data.deployments;
 }
 
+/** A DeployLogSummary plus the project + service it belongs to. The
+ *  global feed (Home / dashboards) needs to render which project a
+ *  deploy was for, so the aggregate /api/deployments/recent endpoint
+ *  ships these flat alongside each row. */
+export interface RecentDeployment extends DeployLogSummary {
+  projectId: string;
+  projectName: string;
+  serviceId: string;
+  serviceName: string;
+}
+
+/** Fetches the N most recent deploy_logs across all projects in a
+ *  single round-trip. Replaces the per-project fan-out previously
+ *  performed by Home.tsx. */
+export async function getRecentDeployments(limit = 20): Promise<RecentDeployment[]> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  const res = await fetch(`/api/deployments/recent?${query.toString()}`);
+  if (!res.ok) throw new Error('Failed to fetch recent deployments');
+  const data = (await res.json()) as { deployments: RecentDeployment[] };
+  return data.deployments;
+}
+
 export interface ConnectedService {
   id: string;
   name: string;

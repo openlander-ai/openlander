@@ -3107,5 +3107,48 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
   });
 
+  // GET /deployments/recent
+  //
+  // Aggregate of the N most recent deploy_logs across all projects so
+  // Home / dashboards can render the global last-deploy line in a
+  // single round-trip instead of fanning out 1 query per project. The
+  // earlier per-project loop in Home.tsx scaled with project count and
+  // dominated cold-load time on multi-project workspaces.
+  api.get('/deployments/recent', (c) => {
+    const limitParam = parseInt(c.req.query('limit') ?? '20', 10);
+    const limit =
+      Number.isInteger(limitParam) && limitParam > 0 && limitParam <= 100 ? limitParam : 20;
+    const rows = ctx.db.listRecentDeployLogsAcrossProjects(limit);
+    // Resolve service → project per row. Projects are keyed by id; the
+    // small N (<=100) keeps per-row lookups cheap. Rows whose service
+    // or project no longer exist are dropped — they shouldn't normally
+    // happen post-0012 but a stale orphan must not crash the page.
+    const deployments = rows
+      .map((dl) => {
+        const service = ctx.db.getService(dl.service_id);
+        if (!service) return null;
+        const project = ctx.db.getProject(service.project_id);
+        if (!project) return null;
+        return {
+          id: dl.id,
+          status: dl.status,
+          trigger: dl.trigger,
+          triggerDetail: dl.trigger_detail,
+          commitSha: dl.commit_sha,
+          commitMessage: dl.commit_message ?? null,
+          durationMs: dl.duration_ms,
+          createdAt: normalizeTimestamp(dl.created_at),
+          failureSummary: dl.status === 'failed' ? extractFailureSummary(dl.build_log) : null,
+          projectId: project.id,
+          projectName: project.name,
+          serviceId: service.id,
+          serviceName: service.name,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+
+    return c.json({ count: deployments.length, deployments });
+  });
+
   return api;
 }
