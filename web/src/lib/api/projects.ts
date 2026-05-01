@@ -295,6 +295,21 @@ export interface RecentDeployment extends DeployLogSummary {
   serviceName: string;
 }
 
+/** Fetches env vars for a single deployable service. Wraps
+ *  /api/projects/:p/services/:s/env. The wire shape matches the
+ *  legacy /projects/:id/env (project, envVars). */
+export async function getServiceEnvVars(
+  projectId: string,
+  serviceId: string,
+): Promise<Record<string, string>> {
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/services/${encodeURIComponent(serviceId)}/env`,
+  );
+  if (!res.ok) throw new Error('Failed to fetch env vars');
+  const data = (await res.json()) as { envVars?: Record<string, string> };
+  return data.envVars ?? {};
+}
+
 /** Fetches the N most recent deploy_logs across all projects in a
  *  single round-trip. Replaces the per-project fan-out previously
  *  performed by Home.tsx. */

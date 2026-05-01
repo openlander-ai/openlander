@@ -51,6 +51,7 @@ import { useServiceHealth } from '@/hooks/use-service-health';
 import { useServiceMetrics } from '@/hooks/use-service-metrics';
 import { useDeployments } from '@/hooks/use-deployments';
 import { getService, type MetricsRange, type Service } from '@/lib/api/services';
+import { getServiceEnvVars } from '@/lib/api';
 import type { DeployLogSummary } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -289,7 +290,11 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           labelledBy="service-environment"
           className="p-5"
         >
-          <EnvironmentTab service={service} projectName={project?.name ?? undefined} />
+          <EnvironmentTab
+            service={service}
+            projectId={project?.id ?? null}
+            projectName={project?.name ?? undefined}
+          />
         </TabPanel>
 
         <TabPanel
@@ -457,8 +462,46 @@ function GeneralTab({ service, onEditConfig }: { service: ServiceNode; onEditCon
   );
 }
 
-function EnvironmentTab({ service, projectName }: { service: ServiceNode; projectName?: string }) {
+function EnvironmentTab({
+  service,
+  projectId,
+  projectName,
+}: {
+  service: ServiceNode;
+  projectId: string | null;
+  projectName?: string;
+}) {
   const [guideKind, setGuideKind] = useState<'set-env-var' | 'delete-env-var' | null>(null);
+  const [envVars, setEnvVars] = useState<Record<string, string> | null>(null);
+  const [envError, setEnvError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const vars = await getServiceEnvVars(projectId, service.id);
+        if (!cancelled) {
+          setEnvVars(vars);
+          setEnvError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setEnvError(err instanceof Error ? err.message : 'Failed to load env vars');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, service.id]);
+
+  const rows: [string, string][] = envVars
+    ? Object.entries(envVars)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => [k, maskEnvValue(k, v)])
+    : [];
+
   return (
     <>
       <SubCard
@@ -484,15 +527,19 @@ function EnvironmentTab({ service, projectName }: { service: ServiceNode; projec
           </span>
         }
       >
-        <KvList
-          rows={[
-            ['DATABASE_URL', 'postgres://hotdeal:••••••@postgres:5432/hotdeal'],
-            ['REDIS_URL', 'redis://redis:6379'],
-            ['SCRAPE_INTERVAL', '300'],
-            ['NODE_ENV', 'production'],
-          ]}
-          valueClassName="ol-mono break-all text-[12px]"
-        />
+        {envError ? (
+          <p className="text-[12.5px] text-[color:var(--ol-error)]">
+            Failed to load env vars: {envError}
+          </p>
+        ) : envVars === null ? (
+          <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
+            No env vars set. Use the agent guide to add one.
+          </p>
+        ) : (
+          <KvList rows={rows} valueClassName="ol-mono break-all text-[12px]" />
+        )}
       </SubCard>
       {guideKind && (
         <AgentGuideDialog
@@ -826,6 +873,25 @@ function SubCard({
       {children}
     </section>
   );
+}
+
+/** Heuristic: mask values for keys that look like secrets so the UI
+ *  doesn't leak credentials at a glance. Reveals length via dots so
+ *  the user can tell something is set. Connection strings keep the
+ *  scheme + host visible, only the password is masked. */
+function maskEnvValue(key: string, value: string): string {
+  const suspicious = /(KEY|TOKEN|SECRET|PASSWORD|PWD|PRIVATE|CREDENTIAL)/i.test(key);
+  if (!suspicious && !/(URL|DSN|URI)$/i.test(key)) {
+    return value;
+  }
+  if (/(URL|DSN|URI)$/i.test(key) && /:[^@/]+@/.test(value)) {
+    // postgres://user:secret@host/db → postgres://user:••••••@host/db
+    return value.replace(/:[^@/]+@/, ':••••••@');
+  }
+  if (suspicious && value) {
+    return '••••••';
+  }
+  return value;
 }
 
 function KvList({ rows, valueClassName }: { rows: [string, string][]; valueClassName?: string }) {
