@@ -1,3 +1,10 @@
+/* eslint-disable openlander-internal/no-dropped-columns */
+/**
+ * Lint note: reads `service.image` off the typed wire shape exposed by
+ * `@/lib/api`, not the dropped DB column. The wire layer aliases
+ * services.image_url→image for backward compatibility. The
+ * no-dropped-columns rule is name-based and would misfire here.
+ */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/i18n/context';

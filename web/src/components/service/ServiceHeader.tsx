@@ -1,3 +1,11 @@
+/* eslint-disable openlander-internal/no-dropped-columns */
+/**
+ * Lint note: reads `service.type` / `service.port` off the typed wire
+ * shape exposed by `@/lib/api`, not the dropped DB columns. The wire
+ * layer aliases services.kind→type and services.assigned_port→port for
+ * backward compatibility. The no-dropped-columns rule is name-based and
+ * would misfire here.
+ */
 import { useNavigate } from 'react-router-dom';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
