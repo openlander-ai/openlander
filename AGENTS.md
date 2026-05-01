@@ -573,7 +573,6 @@ When bumping the version (e.g. `0.6.2` → `0.6.3`), update ALL of these:
 
 ### Manual (agent must update)
 
-- `docs/planning/version-map.md` — add version to timeline + create section with changes
 - `README.md` — add row to roadmap table if the release has user-facing features
 
 ### When NOT using `npm run release` (manual bump)
