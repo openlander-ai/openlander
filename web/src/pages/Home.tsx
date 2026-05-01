@@ -128,6 +128,11 @@ export function Home() {
 
   const allHealthy = tally.crashed === 0;
 
+  const totalServices = useMemo(
+    () => projects.reduce((sum, p) => sum + (p.serviceCount ?? 0), 0),
+    [projects],
+  );
+
   const [guideOpen, setGuideOpen] = useState(false);
 
   // Fetch the most recent deploy across all projects via the
@@ -278,7 +283,7 @@ export function Home() {
       {/* ── 2. Projects grid ── */}
       <OuterCard
         title="Projects"
-        subtitle={`${projects.length} project${projects.length === 1 ? '' : 's'}`}
+        subtitle={`${projects.length} project${projects.length === 1 ? '' : 's'} · ${totalServices} service${totalServices === 1 ? '' : 's'}`}
         actions={
           <button
             type="button"
