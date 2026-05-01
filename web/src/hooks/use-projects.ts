@@ -1,3 +1,12 @@
+/* eslint-disable openlander-internal/no-dropped-columns */
+/**
+ * Lint note: reads `project.status` / `project.visibility` off the typed
+ * wire shape exposed by `../lib/api`, not the dropped DB columns. The
+ * wire layer aliases the dropped projects.* columns from the underlying
+ * services row (post-migration 0012) until consumers migrate to
+ * getDeployableForProject(projectId). The no-dropped-columns rule is
+ * name-based and would misfire here.
+ */
 import { useState, useCallback, useMemo } from 'react';
 import { listProjects, type ProjectWithOptionalEnvironments } from '../lib/api';
 import { usePollingTask } from './use-polling-task';

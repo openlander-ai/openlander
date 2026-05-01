@@ -45,6 +45,18 @@ const PRE_0010_TAGS = [
   '0009_split_projects_services',
 ];
 
+const PRE_0010_FOLDER_MILLIS: Record<string, number> = {
+  '0000_initial': 1776203869422,
+  '0001_env_vars_scoped_uniques': 1776203869423,
+  '0002_add_server_id': 1776217725447,
+  '0003_fix_check_constraints': 1776332000000,
+  '0004_restore_ai_usage_result_check': 1776350000000,
+  '0005_add_error_fields_to_ai_usage_log': 1776380000000,
+  '0006_compose_path_and_recovering_watchdog': 1776480000000,
+  '0007_service_metrics_and_settings': 1776560000000,
+  '0008_mcp_session_log': 1777000000000,
+};
+
 function applyPre0010(sqlite: SqliteDatabase): void {
   sqlite.pragma('foreign_keys = OFF');
   sqlite.exec(
@@ -65,7 +77,7 @@ function applyPre0010(sqlite: SqliteDatabase): void {
     }
     const sql = readFileSync(path.join(MIGRATIONS_FOLDER, `${tag}.sql`), 'utf8');
     sqlite.exec(sql);
-    insertHash.run(createHash('sha256').update(sql).digest('hex'), Date.now());
+    insertHash.run(createHash('sha256').update(sql).digest('hex'), PRE_0010_FOLDER_MILLIS[tag]!);
   }
   sqlite.pragma('foreign_keys = ON');
 }

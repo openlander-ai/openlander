@@ -1,15 +1,15 @@
-name: CI
+name: Release Gate
 
 on:
-  push:
-    branches: [main]
+  pull_request:
+    branches: [develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
       - '.sisyphus/**'
       - 'LICENSE'
-  pull_request:
-    branches: [main]
+  push:
+    branches: [develop]
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -20,9 +20,10 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Lint, Type Check, Test & Build
+  backend-release-gate:
+    name: Backend release gate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -43,14 +44,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Type check
-        run: npm run typecheck
-
-      - name: Test with coverage
-        run: npm run test:coverage
-
-      - name: Build
-        run: npm run build
+      - name: Run release QA gate
+        run: npm run qa:release

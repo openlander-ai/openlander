@@ -1,3 +1,11 @@
+/* eslint-disable openlander-internal/no-dropped-columns */
+/**
+ * Lint note: reads `service.image` / `service.port` off the typed wire
+ * shape exposed by `@/lib/api`, not the dropped DB columns. The wire
+ * layer aliases services.image_url→image and services.assigned_port→port
+ * for backward compatibility. The no-dropped-columns rule is name-based
+ * and would misfire here.
+ */
 import { Button } from '@/components/ui/button';
 import { parseTimestamp } from '@/lib/time';
 import type { Service } from '@/lib/api';
