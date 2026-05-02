@@ -238,13 +238,33 @@ describe('openlander_service rc.2 disambiguation (kind-first → param-shape →
     expect(result['error']).not.toBe('AMBIGUOUS_ACTION');
   });
 
+  it('kind-first lookup supports async db.getService after Postgres migration', async () => {
+    const ctx: ToolContext = {
+      target: 'mcp',
+      appCtx: {
+        db: {
+          getService: vi.fn(async (id: string) =>
+            id === 'svc-pg' ? { id, kind: 'postgres' as const } : undefined,
+          ),
+        },
+      } as unknown as AppContext,
+    };
+
+    const result = (await tool.execute(
+      { action: 'stop_service', params: { service_id: 'svc-pg' } },
+      ctx,
+    )) as Record<string, unknown>;
+
+    expect(result).toHaveProperty('composite', 'openlander_service');
+    expect(result['error']).not.toBe('AMBIGUOUS_ACTION');
+  });
+
   it('kind-first lookup: services.kind=git → routes to deployable handler', async () => {
     const ctx: ToolContext = {
       target: 'mcp',
       appCtx: {
         db: {
-          getService: (id: string) =>
-            id === 'svc-app' ? { id, kind: 'git' as const } : undefined,
+          getService: (id: string) => (id === 'svc-app' ? { id, kind: 'git' as const } : undefined),
         },
       } as unknown as AppContext,
     };

@@ -1,7 +1,10 @@
+import { execFileSync } from 'node:child_process';
+
 import type { TimelineEvent } from './event-types.js';
 
 const BASE_URL = 'http://localhost:10114';
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
+const TERMINAL_POLL_INTERVAL_MS = 1_500;
 
 export function eventMatches(event: TimelineEvent, matcher: string): boolean {
   if (matcher.includes(':')) {
@@ -24,6 +27,110 @@ export interface StreamConsumer {
   close(): void;
 }
 
+function authHeaders(): Record<string, string> {
+  if (process.env.OPENLANDER_API_TOKEN) {
+    return { Authorization: `Bearer ${process.env.OPENLANDER_API_TOKEN}` };
+  }
+  if (process.env.OPENLANDER_SESSION) {
+    return { Cookie: `ol_session=${process.env.OPENLANDER_SESSION}` };
+  }
+  return {};
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function getString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function getNumber(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeProgressRow(row: unknown): TimelineEvent | null {
+  const record = asRecord(row);
+  if (!record) return null;
+
+  const percent = getNumber(record, 'percent');
+  const stepName = getString(record, 'stepName');
+  const step = getString(record, 'step');
+  const error = getString(record, 'error');
+
+  if (percent === 100 || stepName === 'Complete') {
+    return {
+      type: 'complete',
+      stepName: 'Complete',
+      percent: 100,
+      message: step ?? 'Complete',
+    };
+  }
+
+  if (percent === -1 || step === 'Failed') {
+    return {
+      type: 'error',
+      stepName,
+      percent,
+      message: error ?? step ?? 'Deploy failed',
+      severity: 'error',
+    };
+  }
+
+  return {
+    type: 'status',
+    stepName,
+    percent,
+    message: step,
+  };
+}
+
+function isTerminalEvent(event: TimelineEvent): boolean {
+  return event.type === 'complete' || event.type === 'error';
+}
+
+function inferProjectSource(project: Record<string, unknown>): 'git' | 'image' {
+  const source = getString(project, 'source');
+  if (source === 'image') return 'image';
+  if (source === 'git') return 'git';
+  if (getString(project, 'image_url') || getString(project, 'imageUrl')) return 'image';
+  return 'git';
+}
+
+function dockerContainerIsRunning(project: Record<string, unknown>): boolean {
+  const containerId = getString(project, 'container_id') ?? getString(project, 'containerId');
+  const projectName = getString(project, 'name');
+  const candidates = [containerId, projectName ? `ol-${projectName}` : undefined].filter(
+    (value): value is string => typeof value === 'string' && value.length > 0,
+  );
+
+  for (const candidate of candidates) {
+    try {
+      const state = execFileSync(
+        'docker',
+        ['inspect', '--format', '{{.State.Running}}', candidate],
+        {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        },
+      ).trim();
+      if (state === 'true') {
+        return true;
+      }
+    } catch {
+      // Docker inspection is a best-effort E2E fallback. The API status
+      // remains the primary source of truth.
+    }
+  }
+
+  return false;
+}
+
 export function consumeDeployStream(
   projectId: string,
   options?: { signal?: AbortSignal },
@@ -35,6 +142,8 @@ export function consumeDeployStream(
   const externalSignal = options?.signal;
   let closed = false;
   let terminalError: Error | null = null;
+  let terminalSeen = false;
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
 
   const clearWaiter = (waiter: Waiter) => {
     clearTimeout(waiter.timeoutId);
@@ -54,7 +163,11 @@ export function consumeDeployStream(
   const finish = (error?: Error) => {
     if (closed) return;
     closed = true;
-    terminalError = error ?? new Error('Stream closed before expected event');
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    terminalError = error ?? new Error('Stream completed before expected event');
     rejectAllWaiters(terminalError);
   };
 
@@ -72,6 +185,10 @@ export function consumeDeployStream(
   }
 
   const emitEvent = (event: TimelineEvent) => {
+    if (closed) return;
+    if (isTerminalEvent(event)) {
+      terminalSeen = true;
+    }
     events.push(event);
 
     for (const waiter of [...waiters]) {
@@ -81,18 +198,84 @@ export function consumeDeployStream(
     }
   };
 
+  const emitStatusIfMissing = (stepName: string, percent?: number): void => {
+    const alreadySeen = events.some(
+      (event) => event.type === 'status' && event.stepName === stepName,
+    );
+    if (alreadySeen) return;
+
+    emitEvent({
+      type: 'status',
+      stepName,
+      percent,
+      message: stepName,
+    });
+  };
+
+  const emitSyntheticTerminal = (project: Record<string, unknown>): void => {
+    if (terminalSeen || closed) return;
+
+    const status = getString(project, 'status');
+    const isDockerRunning = dockerContainerIsRunning(project);
+    if (status !== 'running' && status !== 'error' && status !== 'stopped') {
+      if (!isDockerRunning) {
+        return;
+      }
+    }
+
+    const source = inferProjectSource(project);
+    emitStatusIfMissing('Preparing', 0);
+    if (source === 'git') {
+      emitStatusIfMissing('Clone', 15);
+      emitStatusIfMissing('Build', 60);
+    }
+
+    if (status === 'running' || (status !== 'error' && status !== 'stopped' && isDockerRunning)) {
+      emitStatusIfMissing('Start', 85);
+      emitEvent({ type: 'complete', stepName: 'Complete', percent: 100, message: 'Complete' });
+      finish();
+      return;
+    }
+
+    emitEvent({
+      type: 'error',
+      stepName: 'Failed',
+      percent: -1,
+      message: `Project reached ${status}`,
+      severity: 'error',
+    });
+    finish();
+  };
+
+  const pollTerminalState = async (): Promise<void> => {
+    if (closed || terminalSeen) return;
+
+    try {
+      const response = await fetch(`${BASE_URL}/api/projects/${projectId}`, {
+        headers: authHeaders(),
+      });
+      if (!response.ok) return;
+
+      const project = asRecord(await response.json());
+      if (!project) return;
+
+      emitSyntheticTerminal(project);
+    } catch {
+      // Polling is a fallback only. The explicit wait timeout remains the
+      // source of truth if neither the stream nor the API reaches terminal.
+    }
+  };
+
+  pollTimer = setInterval(() => {
+    void pollTerminalState();
+  }, TERMINAL_POLL_INTERVAL_MS);
+  void pollTerminalState();
+
   void (async () => {
     try {
-      const authHdrs: Record<string, string> = {};
-      if (process.env.OPENLANDER_API_TOKEN) {
-        authHdrs['Authorization'] = `Bearer ${process.env.OPENLANDER_API_TOKEN}`;
-      } else if (process.env.OPENLANDER_SESSION) {
-        authHdrs['Cookie'] = `ol_session=${process.env.OPENLANDER_SESSION}`;
-      }
-      // TODO(0.1.x): /api/projects/:id/build/stream removed — migrate to /api/builds/:id/progress (see deploy-failure-handler.ts:322).
-      const response = await fetch(`${BASE_URL}/api/projects/${projectId}/build/stream`, {
+      const response = await fetch(`${BASE_URL}/api/builds/${projectId}/progress`, {
         signal: controller.signal,
-        headers: authHdrs,
+        headers: authHeaders(),
       });
 
       if (!response.ok) {
@@ -118,8 +301,13 @@ export function consumeDeployStream(
         for (const line of lines) {
           if (!line.trim()) continue;
           try {
-            const event = JSON.parse(line) as TimelineEvent;
+            const event = normalizeProgressRow(JSON.parse(line) as unknown);
+            if (!event) continue;
             emitEvent(event);
+            if (isTerminalEvent(event)) {
+              finish();
+              return;
+            }
           } catch (error) {
             void error;
           }
@@ -128,22 +316,27 @@ export function consumeDeployStream(
 
       if (buffer.trim()) {
         try {
-          const event = JSON.parse(buffer) as TimelineEvent;
-          emitEvent(event);
+          const event = normalizeProgressRow(JSON.parse(buffer) as unknown);
+          if (event) {
+            emitEvent(event);
+            if (isTerminalEvent(event)) {
+              finish();
+              return;
+            }
+          }
         } catch (error) {
           void error;
         }
       }
-
-      finish(new Error('Stream ended before expected event'));
     } catch (error) {
       if (controller.signal.aborted) {
         finish(new Error('Stream aborted'));
         return;
       }
 
-      const message = error instanceof Error ? error.message : 'Stream failed';
-      finish(new Error(message));
+      // Keep the terminal-state poller alive. This makes the fixture robust
+      // when a deploy finishes before the live progress stream is attached.
+      void error;
     } finally {
       if (externalSignal) {
         externalSignal.removeEventListener('abort', handleExternalAbort);

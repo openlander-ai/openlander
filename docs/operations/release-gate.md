@@ -28,11 +28,16 @@ Target coverage:
 - REST/API wire-shape smoke tests that do not require a live database
 - auth/OAuth token flow checks that do not require DB state
 - deploy mutation policy, readiness, and no-DB recovery policy checks
-- Operations Center agent/recovery logic that does not require DB state
+- release-visible approval/recovery policy primitives that do not require DB state
 - MCP/tool registry and mutation-policy tool surface
 
 The required gate must not require Docker daemon access. Docker-backed E2E,
 soak, and browser-only checks stay outside the required PR gate.
+
+Agent Ops/OpsCenter end-to-end scenarios are release-deferred for 0.1.0. Keep
+backend route and policy contract tests in Vitest, but do not treat hidden
+Agent Ops endpoints or Docker recovery integrations as blocking quality-gate
+E2E checks until that surface is re-enabled.
 
 > Postgres-backed integration tests are a follow-up lane. The old SQLite
 > in-memory suites are intentionally excluded until they are converted to an

@@ -1,5 +1,6 @@
 import net from 'node:net';
 import type { HealthCheckConfig, ProbeResult } from '../types.js';
+import { resolveContainerHost } from '../../pipeline/url-resolver.js';
 
 /**
  * Probe a TCP port to check if it's open and accepting connections.
@@ -10,7 +11,7 @@ import type { HealthCheckConfig, ProbeResult } from '../types.js';
 export async function tcpProbe(config: HealthCheckConfig, port: number): Promise<ProbeResult> {
   return new Promise((resolve) => {
     const startTime = Date.now();
-    const socket = net.createConnection({ port, host: 'localhost' });
+    const socket = net.createConnection({ port, host: resolveContainerHost() });
 
     let resolved = false;
 

@@ -500,8 +500,10 @@ const MANAGED_KINDS = new Set<string>(['postgres', 'mysql', 'redis', 'mongo', 'm
  */
 const renameWarnedKeys = new Set<string>();
 
+type ServiceKindLookup = { kind?: string | null } | null | undefined;
+
 interface DbWithGetService {
-  getService?: (id: string) => { kind?: string | null } | undefined;
+  getService?: (id: string) => ServiceKindLookup | Promise<ServiceKindLookup>;
 }
 
 /**
@@ -516,10 +518,10 @@ interface DbWithGetService {
  *   2. Param-shape fallback: presence of database_type/image
  *   3. Default: deployable
  */
-function disambiguateOverlappingService(
+async function disambiguateOverlappingService(
   params: Record<string, unknown> | undefined,
   context: ToolContext,
-): 'managed' | 'deployable' | 'ambiguous' {
+): Promise<'managed' | 'deployable' | 'ambiguous'> {
   const serviceId =
     typeof params?.service_id === 'string' && params.service_id.length > 0
       ? params.service_id
@@ -532,7 +534,7 @@ function disambiguateOverlappingService(
     const db = appCtx?.db;
     if (db && typeof db.getService === 'function') {
       try {
-        const svc = db.getService(serviceId);
+        const svc = await db.getService(serviceId);
         if (svc) {
           const kind = svc.kind ?? null;
           if (kind && MANAGED_KINDS.has(kind)) return 'managed';
@@ -673,7 +675,7 @@ export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): Compo
 
       // (b) Overlapping names — kind-first lookup → param-shape fallback → hard error.
       if (OVERLAPPING_SERVICE_ACTIONS.has(action)) {
-        const verdict = disambiguateOverlappingService(params, context);
+        const verdict = await disambiguateOverlappingService(params, context);
         if (verdict === 'ambiguous') {
           return {
             error: 'AMBIGUOUS_ACTION',

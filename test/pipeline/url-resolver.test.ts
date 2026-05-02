@@ -1,9 +1,26 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   resolveContainerUrl,
   resolveContainerHost,
   resolveContainerName,
 } from '../../src/pipeline/url-resolver.js';
+
+const originalContainerized = process.env.OPENLANDER_CONTAINERIZED;
+const originalContainerHost = process.env.OPENLANDER_CONTAINER_HOST;
+
+afterEach(() => {
+  if (originalContainerized === undefined) {
+    delete process.env.OPENLANDER_CONTAINERIZED;
+  } else {
+    process.env.OPENLANDER_CONTAINERIZED = originalContainerized;
+  }
+
+  if (originalContainerHost === undefined) {
+    delete process.env.OPENLANDER_CONTAINER_HOST;
+  } else {
+    process.env.OPENLANDER_CONTAINER_HOST = originalContainerHost;
+  }
+});
 
 describe('resolveContainerUrl', () => {
   it('returns localhost URL for default server', () => {
@@ -36,6 +53,28 @@ describe('resolveContainerHost', () => {
 
   it('returns localhost for unknown serverId (single-server mode)', () => {
     expect(resolveContainerHost('remote-server')).toBe('localhost');
+  });
+
+  it('returns host.docker.internal for containerized runtime', () => {
+    process.env.OPENLANDER_CONTAINERIZED = 'true';
+
+    expect(resolveContainerHost()).toBe('host.docker.internal');
+    expect(resolveContainerUrl(3000)).toBe('http://host.docker.internal:3000');
+  });
+
+  it('uses OPENLANDER_CONTAINER_HOST override for containerized runtime', () => {
+    process.env.OPENLANDER_CONTAINERIZED = 'true';
+    process.env.OPENLANDER_CONTAINER_HOST = 'docker-host.internal';
+
+    expect(resolveContainerHost()).toBe('docker-host.internal');
+    expect(resolveContainerUrl(8080)).toBe('http://docker-host.internal:8080');
+  });
+
+  it('falls back to localhost when OPENLANDER_CONTAINERIZED is unset', () => {
+    delete process.env.OPENLANDER_CONTAINERIZED;
+    process.env.OPENLANDER_CONTAINER_HOST = 'ignored-host.internal';
+
+    expect(resolveContainerHost()).toBe('localhost');
   });
 });
 

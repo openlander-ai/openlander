@@ -32,6 +32,7 @@ export interface RollbackResult {
 type RollbackTarget =
   | { project: ProjectRow; environment: EnvironmentRow }
   | { project: ProjectRow; environment?: undefined };
+type ProjectDeployable = Awaited<ReturnType<Database['getDeployableForProject']>>;
 
 function createFallbackStateManager(db: Database): {
   transition: (
@@ -125,9 +126,19 @@ export class RollbackExecutor {
 
     try {
       await this.stateManager.transition(projectId, 'recovering', 'deploy-started');
-      await this.cleanupRunningContainer(target.target);
 
-      const { port, containerName } = await this.resolveContainerRuntime(target.target);
+      const projectDeployable = await this.db.getDeployableForProject(projectId);
+      const { port, containerName } = await this.resolveContainerRuntime(
+        target.target,
+        productionEnvironment,
+        projectDeployable,
+      );
+      await this.cleanupRunningContainer(
+        target.target,
+        productionEnvironment,
+        projectDeployable,
+        containerName,
+      );
       const containerPort = (await this.docker.getImageExposedPort(rollbackImageTag)) ?? port;
 
       const envType: OpenLanderEnv = 'production';
@@ -247,35 +258,57 @@ export class RollbackExecutor {
     return { success: true, target: { project, environment } };
   }
 
-  private async cleanupRunningContainer(target: RollbackTarget): Promise<void> {
-    // PR 4.5: canonical-first read for project-level cleanup with `??` fallback.
-    const projectDeployable = await this.db.getDeployableForProject(target.project.id);
-    const containerId = target.environment
-      ? target.environment.container_id
-      : (projectDeployable?.container_id ?? target.project.container_id);
-    const status = target.environment
-      ? target.environment.status
-      : (projectDeployable?.status ?? target.project.status);
+  private async cleanupRunningContainer(
+    target: RollbackTarget,
+    productionEnvironment: EnvironmentRow | undefined,
+    projectDeployable: ProjectDeployable,
+    containerName: string,
+  ): Promise<void> {
+    const refs = new Set<string>();
+    const runningRefs = new Set<string>();
+    const addRef = (
+      containerId: string | null | undefined,
+      status: string | null | undefined,
+    ): void => {
+      if (!containerId) return;
+      refs.add(containerId);
+      if (status === 'running') {
+        runningRefs.add(containerId);
+      }
+    };
 
-    if (!containerId || status !== 'running') {
-      return;
-    }
+    addRef(target.environment?.container_id, target.environment?.status);
+    addRef(productionEnvironment?.container_id, productionEnvironment?.status);
+    addRef(projectDeployable?.container_id, projectDeployable?.status);
 
-    try {
-      await this.docker.stopContainer(containerId);
-      await this.docker.safeRemoveContainer(containerId);
-    } catch (err) {
-      log.warn({ err, containerId }, 'Container cleanup during rollback failed');
+    // Docker rejects a new container when the old canonical name still exists,
+    // even if metadata no longer points at its container id.
+    refs.add(containerName);
+
+    for (const ref of refs) {
+      if (runningRefs.has(ref)) {
+        try {
+          await this.docker.stopContainer(ref);
+        } catch (err) {
+          if (!isDockerNotFoundError(err)) {
+            log.warn({ err, containerId: ref }, 'Container stop during rollback cleanup failed');
+          }
+        }
+      }
+      await this.docker.safeRemoveContainer(ref);
     }
   }
 
   private async resolveContainerRuntime(
     target: RollbackTarget,
+    productionEnvironment: EnvironmentRow | undefined,
+    projectDeployable: ProjectDeployable,
   ): Promise<{ port: number; containerName: string }> {
-    const routeName = getRouteName(target.project.name);
+    const environment = target.environment ?? productionEnvironment;
+    const routeName = getRouteName(target.project.name, environment?.type);
     const port =
-      target.environment?.assigned_port ??
-      target.project.assigned_port ??
+      environment?.assigned_port ??
+      projectDeployable?.assigned_port ??
       (await allocatePort(this.db, this.docker, {}, 'production'));
 
     return {

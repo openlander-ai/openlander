@@ -14,7 +14,9 @@ import {
 
 test.describe.configure({ mode: 'serial' });
 
-test.describe('OpsAgent — API Tests (no Docker required)', () => {
+// 0.1.0 ships without the Agent Ops surface. Keep backend contract coverage in
+// Vitest; do not make hidden Agent Ops endpoints part of the release E2E gate.
+test.describe.fixme('OpsAgent — API Tests (release-deferred)', () => {
   test('health endpoint returns ok and running', async () => {
     const health = await getOpsHealth();
     expect(health.status).toBe('ok');
@@ -46,8 +48,8 @@ test.describe('OpsAgent — API Tests (no Docker required)', () => {
 });
 
 // fixme (0.1.x): RecoveryCoordinator integration is backend-ALIVE but UI-cut for
-// 0.1.0 per .sisyphus/plans/1.0-surface-spec.md. Deferred until we re-surface
-// OpsCenter or stabilize the timing contract for headless Docker recovery.
+// 0.1.0. Deferred until Agent Ops/OpsCenter is re-surfaced and the headless
+// Docker recovery timing contract is stable.
 test.describe.fixme('OpsAgent — Integration (requires Docker)', () => {
   const createdProjectIds: string[] = [];
 

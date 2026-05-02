@@ -40,6 +40,7 @@ import {
   resolveEnvironmentByType,
 } from './helpers/project-helpers.js';
 import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import { projectIdToServiceId } from '../../db/repos/deploy-log.repo.js';
 import {
   deployableServiceIdToProjectId,
   projectIdToDeployableServiceId,
@@ -1508,7 +1509,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     if (deploymentId) {
       const deployment = await ctx.db.getDeployLog(deploymentId);
-      if (!deployment || deployment.project_id !== project.id) {
+      const expectedServiceId = projectIdToServiceId(project.id);
+      if (!deployment || deployment.service_id !== expectedServiceId) {
         return c.json(
           {
             error: 'DEPLOYMENT_NOT_FOUND',

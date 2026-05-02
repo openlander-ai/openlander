@@ -21,7 +21,7 @@ OPENLANDER_NO_AUTH=1 node dist/cli/index.js --no-open
 ## Running
 
 ```bash
-# Full suite (~6-7 min, excludes fixme tests)
+# Full suite (~6-7 min, excludes fixme/deferred tests)
 npx playwright test --project=quality-gate
 
 # Single spec
@@ -49,37 +49,43 @@ e2e/quality-gate/
 
 `global-setup.ts` sets a password if needed and stores the API token in `process.env.OPENLANDER_API_TOKEN`. All fixture functions use `apiFetch()` which injects `Authorization: Bearer <token>` automatically.
 
+## Release Scope
+
+0.1.0 excludes the Agent Ops/OpsCenter user-facing surface. `ops-agent.spec.ts`
+is therefore deferred in this Docker E2E gate. Backend ops route/policy
+contracts remain covered by Vitest release tests.
+
 ## Test Matrix
 
-| #   | Spec                    | Test                                        | Duration | Status    |
-| --- | ----------------------- | ------------------------------------------- | -------- | --------- |
-| 1   | blue-green.spec.ts      | Blue-green deploy swaps container           | ~23s     | pass      |
-| 2   | compose.spec.ts         | Compose multi-service deploy + /count       | ~5min    | **fixme** |
-| 3   | deploy-git.spec.ts      | R1 deploy via API reaches running + curl OK | ~9s      | pass      |
-| 4   | deploy-git.spec.ts      | R2 auto-detect deploy reaches running       | ~18s     | pass      |
-| 5   | deploy-image.spec.ts    | Docker image deploy without clone/build     | ~5s      | pass      |
-| 6   | env-vars.spec.ts        | R7 deploy without DATABASE_URL -> error     | ~45s     | pass      |
-| 7   | env-vars.spec.ts        | Set DATABASE_URL + redeploy -> running      | ~6s      | pass      |
-| 8   | event-sequences.spec.ts | Git Deploy (Dockerfile) event sequence      | ~11s     | pass      |
-| 9   | event-sequences.spec.ts | Git Deploy (Auto-detect) event sequence     | ~16s     | pass      |
-| 10  | event-sequences.spec.ts | Image Deploy event sequence                 | ~4s      | pass      |
-| 11  | event-sequences.spec.ts | Compose Deploy reaches running              | ~5min    | **fixme** |
-| 12  | event-sequences.spec.ts | Build Fail ends with error event            | ~9s      | pass      |
-| 13  | event-sequences.spec.ts | Runtime Crash deploy succeeds               | ~11s     | pass      |
-| 14  | event-sequences.spec.ts | Blue-Green reuses R1 project                | ~16s     | pass      |
-| 15  | event-sequences.spec.ts | Rollback reuses R1 project                  | ~24s     | pass      |
-| 16  | lifecycle.spec.ts       | Redeploy + rollback emits events            | ~35s     | pass      |
-| 17  | mcp.spec.ts             | MCP initialize + deploy plan + polling      | ~4s      | pass      |
-| 18  | recovery.spec.ts        | R5 build fail -> error/stopped              | ~9s      | pass      |
-| 19  | recovery.spec.ts        | R6 runtime crash detected                   | ~55s     | pass      |
-| 20  | webhook.spec.ts         | Signed webhook triggers redeploy            | ~11s     | pass      |
-| 21  | ops-agent.spec.ts       | OpsAgent health endpoint                    | <1s      | pass      |
-| 22  | ops-agent.spec.ts       | Incidents list returns array                | <1s      | pass      |
-| 23  | ops-agent.spec.ts       | Config endpoint returns enabled flag        | <1s      | pass      |
-| 24  | ops-agent.spec.ts       | Circuit breaker endpoint graceful           | <1s      | pass      |
-| 25  | ops-agent.spec.ts       | Digest trigger returns triggered:true       | <1s      | pass      |
-| 26  | ops-agent.spec.ts       | Crash creates ops_incident (Docker)         | ~2min    | pass      |
-| 27  | ops-agent.spec.ts       | Circuit breaker reset works (Docker)        | ~3min    | pass      |
+| #   | Spec                    | Test                                        | Duration | Status       |
+| --- | ----------------------- | ------------------------------------------- | -------- | ------------ |
+| 1   | blue-green.spec.ts      | Blue-green deploy swaps container           | ~23s     | pass         |
+| 2   | compose.spec.ts         | Compose multi-service deploy + /count       | ~5min    | **fixme**    |
+| 3   | deploy-git.spec.ts      | R1 deploy via API reaches running + curl OK | ~9s      | pass         |
+| 4   | deploy-git.spec.ts      | R2 auto-detect deploy reaches running       | ~18s     | pass         |
+| 5   | deploy-image.spec.ts    | Docker image deploy without clone/build     | ~5s      | pass         |
+| 6   | env-vars.spec.ts        | R7 deploy without DATABASE_URL -> error     | ~45s     | pass         |
+| 7   | env-vars.spec.ts        | Set DATABASE_URL + redeploy -> running      | ~6s      | pass         |
+| 8   | event-sequences.spec.ts | Git Deploy (Dockerfile) event sequence      | ~11s     | pass         |
+| 9   | event-sequences.spec.ts | Git Deploy (Auto-detect) event sequence     | ~16s     | pass         |
+| 10  | event-sequences.spec.ts | Image Deploy event sequence                 | ~4s      | pass         |
+| 11  | event-sequences.spec.ts | Compose Deploy reaches running              | ~5min    | **fixme**    |
+| 12  | event-sequences.spec.ts | Build Fail ends with error event            | ~9s      | pass         |
+| 13  | event-sequences.spec.ts | Runtime Crash deploy succeeds               | ~11s     | pass         |
+| 14  | event-sequences.spec.ts | Blue-Green standalone project               | ~16s     | pass         |
+| 15  | event-sequences.spec.ts | Rollback standalone project                 | ~24s     | pass         |
+| 16  | lifecycle.spec.ts       | Redeploy + rollback emits events            | ~35s     | pass         |
+| 17  | mcp.spec.ts             | MCP initialize + deploy plan + polling      | ~4s      | pass         |
+| 18  | recovery.spec.ts        | R5 build fail -> error/stopped              | ~9s      | pass         |
+| 19  | recovery.spec.ts        | R6 runtime crash detected                   | ~55s     | pass         |
+| 20  | webhook.spec.ts         | Signed webhook triggers redeploy            | ~11s     | pass         |
+| 21  | ops-agent.spec.ts       | OpsAgent health endpoint                    | <1s      | **deferred** |
+| 22  | ops-agent.spec.ts       | Incidents list returns array                | <1s      | **deferred** |
+| 23  | ops-agent.spec.ts       | Config endpoint returns enabled flag        | <1s      | **deferred** |
+| 24  | ops-agent.spec.ts       | Circuit breaker endpoint graceful           | <1s      | **deferred** |
+| 25  | ops-agent.spec.ts       | Digest trigger returns triggered:true       | <1s      | **deferred** |
+| 26  | ops-agent.spec.ts       | Crash creates ops_incident (Docker)         | ~2min    | **deferred** |
+| 27  | ops-agent.spec.ts       | Circuit breaker reset works (Docker)        | ~3min    | **deferred** |
 
 Auth tests (10 tests in `auth.spec.ts`) require a separate run without `OPENLANDER_NO_AUTH`.
 
@@ -89,6 +95,7 @@ Auth tests (10 tests in `auth.spec.ts`) require a separate run without `OPENLAND
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | compose.spec.ts                | Docker build takes 4min+. Pipeline clones to a new tmpdir each deploy (`mkdtemp`), invalidating Docker layer cache despite `cacheFrom`. | Use a pre-built test image in the compose repo, or run in a dedicated slow CI job.                                                                |
 | event-sequences Compose Deploy | Same as above.                                                                                                                          | Same as above.                                                                                                                                    |
+| ops-agent.spec.ts              | Agent Ops/OpsCenter is not part of the 0.1.0 release surface.                                                                           | Keep Vitest backend contract coverage; re-enable Docker E2E when Agent Ops is re-surfaced.                                                        |
 | auth.spec.ts (10 tests)        | Require auth middleware active. `OPENLANDER_NO_AUTH=1` bypasses all auth, so these tests see 200 instead of 401.                        | Run separately: `npx playwright test --project=quality-gate e2e/quality-gate/auth.spec.ts` against a server started without `OPENLANDER_NO_AUTH`. |
 
 ## Product Fixes Included

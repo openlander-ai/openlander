@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 
 import {
   blueGreenDeploy,
+  createGitProject,
   deleteProject,
   deployGitProject,
   deployImageProject,
@@ -25,7 +26,6 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe('Quality Gate — Event wiring golden sequences (Q-2)', () => {
   const createdProjectIds = new Set<string>();
-  let r1ProjectId: string | null = null;
 
   test.beforeAll(() => {
     try {
@@ -61,7 +61,6 @@ test.describe('Quality Gate — Event wiring golden sequences (Q-2)', () => {
     const deploy = await deployGitProject(R1_DOCKERFILE_REPO_URL);
     expect(deploy.success).toBe(true);
     createdProjectIds.add(deploy.projectId);
-    r1ProjectId = deploy.projectId;
 
     const stream = consumeDeployStream(deploy.projectId);
     try {
@@ -83,14 +82,16 @@ test.describe('Quality Gate — Event wiring golden sequences (Q-2)', () => {
   test('Git Deploy (Auto-detect): start -> clone -> auto-detect -> build -> run -> success', async () => {
     test.setTimeout(TEST_TIMEOUT_MS);
 
-    const deploy = await deployGitProject(R2_AUTODETECT_REPO_URL);
-    expect(deploy.success).toBe(true);
-    createdProjectIds.add(deploy.projectId);
+    const project = await createGitProject(R2_AUTODETECT_REPO_URL, {
+      name: `test-no-dockerfile-${Date.now().toString(36)}`,
+    });
+    createdProjectIds.add(project.projectId);
 
-    const stream = consumeDeployStream(deploy.projectId);
+    const stream = consumeDeployStream(project.projectId);
     try {
+      await redeployProject(project.projectId);
       await stream.waitForEvent('complete', TEST_TIMEOUT_MS);
-      await waitForStatus(deploy.projectId, 'running', TEST_TIMEOUT_MS);
+      await waitForStatus(project.projectId, 'running', TEST_TIMEOUT_MS);
 
       assertEventSequence(stream.events, [
         'status:Preparing',
@@ -174,26 +175,40 @@ test.describe('Quality Gate — Event wiring golden sequences (Q-2)', () => {
     }
   });
 
-  test('Blue-Green: reuses R1 project, blue-green reaches running', async () => {
+  test('Blue-Green: standalone Dockerfile project reaches running', async () => {
     test.setTimeout(TEST_TIMEOUT_MS);
-    expect(r1ProjectId).toBeTruthy();
 
-    await blueGreenDeploy(r1ProjectId!, '/');
-    await waitForStatus(r1ProjectId!, 'running', TEST_TIMEOUT_MS);
+    const project = await createGitProject(R1_DOCKERFILE_REPO_URL, {
+      name: `test-blue-green-${Date.now().toString(36)}`,
+    });
+    createdProjectIds.add(project.projectId);
+
+    await redeployProject(project.projectId);
+    await waitForStatus(project.projectId, 'running', TEST_TIMEOUT_MS);
+
+    await blueGreenDeploy(project.projectId, '/');
+    await waitForStatus(project.projectId, 'running', TEST_TIMEOUT_MS);
   });
 
-  test('Rollback: reuses R1 project, rollback reaches running', async () => {
+  test('Rollback: standalone Dockerfile project reaches running', async () => {
     test.setTimeout(TEST_TIMEOUT_MS);
-    expect(r1ProjectId).toBeTruthy();
 
-    const initialDeployments = await getDeployments(r1ProjectId!);
+    const project = await createGitProject(R1_DOCKERFILE_REPO_URL, {
+      name: `test-rollback-${Date.now().toString(36)}`,
+    });
+    createdProjectIds.add(project.projectId);
+
+    await redeployProject(project.projectId);
+    await waitForStatus(project.projectId, 'running', TEST_TIMEOUT_MS);
+
+    const initialDeployments = await getDeployments(project.projectId);
     const firstDeployId = (initialDeployments[0] as any)?.id;
     expect(firstDeployId).toBeTruthy();
 
-    await redeployProject(r1ProjectId!);
-    await waitForStatus(r1ProjectId!, 'running', TEST_TIMEOUT_MS);
+    await redeployProject(project.projectId);
+    await waitForStatus(project.projectId, 'running', TEST_TIMEOUT_MS);
 
-    await rollbackProject(r1ProjectId!, firstDeployId!);
-    await waitForStatus(r1ProjectId!, 'running', TEST_TIMEOUT_MS);
+    await rollbackProject(project.projectId, firstDeployId!);
+    await waitForStatus(project.projectId, 'running', TEST_TIMEOUT_MS);
   });
 });

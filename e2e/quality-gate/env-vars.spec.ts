@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import {
+  createGitProject,
   deleteProject,
   deployGitProject,
   getProject,
@@ -113,9 +114,10 @@ test.describe('Quality Gate — Env Vars Injection (R7)', () => {
   test('Scenario B: set DATABASE_URL then redeploy reaches running', async () => {
     test.setTimeout(SCENARIO_TIMEOUT_MS);
 
-    if (!projectId) {
-      throw new Error('projectId missing from Scenario A deploy');
-    }
+    const project = await createGitProject(R7_REPO_URL, {
+      name: `test-env-required-${Date.now().toString(36)}`,
+    });
+    projectId = project.projectId;
 
     await setEnvVars(projectId, {
       DATABASE_URL: 'postgres://test:test@localhost/test',

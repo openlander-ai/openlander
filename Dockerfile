@@ -10,6 +10,8 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
+FROM docker:27-cli AS docker-cli
+
 FROM node:22-bookworm-slim AS runtime
 
 WORKDIR /app
@@ -19,6 +21,7 @@ ENV HUSKY=0
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/web/dist ./web/dist
 COPY --from=build /app/drizzle ./drizzle

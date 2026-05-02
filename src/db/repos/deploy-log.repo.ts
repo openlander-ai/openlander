@@ -8,7 +8,7 @@ import type { DeployLogRow } from '../types.js';
  * Post-0012: deploy_logs is service-scoped. Callers still pass `projectId`
  * for vocabulary continuity; the repo translates to the canonical service id.
  */
-function projectIdToServiceId(projectId: string): string {
+export function projectIdToServiceId(projectId: string): string {
   return projectId.endsWith('__svc') ? projectId : `${projectId}__svc`;
 }
 

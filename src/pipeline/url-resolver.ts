@@ -1,5 +1,13 @@
 import { containerName } from './helpers.js';
 
+const DEFAULT_LOCAL_CONTAINER_HOST = 'localhost';
+const DEFAULT_CONTAINERIZED_CONTAINER_HOST = 'host.docker.internal';
+
+function isTruthyEnv(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
+}
+
 /**
  * Resolves the container URL for a given port and server.
  * TODO(multi-server): When serverId refers to a remote server,
@@ -15,9 +23,14 @@ export function resolveContainerUrl(port: number, serverId?: string): string {
  * TODO(multi-server): Return remote server's IP/hostname when serverId is not local.
  */
 export function resolveContainerHost(serverId?: string): string {
-  // Always localhost for now — single server mode
   void serverId; // suppress unused warning until multi-server
-  return 'localhost';
+  if (isTruthyEnv(process.env.OPENLANDER_CONTAINERIZED)) {
+    const configuredHost = process.env.OPENLANDER_CONTAINER_HOST?.trim();
+    return configuredHost && configuredHost.length > 0
+      ? configuredHost
+      : DEFAULT_CONTAINERIZED_CONTAINER_HOST;
+  }
+  return DEFAULT_LOCAL_CONTAINER_HOST;
 }
 
 /**

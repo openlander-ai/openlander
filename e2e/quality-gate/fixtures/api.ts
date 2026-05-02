@@ -81,6 +81,40 @@ export async function deployImageProject(
   };
 }
 
+export async function createGitProject(
+  repoUrl: string,
+  options?: { branch?: string; name?: string },
+): Promise<{ projectId: string; name: string; status: string }> {
+  const res = await apiFetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      repo_url: repoUrl,
+      branch: options?.branch ?? 'main',
+      ...(options?.name ? { name: options.name } : {}),
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Create project failed (${res.status}): ${text}`);
+  }
+
+  const data = (await res.json()) as {
+    project?: { id?: string; name?: string; status?: string };
+  };
+  const project = data.project;
+  if (!project?.id || !project.name || !project.status) {
+    throw new Error(`Create project returned invalid payload: ${JSON.stringify(data)}`);
+  }
+
+  return {
+    projectId: project.id,
+    name: project.name,
+    status: project.status,
+  };
+}
+
 // ============================================================================
 // Project CRUD
 // ============================================================================
