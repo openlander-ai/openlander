@@ -57,10 +57,8 @@ function shortSha(sha: string | null): string {
 function parseTimestamp(value: string | number | null): number | null {
   if (value == null) return null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  // SQLite's CURRENT_TIMESTAMP returns "YYYY-MM-DD HH:MM:SS" (UTC, no offset).
-  // Node's Date.parse interprets that as LOCAL time, which silently breaks
-  // relative-time and sort order on non-UTC hosts. Detect the
-  // no-timezone-suffix shape and append `Z` so it parses as UTC.
+  // Legacy rows may use "YYYY-MM-DD HH:MM:SS" (UTC, no offset). Node parses
+  // that as LOCAL time, so append `Z` when there is no timezone suffix.
   const trimmed = value.trim();
   const hasTimezone = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(trimmed);
   const normalized = hasTimezone
@@ -75,7 +73,7 @@ function parseTimestamp(value: string | number | null): number | null {
 export function createActivityRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
-  api.get('/activity', (c) => {
+  api.get('/activity', async (c) => {
     const limitRaw = Number.parseInt(c.req.query('limit') ?? '100', 10);
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 500) : 100;
     const actorFilter = c.req.query('actor');
@@ -85,7 +83,7 @@ export function createActivityRoutes(ctx: AppContext): Hono {
     const events: V4ActivityEvent[] = [];
 
     // Project name lookup is shared across the 3 sources; populate once.
-    const projects = ctx.db.listProjects();
+    const projects = await ctx.db.listProjects();
     const projectNameById = new Map<string, string>();
     for (const p of projects) {
       projectNameById.set(p.id, p.name);
@@ -97,7 +95,7 @@ export function createActivityRoutes(ctx: AppContext): Hono {
     // --- Source 1: deploy_logs ---
     // Cross-project recency query — iterating per-project with caps could
     // drop hot-project rows.
-    const deployRows = ctx.db.listRecentDeployLogsAcrossProjects(limit * 3);
+    const deployRows = await ctx.db.listRecentDeployLogsAcrossProjects(limit * 3);
     for (const row of deployRows) {
       if (projectScoped && row.project_id !== projectFilter) continue;
       const ms = parseTimestamp(row.created_at);
@@ -135,7 +133,7 @@ export function createActivityRoutes(ctx: AppContext): Hono {
     // --- Source 2: runtime_incidents ---
     // listUnresolved is cheap (filtered by `resolved=0`); recent resolved
     // ones come from a dedicated cross-project query for symmetry.
-    const unresolved = ctx.db.listUnresolvedRuntimeIncidents();
+    const unresolved = await ctx.db.listUnresolvedRuntimeIncidents();
     for (const inc of unresolved) {
       const incProjectId = inc.service_id;
       if (projectScoped && incProjectId !== projectFilter) continue;
@@ -164,7 +162,7 @@ export function createActivityRoutes(ctx: AppContext): Hono {
       });
     }
 
-    const resolved = ctx.db.listRecentResolvedRuntimeIncidents(limit * 2);
+    const resolved = await ctx.db.listRecentResolvedRuntimeIncidents(limit * 2);
     for (const inc of resolved) {
       const resolvedProjectId = inc.service_id;
       if (projectScoped && resolvedProjectId !== projectFilter) continue;
@@ -216,7 +214,7 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         });
       }
 
-      const closedSessions = ctx.db.listRecentClosedMcpSessions(50);
+      const closedSessions = await ctx.db.listRecentClosedMcpSessions(50);
       for (const s of closedSessions) {
         const ms = s.disconnected_at;
         if (!Number.isFinite(ms)) continue;

@@ -63,16 +63,24 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
   // Auto-release deploy locks on completion/failure (session-scoped to prevent lock stealing)
   eventBus.on('deploy:success', (p) => {
-    ctx.db.releaseDeployLock(p.projectId, p.sessionId);
+    void ctx.db.releaseDeployLock(p.projectId, p.sessionId).catch((err: unknown) => {
+      log.warn({ err, projectId: p.projectId }, 'Failed to release deploy lock');
+    });
   });
   eventBus.on('deploy:failed', (p) => {
-    ctx.db.releaseDeployLock(p.projectId, p.sessionId);
+    void ctx.db.releaseDeployLock(p.projectId, p.sessionId).catch((err: unknown) => {
+      log.warn({ err, projectId: p.projectId }, 'Failed to release deploy lock');
+    });
   });
   eventBus.on('compose:up', (p) => {
-    ctx.db.releaseDeployLock(p.projectId, p.sessionId);
+    void ctx.db.releaseDeployLock(p.projectId, p.sessionId).catch((err: unknown) => {
+      log.warn({ err, projectId: p.projectId }, 'Failed to release deploy lock');
+    });
   });
   eventBus.on('compose:failed', (p) => {
-    ctx.db.releaseDeployLock(p.projectId, p.sessionId);
+    void ctx.db.releaseDeployLock(p.projectId, p.sessionId).catch((err: unknown) => {
+      log.warn({ err, projectId: p.projectId }, 'Failed to release deploy lock');
+    });
   });
 
   // --- Global Secrets ---
@@ -82,7 +90,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
     return c.json({ secrets });
   });
 
-  api.get('/action-runs', (c) => {
+  api.get('/action-runs', async (c) => {
     const approvalStatus = c.req.query('approval_status');
     if (!approvalStatus) {
       return c.json({ actionRuns: [] });
@@ -96,21 +104,23 @@ export function createApiRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'INVALID_FIELD', message: 'approval_status is invalid' }, 400);
     }
 
-    const actionRuns = ctx.db.getActionRunsByApprovalStatus(approvalStatus, 20).map((run) => ({
-      ...run,
-      recovery_strategy: run.recovery_strategy === 'unknown' ? null : run.recovery_strategy,
-    }));
+    const actionRuns = (await ctx.db.getActionRunsByApprovalStatus(approvalStatus, 20)).map(
+      (run) => ({
+        ...run,
+        recovery_strategy: run.recovery_strategy === 'unknown' ? null : run.recovery_strategy,
+      }),
+    );
     return c.json({ actionRuns });
   });
 
   api.post('/action-runs/:id/approve', async (c) => {
     const id = c.req.param('id');
-    const actionRun = ctx.db.findActionRunPendingApproval(id);
+    const actionRun = await ctx.db.findActionRunPendingApproval(id);
     if (!actionRun) {
       return c.json({ error: 'NOT_FOUND', message: 'Action run not found or not pending' }, 404);
     }
 
-    ctx.db.updateActionRunApproval(id, 'approved', actionRun.approval_tool ?? undefined);
+    await ctx.db.updateActionRunApproval(id, 'approved', actionRun.approval_tool ?? undefined);
     await eventBus.emit('recovery:approval-resolved', {
       actionRunId: id,
       approved: true,
@@ -122,12 +132,12 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
   api.post('/action-runs/:id/reject', async (c) => {
     const id = c.req.param('id');
-    const actionRun = ctx.db.findActionRunPendingApproval(id);
+    const actionRun = await ctx.db.findActionRunPendingApproval(id);
     if (!actionRun) {
       return c.json({ error: 'NOT_FOUND', message: 'Action run not found or not pending' }, 404);
     }
 
-    ctx.db.updateActionRunApproval(id, 'rejected', actionRun.approval_tool ?? undefined);
+    await ctx.db.updateActionRunApproval(id, 'rejected', actionRun.approval_tool ?? undefined);
     await eventBus.emit('recovery:approval-resolved', {
       actionRunId: id,
       approved: false,
@@ -142,20 +152,20 @@ export function createApiRoutes(ctx: AppContext): Hono {
     if (!body.key || !body.value) {
       return c.json({ error: 'MISSING_FIELD', message: 'key and value are required' }, 400);
     }
-    ctx.env.setGlobalSecret(body.key, body.value, body.description);
+    await ctx.env.setGlobalSecret(body.key, body.value, body.description);
     return c.json({ status: 'saved', key: body.key });
   });
 
-  api.delete('/secrets/:key', (c) => {
+  api.delete('/secrets/:key', async (c) => {
     const key = c.req.param('key');
-    const deleted = ctx.env.deleteGlobalSecret(key);
+    const deleted = await ctx.env.deleteGlobalSecret(key);
     if (!deleted) {
       return c.json({ error: 'NOT_FOUND', message: `Secret "${key}" not found` }, 404);
     }
     return c.json({ status: 'deleted', key });
   });
 
-  api.get('/traefik/config', (c) => {
+  api.get('/traefik/config', async (c) => {
     const routers: Record<string, { rule: string; entryPoints: string[]; service: string }> = {};
     const services: Record<string, { loadBalancer: { servers: Array<{ url: string }> } }> = {};
 
@@ -166,14 +176,17 @@ export function createApiRoutes(ctx: AppContext): Hono {
     // PR 4 canonical-first: read status / container_id / container_port /
     // assigned_port via the deployable services row when available; fall
     // back to legacy projects columns through migration 0012.
-    const allProjects = ctx.db.listProjects().filter((p) => {
-      const deployable = ctx.db.getDeployableForProject(p.id);
+    const allProjects = [];
+    for (const p of await ctx.db.listProjects()) {
+      const deployable = await ctx.db.getDeployableForProject(p.id);
       const status = deployable?.status ?? p.status;
       const containerId = deployable?.container_id ?? p.container_id;
-      return status === 'running' || (status === 'building' && containerId);
-    });
+      if (status === 'running' || (status === 'building' && containerId)) {
+        allProjects.push(p);
+      }
+    }
     for (const project of allProjects) {
-      const deployable = ctx.db.getDeployableForProject(project.id);
+      const deployable = await ctx.db.getDeployableForProject(project.id);
       // PR 4.5: canonical-first read with `??` fallback (joined to satisfy grep).
       const internalPort =
         deployable?.container_port ??
@@ -191,7 +204,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
       };
     }
 
-    const mappings = ctx.db.listDomainMappings();
+    const mappings = await ctx.db.listDomainMappings();
     const projectDomains = new Map<string, { projectName: string; domains: string[] }>();
     for (const mapping of mappings) {
       if (!mapping.project_id) continue;
@@ -199,7 +212,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
       if (existing) {
         existing.domains.push(mapping.domain);
       } else {
-        const project = ctx.db.getProject(mapping.project_id);
+        const project = await ctx.db.getProject(mapping.project_id);
         if (project) {
           projectDomains.set(mapping.project_id, {
             projectName: project.name,
@@ -211,10 +224,10 @@ export function createApiRoutes(ctx: AppContext): Hono {
     for (const [projectId, { projectName, domains }] of projectDomains) {
       const svcName = `svc-${projectName}`;
       if (!services[svcName]) {
-        const project = ctx.db.getProject(projectId);
+        const project = await ctx.db.getProject(projectId);
         // PR 4 canonical-first: container_port + assigned_port via
         // deployable services row when available.
-        const deployable = project ? ctx.db.getDeployableForProject(project.id) : undefined;
+        const deployable = project ? await ctx.db.getDeployableForProject(project.id) : undefined;
         const internalPort =
           deployable?.container_port ??
           // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
@@ -256,7 +269,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
       // PR 4 canonical-first: public_url + visibility from deployable
       // services row when available; fall back to legacy projects columns.
-      const deployable = ctx.db.getDeployableForProject(project.id);
+      const deployable = await ctx.db.getDeployableForProject(project.id);
       const visibility = deployable?.visibility ?? project.visibility;
       const publicUrl = deployable?.public_url ?? project.public_url;
       if ((visibility === 'quick-share' || visibility === 'shared') && publicUrl) {

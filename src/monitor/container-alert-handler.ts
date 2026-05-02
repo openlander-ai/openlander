@@ -49,10 +49,10 @@ export class ContainerAlertHandler {
   }
 
   private async handleRuntimeCrash(projectId: string, error: string): Promise<void> {
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) return;
     // PR 4.5: canonical-first read of container_id with `??` fallback.
-    const deployable = this.db.getDeployableForProject(projectId);
+    const deployable = await this.db.getDeployableForProject(projectId);
     const containerId = deployable?.container_id ?? project.container_id;
     if (!containerId) return;
 
@@ -78,7 +78,7 @@ export class ContainerAlertHandler {
     containerName: string;
     exitCode: number;
   }): Promise<void> {
-    const project = this.db.getProject(payload.projectId);
+    const project = await this.db.getProject(payload.projectId);
     if (!project) return;
 
     const key = `container-crash:${payload.containerId}`;
@@ -103,7 +103,7 @@ export class ContainerAlertHandler {
     containerId: string;
     containerName: string;
   }): Promise<void> {
-    const project = this.db.getProject(payload.projectId);
+    const project = await this.db.getProject(payload.projectId);
     if (!project) return;
 
     const key = `container-crash:${payload.containerId}`;

@@ -105,10 +105,13 @@ export class ContainerStateReconciler {
     // PR 4.5: batch-resolve deployables once so canonical-first reads of
     // status/container_id flow through a `??` fallback to legacy `projects`
     // columns until migration 0012 drops them.
-    const allProjects = this.db.listProjects();
-    const deployables = new Map<string, ReturnType<typeof this.db.getDeployableForProject>>();
+    const allProjects = await this.db.listProjects();
+    const deployables = new Map<
+      string,
+      Awaited<ReturnType<typeof this.db.getDeployableForProject>>
+    >();
     for (const p of allProjects) {
-      deployables.set(p.id, this.db.getDeployableForProject(p.id));
+      deployables.set(p.id, await this.db.getDeployableForProject(p.id));
     }
     const projects = allProjects.filter((project) => {
       const d = deployables.get(project.id);
@@ -157,10 +160,10 @@ export class ContainerStateReconciler {
   private async timeoutStuckRecovering(): Promise<void> {
     if (!this.stateManager) return;
     const now = Date.now();
-    const recovering = this.db.listProjects('recovering');
+    const recovering = await this.db.listProjects('recovering');
     for (const project of recovering) {
       // PR 4.5: canonical-first read of recovering_started_at with `??` fallback.
-      const deployable = this.db.getDeployableForProject(project.id);
+      const deployable = await this.db.getDeployableForProject(project.id);
       const recoveringStartedAt =
         deployable?.recovering_started_at ?? project.recovering_started_at;
       if (!recoveringStartedAt) continue;
@@ -174,7 +177,7 @@ export class ContainerStateReconciler {
       // trust deploy_lock_session as a live-liveness signal.
       const lockInfo =
         typeof this.db.getDeployLockInfo === 'function'
-          ? this.db.getDeployLockInfo(project.id)
+          ? await this.db.getDeployLockInfo(project.id)
           : null;
       if (lockInfo) {
         log.debug(
@@ -205,13 +208,13 @@ export class ContainerStateReconciler {
   private async detectOrphanContainers(): Promise<void> {
     try {
       const containers = await this.docker.listAllContainers();
-      const projects = this.db.listProjects();
-      const services = this.db.listServices();
+      const projects = await this.db.listProjects();
+      const services = await this.db.listServices();
 
       const knownContainerIds = new Set<string>();
       for (const project of projects) {
         // PR 4.5: canonical-first read of container_id with `??` fallback.
-        const deployable = this.db.getDeployableForProject(project.id);
+        const deployable = await this.db.getDeployableForProject(project.id);
         const containerId = deployable?.container_id ?? project.container_id;
         if (containerId) {
           knownContainerIds.add(containerId);

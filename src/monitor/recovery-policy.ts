@@ -65,7 +65,7 @@ export interface RecoveryProjectSnapshot {
 export interface RecoveryEligibilityContext {
   db: Pick<Database, 'getProject' | 'getDeployableForProject'>;
   /** Optional — when omitted the circuit-breaker invariant is skipped. */
-  isCircuitBreakerOpen?: (projectId: string) => boolean;
+  isCircuitBreakerOpen?: (projectId: string) => boolean | Promise<boolean>;
   /** Optional — when omitted the global-budget invariant is skipped. */
   isGlobalBudgetExceeded?: () => boolean;
   /** Lock staleness threshold in ms. Defaults to {@link DEFAULT_LOCK_STALE_MS}. */
@@ -76,16 +76,16 @@ export interface RecoveryEligibilityContext {
  * Single source of truth for recovery eligibility. Every recovery entry point
  * MUST call this function so the same invariants apply everywhere.
  */
-export function checkRecoveryEligibility(
+export async function checkRecoveryEligibility(
   projectId: string,
   trigger: RecoveryTrigger,
   ctx: RecoveryEligibilityContext,
-): RecoveryEligibilityResult {
+): Promise<RecoveryEligibilityResult> {
   const lockStaleMs = ctx.lockStaleMs ?? DEFAULT_LOCK_STALE_MS;
 
   let project: RecoveryProjectSnapshot | undefined;
   try {
-    project = ctx.db.getProject(projectId);
+    project = await ctx.db.getProject(projectId);
   } catch (err) {
     // Treat DB lookup failure as "project not found" — caller will emit
     // recovery:blocked rather than starting a recovery on unknown state.
@@ -111,7 +111,7 @@ export function checkRecoveryEligibility(
 
   // PR 4.5: canonical-first read of status with `??` fallback to legacy
   // `projects` column through migration 0012.
-  const deployable = ctx.db.getDeployableForProject(projectId);
+  const deployable = await ctx.db.getDeployableForProject(projectId);
   const status = deployable?.status ?? project.status;
 
   if (status === 'stopped') {
@@ -150,7 +150,7 @@ export function checkRecoveryEligibility(
   // Circuit breaker — Coordinator entry points consult it. OpsRecovery has its
   // own breaker accounting (see RecoveryPipeline.execute) so we skip it there.
   if (trigger !== 'ops_sequence' && ctx.isCircuitBreakerOpen) {
-    if (ctx.isCircuitBreakerOpen(projectId)) {
+    if (await ctx.isCircuitBreakerOpen(projectId)) {
       return {
         eligible: false,
         reason: 'circuit_breaker_open',

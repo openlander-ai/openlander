@@ -159,7 +159,7 @@ export const platformDebugToolDefs: ToolDef[] = [
       'Read-only structured DB table inspection for platform metadata tables with project-aware filtering.',
     mcpDescription: 'Read-only structured DB table inspection for platform metadata.',
     inputSchema: platformDbInspectSchema,
-    execute: (args, context) => {
+    execute: async (args, context) => {
       const db = context.appCtx.db;
       const table = args['table'] as string;
       const projectId = args['project_id'] as string | undefined;
@@ -171,38 +171,49 @@ export const platformDebugToolDefs: ToolDef[] = [
 
       switch (table) {
         case 'projects': {
-          const rows = applyLimit(db.listProjects(undefined, { includeArchived: true }), limit);
+          const rows = applyLimit(
+            await db.listProjects(undefined, { includeArchived: true }),
+            limit,
+          );
           return { table, count: rows.length, rows };
         }
         case 'environments': {
           const rows =
             projectId !== undefined
-              ? db.getEnvironmentsByProject(projectId)
+              ? await db.getEnvironmentsByProject(projectId)
               : applyLimit(
-                  db
-                    .listProjects(undefined, { includeArchived: true })
-                    .flatMap((project) => db.getEnvironmentsByProject(project.id)),
+                  (
+                    await Promise.all(
+                      (await db.listProjects(undefined, { includeArchived: true })).map(
+                        async (project) => await db.getEnvironmentsByProject(project.id),
+                      ),
+                    )
+                  ).flat(),
                   limit,
                 );
           const selected = projectId !== undefined ? applyLimit(rows, limit) : rows;
           return { table, count: selected.length, rows: selected };
         }
         case 'services': {
-          const rows = applyLimit(db.listServices(), limit);
+          const rows = applyLimit(await db.listServices(), limit);
           return { table, count: rows.length, rows };
         }
         case 'deploy_logs': {
           const rows =
             projectId !== undefined
-              ? db.getDeployLogs(projectId, limit)
+              ? await db.getDeployLogs(projectId, limit)
               : applyLimit(
-                  db
-                    .listProjects(undefined, { includeArchived: true })
-                    .flatMap((project) =>
-                      db
-                        .getDeployLogs(project.id, limit)
-                        .map((entry) => ({ ...entry, project_id: project.id })),
-                    ),
+                  (
+                    await Promise.all(
+                      (await db.listProjects(undefined, { includeArchived: true })).map(
+                        async (project) =>
+                          (await db.getDeployLogs(project.id, limit)).map((entry) => ({
+                            ...entry,
+                            project_id: project.id,
+                          })),
+                      ),
+                    )
+                  ).flat(),
                   limit,
                 );
           return { table, count: rows.length, rows };
@@ -210,37 +221,47 @@ export const platformDebugToolDefs: ToolDef[] = [
         case 'timeline_events': {
           const rows =
             projectId !== undefined
-              ? db.getTimelineEvents(projectId, limit)
+              ? await db.getTimelineEvents(projectId, limit)
               : applyLimit(
-                  db
-                    .listProjects(undefined, { includeArchived: true })
-                    .flatMap((project) =>
-                      db
-                        .getTimelineEvents(project.id, limit)
-                        .map((entry) => ({ ...entry, project_id: project.id })),
-                    ),
+                  (
+                    await Promise.all(
+                      (await db.listProjects(undefined, { includeArchived: true })).map(
+                        async (project) =>
+                          (await db.getTimelineEvents(project.id, limit)).map((entry) => ({
+                            ...entry,
+                            project_id: project.id,
+                          })),
+                      ),
+                    )
+                  ).flat(),
                   limit,
                 );
           return { table, count: rows.length, rows };
         }
         case 'domain_mappings': {
           const rows =
-            projectId !== undefined ? db.getDomainMappings(projectId) : db.listDomainMappings();
+            projectId !== undefined
+              ? await db.getDomainMappings(projectId)
+              : await db.listDomainMappings();
           const selected = applyLimit(rows, limit);
           return { table, count: selected.length, rows: selected };
         }
         case 'webhook_configs': {
           const rows =
             projectId !== undefined
-              ? db.getWebhookConfigs(projectId)
+              ? await db.getWebhookConfigs(projectId)
               : applyLimit(
-                  db
-                    .listProjects(undefined, { includeArchived: true })
-                    .flatMap((project) =>
-                      db
-                        .getWebhookConfigs(project.id)
-                        .map((entry) => ({ ...entry, project_id: project.id })),
-                    ),
+                  (
+                    await Promise.all(
+                      (await db.listProjects(undefined, { includeArchived: true })).map(
+                        async (project) =>
+                          (await db.getWebhookConfigs(project.id)).map((entry) => ({
+                            ...entry,
+                            project_id: project.id,
+                          })),
+                      ),
+                    )
+                  ).flat(),
                   limit,
                 );
           const selected = projectId !== undefined ? applyLimit(rows, limit) : rows;
@@ -248,19 +269,22 @@ export const platformDebugToolDefs: ToolDef[] = [
         }
         case 'deploy_configs': {
           if (projectId !== undefined) {
-            const config = db.loadDeployConfig(projectId);
+            const config = await db.loadDeployConfig(projectId);
             const rows = config ? [{ project_id: projectId, config }] : [];
             return { table, count: rows.length, rows };
           }
 
           const rows = applyLimit(
-            db
-              .listProjects(undefined, { includeArchived: true })
-              .map((project) => ({
-                project_id: project.id,
-                config: db.loadDeployConfig(project.id),
-              }))
-              .filter((entry) => entry.config !== undefined),
+            (
+              await Promise.all(
+                (await db.listProjects(undefined, { includeArchived: true })).map(
+                  async (project) => ({
+                    project_id: project.id,
+                    config: await db.loadDeployConfig(project.id),
+                  }),
+                ),
+              )
+            ).filter((entry) => entry.config !== null),
             limit,
           );
           return { table, count: rows.length, rows };

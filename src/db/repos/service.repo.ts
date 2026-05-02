@@ -1,6 +1,6 @@
-import { and, desc, eq, inArray, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, notInArray, sql, type SQL } from 'drizzle-orm';
 
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { services, type ServiceKind } from '../schema.drizzle.js';
 import type { ServiceRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
@@ -55,9 +55,9 @@ export function kindToLegacyType(kind: string): string {
 export class ServiceRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
+    private readonly client: PostgresClient,
   ) {
-    void this.sqlite;
+    void this.client;
   }
 
   /**
@@ -65,7 +65,7 @@ export class ServiceRepo {
    * group. Post-0012: legacy type/image/port/env_vars columns are gone;
    * canonical kind/image_url/assigned_port are the source of truth.
    */
-  createService(service: {
+  async createService(service: {
     id: string;
     name: string;
     /** Wire-format `type` string from MCP/REST; mapped to the canonical kind enum. */
@@ -75,8 +75,8 @@ export class ServiceRepo {
     port: number;
     /** @deprecated 1.1 — credentials column removal pairs with secret refactor. */
     credentials?: string;
-  }): ServiceRow {
-    this.db
+  }): Promise<ServiceRow> {
+    const [created] = await this.db
       .insert(services)
       .values({
         id: service.id,
@@ -88,34 +88,35 @@ export class ServiceRepo {
         container_name: service.containerName,
         credentials: service.credentials ?? null,
       })
-      .run();
+      .returning();
 
-    const created = this.getService(service.id);
-    if (!created) throw new RepoPersistenceError('service', service.id);
-    return created;
+    const row = created ?? null;
+    if (!row) throw new RepoPersistenceError('service', service.id);
+    return row as ServiceRow;
   }
 
-  getService(id: string): ServiceRow | undefined {
-    return this.db.select().from(services).where(eq(services.id, id)).get() as
-      | ServiceRow
-      | undefined;
+  async getService(id: string): Promise<ServiceRow | undefined> {
+    const [row] = await this.db.select().from(services).where(eq(services.id, id)).limit(1);
+    return (row ?? null) ? (row as ServiceRow) : undefined;
   }
 
   /** @param _serverId - Reserved for future server-side filtering. Currently ignored. */
-  listServices(_serverId?: string): ServiceRow[] {
-    return this.db.select().from(services).orderBy(desc(services.updated_at)).all() as ServiceRow[];
+  async listServices(_serverId?: string): Promise<ServiceRow[]> {
+    void _serverId;
+    const rows = await this.db.select().from(services).orderBy(desc(services.updated_at));
+    return rows as ServiceRow[];
   }
 
   /**
    * Filtered service query — used by REST + MCP handlers to scope to a
    * group (project_id) and/or include/exclude kinds.
    */
-  getServices(opts?: {
+  async getServices(opts?: {
     project_id?: string;
     kindIn?: readonly ServiceKind[];
     kindNotIn?: readonly ServiceKind[];
-  }): ServiceRow[] {
-    const conditions = [];
+  }): Promise<ServiceRow[]> {
+    const conditions: SQL[] = [];
     if (opts?.project_id) {
       conditions.push(eq(services.project_id, opts.project_id));
     }
@@ -124,19 +125,25 @@ export class ServiceRepo {
     } else if (opts?.kindNotIn && opts.kindNotIn.length > 0) {
       conditions.push(notInArray(services.kind, [...opts.kindNotIn]));
     }
-    const query = this.db.select().from(services);
-    const filtered = conditions.length > 0 ? query.where(and(...conditions)) : query;
-    return filtered.orderBy(desc(services.updated_at)).all() as ServiceRow[];
+    const rows =
+      conditions.length > 0
+        ? await this.db
+            .select()
+            .from(services)
+            .where(and(...conditions))
+            .orderBy(desc(services.updated_at))
+        : await this.db.select().from(services).orderBy(desc(services.updated_at));
+    return rows as ServiceRow[];
   }
 
-  updateService(
+  async updateService(
     id: string,
     updates: Partial<{
       status: ServiceRow['status'];
       containerId: string | null;
       imageUrl: string | null;
     }>,
-  ): void {
+  ): Promise<void> {
     const setValues: Partial<typeof services.$inferInsert> = {};
 
     if (updates.status !== undefined) {
@@ -151,38 +158,37 @@ export class ServiceRepo {
 
     if (Object.keys(setValues).length === 0) return;
 
-    this.db
+    await this.db
       .update(services)
-      .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
-      .where(eq(services.id, id))
-      .run();
+      .set({ ...setValues, updated_at: sql`now()::text` })
+      .where(eq(services.id, id));
   }
 
-  deleteService(id: string): void {
-    this.db.delete(services).where(eq(services.id, id)).run();
+  async deleteService(id: string): Promise<void> {
+    await this.db.delete(services).where(eq(services.id, id));
   }
 
   /**
    * Returns all services that are compose-children of the given parent service.
    */
-  getComposeChildren(parentServiceId: string): ServiceRow[] {
-    return this.db
+  async getComposeChildren(parentServiceId: string): Promise<ServiceRow[]> {
+    const rows = await this.db
       .select()
       .from(services)
       .where(eq(services.parent_service_id, parentServiceId))
-      .orderBy(desc(services.updated_at))
-      .all() as ServiceRow[];
+      .orderBy(desc(services.updated_at));
+    return rows as ServiceRow[];
   }
 
   /**
    * Returns all deployable (non-compose-child) services for a given project group.
    */
-  getDeployablesByGroup(projectId: string): ServiceRow[] {
-    return this.db
+  async getDeployablesByGroup(projectId: string): Promise<ServiceRow[]> {
+    const rows = await this.db
       .select()
       .from(services)
       .where(and(eq(services.project_id, projectId), sql`${services.kind} != 'compose-child'`))
-      .orderBy(desc(services.updated_at))
-      .all() as ServiceRow[];
+      .orderBy(desc(services.updated_at));
+    return rows as ServiceRow[];
   }
 }

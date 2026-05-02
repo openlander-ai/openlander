@@ -1,16 +1,18 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, notInArray } from 'drizzle-orm';
 
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { timelineEvents } from '../schema.drizzle.js';
 import type { TimelineEventRow } from '../types.js';
 
 export class TimelineRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
-  ) {}
+    private readonly client: PostgresClient,
+  ) {
+    void this.client;
+  }
 
-  createTimelineEvent(event: {
+  async createTimelineEvent(event: {
     id: string;
     projectId: string;
     deployId?: string;
@@ -22,8 +24,8 @@ export class TimelineRepo {
     toolName?: string;
     actionButtons?: string;
     createdAt?: string;
-  }): void {
-    this.db
+  }): Promise<void> {
+    await this.db
       .insert(timelineEvents)
       .values({
         id: event.id,
@@ -38,35 +40,40 @@ export class TimelineRepo {
         action_buttons: event.actionButtons ?? null,
         created_at: event.createdAt ?? new Date().toISOString(),
       })
-      .onConflictDoNothing({ target: timelineEvents.id })
-      .run();
+      .onConflictDoNothing({ target: timelineEvents.id });
 
-    this.sqlite
-      .prepare(
-        `DELETE FROM timeline_events
-         WHERE project_id = ?
-           AND id NOT IN (
-             SELECT id
-             FROM timeline_events
-             WHERE project_id = ?
-             ORDER BY datetime(created_at) DESC, rowid DESC
-             LIMIT 200
-           )`,
-      )
-      .run(event.projectId, event.projectId);
+    const keepIds = (
+      await this.db
+        .select({ id: timelineEvents.id })
+        .from(timelineEvents)
+        .where(eq(timelineEvents.project_id, event.projectId))
+        .orderBy(desc(timelineEvents.created_at), desc(timelineEvents.id))
+        .limit(200)
+    ).map((row) => row.id);
+
+    if (keepIds.length > 0) {
+      await this.db
+        .delete(timelineEvents)
+        .where(
+          and(
+            eq(timelineEvents.project_id, event.projectId),
+            notInArray(timelineEvents.id, keepIds),
+          ),
+        );
+    }
   }
 
-  getTimelineEvents(projectId: string, limit = 200): TimelineEventRow[] {
-    return this.db
+  async getTimelineEvents(projectId: string, limit = 200): Promise<TimelineEventRow[]> {
+    const rows = await this.db
       .select()
       .from(timelineEvents)
       .where(eq(timelineEvents.project_id, projectId))
-      .orderBy(desc(sql`datetime(${timelineEvents.created_at})`), desc(sql`rowid`))
-      .limit(limit)
-      .all() as TimelineEventRow[];
+      .orderBy(desc(timelineEvents.created_at), desc(timelineEvents.id))
+      .limit(limit);
+    return rows as TimelineEventRow[];
   }
 
-  deleteTimelineEvents(projectId: string): void {
-    this.db.delete(timelineEvents).where(eq(timelineEvents.project_id, projectId)).run();
+  async deleteTimelineEvents(projectId: string): Promise<void> {
+    await this.db.delete(timelineEvents).where(eq(timelineEvents.project_id, projectId));
   }
 }

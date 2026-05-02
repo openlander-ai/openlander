@@ -108,7 +108,7 @@ export async function scanUsedPorts(db: Database, docker: Docker): Promise<PortS
   }
 
   // 1. DB ports (OpenLander managed projects)
-  const dbPorts = db.getUsedPorts();
+  const dbPorts = await db.getUsedPorts();
 
   // 2. Docker ports (all containers)
   let dockerPorts: number[] = [];
@@ -209,22 +209,22 @@ export function releasePortReservation(port: number): void {
 }
 
 /** Check if a specific port is available. */
-export function isPortAvailable(db: Database, port: number): boolean {
-  const usedPorts = db.getUsedPorts();
+export async function isPortAvailable(db: Database, port: number): Promise<boolean> {
+  const usedPorts = await db.getUsedPorts();
   return !usedPorts.includes(port);
 }
 
 /** Get the count of available ports. */
-export function getAvailablePortCount(
+export async function getAvailablePortCount(
   db: Database,
   rangeStart?: number,
   rangeEnd?: number,
   _envType: OpenLanderEnv = 'production',
-): number {
+): Promise<number> {
   const policy = getPolicy('production');
   const start = rangeStart ?? policy.portRangeStart;
   const end = rangeEnd ?? policy.portRangeEnd;
   const total = end - start + 1;
-  const used = db.getUsedPorts().length;
+  const used = (await db.getUsedPorts()).length;
   return total - used;
 }

@@ -111,7 +111,7 @@ export class InfrastructureAlerter {
   }
 
   private async checkInactiveProjects(): Promise<void> {
-    const projects = this.db.listProjects('running');
+    const projects = await this.db.listProjects('running');
     const now = Date.now();
 
     for (const project of projects) {
@@ -144,12 +144,12 @@ export class InfrastructureAlerter {
   }
 
   private async checkContainerRestartLoops(): Promise<void> {
-    const projects = this.db.listProjects('running');
+    const projects = await this.db.listProjects('running');
 
     for (const project of projects) {
       // PR 4.5: canonical-first read of container_id with `??` fallback to
       // legacy `projects` column through migration 0012.
-      const deployable = this.db.getDeployableForProject(project.id);
+      const deployable = await this.db.getDeployableForProject(project.id);
       const containerId = deployable?.container_id ?? project.container_id;
       if (!containerId) continue;
 
@@ -228,12 +228,12 @@ export class InfrastructureAlerter {
   }
 
   private async checkPortConflicts(): Promise<void> {
-    const projects = this.db.listProjects('running');
+    const projects = await this.db.listProjects('running');
     const portMap = new Map<number, string[]>();
 
     for (const project of projects) {
       // PR 4.5: canonical-first read of assigned_port with `??` fallback.
-      const deployable = this.db.getDeployableForProject(project.id);
+      const deployable = await this.db.getDeployableForProject(project.id);
       const assignedPort = deployable?.assigned_port ?? project.assigned_port;
       if (assignedPort != null) {
         const names = portMap.get(assignedPort) ?? [];
@@ -268,11 +268,11 @@ export class InfrastructureAlerter {
   }
 
   private async checkContainerMemory(): Promise<void> {
-    const projects = this.db.listProjects('running');
+    const projects = await this.db.listProjects('running');
 
     for (const project of projects) {
       // PR 4.5: canonical-first read of container_id with `??` fallback.
-      const deployable = this.db.getDeployableForProject(project.id);
+      const deployable = await this.db.getDeployableForProject(project.id);
       const containerId = deployable?.container_id ?? project.container_id;
       if (!containerId) continue;
 

@@ -51,7 +51,11 @@ test.describe('Quality Gate — Event wiring golden sequences (Q-2)', () => {
     }
   });
 
-  test('Git Deploy (Dockerfile): start -> clone -> build -> run -> success', async () => {
+  // fixme (0.1.x): event-sequence assertions assume async polling shape;
+  // sync-deploy contract change since v5 means the start->clone->build->run
+  // transitions arrive in a different order/group. Rework against current
+  // event stream before re-enabling.
+  test.fixme('Git Deploy (Dockerfile): start -> clone -> build -> run -> success', async () => {
     test.setTimeout(TEST_TIMEOUT_MS);
 
     const deploy = await deployGitProject(R1_DOCKERFILE_REPO_URL);

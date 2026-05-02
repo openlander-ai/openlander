@@ -179,25 +179,25 @@ export function validateStoredConfig(json: string): StoredDeployConfig | null {
   return deserializeConfig(json);
 }
 
-export function persistDeployConfig(params: {
+export async function persistDeployConfig(params: {
   projectId: string;
   config: ProjectConfig;
   db: Database;
-}): void {
+}): Promise<void> {
   const snapshot = createSnapshot(params.config);
   const json = serializeConfig(snapshot);
-  params.db.saveDeployConfig(params.projectId, json, CONFIG_VERSION);
+  await params.db.saveDeployConfig(params.projectId, json, CONFIG_VERSION);
 }
 
 /**
  * Load resource limits for a project from deploy_configs.
  * Returns null if no config exists or no resource profile is set.
  */
-export function loadResourceLimitsForProject(
+export async function loadResourceLimitsForProject(
   db: Database,
   projectId: string,
-): ResourceLimitConfig | null {
-  const configRow = db.loadDeployConfig(projectId);
+): Promise<ResourceLimitConfig | null> {
+  const configRow = await db.loadDeployConfig(projectId);
   if (!configRow) return null;
   const stored = deserializeConfig(configRow.config_json);
   if (!stored?.snapshot) return null;

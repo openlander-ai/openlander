@@ -1,7 +1,7 @@
 import { and, desc, eq, or } from 'drizzle-orm';
 
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
-import { serviceConnections, services } from '../schema.drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
+import { serviceConnections } from '../schema.drizzle.js';
 import type { ServiceConnectionRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
 
@@ -19,9 +19,9 @@ function projectIdToServiceId(projectId: string): string {
 export class ServiceConnectionRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
+    private readonly client: PostgresClient,
   ) {
-    void this.sqlite;
+    void this.client;
   }
 
   /**
@@ -39,41 +39,43 @@ export class ServiceConnectionRepo {
     };
   }
 
-  createConnection(opts: {
+  async createConnection(opts: {
     projectId: string;
     serviceId: string;
     environmentId?: string;
-  }): ServiceConnectionRow {
+  }): Promise<ServiceConnectionRow> {
     const consumerId = projectIdToServiceId(opts.projectId);
-    this.db
+    const [created] = await this.db
       .insert(serviceConnections)
       .values({
         service_id_consumer: consumerId,
         service_id_provider: opts.serviceId,
         environment_id: opts.environmentId ?? null,
       })
-      .run();
+      .returning();
 
-    const created = this.getConnectionByProjectAndService(opts.projectId, opts.serviceId);
-    if (!created)
+    const row = (created ?? null) as ServiceConnectionRow | null;
+    if (!row) {
       throw new RepoPersistenceError('service connection', `${opts.projectId}:${opts.serviceId}`);
-    return created;
+    }
+    return this.hydrateDeprecated(row);
   }
 
-  getConnection(id: string): ServiceConnectionRow | undefined {
-    const row = this.db
+  async getConnection(id: string): Promise<ServiceConnectionRow | undefined> {
+    const [selected] = await this.db
       .select()
       .from(serviceConnections)
       .where(eq(serviceConnections.id, id))
-      .get() as ServiceConnectionRow | undefined;
+      .limit(1);
+    const row = (selected ?? null) as ServiceConnectionRow | null;
     return row ? this.hydrateDeprecated(row) : undefined;
   }
 
-  getConnectionByProjectAndService(
+  async getConnectionByProjectAndService(
     projectId: string,
     serviceId: string,
-  ): ServiceConnectionRow | undefined {
-    const row = this.db
+  ): Promise<ServiceConnectionRow | undefined> {
+    const [selected] = await this.db
       .select()
       .from(serviceConnections)
       .where(
@@ -82,23 +84,26 @@ export class ServiceConnectionRepo {
           eq(serviceConnections.service_id_provider, serviceId),
         ),
       )
-      .get() as ServiceConnectionRow | undefined;
+      .limit(1);
+    const row = (selected ?? null) as ServiceConnectionRow | null;
     return row ? this.hydrateDeprecated(row) : undefined;
   }
 
-  listConnectionsByProject(projectId: string, environmentId?: string): ServiceConnectionRow[] {
-    const conditions = [
-      eq(serviceConnections.service_id_consumer, projectIdToServiceId(projectId)),
-    ];
-    if (environmentId) {
-      conditions.push(eq(serviceConnections.environment_id, environmentId));
-    }
-    const rows = this.db
+  async listConnectionsByProject(
+    projectId: string,
+    environmentId?: string,
+  ): Promise<ServiceConnectionRow[]> {
+    const whereClause = environmentId
+      ? and(
+          eq(serviceConnections.service_id_consumer, projectIdToServiceId(projectId)),
+          eq(serviceConnections.environment_id, environmentId),
+        )
+      : eq(serviceConnections.service_id_consumer, projectIdToServiceId(projectId));
+    const rows = (await this.db
       .select()
       .from(serviceConnections)
-      .where(and(...conditions))
-      .orderBy(desc(serviceConnections.created_at))
-      .all() as ServiceConnectionRow[];
+      .where(whereClause)
+      .orderBy(desc(serviceConnections.created_at))) as ServiceConnectionRow[];
     return rows.map((r) => this.hydrateDeprecated(r));
   }
 
@@ -107,8 +112,8 @@ export class ServiceConnectionRepo {
    * (consumer or provider). Pre-0012 the column was `service_id` (provider
    * only); the new shape symmetrically matches both endpoints.
    */
-  listConnectionsByService(serviceId: string): ServiceConnectionRow[] {
-    const rows = this.db
+  async listConnectionsByService(serviceId: string): Promise<ServiceConnectionRow[]> {
+    const rows = (await this.db
       .select()
       .from(serviceConnections)
       .where(
@@ -117,18 +122,17 @@ export class ServiceConnectionRepo {
           eq(serviceConnections.service_id_provider, serviceId),
         ),
       )
-      .orderBy(desc(serviceConnections.created_at))
-      .all() as ServiceConnectionRow[];
+      .orderBy(desc(serviceConnections.created_at))) as ServiceConnectionRow[];
     return rows.map((r) => this.hydrateDeprecated(r));
   }
 
-  updateConnection(
+  async updateConnection(
     id: string,
     updates: Partial<{
       environmentId: string | null;
       autoInjectedEnvKeys: string | null;
     }>,
-  ): void {
+  ): Promise<void> {
     const setValues: Partial<typeof serviceConnections.$inferInsert> = {};
 
     if (updates.environmentId !== undefined) {
@@ -140,25 +144,21 @@ export class ServiceConnectionRepo {
 
     if (Object.keys(setValues).length === 0) return;
 
-    this.db.update(serviceConnections).set(setValues).where(eq(serviceConnections.id, id)).run();
+    await this.db.update(serviceConnections).set(setValues).where(eq(serviceConnections.id, id));
   }
 
-  deleteConnection(id: string): void {
-    this.db.delete(serviceConnections).where(eq(serviceConnections.id, id)).run();
+  async deleteConnection(id: string): Promise<void> {
+    await this.db.delete(serviceConnections).where(eq(serviceConnections.id, id));
   }
 
-  deleteConnectionByProjectAndService(projectId: string, serviceId: string): void {
-    this.db
+  async deleteConnectionByProjectAndService(projectId: string, serviceId: string): Promise<void> {
+    await this.db
       .delete(serviceConnections)
       .where(
         and(
           eq(serviceConnections.service_id_consumer, projectIdToServiceId(projectId)),
           eq(serviceConnections.service_id_provider, serviceId),
         ),
-      )
-      .run();
-    // Reference `services` to silence unused-import in build paths that
-    // tree-shake the consumer/provider join; safe no-op.
-    void services;
+      );
   }
 }

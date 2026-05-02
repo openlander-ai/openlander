@@ -98,8 +98,8 @@ export type UpgradeWebSocketHandler = NodeWebSocket['upgradeWebSocket'];
  * Idempotent: returns the same secret if invoked multiple times before setup
  * completes; returns null (and prints nothing) once a password exists.
  */
-function announceSetupSecretIfNeeded(authService: AuthService): void {
-  const secret = authService.getOrCreateSetupSecret();
+async function announceSetupSecretIfNeeded(authService: AuthService): Promise<void> {
+  const secret = await authService.getOrCreateSetupSecret();
   if (!secret) {
     return;
   }
@@ -442,7 +442,7 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
     );
     const host = options.host || 'localhost';
     console.log(`\n  OpenLander v${VERSION}\n  http://${host}:${String(options.port)}\n`);
-    announceSetupSecretIfNeeded(authService);
+    void announceSetupSecretIfNeeded(authService);
   });
   injectWebSocket(server);
 
@@ -518,7 +518,7 @@ export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<vo
     server.listen(options.socketPath, () => {
       chmodSync(options.socketPath, 0o660);
       log.debug({ socketPath: options.socketPath }, 'Daemon listening');
-      announceSetupSecretIfNeeded(authService);
+      void announceSetupSecretIfNeeded(authService);
       resolve();
     });
   });
@@ -537,7 +537,9 @@ export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<vo
   // Handle graceful shutdown
   const cleanup = (): void => {
     log.info('Daemon shutting down');
-    shutdownAppContext(ctx);
+    void shutdownAppContext(ctx).catch((err: unknown) => {
+      log.warn({ err }, 'Failed to shutdown app context cleanly');
+    });
     mcpRoutes.cleanup();
     server.close();
     if (existsSync(options.socketPath)) {

@@ -75,36 +75,38 @@ export class ActivityLogger {
       const unsub = this.eventBus.on(eventType, (payload: EventPayload[typeof eventType]) => {
         // Defer insert via queueMicrotask to avoid blocking the EventBus emit path
         queueMicrotask(() => {
-          try {
-            const activity = buildActivityEvent(this.db, eventType, payload);
-            if (!activity) return;
+          void (async () => {
+            try {
+              const activity = await buildActivityEvent(this.db, eventType, payload);
+              if (!activity) return;
 
-            // Extract correlationId from payload when available
-            const correlationId =
-              activity.correlationId ??
-              (payload as { correlationId?: string }).correlationId ??
-              undefined;
+              // Extract correlationId from payload when available
+              const correlationId =
+                activity.correlationId ??
+                (payload as { correlationId?: string }).correlationId ??
+                undefined;
 
-            const metadata: Record<string, unknown> = {};
-            if (activity.incidentId) metadata.incidentId = activity.incidentId;
-            if (activity.actionRunId) metadata.actionRunId = activity.actionRunId;
-            if (activity.aiMetadata) metadata.aiMetadata = activity.aiMetadata;
-            if (activity.reason) metadata.reason = activity.reason;
+              const metadata: Record<string, unknown> = {};
+              if (activity.incidentId) metadata.incidentId = activity.incidentId;
+              if (activity.actionRunId) metadata.actionRunId = activity.actionRunId;
+              if (activity.aiMetadata) metadata.aiMetadata = activity.aiMetadata;
+              if (activity.reason) metadata.reason = activity.reason;
 
-            this.db.insertActivityLog({
-              event_type: eventType,
-              activity_type: activity.type,
-              severity: activity.severity,
-              project_id: activity.projectId,
-              correlation_id: correlationId ?? null,
-              title: activity.title,
-              description: activity.description,
-              status: activity.status,
-              metadata: JSON.stringify(metadata),
-            });
-          } catch (err) {
-            log.error({ err, eventType }, 'Failed to persist activity event');
-          }
+              await this.db.insertActivityLog({
+                event_type: eventType,
+                activity_type: activity.type,
+                severity: activity.severity,
+                project_id: activity.projectId,
+                correlation_id: correlationId ?? null,
+                title: activity.title,
+                description: activity.description,
+                status: activity.status,
+                metadata: JSON.stringify(metadata),
+              });
+            } catch (err) {
+              log.error({ err, eventType }, 'Failed to persist activity event');
+            }
+          })();
         });
       });
       this.unsubscribers.push(unsub);

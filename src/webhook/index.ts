@@ -144,12 +144,12 @@ export class WebhookManager {
       return { accepted: false, message: 'Missing project id.' };
     }
 
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) {
       return { accepted: false, projectId, message: 'Project not found.' };
     }
 
-    const config = this.db.getWebhookConfig(projectId, source);
+    const config = await this.db.getWebhookConfig(projectId, source);
     if (!config || config.enabled !== 1) {
       return { accepted: false, projectId, message: 'Webhook config missing or disabled.' };
     }
@@ -202,7 +202,7 @@ export class WebhookManager {
       return { accepted: false, projectId, message: 'Invalid push payload.' };
     }
 
-    const targetEnvironment = this.resolvePushEnvironment(projectId, parsed.branch);
+    const targetEnvironment = await this.resolvePushEnvironment(projectId, parsed.branch);
     if (!targetEnvironment) {
       const expectedBranch = config.branch_filter || 'main';
       if (parsed.branch !== expectedBranch) {
@@ -345,11 +345,11 @@ export class WebhookManager {
     }
   }
 
-  private resolvePushEnvironment(
+  private async resolvePushEnvironment(
     projectId: string,
     branch: string,
-  ): EnvironmentBranchTarget | null {
-    const environments = this.db.getEnvironmentsByProject(projectId).map((environment) => ({
+  ): Promise<EnvironmentBranchTarget | null> {
+    const environments = (await this.db.getEnvironmentsByProject(projectId)).map((environment) => ({
       id: environment.id,
       type: environment.type,
       branch: environment.branch,
@@ -376,7 +376,7 @@ export class WebhookManager {
   }
 
   private async cleanupPreview(parentProjectId: string, prNumber: number): Promise<void> {
-    const previews = this.db.getPreviewProjects(parentProjectId);
+    const previews = await this.db.getPreviewProjects(parentProjectId);
     const target = previews.find((preview) => preview.pr_number === prNumber);
     if (target) {
       await this.pipeline.remove(target.id);

@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { pickDefined } from '../helpers.js';
 import { circuitBreakerState } from '../schema.drizzle.js';
 import type { CircuitBreakerRow } from '../types.js';
@@ -11,24 +11,28 @@ const HALF_OPEN_DELAY_MS = 30 * 60 * 1000;
 export class CircuitBreakerRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
+    private readonly client: PostgresClient,
   ) {
-    void this.sqlite;
+    void this.client;
   }
 
-  getState(projectId: string): CircuitBreakerRow | undefined {
-    return this.db
-      .select()
-      .from(circuitBreakerState)
-      .where(eq(circuitBreakerState.project_id, projectId))
-      .get();
+  async getState(projectId: string): Promise<CircuitBreakerRow | undefined> {
+    const row =
+      (
+        await this.db
+          .select()
+          .from(circuitBreakerState)
+          .where(eq(circuitBreakerState.project_id, projectId))
+          .limit(1)
+      )[0] ?? null;
+    return row ?? undefined;
   }
 
-  upsert(projectId: string, data: Partial<CircuitBreakerRow>): void {
-    const existing = this.getState(projectId);
+  async upsert(projectId: string, data: Partial<CircuitBreakerRow>): Promise<void> {
+    const existing = await this.getState(projectId);
 
     if (existing) {
-      const setValues = pickDefined(
+      const setValues: Partial<typeof circuitBreakerState.$inferInsert> = pickDefined(
         data,
         'failure_count',
         'last_failure_at',
@@ -38,152 +42,134 @@ export class CircuitBreakerRepo {
       );
 
       if (Object.keys(setValues).length > 0) {
-        this.db
+        await this.db
           .update(circuitBreakerState)
           .set(setValues)
-          .where(eq(circuitBreakerState.project_id, projectId))
-          .run();
+          .where(eq(circuitBreakerState.project_id, projectId));
       }
     } else {
-      this.db
-        .insert(circuitBreakerState)
-        .values({
-          project_id: projectId,
-          failure_count: data.failure_count ?? 0,
-          last_failure_at: data.last_failure_at ?? null,
-          opened_at: data.opened_at ?? null,
-          state: data.state ?? 'closed',
-          reset_at: data.reset_at ?? null,
-        })
-        .run();
+      await this.db.insert(circuitBreakerState).values({
+        project_id: projectId,
+        failure_count: data.failure_count ?? 0,
+        last_failure_at: data.last_failure_at ?? null,
+        opened_at: data.opened_at ?? null,
+        state: data.state ?? 'closed',
+        reset_at: data.reset_at ?? null,
+      });
     }
   }
 
-  incrementFailure(projectId: string): CircuitBreakerRow {
-    const existing = this.getState(projectId);
+  async incrementFailure(projectId: string): Promise<CircuitBreakerRow> {
+    const existing = await this.getState(projectId);
     const now = Date.now();
+    let updated: CircuitBreakerRow | null;
 
     if (existing) {
       const isOutsideWindow =
         typeof existing.last_failure_at === 'number' &&
         now - existing.last_failure_at > FAILURE_WINDOW_MS;
 
-      this.db
-        .update(circuitBreakerState)
-        .set({
-          failure_count: isOutsideWindow ? 1 : existing.failure_count + 1,
-          last_failure_at: now,
-        })
-        .where(eq(circuitBreakerState.project_id, projectId))
-        .run();
+      updated =
+        (
+          await this.db
+            .update(circuitBreakerState)
+            .set({
+              failure_count: isOutsideWindow ? 1 : existing.failure_count + 1,
+              last_failure_at: now,
+            })
+            .where(eq(circuitBreakerState.project_id, projectId))
+            .returning()
+        )[0] ?? null;
     } else {
-      this.db
-        .insert(circuitBreakerState)
-        .values({
-          project_id: projectId,
-          failure_count: 1,
-          last_failure_at: now,
-          state: 'closed',
-        })
-        .run();
+      updated =
+        (
+          await this.db
+            .insert(circuitBreakerState)
+            .values({
+              project_id: projectId,
+              failure_count: 1,
+              last_failure_at: now,
+              state: 'closed',
+            })
+            .returning()
+        )[0] ?? null;
     }
 
-    const updated = this.getState(projectId);
     if (!updated) throw new RepoPersistenceError('circuit breaker state', projectId);
     return updated;
   }
 
-  openBreaker(projectId: string): void {
-    const existing = this.getState(projectId);
-
-    if (existing) {
-      this.db
-        .update(circuitBreakerState)
-        .set({
+  async openBreaker(projectId: string): Promise<void> {
+    const openedAt = Date.now();
+    await this.db
+      .insert(circuitBreakerState)
+      .values({
+        project_id: projectId,
+        state: 'open',
+        opened_at: openedAt,
+      })
+      .onConflictDoUpdate({
+        target: circuitBreakerState.project_id,
+        set: {
           state: 'open',
-          opened_at: Date.now(),
-        })
-        .where(eq(circuitBreakerState.project_id, projectId))
-        .run();
-    } else {
-      this.db
-        .insert(circuitBreakerState)
-        .values({
-          project_id: projectId,
-          state: 'open',
-          opened_at: Date.now(),
-        })
-        .run();
-    }
+          opened_at: openedAt,
+        },
+      });
   }
 
-  halfOpen(projectId: string): void {
-    const existing = this.getState(projectId);
-
-    if (existing) {
-      this.db
-        .update(circuitBreakerState)
-        .set({
+  async halfOpen(projectId: string): Promise<void> {
+    await this.db
+      .insert(circuitBreakerState)
+      .values({
+        project_id: projectId,
+        state: 'half_open',
+      })
+      .onConflictDoUpdate({
+        target: circuitBreakerState.project_id,
+        set: {
           state: 'half_open',
-        })
-        .where(eq(circuitBreakerState.project_id, projectId))
-        .run();
-    } else {
-      this.db
-        .insert(circuitBreakerState)
-        .values({
-          project_id: projectId,
-          state: 'half_open',
-        })
-        .run();
-    }
+        },
+      });
   }
 
-  reset(projectId: string): void {
-    const existing = this.getState(projectId);
-
-    if (existing) {
-      this.db
-        .update(circuitBreakerState)
-        .set({
+  async reset(projectId: string): Promise<void> {
+    const resetAt = Date.now();
+    await this.db
+      .insert(circuitBreakerState)
+      .values({
+        project_id: projectId,
+        state: 'closed',
+        failure_count: 0,
+        reset_at: resetAt,
+      })
+      .onConflictDoUpdate({
+        target: circuitBreakerState.project_id,
+        set: {
           state: 'closed',
           failure_count: 0,
-          reset_at: Date.now(),
-        })
-        .where(eq(circuitBreakerState.project_id, projectId))
-        .run();
-    } else {
-      this.db
-        .insert(circuitBreakerState)
-        .values({
-          project_id: projectId,
-          state: 'closed',
-          failure_count: 0,
-          reset_at: Date.now(),
-        })
-        .run();
-    }
+          reset_at: resetAt,
+        },
+      });
   }
 
-  findAll(): CircuitBreakerRow[] {
-    return this.db.select().from(circuitBreakerState).all();
+  async findAll(): Promise<CircuitBreakerRow[]> {
+    return await this.db.select().from(circuitBreakerState);
   }
 
-  findAllOpen(): string[] {
-    const rows = this.db
+  async findAllOpen(): Promise<string[]> {
+    const rows = await this.db
       .select({ project_id: circuitBreakerState.project_id })
       .from(circuitBreakerState)
-      .where(eq(circuitBreakerState.state, 'open'))
-      .all();
+      .where(eq(circuitBreakerState.state, 'open'));
     return rows.map((r) => r.project_id);
   }
 
-  isOpen(projectId: string): boolean {
-    const state = this.getState(projectId);
+  async isOpen(projectId: string): Promise<boolean> {
+    const state = await this.getState(projectId);
     if (state?.state === 'open' && typeof state.opened_at === 'number') {
       const now = Date.now();
       if (now - state.opened_at > HALF_OPEN_DELAY_MS) {
-        this.halfOpen(projectId);
+        await this.halfOpen(projectId);
         return false;
       }
     }

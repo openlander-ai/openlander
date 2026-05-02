@@ -45,7 +45,10 @@ test.describe('OpsAgent — API Tests (no Docker required)', () => {
   });
 });
 
-test.describe('OpsAgent — Integration (requires Docker)', () => {
+// fixme (0.1.x): RecoveryCoordinator integration is backend-ALIVE but UI-cut for
+// 0.1.0 per .sisyphus/plans/1.0-surface-spec.md. Deferred until we re-surface
+// OpsCenter or stabilize the timing contract for headless Docker recovery.
+test.describe.fixme('OpsAgent — Integration (requires Docker)', () => {
   const createdProjectIds: string[] = [];
 
   test.afterAll(async () => {

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { project_ops_overrides } from '../schema.drizzle.js';
 import type { ProjectOpsOverride } from '../../monitor/ops-types.js';
 
@@ -18,16 +18,16 @@ function projectIdToServiceId(projectId: string): string {
 export class ProjectOpsOverrideRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
+    private readonly client: PostgresClient,
   ) {
-    void this.sqlite;
+    void this.client;
   }
 
-  save(projectId: string, overrides: ProjectOpsOverride): void {
+  async save(projectId: string, overrides: ProjectOpsOverride): Promise<void> {
     const now = new Date().toISOString();
     const serviceId = projectIdToServiceId(projectId);
 
-    this.db
+    await this.db
       .insert(project_ops_overrides)
       .values({
         id: randomUUID(),
@@ -41,24 +41,25 @@ export class ProjectOpsOverrideRepo {
           overrides_json: JSON.stringify(overrides),
           updated_at: now,
         },
-      })
-      .run();
+      });
   }
 
-  load(projectId: string): ProjectOpsOverride | undefined {
-    const row = this.db
-      .select()
-      .from(project_ops_overrides)
-      .where(eq(project_ops_overrides.service_id, projectIdToServiceId(projectId)))
-      .get();
+  async load(projectId: string): Promise<ProjectOpsOverride | undefined> {
+    const row =
+      (
+        await this.db
+          .select()
+          .from(project_ops_overrides)
+          .where(eq(project_ops_overrides.service_id, projectIdToServiceId(projectId)))
+          .limit(1)
+      )[0] ?? null;
     if (!row) return undefined;
     return JSON.parse(row.overrides_json) as ProjectOpsOverride;
   }
 
-  delete(projectId: string): void {
-    this.db
+  async delete(projectId: string): Promise<void> {
+    await this.db
       .delete(project_ops_overrides)
-      .where(eq(project_ops_overrides.service_id, projectIdToServiceId(projectId)))
-      .run();
+      .where(eq(project_ops_overrides.service_id, projectIdToServiceId(projectId)));
   }
 }

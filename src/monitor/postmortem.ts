@@ -103,10 +103,10 @@ export class PostmortemGenerator {
         log.debug({ projectId }, 'Postmortem dedup — skipping (recent postmortem exists)');
         return;
       }
-      const project = this.db.getProject(projectId);
+      const project = await this.db.getProject(projectId);
       const projectName = project?.name ?? projectId;
       // PR 4.5: canonical-first status read with `??` fallback.
-      const deployable = project ? this.db.getDeployableForProject(projectId) : undefined;
+      const deployable = project ? await this.db.getDeployableForProject(projectId) : undefined;
       // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       const status = deployable?.status ?? project?.status;
 
@@ -116,7 +116,7 @@ export class PostmortemGenerator {
         return;
       }
 
-      const logs = this.db.getDeployLogs(projectId, 1);
+      const logs = await this.db.getDeployLogs(projectId, 1);
       const latestLog: DeployLogRow | undefined = logs[0];
       const rawBuildLog = latestLog?.build_log?.slice(-3000) ?? 'No build log available';
       const buildLogTail = this.redactSecrets(rawBuildLog);

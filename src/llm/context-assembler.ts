@@ -51,17 +51,17 @@ export async function buildContextSnapshot(
   docker?: Docker,
   scope?: ContextScope,
 ): Promise<string> {
-  const projects = db.listProjects();
+  const projects = await db.listProjects();
   const stats = getSystemStats();
 
   const effectiveType = scope?.type ?? 'global';
 
   const projectLines =
     effectiveType === 'project' || effectiveType === 'recovery'
-      ? buildScopedProjectLines(projects, db, scope?.projectId)
-      : buildGlobalProjectLines(projects, db);
+      ? await buildScopedProjectLines(projects, db, scope?.projectId)
+      : await buildGlobalProjectLines(projects, db);
 
-  const projectGroups = buildProjectGroups(projects, db);
+  const projectGroups = await buildProjectGroups(projects, db);
 
   const parts: string[] = [
     `## Current Server State (auto-injected)
@@ -87,13 +87,13 @@ ${projectLines}${projectGroups ? `\n\n${projectGroups}` : ''}`,
   }
 
   // v0.0.11: Add deployment history for smart defaults context
-  const deployHistory = buildDeploymentHistory(db, projects);
+  const deployHistory = await buildDeploymentHistory(db, projects);
   if (deployHistory) {
     parts.push(deployHistory);
   }
 
   // v0.0.10: Add global secrets summary
-  const globalSecrets = db.getGlobalSecrets();
+  const globalSecrets = await db.getGlobalSecrets();
   if (globalSecrets.length > 0) {
     const secretKeys = globalSecrets.map((s) => s.key).join(', ');
     parts.push(
@@ -102,14 +102,14 @@ ${projectLines}${projectGroups ? `\n\n${projectGroups}` : ''}`,
   }
 
   if (effectiveType === 'recovery' && scope?.projectId) {
-    const recoverySection = buildRecoverySection(db, scope.projectId);
+    const recoverySection = await buildRecoverySection(db, scope.projectId);
     if (recoverySection) {
       parts.push(recoverySection);
     }
   }
 
   if ((effectiveType === 'project' || effectiveType === 'recovery') && scope?.projectId) {
-    const patternSection = buildPatternSection(db, scope.projectId);
+    const patternSection = await buildPatternSection(db, scope.projectId);
     if (patternSection) {
       parts.push(patternSection);
     }
@@ -126,7 +126,10 @@ ${projectLines}${projectGroups ? `\n\n${projectGroups}` : ''}`,
  * Build incident briefing from runtime incidents.
  * Shows active crashes and errors per project.
  */
-export function buildIncidentBriefing(incidents: RuntimeIncidentRow[], db: Database): string {
+export async function buildIncidentBriefing(
+  incidents: RuntimeIncidentRow[],
+  db: Database,
+): Promise<string> {
   if (incidents.length === 0) return '';
 
   const incidentsByProject = new Map<string, RuntimeIncidentRow[]>();
@@ -145,7 +148,7 @@ export function buildIncidentBriefing(incidents: RuntimeIncidentRow[], db: Datab
   for (const [projectId, projectIncidents] of incidentsByProject) {
     if (projectIncidents.length === 0) continue;
 
-    const project = db.getProject(projectId);
+    const project = await db.getProject(projectId);
     const projectName = project ? project.name : projectId;
 
     const categories = Array.from(new Set(projectIncidents.map((incident) => incident.category)));
@@ -171,16 +174,18 @@ export function buildIncidentBriefing(incidents: RuntimeIncidentRow[], db: Datab
 // Project relationship grouping
 // ---------------------------------------------------------------------------
 
-function buildProjectGroups(projects: ProjectRow[], db: Database): string {
+async function buildProjectGroups(projects: ProjectRow[], db: Database): Promise<string> {
   if (projects.length < 2) return '';
 
   const repoGroups = new Map<string, ProjectRow[]>();
   const parentGroups = new Map<string, ProjectRow[]>();
+  const services = new Map<string, ServiceRow | undefined>();
 
   for (const p of projects) {
     // PR 3: derive compose-child parent from services.parent_service_id (canonical),
     // fall back to projects.parent_project_id for pre-migration rows.
-    const svc = db.getService(`${p.id}__svc`);
+    const svc = await db.getService(`${p.id}__svc`);
+    services.set(p.id, svc);
     const parentId =
       (svc?.parent_service_id ? svc.parent_service_id.replace(/__svc$/, '') : null) ??
       p.parent_project_id ??
@@ -219,7 +224,7 @@ function buildProjectGroups(projects: ProjectRow[], db: Database): string {
     if (group.length < 2) continue;
     // PR 3: check canonical parent via services; fall back to projects column.
     const alreadyGrouped = group.every((p) => {
-      const s = db.getService(`${p.id}__svc`);
+      const s = services.get(p.id);
       return (s?.parent_service_id ?? p.parent_project_id) != null;
     });
     if (alreadyGrouped) continue;
@@ -261,7 +266,7 @@ function formatProjectSummary(p: ProjectRow, svc?: ServiceRow | null): string {
   return `  ${statusIcon} ${p.name} (${status ?? 'unknown'})`;
 }
 
-function buildGlobalProjectLines(projects: ProjectRow[], db: Database): string {
+async function buildGlobalProjectLines(projects: ProjectRow[], db: Database): Promise<string> {
   const MAX_DETAILED_PROJECTS = 5;
 
   if (projects.length === 0) {
@@ -269,13 +274,18 @@ function buildGlobalProjectLines(projects: ProjectRow[], db: Database): string {
   }
 
   if (projects.length <= MAX_DETAILED_PROJECTS) {
-    return projects
-      .map((p: ProjectRow) => formatProjectLine(p, db.getDeployableForProject(p.id)))
-      .join('\n');
+    const lines = await Promise.all(
+      projects.map(async (p: ProjectRow) =>
+        formatProjectLine(p, await db.getDeployableForProject(p.id)),
+      ),
+    );
+    return lines.join('\n');
   }
 
   // PR 4.5: derive counts from canonical status, falling back to legacy column.
-  const withSvc = projects.map((p) => ({ p, svc: db.getDeployableForProject(p.id) }));
+  const withSvc = await Promise.all(
+    projects.map(async (p) => ({ p, svc: await db.getDeployableForProject(p.id) })),
+  );
   const running = withSvc.filter(({ p, svc }) => (svc?.status ?? p.status) === 'running');
   const errored = withSvc.filter(({ p, svc }) => (svc?.status ?? p.status) === 'error');
   const stopped = withSvc.filter(({ p, svc }) => (svc?.status ?? p.status) === 'stopped');
@@ -286,11 +296,11 @@ function buildGlobalProjectLines(projects: ProjectRow[], db: Database): string {
   ].join('\n');
 }
 
-function buildScopedProjectLines(
+async function buildScopedProjectLines(
   projects: ProjectRow[],
   db: Database,
   focalProjectId?: string,
-): string {
+): Promise<string> {
   if (projects.length === 0) {
     return '(no projects deployed yet)';
   }
@@ -301,18 +311,21 @@ function buildScopedProjectLines(
   const lines: string[] = [];
 
   if (focal) {
-    lines.push(formatProjectLine(focal, db.getDeployableForProject(focal.id)));
+    lines.push(formatProjectLine(focal, await db.getDeployableForProject(focal.id)));
   }
 
   if (others.length > 0) {
-    lines.push(...others.map((p) => formatProjectSummary(p, db.getDeployableForProject(p.id))));
+    const otherLines = await Promise.all(
+      others.map(async (p) => formatProjectSummary(p, await db.getDeployableForProject(p.id))),
+    );
+    lines.push(...otherLines);
   }
 
   return lines.join('\n');
 }
 
-function buildPatternSection(db: Database, projectId: string): string | null {
-  const patterns = db.getTopDeploymentPatterns(projectId, 5);
+async function buildPatternSection(db: Database, projectId: string): Promise<string | null> {
+  const patterns = await db.getTopDeploymentPatterns(projectId, 5);
   if (patterns.length === 0) return null;
 
   const lines: string[] = ['## Known Deployment Patterns'];
@@ -367,8 +380,8 @@ function recipeCategory(title: string): string {
   return 'other';
 }
 
-function buildRecoverySection(db: Database, projectId: string): string | null {
-  const logs = db.getDeployLogs(projectId, 5);
+async function buildRecoverySection(db: Database, projectId: string): Promise<string | null> {
+  const logs = await db.getDeployLogs(projectId, 5);
   const failedLogs = logs.filter((l) => l.status === 'failed');
   const lines: string[] = ['## Recovery Context'];
 
@@ -378,7 +391,7 @@ function buildRecoverySection(db: Database, projectId: string): string | null {
     lines.push(`  ❌ ${time} — ${hint}`);
   }
 
-  const patterns = db.getTopDeploymentPatterns(projectId, 5);
+  const patterns = await db.getTopDeploymentPatterns(projectId, 5);
   if (patterns.length > 0) {
     lines.push('\n## Known Patterns for This Project');
     for (const p of patterns) {
@@ -410,17 +423,20 @@ function buildRecoverySection(db: Database, projectId: string): string | null {
  * Shows last 2 deploy logs per project (max 5 projects) so the LLM
  * can naturally suggest smart defaults during conversation.
  */
-function buildDeploymentHistory(db: Database, allProjects: ProjectRow[]): string | null {
+async function buildDeploymentHistory(
+  db: Database,
+  allProjects: ProjectRow[],
+): Promise<string | null> {
   const projectsWithHistory = allProjects.slice(0, 5);
   if (projectsWithHistory.length === 0) return null;
 
   const sections: string[] = [];
 
   for (const project of projectsWithHistory) {
-    const logs = db.getDeployLogs(project.id, 2);
+    const logs = await db.getDeployLogs(project.id, 2);
     if (logs.length === 0) continue;
 
-    const envVars = db.getEnvVars(project.id);
+    const envVars = await db.getEnvVars(project.id);
     const envKeys = Object.keys(envVars);
 
     const logLines = logs.map((l: DeployLogRow) => {
@@ -430,7 +446,7 @@ function buildDeploymentHistory(db: Database, allProjects: ProjectRow[]): string
     });
 
     // PR 4.5: canonical-first read of assigned_port with `??` fallback.
-    const portDeployable = db.getDeployableForProject(project.id);
+    const portDeployable = await db.getDeployableForProject(project.id);
     const portAssigned = portDeployable?.assigned_port ?? project.assigned_port;
     const portInfo = portAssigned != null ? `port ${String(portAssigned)}` : 'no port';
     const envInfo = envKeys.length > 0 ? `env: ${envKeys.join(', ')}` : 'no env vars';

@@ -5,7 +5,7 @@ import { defineConfig } from 'tsup';
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8')) as { version: string };
 
 // Runtime modules — resolved at runtime, not bundled
-const externals = ['better-sqlite3', 'nodemailer'];
+const externals = ['postgres', 'nodemailer'];
 
 export default defineConfig([
   // CLI entry — needs shebang for `npx openlander`

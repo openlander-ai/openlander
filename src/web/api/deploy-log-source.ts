@@ -27,30 +27,30 @@ import type { DeployLogRow, ProjectRow } from '../../db/types.js';
  * Returns `null` when neither resolution succeeds; callers should
  * surface a 404.
  */
-export function resolveDeploymentLogSource(
+export async function resolveDeploymentLogSource(
   ctx: AppContext,
   id: string,
-): { project: ProjectRow; deployLog: DeployLogRow | null } | null {
-  const deployLog = ctx.db.getDeployLog(id) ?? null;
+): Promise<{ project: ProjectRow; deployLog: DeployLogRow | null } | null> {
+  const deployLog = (await ctx.db.getDeployLog(id)) ?? null;
   if (deployLog) {
     // Post-0012: deploy_logs.service_id is the canonical FK. Walk
     // through the service row to find the parent project.
-    const service = ctx.db.getService(deployLog.service_id);
+    const service = await ctx.db.getService(deployLog.service_id);
     if (!service) return null;
-    const project = ctx.db.getProject(service.project_id);
+    const project = await ctx.db.getProject(service.project_id);
     if (!project) return null;
     return { project, deployLog };
   }
 
   // Fallback: in-flight deploy keyed by service id (post-0012) or
   // project id (legacy) until the post-mortem deploy_logs row lands.
-  const serviceMatch = ctx.db.getService(id);
+  const serviceMatch = await ctx.db.getService(id);
   if (serviceMatch) {
-    const project = ctx.db.getProject(serviceMatch.project_id);
+    const project = await ctx.db.getProject(serviceMatch.project_id);
     if (!project) return null;
     return { project, deployLog: null };
   }
-  const project = ctx.db.getProject(id);
+  const project = await ctx.db.getProject(id);
   if (!project) return null;
   return { project, deployLog: null };
 }

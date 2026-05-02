@@ -208,7 +208,7 @@ export class ServiceManager {
    *  - First service of a type → standard key (DATABASE_URL, REDIS_URL, …)
    *  - Subsequent services of the same type → prefixed key (e.g. MYDB_DATABASE_URL)
    */
-  getSuggestedEnv(service: ServiceRow): Array<{ key: string; value: string }> {
+  async getSuggestedEnv(service: ServiceRow): Promise<Array<{ key: string; value: string }>> {
     const serviceKind = service.kind;
     const baseKey = DEFAULT_ENV_KEYS[serviceKind];
     if (!baseKey) {
@@ -221,9 +221,9 @@ export class ServiceManager {
       return [];
     }
 
-    const existing = this.db
-      .listServices()
-      .filter((s) => s.kind === serviceKind && s.id !== service.id);
+    const existing = (await this.db.listServices()).filter(
+      (s) => s.kind === serviceKind && s.id !== service.id,
+    );
 
     if (serviceKind === 'minio') {
       const user = (credentials?.['user'] as string | undefined) ?? '';
@@ -263,7 +263,7 @@ export class ServiceManager {
    * Idempotent: skips services already connected with correct alias.
    */
   async reconcileServiceNetworks(): Promise<void> {
-    const services = this.db.listServices();
+    const services = await this.db.listServices();
     let reconciled = 0;
     let migrated = 0;
     let alreadyConnected = 0;
@@ -505,7 +505,7 @@ export class ServiceManager {
       }
     }
 
-    this.db.createService({
+    await this.db.createService({
       id,
       name: opts.name,
       type,
@@ -515,9 +515,9 @@ export class ServiceManager {
       credentials: credentialsJson,
     });
 
-    this.db.updateService(id, { status: 'running', containerId });
+    await this.db.updateService(id, { status: 'running', containerId });
     this.invalidateServiceCardSummaryCache();
-    const created = this.db.getService(id);
+    const created = await this.db.getService(id);
     if (!created) {
       throw new RepoPersistenceError('service', id);
     }
@@ -525,26 +525,26 @@ export class ServiceManager {
   }
 
   async start(id: string): Promise<void> {
-    const service = this.db.getService(id);
+    const service = await this.db.getService(id);
     if (!service) {
       throw new ServiceNotFoundError(id);
     }
 
     const containerId = service.container_id ?? service.container_name ?? '';
     await this.docker.startContainer(containerId);
-    this.db.updateService(id, { status: 'running' });
+    await this.db.updateService(id, { status: 'running' });
     this.invalidateServiceCardSummaryCache();
   }
 
   async stop(id: string): Promise<void> {
-    const service = this.db.getService(id);
+    const service = await this.db.getService(id);
     if (!service) {
       throw new ServiceNotFoundError(id);
     }
 
     const containerId = service.container_id ?? service.container_name ?? '';
     await this.docker.stopContainer(containerId);
-    this.db.updateService(id, { status: 'stopped' });
+    await this.db.updateService(id, { status: 'stopped' });
     this.invalidateServiceCardSummaryCache();
   }
 
@@ -552,13 +552,13 @@ export class ServiceManager {
     id: string,
     options?: { force?: boolean },
   ): Promise<{ warning?: string; connected_projects?: Array<{ id: string; name: string }> }> {
-    const service = this.db.getService(id);
+    const service = await this.db.getService(id);
     if (!service) {
       throw new ServiceNotFoundError(id);
     }
 
     // Check for connected projects before deletion
-    const connectedProjects = this.getConnectedProjects(id);
+    const connectedProjects = await this.getConnectedProjects(id);
     let warning: string | undefined;
     if (connectedProjects.length > 0) {
       if (!options?.force) {
@@ -588,7 +588,7 @@ export class ServiceManager {
     const volumeName = this.getVolumeName(service.name);
     await this.docker.removeVolume(volumeName);
 
-    this.db.deleteService(id);
+    await this.db.deleteService(id);
     this.invalidateServiceCardSummaryCache();
 
     return {
@@ -598,7 +598,7 @@ export class ServiceManager {
   }
 
   async backup(id: string): Promise<{ backupId: string; path: string; size: number }> {
-    const service = this.getRequiredService(id);
+    const service = await this.getRequiredService(id);
     const volumeName = this.getVolumeName(service.name);
     const backupDir = this.getBackupDir();
     const backupId = `${service.name}-${String(Date.now())}`;
@@ -676,7 +676,7 @@ export class ServiceManager {
   }
 
   async restore(id: string, backupId: string): Promise<void> {
-    const service = this.getRequiredService(id);
+    const service = await this.getRequiredService(id);
     const backupDir = this.getBackupDir();
     const backupFilename = `${backupId}.tar.gz`;
     const backupPath = join(backupDir, backupFilename);
@@ -716,8 +716,10 @@ export class ServiceManager {
     }
   }
 
-  listBackups(id: string): Array<{ backupId: string; createdAt: Date; sizeBytes: number }> {
-    const service = this.getRequiredService(id);
+  async listBackups(
+    id: string,
+  ): Promise<Array<{ backupId: string; createdAt: Date; sizeBytes: number }>> {
+    const service = await this.getRequiredService(id);
     const backupDir = this.getBackupDir();
     if (!existsSync(backupDir)) {
       return [];
@@ -743,12 +745,12 @@ export class ServiceManager {
   }
 
   async list(): Promise<ServiceRow[]> {
-    const services = this.db.listServices();
+    const services = await this.db.listServices();
 
     await Promise.all(
       services.map(async (service) => {
         const inspection = await this.inspectServiceContainer(service);
-        this.syncServiceStateFromInspection(service, inspection);
+        await this.syncServiceStateFromInspection(service, inspection);
       }),
     );
 
@@ -756,14 +758,14 @@ export class ServiceManager {
   }
 
   async getDetail(id: string): Promise<ServiceRow> {
-    const service = this.getRequiredService(id);
+    const service = await this.getRequiredService(id);
 
     if (!service.container_id && !service.container_name) {
       if (service.status !== 'error') {
-        this.db.updateService(service.id, { status: 'error' });
+        await this.db.updateService(service.id, { status: 'error' });
         log.warn({ serviceId: service.id }, 'Service has no container reference, marking as error');
       }
-      const refreshed = this.db.getService(id);
+      const refreshed = await this.db.getService(id);
       if (!refreshed) {
         throw new ServiceNotFoundError(id);
       }
@@ -777,16 +779,16 @@ export class ServiceManager {
       const containerIdFromDocker = info.Id;
 
       if (status !== service.status || containerIdFromDocker !== service.container_id) {
-        this.db.updateService(service.id, { status, containerId: containerIdFromDocker });
+        await this.db.updateService(service.id, { status, containerId: containerIdFromDocker });
       }
     } catch (err) {
       log.warn({ err, serviceId: service.id, containerId }, 'Failed to inspect service container');
       if (service.status !== 'error') {
-        this.db.updateService(service.id, { status: 'error' });
+        await this.db.updateService(service.id, { status: 'error' });
       }
     }
 
-    const refreshed = this.db.getService(id);
+    const refreshed = await this.db.getService(id);
     if (!refreshed) {
       throw new ServiceNotFoundError(id);
     }
@@ -794,14 +796,14 @@ export class ServiceManager {
   }
 
   async getLogs(id: string, lines = 100): Promise<string> {
-    const service = this.getRequiredService(id);
+    const service = await this.getRequiredService(id);
     const tail = Number.isInteger(lines) && lines > 0 ? lines : 100;
     const containerId = service.container_id ?? service.container_name ?? '';
     return this.docker.getLogs(containerId, tail);
   }
 
   async exec(id: string, command: string[], options?: ExecOptions): Promise<ContainerExecResult> {
-    const service = this.getRequiredService(id);
+    const service = await this.getRequiredService(id);
     await this.ensureServiceContainerRunning(service);
     return execInServiceContainer(this.docker, service, command, {
       throwOnNonZeroExit: false,
@@ -843,7 +845,7 @@ export class ServiceManager {
    * until a request-counting layer lands (post-1.0 follow-up).
    */
   async recordMetricSample(serviceId: string): Promise<void> {
-    const service = this.db.getService(serviceId);
+    const service = await this.db.getService(serviceId);
     if (!service || service.status !== 'running') {
       return;
     }
@@ -854,7 +856,7 @@ export class ServiceManager {
         ? Math.round((runtime.memoryUsageBytes / (1024 * 1024)) * 10) / 10
         : 0;
 
-    this.db.recordServiceMetricSample({
+    await this.db.recordServiceMetricSample({
       serviceId,
       recordedAt: Date.now(),
       cpu: runtime.cpuPercent ?? 0,
@@ -881,7 +883,7 @@ export class ServiceManager {
     status: ServiceRow['status'];
     healthStatus: string | null;
   }> {
-    const service = this.getRequiredService(id);
+    const service = await this.getRequiredService(id);
     const inspection = await this.inspectServiceContainer(service);
     return { status: inspection.status, healthStatus: inspection.healthStatus };
   }
@@ -913,14 +915,14 @@ export class ServiceManager {
 
     const epoch = this.serviceCardSummaryEpoch;
     const loadPromise = (async () => {
-      const allServices = this.db.listServices();
+      const allServices = await this.db.listServices();
       const services = kindIn
         ? allServices.filter((s) => (kindIn as readonly string[]).includes(s.kind))
         : allServices;
       const summaries = await Promise.all(
         services.map(async (service) => {
           const inspection = await this.inspectServiceContainer(service);
-          this.syncServiceStateFromInspection(service, inspection);
+          await this.syncServiceStateFromInspection(service, inspection);
 
           return {
             ...service,
@@ -1007,12 +1009,12 @@ export class ServiceManager {
     }
   }
 
-  private syncServiceStateFromInspection(
+  private async syncServiceStateFromInspection(
     service: ServiceRow,
     inspection: { status: ServiceRow['status']; containerId: string | null },
-  ): void {
+  ): Promise<void> {
     if (inspection.status !== service.status || inspection.containerId !== service.container_id) {
-      this.db.updateService(service.id, {
+      await this.db.updateService(service.id, {
         status: inspection.status,
         containerId: inspection.containerId,
       });
@@ -1120,25 +1122,25 @@ export class ServiceManager {
     };
   }
 
-  getProjectServices(projectId: string): ServiceRow[] {
-    const envVars = this.db.getEnvVars(projectId);
+  async getProjectServices(projectId: string): Promise<ServiceRow[]> {
+    const envVars = await this.db.getEnvVars(projectId);
     const allValues = Object.values(envVars).join(' ');
-    const services = this.db.listServices();
+    const services = await this.db.listServices();
     return services.filter((s) => s.container_name != null && allValues.includes(s.container_name));
   }
 
-  getConnectedProjects(serviceId: string): Array<{ id: string; name: string }> {
-    const service = this.getRequiredService(serviceId);
+  async getConnectedProjects(serviceId: string): Promise<Array<{ id: string; name: string }>> {
+    const service = await this.getRequiredService(serviceId);
     const containerName = service.container_name;
-    const projects = this.db.listProjects();
+    const projects = await this.db.listProjects();
     const connected: Array<{ id: string; name: string }> = [];
 
     for (const project of projects) {
-      const projectEnvVars = this.db.getEnvVars(project.id);
-      const environments = this.db.getEnvironmentsByProject(project.id);
+      const projectEnvVars = await this.db.getEnvVars(project.id);
+      const environments = await this.db.getEnvironmentsByProject(project.id);
       const allEnvValues: string[] = Object.values(projectEnvVars);
       for (const env of environments) {
-        allEnvValues.push(...Object.values(this.db.getEnvVars(project.id, env.id)));
+        allEnvValues.push(...Object.values(await this.db.getEnvVars(project.id, env.id)));
       }
       const hasConnection =
         containerName != null &&
@@ -1152,7 +1154,7 @@ export class ServiceManager {
   }
 
   async listDatabases(serviceId: string): Promise<ListedDatabase[]> {
-    const service = this.getRequiredService(serviceId);
+    const service = await this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
     const serviceKind = service.kind;
     const adapter = getServiceAdapter(serviceKind);
@@ -1164,7 +1166,7 @@ export class ServiceManager {
   }
 
   async listUsers(serviceId: string): Promise<ListedUser[]> {
-    const service = this.getRequiredService(serviceId);
+    const service = await this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
     const serviceKind = service.kind;
     const adapter = getServiceAdapter(serviceKind);
@@ -1176,7 +1178,7 @@ export class ServiceManager {
   }
 
   async createDatabase(serviceId: string, dbName: string): Promise<CreateDatabaseResult> {
-    const service = this.getRequiredService(serviceId);
+    const service = await this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
     assertSafeDatabaseName(dbName);
 
@@ -1195,7 +1197,7 @@ export class ServiceManager {
     password?: string,
     grants?: { database: string },
   ): Promise<CreateUserResult> {
-    const service = this.getRequiredService(serviceId);
+    const service = await this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
     assertSafeUserName(username);
 
@@ -1214,7 +1216,7 @@ export class ServiceManager {
   }
 
   async listBuckets(serviceId: string): Promise<Array<{ name: string; createdAt: string }>> {
-    const service = this.getRequiredService(serviceId);
+    const service = await this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
     const serviceKind = service.kind;
     if (serviceKind !== 'minio') {
@@ -1226,7 +1228,7 @@ export class ServiceManager {
   }
 
   async createBucket(serviceId: string, bucketName: string): Promise<void> {
-    const service = this.getRequiredService(serviceId);
+    const service = await this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
     const serviceKind = service.kind;
     if (serviceKind !== 'minio') {
@@ -1238,7 +1240,7 @@ export class ServiceManager {
   }
 
   async deleteBucket(serviceId: string, bucketName: string): Promise<void> {
-    const service = this.getRequiredService(serviceId);
+    const service = await this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
     const serviceKind = service.kind;
     if (serviceKind !== 'minio') {
@@ -1337,8 +1339,8 @@ export class ServiceManager {
     return normalized.length > 0 ? normalized : 'custom';
   }
 
-  private getRequiredService(serviceId: string): ServiceRow {
-    const service = this.db.getService(serviceId);
+  private async getRequiredService(serviceId: string): Promise<ServiceRow> {
+    const service = await this.db.getService(serviceId);
     if (!service) {
       throw new ServiceNotFoundError(serviceId);
     }

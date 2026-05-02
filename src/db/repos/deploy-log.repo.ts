@@ -1,6 +1,6 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { deployLogs } from '../schema.drizzle.js';
 import type { DeployLogRow } from '../types.js';
 
@@ -15,12 +15,12 @@ function projectIdToServiceId(projectId: string): string {
 export class DeployLogRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
+    private readonly client: PostgresClient,
   ) {
-    void this.sqlite;
+    void this.client;
   }
 
-  createDeployLog(log: {
+  async createDeployLog(log: {
     id: string;
     projectId: string;
     environmentId?: string;
@@ -31,72 +31,74 @@ export class DeployLogRepo {
     commitMessage?: string;
     buildLog?: string;
     durationMs?: number;
-  }): void {
-    this.db
-      .insert(deployLogs)
-      .values({
-        id: log.id,
-        service_id: projectIdToServiceId(log.projectId),
-        environment_id: log.environmentId ?? null,
-        status: log.status,
-        trigger: log.trigger,
-        trigger_detail: log.triggerDetail ?? null,
-        commit_sha: log.commitSha ?? null,
-        commit_message: log.commitMessage ?? null,
-        build_log: log.buildLog ?? null,
-        duration_ms: log.durationMs ?? null,
-      })
-      .run();
+  }): Promise<void> {
+    await this.db.insert(deployLogs).values({
+      id: log.id,
+      service_id: projectIdToServiceId(log.projectId),
+      environment_id: log.environmentId ?? null,
+      status: log.status,
+      trigger: log.trigger,
+      trigger_detail: log.triggerDetail ?? null,
+      commit_sha: log.commitSha ?? null,
+      commit_message: log.commitMessage ?? null,
+      build_log: log.buildLog ?? null,
+      duration_ms: log.durationMs ?? null,
+    });
   }
 
   /** @param _serverId - Reserved for future server-side filtering. Currently ignored. */
-  getDeployLogs(
+  async getDeployLogs(
     projectId: string,
     limit = 20,
     environmentId?: string,
     _serverId?: string,
-  ): DeployLogRow[] {
+  ): Promise<DeployLogRow[]> {
     const serviceId = projectIdToServiceId(projectId);
     const whereClause = environmentId
       ? and(eq(deployLogs.service_id, serviceId), eq(deployLogs.environment_id, environmentId))
       : eq(deployLogs.service_id, serviceId);
 
-    return this.db
+    const rows = await this.db
       .select()
       .from(deployLogs)
       .where(whereClause)
-      .orderBy(desc(sql`rowid`))
-      .limit(limit)
-      .all() as DeployLogRow[];
+      .orderBy(desc(deployLogs.created_at), desc(deployLogs.id))
+      .limit(limit);
+    return rows as DeployLogRow[];
   }
 
-  getLastDeployLog(projectId: string, environmentId?: string): DeployLogRow | undefined {
+  async getLastDeployLog(
+    projectId: string,
+    environmentId?: string,
+  ): Promise<DeployLogRow | undefined> {
     const serviceId = projectIdToServiceId(projectId);
     const whereClause = environmentId
       ? and(eq(deployLogs.service_id, serviceId), eq(deployLogs.environment_id, environmentId))
       : eq(deployLogs.service_id, serviceId);
 
-    return this.db
+    const [row] = await this.db
       .select()
       .from(deployLogs)
       .where(whereClause)
-      .orderBy(desc(sql`rowid`))
-      .limit(1)
-      .get() as DeployLogRow | undefined;
+      .orderBy(desc(deployLogs.created_at), desc(deployLogs.id))
+      .limit(1);
+    return (row as DeployLogRow | undefined) ?? undefined;
   }
 
-  updateRuntimeLog(deployId: string, runtimeLog: string): void {
-    this.db
+  async updateRuntimeLog(deployId: string, runtimeLog: string): Promise<void> {
+    await this.db
       .update(deployLogs)
       .set({ runtime_log: runtimeLog })
-      .where(eq(deployLogs.id, deployId))
-      .run();
+      .where(eq(deployLogs.id, deployId));
   }
 
-  getDeployLog(deployId: string): DeployLogRow | undefined {
-    return this.db.select().from(deployLogs).where(eq(deployLogs.id, deployId)).get() as
-      | DeployLogRow
-      | undefined;
+  async getDeployLog(deployId: string): Promise<DeployLogRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(deployLogs)
+      .where(eq(deployLogs.id, deployId))
+      .limit(1);
+    return (row as DeployLogRow | undefined) ?? undefined;
   }
 
   /**
@@ -104,12 +106,12 @@ export class DeployLogRepo {
    * deploy events from all projects without per-project caps that would
    * otherwise drop hot-project rows.
    */
-  listRecentAcrossProjects(limit = 100): DeployLogRow[] {
-    return this.db
+  async listRecentAcrossProjects(limit = 100): Promise<DeployLogRow[]> {
+    const rows = await this.db
       .select()
       .from(deployLogs)
-      .orderBy(desc(sql`rowid`))
-      .limit(limit)
-      .all() as DeployLogRow[];
+      .orderBy(desc(deployLogs.created_at), desc(deployLogs.id))
+      .limit(limit);
+    return rows as DeployLogRow[];
   }
 }

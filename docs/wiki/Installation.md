@@ -4,7 +4,7 @@
 
 | Requirement       | Version  | Notes                                                                       |
 | ----------------- | -------- | --------------------------------------------------------------------------- |
-| **Node.js**       | >= 22    | Includes npm                                                                |
+| **Node.js**       | >= 22    | Required for direct CLI development; Docker Compose runtime includes Node   |
 | **Docker Engine** | >= 20.10 | With Compose V2 >= 2.3.0                                                    |
 | **Git**           | >= 2.x   | For cloning repositories                                                    |
 | **LLM API Key**   | —        | One of: Gemini (free), OpenRouter (free), Anthropic, OpenAI, Ollama (local) |
@@ -13,24 +13,35 @@
 
 ---
 
-## Install
+## Install And Run
 
 ```bash
-npm install -g openlander
+# Start OpenLander plus its Postgres database
+OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose up -d --build
 ```
 
-## Run
+This starts:
 
-```bash
-openlander
-```
+- `openlander` — the web UI, API, MCP server, deploy pipeline, and recovery worker
+- `openlander-db` — Postgres 16 for OpenLander runtime state
+- `openlander-data` and `openlander-postgres` Docker volumes for persisted data
 
 This will:
 
-1. Check Docker (install if missing on Linux, fix permissions if needed)
-2. Start the Traefik reverse proxy
-3. Open the Web UI at `http://localhost:10114`
-4. Walk through the setup wizard
+1. Start Postgres and OpenLander containers
+2. Mount the Docker socket so OpenLander can build and run project containers
+3. Serve the Web UI at `http://localhost:10114`
+4. Preserve runtime state in `openlander-data` and `openlander-postgres`
+5. Let you walk through the setup wizard on first open
+
+### Direct CLI Runtime
+
+Running `openlander` directly is supported for development or custom process
+supervisors only. You must provide a Postgres URL:
+
+```bash
+OPENLANDER_DATABASE_URL='postgres://user:password@host:5432/openlander' openlander start
+```
 
 ### Options
 
@@ -115,7 +126,9 @@ brew install --cask docker
 | `openlander config reset-password` | Reset admin password                                |
 | `openlander mcp`                   | Start MCP server (stdio mode)                       |
 
-> **1.0 change**: OpenLander runs in the foreground only. Use systemd / pm2 / docker for background lifecycle (see the [Running as a Service](../../README.md#running-as-a-service) section in README).
+> **1.0 change**: OpenLander runs in the foreground only. Use Docker Compose,
+> systemd, or pm2 for background lifecycle (see the
+> [Running as a Service](../../README.md#running-as-a-service) section in README).
 
 > **Single-process only**: OpenLander 1.0 must run as a single process. Do **not** enable PM2 cluster mode (`exec_mode: 'cluster'` / `instances > 1`) or run multiple `openlander` workers behind a load balancer. The first-boot setup secret, the OAuth PKCE verifier map, and the agent pool are in-process state — workers would each generate a different setup secret and fail to share OAuth/session state. Multi-process support is tracked for a future minor release.
 

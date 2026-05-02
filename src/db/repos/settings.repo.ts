@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { settings } from '../schema.drizzle.js';
 
 /**
@@ -11,36 +11,35 @@ import { settings } from '../schema.drizzle.js';
 export class SettingsRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
+    private readonly client: PostgresClient,
   ) {
-    void this.sqlite;
+    void this.client;
   }
 
-  getSetting(key: string): { value: string } | undefined {
-    const row = this.db
+  async getSetting(key: string): Promise<{ value: string } | null> {
+    const [row] = await this.db
       .select({ value: settings.value })
       .from(settings)
       .where(eq(settings.key, key))
-      .get();
-    return row ?? undefined;
+      .limit(1);
+    return row ?? null;
   }
 
-  upsertSetting(key: string, value: string): void {
-    this.db
+  async upsertSetting(key: string, value: string): Promise<void> {
+    await this.db
       .insert(settings)
       .values({
         key,
         value,
-        updated_at: sql`CURRENT_TIMESTAMP`,
+        updated_at: sql`now()::text`,
       })
       .onConflictDoUpdate({
         target: settings.key,
         set: {
           value,
-          updated_at: sql`CURRENT_TIMESTAMP`,
+          updated_at: sql`now()::text`,
         },
-      })
-      .run();
+      });
   }
 
   /**
@@ -48,10 +47,11 @@ export class SettingsRepo {
    * an error. Callers can treat the route as 200 in either case (the
    * notifications webhook DELETE is contract-idempotent).
    */
-  deleteSetting(key: string): boolean {
-    const result = this.db.delete(settings).where(eq(settings.key, key)).run() as
-      | { changes?: number }
-      | undefined;
-    return (result?.changes ?? 0) > 0;
+  async deleteSetting(key: string): Promise<boolean> {
+    const deleted = await this.db
+      .delete(settings)
+      .where(eq(settings.key, key))
+      .returning({ key: settings.key });
+    return deleted.length > 0;
   }
 }

@@ -174,10 +174,12 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       const services = await ctx.serviceManager.listWithCardSummary({
         kindIn: MANAGED_SERVICE_KINDS,
       });
-      const wire = services.map((svc) => {
-        const envVars = ctx.db.getEnvVars(svc.id);
-        return toServiceWire(svc, envVars);
-      });
+      const wire = await Promise.all(
+        services.map(async (svc) => {
+          const envVars = await ctx.db.getEnvVars(svc.id);
+          return toServiceWire(svc, envVars);
+        }),
+      );
       return c.json(wire);
     } catch (err) {
       log.debug({ err }, 'List services failed');
@@ -241,7 +243,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
         version: body.version,
         envVars: body.env_vars,
       });
-      const envVars = ctx.db.getEnvVars(service.id);
+      const envVars = await ctx.db.getEnvVars(service.id);
       return c.json(toServiceWire(service, envVars));
     } catch (err) {
       log.debug({ err }, 'Create service failed');
@@ -257,7 +259,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     const id = c.req.param('id');
     try {
       const service = await ctx.serviceManager.getDetail(id);
-      const envVars = ctx.db.getEnvVars(service.id);
+      const envVars = await ctx.db.getEnvVars(service.id);
       return c.json(toServiceWire(service, envVars));
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Get service detail failed');
@@ -322,7 +324,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
   // 204 when the service has no recorded samples yet (first-deploy or
   // recorder hasn't fired); the UI hook should treat 204 as "no data"
   // and keep a placeholder sparkline rather than showing an error.
-  api.get('/services/:id/metrics', (c) => {
+  api.get('/services/:id/metrics', async (c) => {
     const id = c.req.param('id');
 
     const rangeParam = (c.req.query('range') ?? '1h') as '15m' | '1h' | '6h' | '24h' | '7d';
@@ -336,17 +338,17 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     const windowMs: number = RANGE_MS[rangeParam] ?? RANGE_MS['1h'] ?? 3_600_000;
 
     try {
-      const service = ctx.db.getService(id);
+      const service = await ctx.db.getService(id);
       if (!service) {
         return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
       }
 
-      if (!ctx.db.hasAnyServiceMetrics(id)) {
+      if (!(await ctx.db.hasAnyServiceMetrics(id))) {
         return new Response(null, { status: 204 });
       }
 
       const fromMs = Date.now() - windowMs;
-      const rows = ctx.db.listServiceMetricsSince(id, fromMs);
+      const rows = await ctx.db.listServiceMetricsSince(id, fromMs);
 
       if (rows.length === 0) {
         return new Response(null, { status: 204 });

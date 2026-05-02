@@ -32,25 +32,29 @@ export class AiUsageListener {
           const actionType = payload.actionType ?? 'system';
           const source = payload.source ?? null;
 
-          this.db.createAiUsageLog({
-            action_type: actionType as AiUsageLogRow['action_type'],
-            source: source as AiUsageLogRow['source'],
-            model_name: payload.modelName,
-            provider: payload.provider,
-            input_tokens: payload.inputTokens,
-            output_tokens: payload.outputTokens,
-            total_tokens: payload.totalTokens,
-            cost_usd: payload.costUsd ?? null,
-            project_id: payload.projectId ?? null,
-            session_id: payload.sessionId ?? null,
-            tools_called: JSON.stringify(payload.toolsCalled ?? []),
-            result: payload.result,
-            error_message: payload.errorMessage ?? null,
-            error_type: payload.errorType ?? null,
-            duration_ms: payload.durationMs,
-            user_id: null,
-            tenant_id: null,
-          });
+          void this.db
+            .createAiUsageLog({
+              action_type: actionType as AiUsageLogRow['action_type'],
+              source: source as AiUsageLogRow['source'],
+              model_name: payload.modelName,
+              provider: payload.provider,
+              input_tokens: payload.inputTokens,
+              output_tokens: payload.outputTokens,
+              total_tokens: payload.totalTokens,
+              cost_usd: payload.costUsd ?? null,
+              project_id: payload.projectId ?? null,
+              session_id: payload.sessionId ?? null,
+              tools_called: JSON.stringify(payload.toolsCalled ?? []),
+              result: payload.result,
+              error_message: payload.errorMessage ?? null,
+              error_type: payload.errorType ?? null,
+              duration_ms: payload.durationMs,
+              user_id: null,
+              tenant_id: null,
+            })
+            .catch((err: unknown) => {
+              log.warn({ err }, 'Failed to persist ai:usage event');
+            });
         } catch (err) {
           log.warn({ err }, 'Failed to persist ai:usage event');
         }

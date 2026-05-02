@@ -24,6 +24,7 @@
 #   SOAK_PASSWORD       default soak-test-pwd
 #   SOAK_CYCLE_SEC      default 300 (5min)
 #   SOAK_DURATION_SEC   default 86400 (24h)
+#   SOAK_DATABASE_URL   required Postgres URL for the side OpenLander instance
 
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -34,6 +35,7 @@ SOAK_PORT="${SOAK_PORT:-10116}"
 SOAK_PASSWORD="${SOAK_PASSWORD:-soak-test-pwd}"
 SOAK_CYCLE_SEC="${SOAK_CYCLE_SEC:-300}"
 SOAK_DURATION_SEC="${SOAK_DURATION_SEC:-86400}"
+SOAK_DATABASE_URL="${SOAK_DATABASE_URL:-}"
 SEED_REPO="${SEED_REPO:-https://github.com/openlander-ai/test-no-dockerfile}"
 BASE_URL="http://localhost:$SOAK_PORT"
 
@@ -72,8 +74,13 @@ wait_for_health() {
 start_instance() {
   local home_dir="$1"
   local log_file="$2"
+  if [ -z "$SOAK_DATABASE_URL" ]; then
+    echo "[soak] SOAK_DATABASE_URL is required after the Postgres cutover" >&2
+    return 1
+  fi
   echo "[soak] starting OpenLander on $BASE_URL with HOME=$home_dir"
-  HOME="$home_dir" nohup npx tsx "$(dirname "$HERE")/../src/cli/index.ts" --port "$SOAK_PORT" \
+  HOME="$home_dir" OPENLANDER_DATABASE_URL="$SOAK_DATABASE_URL" \
+    nohup npx tsx "$(dirname "$HERE")/../src/cli/index.ts" --port "$SOAK_PORT" \
     >"$log_file" 2>&1 &
   echo $!
 }
@@ -140,7 +147,9 @@ case "$cmd" in
     METRICS_LOG="$RUN_DIR/metrics.jsonl"
     LOOP_LOG="$RUN_DIR/loop.log"
 
-    INSTANCE_PID=$(start_instance "$SOAK_HOME" "$INSTANCE_LOG")
+    if ! INSTANCE_PID=$(start_instance "$SOAK_HOME" "$INSTANCE_LOG"); then
+      exit 1
+    fi
     echo "$INSTANCE_PID" > "$RUN_DIR/instance.pid"
     echo "[soak] instance pid=$INSTANCE_PID, waiting for /health…" | tee -a "$LOOP_LOG"
     if ! wait_for_health; then
@@ -184,7 +193,6 @@ except: pass' 2>/dev/null)
         cookie=$(login_cookie "$SOAK_PASSWORD")
         cycle "$cookie" "$seed_id" "$cycle_idx" 2>&1 | tee -a "$LOOP_LOG"
         OPENLANDER_BASE_URL="$BASE_URL" OPENLANDER_ADMIN_PASSWORD="$SOAK_PASSWORD" \
-          OPENLANDER_DB_PATH="$SOAK_HOME/.openlander/openlander.db" \
           "$HERE/soak-metrics.sh" >>"$METRICS_LOG"
         sleep "$SOAK_CYCLE_SEC"
       done

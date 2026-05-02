@@ -39,7 +39,7 @@ export const deployToolDefs: ToolDef[] = [
       'Deploy an ephemeral preview environment for a specific branch. Creates a separate container that does not affect the main deployment. Use when user wants to test a PR or feature branch before merging. Returns { success, previewId, branch, url, port, containerId }. The preview is temporary — clean up with cleanup_preview when done.',
     mcpDescription: 'Deploy an ephemeral preview environment for a branch.',
     inputSchema: previewDeploySchema,
-    execute: (args, context) => {
+    execute: async (args, context) => {
       const appCtx = context.appCtx;
       const branch = args['branch'] as string;
       return appCtx.previewDeployer
@@ -67,15 +67,15 @@ export const deployToolDefs: ToolDef[] = [
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
       const toolSessionId = `mcp-rollback-${nanoid(12)}`;
-      const project = context.appCtx.db.getProjectByName(projectName);
+      const project = await context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
-      const policyRejection = tryRejectIfNotMutable(project, context);
+      const policyRejection = await tryRejectIfNotMutable(project, context);
       if (policyRejection) {
         return policyRejection;
       }
-      const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
+      const lockResult = await tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
       if (lockResult) {
         return lockResult;
       }
@@ -139,22 +139,22 @@ export const deployToolDefs: ToolDef[] = [
     mcpDescription:
       'Start zero-downtime blue-green deployment (non-blocking). Poll get_deploy_status for progress.',
     inputSchema: deployBlueGreenSchema,
-    execute: (args, context) => {
+    execute: async (args, context) => {
       const projectName = args['project_name'] as string;
       const toolSessionId = `mcp-blue-green-${nanoid(12)}`;
       const healthCheckPath = args['health_check_path'] as string | undefined;
-      const project = context.appCtx.db.getProjectByName(projectName);
+      const project = await context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
       // Fire-and-forget pre-check: surface archived/recovering/circuit-open
       // immediately instead of returning a fake "deploying" success while
       // the pipeline boundary silently rejects in the background.
-      const policyRejection = tryRejectIfNotMutable(project, context);
+      const policyRejection = await tryRejectIfNotMutable(project, context);
       if (policyRejection) {
         return policyRejection;
       }
-      const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
+      const lockResult = await tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
       if (lockResult) {
         return lockResult;
       }
@@ -187,7 +187,11 @@ export const deployToolDefs: ToolDef[] = [
           log.error({ err, projectId: project.id }, 'Blue-green deploy failed');
         })
         .finally(() => {
-          context.appCtx.db.releaseDeployLock(project.id, toolSessionId);
+          return context.appCtx.db
+            .releaseDeployLock(project.id, toolSessionId)
+            .catch((err: unknown) => {
+              log.warn({ err, projectId: project.id }, 'Failed to release blue-green deploy lock');
+            });
         });
 
       return {
@@ -282,15 +286,7 @@ export const deployToolDefs: ToolDef[] = [
               internal_host: projectContainerName(job.projectName),
               docker_host: getDockerHostType(),
               completed_at: job.completedAt?.toISOString(),
-              health: (() => {
-                try {
-                  const project = appCtx.db.getProjectByName(job.projectName);
-                  // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-                  return project?.status ?? 'unknown';
-                } catch {
-                  return 'unknown';
-                }
-              })(),
+              health: 'unknown',
               _agent_guidance: {
                 next_steps: [
                   'Call get_logs to confirm container is healthy',
@@ -352,9 +348,9 @@ export const deployToolDefs: ToolDef[] = [
       });
 
       if (projectName) {
-        const project = appCtx.db.getProjectByName(projectName);
+        const project = await appCtx.db.getProjectByName(projectName);
         if (!project) {
-          const plans = appCtx.db.listDeployPlans(projectName);
+          const plans = await appCtx.db.listDeployPlans(projectName);
           const activePlan = plans.find((p) => {
             // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             return p.status === 'executing' || p.status === 'ready' || p.status === 'draft';
@@ -413,7 +409,7 @@ export const deployToolDefs: ToolDef[] = [
         });
 
         let status = appCtx.jobManager.getStatus(project.id);
-        const lockInfo = appCtx.db.getDeployLockInfo(project.id);
+        const lockInfo = await appCtx.db.getDeployLockInfo(project.id);
 
         if (!wait) {
           const result = buildProjectResult(status) as Record<string, unknown>;
@@ -455,12 +451,12 @@ export const deployToolDefs: ToolDef[] = [
             unsubFailed();
           };
 
-          const resolveFromDeployLog = (lastLogCreatedAt: string): void => {
+          const resolveFromDeployLog = async (lastLogCreatedAt: string): Promise<void> => {
             if (settled) return;
             settled = true;
             cleanup();
 
-            const dbProject = appCtx.db.getProjectByName(projectName);
+            const dbProject = await appCtx.db.getProjectByName(projectName);
             resolve({
               active: 0,
               jobs: [
@@ -481,14 +477,14 @@ export const deployToolDefs: ToolDef[] = [
             parentProjectId?: string;
           }): boolean => payload.projectId === project.id || payload.parentProjectId === project.id;
 
-          const resolveWithCurrent = (timedOut: boolean): void => {
+          const resolveWithCurrent = async (timedOut: boolean): Promise<void> => {
             if (settled) return;
             settled = true;
             cleanup();
 
             const current = appCtx.jobManager.getStatus(project.id);
             if (current) {
-              const lastLog = appCtx.db.getLastDeployLog(project.id);
+              const lastLog = await appCtx.db.getLastDeployLog(project.id);
               const logIsNewer =
                 lastLog &&
                 parseDBTimestamp(lastLog.created_at).getTime() > current.startedAt.getTime();
@@ -497,7 +493,7 @@ export const deployToolDefs: ToolDef[] = [
                 lastLog.status === 'success' &&
                 (current.phase === 'failed' || current.phase === 'done')
               ) {
-                const freshProject = appCtx.db.getProjectByName(projectName);
+                const freshProject = await appCtx.db.getProjectByName(projectName);
                 resolve({
                   active: 0,
                   jobs: [
@@ -521,13 +517,13 @@ export const deployToolDefs: ToolDef[] = [
               return;
             }
 
-            const currentLockInfo = appCtx.db.getDeployLockInfo(project.id);
+            const currentLockInfo = await appCtx.db.getDeployLockInfo(project.id);
             if (currentLockInfo) {
               resolve(buildLockedQueuedResult(currentLockInfo, timedOut));
               return;
             }
 
-            const dbProject = appCtx.db.getProjectByName(projectName);
+            const dbProject = await appCtx.db.getProjectByName(projectName);
             resolve({
               project: projectName,
               status: dbProject?.status ?? 'unknown',
@@ -537,27 +533,27 @@ export const deployToolDefs: ToolDef[] = [
           };
 
           const unsubSuccess = eventBus.on('deploy:success', (payload) => {
-            if (matchesProject(payload)) resolveWithCurrent(false);
+            if (matchesProject(payload)) void resolveWithCurrent(false);
           });
 
           const unsubFailed = eventBus.on('deploy:failed', (payload) => {
-            if (matchesProject(payload)) resolveWithCurrent(false);
+            if (matchesProject(payload)) void resolveWithCurrent(false);
           });
 
           const timer = setTimeout(
             () => {
-              resolveWithCurrent(true);
+              void resolveWithCurrent(true);
             },
             Math.max(1, timeoutSec) * 1000,
           );
 
-          const dbPollInterval = setInterval(() => {
+          const pollDeployLog = async (): Promise<void> => {
             if (settled) {
               clearInterval(dbPollInterval);
               return;
             }
 
-            const lastLog = appCtx.db.getLastDeployLog(project.id);
+            const lastLog = await appCtx.db.getLastDeployLog(project.id);
             if (!lastLog || (lastLog.status !== 'success' && lastLog.status !== 'failed')) {
               return;
             }
@@ -575,7 +571,7 @@ export const deployToolDefs: ToolDef[] = [
               if (lastLog.status === 'failed') {
                 settled = true;
                 cleanup();
-                const dbProject = appCtx.db.getProjectByName(projectName);
+                const dbProject = await appCtx.db.getProjectByName(projectName);
                 resolve({
                   active: 0,
                   jobs: [
@@ -590,14 +586,18 @@ export const deployToolDefs: ToolDef[] = [
                   ...(dbProject ? { health: dbProject.status } : {}),
                 });
               } else {
-                resolveFromDeployLog(lastLog.created_at);
+                void resolveFromDeployLog(lastLog.created_at);
               }
             }
+          };
+
+          const dbPollInterval = setInterval(() => {
+            void pollDeployLog();
           }, 5000);
 
           status = appCtx.jobManager.getStatus(project.id);
           if (status && (status.phase === 'done' || status.phase === 'failed')) {
-            resolveWithCurrent(false);
+            void resolveWithCurrent(false);
           }
         });
       }
@@ -680,15 +680,15 @@ export const deployToolDefs: ToolDef[] = [
       'Get deployment history for a project. Returns recent deploys with status, trigger, commit, duration. Use to understand why a service is in its current state or to review past deployments.',
     mcpDescription: 'Get deployment history with status, duration, trigger, and commit details.',
     inputSchema: deployHistorySchema,
-    execute: (args, context) => {
+    execute: async (args, context) => {
       const appCtx = context.appCtx;
       const projectName = args['project_name'] as string;
       const limit = (args['limit'] as number | undefined) ?? 10;
 
-      const project = appCtx.db.getProjectByName(projectName);
+      const project = await appCtx.db.getProjectByName(projectName);
       if (!project) throw new ProjectNotFoundError(projectName);
 
-      const logs = appCtx.db.getDeployLogs(project.id, limit);
+      const logs = await appCtx.db.getDeployLogs(project.id, limit);
 
       return Promise.resolve({
         project: projectName,

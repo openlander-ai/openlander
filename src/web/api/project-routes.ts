@@ -31,6 +31,8 @@ import type { EnvironmentRow, ProjectRow } from '../../db/index.js';
 import {
   assertProjectLifecycleMutable,
   assertProjectMutable,
+  type LifecycleAction,
+  type MutationPolicyCtx,
 } from '../../pipeline/mutation-policy.js';
 import {
   getEnvironmentByIdOrThrow,
@@ -145,15 +147,15 @@ function registerTopologyCacheInvalidation(ctx: AppContext): void {
   }
   topologyCacheInvalidationRegistered.add(ctx.eventBus);
 
-  const invalidateProjectContainers = (projectId: string): void => {
+  const invalidateProjectContainers = async (projectId: string): Promise<void> => {
     try {
-      const project = ctx.db.getProject(projectId);
+      const project = await ctx.db.getProject(projectId);
       if (project) {
         // PR 4 canonical-first: prefer the deployable service's container_id
         // (post-0012 source of truth) over the legacy projects column.
         const deployable =
           typeof ctx.db.getDeployableForProject === 'function'
-            ? ctx.db.getDeployableForProject(projectId)
+            ? await ctx.db.getDeployableForProject(projectId)
             : undefined;
         invalidateTopologyNodeCache(deployable?.container_id ?? project.container_id);
       }
@@ -161,14 +163,14 @@ function registerTopologyCacheInvalidation(ctx: AppContext): void {
       // as a fixture/back-compat fallback for narrow tests.
       const children =
         typeof ctx.db.getComposeChildProjects === 'function'
-          ? ctx.db.getComposeChildProjects(projectId)
+          ? await ctx.db.getComposeChildProjects(projectId)
           : typeof ctx.db.getChildProjects === 'function'
-            ? ctx.db.getChildProjects(projectId)
+            ? await ctx.db.getChildProjects(projectId)
             : [];
       for (const child of children) {
         const childDeployable =
           typeof ctx.db.getDeployableForProject === 'function'
-            ? ctx.db.getDeployableForProject(child.id)
+            ? await ctx.db.getDeployableForProject(child.id)
             : undefined;
         invalidateTopologyNodeCache(childDeployable?.container_id ?? child.container_id);
       }
@@ -178,20 +180,20 @@ function registerTopologyCacheInvalidation(ctx: AppContext): void {
   };
 
   ctx.eventBus.on('deploy:success', (payload) => {
-    invalidateProjectContainers(payload.projectId);
+    void invalidateProjectContainers(payload.projectId);
   });
   ctx.eventBus.on('deploy:failed', (payload) => {
-    invalidateProjectContainers(payload.projectId);
+    void invalidateProjectContainers(payload.projectId);
   });
   // Compose deploys never emit deploy:success / deploy:failed — they emit
   // compose:up / compose:failed instead. Without these subscriptions the
   // topology cache stayed stale for the full 15s TTL after a compose
   // rollout or failure (Codex MEDIUM-1).
   ctx.eventBus.on('compose:up', (payload) => {
-    invalidateProjectContainers(payload.projectId);
+    void invalidateProjectContainers(payload.projectId);
   });
   ctx.eventBus.on('compose:failed', (payload) => {
-    invalidateProjectContainers(payload.projectId);
+    void invalidateProjectContainers(payload.projectId);
   });
 }
 
@@ -219,7 +221,7 @@ async function fetchTopologyNodeRuntime(
       : undefined;
   if (node.container_id && node.status === 'running') {
     if (getLatestServiceMetric) {
-      const sample = getLatestServiceMetric(node.id);
+      const sample = await getLatestServiceMetric(node.id);
       if (sample && Date.now() - sample.recorded_at < TOPOLOGY_METRIC_FRESHNESS_MS) {
         const cpuPct = Number.isFinite(sample.cpu) ? Math.round(sample.cpu * 10) / 10 : null;
         if (cpuPct !== null) {
@@ -526,8 +528,10 @@ function normalizeTimestamp(value: unknown): string {
     return trimmed;
   }
 
-  const sqliteLike = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
-  const normalizedInput = sqliteLike.test(trimmed) ? trimmed.replace(' ', 'T') + 'Z' : trimmed;
+  const legacyNoTimezone = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+  const normalizedInput = legacyNoTimezone.test(trimmed)
+    ? trimmed.replace(' ', 'T') + 'Z'
+    : trimmed;
   const parsed = new Date(normalizedInput);
 
   if (Number.isNaN(parsed.getTime())) {
@@ -535,6 +539,35 @@ function normalizeTimestamp(value: unknown): string {
   }
 
   return parsed.toISOString();
+}
+
+async function createMutationPolicySnapshot(
+  ctx: AppContext,
+  project: ProjectRow,
+): Promise<MutationPolicyCtx> {
+  const [deployable, circuitBreakerOpen] = await Promise.all([
+    ctx.db.getDeployableForProject(project.id),
+    ctx.db.isCircuitBreakerOpen(project.id),
+  ]);
+
+  return {
+    db: {
+      getDeployableForProject: (projectId) => (projectId === project.id ? deployable : undefined),
+      isCircuitBreakerOpen: (projectId) => projectId === project.id && circuitBreakerOpen,
+    },
+  };
+}
+
+async function assertProjectMutableForRoute(project: ProjectRow, ctx: AppContext): Promise<void> {
+  assertProjectMutable(project, await createMutationPolicySnapshot(ctx, project));
+}
+
+async function assertProjectLifecycleMutableForRoute(
+  project: ProjectRow,
+  action: LifecycleAction,
+  ctx: AppContext,
+): Promise<void> {
+  assertProjectLifecycleMutable(project, action, await createMutationPolicySnapshot(ctx, project));
 }
 
 function extractFailureSummary(buildLog: string | null): string | null {
@@ -648,7 +681,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
 
-    const existing = ctx.db.getProjectByName(projectName);
+    const existing = await ctx.db.getProjectByName(projectName);
     if (existing) {
       return c.json(
         {
@@ -660,7 +693,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
 
-    const created = ctx.db.createProject({
+    const created = await ctx.db.createProject({
       id: crypto.randomUUID(),
       name: projectName,
       repoUrl: body.repo_url,
@@ -677,12 +710,12 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/projects/:id/stats', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     // PR 4 canonical-first: prefer the deployable services row for
     // status + container_id; fall back to legacy projects columns through
     // migration 0012.
-    const deployable = ctx.db.getDeployableForProject(project.id);
+    const deployable = await ctx.db.getDeployableForProject(project.id);
     const status = deployable?.status ?? project.status;
     const containerId = deployable?.container_id ?? project.container_id;
 
@@ -732,7 +765,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
   });
 
-  api.get('/projects', (c) => {
+  api.get('/projects', async (c) => {
     const status = c.req.query('status') as
       | 'running'
       | 'stopped'
@@ -743,7 +776,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     // Batch fetch projects + environments + child counts in O(3) queries
     // instead of the previous O(1 + 3N) per-project N+1 (was getEnvironments,
     // isParentProject, and getChildProjects per row).
-    const projectsWithMeta = ctx.db.listProjectsWithMetadata(status, { includeArchived });
+    const projectsWithMeta = await ctx.db.listProjectsWithMetadata(status, { includeArchived });
     const ips = getAllIps();
 
     // CCG perf #3 (Codex 2026-04-30): the per-row pre-fetch loop here was
@@ -789,16 +822,16 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
   });
 
-  api.get('/projects/:id', (c) => {
-    const project = getProjectOrThrow(c, ctx);
+  api.get('/projects/:id', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
 
-    const envVars = ctx.env.getAll(project.id);
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
-    const deployLogs = ctx.db.getDeployLogs(project.id, 5);
+    const envVars = await ctx.env.getAll(project.id);
+    const environments = await ctx.db.getEnvironmentsByProject(project.id);
+    const deployLogs = await ctx.db.getDeployLogs(project.id, 5);
     // PR 4 canonical-first: fetch the deployable service row once and
     // pass into mapProjectForApi so wire emission reads canonical fields
     // (kind/image_url/assigned_port) with `??` fallback.
-    const deployable = ctx.db.getDeployableForProject(project.id);
+    const deployable = await ctx.db.getDeployableForProject(project.id);
 
     return c.json({
       ...mapProjectForApi(project, deployable),
@@ -823,7 +856,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // collapses 'running' (no healthcheck) → 'healthy' because the UI
   // type is binary 'healthy' | 'crashed'.
   api.get('/projects/:id/topology', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     try {
       // Post-grouping: a project is a group with N deployable services.
@@ -833,13 +866,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       // path when the group has no services. The previous unconditional call
       // ran a query + N getProject() round-trips for every grouped project,
       // even though the result was discarded by useServices=true.
-      const groupServices = ctx.db.getDeployablesByGroup(project.id);
+      const groupServices = await ctx.db.getDeployablesByGroup(project.id);
       const useServices = groupServices.length > 0;
       const childProjects = useServices
         ? []
         : typeof ctx.db.getComposeChildProjects === 'function'
-          ? ctx.db.getComposeChildProjects(project.id)
-          : ctx.db.getChildProjects(project.id);
+          ? await ctx.db.getComposeChildProjects(project.id)
+          : await ctx.db.getChildProjects(project.id);
 
       const nodeIds = new Set(
         useServices
@@ -854,7 +887,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         ? groupServices.map((s) => deployableServiceIdToProjectId(s.id))
         : (childProjects.length > 0 ? childProjects : [project]).map((n) => n.id);
       for (const lookupId of dependencyIdSource) {
-        const deps = ctx.db.findDependenciesByProject(lookupId);
+        const deps = await ctx.db.findDependenciesByProject(lookupId);
         const siblingDeps = deps
           .map((d) => d.target_service_id)
           .filter((sid): sid is string => sid !== null && nodeIds.has(sid));
@@ -904,7 +937,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
             childProjects.length > 0 ? childProjects : [project],
             TOPOLOGY_INSPECT_CONCURRENCY,
             async (node) => {
-              const deployable = ctx.db.getDeployableForProject(node.id);
+              const deployable = await ctx.db.getDeployableForProject(node.id);
               const port = deployable?.assigned_port ?? node.assigned_port ?? null;
               const url = port ? getProjectUrl(node.name) : null;
               const image =
@@ -947,7 +980,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.patch('/projects/:id', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     const body = await c.req
       .json<{
@@ -1015,19 +1048,19 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
 
-    ctx.db.updateProject(project.id, {
+    await ctx.db.updateProject(project.id, {
       imageUrl,
       imageCmd: imageCmd ? JSON.stringify(imageCmd) : null,
       containerPort,
     });
 
-    const updatedProject = ctx.db.getProject(project.id);
+    const updatedProject = await ctx.db.getProject(project.id);
     if (!updatedProject) {
       return c.json({ error: 'NOT_FOUND', message: 'Project not found' }, 404);
     }
 
     // PR 4 canonical-first: re-read deployable after mutation.
-    const updatedDeployable = ctx.db.getDeployableForProject(updatedProject.id);
+    const updatedDeployable = await ctx.db.getDeployableForProject(updatedProject.id);
     return c.json(mapProjectForApi(updatedProject, updatedDeployable));
   });
 
@@ -1035,16 +1068,16 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     return _c.json({ error: 'FEATURE_FROZEN', message: 'Environment creation is disabled' }, 410);
   });
 
-  api.get('/projects/:id/environments', (c) => {
-    const project = getProjectOrThrow(c, ctx);
+  api.get('/projects/:id/environments', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
 
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
+    const environments = await ctx.db.getEnvironmentsByProject(project.id);
     return c.json({ environments: environments.map((env) => mapEnvironment(project.name, env)) });
   });
 
-  api.get('/projects/:id/environments/:envId', (c) => {
-    const project = getProjectOrThrow(c, ctx);
-    const environment = getEnvironmentByIdOrThrow(c, ctx, project.id);
+  api.get('/projects/:id/environments/:envId', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
+    const environment = await getEnvironmentByIdOrThrow(c, ctx, project.id);
     if (environment instanceof Response) {
       return environment;
     }
@@ -1056,14 +1089,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     return _c.json({ error: 'FEATURE_FROZEN', message: 'Environment deletion is disabled' }, 410);
   });
 
-  api.get('/projects/:id/environments/:envId/env', (c) => {
-    const project = getProjectOrThrow(c, ctx);
-    const environment = getEnvironmentByIdOrThrow(c, ctx, project.id);
+  api.get('/projects/:id/environments/:envId/env', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
+    const environment = await getEnvironmentByIdOrThrow(c, ctx, project.id);
     if (environment instanceof Response) {
       return environment;
     }
 
-    const envVars = ctx.env.getAllWithInheritance(project.id, environment.id);
+    const envVars = await ctx.env.getAllWithInheritance(project.id, environment.id);
     const inheritance = ctx.env.getInheritanceInfo(project.id, environment.id);
 
     return c.json({
@@ -1074,8 +1107,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/environments/:envId/env', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
-    const environment = getEnvironmentByIdOrThrow(c, ctx, project.id);
+    const project = await getProjectOrThrow(c, ctx);
+    const environment = await getEnvironmentByIdOrThrow(c, ctx, project.id);
     if (environment instanceof Response) {
       return environment;
     }
@@ -1085,7 +1118,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'MISSING_FIELD', message: 'variables object is required' }, 400);
     }
 
-    const changed = ctx.env.setBulk(project.id, body.variables, environment.id);
+    const changed = await ctx.env.setBulk(project.id, body.variables, environment.id);
     return c.json({
       status: changed ? 'updated' : 'unchanged',
       project: project.name,
@@ -1101,9 +1134,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // `db.getServices({ project_id, kindNotIn: MANAGED_SERVICE_KINDS })`.
   // Legacy connection-mapped managed services were moved under
   // /projects/:p/managed-services (also wired below).
-  api.get('/projects/:id/services', (c) => {
-    const project = getProjectOrThrow(c, ctx);
-    const deployables = ctx.db.getServices({
+  api.get('/projects/:id/services', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
+    const deployables = await ctx.db.getServices({
       project_id: project.id,
       kindNotIn: MANAGED_SERVICE_KINDS,
     });
@@ -1128,21 +1161,21 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
   });
 
-  api.post('/projects/:id/services/:serviceId', (c) => {
-    const project = getProjectOrThrow(c, ctx);
+  api.post('/projects/:id/services/:serviceId', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
     const serviceId = c.req.param('serviceId');
 
-    const service = ctx.db.getService(serviceId);
+    const service = await ctx.db.getService(serviceId);
     if (!service) {
       return c.json({ error: 'SERVICE_NOT_FOUND', message: 'Service not found' }, 404);
     }
 
-    const existing = ctx.db.getServiceConnectionByProjectAndService(project.id, serviceId);
+    const existing = await ctx.db.getServiceConnectionByProjectAndService(project.id, serviceId);
     if (existing) {
       return c.json({ error: 'ALREADY_CONNECTED', message: 'Service already connected' }, 409);
     }
 
-    const connection = ctx.db.createServiceConnection({
+    const connection = await ctx.db.createServiceConnection({
       projectId: project.id,
       serviceId,
     });
@@ -1161,13 +1194,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       containerName: service.container_name ?? '',
       credentials,
     });
-    ctx.db.updateServiceConnection(connection.id, {
+    await ctx.db.updateServiceConnection(connection.id, {
       autoInjectedEnvKeys: JSON.stringify(injectedKeys),
     });
 
     // Auto-sync dependency
     try {
-      ctx.db.createProjectDependency({
+      await ctx.db.createProjectDependency({
         source_service_id: projectIdToDeployableServiceId(project.id),
         target_service_id: serviceId,
         dependency_type:
@@ -1203,11 +1236,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     );
   });
 
-  api.delete('/projects/:id/services/:serviceId', (c) => {
-    const project = getProjectOrThrow(c, ctx);
+  api.delete('/projects/:id/services/:serviceId', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
     const serviceId = c.req.param('serviceId');
 
-    const existing = ctx.db.getServiceConnectionByProjectAndService(project.id, serviceId);
+    const existing = await ctx.db.getServiceConnectionByProjectAndService(project.id, serviceId);
     if (!existing) {
       return c.json(
         { error: 'NOT_CONNECTED', message: 'Service not connected to this project' },
@@ -1219,22 +1252,22 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const autoInjectedEnvKeys = Array.isArray(parsedAutoInjected)
       ? parsedAutoInjected.filter((key): key is string => typeof key === 'string')
       : [];
-    cleanupAutoInjectedEnv({
+    await cleanupAutoInjectedEnv({
       db: ctx.db,
       env: ctx.env,
       projectId: project.id,
       autoInjectedEnvKeys,
     });
 
-    ctx.db.deleteServiceConnectionByProjectAndService(project.id, serviceId);
+    await ctx.db.deleteServiceConnectionByProjectAndService(project.id, serviceId);
 
     // Auto-remove dependency
     try {
-      const deps = ctx.db.findDependenciesByProject(project.id);
+      const deps = await ctx.db.findDependenciesByProject(project.id);
       const matchingDep = deps.find(
         (d) => d.target_service_id === serviceId && d.source === 'auto',
       );
-      if (matchingDep) ctx.db.deleteProjectDependency(matchingDep.id);
+      if (matchingDep) await ctx.db.deleteProjectDependency(matchingDep.id);
     } catch {
       // dependency cleanup is best-effort
     }
@@ -1244,12 +1277,12 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // --- Deployment History ---
 
-  api.get('/projects/:id/deployments', (c) => {
-    const project = getProjectOrThrow(c, ctx);
+  api.get('/projects/:id/deployments', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
 
     const limit = parseInt(c.req.query('limit') ?? '50', 10);
     const environmentId = c.req.query('environmentId');
-    const logs = ctx.db.getDeployLogs(project.id, limit, environmentId);
+    const logs = await ctx.db.getDeployLogs(project.id, limit, environmentId);
 
     return c.json({
       count: logs.length,
@@ -1267,11 +1300,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
   });
 
-  api.get('/projects/:id/deployments/:deployId', (c) => {
+  api.get('/projects/:id/deployments/:deployId', async (c) => {
     const deployId = c.req.param('deployId');
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
-    const log = ctx.db.getDeployLog(deployId);
+    const log = await ctx.db.getDeployLog(deployId);
     if (!log || log.project_id !== project.id) {
       return c.json({ error: 'NOT_FOUND', message: 'Deployment not found' }, 404);
     }
@@ -1293,10 +1326,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // v0.2.3: Start a stopped project
   api.post('/projects/:id/start', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     try {
-      assertProjectLifecycleMutable(project, 'start', ctx);
+      await assertProjectLifecycleMutableForRoute(project, 'start', ctx);
     } catch (err) {
       if (
         err instanceof ProjectArchivedError ||
@@ -1310,7 +1343,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     // PR 4 canonical-first: read container_id from the deployable services
     // row when available; fall back to the legacy projects column.
-    const deployable = ctx.db.getDeployableForProject(project.id);
+    const deployable = await ctx.db.getDeployableForProject(project.id);
     const containerId = deployable?.container_id ?? project.container_id;
     if (!containerId) {
       return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
@@ -1321,10 +1354,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/stop', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     try {
-      assertProjectLifecycleMutable(project, 'stop', ctx);
+      await assertProjectLifecycleMutableForRoute(project, 'stop', ctx);
     } catch (err) {
       if (
         err instanceof ProjectArchivedError ||
@@ -1357,10 +1390,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/redeploy', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     try {
-      assertProjectMutable(project, ctx);
+      await assertProjectMutableForRoute(project, ctx);
     } catch (err) {
       if (
         err instanceof ProjectArchivedError ||
@@ -1385,14 +1418,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     if (body.env_vars && typeof body.env_vars === 'object') {
       for (const [key, value] of Object.entries(body.env_vars)) {
         if (value.trim()) {
-          ctx.env.set(project.id, key, value.trim());
+          await ctx.env.set(project.id, key, value.trim());
         }
       }
     }
 
     // PR 4 canonical-first: source is on services post-0009 too. Read
     // canonical with legacy fallback.
-    const deployable = ctx.db.getDeployableForProject(project.id);
+    const deployable = await ctx.db.getDeployableForProject(project.id);
     const projectSource = deployable?.source ?? project.source;
     if (projectSource === 'git' && !project.repo_url) {
       return c.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
@@ -1409,7 +1442,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     }
     try {
       ctx.coordinator.suppressProject(project.id, 120_000);
-      ctx.db.updateProject(project.id, { status: 'building' });
+      await ctx.db.updateProject(project.id, { status: 'building' });
       const result = await ctx.pipeline.redeploy(project.id, {
         noCache: body.no_cache,
         strategy,
@@ -1434,7 +1467,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       if (err instanceof OpenLanderError) {
         return c.json(err.toJSON(), err.statusCode as 400);
       }
-      ctx.db.updateProject(project.id, { status: 'error' });
+      await ctx.db.updateProject(project.id, { status: 'error' });
       const errMsg = err instanceof Error ? err.message : String(err);
       return c.json({ success: false, error: errMsg }, 500);
     } finally {
@@ -1444,10 +1477,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // v0.3: Rollback
   api.post('/projects/:id/rollback', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     try {
-      assertProjectMutable(project, ctx);
+      await assertProjectMutableForRoute(project, ctx);
     } catch (err) {
       if (
         err instanceof ProjectArchivedError ||
@@ -1459,7 +1492,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       throw err;
     }
 
-    const environmentResolution = resolveEnvironmentByType(c, ctx, project);
+    const environmentResolution = await resolveEnvironmentByType(c, ctx, project);
     if ('response' in environmentResolution) {
       return environmentResolution.response;
     }
@@ -1474,7 +1507,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         : undefined;
 
     if (deploymentId) {
-      const deployment = ctx.db.getDeployLog(deploymentId);
+      const deployment = await ctx.db.getDeployLog(deploymentId);
       if (!deployment || deployment.project_id !== project.id) {
         return c.json(
           {
@@ -1510,9 +1543,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         );
       }
 
-      ctx.db.updateProject(project.id, { previousImageTag: imageTag });
+      await ctx.db.updateProject(project.id, { previousImageTag: imageTag });
       if (environmentRow) {
-        ctx.db.updateEnvironment(environmentRow.id, { previousImageTag: imageTag });
+        await ctx.db.updateEnvironment(environmentRow.id, { previousImageTag: imageTag });
       }
     }
 
@@ -1552,10 +1585,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // v0.3: Blue-green deployment
   api.post('/projects/:id/blue-green', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     try {
-      assertProjectMutable(project, ctx);
+      await assertProjectMutableForRoute(project, ctx);
     } catch (err) {
       if (
         err instanceof ProjectArchivedError ||
@@ -1606,9 +1639,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   // v0.2.3: Webhook settings API
-  api.get('/projects/:id/webhooks', (c) => {
-    const project = getProjectOrThrow(c, ctx);
-    const configs = ctx.db.getWebhookConfigs(project.id);
+  api.get('/projects/:id/webhooks', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
+    const configs = await ctx.db.getWebhookConfigs(project.id);
     return c.json({
       webhooks: configs.map((cfg) => ({
         id: cfg.id,
@@ -1623,16 +1656,16 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/webhooks', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
     const body = await c.req.json<{ source: string; branch_filter?: string; enabled?: boolean }>();
     if (!body.source || !['github', 'gitlab', 'bitbucket'].includes(body.source)) {
       return c.json({ error: 'Invalid source. Must be github, gitlab, or bitbucket.' }, 400);
     }
     const source = body.source as 'github' | 'gitlab' | 'bitbucket';
-    const existing = ctx.db.getWebhookConfig(project.id, source);
+    const existing = await ctx.db.getWebhookConfig(project.id, source);
     const secret = existing?.secret ?? `${project.id}.${crypto.randomUUID().replace(/-/g, '')}`;
     const configId = existing?.id ?? crypto.randomUUID();
-    ctx.db.setWebhookConfig({
+    await ctx.db.setWebhookConfig({
       id: configId,
       projectId: project.id,
       source,
@@ -1640,7 +1673,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       branchFilter: body.branch_filter ?? 'main',
       enabled: body.enabled !== false,
     });
-    const config = ctx.db.getWebhookConfig(project.id, source);
+    const config = await ctx.db.getWebhookConfig(project.id, source);
     if (!config) {
       return c.json({ error: 'Failed to configure webhook' }, 500);
     }
@@ -1654,13 +1687,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
   });
 
-  api.delete('/projects/:id/webhooks/:source', (c) => {
+  api.delete('/projects/:id/webhooks/:source', async (c) => {
     const source = c.req.param('source');
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
     if (!['github', 'gitlab', 'bitbucket'].includes(source)) {
       return c.json({ error: 'Invalid source' }, 400);
     }
-    ctx.db.deleteWebhookConfig(project.id, source as 'github' | 'gitlab' | 'bitbucket');
+    await ctx.db.deleteWebhookConfig(project.id, source as 'github' | 'gitlab' | 'bitbucket');
     return c.json({ status: 'deleted' });
   });
 
@@ -1709,7 +1742,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // --- v0.0.11: Insight action handlers ---
 
   api.post('/projects/:id/actions', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     const body = await c.req.json<{ action: string }>().catch(() => ({ action: '' }));
     const { action } = body;
@@ -1719,7 +1752,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         // Remove old containers for this project (keep the current one).
         // PR 4 canonical-first: prefer deployable services row's
         // container_id; fall back to legacy projects column through 0012.
-        const deployable = ctx.db.getDeployableForProject(project.id);
+        const deployable = await ctx.db.getDeployableForProject(project.id);
         const currentContainerId = deployable?.container_id ?? project.container_id;
         const managed = await ctx.docker.listManagedContainers();
         const stale = managed.filter(
@@ -1762,10 +1795,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // --- Archive / Unarchive / Purge ---
 
   api.post('/projects/:id/archive', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     try {
-      assertProjectLifecycleMutable(project, 'archive', ctx);
+      await assertProjectLifecycleMutableForRoute(project, 'archive', ctx);
     } catch (err) {
       if (
         err instanceof ProjectArchivedError ||
@@ -1787,7 +1820,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     try {
       ctx.coordinator.suppressProject(project.id, 60_000);
       await ctx.pipeline.archive(project.id);
-      const updated = ctx.db.getProject(project.id);
+      const updated = await ctx.db.getProject(project.id);
       return c.json({ project: updated });
     } finally {
       ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
@@ -1795,9 +1828,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/unarchive', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
     await ctx.pipeline.unarchive(project.id);
-    const updated = ctx.db.getProject(project.id);
+    const updated = await ctx.db.getProject(project.id);
     return c.json({ project: updated });
   });
 
@@ -1809,10 +1842,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         400,
       );
     }
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     try {
-      assertProjectLifecycleMutable(project, 'purge', ctx);
+      await assertProjectLifecycleMutableForRoute(project, 'purge', ctx);
     } catch (err) {
       if (
         err instanceof ProjectArchivedError ||
@@ -1842,10 +1875,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.delete('/projects/:id', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     try {
-      assertProjectLifecycleMutable(project, 'archive', ctx);
+      await assertProjectLifecycleMutableForRoute(project, 'archive', ctx);
     } catch (err) {
       if (
         err instanceof ProjectArchivedError ||
@@ -1874,12 +1907,12 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/projects/:id/logs', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     const follow = c.req.query('follow');
 
     // PR 4 canonical-first: container_id from deployable services row.
-    const deployable = ctx.db.getDeployableForProject(project.id);
+    const deployable = await ctx.db.getDeployableForProject(project.id);
     const followContainerId = deployable?.container_id ?? project.container_id;
     if (follow && followContainerId) {
       const containerId = followContainerId;
@@ -1929,15 +1962,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     return c.json({ project: project.name, logs });
   });
 
-  api.get('/projects/:id/env', (c) => {
-    const project = getProjectOrThrow(c, ctx);
+  api.get('/projects/:id/env', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
 
-    const vars = ctx.env.getAll(project.id);
+    const vars = await ctx.env.getAll(project.id);
     return c.json({ project: project.name, envVars: vars });
   });
 
   api.get('/projects/:id/env-example', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
     if (!project.repo_url) {
       return c.json({ error: 'MISSING_REPO_URL', message: 'Project has no repository URL' }, 400);
     }
@@ -1954,7 +1987,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
 
-    const environmentResolution = resolveEnvironmentByType(c, ctx, project, {
+    const environmentResolution = await resolveEnvironmentByType(c, ctx, project, {
       requireExistingEnvironmentWhenAnyExists: true,
     });
     if ('response' in environmentResolution) {
@@ -1971,8 +2004,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       clonePath = cloneResult.path;
       const scanResult = scanForEnvUsage(clonePath);
       const existingVars = environmentRow
-        ? ctx.env.getAllWithInheritance(project.id, environmentRow.id)
-        : ctx.env.getAll(project.id);
+        ? await ctx.env.getAllWithInheritance(project.id, environmentRow.id)
+        : await ctx.env.getAll(project.id);
       const envExample = generateEnvExample(scanResult, existingVars);
       return c.text(envExample);
     } catch (err) {
@@ -1986,16 +2019,16 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/env', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     const body = await c.req.json<{ variables?: Record<string, string> }>();
     if (!body.variables) {
       return c.json({ error: 'MISSING_FIELD', message: 'variables object is required' }, 400);
     }
 
-    const changed = ctx.env.setBulk(project.id, body.variables);
+    const changed = await ctx.env.setBulk(project.id, body.variables);
     // PR 4 canonical-first: status from deployable services row.
-    const deployable = ctx.db.getDeployableForProject(project.id);
+    const deployable = await ctx.db.getDeployableForProject(project.id);
     const projectStatus = deployable?.status ?? project.status;
     return c.json({
       status: changed ? 'updated' : 'unchanged',
@@ -2105,10 +2138,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/expose', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     // PR 4 canonical-first: assigned_port from deployable services row.
-    const deployable = ctx.db.getDeployableForProject(project.id);
+    const deployable = await ctx.db.getDeployableForProject(project.id);
     const exposePort = deployable?.assigned_port ?? project.assigned_port;
     if (!exposePort) {
       return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
@@ -2131,15 +2164,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     }
   });
 
-  api.post('/projects/:id/unexpose', (c) => {
-    const project = getProjectOrThrow(c, ctx);
+  api.post('/projects/:id/unexpose', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
 
     ctx.pipeline.closeTunnel(project.id);
     return c.json({ status: 'unexposed', project: project.name });
   });
 
   api.post('/projects/:id/share', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     const body = await c.req.json<{ accessCode: string }>();
     if (!body.accessCode || body.accessCode.length < 4) {
@@ -2155,7 +2188,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const { encrypted, iv } = encrypt(body.accessCode);
 
     // PR 4 canonical-first: assigned_port from deployable services row.
-    const shareDeployable = ctx.db.getDeployableForProject(project.id);
+    const shareDeployable = await ctx.db.getDeployableForProject(project.id);
     const sharePort = shareDeployable?.assigned_port ?? project.assigned_port;
     // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     if (project.visibility !== 'quick-share' && project.visibility !== 'shared') {
@@ -2213,16 +2246,16 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     tunnel.enableSharedMode(project.name, body.accessCode);
 
-    ctx.db.updateProject(project.id, {
+    await ctx.db.updateProject(project.id, {
       visibility: 'shared',
       accessCode: encrypted,
       accessCodeIv: iv,
     });
 
-    const updatedProject = ctx.db.getProject(project.id);
+    const updatedProject = await ctx.db.getProject(project.id);
     // PR 4 canonical-first: public_url from deployable services row.
     const updatedDeployable = updatedProject
-      ? ctx.db.getDeployableForProject(updatedProject.id)
+      ? await ctx.db.getDeployableForProject(updatedProject.id)
       : undefined;
     return c.json({
       status: 'shared',
@@ -2231,15 +2264,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
   });
 
-  api.delete('/projects/:id/share', (c) => {
-    const project = getProjectOrThrow(c, ctx);
+  api.delete('/projects/:id/share', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
 
     const tunnel = ctx.pipeline.getTunnel(project.id);
     if (tunnel) {
       tunnel.disableSharedMode(project.name);
     }
 
-    ctx.db.updateProject(project.id, {
+    await ctx.db.updateProject(project.id, {
       visibility: 'quick-share',
       accessCode: null,
       accessCodeIv: null,
@@ -2248,41 +2281,43 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     return c.json({ status: 'unshared', project: project.name });
   });
 
-  api.get('/projects/:id/previews', (c) => {
-    const project = getProjectOrThrow(c, ctx);
+  api.get('/projects/:id/previews', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
 
-    const previews = ctx.db.getPreviewProjects(project.id);
+    const previews = await ctx.db.getPreviewProjects(project.id);
     return c.json({
-      previews: previews.map((preview) => {
-        // PR 4 canonical-first: status + public_url from each preview's
-        // deployable services row when available; fall back to legacy
-        // projects columns through migration 0012.
-        const deployable = ctx.db.getDeployableForProject(preview.id);
-        return {
-          id: preview.id,
-          name: preview.name,
-          status: deployable?.status ?? preview.status,
-          prNumber: preview.pr_number,
-          url: getProjectUrl(preview.name),
-          publicUrl: deployable?.public_url ?? preview.public_url,
-          createdAt: normalizeTimestamp(preview.created_at),
-          updatedAt: normalizeTimestamp(preview.updated_at),
-        };
-      }),
+      previews: await Promise.all(
+        previews.map(async (preview) => {
+          // PR 4 canonical-first: status + public_url from each preview's
+          // deployable services row when available; fall back to legacy
+          // projects columns through migration 0012.
+          const deployable = await ctx.db.getDeployableForProject(preview.id);
+          return {
+            id: preview.id,
+            name: preview.name,
+            status: deployable?.status ?? preview.status,
+            prNumber: preview.pr_number,
+            url: getProjectUrl(preview.name),
+            publicUrl: deployable?.public_url ?? preview.public_url,
+            createdAt: normalizeTimestamp(preview.created_at),
+            updatedAt: normalizeTimestamp(preview.updated_at),
+          };
+        }),
+      ),
     });
   });
 
   api.delete('/projects/:id/previews/:previewId', async (c) => {
     const previewId = c.req.param('previewId');
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     // PR 4 canonical-first (Codex CCG flagged): resolve preview's parent
     // via the services hierarchy first (parent_service_id stripped of
     // `__svc` suffix → parent project id), fall back to the legacy
     // projects.parent_project_id column through migration 0012.
-    const preview = ctx.db.getProject(previewId);
+    const preview = await ctx.db.getProject(previewId);
     const previewService = preview
-      ? ctx.db.getService(projectIdToDeployableServiceId(previewId))
+      ? await ctx.db.getService(projectIdToDeployableServiceId(previewId))
       : undefined;
     const previewParentId =
       (previewService?.parent_service_id
@@ -2312,18 +2347,18 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // ---------------------------------------------------------------------------
   api.use('/services/:id', async (c, next) => {
     const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    const project = (await ctx.db.getProject(id)) ?? (await ctx.db.getProjectByName(id));
     if (project) {
       return c.redirect(`/api/projects/${project.id}/services/${project.id}`, 308);
     }
     await next();
   });
 
-  api.get('/managed-services/:id', (c) => {
+  api.get('/managed-services/:id', async (c) => {
     const id = c.req.param('id');
     // /managed-services/:id has no legacy handler — always redirect to canonical shape.
     // Use the id as both :p and :s (managed services map 1:1 to their project scope in rc.1).
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    const project = (await ctx.db.getProject(id)) ?? (await ctx.db.getProjectByName(id));
     const projectId = project?.id ?? id;
     return c.redirect(`/api/projects/${projectId}/services/${id}`, 308);
   });
@@ -2357,12 +2392,12 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // GET /projects/:p/services/:s/stats
   api.get('/projects/:p/services/:s/stats', async (c) => {
-    return withServiceAsId(c, (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+    return withServiceAsId(c, async (cx) => {
+      const project = await getProjectOrThrow(cx, ctx);
       // PR 4 canonical-first: prefer the deployable services row's
       // status + container_id; fall back to legacy projects columns
       // through 0012.
-      const deployable = ctx.db.getDeployableForProject(project.id);
+      const deployable = await ctx.db.getDeployableForProject(project.id);
       const status = deployable?.status ?? project.status;
       const containerId = deployable?.container_id ?? project.container_id;
       if (containerId && status === 'running') {
@@ -2404,10 +2439,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // the service via :s against the unified `services` table. Backwards-
   // compatible with the rc.1 contract where :s == :p == legacy project id
   // (fall through to the legacy projects row in that case).
-  api.get('/projects/:p/services/:s', (c) => {
+  api.get('/projects/:p/services/:s', async (c) => {
     const pParam = c.req.param('p');
     const sParam = c.req.param('s');
-    const project = ctx.db.getProject(pParam) ?? ctx.db.getProjectByName(pParam);
+    const project = (await ctx.db.getProject(pParam)) ?? (await ctx.db.getProjectByName(pParam));
     if (!project) {
       return c.json({ error: 'NOT_FOUND', message: `Project not found: ${pParam}` }, 404);
     }
@@ -2415,19 +2450,19 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     // Resolve service via the unified table; auto-derived deployables
     // use id = `<projectId>__svc`. Managed services keep their original id.
     const serviceRow =
-      ctx.db.getService(sParam) ??
-      ctx.db.getService(projectIdToDeployableServiceId(sParam)) ??
+      (await ctx.db.getService(sParam)) ??
+      (await ctx.db.getService(projectIdToDeployableServiceId(sParam))) ??
       null;
 
     // Legacy fallback: when :s is the legacy project id (pre-migration
     // shape, test fixtures without 0009 backfill), resolve project ops
     // (env vars, deploy logs) via the legacy project row directly.
-    const envVars = ctx.env.getAll(project.id);
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
-    const deployLogs = ctx.db.getDeployLogs(project.id, 5);
+    const envVars = await ctx.env.getAll(project.id);
+    const environments = await ctx.db.getEnvironmentsByProject(project.id);
+    const deployLogs = await ctx.db.getDeployLogs(project.id, 5);
     // PR 4 canonical-first: pass the auto-derived deployable so wire
     // emission reads canonical kind/image_url/assigned_port with fallback.
-    const deployable = ctx.db.getDeployableForProject(project.id);
+    const deployable = await ctx.db.getDeployableForProject(project.id);
 
     return c.json({
       ...mapProjectForApi(project, deployable),
@@ -2462,7 +2497,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // PATCH /projects/:p/services/:s  (update config)
   api.patch('/projects/:p/services/:s', async (c) => {
     return withServiceAsId(c, async (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+      const project = await getProjectOrThrow(cx, ctx);
       const body = await cx.req
         .json<{
           imageUrl?: unknown;
@@ -2522,37 +2557,37 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           400,
         );
       }
-      ctx.db.updateProject(project.id, {
+      await ctx.db.updateProject(project.id, {
         imageUrl,
         imageCmd: imageCmd ? JSON.stringify(imageCmd) : null,
         containerPort,
       });
-      const updated = ctx.db.getProject(project.id);
+      const updated = await ctx.db.getProject(project.id);
       if (!updated) return cx.json({ error: 'NOT_FOUND', message: 'Project not found' }, 404);
       // PR 4 canonical-first: re-read deployable after mutation so wire
       // emission reflects the post-update canonical state.
-      const updatedDeployable = ctx.db.getDeployableForProject(updated.id);
+      const updatedDeployable = await ctx.db.getDeployableForProject(updated.id);
       return cx.json(mapProjectForApi(updated, updatedDeployable));
     });
   });
 
   // GET /projects/:p/services/:s/topology
   api.get('/projects/:p/services/:s/topology', async (c) => {
-    return withServiceAsId(c, (cx) => {
+    return withServiceAsId(c, async (cx) => {
       // Re-use the same logic as /projects/:id/topology by faking the inner
       // request and delegating to the existing handler via a sub-request.
       // Simpler: inline the same response shape using the resolved project.
-      const project = getProjectOrThrow(cx, ctx);
+      const project = await getProjectOrThrow(cx, ctx);
       try {
         const childProjects =
           typeof ctx.db.getComposeChildProjects === 'function'
-            ? ctx.db.getComposeChildProjects(project.id)
-            : ctx.db.getChildProjects(project.id);
+            ? await ctx.db.getComposeChildProjects(project.id)
+            : await ctx.db.getChildProjects(project.id);
         const nodes = childProjects.length > 0 ? childProjects : [project];
         const nodeIds = new Set(nodes.map((n) => n.id));
         const dependsOnMap = new Map<string, string[]>();
         for (const node of nodes) {
-          const deps = ctx.db.findDependenciesByProject(node.id);
+          const deps = await ctx.db.findDependenciesByProject(node.id);
           const siblingDeps = deps
             .map((d) => d.target_service_id)
             .filter((sid): sid is string => sid !== null && nodeIds.has(sid));
@@ -2565,11 +2600,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           }
           return 'Application';
         }
-        return Promise.all(
+        const serviceNodes = await Promise.all(
           nodes.map(async (node) => {
             // PR 4 canonical-first: deployable services row drives port,
             // image, and runtime status when present.
-            const deployable = ctx.db.getDeployableForProject(node.id);
+            const deployable = await ctx.db.getDeployableForProject(node.id);
             const port = deployable?.assigned_port ?? node.assigned_port ?? null;
             const url = port ? getProjectUrl(node.name) : null;
             const image =
@@ -2598,7 +2633,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
               dependsOn: dependsOnMap.get(node.id) ?? [],
             };
           }),
-        ).then((serviceNodes) => cx.json({ services: serviceNodes }));
+        );
+        return cx.json({ services: serviceNodes });
       } catch (err) {
         log.debug({ err, projectId: project.id }, 'Get project topology failed (canonical path)');
         const message = err instanceof Error ? err.message : String(err);
@@ -2624,12 +2660,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   //
   // Returns either a resolved `{ project, service }` pair or a Response (404).
   // ---------------------------------------------------------------------------
-  function resolveServiceForRequest(
+  async function resolveServiceForRequest(
     c: Context,
-  ): { project: ProjectRow; service: ReturnType<typeof ctx.db.getService> | null } | Response {
+  ): Promise<
+    | { project: ProjectRow; service: Awaited<ReturnType<typeof ctx.db.getService>> | null }
+    | Response
+  > {
     const p = c.req.param('p') ?? '';
     const s = c.req.param('s') ?? '';
-    const project = ctx.db.getProject(p) ?? ctx.db.getProjectByName(p);
+    const project = (await ctx.db.getProject(p)) ?? (await ctx.db.getProjectByName(p));
     if (!project) {
       return c.json({ error: 'NOT_FOUND', message: `Project not found: ${p}` }, 404);
     }
@@ -2637,22 +2676,25 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     // == legacy_project_id + '__svc' for auto-derived deployables, or
     // == original managed_service_id (managed kinds).
     const service =
-      ctx.db.getService(s) ?? ctx.db.getService(projectIdToDeployableServiceId(s)) ?? null;
+      (await ctx.db.getService(s)) ??
+      (await ctx.db.getService(projectIdToDeployableServiceId(s))) ??
+      null;
     return { project, service };
   }
 
   // GET /projects/:p/services (list all managed services connected to project)
   // Also exposed as GET /projects/:p/managed-services (managed-only alias)
-  const listManagedServicesHandler = (c: Context) => {
+  const listManagedServicesHandler = async (c: Context) => {
     const projectId = c.req.param('p') ?? '';
-    const project = ctx.db.getProject(projectId) ?? ctx.db.getProjectByName(projectId);
+    const project =
+      (await ctx.db.getProject(projectId)) ?? (await ctx.db.getProjectByName(projectId));
     if (!project) {
       return c.json({ error: 'NOT_FOUND', message: `Project not found: ${projectId}` }, 404);
     }
-    const connections = ctx.db.listServiceConnectionsByProject(project.id);
-    const services = connections
-      .map((conn) => ctx.db.getService(conn.service_id_provider))
-      .filter((svc) => svc !== undefined);
+    const connections = await ctx.db.listServiceConnectionsByProject(project.id);
+    const services = (
+      await Promise.all(connections.map((conn) => ctx.db.getService(conn.service_id_provider)))
+    ).filter((svc): svc is NonNullable<typeof svc> => svc !== undefined);
     return c.json(
       services.map((svc) => {
         // eslint-disable-next-line @typescript-eslint/no-deprecated
@@ -2681,9 +2723,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // POST /projects/:p/services/:s/start
   api.post('/projects/:p/services/:s/start', async (c) => {
     return withServiceAsId(c, async (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+      const project = await getProjectOrThrow(cx, ctx);
       try {
-        assertProjectLifecycleMutable(project, 'start', ctx);
+        await assertProjectLifecycleMutableForRoute(project, 'start', ctx);
       } catch (err) {
         if (
           err instanceof ProjectArchivedError ||
@@ -2695,7 +2737,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         throw err;
       }
       // PR 4 canonical-first: container_id from deployable services row.
-      const deployable = ctx.db.getDeployableForProject(project.id);
+      const deployable = await ctx.db.getDeployableForProject(project.id);
       const containerId = deployable?.container_id ?? project.container_id;
       if (!containerId) {
         return cx.json({ error: 'No container to start. Redeploy instead.' }, 400);
@@ -2708,9 +2750,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // POST /projects/:p/services/:s/stop
   api.post('/projects/:p/services/:s/stop', async (c) => {
     return withServiceAsId(c, async (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+      const project = await getProjectOrThrow(cx, ctx);
       try {
-        assertProjectLifecycleMutable(project, 'stop', ctx);
+        await assertProjectLifecycleMutableForRoute(project, 'stop', ctx);
       } catch (err) {
         if (
           err instanceof ProjectArchivedError ||
@@ -2742,9 +2784,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // POST /projects/:p/services/:s/restart
   api.post('/projects/:p/services/:s/restart', async (c) => {
     return withServiceAsId(c, async (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+      const project = await getProjectOrThrow(cx, ctx);
       try {
-        assertProjectLifecycleMutable(project, 'stop', ctx);
+        await assertProjectLifecycleMutableForRoute(project, 'stop', ctx);
       } catch (err) {
         if (
           err instanceof ProjectArchivedError ||
@@ -2777,9 +2819,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // POST /projects/:p/services/:s/deploy  (alias for /redeploy — Task 1 §5)
   api.post('/projects/:p/services/:s/deploy', async (c) => {
     return withServiceAsId(c, async (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+      const project = await getProjectOrThrow(cx, ctx);
       try {
-        assertProjectMutable(project, ctx);
+        await assertProjectMutableForRoute(project, ctx);
       } catch (err) {
         if (
           err instanceof ProjectArchivedError ||
@@ -2800,11 +2842,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         .catch(() => ({ env_vars: undefined, no_cache: undefined, health_check_path: undefined }));
       if (body.env_vars && typeof body.env_vars === 'object') {
         for (const [key, value] of Object.entries(body.env_vars)) {
-          if (value.trim()) ctx.env.set(project.id, key, value.trim());
+          if (value.trim()) await ctx.env.set(project.id, key, value.trim());
         }
       }
       // PR 4 canonical-first: source from deployable services row.
-      const deployable = ctx.db.getDeployableForProject(project.id);
+      const deployable = await ctx.db.getDeployableForProject(project.id);
       const projectSource = deployable?.source ?? project.source;
       if (projectSource === 'git' && !project.repo_url) {
         return cx.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
@@ -2819,7 +2861,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       }
       try {
         ctx.coordinator.suppressProject(project.id, 120_000);
-        ctx.db.updateProject(project.id, { status: 'building' });
+        await ctx.db.updateProject(project.id, { status: 'building' });
         const result = await ctx.pipeline.redeploy(project.id, {
           noCache: body.no_cache,
           strategy,
@@ -2836,7 +2878,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           return cx.json(err.toJSON(), 409);
         }
         if (err instanceof OpenLanderError) return cx.json(err.toJSON(), err.statusCode as 400);
-        ctx.db.updateProject(project.id, { status: 'error' });
+        await ctx.db.updateProject(project.id, { status: 'error' });
         const errMsg = err instanceof Error ? err.message : String(err);
         return cx.json({ success: false, error: errMsg }, 500);
       } finally {
@@ -2848,9 +2890,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // POST /projects/:p/services/:s/archive
   api.post('/projects/:p/services/:s/archive', async (c) => {
     return withServiceAsId(c, async (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+      const project = await getProjectOrThrow(cx, ctx);
       try {
-        assertProjectLifecycleMutable(project, 'archive', ctx);
+        await assertProjectLifecycleMutableForRoute(project, 'archive', ctx);
       } catch (err) {
         if (
           err instanceof ProjectArchivedError ||
@@ -2872,7 +2914,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       try {
         ctx.coordinator.suppressProject(project.id, 60_000);
         await ctx.pipeline.archive(project.id);
-        const updated = ctx.db.getProject(project.id);
+        const updated = await ctx.db.getProject(project.id);
         return cx.json({ project: updated });
       } finally {
         ctx.agentPool?.releaseProjectLock(project.id, lockSessionId);
@@ -2883,9 +2925,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // POST /projects/:p/services/:s/unarchive
   api.post('/projects/:p/services/:s/unarchive', async (c) => {
     return withServiceAsId(c, async (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+      const project = await getProjectOrThrow(cx, ctx);
       await ctx.pipeline.unarchive(project.id);
-      const updated = ctx.db.getProject(project.id);
+      const updated = await ctx.db.getProject(project.id);
       return cx.json({ project: updated });
     });
   });
@@ -2903,14 +2945,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.get('/projects/:p/services/:s/logs', async (c) => {
     const projectParam = c.req.param('p');
     const serviceId = c.req.param('s');
-    const project = ctx.db.getProject(projectParam) ?? ctx.db.getProjectByName(projectParam);
+    const project =
+      (await ctx.db.getProject(projectParam)) ?? (await ctx.db.getProjectByName(projectParam));
     if (!project) {
       return c.json(
         { error: 'PROJECT_NOT_FOUND', message: `Project ${projectParam} not found` },
         404,
       );
     }
-    const service = ctx.db.getService(serviceId);
+    const service = await ctx.db.getService(serviceId);
     if (!service) {
       return c.json({ error: 'SERVICE_NOT_FOUND', message: `Service ${serviceId} not found` }, 404);
     }
@@ -2974,10 +3017,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   // GET /projects/:p/services/:s/env
-  api.get('/projects/:p/services/:s/env', (c) => {
-    return withServiceAsId(c, (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
-      const vars = ctx.env.getAll(project.id);
+  api.get('/projects/:p/services/:s/env', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = await getProjectOrThrow(cx, ctx);
+      const vars = await ctx.env.getAll(project.id);
       return cx.json({ project: project.name, envVars: vars });
     });
   });
@@ -2985,14 +3028,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // POST /projects/:p/services/:s/env
   api.post('/projects/:p/services/:s/env', async (c) => {
     return withServiceAsId(c, async (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+      const project = await getProjectOrThrow(cx, ctx);
       const body = await cx.req.json<{ variables?: Record<string, string> }>();
       if (!body.variables) {
         return cx.json({ error: 'MISSING_FIELD', message: 'variables object is required' }, 400);
       }
-      const changed = ctx.env.setBulk(project.id, body.variables);
+      const changed = await ctx.env.setBulk(project.id, body.variables);
       // PR 4 canonical-first: status from deployable services row.
-      const deployable = ctx.db.getDeployableForProject(project.id);
+      const deployable = await ctx.db.getDeployableForProject(project.id);
       const projectStatus = deployable?.status ?? project.status;
       return cx.json({
         status: changed ? 'updated' : 'unchanged',
@@ -3005,9 +3048,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // GET /projects/:p/services/:s/deployments
   api.get('/projects/:p/services/:s/deployments', (c) => {
-    return withServiceAsId(c, (cx) => {
+    return withServiceAsId(c, async (cx) => {
       // 404 if project missing (throws ProjectNotFoundError), discard the row.
-      getProjectOrThrow(cx, ctx);
+      await getProjectOrThrow(cx, ctx);
       const limit = parseInt(cx.req.query('limit') ?? '50', 10);
       const environmentId = cx.req.query('environmentId');
       // CCG #5 (post-0012 multi-svc gap): the legacy call passed project.id,
@@ -3016,7 +3059,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       // project. Pass the canonical service id from the URL so each service's
       // deploy history shows up under its own detail page.
       const serviceId = cx.req.param('s') ?? '';
-      const deployLogs = ctx.db.getDeployLogs(serviceId, limit, environmentId);
+      const deployLogs = await ctx.db.getDeployLogs(serviceId, limit, environmentId);
       return cx.json({
         count: deployLogs.length,
         deployments: deployLogs.map((dl) => ({
@@ -3037,9 +3080,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // POST /projects/:p/services/:s/expose
   api.post('/projects/:p/services/:s/expose', async (c) => {
     return withServiceAsId(c, async (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+      const project = await getProjectOrThrow(cx, ctx);
       // PR 4 canonical-first: assigned_port from deployable services row.
-      const deployable = ctx.db.getDeployableForProject(project.id);
+      const deployable = await ctx.db.getDeployableForProject(project.id);
       const exposePort = deployable?.assigned_port ?? project.assigned_port;
       if (!exposePort) {
         return cx.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
@@ -3063,9 +3106,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   // POST /projects/:p/services/:s/unexpose
-  api.post('/projects/:p/services/:s/unexpose', (c) => {
-    return withServiceAsId(c, (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+  api.post('/projects/:p/services/:s/unexpose', async (c) => {
+    return withServiceAsId(c, async (cx) => {
+      const project = await getProjectOrThrow(cx, ctx);
       ctx.pipeline.closeTunnel(project.id);
       return cx.json({ status: 'unexposed', project: project.name });
     });
@@ -3073,9 +3116,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // GET /projects/:p/services/:s/webhooks
   api.get('/projects/:p/services/:s/webhooks', (c) => {
-    return withServiceAsId(c, (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
-      const configs = ctx.db.getWebhookConfigs(project.id);
+    return withServiceAsId(c, async (cx) => {
+      const project = await getProjectOrThrow(cx, ctx);
+      const configs = await ctx.db.getWebhookConfigs(project.id);
       return cx.json({
         webhooks: configs.map((cfg) => ({
           id: cfg.id,
@@ -3093,7 +3136,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // POST /projects/:p/services/:s/webhooks
   api.post('/projects/:p/services/:s/webhooks', async (c) => {
     return withServiceAsId(c, async (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
+      const project = await getProjectOrThrow(cx, ctx);
       const body = await cx.req
         .json<{ source: string; branch_filter?: string; enabled?: boolean }>()
         .catch(() => ({ source: '', branch_filter: undefined, enabled: undefined }));
@@ -3101,10 +3144,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         return cx.json({ error: 'Invalid source. Must be github, gitlab, or bitbucket.' }, 400);
       }
       const source = body.source as 'github' | 'gitlab' | 'bitbucket';
-      const existing = ctx.db.getWebhookConfig(project.id, source);
+      const existing = await ctx.db.getWebhookConfig(project.id, source);
       const secret = existing?.secret ?? `${project.id}.${crypto.randomUUID().replace(/-/g, '')}`;
       const configId = existing?.id ?? crypto.randomUUID();
-      ctx.db.setWebhookConfig({
+      await ctx.db.setWebhookConfig({
         id: configId,
         projectId: project.id,
         source,
@@ -3112,7 +3155,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         branchFilter: body.branch_filter ?? 'main',
         enabled: body.enabled !== false,
       });
-      const config = ctx.db.getWebhookConfig(project.id, source);
+      const config = await ctx.db.getWebhookConfig(project.id, source);
       if (!config) {
         return cx.json({ error: 'Failed to configure webhook' }, 500);
       }
@@ -3129,24 +3172,26 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // GET /projects/:p/services/:s/previews
   api.get('/projects/:p/services/:s/previews', (c) => {
-    return withServiceAsId(c, (cx) => {
-      const project = getProjectOrThrow(cx, ctx);
-      const previews = ctx.db.getPreviewProjects(project.id);
+    return withServiceAsId(c, async (cx) => {
+      const project = await getProjectOrThrow(cx, ctx);
+      const previews = await ctx.db.getPreviewProjects(project.id);
       return cx.json({
-        previews: previews.map((preview) => {
-          // PR 4 canonical-first: per-preview deployable services row.
-          const deployable = ctx.db.getDeployableForProject(preview.id);
-          return {
-            id: preview.id,
-            name: preview.name,
-            status: deployable?.status ?? preview.status,
-            prNumber: preview.pr_number,
-            url: getProjectUrl(preview.name),
-            publicUrl: deployable?.public_url ?? preview.public_url,
-            createdAt: normalizeTimestamp(preview.created_at),
-            updatedAt: normalizeTimestamp(preview.updated_at),
-          };
-        }),
+        previews: await Promise.all(
+          previews.map(async (preview) => {
+            // PR 4 canonical-first: per-preview deployable services row.
+            const deployable = await ctx.db.getDeployableForProject(preview.id);
+            return {
+              id: preview.id,
+              name: preview.name,
+              status: deployable?.status ?? preview.status,
+              prNumber: preview.pr_number,
+              url: getProjectUrl(preview.name),
+              publicUrl: deployable?.public_url ?? preview.public_url,
+              createdAt: normalizeTimestamp(preview.created_at),
+              updatedAt: normalizeTimestamp(preview.updated_at),
+            };
+          }),
+        ),
       });
     });
   });
@@ -3158,38 +3203,40 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // single round-trip instead of fanning out 1 query per project. The
   // earlier per-project loop in Home.tsx scaled with project count and
   // dominated cold-load time on multi-project workspaces.
-  api.get('/deployments/recent', (c) => {
+  api.get('/deployments/recent', async (c) => {
     const limitParam = parseInt(c.req.query('limit') ?? '20', 10);
     const limit =
       Number.isInteger(limitParam) && limitParam > 0 && limitParam <= 100 ? limitParam : 20;
-    const rows = ctx.db.listRecentDeployLogsAcrossProjects(limit);
+    const rows = await ctx.db.listRecentDeployLogsAcrossProjects(limit);
     // Resolve service → project per row. Projects are keyed by id; the
     // small N (<=100) keeps per-row lookups cheap. Rows whose service
     // or project no longer exist are dropped — they shouldn't normally
     // happen post-0012 but a stale orphan must not crash the page.
-    const deployments = rows
-      .map((dl) => {
-        const service = ctx.db.getService(dl.service_id);
-        if (!service) return null;
-        const project = ctx.db.getProject(service.project_id);
-        if (!project) return null;
-        return {
-          id: dl.id,
-          status: dl.status,
-          trigger: dl.trigger,
-          triggerDetail: dl.trigger_detail,
-          commitSha: dl.commit_sha,
-          commitMessage: dl.commit_message ?? null,
-          durationMs: dl.duration_ms,
-          createdAt: normalizeTimestamp(dl.created_at),
-          failureSummary: dl.status === 'failed' ? extractFailureSummary(dl.build_log) : null,
-          projectId: project.id,
-          projectName: project.name,
-          serviceId: service.id,
-          serviceName: service.name,
-        };
-      })
-      .filter((row): row is NonNullable<typeof row> => row !== null);
+    const deployments = (
+      await Promise.all(
+        rows.map(async (dl) => {
+          const service = await ctx.db.getService(dl.service_id);
+          if (!service) return null;
+          const project = await ctx.db.getProject(service.project_id);
+          if (!project) return null;
+          return {
+            id: dl.id,
+            status: dl.status,
+            trigger: dl.trigger,
+            triggerDetail: dl.trigger_detail,
+            commitSha: dl.commit_sha,
+            commitMessage: dl.commit_message ?? null,
+            durationMs: dl.duration_ms,
+            createdAt: normalizeTimestamp(dl.created_at),
+            failureSummary: dl.status === 'failed' ? extractFailureSummary(dl.build_log) : null,
+            projectId: project.id,
+            projectName: project.name,
+            serviceId: service.id,
+            serviceName: service.name,
+          };
+        }),
+      )
+    ).filter((row): row is NonNullable<typeof row> => row !== null);
 
     return c.json({ count: deployments.length, deployments });
   });

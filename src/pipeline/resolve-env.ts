@@ -21,21 +21,21 @@ export interface ResolveEnvParams {
  * 6) serviceEnvVars
  * 7) inlineEnvVars
  */
-export function resolveEnvVars(
+export async function resolveEnvVars(
   params: ResolveEnvParams,
   deps: { env: EnvManager },
-): Record<string, string> {
+): Promise<Record<string, string>> {
   const autoEnvVars = params.autoEnvVars ?? {};
-  const globalSecrets = deps.env.getGlobalSecrets();
-  const projectEnvVars = deps.env.getAll(params.projectId);
+  const globalSecrets = await deps.env.getGlobalSecrets();
+  const projectEnvVars = await deps.env.getAll(params.projectId);
 
   let productionEnvVars: Record<string, string> = {};
   let targetEnvironmentEnvVars: Record<string, string> = {};
 
   if (params.environmentId !== undefined) {
     const productionEnvironmentId = `${params.projectId}-production`;
-    productionEnvVars = deps.env.getAll(params.projectId, productionEnvironmentId);
-    targetEnvironmentEnvVars = deps.env.getAll(params.projectId, params.environmentId);
+    productionEnvVars = await deps.env.getAll(params.projectId, productionEnvironmentId);
+    targetEnvironmentEnvVars = await deps.env.getAll(params.projectId, params.environmentId);
   }
 
   const serviceEnvVars = params.serviceEnvVars ?? {};
@@ -55,9 +55,9 @@ export function resolveEnvVars(
 /**
  * Resolves env vars, then keeps only build-time variables.
  */
-export function resolveEnvVarsForBuild(
+export async function resolveEnvVarsForBuild(
   params: ResolveEnvParams,
   deps: { env: EnvManager },
-): Record<string, string> {
-  return filterBuildTimeVars(resolveEnvVars(params, deps));
+): Promise<Record<string, string>> {
+  return filterBuildTimeVars(await resolveEnvVars(params, deps));
 }

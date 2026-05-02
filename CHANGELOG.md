@@ -13,6 +13,10 @@ OpenLander is a self-hosted deployment platform: paste a Git URL, get a deploy. 
 
 This is an early release — expect breaking changes between 0.x versions. Production use is supported but configurations and APIs may evolve based on user feedback.
 
+### Architecture
+
+- **Platform metadata: PostgreSQL via Docker Compose.** OpenLander now ships with a managed `postgres:16-alpine` container alongside the application; the previous embedded SQLite (`better-sqlite3`) datastore has been removed. The recommended self-hosted runtime is `docker compose up`; the npm CLI path is supported for development with a user-provided `OPENLANDER_DATABASE_URL`. Aligns with industry pattern (Coolify, Dokploy).
+
 ### Highlights
 
 **Deployment**
@@ -52,6 +56,8 @@ This is an early release — expect breaking changes between 0.x versions. Produ
 
 **Infrastructure**
 
+- Postgres-backed OpenLander runtime with Docker Compose deployment and a
+  dedicated persistent database volume.
 - Traefik reverse proxy with auto-routing per project.
 - Cloudflare Tunnel (production) and TryCloudflare (quick share) for public exposure.
 - Managed services: PostgreSQL, MySQL, Redis, MongoDB, MinIO containers on demand.

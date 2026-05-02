@@ -1,91 +1,65 @@
-/**
- * Schema parity test (ralplan-monitoring-logs Phase 1 step 4).
- *
- * Catches schema drift: if a table is renamed/added in Drizzle without a
- * matching migration (or vice versa), this test fails with a column-set
- * diff instead of a runtime "no such column" error in production.
- *
- * Strategy (fixture-free):
- *   1. Open in-memory better-sqlite3 via createDrizzleDatabase(':memory:').
- *   2. Run every migration in drizzle/ via drizzle's migrate().
- *   3. For each Drizzle-declared table, query PRAGMA table_info(<name>) and
- *      compare the resulting column set to the Drizzle schema's column
- *      configuration.
- *
- * The assertion is a column-name set parity check. Type-detail mismatches
- * (text vs integer) are out of scope here — drizzle's own migrator catches
- * those at migrate() time.
- */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { getTableConfig } from 'drizzle-orm/sqlite-core';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { getTableConfig } from 'drizzle-orm/pg-core';
 
-import {
-  createDrizzleDatabase,
-  type SqliteDatabase,
-  type DrizzleClient,
-} from '../../src/db/drizzle.js';
 import { drizzleSchema } from '../../src/db/schema.drizzle.js';
+import {
+  readMigrationSqlInJournalOrder,
+  staticTableShapeFromSql,
+  type StaticTableShape,
+} from './postgres-migration-helpers.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS_FOLDER = path.resolve(__dirname, '..', '..', 'drizzle');
+function drizzleTableShape(): { duplicates: string[]; shape: StaticTableShape } {
+  const duplicates: string[] = [];
+  const shape: StaticTableShape = new Map();
 
-interface ColumnInfoRow {
-  cid: number;
-  name: string;
-  type: string;
-  notnull: 0 | 1;
-  dflt_value: string | null;
-  pk: 0 | 1;
-}
+  for (const [exportName, table] of Object.entries(drizzleSchema)) {
+    const config = getTableConfig(table);
+    const columns = new Set(config.columns.map((column) => column.name));
 
-function pragmaColumns(sqlite: SqliteDatabase, table: string): ColumnInfoRow[] {
-  return sqlite.prepare(`PRAGMA table_info('${table}')`).all() as ColumnInfoRow[];
-}
-
-describe('schema parity (drizzle vs migrated DB)', () => {
-  let sqlite: SqliteDatabase;
-  let drizzle: DrizzleClient;
-
-  beforeEach(() => {
-    const db = createDrizzleDatabase(':memory:');
-    sqlite = db.sqlite;
-    drizzle = db.db;
-    // 0009 drops parent tables; mirror src/db/index.ts:435-443 production path.
-    sqlite.exec('PRAGMA foreign_keys = OFF');
-    try {
-      migrate(drizzle as Parameters<typeof migrate>[0], { migrationsFolder: MIGRATIONS_FOLDER });
-    } finally {
-      sqlite.exec('PRAGMA foreign_keys = ON');
+    if (shape.has(config.name)) {
+      duplicates.push(`${config.name} exported more than once; latest export=${exportName}`);
     }
-  });
 
-  afterEach(() => {
-    sqlite.close();
-  });
+    shape.set(config.name, columns);
+  }
 
-  it('migrated_db_matches_drizzle_schema_all_tables', () => {
-    const mismatches: string[] = [];
+  return { duplicates, shape };
+}
 
-    for (const [exportName, table] of Object.entries(drizzleSchema)) {
-      const config = getTableConfig(table);
-      const declaredColumns = config.columns.map((c) => c.name).sort();
+function sortedValues(values: Iterable<string>): string[] {
+  return [...values].sort((a, b) => a.localeCompare(b));
+}
 
-      const migratedRows = pragmaColumns(sqlite, config.name);
-      if (migratedRows.length === 0) {
-        mismatches.push(`Table '${config.name}' (export ${exportName}) declared in Drizzle but missing from migrated DB`);
+function columnSetDiff(expected: Set<string>, actual: Set<string>): string {
+  const missing = sortedValues(expected).filter((column) => !actual.has(column));
+  const extra = sortedValues(actual).filter((column) => !expected.has(column));
+  return `missing=[${missing.join(',')}] extra=[${extra.join(',')}]`;
+}
+
+describe('Postgres schema parity (Drizzle schema vs migration SQL)', () => {
+  it('active Postgres migrations create the same table/column shape declared by Drizzle', () => {
+    const drizzle = drizzleTableShape();
+    const migrated = staticTableShapeFromSql(readMigrationSqlInJournalOrder());
+    const mismatches: string[] = [...drizzle.duplicates];
+    const allTables = new Set([...drizzle.shape.keys(), ...migrated.keys()]);
+
+    for (const tableName of sortedValues(allTables)) {
+      const declaredColumns = drizzle.shape.get(tableName);
+      const migratedColumns = migrated.get(tableName);
+
+      if (!declaredColumns) {
+        mismatches.push(`Table '${tableName}' exists in migrations but not in drizzleSchema`);
         continue;
       }
-      const migratedColumns = migratedRows.map((r) => r.name).sort();
 
-      const onlyInDrizzle = declaredColumns.filter((c) => !migratedColumns.includes(c));
-      const onlyInMigrated = migratedColumns.filter((c) => !declaredColumns.includes(c));
+      if (!migratedColumns) {
+        mismatches.push(`Table '${tableName}' exists in drizzleSchema but not in migrations`);
+        continue;
+      }
 
-      if (onlyInDrizzle.length > 0 || onlyInMigrated.length > 0) {
+      if (columnSetDiff(declaredColumns, migratedColumns) !== 'missing=[] extra=[]') {
         mismatches.push(
-          `Table '${config.name}' (export ${exportName}): drizzle-only=[${onlyInDrizzle.join(',')}] migrated-only=[${onlyInMigrated.join(',')}]`,
+          `Table '${tableName}' column mismatch: ${columnSetDiff(declaredColumns, migratedColumns)}`,
         );
       }
     }

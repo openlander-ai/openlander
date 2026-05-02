@@ -81,7 +81,7 @@ export class ProjectStateManager {
     reason: string,
     options?: StateTransitionOptions,
   ): Promise<boolean> {
-    const project = this.ctx.db.getProject(projectId);
+    const project = await this.ctx.db.getProject(projectId);
     // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const currentStatus = project?.status ?? null;
     if (!currentStatus) {
@@ -126,7 +126,7 @@ export class ProjectStateManager {
         ? { recoveringStartedAt: new Date().toISOString() }
         : { recoveringStartedAt: null };
 
-    this.ctx.db.updateProject(projectId, {
+    await this.ctx.db.updateProject(projectId, {
       status: persistedStatus,
       ...recoveringUpdate,
     });
@@ -147,10 +147,10 @@ export class ProjectStateManager {
    * Get current state of a project.
    * @returns ProjectStatus or null if project not found
    */
-  getState(projectId: string): Promise<ProjectStatus | null> {
-    const project = this.ctx.db.getProject(projectId);
+  async getState(projectId: string): Promise<ProjectStatus | null> {
+    const project = await this.ctx.db.getProject(projectId);
     // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-    return Promise.resolve(project?.status ?? null);
+    return project?.status ?? null;
   }
 
   /**
@@ -163,7 +163,7 @@ export class ProjectStateManager {
   async reconcileAll(): Promise<{ reconciled: number; skipped: number }> {
     const containers = await this.ctx.docker.listManagedContainers();
     const containerIndex = this.buildContainerIndex(containers);
-    const projects = this.ctx.db.listProjects();
+    const projects = await this.ctx.db.listProjects();
 
     let reconciled = 0;
     let skipped = 0;
@@ -180,7 +180,7 @@ export class ProjectStateManager {
     const runningContainerIds = new Set(
       containers.filter((c) => c.status === 'running').map((c) => c.id),
     );
-    reconciled += this.reconcileStaleEnvironments(projects, runningContainerIds);
+    reconciled += await this.reconcileStaleEnvironments(projects, runningContainerIds);
 
     return { reconciled, skipped };
   }
@@ -198,13 +198,13 @@ export class ProjectStateManager {
     projectId: string,
     containers: Map<string, ContainerInfo>,
   ): Promise<boolean> {
-    const project = this.ctx.db.getProject(projectId);
+    const project = await this.ctx.db.getProject(projectId);
     if (!project || project.archived_at !== null) {
       return false;
     }
 
     // PR 4.5: canonical-first reads of container_id/status with `??` fallback.
-    const deployable = this.ctx.db.getDeployableForProject(project.id);
+    const deployable = await this.ctx.db.getDeployableForProject(project.id);
     const projectContainerId = deployable?.container_id ?? project.container_id;
     const projectStatus = deployable?.status ?? project.status;
 
@@ -231,10 +231,10 @@ export class ProjectStateManager {
     return false;
   }
 
-  private reconcileStaleEnvironments(
+  private async reconcileStaleEnvironments(
     projects: { id: string }[],
     runningContainerIds: Set<string>,
-  ): number {
+  ): Promise<number> {
     if (typeof this.ctx.db.getEnvironmentsByProject !== 'function') {
       return 0;
     }
@@ -242,13 +242,13 @@ export class ProjectStateManager {
     let count = 0;
 
     for (const project of projects) {
-      const envs = this.ctx.db.getEnvironmentsByProject(project.id);
+      const envs = await this.ctx.db.getEnvironmentsByProject(project.id);
       for (const env of envs) {
         if (env.status !== 'building') continue;
         const isContainerRunning =
           env.container_id != null && runningContainerIds.has(env.container_id);
         const newStatus = isContainerRunning ? 'running' : 'stopped';
-        this.ctx.db.updateEnvironment(env.id, { status: newStatus });
+        await this.ctx.db.updateEnvironment(env.id, { status: newStatus });
         count += 1;
         log.info(
           { envId: env.id, type: env.type, from: 'building', to: newStatus },

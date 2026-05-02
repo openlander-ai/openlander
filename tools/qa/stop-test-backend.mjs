@@ -2,10 +2,7 @@
 /**
  * stop-test-backend.mjs — tears down the contract-test backend.
  *
- * Reads .test-backend-pid, sends SIGTERM, then removes:
- *   - /tmp/ol-contract-test.db
- *   - web/.test-backend-pid
- *   - web/.test-backend-port
+ * Reads .test-backend-pid, sends SIGTERM, then removes web test metadata files.
  */
 import { readFileSync, existsSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
@@ -16,7 +13,6 @@ const WEB_DIR = join(__dirname, '..', '..', 'web');
 const PID_FILE = join(WEB_DIR, '.test-backend-pid');
 const PORT_FILE = join(WEB_DIR, '.test-backend-port');
 const TOKEN_FILE = join(WEB_DIR, '.test-backend-token');
-const DB_PATH = '/tmp/ol-contract-test.db';
 
 if (existsSync(PID_FILE)) {
   const pid = parseInt(readFileSync(PID_FILE, 'utf8').trim(), 10);
@@ -34,6 +30,5 @@ if (existsSync(PID_FILE)) {
 
 if (existsSync(PORT_FILE)) unlinkSync(PORT_FILE);
 if (existsSync(TOKEN_FILE)) unlinkSync(TOKEN_FILE);
-if (existsSync(DB_PATH)) unlinkSync(DB_PATH);
 
 console.log('[stop-test-backend] cleanup complete');

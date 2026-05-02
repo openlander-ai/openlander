@@ -14,7 +14,7 @@ export class TunnelManager {
   ) {}
 
   async expose(projectId: string, _port: number): Promise<string> {
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) {
       throw new Error(`Project not found: ${projectId}`);
     }
@@ -23,7 +23,7 @@ export class TunnelManager {
     const url = await tunnel.start(project.name);
     this.tunnels.set(projectId, tunnel);
 
-    this.db.updateProject(projectId, {
+    await this.db.updateProject(projectId, {
       visibility: 'quick-share',
       publicUrl: url,
     });
@@ -40,23 +40,27 @@ export class TunnelManager {
 
     tunnel.stop();
     this.tunnels.delete(projectId);
-    this.db.updateProject(projectId, {
-      visibility: 'internal',
-      publicUrl: null,
-    });
+    void this.db
+      .updateProject(projectId, {
+        visibility: 'internal',
+        publicUrl: null,
+      })
+      .catch((err: unknown) => {
+        log.warn({ err, projectId }, 'Failed to clear quick-share tunnel state');
+      });
   }
 
   get(projectId: string): CloudflareTunnel | undefined {
     return this.tunnels.get(projectId);
   }
 
-  cleanupStale(): void {
-    const projects = this.db.listProjects();
+  async cleanupStale(): Promise<void> {
+    const projects = await this.db.listProjects();
     for (const project of projects) {
       // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       if (project.visibility === 'quick-share' || project.visibility === 'shared') {
         log.info({ projectId: project.id, name: project.name }, 'Clearing stale tunnel state');
-        this.db.updateProject(project.id, {
+        await this.db.updateProject(project.id, {
           visibility: 'internal',
           publicUrl: null,
         });

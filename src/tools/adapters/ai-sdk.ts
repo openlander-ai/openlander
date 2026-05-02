@@ -82,8 +82,8 @@ export function toAiSdkTools(
     return { count: nextCount, exceeded: nextCount > MAX_FIX_ATTEMPTS };
   };
 
-  const savePendingFix = (projectId: string, pendingFix: PendingFixPayload) => {
-    appCtx.db.setPendingFix(projectId, pendingFix);
+  const savePendingFix = async (projectId: string, pendingFix: PendingFixPayload) => {
+    await appCtx.db.setPendingFix(projectId, pendingFix);
   };
 
   const shouldApplyApprovedFix = (selectedLabels: string[]) => {
@@ -136,12 +136,12 @@ export function toAiSdkTools(
         };
       }
 
-      const project = appCtx.db.getProjectByName(project_name);
+      const project = await appCtx.db.getProjectByName(project_name);
       if (!project) {
         throw new ProjectNotFoundError(project_name);
       }
 
-      const lastDeploy = appCtx.db.getLastDeployLog(project.id);
+      const lastDeploy = await appCtx.db.getLastDeployLog(project.id);
       if (!lastDeploy || lastDeploy.status !== 'failed') {
         return { error: 'No failed build found for this project.' };
       }
@@ -244,7 +244,7 @@ export function toAiSdkTools(
         };
       }
 
-      savePendingFix(project.id, {
+      await savePendingFix(project.id, {
         filePath: 'Dockerfile',
         content: fixResult.dockerfileContent,
       });
@@ -358,9 +358,9 @@ export function toAiSdkTools(
 
         const targetProject =
           typeof metadataProjectId === 'string'
-            ? appCtx.db.getProject(metadataProjectId)
+            ? await appCtx.db.getProject(metadataProjectId)
             : typeof metadataProjectName === 'string'
-              ? appCtx.db.getProjectByName(metadataProjectName)
+              ? await appCtx.db.getProjectByName(metadataProjectName)
               : undefined;
 
         if (
@@ -390,7 +390,7 @@ export function toAiSdkTools(
             };
           }
 
-          savePendingFix(targetProject.id, pendingFix);
+          await savePendingFix(targetProject.id, pendingFix);
 
           // 1.0 GA: per-project lock so applying a fix from chat does not
           // bypass the BUG-002 regression guard.

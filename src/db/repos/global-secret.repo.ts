@@ -1,52 +1,49 @@
+import { randomUUID } from 'node:crypto';
 import { asc, eq, sql } from 'drizzle-orm';
 
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { globalSecrets } from '../schema.drizzle.js';
+
+type GlobalSecretRow = typeof globalSecrets.$inferSelect;
 
 export class GlobalSecretRepo {
   private readonly db: DrizzleClient;
-  private readonly sqlite: SqliteDatabase;
+  private readonly client: PostgresClient;
 
-  constructor(db: DrizzleClient, sqlite: SqliteDatabase) {
+  constructor(db: DrizzleClient, client: PostgresClient) {
     this.db = db;
-    this.sqlite = sqlite;
-    void this.sqlite;
+    this.client = client;
+    void this.client;
   }
 
-  getGlobalSecrets(): Array<{
-    id: string;
-    key: string;
-    encrypted_value: string;
-    iv: string;
-    description: string | null;
-    created_at: string | null;
-    updated_at: string | null;
-  }> {
-    return this.db.select().from(globalSecrets).orderBy(asc(globalSecrets.key)).all();
+  async getGlobalSecrets(): Promise<GlobalSecretRow[]> {
+    return this.db.select().from(globalSecrets).orderBy(asc(globalSecrets.key));
   }
 
-  getGlobalSecret(key: string):
-    | {
-        id: string;
-        key: string;
-        encrypted_value: string;
-        iv: string;
-        description: string | null;
-      }
-    | undefined {
-    return this.db.select().from(globalSecrets).where(eq(globalSecrets.key, key)).get();
+  async getGlobalSecret(key: string): Promise<GlobalSecretRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(globalSecrets)
+      .where(eq(globalSecrets.key, key))
+      .limit(1);
+    return row ?? null;
   }
 
-  setGlobalSecret(key: string, encryptedValue: string, iv: string, description?: string): void {
-    this.db
+  async setGlobalSecret(
+    key: string,
+    encryptedValue: string,
+    iv: string,
+    description?: string,
+  ): Promise<void> {
+    await this.db
       .insert(globalSecrets)
       .values({
-        id: sql<string>`lower(hex(randomblob(8)))`,
+        id: randomUUID(),
         key,
         encrypted_value: encryptedValue,
         iv,
         description: description ?? null,
-        updated_at: sql`CURRENT_TIMESTAMP`,
+        updated_at: sql`now()::text`,
       })
       .onConflictDoUpdate({
         target: globalSecrets.key,
@@ -54,16 +51,16 @@ export class GlobalSecretRepo {
           encrypted_value: encryptedValue,
           iv,
           description: description ?? null,
-          updated_at: sql`CURRENT_TIMESTAMP`,
+          updated_at: sql`now()::text`,
         },
-      })
-      .run();
+      });
   }
 
-  deleteGlobalSecret(key: string): boolean {
-    const existing = this.getGlobalSecret(key);
-    if (!existing) return false;
-    this.db.delete(globalSecrets).where(eq(globalSecrets.key, key)).run();
-    return true;
+  async deleteGlobalSecret(key: string): Promise<boolean> {
+    const deleted = await this.db
+      .delete(globalSecrets)
+      .where(eq(globalSecrets.key, key))
+      .returning({ key: globalSecrets.key });
+    return deleted.length > 0;
   }
 }

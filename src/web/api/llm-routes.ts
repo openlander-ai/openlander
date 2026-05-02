@@ -40,7 +40,7 @@ export function createLlmRoutes(ctx: AppContext): Hono {
       const suggestion = response.text.trim();
       const eventId = nanoid(16);
 
-      ctx.db.createTimelineEvent({
+      await ctx.db.createTimelineEvent({
         id: eventId,
         projectId,
         deployId,

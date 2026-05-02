@@ -206,13 +206,13 @@ export class DockerEventListener {
   ): Promise<void> {
     this.recentOoms.set(containerId, Date.now());
 
-    const projectId = this.resolveProjectId(attrs);
+    const projectId = await this.resolveProjectId(attrs);
     if (!projectId) return;
 
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) return;
     // PR 4.5: canonical-first status read with `??` fallback.
-    const oomDeployable = this.db.getDeployableForProject(projectId);
+    const oomDeployable = await this.db.getDeployableForProject(projectId);
     const oomStatus = oomDeployable?.status ?? project.status;
     if (oomStatus !== 'running' || project.archived_at) return;
 
@@ -243,13 +243,13 @@ export class DockerEventListener {
     const lastCrash = this.recentCrashes.get(containerId);
     if (lastCrash && Date.now() - lastCrash < DEBOUNCE_MS) return;
 
-    const projectId = this.resolveProjectId(attrs);
+    const projectId = await this.resolveProjectId(attrs);
     if (!projectId) return;
 
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) return;
     // PR 4.5: canonical-first status read with `??` fallback.
-    const dieDeployable = this.db.getDeployableForProject(projectId);
+    const dieDeployable = await this.db.getDeployableForProject(projectId);
     const dieStatus = dieDeployable?.status ?? project.status;
     if (dieStatus !== 'running') return;
     if (project.archived_at) return;
@@ -273,13 +273,13 @@ export class DockerEventListener {
     this.recentOoms.delete(containerId);
   }
 
-  private resolveProjectId(attrs: Record<string, string>): string | null {
+  private async resolveProjectId(attrs: Record<string, string>): Promise<string | null> {
     const projectName = attrs[DOCKER_LABELS.PROJECT];
     if (!projectName) return null;
 
     if (attrs[DOCKER_LABELS.SERVICE]) return null;
 
-    const project = this.db.getProjectByName(projectName);
+    const project = await this.db.getProjectByName(projectName);
     return project?.id ?? null;
   }
 }

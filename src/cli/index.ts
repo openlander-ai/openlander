@@ -47,14 +47,14 @@ program
     // CLI no longer runs LLM/Git setup — just start the server
 
     // Step 3: Load config & create app context
-    const { loadConfig, getDbPath } = await import('../config/index.js');
+    const { loadConfig, getDatabaseUrl } = await import('../config/index.js');
 
     const config = loadConfig();
     config.server.port = port;
     config.server.host = options.host;
 
     const { createAppContext } = await import('../app.js');
-    const ctx = await createAppContext(config, getDbPath());
+    const ctx = await createAppContext(config, getDatabaseUrl());
 
     registerUnhandledRejectionHandler();
 
@@ -111,10 +111,15 @@ program
 
     // Graceful shutdown
     const { shutdownAppContext } = await import('../app.js');
-    const shutdown = () => {
+    const shutdown = (): void => {
       console.log(pc.dim('\n  Shutting down...'));
-      shutdownAppContext(ctx);
-      process.exit(0);
+      void shutdownAppContext(ctx)
+        .catch((err: unknown) => {
+          log.warn({ err }, 'Failed to shutdown app context cleanly');
+        })
+        .finally(() => {
+          process.exit(0);
+        });
     };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
@@ -151,13 +156,13 @@ program
     const { ensureDocker } = await import('./onboard.js');
     await ensureDocker();
 
-    const { loadConfig, getDbPath } = await import('../config/index.js');
+    const { loadConfig, getDatabaseUrl } = await import('../config/index.js');
     const config = loadConfig();
     config.server.port = port;
     config.server.host = options.host;
 
     const { createAppContext } = await import('../app.js');
-    const ctx = await createAppContext(config, getDbPath());
+    const ctx = await createAppContext(config, getDatabaseUrl());
 
     registerUnhandledRejectionHandler();
 
@@ -211,8 +216,13 @@ program
     const { shutdownAppContext } = await import('../app.js');
     const shutdown = (): void => {
       console.log(pc.dim('\n  Shutting down...'));
-      shutdownAppContext(ctx);
-      process.exit(0);
+      void shutdownAppContext(ctx)
+        .catch((err: unknown) => {
+          log.warn({ err }, 'Failed to shutdown app context cleanly');
+        })
+        .finally(() => {
+          process.exit(0);
+        });
     };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
@@ -310,11 +320,11 @@ program
     }
 
     if (action === 'reset-password') {
-      const { getDbPath } = await import('../config/index.js');
-      const dbPath = getDbPath();
+      const { getDatabaseUrl } = await import('../config/index.js');
+      const databaseUrl = getDatabaseUrl();
 
-      if (!existsSync(dbPath)) {
-        console.log(pc.red('No database found. Run OpenLander first.'));
+      if (!databaseUrl) {
+        console.log(pc.red('No database URL configured. Set OPENLANDER_DATABASE_URL first.'));
         return;
       }
 
@@ -336,9 +346,10 @@ program
       const { Database } = await import('../db/index.js');
       const { AuthService } = await import('../auth/auth-service.js');
 
-      const db = new Database(dbPath);
+      const db = await Database.connect(databaseUrl);
       const authService = new AuthService(db);
-      authService.resetPassword(newPassword);
+      await authService.resetPassword(newPassword);
+      await db.close();
 
       console.log(pc.green('Password reset successfully.'));
       return;
@@ -380,11 +391,11 @@ program
   .description('Recover containers after Docker migration (preserves data)')
   .option('--dry-run', 'Preview recovery actions without making changes')
   .action(async (options: { dryRun?: boolean }) => {
-    const { loadConfig, getDbPath } = await import('../config/index.js');
+    const { loadConfig, getDatabaseUrl } = await import('../config/index.js');
     const config = loadConfig();
 
     const { createAppContext } = await import('../app.js');
-    const ctx = await createAppContext(config, getDbPath());
+    const ctx = await createAppContext(config, getDatabaseUrl());
 
     const { recover } = await import('../pipeline/recover.js');
     const dryRun = options.dryRun ?? false;
@@ -501,7 +512,7 @@ program
   .command('mcp')
   .description('Start the MCP server (for Claude Code, Cursor, etc.)')
   .action(async () => {
-    const { loadConfig, getDbPath, isOnboarded } = await import('../config/index.js');
+    const { loadConfig, getDatabaseUrl, isOnboarded } = await import('../config/index.js');
 
     if (!isOnboarded()) {
       console.error('Not configured. Run `openlander` first.');
@@ -511,7 +522,7 @@ program
     const config = loadConfig();
 
     const { createAppContext } = await import('../app.js');
-    const ctx = await createAppContext(config, getDbPath());
+    const ctx = await createAppContext(config, getDatabaseUrl());
 
     if (ctx.agent) {
       const { createTools } = await import('../tools/index.js');

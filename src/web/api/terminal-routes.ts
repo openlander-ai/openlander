@@ -71,10 +71,10 @@ export function createTerminalRoutes(
           void (async () => {
             try {
               // Auth check: validate session cookie
-              if (authService.isPasswordSet()) {
+              if (await authService.isPasswordSet()) {
                 const cookieHeader = c.req.header('cookie');
                 const sessionToken = parseCookie(cookieHeader, 'ol_session');
-                if (!sessionToken || !authService.validateSession(sessionToken)) {
+                if (!sessionToken || !(await authService.validateSession(sessionToken))) {
                   closeWithError(ws, 'Unauthorized');
                   return;
                 }
@@ -104,12 +104,12 @@ export function createTerminalRoutes(
                 }
               }
 
-              const project = getProjectOrThrow(c, ctx);
+              const project = await getProjectOrThrow(c, ctx);
 
               // PR 4 canonical-first: container_id + status from the
               // deployable services row when available; fall back to
               // legacy projects columns through migration 0012.
-              const deployable = ctx.db.getDeployableForProject(project.id);
+              const deployable = await ctx.db.getDeployableForProject(project.id);
               const status = deployable?.status ?? project.status;
               const projectContainerId = deployable?.container_id ?? project.container_id;
               if (!projectContainerId || status !== 'running') {

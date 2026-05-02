@@ -97,13 +97,13 @@ export const deployPlanToolDefs: ToolDef[] = [
     mcpDescription:
       'Update a deployment plan with missing values. Pass updates as a JSON string with fields like env (environment variables), dockerfile (Dockerfile path), or services (service configuration). Returns the full updated plan with plan_id, status, complexity, app, build, services, env, missing, warnings.',
     inputSchema: updateDeployPlanSchema,
-    execute: (args, context) => {
+    execute: async (args, context) => {
       const appCtx = context.appCtx;
       const planId = args['plan_id'] as string;
       const updatesRaw = args['updates'] as string;
       const updates = JSON.parse(updatesRaw) as PlanUpdates;
 
-      const plan: DeployPlan = appCtx.planEngine.updatePlan(planId, updates);
+      const plan: DeployPlan = await appCtx.planEngine.updatePlan(planId, updates);
 
       return {
         plan_id: plan.plan_id,
@@ -138,13 +138,19 @@ export const deployPlanToolDefs: ToolDef[] = [
 
       const deployOnly = (args['deploy_only'] as string[] | undefined) ?? undefined;
       const planRow =
-        typeof appCtx.db.getDeployPlan === 'function' ? appCtx.db.getDeployPlan(planId) : undefined;
+        typeof appCtx.db.getDeployPlan === 'function'
+          ? await appCtx.db.getDeployPlan(planId)
+          : undefined;
       if (planRow) {
         const planData = JSON.parse(planRow.plan_json) as DeployPlan;
         const lockProjectId =
-          planData.project_id ?? appCtx.db.getProjectByName(planData.app.name)?.id ?? null;
+          planData.project_id ?? (await appCtx.db.getProjectByName(planData.app.name))?.id ?? null;
         if (lockProjectId) {
-          const lockResult = tryAcquireDeployLockOrResponse(lockProjectId, toolSessionId, context);
+          const lockResult = await tryAcquireDeployLockOrResponse(
+            lockProjectId,
+            toolSessionId,
+            context,
+          );
           if (lockResult) {
             return lockResult;
           }
@@ -244,7 +250,7 @@ export const deployPlanToolDefs: ToolDef[] = [
               'target_project_id requires wait=true. The attach step runs only after deploy completion; with wait=false the deploy would stay in a temp project. Re-call with wait=true (default).',
           };
         }
-        if (!appCtx.db.getProject(targetProjectId)) {
+        if (!(await appCtx.db.getProject(targetProjectId))) {
           return {
             status: 'failed',
             error: 'TARGET_PROJECT_NOT_FOUND',
@@ -287,9 +293,13 @@ export const deployPlanToolDefs: ToolDef[] = [
         markMcpDeploy(plan.project_id);
       }
       const lockProjectId =
-        plan.project_id ?? appCtx.db.getProjectByName(plan.app.name)?.id ?? null;
+        plan.project_id ?? (await appCtx.db.getProjectByName(plan.app.name))?.id ?? null;
       if (lockProjectId) {
-        const lockResult = tryAcquireDeployLockOrResponse(lockProjectId, toolSessionId, context);
+        const lockResult = await tryAcquireDeployLockOrResponse(
+          lockProjectId,
+          toolSessionId,
+          context,
+        );
         if (lockResult) {
           return lockResult;
         }
@@ -370,7 +380,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         }> => {
           const extra: Record<string, unknown> = {};
           const warnings: string[] = [];
-          const proj = appCtx.db.getProjectByName(result.project_name);
+          const proj = await appCtx.db.getProjectByName(result.project_name);
           if (!proj) return { extra, warnings };
           if (expose) {
             try {
@@ -396,7 +406,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           if (targetProjectId) {
             try {
               const serviceId = `${proj.id}__svc`;
-              const moved = appCtx.db.attachServiceToProject(serviceId, targetProjectId);
+              const moved = await appCtx.db.attachServiceToProject(serviceId, targetProjectId);
               extra.attached_to = moved.targetProjectId;
               extra.merged_from = moved.sourceProjectId;
               projectIdOverride = moved.targetProjectId;
@@ -574,11 +584,11 @@ export const deployPlanToolDefs: ToolDef[] = [
     mcpDescription:
       'Pre-flight validation for a deploy plan. Returns structured checks with pass/warning/info status for env vars, Dockerfile, ports, and services. Catches DATABASE_URL=localhost, placeholder secrets, missing HEALTHCHECK, and other common mistakes before execution.',
     inputSchema: validateDeployPlanSchema,
-    execute: (args, context) => {
+    execute: async (args, context) => {
       const appCtx = context.appCtx;
       const planId = args['plan_id'] as string;
 
-      const row = appCtx.db.getDeployPlan(planId);
+      const row = await appCtx.db.getDeployPlan(planId);
       if (!row) {
         throw new Error(`Deploy plan not found: ${planId}`);
       }

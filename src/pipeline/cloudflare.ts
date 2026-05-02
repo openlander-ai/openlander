@@ -59,14 +59,15 @@ export class CloudflareTunnelManager {
 
   async createTunnel(projectId: string, domain: string): Promise<void> {
     const normalizedDomain = normalizeDomain(domain);
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) {
       throw new Error(`Project not found: ${projectId}`);
     }
 
-    const existingProjectMapping = this.db
-      .getDomainMappings(projectId)
-      .find((mapping) => mapping.domain.toLowerCase() === normalizedDomain);
+    const projectMappings = await this.db.getDomainMappings(projectId);
+    const existingProjectMapping = projectMappings.find(
+      (mapping) => mapping.domain.toLowerCase() === normalizedDomain,
+    );
     if (existingProjectMapping) {
       return;
     }
@@ -75,7 +76,7 @@ export class CloudflareTunnelManager {
     const recordId = await this.upsertCnameRecord(zone.id, normalizedDomain);
     const mappingId = nanoid(12);
 
-    this.db.createDomainMapping({
+    await this.db.createDomainMapping({
       id: mappingId,
       projectId,
       domain: normalizedDomain,
@@ -87,7 +88,7 @@ export class CloudflareTunnelManager {
       await this.updateTunnelConfig();
       await this.syncProjectRouting(projectId);
     } catch (error) {
-      this.db.deleteDomainMapping(mappingId);
+      await this.db.deleteDomainMapping(mappingId);
       await this.deleteDnsRecord(zone.id, recordId);
       throw error;
     }
@@ -95,9 +96,8 @@ export class CloudflareTunnelManager {
 
   async removeTunnel(projectId: string, domain: string): Promise<void> {
     const normalizedDomain = normalizeDomain(domain);
-    const mapping = this.db
-      .getDomainMappings(projectId)
-      .find((entry) => entry.domain.toLowerCase() === normalizedDomain);
+    const mappings = await this.db.getDomainMappings(projectId);
+    const mapping = mappings.find((entry) => entry.domain.toLowerCase() === normalizedDomain);
 
     if (!mapping) {
       return;
@@ -109,7 +109,7 @@ export class CloudflareTunnelManager {
     }
 
     // DB cleanup must always succeed regardless of API failures above
-    this.db.deleteDomainMapping(mapping.id);
+    await this.db.deleteDomainMapping(mapping.id);
 
     // Tunnel config + routing — best-effort (tunnel may have been deleted externally)
     try {
@@ -123,7 +123,7 @@ export class CloudflareTunnelManager {
     }
   }
 
-  listDomains(projectId: string): DomainMappingRow[] {
+  listDomains(projectId: string): Promise<DomainMappingRow[]> {
     return this.db.getDomainMappings(projectId);
   }
 
@@ -147,10 +147,10 @@ export class CloudflareTunnelManager {
   }
 
   private async syncProjectRouting(projectId: string): Promise<void> {
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     // PR 4.5: canonical-first read of assigned_port with `??` fallback to
     // legacy `projects` column through migration 0012.
-    const deployable = project ? this.db.getDeployableForProject(projectId) : undefined;
+    const deployable = project ? await this.db.getDeployableForProject(projectId) : undefined;
     // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const assignedPort = deployable?.assigned_port ?? project?.assigned_port;
     if (!project || !assignedPort) {
@@ -158,10 +158,10 @@ export class CloudflareTunnelManager {
       return;
     }
 
-    const domains = this.db.getDomainMappings(projectId).map((mapping) => mapping.domain);
+    const domains = (await this.db.getDomainMappings(projectId)).map((mapping) => mapping.domain);
     if (domains.length === 0) {
       this.traefikLabels.delete(projectId);
-      this.db.updateProject(projectId, { visibility: 'internal', publicUrl: null });
+      await this.db.updateProject(projectId, { visibility: 'internal', publicUrl: null });
       return;
     }
 
@@ -169,7 +169,7 @@ export class CloudflareTunnelManager {
     this.traefikLabels.set(projectId, labels);
 
     const primaryUrl = `https://${domains[0] ?? 'unknown'}`;
-    this.db.updateProject(projectId, { visibility: 'production', publicUrl: primaryUrl });
+    await this.db.updateProject(projectId, { visibility: 'production', publicUrl: primaryUrl });
     await this.events.emit('tunnel:url', { projectId, url: primaryUrl });
   }
 
@@ -193,7 +193,7 @@ export class CloudflareTunnelManager {
 
   private async updateTunnelConfig(): Promise<void> {
     const ingress: TunnelIngressRule[] = [];
-    const mappings = this.db.listDomainMappings();
+    const mappings = await this.db.listDomainMappings();
 
     for (const mapping of mappings) {
       ingress.push({

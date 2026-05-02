@@ -109,9 +109,9 @@ Example: openlander_service({ action: "create_service", params: { name: "pg", ty
 - Never create Docker networks manually`;
 
 // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
-function createMcpServerInstance(ctx: AppContext): Server {
-  const unresolvedIncidents = ctx.db.listUnresolvedRuntimeIncidents();
-  const incidentBriefing = buildIncidentBriefing(unresolvedIncidents, ctx.db);
+async function createMcpServerInstance(ctx: AppContext): Promise<Server> {
+  const unresolvedIncidents = await ctx.db.listUnresolvedRuntimeIncidents();
+  const incidentBriefing = await buildIncidentBriefing(unresolvedIncidents, ctx.db);
   const instructions = incidentBriefing
     ? `${SERVER_INSTRUCTIONS}\n\n${incidentBriefing}`
     : SERVER_INSTRUCTIONS;
@@ -134,7 +134,7 @@ function createMcpServerInstance(ctx: AppContext): Server {
 }
 
 export async function startMcpServer(ctx: AppContext): Promise<void> {
-  const server = createMcpServerInstance(ctx);
+  const server = await createMcpServerInstance(ctx);
   const transport = new StdioServerTransport();
   await server.connect(transport);
   log.info('OpenLander MCP server started on stdio transport');
@@ -232,17 +232,17 @@ export function terminateMcpSession(sid: string, ctx: AppContext): boolean {
     // audit row themselves. Codex CCG (2026-05-01).
     if (!session.closeRecorded) {
       session.closeRecorded = true;
-      try {
-        ctx.db.recordMcpSessionClose({
+      void ctx.db
+        .recordMcpSessionClose({
           sessionId: mapKey,
           transport: 'http',
           connectedAt: session.connectedAt,
           disconnectedAt: Date.now(),
           clientInfo: formatClientInfoForLog(session),
+        })
+        .catch((err: unknown) => {
+          log.warn({ sessionId: mapKey, err }, 'Failed to persist MCP HTTP admin-terminate close');
         });
-      } catch (err) {
-        log.warn({ sessionId: mapKey, err }, 'Failed to persist MCP HTTP admin-terminate close');
-      }
     }
     session.closed = true;
     if (session.heartbeatInterval) clearInterval(session.heartbeatInterval);
@@ -257,17 +257,17 @@ export function terminateMcpSession(sid: string, ctx: AppContext): boolean {
     // Same audit concern as the HTTP branch above. The SSE
     // outgoing.on('close') handler races with our delete here; record
     // first so the close row is guaranteed.
-    try {
-      ctx.db.recordMcpSessionClose({
+    void ctx.db
+      .recordMcpSessionClose({
         sessionId: mapKey,
         transport: 'sse',
         connectedAt: session.connectedAt,
         disconnectedAt: Date.now(),
         clientInfo: formatClientInfoForLog(session),
+      })
+      .catch((err: unknown) => {
+        log.warn({ sessionId: mapKey, err }, 'Failed to persist MCP SSE admin-terminate close');
       });
-    } catch (err) {
-      log.warn({ sessionId: mapKey, err }, 'Failed to persist MCP SSE admin-terminate close');
-    }
     void session.transport.close();
     sseSessions.delete(mapKey);
     log.info({ sessionId: mapKey }, 'MCP SSE session terminated by admin');
@@ -326,7 +326,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
 
   app.all('/', async (c) => {
     // Bearer token auth for HTTP MCP
-    if (authService.isPasswordSet()) {
+    if (await authService.isPasswordSet()) {
       const authHeader = c.req.header('authorization');
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return c.json(
@@ -335,7 +335,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
         );
       }
       const token = authHeader.slice(7);
-      if (!authService.validateApiToken(token)) {
+      if (!(await authService.validateApiToken(token))) {
         return c.json(
           { jsonrpc: '2.0', error: { code: -32001, message: 'Invalid token' }, id: null },
           401,
@@ -361,7 +361,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
       return session.transport.handleRequest(c.req.raw);
     }
 
-    const server = createMcpServerInstance(ctx);
+    const server = await createMcpServerInstance(ctx);
     let httpSessionId: string | null = null;
     let httpClientCaptured = false;
     server.oninitialized = () => {
@@ -423,17 +423,17 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
           // most one row per session lifetime.
           if (!session.closeRecorded) {
             session.closeRecorded = true;
-            try {
-              ctx.db.recordMcpSessionClose({
+            void ctx.db
+              .recordMcpSessionClose({
                 sessionId: sid,
                 transport: 'http',
                 connectedAt: session.connectedAt,
                 disconnectedAt: Date.now(),
                 clientInfo: formatClientInfoForLog(session),
+              })
+              .catch((err: unknown) => {
+                log.warn({ sessionId: sid, err }, 'Failed to persist MCP HTTP session close');
               });
-            } catch (err) {
-              log.warn({ sessionId: sid, err }, 'Failed to persist MCP HTTP session close');
-            }
           }
 
           if (session.heartbeatInterval) {
@@ -467,7 +467,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
   // Legacy SSE transport (protocol 2024-11-05) — needed by OpenCode, Cline for remote connections
 
   app.get('/sse', async (c) => {
-    if (authService.isPasswordSet()) {
+    if (await authService.isPasswordSet()) {
       const authHeader = c.req.header('authorization');
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return c.json(
@@ -476,7 +476,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
         );
       }
       const token = authHeader.slice(7);
-      if (!authService.validateApiToken(token)) {
+      if (!(await authService.validateApiToken(token))) {
         return c.json(
           { jsonrpc: '2.0', error: { code: -32001, message: 'Invalid token' }, id: null },
           401,
@@ -487,7 +487,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
     const { outgoing } = c.env as HttpBindings;
     // eslint-disable-next-line @typescript-eslint/no-deprecated -- backward compat
     const transport = new SSEServerTransport('/mcp/messages', outgoing);
-    const server = createMcpServerInstance(ctx);
+    const server = await createMcpServerInstance(ctx);
 
     sseSessions.set(transport.sessionId, {
       server,
@@ -523,20 +523,20 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
     outgoing.on('close', () => {
       const session = sseSessions.get(transport.sessionId);
       if (session) {
-        try {
-          ctx.db.recordMcpSessionClose({
+        void ctx.db
+          .recordMcpSessionClose({
             sessionId: transport.sessionId,
             transport: 'sse',
             connectedAt: session.connectedAt,
             disconnectedAt: Date.now(),
             clientInfo: formatClientInfoForLog(session),
+          })
+          .catch((err: unknown) => {
+            log.warn(
+              { sessionId: transport.sessionId, err },
+              'Failed to persist MCP SSE session close',
+            );
           });
-        } catch (err) {
-          log.warn(
-            { sessionId: transport.sessionId, err },
-            'Failed to persist MCP SSE session close',
-          );
-        }
       }
       sseSessions.delete(transport.sessionId);
       log.info({ sessionId: transport.sessionId }, 'MCP SSE session closed');
@@ -550,7 +550,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
   });
 
   app.post('/messages', async (c) => {
-    if (authService.isPasswordSet()) {
+    if (await authService.isPasswordSet()) {
       const authHeader = c.req.header('authorization');
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return c.json(
@@ -559,7 +559,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
         );
       }
       const token = authHeader.slice(7);
-      if (!authService.validateApiToken(token)) {
+      if (!(await authService.validateApiToken(token))) {
         return c.json(
           { jsonrpc: '2.0', error: { code: -32001, message: 'Invalid token' }, id: null },
           401,

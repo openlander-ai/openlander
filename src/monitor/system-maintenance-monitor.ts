@@ -80,7 +80,7 @@ export class SystemMaintenanceMonitor {
       return;
     }
 
-    const building = this.db.listProjects('building');
+    const building = await this.db.listProjects('building');
     if (building.length > 0) {
       log.info({ count: building.length }, 'Deferred disk cleanup — builds in progress');
       return;

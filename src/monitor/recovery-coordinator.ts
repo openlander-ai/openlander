@@ -16,9 +16,9 @@ const log = createModuleLogger('recovery-coordinator');
 
 function createFallbackStateManager(db: Database): Pick<ProjectStateManager, 'transition'> {
   return {
-    transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
-      db.updateProject(projectId, { status: targetStatus });
-      return Promise.resolve(true);
+    async transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
+      await db.updateProject(projectId, { status: targetStatus });
+      return true;
     },
   };
 }
@@ -156,8 +156,8 @@ export class RecoveryCoordinator {
     log.info('RecoveryCoordinator stopped');
   }
 
-  checkEligibility(projectId: string, trigger?: RecoveryTrigger): EligibilityResult {
-    return this.evaluateEligibility(projectId, trigger ?? 'container_failure');
+  async checkEligibility(projectId: string, trigger?: RecoveryTrigger): Promise<EligibilityResult> {
+    return await this.evaluateEligibility(projectId, trigger ?? 'container_failure');
   }
 
   suppressProject(projectId: string, durationMs: number): void {
@@ -206,8 +206,8 @@ export class RecoveryCoordinator {
     return this.llmCallTimestamps.length >= this.maxLlmCallsPerHour;
   }
 
-  shouldContinue(projectId: string): boolean {
-    const result = this.evaluateEligibility(projectId, 'continue_check');
+  async shouldContinue(projectId: string): Promise<boolean> {
+    const result = await this.evaluateEligibility(projectId, 'continue_check');
     return result.eligible;
   }
 
@@ -221,15 +221,18 @@ export class RecoveryCoordinator {
    * shouldContinue (continue_check trigger). Closes the U-P0-4 gap where
    * shouldContinue did not consult the deploy lock.
    */
-  private evaluateEligibility(projectId: string, trigger: RecoveryTrigger): EligibilityResult {
-    const project = this.getProjectSnapshot(projectId);
+  private async evaluateEligibility(
+    projectId: string,
+    trigger: RecoveryTrigger,
+  ): Promise<EligibilityResult> {
+    const project = await this.getProjectSnapshot(projectId);
     if (!project) {
       return { eligible: false, reason: 'project_not_found' };
     }
 
     // PR 4.5: canonical-first read of status with `??` fallback to legacy
     // `projects` column through migration 0012.
-    const deployable = this.db.getDeployableForProject(projectId);
+    const deployable = await this.db.getDeployableForProject(projectId);
     const status = deployable?.status ?? project.status;
 
     // Coordinator-specific status whitelist (depends on trigger).
@@ -266,7 +269,7 @@ export class RecoveryCoordinator {
       isCircuitBreakerOpen: (id) => this.db.isCircuitBreakerOpen(id),
       isGlobalBudgetExceeded: () => this.isGlobalBudgetExceeded(),
     };
-    const policyResult = checkRecoveryEligibility(projectId, trigger, policyCtx);
+    const policyResult = await checkRecoveryEligibility(projectId, trigger, policyCtx);
     if (!policyResult.eligible) {
       return { eligible: false, reason: policyResult.reason };
     }
@@ -304,7 +307,7 @@ export class RecoveryCoordinator {
 
     try {
       const trigger = RecoveryCoordinator.signalTrigger(signal.kind);
-      const result = this.checkEligibility(signal.projectId, trigger);
+      const result = await this.checkEligibility(signal.projectId, trigger);
       if (!result.eligible) {
         await this.emitBlocked(signal.projectId, result.reason);
         return;
@@ -350,7 +353,7 @@ export class RecoveryCoordinator {
 
   private async handleHealthDegraded(payload: EventPayload['health:degraded']): Promise<void> {
     try {
-      const result = this.evaluateEligibility(payload.projectId, 'health_degraded');
+      const result = await this.evaluateEligibility(payload.projectId, 'health_degraded');
       if (!result.eligible) {
         await this.emitBlocked(payload.projectId, result.reason);
         return;
@@ -359,7 +362,12 @@ export class RecoveryCoordinator {
       this.recordLlmCall();
 
       // Stage B: OpsAgent enqueue (non-critical)
-      this.enqueueOpsAgentForCrash(payload.projectId);
+      void this.enqueueOpsAgentForCrash(payload.projectId).catch((enqueueErr: unknown) => {
+        log.warn(
+          { err: enqueueErr, projectId: payload.projectId },
+          'Failed to enqueue to OpsAgent, continuing with recovery',
+        );
+      });
 
       // Stage C: transition status — failure must abort before stage D so
       // that recovery:started never fires on a project whose status was not
@@ -397,7 +405,7 @@ export class RecoveryCoordinator {
       | EventPayload['container:missing'],
   ): Promise<void> {
     try {
-      const result = this.evaluateEligibility(payload.projectId, 'container_failure');
+      const result = await this.evaluateEligibility(payload.projectId, 'container_failure');
       if (!result.eligible) {
         const unhandledReasons: EligibilityReason[] = [
           'ai_disabled',
@@ -412,7 +420,14 @@ export class RecoveryCoordinator {
       }
 
       // Stage B: OpsAgent enqueue (non-critical)
-      this.enqueueOpsAgentForCrash(payload.projectId, payload.containerId || undefined);
+      void this.enqueueOpsAgentForCrash(payload.projectId, payload.containerId || undefined).catch(
+        (enqueueErr: unknown) => {
+          log.warn(
+            { err: enqueueErr, projectId: payload.projectId },
+            'Failed to enqueue to OpsAgent, continuing with recovery',
+          );
+        },
+      );
 
       // Stage C: transition status — failure must abort before stage D
       // (U-P0-2). Partial failure is surfaced via `recovery:degraded`.
@@ -442,7 +457,7 @@ export class RecoveryCoordinator {
         return;
       }
 
-      const result = this.evaluateEligibility(payload.projectId, 'deploy_failed');
+      const result = await this.evaluateEligibility(payload.projectId, 'deploy_failed');
       if (!result.eligible) {
         await this.emitBlocked(payload.projectId, result.reason);
         return;
@@ -469,7 +484,7 @@ export class RecoveryCoordinator {
         return;
       }
 
-      const result = this.evaluateEligibility(payload.projectId, 'deploy_failed');
+      const result = await this.evaluateEligibility(payload.projectId, 'deploy_failed');
       if (!result.eligible) {
         await this.emitBlocked(payload.projectId, result.reason);
         return;
@@ -483,36 +498,32 @@ export class RecoveryCoordinator {
 
   /**
    * Stage B — enqueue ops agent for crash handling. Non-critical: enqueue
-   * failures are logged but do not abort recovery progression. Synchronous
-   * (no await) so it does not change microtask ordering of subsequent stages.
+   * failures are logged at the fire-and-forget call site and do not abort
+   * recovery progression.
    * `containerIdOverride` is the container ID from the originating event,
    * preferred over the DB-cached container_id when available.
    */
-  private enqueueOpsAgentForCrash(projectId: string, containerIdOverride?: string): void {
+  private async enqueueOpsAgentForCrash(
+    projectId: string,
+    containerIdOverride?: string,
+  ): Promise<void> {
     if (!this.opsAgent) {
       return;
     }
-    try {
-      const project = this.getProjectSnapshot(projectId);
-      // PR 4.5: canonical-first read of container_id with `||` fallback.
-      const deployable = this.db.getDeployableForProject(projectId);
-      this.opsAgent.enqueue({
-        type: 'deploy:crash',
-        payload: {
-          projectId,
-          projectName: project?.name ?? projectId,
-          containerId:
-            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-            containerIdOverride || deployable?.container_id || project?.container_id || '',
-        },
-        timestamp: Date.now(),
-      });
-    } catch (enqueueErr) {
-      log.warn(
-        { err: enqueueErr, projectId },
-        'Failed to enqueue to OpsAgent, continuing with recovery',
-      );
-    }
+    const project = await this.getProjectSnapshot(projectId);
+    // PR 4.5: canonical-first read of container_id with `||` fallback.
+    const deployable = await this.db.getDeployableForProject(projectId);
+    this.opsAgent.enqueue({
+      type: 'deploy:crash',
+      payload: {
+        projectId,
+        projectName: project?.name ?? projectId,
+        containerId:
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+          containerIdOverride || deployable?.container_id || project?.container_id || '',
+      },
+      timestamp: Date.now(),
+    });
   }
 
   /**
@@ -559,11 +570,11 @@ export class RecoveryCoordinator {
     projectId: string,
     nextStatus: 'running' | 'error',
   ): Promise<void> {
-    const project = this.getProjectSnapshot(projectId);
+    const project = await this.getProjectSnapshot(projectId);
     if (!project) return;
 
     // PR 4.5: canonical-first status read with `??` fallback.
-    const deployable = this.db.getDeployableForProject(projectId);
+    const deployable = await this.db.getDeployableForProject(projectId);
     const status = deployable?.status ?? project.status;
 
     if (status === 'recovering') {
@@ -588,7 +599,7 @@ export class RecoveryCoordinator {
       return;
     }
 
-    const project = this.getProjectSnapshot(projectId);
+    const project = await this.getProjectSnapshot(projectId);
     // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     if (project?.status === nextStatus) {
       return;
@@ -600,8 +611,8 @@ export class RecoveryCoordinator {
     );
   }
 
-  private getProjectSnapshot(projectId: string): ProjectSnapshot | undefined {
-    return this.db.getProject(projectId);
+  private async getProjectSnapshot(projectId: string): Promise<ProjectSnapshot | undefined> {
+    return await this.db.getProject(projectId);
   }
 
   private getConfig(): OpenLanderConfig {

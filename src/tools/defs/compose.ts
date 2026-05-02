@@ -59,10 +59,10 @@ export const composeToolDefs: ToolDef[] = [
         throw new Error('COMPOSE_FILE_NOT_FOUND: No compose file found in repository.');
       }
 
-      const existingProject = name ? appCtx.db.getProjectByName(name) : undefined;
+      const existingProject = name ? await appCtx.db.getProjectByName(name) : undefined;
       const envVars = existingProject
-        ? resolveEnvVars({ projectId: existingProject.id }, { env: appCtx.env })
-        : appCtx.env.getGlobalSecrets();
+        ? await resolveEnvVars({ projectId: existingProject.id }, { env: appCtx.env })
+        : await appCtx.env.getGlobalSecrets();
 
       const result = await appCtx.composePipeline.deployCompose({
         repoUrl,
@@ -111,14 +111,14 @@ export const composeToolDefs: ToolDef[] = [
       'List services in a Docker Compose project with per-service status, ports, and container IDs.',
     mcpDescription: 'List compose services with per-service status and ports.',
     inputSchema: listComposeServicesSchema,
-    execute: (args, { appCtx }) => {
+    execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
-      const project = appCtx.db.getProjectByName(projectName);
+      const project = await appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
-      const services = appCtx.composePipeline.getServiceStatuses(project.id);
+      const services = await appCtx.composePipeline.getServiceStatuses(project.id);
       return {
         project: projectName,
         count: services.length,

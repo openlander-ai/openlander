@@ -54,13 +54,13 @@ export function createAuthMiddleware(authService: AuthService) {
     const cookieHeader = c.req.header('cookie') || '';
     const sessionToken = parseCookie(cookieHeader, 'ol_session');
     let authed = false;
-    if (sessionToken && authService.validateSession(sessionToken)) {
+    if (sessionToken && (await authService.validateSession(sessionToken))) {
       authed = true;
     } else {
       const authHeader = c.req.header('authorization');
       if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.slice(7);
-        if (authService.validateApiToken(token)) {
+        if (await authService.validateApiToken(token)) {
           authed = true;
         }
       }
@@ -99,7 +99,7 @@ export function createAuthMiddleware(authService: AuthService) {
       return next();
     }
 
-    if (!authService.isPasswordSet()) {
+    if (!(await authService.isPasswordSet())) {
       if (path.startsWith('/api/setup/') || path.startsWith('/setup')) {
         return next();
       }

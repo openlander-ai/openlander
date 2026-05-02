@@ -355,13 +355,13 @@ export const volumeToolDefs: ToolDef[] = [
     mcpDescription:
       'Free Docker disk space by pruning dangling images, build cache, and unused images. Host-wide — affects all Docker workloads on this host. Recommended workflow: call get_disk_usage first, then cleanup_docker, then get_disk_usage again to report reclaimed space. Levels: "soft" (dangling images only), "standard" (default — also clears build cache, may slow next build), "aggressive" (also removes unused images older than 24h, may remove rollback images). Does NOT remove running containers, mounted volumes, or in-use images.',
     inputSchema: cleanupDockerSchema,
-    execute: (args, { appCtx }) => {
+    execute: async (args, { appCtx }) => {
       const level = (args['level'] as string | undefined) ?? 'standard';
       const warnings: string[] = [];
       let totalReclaimedMB = 0;
 
       if (level !== 'soft') {
-        const building = appCtx.db.listProjects('building');
+        const building = await appCtx.db.listProjects('building');
         if (building.length > 0) {
           return {
             level,

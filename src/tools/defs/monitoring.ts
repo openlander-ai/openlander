@@ -25,7 +25,7 @@ export const monitoringToolDefs: ToolDef[] = [
     execute: async (args, context) => {
       const appCtx = context.appCtx;
       const projectName = args['project_name'] as string;
-      const project = appCtx.db.getProjectByName(projectName);
+      const project = await appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
@@ -95,14 +95,14 @@ export const monitoringToolDefs: ToolDef[] = [
     execute: async (args, context) => {
       const appCtx = context.appCtx;
       const projectName = args['project_name'] as string;
-      const project = appCtx.db.getProjectByName(projectName);
+      const project = await appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
       // PR 4.5: canonical-first read of runtime fields with `??` fallback to
       // legacy `projects` columns through migration 0012.
-      const deployable = appCtx.db.getDeployableForProject(project.id);
+      const deployable = await appCtx.db.getDeployableForProject(project.id);
       const status = deployable?.status ?? project.status;
       const containerId = deployable?.container_id ?? project.container_id;
 

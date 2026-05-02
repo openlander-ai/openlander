@@ -89,6 +89,7 @@ export function consumeDeployStream(
       } else if (process.env.OPENLANDER_SESSION) {
         authHdrs['Cookie'] = `ol_session=${process.env.OPENLANDER_SESSION}`;
       }
+      // TODO(0.1.x): /api/projects/:id/build/stream removed — migrate to /api/builds/:id/progress (see deploy-failure-handler.ts:322).
       const response = await fetch(`${BASE_URL}/api/projects/${projectId}/build/stream`, {
         signal: controller.signal,
         headers: authHdrs,

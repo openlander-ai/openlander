@@ -11,7 +11,6 @@ set -uo pipefail
 
 BASE_URL="${1:-${OPENLANDER_BASE_URL:-http://localhost:10114}}"
 PASSWORD="${2:-${OPENLANDER_ADMIN_PASSWORD:-admin}}"
-DB_PATH="${OPENLANDER_DB_PATH:-$HOME/.openlander/openlander.db}"
 
 ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -54,20 +53,45 @@ except Exception:
   fi
 fi
 
-# DB metrics
+# API-backed state metrics
 db_size_kb=0
 projects_total=0
 projects_recovering=0
 projects_error=0
 deploy_locks_held=0
 activity_rows=0
-if [ -f "$DB_PATH" ]; then
-  db_size_kb=$(du -k "$DB_PATH" | cut -f1)
-  projects_total=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM projects WHERE archived_at IS NULL" 2>/dev/null || echo 0)
-  projects_recovering=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM projects WHERE status='recovering'" 2>/dev/null || echo 0)
-  projects_error=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM projects WHERE status='error'" 2>/dev/null || echo 0)
-  deploy_locks_held=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM projects WHERE deploy_lock_session IS NOT NULL" 2>/dev/null || echo 0)
-  activity_rows=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM activity_log" 2>/dev/null || echo 0)
+if [ -n "$COOKIE_HEADER" ]; then
+  projects_json=$(curl -sS -H "Cookie: $COOKIE_HEADER" "$BASE_URL/api/projects?include_archived=true" 2>/dev/null || echo '{}')
+  project_counts=$(printf '%s' "$projects_json" | python3 -c '
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    arr = data.get("projects", data if isinstance(data, list) else [])
+    def val(row, *keys):
+        for key in keys:
+            if key in row:
+                return row[key]
+        return None
+    active = [p for p in arr if not val(p, "archived_at", "archivedAt")]
+    recovering = sum(1 for p in active if val(p, "status") == "recovering")
+    error = sum(1 for p in active if val(p, "status") == "error")
+    locked = sum(1 for p in active if val(p, "deploy_lock_session", "deployLockSession"))
+    print(len(active), recovering, error, locked)
+except Exception:
+    print("0 0 0 0")
+' 2>/dev/null)
+  read -r projects_total projects_recovering projects_error deploy_locks_held <<<"$project_counts"
+
+  activity_json=$(curl -sS -H "Cookie: $COOKIE_HEADER" "$BASE_URL/api/ops/activity?limit=50" 2>/dev/null || echo '{}')
+  activity_rows=$(printf '%s' "$activity_json" | python3 -c '
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    rows = data.get("items") or data.get("activity") or data.get("activities") or []
+    print(len(rows) if isinstance(rows, list) else 0)
+except Exception:
+    print(0)
+' 2>/dev/null || echo 0)
 fi
 
 # disk

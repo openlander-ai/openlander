@@ -9,22 +9,23 @@ import type { ProjectRow } from '../../db/index.js';
 import { assertProjectMutable } from '../../pipeline/mutation-policy.js';
 import type { ToolDef } from './types.js';
 
-export function getProjectByName(
+export async function getProjectByName(
   appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
   name: string,
 ) {
-  const project = appCtx.db.getProjectByName(name);
+  const project = await appCtx.db.getProjectByName(name);
   if (!project) {
     throw new ProjectNotFoundError(name);
   }
   return project;
 }
 
-export function getProductionEnvironmentId(
+export async function getProductionEnvironmentId(
   appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
   projectId: string,
-): string | undefined {
-  return appCtx.db.getEnvironmentsByProject(projectId).find((e) => e.type === 'production')?.id;
+): Promise<string | undefined> {
+  const environments = await appCtx.db.getEnvironmentsByProject(projectId);
+  return environments.find((e) => e.type === 'production')?.id;
 }
 
 export function buildDeployLockedResponse(error: DeployLockedError) {
@@ -39,16 +40,16 @@ export function buildDeployLockedResponse(error: DeployLockedError) {
   };
 }
 
-export function tryAcquireDeployLockOrResponse(
+export async function tryAcquireDeployLockOrResponse(
   projectId: string,
   sessionId: string,
   context: Parameters<ToolDef['execute']>[1],
 ) {
-  const locked = context.appCtx.db.acquireDeployLock(projectId, sessionId);
+  const locked = await context.appCtx.db.acquireDeployLock(projectId, sessionId);
   if (locked) {
     return null;
   }
-  const lockInfo = context.appCtx.db.getDeployLockInfo(projectId);
+  const lockInfo = await context.appCtx.db.getDeployLockInfo(projectId);
   const error = new DeployLockedError(projectId, lockInfo?.session ?? 'unknown');
   return buildDeployLockedResponse(error);
 }
@@ -94,12 +95,21 @@ export function buildPolicyRejectionResponse(
  * restart_project, redeploy_project) would tell the user "deploying" while
  * the pipeline silently rejects in the background catch handler.
  */
-export function tryRejectIfNotMutable(
+export async function tryRejectIfNotMutable(
   project: ProjectRow,
   context: Parameters<ToolDef['execute']>[1],
 ) {
   try {
-    assertProjectMutable(project, { db: context.appCtx.db });
+    const [deployable, circuitOpen] = await Promise.all([
+      context.appCtx.db.getDeployableForProject(project.id),
+      context.appCtx.db.isCircuitBreakerOpen(project.id),
+    ]);
+    assertProjectMutable(project, {
+      db: {
+        getDeployableForProject: () => deployable,
+        isCircuitBreakerOpen: () => circuitOpen,
+      },
+    });
     return null;
   } catch (err) {
     if (

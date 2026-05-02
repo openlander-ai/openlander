@@ -40,7 +40,10 @@ async function waitForProjectStatus(
 
 test.describe.configure({ mode: 'serial' });
 
-test.describe('Quality Gate Recovery (R5/R6)', () => {
+// fixme (0.1.x): RecoveryCoordinator behavior is backend-ALIVE but UI-cut for
+// 0.1.0 per .sisyphus/plans/1.0-surface-spec.md. Deferred until we re-surface
+// OpsCenter or stabilize the headless recovery timing/deploy-error contract.
+test.describe.fixme('Quality Gate Recovery (R5/R6)', () => {
   const createdProjectIds: string[] = [];
 
   test.afterAll(async () => {

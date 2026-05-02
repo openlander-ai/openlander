@@ -47,16 +47,16 @@ export class IncidentReporter {
   start(): void {
     this.unsubscribers.push(
       this.events.on('recovery:start', (payload) => {
-        this.trackRecoveryStart(payload);
+        return this.trackRecoveryStart(payload);
       }),
       this.events.on('recovery:failed', (payload) => {
-        this.trackRecoveryFailure(payload);
+        return this.trackRecoveryFailure(payload);
       }),
       this.events.on('recovery:success', (payload) => {
-        void this.reportRecoverySuccess(payload);
+        return this.reportRecoverySuccess(payload);
       }),
       this.events.on('recovery:exhausted', (payload) => {
-        void this.reportRecoveryExhausted(payload);
+        return this.reportRecoveryExhausted(payload);
       }),
       this.events.on('recovery:degraded', (payload) => {
         this.trackRecoveryDegraded(payload);
@@ -84,9 +84,9 @@ export class IncidentReporter {
     );
   }
 
-  private trackRecoveryStart(payload: EventPayload['recovery:start']): void {
+  private async trackRecoveryStart(payload: EventPayload['recovery:start']): Promise<void> {
     const current = this.incidents.get(payload.projectId);
-    const projectName = this.resolveProjectName(payload.projectId);
+    const projectName = await this.resolveProjectName(payload.projectId);
 
     this.incidents.set(payload.projectId, {
       projectId: payload.projectId,
@@ -97,15 +97,15 @@ export class IncidentReporter {
     });
   }
 
-  private trackRecoveryFailure(payload: EventPayload['recovery:failed']): void {
-    const incident = this.ensureIncident(payload.projectId);
+  private async trackRecoveryFailure(payload: EventPayload['recovery:failed']): Promise<void> {
+    const incident = await this.ensureIncident(payload.projectId);
     incident.lastError = payload.error;
     incident.attempt = payload.attempt;
     this.incidents.set(payload.projectId, incident);
   }
 
   private async reportRecoverySuccess(payload: EventPayload['recovery:success']): Promise<void> {
-    const incident = this.ensureIncident(payload.projectId);
+    const incident = await this.ensureIncident(payload.projectId);
     const recoveredAt = new Date();
     const report = this.formatSuccessReport(
       incident,
@@ -129,7 +129,7 @@ export class IncidentReporter {
   private async reportRecoveryExhausted(
     payload: EventPayload['recovery:exhausted'],
   ): Promise<void> {
-    const incident = this.ensureIncident(payload.projectId);
+    const incident = await this.ensureIncident(payload.projectId);
     const report = this.formatExhaustedReport(incident, payload.totalAttempts, payload.lastError);
 
     try {
@@ -144,7 +144,7 @@ export class IncidentReporter {
     }
   }
 
-  private ensureIncident(projectId: string): IncidentState {
+  private async ensureIncident(projectId: string): Promise<IncidentState> {
     const current = this.incidents.get(projectId);
     if (current) {
       return current;
@@ -152,15 +152,15 @@ export class IncidentReporter {
 
     return {
       projectId,
-      projectName: this.resolveProjectName(projectId),
+      projectName: await this.resolveProjectName(projectId),
       failedAt: new Date(),
       lastError: 'unknown',
       attempt: 1,
     };
   }
 
-  private resolveProjectName(projectId: string): string {
-    const project = this.db.getProject(projectId);
+  private async resolveProjectName(projectId: string): Promise<string> {
+    const project = await this.db.getProject(projectId);
     return project?.name ?? projectId;
   }
 

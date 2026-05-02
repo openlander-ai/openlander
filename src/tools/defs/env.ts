@@ -25,10 +25,10 @@ export const envToolDefs: ToolDef[] = [
       'List all environment variables for a project (values are masked for security). Use to check what variables are currently set before adding or modifying. Returns { variables: { KEY: "sk-****7890" }, count }. Errors: PROJECT_NOT_FOUND.',
     mcpDescription: 'List project-scoped environment variables with masked values.',
     inputSchema: listEnvVarsSchema,
-    execute: (_args, { appCtx }) => {
+    execute: async (_args, { appCtx }) => {
       const projectName = _args['project_name'] as string;
-      const project = getProjectByName(appCtx, projectName);
-      const vars = appCtx.env.getAllWithInheritanceMasked(project.id);
+      const project = await getProjectByName(appCtx, projectName);
+      const vars = await appCtx.env.getAllWithInheritanceMasked(project.id);
       return Promise.resolve({ variables: vars, count: Object.keys(vars).length });
     },
   },
@@ -39,14 +39,14 @@ export const envToolDefs: ToolDef[] = [
       'Get the unmasked value of a single environment variable for debugging. Use when you need to verify the exact value was set correctly (e.g., connection strings with special characters). Returns { key, value }. Throws NOT_FOUND error if key does not exist. Errors: PROJECT_NOT_FOUND.',
     mcpDescription: 'Get a single environment variable value for a project.',
     inputSchema: getEnvVarSchema,
-    execute: (_args, { appCtx }) => {
+    execute: async (_args, { appCtx }) => {
       const projectName = _args['project_name'] as string;
       const key = _args['key'] as string;
-      const project = getProjectByName(appCtx, projectName);
-      const prodEnvId = getProductionEnvironmentId(appCtx, project.id);
+      const project = await getProjectByName(appCtx, projectName);
+      const prodEnvId = await getProductionEnvironmentId(appCtx, project.id);
       const vars = prodEnvId
-        ? appCtx.env.getAllWithInheritance(project.id, prodEnvId)
-        : appCtx.env.getAll(project.id);
+        ? await appCtx.env.getAllWithInheritance(project.id, prodEnvId)
+        : await appCtx.env.getAll(project.id);
       if (key in vars) {
         return Promise.resolve({ key, value: vars[key] });
       }
@@ -63,12 +63,12 @@ export const envToolDefs: ToolDef[] = [
     inputSchema: setEnvVarsSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
-      const project = getProjectByName(appCtx, projectName);
+      const project = await getProjectByName(appCtx, projectName);
       const vars = JSON.parse(args['variables'] as string) as Record<string, string>;
-      const prodEnvId = getProductionEnvironmentId(appCtx, project.id);
+      const prodEnvId = await getProductionEnvironmentId(appCtx, project.id);
 
-      const changed = appCtx.env.setBulk(project.id, vars, prodEnvId);
-      const mismatches = appCtx.env.verifyRoundTrip(project.id, vars, prodEnvId);
+      const changed = await appCtx.env.setBulk(project.id, vars, prodEnvId);
+      const mismatches = await appCtx.env.verifyRoundTrip(project.id, vars, prodEnvId);
 
       if (mismatches.length > 0) {
         return {
@@ -80,7 +80,7 @@ export const envToolDefs: ToolDef[] = [
       }
 
       // PR 4.5: canonical-first status read.
-      const setEnvDeployable = appCtx.db.getDeployableForProject(project.id);
+      const setEnvDeployable = await appCtx.db.getDeployableForProject(project.id);
       const setEnvStatus = setEnvDeployable?.status ?? project.status;
       if (changed && setEnvStatus === 'running') {
         // 1.0 GA: per-project lock instead of global DeployQueue.
@@ -144,11 +144,11 @@ export const envToolDefs: ToolDef[] = [
       'Set a global secret that is available to all projects (stored encrypted). Use for shared API keys, database credentials, etc. that multiple projects need. Returns { status, key }.',
     mcpDescription: 'Set an encrypted global secret shared across all projects.',
     inputSchema: setGlobalSecretSchema,
-    execute: (args, { appCtx, target }) => {
+    execute: async (args, { appCtx, target }) => {
       const key = args['key'] as string;
       const value = args['value'] as string;
       const description = args['description'] as string | undefined;
-      appCtx.env.setGlobalSecret(key, value, description);
+      await appCtx.env.setGlobalSecret(key, value, description);
 
       if (target === 'mcp') {
         return { status: 'saved', key };
@@ -164,8 +164,8 @@ export const envToolDefs: ToolDef[] = [
       'List all global secrets (values are masked for security). Returns { secrets: [{ key, maskedValue, description }], count }.',
     mcpDescription: 'List all global secrets with masked values and descriptions.',
     inputSchema: listGlobalSecretsSchema,
-    execute: (_args, { appCtx }) => {
-      const secrets = appCtx.env.getGlobalSecretsMasked();
+    execute: async (_args, { appCtx }) => {
+      const secrets = await appCtx.env.getGlobalSecretsMasked();
       return { secrets, count: secrets.length };
     },
   },
@@ -178,9 +178,9 @@ export const envToolDefs: ToolDef[] = [
     inputSchema: projectNameSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
-      const project = getProjectByName(appCtx, projectName);
+      const project = await getProjectByName(appCtx, projectName);
       // PR 4.5: canonical-first port read.
-      const exposeDeployable = appCtx.db.getDeployableForProject(project.id);
+      const exposeDeployable = await appCtx.db.getDeployableForProject(project.id);
       const exposePort = exposeDeployable?.assigned_port ?? project.assigned_port;
       if (!exposePort) {
         throw new Error('Project is not running — deploy it first');
@@ -204,9 +204,9 @@ export const envToolDefs: ToolDef[] = [
       'Remove the public TryCloudflare tunnel URL for a project. Use when user wants to make a project private again. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
     mcpDescription: 'Remove a public URL and stop the TryCloudflare tunnel.',
     inputSchema: projectNameSchema,
-    execute: (args, { appCtx }) => {
+    execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
-      const project = getProjectByName(appCtx, projectName);
+      const project = await getProjectByName(appCtx, projectName);
       appCtx.pipeline.closeTunnel(project.id);
       return { status: 'unexposed', project: projectName };
     },
@@ -218,7 +218,7 @@ export const envToolDefs: ToolDef[] = [
       'Upload a secret file that will be mounted into containers at /run/secrets/filename. Use for credential files like Firebase service account JSON, TLS certificates, or any file the app reads from disk. Content is encrypted at rest. Omit project_name to make it global (available to all projects). Requires redeploy to take effect. Returns { status, mountPath }.',
     mcpDescription: 'Upload an encrypted secret file mounted at /run/secrets/filename.',
     inputSchema: uploadSecretFileSchema,
-    execute: (args, { appCtx }) => {
+    execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string | undefined;
       const filename = args['filename'] as string;
       const content = args['content'] as string;
@@ -226,11 +226,11 @@ export const envToolDefs: ToolDef[] = [
 
       let projectId: string | null = null;
       if (projectName) {
-        const project = getProjectByName(appCtx, projectName);
+        const project = await getProjectByName(appCtx, projectName);
         projectId = project.id;
       }
 
-      appCtx.env.uploadSecretFile(projectId, filename, content, mountPath);
+      await appCtx.env.uploadSecretFile(projectId, filename, content, mountPath);
 
       return {
         status: 'uploaded',
@@ -253,15 +253,15 @@ export const envToolDefs: ToolDef[] = [
       'List secret files uploaded for a project or globally. Shows filenames, mount paths, and scope (project/global) — file content is never returned for security. Omit project_name to list global secret files. Returns { files[], count }.',
     mcpDescription: 'List uploaded secret files; file content is never returned.',
     inputSchema: listSecretFilesSchema,
-    execute: (_args, { appCtx }) => {
+    execute: async (_args, { appCtx }) => {
       const projectName = _args['project_name'] as string | undefined;
       let projectId: string | null = null;
       if (projectName) {
-        const project = getProjectByName(appCtx, projectName);
+        const project = await getProjectByName(appCtx, projectName);
         projectId = project.id;
       }
 
-      const files = appCtx.env.listSecretFiles(projectId);
+      const files = await appCtx.env.listSecretFiles(projectId);
       return { files, count: files.length };
     },
     targets: ['mcp'],
@@ -273,17 +273,17 @@ export const envToolDefs: ToolDef[] = [
       'Remove a previously uploaded secret file from a project or global scope. The file will no longer be mounted after the next redeploy. Omit project_name for global secret files. Returns { status: "removed"|"not_found", filename }. Errors: PROJECT_NOT_FOUND.',
     mcpDescription: 'Remove a secret file. Redeploy to stop mounting it in containers.',
     inputSchema: removeSecretFileSchema,
-    execute: (args, { appCtx }) => {
+    execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string | undefined;
       const filename = args['filename'] as string;
 
       let projectId: string | null = null;
       if (projectName) {
-        const project = getProjectByName(appCtx, projectName);
+        const project = await getProjectByName(appCtx, projectName);
         projectId = project.id;
       }
 
-      const removed = appCtx.env.removeSecretFile(projectId, filename);
+      const removed = await appCtx.env.removeSecretFile(projectId, filename);
       return { status: removed ? 'removed' : 'not_found', filename };
     },
     targets: ['mcp'],

@@ -42,10 +42,20 @@ export class RollbackWatcher {
   start(): void {
     this.unsubscribers.push(
       this.events.on('deploy:success', (payload) => {
-        this.startWatching(payload.projectId, payload.planId);
+        void this.startWatching(payload.projectId, payload.planId).catch((err: unknown) => {
+          log.warn(
+            { err, projectId: payload.projectId, planId: payload.planId },
+            'Failed to start post-deploy health watch',
+          );
+        });
       }),
       this.events.on('monitor:healthcheck', (payload) => {
-        this.handleHealthCheck(payload.projectId, payload.healthy);
+        void this.handleHealthCheck(payload.projectId, payload.healthy).catch((err: unknown) => {
+          log.warn(
+            { err, projectId: payload.projectId },
+            'Failed to handle post-deploy health watch check',
+          );
+        });
       }),
     );
   }
@@ -61,10 +71,10 @@ export class RollbackWatcher {
     this.watchers.clear();
   }
 
-  private startWatching(projectId: string, planId?: string): void {
-    const project = this.db.getProject(projectId);
+  private async startWatching(projectId: string, planId?: string): Promise<void> {
+    const project = await this.db.getProject(projectId);
     // PR 4.5: canonical-first read of previous_image_tag with `??` fallback.
-    const deployable = this.db.getDeployableForProject(projectId);
+    const deployable = await this.db.getDeployableForProject(projectId);
     // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const previousImageTag = deployable?.previous_image_tag ?? project?.previous_image_tag;
     if (!previousImageTag) return;
@@ -93,17 +103,17 @@ export class RollbackWatcher {
     }
   }
 
-  private handleHealthCheck(projectId: string, healthy: boolean): void {
+  private async handleHealthCheck(projectId: string, healthy: boolean): Promise<void> {
     const watcher = this.watchers.get(projectId);
     if (!watcher) return;
 
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) {
       this.stopWatching(projectId);
       return;
     }
     // PR 4.5: canonical-first reads with `??` fallback to legacy columns.
-    const deployable = this.db.getDeployableForProject(projectId);
+    const deployable = await this.db.getDeployableForProject(projectId);
     const status = deployable?.status ?? project.status;
     const previousImageTag = deployable?.previous_image_tag ?? project.previous_image_tag;
     if (status === 'stopped') {
@@ -133,18 +143,24 @@ export class RollbackWatcher {
             failureCount: watcher.consecutiveFailures,
             suggestedAction: 'rollback',
           };
-          void this.options.onRegressionSignal(signal);
+          void this.options.onRegressionSignal(signal).catch((err: unknown) => {
+            log.warn({ err, projectId }, 'Failed to emit rollback regression signal');
+          });
         } else if (watcher.planId && this.pipeline) {
           // Fallback: plan-originated deploy with pipeline — auto-execute rollback
           void this.executeAutoRollback(projectId, watcher.planId);
         } else {
           // Fallback: emit suggestion for manual rollback
-          void this.events.emit('rollback:suggested', {
-            projectId,
-            projectName: project.name,
-            consecutiveFailures: watcher.consecutiveFailures,
-            previousImageTag,
-          });
+          void this.events
+            .emit('rollback:suggested', {
+              projectId,
+              projectName: project.name,
+              consecutiveFailures: watcher.consecutiveFailures,
+              previousImageTag,
+            })
+            .catch((err: unknown) => {
+              log.warn({ err, projectId }, 'Failed to emit rollback suggestion');
+            });
         }
       }
       this.stopWatching(projectId);
@@ -161,7 +177,7 @@ export class RollbackWatcher {
       if (result.success) {
         log.info({ projectId, planId }, 'Auto-rollback succeeded');
         // Update plan status to rolled_back
-        this.db.updateDeployPlanStatus(planId, 'rolled_back');
+        await this.db.updateDeployPlanStatus(planId, 'rolled_back');
       } else {
         log.error({ projectId, planId, error: result.error }, 'Auto-rollback failed');
       }

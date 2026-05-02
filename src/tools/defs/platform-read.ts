@@ -119,7 +119,7 @@ export const platformReadToolDefs: ToolDef[] = [
       }
 
       try {
-        const projects = appCtx.db.listProjects();
+        const projects = await appCtx.db.listProjects();
         projectCount = projects.length;
       } catch {
         dbStatus = 'error';
@@ -187,8 +187,8 @@ export const platformReadToolDefs: ToolDef[] = [
       const projectName = args['project_name'] as string | undefined;
 
       const managedContainers = await appCtx.docker.listManagedContainers();
-      const allProjects = appCtx.db.listProjects();
-      const services = appCtx.db.listServices();
+      const allProjects = await appCtx.db.listProjects();
+      const services = await appCtx.db.listServices();
       const projects =
         projectName !== undefined
           ? allProjects.filter((project) => project.name === projectName)
@@ -209,7 +209,7 @@ export const platformReadToolDefs: ToolDef[] = [
       // through migration 0012.
       const deployableContainerIds = new Map<string, string | null>();
       for (const p of projects) {
-        const d = appCtx.db.getDeployableForProject(p.id);
+        const d = await appCtx.db.getDeployableForProject(p.id);
         deployableContainerIds.set(p.id, d?.container_id ?? p.container_id ?? null);
       }
 

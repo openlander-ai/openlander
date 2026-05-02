@@ -78,7 +78,7 @@ export class ProjectHealthMonitor {
   }
 
   async checkProject(projectId: string): Promise<ProjectCheckResult> {
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     const previousFailures = this.consecutiveFailures.get(projectId) ?? 0;
 
     if (!project) {
@@ -90,7 +90,7 @@ export class ProjectHealthMonitor {
       };
     }
 
-    const deployable = this.db.getDeployableForProject(projectId);
+    const deployable = await this.db.getDeployableForProject(projectId);
     const profile = resolveMonitoringProfile(project, deployable);
     if (profile.health.strategy === 'none') {
       this.consecutiveFailures.set(projectId, 0);
@@ -102,11 +102,10 @@ export class ProjectHealthMonitor {
     }
 
     // PR 4.5: canonical-first read of runtime columns with `??` fallback.
-    const deployableForProbe = this.db.getDeployableForProject(projectId);
     const probeContext: ProbeContext = {
       projectId,
-      containerId: deployableForProbe?.container_id ?? project.container_id ?? '',
-      assignedPort: deployableForProbe?.assigned_port ?? project.assigned_port ?? undefined,
+      containerId: deployable?.container_id ?? project.container_id ?? '',
+      assignedPort: deployable?.assigned_port ?? project.assigned_port ?? undefined,
     };
 
     const probeConfig = {
@@ -147,8 +146,8 @@ export class ProjectHealthMonitor {
 
     this.checking = true;
     try {
-      const runningProjects = this.db.listProjects('running').map((project) => project.id);
-      const errorProjects = this.db.listProjects('error').map((project) => project.id);
+      const runningProjects = (await this.db.listProjects('running')).map((project) => project.id);
+      const errorProjects = (await this.db.listProjects('error')).map((project) => project.id);
       const activeProjectIds = [...new Set([...runningProjects, ...errorProjects])];
 
       await Promise.all(activeProjectIds.map((projectId) => this.runCheck(projectId)));
@@ -158,13 +157,13 @@ export class ProjectHealthMonitor {
   }
 
   private async runCheck(projectId: string): Promise<void> {
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) {
       return;
     }
 
     // PR 4.5: canonical-first status read with `??` fallback.
-    const deployable = this.db.getDeployableForProject(projectId);
+    const deployable = await this.db.getDeployableForProject(projectId);
     const status = deployable?.status ?? project.status;
     if ((status !== 'running' && status !== 'error') || project.archived_at) {
       return;

@@ -109,7 +109,7 @@ export async function handleTerminalFailure(
   } | null = null;
 
   try {
-    const existing = deps.ctx.db.getProjectByName(deps.projectName);
+    const existing = await deps.ctx.db.getProjectByName(deps.projectName);
     diagnosis = await deps.ctx.buildDebugger.diagnose({
       buildLog: input.error,
       projectName: deps.projectName,
@@ -268,7 +268,7 @@ export async function handleTerminalFailure(
             : `User selected ${selectedManualFixLabel}. OpenLander will not auto-apply this fix; manual follow-up is required.`,
         );
 
-        deps.ctx.db.updateProject(deps.projectId, { status: 'error' });
+        await deps.ctx.db.updateProject(deps.projectId, { status: 'error' });
         await eventBus.emit('deploy:needs-user-action', {
           projectId: deps.projectId,
           category: 'manual_followup_required',
@@ -320,8 +320,8 @@ export async function emitTerminalMessage(
 }
 
 export function registerBuildProgressRoute(api: Hono, ctx: AppContext): void {
-  api.get('/builds/:id/progress', (c) => {
-    const project = getProjectOrThrow(c, ctx);
+  api.get('/builds/:id/progress', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
 
     const unsubscribers: Array<() => void> = [];
     const progressHandlers: Array<{ event: string; payload: Record<string, unknown> }> = [
@@ -415,7 +415,7 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
   });
 
   api.post('/projects/:id/env/scan', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
     if (!project.repo_url) return c.json({ error: 'Project has no repo URL' }, 400);
 
     let clonePath: string | null = null;
@@ -424,7 +424,7 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
       clonePath = cloneResult.path;
       // PR 4 canonical-first: dockerfile_path on the deployable services
       // row supersedes the legacy projects column post-0012.
-      const deployable = ctx.db.getDeployableForProject(project.id);
+      const deployable = await ctx.db.getDeployableForProject(project.id);
       const dockerfilePath = deployable?.dockerfile_path ?? project.dockerfile_path;
       const scanResult = scanRepoEnvVars(clonePath, {
         dockerfilePath: dockerfilePath ?? undefined,
@@ -433,7 +433,7 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
       const allStoredKeys = new Set<string>();
       for (const key of Object.keys(ctx.env.getAll(project.id))) allStoredKeys.add(key);
       for (const key of Object.keys(ctx.env.getGlobalSecrets())) allStoredKeys.add(key);
-      for (const env of ctx.db.getEnvironmentsByProject(project.id)) {
+      for (const env of await ctx.db.getEnvironmentsByProject(project.id)) {
         for (const key of Object.keys(ctx.env.getAll(project.id, env.id))) allStoredKeys.add(key);
       }
 

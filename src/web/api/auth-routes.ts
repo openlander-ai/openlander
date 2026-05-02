@@ -114,7 +114,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
   const api = new Hono();
 
   api.post('/auth/setup-password', async (c) => {
-    if (authService.isPasswordSet()) {
+    if (await authService.isPasswordSet()) {
       return c.json({ error: 'Password already configured' }, 403);
     }
 
@@ -138,10 +138,10 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       );
     }
 
-    const { apiToken } = authService.setupPassword(body.password);
+    const { apiToken } = await authService.setupPassword(body.password);
 
     // Auto-login: create session so subsequent setup API calls work
-    const session = authService.createSession();
+    const session = await authService.createSession();
     c.header(
       'Set-Cookie',
       `ol_session=${session.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${String(SESSION_MAX_AGE)}`,
@@ -156,7 +156,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       return c.json({ error: 'Password is required' }, 400);
     }
 
-    const auth = authService.getAuth();
+    const auth = await authService.getAuth();
     if (!auth || !auth.password_hash) {
       return c.json({ error: 'Password not configured' }, 403);
     }
@@ -165,7 +165,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       return c.json({ error: 'Invalid password' }, 401);
     }
 
-    const session = authService.createSession();
+    const session = await authService.createSession();
     c.header(
       'Set-Cookie',
       `ol_session=${session.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${String(SESSION_MAX_AGE)}`,
@@ -173,21 +173,21 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
     return c.json({ success: true });
   });
 
-  api.post('/auth/logout', (c) => {
+  api.post('/auth/logout', async (c) => {
     const cookieHeader = c.req.header('cookie') || '';
     const token = getSessionCookieToken(cookieHeader);
     if (token) {
-      authService.deleteSession(token);
+      await authService.deleteSession(token);
     }
     c.header('Set-Cookie', 'ol_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
     return c.json({ success: true });
   });
 
-  api.get('/auth/verify', (c) => {
+  api.get('/auth/verify', async (c) => {
     const cookieHeader = c.req.header('cookie') || '';
     const token = getSessionCookieToken(cookieHeader);
 
-    if (token && authService.validateSession(token)) {
+    if (token && (await authService.validateSession(token))) {
       return c.json({ authenticated: true });
     }
     return c.json({ authenticated: false }, 401);
@@ -196,13 +196,13 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
   api.post('/auth/change-password', async (c) => {
     const cookieHeader = c.req.header('cookie') || '';
     const sessionToken = getSessionCookieToken(cookieHeader);
-    if (!sessionToken || !authService.validateSession(sessionToken)) {
+    if (!sessionToken || !(await authService.validateSession(sessionToken))) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
     const body = await c.req.json<{ currentPassword: string; newPassword: string }>();
     try {
-      authService.changePassword(body.currentPassword, body.newPassword);
+      await authService.changePassword(body.currentPassword, body.newPassword);
       return c.json({ success: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to change password';
@@ -210,14 +210,14 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
     }
   });
 
-  api.get('/auth/token', (c) => {
+  api.get('/auth/token', async (c) => {
     const cookieHeader = c.req.header('cookie') || '';
     const sessionToken = getSessionCookieToken(cookieHeader);
-    if (!sessionToken || !authService.validateSession(sessionToken)) {
+    if (!sessionToken || !(await authService.validateSession(sessionToken))) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    const token = authService.getDecryptedApiToken();
+    const token = await authService.getDecryptedApiToken();
     if (!token) {
       return c.json({ error: 'No API token configured' }, 404);
     }
@@ -227,7 +227,7 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
   api.get('/auth/google/status', async (c) => {
     const cookieHeader = c.req.header('cookie') || '';
     const sessionToken = getSessionCookieToken(cookieHeader);
-    if (!sessionToken || !authService.validateSession(sessionToken)) {
+    if (!sessionToken || !(await authService.validateSession(sessionToken))) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
@@ -243,21 +243,21 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
     }
   });
 
-  api.post('/auth/token/regenerate', (c) => {
+  api.post('/auth/token/regenerate', async (c) => {
     const cookieHeader = c.req.header('cookie') || '';
     const sessionToken = getSessionCookieToken(cookieHeader);
-    if (!sessionToken || !authService.validateSession(sessionToken)) {
+    if (!sessionToken || !(await authService.validateSession(sessionToken))) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    const { apiToken } = authService.regenerateToken();
+    const { apiToken } = await authService.regenerateToken();
     return c.json({ token: apiToken });
   });
 
-  api.get('/auth/google/start', (c) => {
+  api.get('/auth/google/start', async (c) => {
     const cookieHeader = c.req.header('cookie') || '';
     const sessionToken = getSessionCookieToken(cookieHeader);
-    if (!sessionToken || !authService.validateSession(sessionToken)) {
+    if (!sessionToken || !(await authService.validateSession(sessionToken))) {
       return c.json({ error: 'AUTH_REQUIRED' }, 401);
     }
 
@@ -334,11 +334,13 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       );
 
       const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
-      encryptAndStoreToken(ctx.db, 'google', {
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token || null,
-        expiresAt,
-      });
+      await Promise.resolve(
+        encryptAndStoreToken(ctx.db, 'google', {
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token || null,
+          expiresAt,
+        }),
+      );
 
       log.info('Google OAuth tokens stored successfully');
       return c.redirect(`${ctx.config.server.baseUrl}/?oauth_success=google`);

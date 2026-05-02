@@ -7,14 +7,14 @@ const AUTH_SALT_ROUNDS = 10;
 const SESSION_TTL_MS = Number(process.env['OPENLANDER_SESSION_TTL_HOURS'] || 168) * 60 * 60 * 1000;
 
 export interface AuthDatabase {
-  isPasswordSet(): boolean;
-  getAuth(): AuthRow | null;
-  setPassword(hash: string): void;
-  getApiToken(): { encrypted: string; iv: string } | null;
-  setApiToken(encrypted: string, iv: string): void;
-  getSession(): { token: string; createdAt: number; expiresAt: number } | null;
-  createSession(token: string, createdAt: number, expiresAt: number): void;
-  deleteSession(): void;
+  isPasswordSet(): Promise<boolean>;
+  getAuth(): Promise<AuthRow | null>;
+  setPassword(hash: string): Promise<void>;
+  getApiToken(): Promise<{ encrypted: string; iv: string } | null>;
+  setApiToken(encrypted: string, iv: string): Promise<void>;
+  getSession(): Promise<{ token: string; createdAt: number; expiresAt: number } | null>;
+  createSession(token: string, createdAt: number, expiresAt: number): Promise<void>;
+  deleteSession(): Promise<void>;
 }
 
 /**
@@ -58,19 +58,21 @@ export function generateApiToken(): { token: string; encrypted: string; iv: stri
 /**
  * Create a session token, persist it, and return expiry metadata.
  */
-export function createSession(db: AuthDatabase): { token: string; expiresAt: number } {
+export async function createSession(
+  db: AuthDatabase,
+): Promise<{ token: string; expiresAt: number }> {
   const token = randomUUID();
   const createdAt = Date.now();
   const expiresAt = createdAt + SESSION_TTL_MS;
-  db.createSession(token, createdAt, expiresAt);
+  await db.createSession(token, createdAt, expiresAt);
   return { token, expiresAt };
 }
 
 /**
  * Validate a session token against stored token and expiration.
  */
-export function validateSession(db: AuthDatabase, token: string): boolean {
-  const session = db.getSession();
+export async function validateSession(db: AuthDatabase, token: string): Promise<boolean> {
+  const session = await db.getSession();
   if (!session) {
     return false;
   }
@@ -80,7 +82,7 @@ export function validateSession(db: AuthDatabase, token: string): boolean {
   }
 
   if (Date.now() > session.expiresAt) {
-    db.deleteSession();
+    await db.deleteSession();
     return false;
   }
 
@@ -90,19 +92,22 @@ export function validateSession(db: AuthDatabase, token: string): boolean {
 /**
  * Delete the current stored session.
  */
-export function deleteSession(db: AuthDatabase, _token: string): void {
-  db.deleteSession();
+export async function deleteSession(db: AuthDatabase, _token: string): Promise<void> {
+  await db.deleteSession();
 }
 
 /**
  * Initial password setup flow: stores hashed password and initial API token.
  */
-export function setupPassword(db: AuthDatabase, password: string): { apiToken: string } {
+export async function setupPassword(
+  db: AuthDatabase,
+  password: string,
+): Promise<{ apiToken: string }> {
   const passwordHash = hashPassword(password);
-  db.setPassword(passwordHash);
+  await db.setPassword(passwordHash);
 
   const { token, encrypted, iv } = generateApiToken();
-  db.setApiToken(encrypted, iv);
+  await db.setApiToken(encrypted, iv);
 
   return { apiToken: token };
 }
@@ -110,12 +115,12 @@ export function setupPassword(db: AuthDatabase, password: string): { apiToken: s
 /**
  * Change password after validating the current password hash.
  */
-export function changePassword(
+export async function changePassword(
   db: AuthDatabase,
   currentPassword: string,
   newPassword: string,
-): void {
-  const auth = db.getAuth();
+): Promise<void> {
+  const auth = await db.getAuth();
   if (!auth || !auth.password_hash) {
     throw new Error('Password is not configured.');
   }
@@ -124,31 +129,31 @@ export function changePassword(
     throw new Error('Current password is incorrect.');
   }
 
-  db.setPassword(hashPassword(newPassword));
+  await db.setPassword(hashPassword(newPassword));
 }
 
 /**
  * Generate and persist a fresh API token while leaving password unchanged.
  */
-export function regenerateToken(db: AuthDatabase): { apiToken: string } {
+export async function regenerateToken(db: AuthDatabase): Promise<{ apiToken: string }> {
   const { token, encrypted, iv } = generateApiToken();
-  db.setApiToken(encrypted, iv);
+  await db.setApiToken(encrypted, iv);
   return { apiToken: token };
 }
 
 /**
  * Reset password without verifying old password (CLI recovery flow).
  */
-export function resetPassword(db: AuthDatabase, newPassword: string): void {
-  db.setPassword(hashPassword(newPassword));
+export async function resetPassword(db: AuthDatabase, newPassword: string): Promise<void> {
+  await db.setPassword(hashPassword(newPassword));
 }
 
 /**
  * Validate a presented API token against encrypted token in storage.
  * Uses constant-time comparison to prevent timing attacks.
  */
-export function validateApiToken(db: AuthDatabase, token: string): boolean {
-  const stored = db.getApiToken();
+export async function validateApiToken(db: AuthDatabase, token: string): Promise<boolean> {
+  const stored = await db.getApiToken();
   if (!stored) {
     return false;
   }
@@ -187,8 +192,8 @@ export class AuthService {
    * has already been configured, so callers don't accidentally print a stale
    * value during runtime.
    */
-  getOrCreateSetupSecret(): string | null {
-    if (this.db.isPasswordSet()) {
+  async getOrCreateSetupSecret(): Promise<string | null> {
+    if (await this.db.isPasswordSet()) {
       this.setupSecret = null;
       return null;
     }
@@ -240,41 +245,41 @@ export class AuthService {
     return decryptToken(encrypted, iv);
   }
 
-  createSession(): { token: string; expiresAt: number } {
+  createSession(): Promise<{ token: string; expiresAt: number }> {
     return createSession(this.db);
   }
 
-  validateSession(token: string): boolean {
+  validateSession(token: string): Promise<boolean> {
     return validateSession(this.db, token);
   }
 
-  deleteSession(token: string): void {
-    deleteSession(this.db, token);
+  async deleteSession(token: string): Promise<void> {
+    await deleteSession(this.db, token);
   }
 
-  setupPassword(password: string): { apiToken: string } {
-    const result = setupPassword(this.db, password);
+  async setupPassword(password: string): Promise<{ apiToken: string }> {
+    const result = await setupPassword(this.db, password);
     this.clearSetupSecret();
     return result;
   }
 
-  changePassword(currentPassword: string, newPassword: string): void {
-    changePassword(this.db, currentPassword, newPassword);
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await changePassword(this.db, currentPassword, newPassword);
   }
 
-  regenerateToken(): { apiToken: string } {
+  regenerateToken(): Promise<{ apiToken: string }> {
     return regenerateToken(this.db);
   }
 
-  resetPassword(newPassword: string): void {
-    resetPassword(this.db, newPassword);
+  async resetPassword(newPassword: string): Promise<void> {
+    await resetPassword(this.db, newPassword);
   }
 
-  validateApiToken(token: string): boolean {
+  validateApiToken(token: string): Promise<boolean> {
     return validateApiToken(this.db, token);
   }
 
-  isPasswordSet(): boolean {
+  isPasswordSet(): Promise<boolean> {
     return this.db.isPasswordSet();
   }
 
@@ -282,8 +287,8 @@ export class AuthService {
     return this.db.getAuth();
   }
 
-  getDecryptedApiToken(): string | null {
-    const stored = this.db.getApiToken();
+  async getDecryptedApiToken(): Promise<string | null> {
+    const stored = await this.db.getApiToken();
     if (!stored) return null;
     try {
       return decryptToken(stored.encrypted, stored.iv);

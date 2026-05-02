@@ -96,7 +96,7 @@ export const serviceToolDefs: ToolDef[] = [
       // exists BEFORE provisioning the service. A typo otherwise creates the
       // managed service in __orphan_managed and then surfaces only as a
       // warning string — easy to miss.
-      if (targetProjectId && !appCtx.db.getProject(targetProjectId)) {
+      if (targetProjectId && !(await appCtx.db.getProject(targetProjectId))) {
         return {
           status: 'failed',
           error: 'TARGET_PROJECT_NOT_FOUND',
@@ -116,7 +116,7 @@ export const serviceToolDefs: ToolDef[] = [
       let droppedKeys: string[] | undefined;
       if (targetProjectId) {
         try {
-          const moved = appCtx.db.attachServiceToProject(result.id, targetProjectId);
+          const moved = await appCtx.db.attachServiceToProject(result.id, targetProjectId);
           resolvedProjectId = moved.targetProjectId;
           if (moved.droppedEnvVarKeys.length > 0 || moved.droppedSecretFiles.length > 0) {
             droppedKeys = [...moved.droppedEnvVarKeys, ...moved.droppedSecretFiles];
@@ -531,7 +531,7 @@ export const serviceToolDefs: ToolDef[] = [
     inputSchema: listServiceBackupsSchema,
     execute: async (args, { appCtx }) => {
       const service = await getServiceByName(appCtx, args['service_name'] as string);
-      const backups = appCtx.serviceManager.listBackups(service.id);
+      const backups = await appCtx.serviceManager.listBackups(service.id);
       return {
         service: service.name,
         count: backups.length,

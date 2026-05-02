@@ -41,7 +41,7 @@ Those are great tools. OpenLander takes a different approach.
 | When containers crash | You get an alert                | AI detects it, diagnoses the cause, and attempts a fix   |
 | Coding agent support  | None                            | MCP protocol — deploy from Cursor, Claude Code, etc.     |
 | Server awareness      | Manual configuration            | Auto-detects ports, proxies, containers before deploying |
-| Install               | `docker compose`                | `npx openlander`                                         |
+| Install               | `docker compose`                | `docker compose` (includes Postgres)                     |
 
 **Positioning**: Coolify's Docker foundation + Vercel's clean UX + AI auto-recovery.
 
@@ -58,14 +58,13 @@ Mac Mini + OpenLander:   ~$600 once, $0/month
 > **Platform**: Linux (primary) and macOS. Windows is not supported (WSL2 works).
 
 ```bash
-# Install
-npm install -g openlander
-
-# Run
-openlander
+# Start OpenLander plus its Postgres database
+OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose up -d --build
 ```
 
-> **Note**: OpenLander requires [Node.js](https://nodejs.org/) >= 22 and Docker.
+> **Note**: The supported self-hosted runtime is Docker Compose with Postgres.
+> Running the CLI directly is for development or custom service managers and
+> requires `OPENLANDER_DATABASE_URL` / `DATABASE_URL` to point at Postgres.
 
 1. Check Docker (install if missing, fix permissions if needed)
 2. Start the Traefik reverse proxy
@@ -132,11 +131,26 @@ pm2 save
 
 ### Docker
 
+Recommended:
+
+```bash
+OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose up -d --build
+```
+
+This starts OpenLander plus a dedicated Postgres container and preserves data in
+Docker volumes:
+
+- `openlander-data` — OpenLander config, cloned repos, secrets, and app data
+- `openlander-postgres` — OpenLander database
+
+Minimal one-container runtime is possible only if you provide an external Postgres URL:
+
 ```bash
 docker run -d \
   --name openlander \
   --restart unless-stopped \
   -p 10114:10114 \
+  -e OPENLANDER_DATABASE_URL='postgres://user:password@host:5432/openlander' \
   -v openlander-data:/root/.openlander \
   -v /var/run/docker.sock:/var/run/docker.sock \
   node:22 \
@@ -208,7 +222,7 @@ Deploy Pipeline (deterministic — rule-based execution)
     ├─ expose (TryCloudflare / Cloudflare Tunnel)
     └─ monitor (health checks + crash detection + auto-recovery)
     ↓
-Infrastructure (Docker + Traefik + Cloudflare + SQLite)
+Infrastructure (Docker + Traefik + Cloudflare + Postgres)
 ```
 
 **Key principle**: Execution is deterministic (rule-based). The AI only handles error analysis, recovery, and insights — never makes deployment decisions autonomously.
@@ -230,14 +244,14 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | Language      | TypeScript (strict mode, ESM)                                                   |
 | Runtime       | [Node.js](https://nodejs.org/) >= 22                                            |
 | Build         | [tsup](https://tsup.egoist.dev) (backend) + [Vite](https://vite.dev) (frontend) |
-| Install       | npm global package                                                              |
+| Install       | Docker Compose (recommended); npm CLI for direct/custom runtimes                |
 | Web UI        | React 19 + React Router + Tailwind CSS v3                                       |
 | AI            | [Vercel AI SDK](https://ai-sdk.dev) — multi-provider, streaming, tool calling   |
-| ORM           | [Drizzle ORM](https://orm.drizzle.team) + better-sqlite3                        |
+| ORM           | [Drizzle ORM](https://orm.drizzle.team) + postgres.js                           |
 | Docker        | dockerode                                                                       |
 | Reverse Proxy | Traefik (Docker label routing)                                                  |
 | Tunnel        | TryCloudflare / Cloudflare Tunnel                                               |
-| Database      | SQLite (via Drizzle ORM)                                                        |
+| Database      | PostgreSQL 16 (Docker Compose by default)                                       |
 | Test          | Vitest + Node.js                                                                |
 
 ## Roadmap

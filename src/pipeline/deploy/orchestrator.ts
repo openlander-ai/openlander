@@ -47,7 +47,7 @@ export interface DeployOrchestrationDeps {
   composePipeline?: ComposePipeline;
   autoDetector?: AutoDetector;
   jobManager?: JobManager;
-  applyPendingFix: (projectId: string, clonePath: string) => string | null;
+  applyPendingFix: (projectId: string, clonePath: string) => Promise<string | null>;
   exposeTunnel: (projectId: string, port: number) => Promise<string>;
   secretScanEnabled: boolean;
 }
@@ -61,7 +61,7 @@ async function transitionProjectState(
 ): Promise<void> {
   await deps.stateManager.transition(projectId, targetStatus, reason);
   if (Object.keys(updates).length > 0) {
-    deps.db.updateProject(projectId, updates);
+    await deps.db.updateProject(projectId, updates);
   }
 }
 
@@ -97,12 +97,12 @@ export async function cloneAndAnalyze(
 
   buildLog += `[clone] ${repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
 
-  const pendingFixFile = deps.applyPendingFix(projectId, cloneResult.path);
+  const pendingFixFile = await deps.applyPendingFix(projectId, cloneResult.path);
   if (pendingFixFile) {
     buildLog += `[pending-fix] Applied ${pendingFixFile}\n`;
   }
 
-  const previousDeploy = deps.db.getLastDeployLog(projectId, environmentId);
+  const previousDeploy = await deps.db.getLastDeployLog(projectId, environmentId);
   const previousSha = previousDeploy?.commit_sha;
 
   if (previousSha && previousSha !== cloneResult.commitSha) {
@@ -131,7 +131,7 @@ export async function cloneAndAnalyze(
     }
   }
 
-  const storedVars = deps.env.getAll(projectId, environmentId);
+  const storedVars = await deps.env.getAll(projectId, environmentId);
   const storedKeys = Object.keys(storedVars);
   const detection = detectNewEnvKeys(cloneResult.path, storedKeys);
   if (detection) {
@@ -225,13 +225,13 @@ export async function buildProject(
   const composePath = preferDockerfile ? null : composePipeline?.detectComposeFile(clonePath);
   const isCompose = Boolean(composePath && composePipeline);
   try {
-    deps.db.updateProject(projectId, {
+    await deps.db.updateProject(projectId, {
       buildMethod: isCompose ? 'compose' : 'dockerfile',
     });
   } catch (err) {
     log.debug({ err, projectId }, 'Failed to store build_method - column may not exist');
   }
-  const composeEnvVars = resolveEnvVars(
+  const composeEnvVars = await resolveEnvVars(
     { projectId, environmentId, inlineEnvVars: config.envVars },
     { env: deps.env },
   );
@@ -383,7 +383,7 @@ export async function buildProject(
     }
   }
 
-  const buildTimeVars = resolveEnvVarsForBuild(
+  const buildTimeVars = await resolveEnvVarsForBuild(
     { projectId, environmentId, inlineEnvVars: config.envVars },
     { env: deps.env },
   );
@@ -490,13 +490,13 @@ export async function runAndVerify(
     (dockerfilePath && dockerfilePath.length > 0
       ? (parseDockerfileExposePort(dockerfilePath) ?? undefined)
       : undefined);
-  const envVars = resolveEnvVars(
+  const envVars = await resolveEnvVars(
     { projectId, environmentId, inlineEnvVars: config.envVars },
     { env: deps.env },
   );
 
   deps.jobManager?.updatePhase(projectId, 'starting');
-  const secretFilesMounts = deps.env.getSecretFilesForDeploy(projectId);
+  const secretFilesMounts = await deps.env.getSecretFilesForDeploy(projectId);
   const runResult = await deps.containerRunner.run({
     imageTag,
     projectName,
@@ -538,7 +538,7 @@ export async function runAndVerify(
       'Container crashed after deploy',
     );
 
-    deps.db.updateEnvironment(environmentId, {
+    await deps.db.updateEnvironment(environmentId, {
       status: 'error',
       assignedPort: port,
       containerId,
@@ -596,7 +596,7 @@ export async function runAndVerify(
     log.warn({ projectId, containerId, err }, 'Post-deploy connectivity check failed');
   }
 
-  deps.db.updateEnvironment(environmentId, {
+  await deps.db.updateEnvironment(environmentId, {
     status: 'running',
     assignedPort: port,
     containerId,
@@ -672,7 +672,7 @@ export async function handlePostDeploy(
   const totalDuration = Date.now() - startTime;
 
   if (!skipDeployLog) {
-    deps.db.createDeployLog({
+    await deps.db.createDeployLog({
       id: nanoid(12),
       projectId,
       environmentId,
@@ -686,7 +686,7 @@ export async function handlePostDeploy(
   }
 
   try {
-    persistDeployConfig({ projectId, config: { ...config, repoUrl }, db: deps.db });
+    await persistDeployConfig({ projectId, config: { ...config, repoUrl }, db: deps.db });
   } catch (err) {
     log.debug({ err, projectId }, 'Failed to persist deploy config snapshot');
   }

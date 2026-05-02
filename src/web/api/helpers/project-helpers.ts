@@ -8,36 +8,40 @@ function environmentNotFoundResponse(c: Context, message: string): Response {
   return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message }, 404);
 }
 
-export function getProjectOrThrow(c: Context, ctx: Pick<AppContext, 'db'>): ProjectRow {
+export async function getProjectOrThrow(
+  c: Context,
+  ctx: Pick<AppContext, 'db'>,
+): Promise<ProjectRow> {
   const id = c.req.param('id') ?? '';
-  const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+  const project = (await ctx.db.getProject(id)) ?? (await ctx.db.getProjectByName(id));
   if (!project) throw new ProjectNotFoundError(id);
   return project;
 }
 
-export function getEnvironmentByIdOrThrow(
+export async function getEnvironmentByIdOrThrow(
   c: Context,
   ctx: AppContext,
   projectId: string,
-): EnvironmentRow | Response {
+): Promise<EnvironmentRow | Response> {
   const envId = c.req.param('envId') ?? '';
-  const environment = ctx.db.getEnvironment(envId);
+  const environment = await ctx.db.getEnvironment(envId);
   if (!environment || environment.project_id !== projectId) {
     return environmentNotFoundResponse(c, 'Environment not found');
   }
   return environment;
 }
 
-export function resolveEnvironmentByType(
+export async function resolveEnvironmentByType(
   c: Context,
   ctx: AppContext,
   project: ProjectRow,
   options?: { requireExistingEnvironmentWhenAnyExists?: boolean },
-):
+): Promise<
   | { requestedEnvironment: string; environmentRow: EnvironmentRow | undefined }
-  | { response: Response } {
+  | { response: Response }
+> {
   const requestedEnvironment = 'production';
-  const environments = ctx.db.getEnvironmentsByProject(project.id);
+  const environments = await ctx.db.getEnvironmentsByProject(project.id);
   const environmentRow = environments.find((environment) => environment.type === 'production');
   const shouldRequireEnvironment =
     options?.requireExistingEnvironmentWhenAnyExists === true && environments.length > 0;

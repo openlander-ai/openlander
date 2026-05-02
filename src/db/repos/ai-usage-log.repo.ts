@@ -1,5 +1,5 @@
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import { and, desc, eq, gte, lte, sql, type SQL } from 'drizzle-orm';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { aiUsageLog } from '../schema.drizzle.js';
 import type { AiUsageLogRow } from '../types.js';
 
@@ -12,54 +12,40 @@ interface AiUsageLogFilterOptions {
 export class AiUsageLogRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
-  ) {}
+    private readonly client: PostgresClient,
+  ) {
+    void this.client;
+  }
 
   /**
    * Create a new AI usage log entry.
    * Generates UUID and sets created_at timestamp.
    */
-  create(data: Omit<AiUsageLogRow, 'id' | 'created_at'>): string {
+  async create(data: Omit<AiUsageLogRow, 'id' | 'created_at'>): Promise<string> {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
 
-    // Raw better-sqlite3 prepare instead of Drizzle .insert().values() —
-    // observed on dogfood mini PM2 logs: the Drizzle path was throwing
-    // "TypeError: You cannot specify named parameters in two different
-    // objects" from better-sqlite3 session.ts:132 on every ai:usage event.
-    // The collision came from the way Drizzle bundles defaults with explicit
-    // values. Positional binding sidesteps it entirely and the wire shape
-    // is identical.
-    this.sqlite
-      .prepare(
-        `INSERT INTO ai_usage_log (
-          id, project_id, session_id, action_type, model_name, provider,
-          input_tokens, output_tokens, total_tokens, cost_usd, tools_called,
-          result, error_message, error_type, duration_ms, user_id, tenant_id,
-          source, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        id,
-        data.project_id ?? null,
-        data.session_id ?? null,
-        data.action_type,
-        data.model_name,
-        data.provider,
-        data.input_tokens,
-        data.output_tokens,
-        data.total_tokens,
-        data.cost_usd ?? null,
-        data.tools_called,
-        data.result,
-        data.error_message ?? null,
-        data.error_type ?? null,
-        data.duration_ms,
-        data.user_id ?? null,
-        data.tenant_id ?? null,
-        data.source ?? null,
-        createdAt,
-      );
+    await this.db.insert(aiUsageLog).values({
+      id,
+      project_id: data.project_id ?? null,
+      session_id: data.session_id ?? null,
+      action_type: data.action_type,
+      model_name: data.model_name,
+      provider: data.provider,
+      input_tokens: data.input_tokens,
+      output_tokens: data.output_tokens,
+      total_tokens: data.total_tokens,
+      cost_usd: data.cost_usd ?? null,
+      tools_called: data.tools_called,
+      result: data.result,
+      error_message: data.error_message ?? null,
+      error_type: data.error_type ?? null,
+      duration_ms: data.duration_ms,
+      user_id: data.user_id ?? null,
+      tenant_id: data.tenant_id ?? null,
+      source: data.source ?? null,
+      created_at: createdAt,
+    });
 
     return id;
   }
@@ -67,49 +53,60 @@ export class AiUsageLogRepo {
   /**
    * Find all AI usage logs for a project.
    */
-  findByProjectId(projectId: string): AiUsageLogRow[] {
-    return this.db
+  async findByProjectId(projectId: string): Promise<AiUsageLogRow[]> {
+    return await this.db
       .select()
       .from(aiUsageLog)
       .where(eq(aiUsageLog.project_id, projectId))
-      .orderBy(desc(aiUsageLog.created_at))
-      .all();
+      .orderBy(desc(aiUsageLog.created_at));
   }
 
   /**
    * Find AI usage logs within a date range.
    */
-  findByDateRange(from: Date, to: Date): AiUsageLogRow[] {
+  async findByDateRange(from: Date, to: Date): Promise<AiUsageLogRow[]> {
     const fromIso = from.toISOString();
     const toIso = to.toISOString();
 
-    return this.db
+    return await this.db
       .select()
       .from(aiUsageLog)
       .where(and(gte(aiUsageLog.created_at, fromIso), lte(aiUsageLog.created_at, toIso)))
-      .orderBy(desc(aiUsageLog.created_at))
-      .all();
+      .orderBy(desc(aiUsageLog.created_at));
   }
 
-  findRecent(opts: { limit: number } & AiUsageLogFilterOptions): AiUsageLogRow[] {
+  async findRecent(opts: { limit: number } & AiUsageLogFilterOptions): Promise<AiUsageLogRow[]> {
     const whereClause = this.buildWhereClause(opts);
 
-    return this.db
+    if (whereClause) {
+      return await this.db
+        .select()
+        .from(aiUsageLog)
+        .where(whereClause)
+        .orderBy(desc(aiUsageLog.created_at))
+        .limit(opts.limit);
+    }
+
+    return await this.db
       .select()
       .from(aiUsageLog)
-      .where(whereClause)
       .orderBy(desc(aiUsageLog.created_at))
-      .limit(opts.limit)
-      .all();
+      .limit(opts.limit);
   }
 
-  countAll(opts?: AiUsageLogFilterOptions): number {
+  async countAll(opts?: AiUsageLogFilterOptions): Promise<number> {
     const whereClause = this.buildWhereClause(opts);
-    const row = this.db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(aiUsageLog)
-      .where(whereClause)
-      .get();
+    const row =
+      (whereClause
+        ? await this.db
+            .select({ count: sql<number>`COUNT(*)::int` })
+            .from(aiUsageLog)
+            .where(whereClause)
+            .limit(1)
+        : await this.db
+            .select({ count: sql<number>`COUNT(*)::int` })
+            .from(aiUsageLog)
+            .limit(1))[0] ?? null;
 
     return row?.count ?? 0;
   }
@@ -119,56 +116,73 @@ export class AiUsageLogRepo {
    * If projectId is provided, returns summary for that project.
    * Otherwise returns global summary.
    */
-  getTokenSummary(projectId?: string): {
+  async getTokenSummary(projectId?: string): Promise<{
     totalInputTokens: number;
     totalOutputTokens: number;
     totalCostUsd: number | null;
-  } {
-    const whereClause = projectId ? eq(aiUsageLog.project_id, projectId) : undefined;
-
-    const result = this.db
-      .select({
-        totalInputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.input_tokens}), 0)`,
-        totalOutputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.output_tokens}), 0)`,
-        totalCostUsd: sql<number | null>`SUM(${aiUsageLog.cost_usd})`,
-      })
-      .from(aiUsageLog)
-      .where(whereClause)
-      .get();
+  }> {
+    const row =
+      (projectId
+        ? await this.db
+            .select({
+              totalInputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.input_tokens}), 0)::int`,
+              totalOutputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.output_tokens}), 0)::int`,
+              totalCostUsd: sql<number | null>`SUM(${aiUsageLog.cost_usd})`,
+            })
+            .from(aiUsageLog)
+            .where(eq(aiUsageLog.project_id, projectId))
+            .limit(1)
+        : await this.db
+            .select({
+              totalInputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.input_tokens}), 0)::int`,
+              totalOutputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.output_tokens}), 0)::int`,
+              totalCostUsd: sql<number | null>`SUM(${aiUsageLog.cost_usd})`,
+            })
+            .from(aiUsageLog)
+            .limit(1))[0] ?? null;
 
     return {
-      totalInputTokens: result?.totalInputTokens ?? 0,
-      totalOutputTokens: result?.totalOutputTokens ?? 0,
-      totalCostUsd: result?.totalCostUsd ?? null,
+      totalInputTokens: row?.totalInputTokens ?? 0,
+      totalOutputTokens: row?.totalOutputTokens ?? 0,
+      totalCostUsd: row?.totalCostUsd ?? null,
     };
   }
 
-  getTokenSummaryFiltered(opts?: AiUsageLogFilterOptions): {
+  async getTokenSummaryFiltered(opts?: AiUsageLogFilterOptions): Promise<{
     totalInputTokens: number;
     totalOutputTokens: number;
     totalCostUsd: number | null;
-  } {
+  }> {
     const whereClause = this.buildWhereClause(opts);
-
-    const result = this.db
-      .select({
-        totalInputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.input_tokens}), 0)`,
-        totalOutputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.output_tokens}), 0)`,
-        totalCostUsd: sql<number | null>`SUM(${aiUsageLog.cost_usd})`,
-      })
-      .from(aiUsageLog)
-      .where(whereClause)
-      .get();
+    const row =
+      (whereClause
+        ? await this.db
+            .select({
+              totalInputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.input_tokens}), 0)::int`,
+              totalOutputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.output_tokens}), 0)::int`,
+              totalCostUsd: sql<number | null>`SUM(${aiUsageLog.cost_usd})`,
+            })
+            .from(aiUsageLog)
+            .where(whereClause)
+            .limit(1)
+        : await this.db
+            .select({
+              totalInputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.input_tokens}), 0)::int`,
+              totalOutputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.output_tokens}), 0)::int`,
+              totalCostUsd: sql<number | null>`SUM(${aiUsageLog.cost_usd})`,
+            })
+            .from(aiUsageLog)
+            .limit(1))[0] ?? null;
 
     return {
-      totalInputTokens: result?.totalInputTokens ?? 0,
-      totalOutputTokens: result?.totalOutputTokens ?? 0,
-      totalCostUsd: result?.totalCostUsd ?? null,
+      totalInputTokens: row?.totalInputTokens ?? 0,
+      totalOutputTokens: row?.totalOutputTokens ?? 0,
+      totalCostUsd: row?.totalCostUsd ?? null,
     };
   }
 
-  private buildWhereClause(opts?: AiUsageLogFilterOptions) {
-    const conditions: Array<ReturnType<typeof eq>> = [];
+  private buildWhereClause(opts?: AiUsageLogFilterOptions): SQL | undefined {
+    const conditions: SQL[] = [];
 
     if (opts?.projectId) {
       conditions.push(eq(aiUsageLog.project_id, opts.projectId));

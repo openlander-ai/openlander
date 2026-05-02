@@ -9,16 +9,13 @@ Paste a Git URL. It builds, deploys, and hands you a URL — if something breaks
 ## Quick Start
 
 ```bash
-# Install
-npm install -g openlander
-
-# Run
-openlander
+# Start OpenLander plus its Postgres database
+OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose up -d --build
 ```
 
 Open `http://localhost:10114` and follow the setup wizard.
 
-**Requirements**: Node.js >= 22, Docker >= 20.10, Git >= 2.x
+**Requirements**: Docker >= 20.10 with Compose V2 >= 2.3.0, Git >= 2.x
 
 ---
 
@@ -37,7 +34,7 @@ Deploy Pipeline (deterministic — rule-based execution)
     ├─ expose (TryCloudflare / Cloudflare Tunnel)
     └─ monitor (health checks + auto-recovery)
     ↓
-Infrastructure (Docker + Traefik + Cloudflare + SQLite)
+Infrastructure (Docker + Traefik + Cloudflare + Postgres)
 ```
 
 **Key principle**: Execution is deterministic (rule-based). AI handles error analysis and recovery only — never makes deployment decisions autonomously.
@@ -73,7 +70,7 @@ Infrastructure (Docker + Traefik + Cloudflare + SQLite)
 | Runtime       | Node.js >= 22                     |
 | Web UI        | React 19 + Tailwind CSS v3        |
 | AI            | Vercel AI SDK (multi-provider)    |
-| Database      | SQLite (Drizzle ORM)              |
+| Database      | PostgreSQL 16 (Docker Compose)    |
 | Containers    | Docker + dockerode                |
 | Reverse Proxy | Traefik (Docker label routing)    |
 | Tunnel        | TryCloudflare / Cloudflare Tunnel |

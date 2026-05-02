@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { oauthTokens } from '../schema.drizzle.js';
 import type { OAuthTokenRow } from '../types.js';
 import { createModuleLogger } from '../../lib/logger.js';
@@ -10,16 +10,19 @@ const log = createModuleLogger('oauth-repo');
 export class OAuthRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
+    private readonly client: PostgresClient,
   ) {
-    void this.sqlite;
+    void this.client;
   }
 
-  getOAuthTokens(provider: string): OAuthTokenRow | undefined {
+  async getOAuthTokens(provider: string): Promise<OAuthTokenRow | undefined> {
     try {
-      return this.db.select().from(oauthTokens).where(eq(oauthTokens.provider, provider)).get() as
-        | OAuthTokenRow
-        | undefined;
+      const [row] = await this.db
+        .select()
+        .from(oauthTokens)
+        .where(eq(oauthTokens.provider, provider))
+        .limit(1);
+      return (row as OAuthTokenRow | undefined) ?? undefined;
     } catch (err) {
       // 1.0 GA — narrow defensive catch: only swallow schema-mismatch /
       // missing-table errors so the OAuth flow can recover by prompting the
@@ -27,7 +30,10 @@ export class OAuthRepo {
       // bugs) so they surface in logs and HTTP 5xx instead of being silently
       // hidden behind a permanent "GitHub auth required" banner.
       const msg = err instanceof Error ? err.message : String(err);
-      const isSchemaMismatch = /no such column|no such table/i.test(msg);
+      const isSchemaMismatch =
+        /no such column|no such table|column .* does not exist|relation .* does not exist/i.test(
+          msg,
+        );
       if (isSchemaMismatch) {
         log.error(
           { err, provider },
@@ -40,7 +46,7 @@ export class OAuthRepo {
     }
   }
 
-  upsertOAuthTokens(token: {
+  async upsertOAuthTokens(token: {
     id: string;
     provider: string;
     accessToken: string;
@@ -50,8 +56,8 @@ export class OAuthRepo {
     authMethod?: string;
     userEmail?: string | null;
     iv?: string;
-  }): void {
-    this.db
+  }): Promise<void> {
+    await this.db
       .insert(oauthTokens)
       .values({
         id: token.id,
@@ -74,13 +80,12 @@ export class OAuthRepo {
           auth_method: token.authMethod ?? 'manual',
           user_email: token.userEmail ?? null,
           iv: token.iv ?? null,
-          updated_at: sql`CURRENT_TIMESTAMP`,
+          updated_at: sql`now()::text`,
         },
-      })
-      .run();
+      });
   }
 
-  deleteOAuthTokens(provider: string): void {
-    this.db.delete(oauthTokens).where(eq(oauthTokens.provider, provider)).run();
+  async deleteOAuthTokens(provider: string): Promise<void> {
+    await this.db.delete(oauthTokens).where(eq(oauthTokens.provider, provider));
   }
 }

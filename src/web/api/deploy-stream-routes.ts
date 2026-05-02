@@ -75,15 +75,16 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       // it participates in the same BUG-002 regression guard as the
       // agent-driven path. New-project deploys (no existing project row) get
       // a synthetic lock id from the requested name.
+      const fallbackProject = await ctx.db.getProjectByName(
+        body.name ??
+          (source === 'image' && imageUrl
+            ? extractProjectName(imageUrl)
+            : repoUrl
+              ? extractProjectName(repoUrl)
+              : 'unknown'),
+      );
       const fallbackLockKey =
-        ctx.db.getProjectByName(
-          body.name ??
-            (source === 'image' && imageUrl
-              ? extractProjectName(imageUrl)
-              : repoUrl
-                ? extractProjectName(repoUrl)
-                : 'unknown'),
-        )?.id ??
+        fallbackProject?.id ??
         body.name ??
         (source === 'image' && imageUrl
           ? extractProjectName(imageUrl)
@@ -178,12 +179,12 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       throw err;
     }
 
-    const existing = ctx.db.getProjectByName(projectName);
+    const existing = await ctx.db.getProjectByName(projectName);
     const projectId = existing?.id ?? nanoid(12);
 
     if (!existing) {
       if (source === 'image' && imageUrl) {
-        ctx.db.createProject({
+        await ctx.db.createProject({
           id: projectId,
           name: projectName,
           repoUrl: '',
@@ -193,7 +194,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
           containerPort: body.port,
         });
       } else if (repoUrl) {
-        ctx.db.createProject({
+        await ctx.db.createProject({
           id: projectId,
           name: projectName,
           repoUrl,
@@ -202,14 +203,14 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       }
     }
 
-    ctx.db.updateProject(projectId, { status: 'building' });
+    await ctx.db.updateProject(projectId, { status: 'building' });
     ctx.jobManager.trackJob(projectId, projectName);
     ctx.questionBridge.setActiveProject(projectId);
 
     if (body.env_vars && typeof body.env_vars === 'object') {
       for (const [key, value] of Object.entries(body.env_vars)) {
         if (typeof value === 'string' && value.trim()) {
-          ctx.env.set(projectId, key, value.trim());
+          await ctx.env.set(projectId, key, value.trim());
         }
       }
     }
@@ -340,10 +341,10 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
 
     // 1.0 GA: same per-project lock as the main /projects/deploy path so
     // /deploy/start does not bypass the BUG-002 regression guard.
-    const startLockKey =
-      ctx.db.getProjectByName(body.name ?? extractProjectName(body.repo_url))?.id ??
-      body.name ??
-      extractProjectName(body.repo_url);
+    const startExisting = await ctx.db.getProjectByName(
+      body.name ?? extractProjectName(body.repo_url),
+    );
+    const startLockKey = startExisting?.id ?? body.name ?? extractProjectName(body.repo_url);
     const startSessionId = `deploy-start-${Date.now().toString(36)}-${nanoid(6)}`;
     const startAcquired = ctx.agentPool
       ? ctx.agentPool.acquireProjectLock(startLockKey, startSessionId)

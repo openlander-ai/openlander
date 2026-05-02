@@ -83,7 +83,7 @@ interface RecoveryPostmortemAutomationOptions {
   eventBus: EventBus;
   db: PostmortemProjectLookup;
   getPostmortem: () => PostmortemGeneratorLike | null;
-  isEligible?: (projectId: string) => boolean;
+  isEligible?: (projectId: string) => boolean | Promise<boolean>;
   delayMs?: number;
 }
 
@@ -112,17 +112,19 @@ export function setupRecoveryPostmortemAutomation({
       void (async () => {
         postmortemTimers.delete(payload.projectId);
 
-        const project = db.getProject(payload.projectId);
+        const project = await db.getProject(payload.projectId);
         // PR 4.5: canonical-first status read with `??` fallback to legacy
         // `projects` column through migration 0012.
-        const deployable = project ? db.getDeployableForProject(payload.projectId) : undefined;
+        const deployable = project
+          ? await db.getDeployableForProject(payload.projectId)
+          : undefined;
         // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
         const status = deployable?.status ?? project?.status;
         if (!project || status !== 'running') {
           return;
         }
 
-        if (isEligible && !isEligible(payload.projectId)) {
+        if (isEligible && !(await isEligible(payload.projectId))) {
           log.info({ projectId: payload.projectId }, 'Auto-postmortem skipped: not eligible');
           return;
         }
@@ -221,22 +223,22 @@ export interface AppContext {
  * existing projects that have no resource config in deploy_configs.
  * Idempotent — safe to run on every startup.
  */
-function migrateDefaultResourceProfile(db: Database): void {
-  const allProjects = db.listProjects(undefined, { includeArchived: true });
+async function migrateDefaultResourceProfile(db: Database): Promise<void> {
+  const allProjects = await db.listProjects(undefined, { includeArchived: true });
   let migratedCount = 0;
 
   for (const project of allProjects) {
-    const configRow = db.loadDeployConfig(project.id);
+    const configRow = await db.loadDeployConfig(project.id);
     if (!configRow) {
       const json = serializeConfig({ resourceProfile: 'small' });
-      db.saveDeployConfig(project.id, json, CONFIG_VERSION);
+      await db.saveDeployConfig(project.id, json, CONFIG_VERSION);
       migratedCount++;
     } else {
       const stored = deserializeConfig(configRow.config_json);
       if (stored && !stored.snapshot.resourceProfile) {
         const updatedSnapshot = { ...stored.snapshot, resourceProfile: 'small' as const };
         const json = serializeConfig(updatedSnapshot);
-        db.saveDeployConfig(project.id, json, CONFIG_VERSION);
+        await db.saveDeployConfig(project.id, json, CONFIG_VERSION);
         migratedCount++;
       }
     }
@@ -250,10 +252,10 @@ function migrateDefaultResourceProfile(db: Database): void {
 /** Create the application context from config. */
 export async function createAppContext(
   config: OpenLanderConfig,
-  dbPath: string,
+  databaseUrl: string,
 ): Promise<AppContext> {
-  const db = new Database(dbPath);
-  migrateDefaultResourceProfile(db);
+  const db = await Database.connect(databaseUrl);
+  await migrateDefaultResourceProfile(db);
   const docker = new Docker(config.docker.socketPath || undefined, config.docker.networkName);
   const serverContext = createLocalServerContext(docker);
 
@@ -430,10 +432,10 @@ export async function createAppContext(
     language: config.language,
     config,
     shouldContinue: (projectId) => coordinator.shouldContinue(projectId),
-    getAutomationPolicy: (projectId) => {
+    getAutomationPolicy: async (projectId) => {
       // Use live opsAgent config (hot-reloaded) instead of bootstrap config.ops
       const opsConfig = ctx.opsAgent?.getConfig() ?? config.ops;
-      const override = db.getProjectOpsOverride(projectId);
+      const override = await db.getProjectOpsOverride(projectId);
       return resolveAutomationPolicy(opsConfig, override ?? undefined);
     },
     // 1.0 GA: route recovery through the per-project lock so two different
@@ -676,8 +678,14 @@ export async function createAppContext(
       const cutoff = new Date(
         Date.now() - ACTIVITY_LOG_TTL_DAYS * 24 * 60 * 60 * 1000,
       ).toISOString();
-      const deleted = db.deleteActivityLogOlderThan(cutoff);
-      if (deleted > 0) log.info({ deleted }, 'Activity log cleanup completed');
+      void db
+        .deleteActivityLogOlderThan(cutoff)
+        .then((deleted) => {
+          if (deleted > 0) log.info({ deleted }, 'Activity log cleanup completed');
+        })
+        .catch((err: unknown) => {
+          log.error({ err }, 'Activity log cleanup failed');
+        });
     } catch (err) {
       log.error({ err }, 'Activity log cleanup failed');
     }
@@ -699,7 +707,7 @@ export async function createAppContext(
 }
 
 /** Shutdown the application context. */
-export function shutdownAppContext(ctx: AppContext): void {
+export async function shutdownAppContext(ctx: AppContext): Promise<void> {
   activeIncidentReporter?.stop();
   activeActivityLogger?.stop();
   activeAiUsageListener?.stop();
@@ -726,6 +734,6 @@ export function shutdownAppContext(ctx: AppContext): void {
   void ctx.channelManager.stop();
   void ctx.previewDeployer.cleanupAll();
   ctx.approvalGate.dispose();
-  ctx.db.close();
+  await ctx.db.close();
   void ctx.mcpClientManager.disconnectAll();
 }

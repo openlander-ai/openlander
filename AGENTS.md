@@ -19,7 +19,7 @@ CLI (Commander)  →  AppContext  →  Hono HTTP Server
                 ↓                       │
             Database                    │
          (Drizzle ORM +                 │
-          SQLite + Repos)               │
+          Postgres + Repos)             │
                 │                       │
          Recovery Layer                 │
          (RecoveryCoordinator,          │
@@ -288,7 +288,7 @@ ctx.db.projects.findById(id)
 ctx.db.deployLogs.create(data)
 ```
 
-Schema defined in `src/db/schema.drizzle.ts` (Drizzle ORM + SQLite).
+Schema defined in `src/db/schema.drizzle.ts` (Drizzle ORM + Postgres).
 
 ### ToolDef System (MCP + AI SDK)
 
@@ -352,7 +352,7 @@ All new code MUST import from `docker.ts` (or `docker/facade.ts`), never raw doc
 
 ### EventBus
 
-`src/events/index.ts` — Decouples modules. 66 event types (`deploy:start`, `deploy:success`, `container:crash`, etc.).
+`src/events/index.ts` — Decouples modules. 70 event types (`deploy:start`, `deploy:success`, `container:crash`, etc.).
 
 ### Deploy Pipeline (3-Step Flow)
 

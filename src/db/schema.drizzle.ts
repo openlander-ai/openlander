@@ -1,14 +1,15 @@
 import { sql } from 'drizzle-orm';
 import {
   check,
+  bigint,
   index,
   integer,
   real,
-  sqliteTable,
+  pgTable,
   text,
   uniqueIndex,
-  type AnySQLiteColumn,
-} from 'drizzle-orm/sqlite-core';
+  type AnyPgColumn,
+} from 'drizzle-orm/pg-core';
 
 /**
  * Post-0012 `projects` table — group-only shape.
@@ -18,21 +19,21 @@ import {
  * per ADR §"Deploy-lock relocation" option (c); 1.2 follow-up moves locks
  * to a dedicated table).
  */
-export const projects = sqliteTable('projects', {
+export const projects = pgTable('projects', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),
   repo_url: text('repo_url'),
   branch: text('branch').default('main'),
   archived_at: text('archived_at'),
-  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-  updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  created_at: text('created_at').default(sql`now()::text`),
+  updated_at: text('updated_at').default(sql`now()::text`),
   server_id: text('server_id').notNull().default('local'),
   // Deploy lock (group-scoped — see ADR §"Deploy-lock relocation").
   deploy_lock_session: text('deploy_lock_session'),
   deploy_lock_at: text('deploy_lock_at'),
 });
 
-export const environments = sqliteTable(
+export const environments = pgTable(
   'environments',
   {
     id: text('id').primaryKey(),
@@ -51,8 +52,8 @@ export const environments = sqliteTable(
     previous_image_tag: text('previous_image_tag'),
     public_url: text('public_url'),
     container_port: integer('container_port'),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
+    updated_at: text('updated_at').default(sql`now()::text`),
     server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
@@ -66,7 +67,7 @@ export const environments = sqliteTable(
   ],
 );
 
-export const envVars = sqliteTable(
+export const envVars = pgTable(
   'env_vars',
   {
     id: text('id').primaryKey(),
@@ -86,7 +87,7 @@ export const envVars = sqliteTable(
     }),
     key: text('key').notNull(),
     value: text('value').notNull(),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
   },
   (table) => [
     uniqueIndex('env_vars_project_key_unique').on(table.project_id, table.key),
@@ -95,7 +96,7 @@ export const envVars = sqliteTable(
   ],
 );
 
-export const deployLogs = sqliteTable(
+export const deployLogs = pgTable(
   'deploy_logs',
   {
     id: text('id').primaryKey(),
@@ -114,7 +115,7 @@ export const deployLogs = sqliteTable(
     build_log: text('build_log'),
     runtime_log: text('runtime_log'),
     duration_ms: integer('duration_ms'),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
     server_id: text('server_id').notNull().default('local'),
   },
   (table) => [
@@ -125,7 +126,7 @@ export const deployLogs = sqliteTable(
   ],
 );
 
-export const timelineEvents = sqliteTable(
+export const timelineEvents = pgTable(
   'timeline_events',
   {
     id: text('id').primaryKey(),
@@ -140,12 +141,12 @@ export const timelineEvents = sqliteTable(
     percent: integer('percent'),
     tool_name: text('tool_name'),
     action_buttons: text('action_buttons'),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
   },
   (table) => [index('idx_timeline_project').on(table.project_id, table.created_at)],
 );
 
-export const domainMappings = sqliteTable(
+export const domainMappings = pgTable(
   'domain_mappings',
   {
     id: text('id').primaryKey(),
@@ -157,7 +158,7 @@ export const domainMappings = sqliteTable(
     cloudflare_zone_id: text('cloudflare_zone_id'),
     cloudflare_dns_record_id: text('cloudflare_dns_record_id'),
     status: text('status', { enum: ['active', 'pending', 'error'] }).default('active'),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
   },
   (table) => [
     check('domain_mappings_status_check', sql`${table.status} IN ('active', 'pending', 'error')`),
@@ -165,7 +166,7 @@ export const domainMappings = sqliteTable(
   ],
 );
 
-export const oauthTokens = sqliteTable(
+export const oauthTokens = pgTable(
   'oauth_tokens',
   {
     id: text('id').primaryKey(),
@@ -177,13 +178,13 @@ export const oauthTokens = sqliteTable(
     auth_method: text('auth_method').default('manual'),
     user_email: text('user_email'),
     iv: text('iv'),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
+    updated_at: text('updated_at').default(sql`now()::text`),
   },
   (table) => [index('idx_oauth_tokens_provider').on(table.provider)],
 );
 
-export const webhookConfigs = sqliteTable(
+export const webhookConfigs = pgTable(
   'webhook_configs',
   {
     id: text('id').primaryKey(),
@@ -194,7 +195,7 @@ export const webhookConfigs = sqliteTable(
     secret: text('secret').notNull(),
     branch_filter: text('branch_filter').default('main'),
     enabled: integer('enabled').default(1),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
   },
   (table) => [
     check(
@@ -207,7 +208,7 @@ export const webhookConfigs = sqliteTable(
   ],
 );
 
-export const globalSecrets = sqliteTable(
+export const globalSecrets = pgTable(
   'global_secrets',
   {
     id: text('id').primaryKey(),
@@ -215,8 +216,8 @@ export const globalSecrets = sqliteTable(
     encrypted_value: text('encrypted_value').notNull(),
     iv: text('iv').notNull(),
     description: text('description'),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
+    updated_at: text('updated_at').default(sql`now()::text`),
   },
   (table) => [index('idx_global_secrets_key').on(table.key)],
 );
@@ -229,7 +230,7 @@ export const globalSecrets = sqliteTable(
  * per ADR §"services legacy column rename strategy" (deferred to 1.1
  * paired with managed-services secret refactor).
  */
-export const services = sqliteTable(
+export const services = pgTable(
   'services',
   {
     id: text('id').primaryKey(),
@@ -250,7 +251,7 @@ export const services = sqliteTable(
         'minio',
       ],
     }).notNull(),
-    parent_service_id: text('parent_service_id').references((): AnySQLiteColumn => services.id, {
+    parent_service_id: text('parent_service_id').references((): AnyPgColumn => services.id, {
       onDelete: 'cascade',
     }),
     // Deployable-specific (NULL for managed)
@@ -287,8 +288,8 @@ export const services = sqliteTable(
      */
     credentials: text('credentials'),
     // Common
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
+    updated_at: text('updated_at').default(sql`now()::text`),
     archived_at: text('archived_at'),
     server_id: text('server_id').notNull().default('local'),
   },
@@ -325,7 +326,7 @@ export type ServiceKind =
  * service_id_provider in migration 0012 Phase D. Legacy project_id +
  * service_id columns dropped in the same phase.
  */
-export const serviceConnections = sqliteTable(
+export const serviceConnections = pgTable(
   'service_connections',
   {
     id: text('id')
@@ -356,7 +357,7 @@ export const serviceConnections = sqliteTable(
   ],
 );
 
-export const runtimeIncidents = sqliteTable(
+export const runtimeIncidents = pgTable(
   'runtime_incidents',
   {
     id: text('id')
@@ -371,7 +372,7 @@ export const runtimeIncidents = sqliteTable(
     exit_code: integer('exit_code'),
     error_snippet: text('error_snippet'),
     container_image: text('container_image'),
-    container_uptime_ms: integer('container_uptime_ms'),
+    container_uptime_ms: bigint('container_uptime_ms', { mode: 'number' }),
     restart_count: integer('restart_count'),
     diagnosis: text('diagnosis'),
     resolved: integer('resolved').notNull().default(0),
@@ -387,7 +388,7 @@ export const runtimeIncidents = sqliteTable(
   ],
 );
 
-export const deploy_configs = sqliteTable(
+export const deploy_configs = pgTable(
   'deploy_configs',
   {
     id: text('id').primaryKey(),
@@ -398,8 +399,8 @@ export const deploy_configs = sqliteTable(
       .references(() => services.id, { onDelete: 'cascade' }),
     config_json: text('config_json').notNull(),
     config_version: integer('config_version').notNull().default(1),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
+    updated_at: text('updated_at').default(sql`now()::text`),
   },
   (table) => [index('idx_deploy_configs_service').on(table.service_id)],
 );
@@ -408,7 +409,7 @@ export const deploy_configs = sqliteTable(
  * Post-0012 service_ops_overrides — service-scoped overrides.
  * Renamed from project_ops_overrides in 0009; FK fully repointed in 0012.
  */
-export const serviceOpsOverrides = sqliteTable(
+export const serviceOpsOverrides = pgTable(
   'service_ops_overrides',
   {
     id: text('id').primaryKey(),
@@ -418,8 +419,8 @@ export const serviceOpsOverrides = sqliteTable(
       .unique()
       .references(() => services.id, { onDelete: 'cascade' }),
     overrides_json: text('overrides_json').notNull(),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
+    updated_at: text('updated_at').default(sql`now()::text`),
   },
   (table) => [index('idx_service_ops_overrides_service').on(table.service_id)],
 );
@@ -427,7 +428,7 @@ export const serviceOpsOverrides = sqliteTable(
 /** Back-compat alias for the renamed table; existing repo references this name. */
 export const project_ops_overrides = serviceOpsOverrides;
 
-export const secretFiles = sqliteTable(
+export const secretFiles = pgTable(
   'secret_files',
   {
     id: text('id').primaryKey(),
@@ -436,8 +437,8 @@ export const secretFiles = sqliteTable(
     encrypted_content: text('encrypted_content').notNull(),
     iv: text('iv').notNull(),
     mount_path: text('mount_path').notNull().default('/run/secrets'),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
+    updated_at: text('updated_at').default(sql`now()::text`),
   },
   (table) => [
     index('idx_secret_files_project').on(table.project_id),
@@ -445,7 +446,7 @@ export const secretFiles = sqliteTable(
   ],
 );
 
-export const deployPlans = sqliteTable(
+export const deployPlans = pgTable(
   'deploy_plans',
   {
     id: text('id').primaryKey(),
@@ -456,8 +457,8 @@ export const deployPlans = sqliteTable(
     plan_json: text('plan_json').notNull(),
     commit_sha: text('commit_sha'),
     error_message: text('error_message'),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    created_at: text('created_at').default(sql`now()::text`),
+    updated_at: text('updated_at').default(sql`now()::text`),
     executed_at: text('executed_at'),
     completed_at: text('completed_at'),
     server_id: text('server_id').notNull().default('local'),
@@ -468,7 +469,7 @@ export const deployPlans = sqliteTable(
   ],
 );
 
-export const auth = sqliteTable(
+export const auth = pgTable(
   'auth',
   {
     id: integer('id').primaryKey().default(1),
@@ -476,13 +477,13 @@ export const auth = sqliteTable(
     api_token: text('api_token').notNull(),
     api_token_iv: text('api_token_iv'),
     session_token: text('session_token'),
-    session_created_at: integer('session_created_at'),
-    session_expires_at: integer('session_expires_at'),
+    session_created_at: bigint('session_created_at', { mode: 'number' }),
+    session_expires_at: bigint('session_expires_at', { mode: 'number' }),
   },
   (table) => [check('auth_id_check', sql`${table.id} = 1`)],
 );
 
-export const aiUsageLog = sqliteTable(
+export const aiUsageLog = pgTable(
   'ai_usage_log',
   {
     id: text('id').notNull().primaryKey(),
@@ -522,7 +523,7 @@ export const aiUsageLog = sqliteTable(
   ],
 );
 
-export const actionRuns = sqliteTable(
+export const actionRuns = pgTable(
   'action_runs',
   {
     id: text('id').notNull().primaryKey(),
@@ -561,7 +562,7 @@ export const actionRuns = sqliteTable(
   ],
 );
 
-export const deploymentPatterns = sqliteTable(
+export const deploymentPatterns = pgTable(
   'deployment_patterns',
   {
     id: text('id').notNull().primaryKey(),
@@ -580,7 +581,7 @@ export const deploymentPatterns = sqliteTable(
   ],
 );
 
-export const opsIncidents = sqliteTable(
+export const opsIncidents = pgTable(
   'ops_incidents',
   {
     id: text('id').primaryKey(),
@@ -592,9 +593,9 @@ export const opsIncidents = sqliteTable(
     root_cause: text('root_cause'),
     diagnosis: text('diagnosis'),
     actions_taken: text('actions_taken'),
-    created_at: integer('created_at').notNull(),
-    resolved_at: integer('resolved_at'),
-    escalated_at: integer('escalated_at'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    resolved_at: bigint('resolved_at', { mode: 'number' }),
+    escalated_at: bigint('escalated_at', { mode: 'number' }),
   },
   (table) => [
     check(
@@ -610,7 +611,7 @@ export const opsIncidents = sqliteTable(
   ],
 );
 
-export const opsIncidentEvents = sqliteTable(
+export const opsIncidentEvents = pgTable(
   'ops_incident_events',
   {
     id: text('id').primaryKey(),
@@ -629,7 +630,7 @@ export const opsIncidentEvents = sqliteTable(
     }).notNull(),
     description: text('description').notNull(),
     metadata: text('metadata'),
-    created_at: integer('created_at').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (table) => [
     check(
@@ -640,17 +641,17 @@ export const opsIncidentEvents = sqliteTable(
   ],
 );
 
-export const circuitBreakerState = sqliteTable(
+export const circuitBreakerState = pgTable(
   'circuit_breaker_state',
   {
     project_id: text('project_id').primaryKey(),
     failure_count: integer('failure_count').notNull().default(0),
-    last_failure_at: integer('last_failure_at'),
-    opened_at: integer('opened_at'),
+    last_failure_at: bigint('last_failure_at', { mode: 'number' }),
+    opened_at: bigint('opened_at', { mode: 'number' }),
     state: text('state', { enum: ['closed', 'open', 'half_open'] })
       .notNull()
       .default('closed'),
-    reset_at: integer('reset_at'),
+    reset_at: bigint('reset_at', { mode: 'number' }),
   },
   (table) => [
     check('circuit_breaker_state_check', sql`${table.state} IN ('closed', 'open', 'half_open')`),
@@ -663,7 +664,7 @@ export const circuitBreakerState = sqliteTable(
  * Phase E dropped legacy source_project_id, target_project_id, and the
  * additive target_managed_service_id was promoted to target_service_id.
  */
-export const projectDependencies = sqliteTable(
+export const projectDependencies = pgTable(
   'project_dependencies',
   {
     id: text('id').notNull().primaryKey(),
@@ -692,14 +693,14 @@ export const projectDependencies = sqliteTable(
  * Post-0012 the table accumulates 45 additional rows recording column drops,
  * FK repoints, and UNIQUE rebuilds done by 0012 Phases C/D/E/G/H.
  */
-export const migration0009Audit = sqliteTable('migration_0009_audit', {
+export const migration0009Audit = pgTable('migration_0009_audit', {
   phase: text('phase').notNull(),
   source_table: text('source_table').notNull(),
   source_id: text('source_id').notNull(),
   target_table: text('target_table').notNull(),
   target_id: text('target_id').notNull(),
   kind: text('kind'),
-  created_at: integer('created_at').notNull(),
+  created_at: bigint('created_at', { mode: 'number' }).notNull(),
 });
 
 export type Migration0009AuditRow = typeof migration0009Audit.$inferSelect;
@@ -733,14 +734,14 @@ export type NewCircuitBreaker = typeof circuitBreakerState.$inferInsert;
  * (which is a single row per service representing the most-recent
  * snapshot) because the v4 sparkline needs historical retention.
  */
-export const serviceMetrics = sqliteTable(
+export const serviceMetrics = pgTable(
   'service_metrics',
   {
     service_id: text('service_id')
       .notNull()
       .references(() => services.id, { onDelete: 'cascade' }),
     /** Wall-clock millisecond timestamp of the sample (epoch ms). */
-    recorded_at: integer('recorded_at').notNull(),
+    recorded_at: bigint('recorded_at', { mode: 'number' }).notNull(),
     /** CPU percent, 0–100*N where N is core count. */
     cpu: real('cpu').notNull().default(0),
     /** Memory usage in MB. */
@@ -769,12 +770,12 @@ export type NewServiceMetric = typeof serviceMetrics.$inferInsert;
  * dedicated table. Value is opaque JSON text — callers parse against
  * their own schema.
  */
-export const settings = sqliteTable(
+export const settings = pgTable(
   'settings',
   {
     key: text('key').primaryKey(),
     value: text('value').notNull(),
-    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    updated_at: text('updated_at').default(sql`now()::text`),
   },
   (_table) => [],
 );
@@ -782,7 +783,7 @@ export const settings = sqliteTable(
 export type SettingsRow = typeof settings.$inferSelect;
 export type NewSetting = typeof settings.$inferInsert;
 
-export const activityLog = sqliteTable(
+export const activityLog = pgTable(
   'activity_log',
   {
     id: text('id').primaryKey(),
@@ -813,14 +814,14 @@ export type NewActivityLog = typeof activityLog.$inferInsert;
  * powers `mcp_disconnected` synthesis on the v4 /api/activity feed (live
  * sessions are read directly from the in-memory snapshot).
  */
-export const mcpSessionLog = sqliteTable(
+export const mcpSessionLog = pgTable(
   'mcp_session_log',
   {
     id: text('id').primaryKey(),
     session_id: text('session_id').notNull(),
     transport: text('transport', { enum: ['http', 'sse'] }).notNull(),
-    connected_at: integer('connected_at').notNull(),
-    disconnected_at: integer('disconnected_at').notNull(),
+    connected_at: bigint('connected_at', { mode: 'number' }).notNull(),
+    disconnected_at: bigint('disconnected_at', { mode: 'number' }).notNull(),
     client_info: text('client_info'),
   },
   (table) => [index('idx_mcp_session_log_disconnected_at').on(table.disconnected_at)],

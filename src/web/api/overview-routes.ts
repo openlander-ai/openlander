@@ -9,7 +9,7 @@ const log = createModuleLogger('overview-routes');
 export function createOverviewRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
-  api.get('/overview/stats', (c) => {
+  api.get('/overview/stats', async (c) => {
     let activeDeploys = 0;
     let activeRecoveries = 0;
     let pendingApprovals = 0;
@@ -24,7 +24,7 @@ export function createOverviewRoutes(ctx: AppContext): Hono {
     }
 
     try {
-      const activeIncidents = ctx.db.listAllActiveOpsIncidents();
+      const activeIncidents = await ctx.db.listAllActiveOpsIncidents();
       for (const incident of activeIncidents) {
         if (incident.status === 'active') {
           activeRecoveries++;
@@ -37,13 +37,13 @@ export function createOverviewRoutes(ctx: AppContext): Hono {
     }
 
     try {
-      pendingApprovals = ctx.db.getActionRunsByApprovalStatus('pending').length;
+      pendingApprovals = (await ctx.db.getActionRunsByApprovalStatus('pending')).length;
     } catch (err) {
       log.warn({ err }, 'Failed to get pending approvals count');
     }
 
     try {
-      const allServices = ctx.db.listServices();
+      const allServices = await ctx.db.listServices();
       unhealthyServices = allServices.filter((s) => s.status !== 'running').length;
     } catch (err) {
       log.warn({ err }, 'Failed to get unhealthy services count');
@@ -54,7 +54,7 @@ export function createOverviewRoutes(ctx: AppContext): Hono {
       const startOfToday = new Date(
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
       );
-      const summary = ctx.db.getAiTokenSummaryFiltered({ from: startOfToday, to: now });
+      const summary = await ctx.db.getAiTokenSummaryFiltered({ from: startOfToday, to: now });
       aiSpendToday = Math.round((summary.totalCostUsd ?? 0) * 100) / 100;
     } catch (err) {
       log.warn({ err }, 'Failed to get AI spend today');

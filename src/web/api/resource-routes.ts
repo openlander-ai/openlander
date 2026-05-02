@@ -76,10 +76,10 @@ export function createResourceRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   // GET /api/projects/:id/resources
-  api.get('/projects/:id/resources', (c) => {
-    const project = getProjectOrThrow(c, ctx);
+  api.get('/projects/:id/resources', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
 
-    const configRow = ctx.db.loadDeployConfig(project.id);
+    const configRow = await ctx.db.loadDeployConfig(project.id);
     let snapshot: DeployConfigSnapshot = {};
 
     if (configRow) {
@@ -105,7 +105,7 @@ export function createResourceRoutes(ctx: AppContext): Hono {
 
   // PATCH /api/projects/:id/resources
   api.patch('/projects/:id/resources', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     const body: unknown = await c.req.json();
     const parsed = UpdateResourceLimitsSchema.safeParse(body);
@@ -158,7 +158,7 @@ export function createResourceRoutes(ctx: AppContext): Hono {
       newMemoryLimitBytes = RESOURCE_PROFILES[profile].memoryLimitBytes;
     }
 
-    const configRow = ctx.db.loadDeployConfig(project.id);
+    const configRow = await ctx.db.loadDeployConfig(project.id);
     let snapshot: DeployConfigSnapshot = {};
     if (configRow) {
       const stored = deserializeConfig(configRow.config_json);
@@ -170,7 +170,7 @@ export function createResourceRoutes(ctx: AppContext): Hono {
     snapshot.resourceProfile = newResourceProfile;
     snapshot.memoryLimitBytes = newMemoryLimitBytes;
 
-    ctx.db.saveDeployConfig(project.id, serializeConfig(snapshot), CONFIG_VERSION);
+    await ctx.db.saveDeployConfig(project.id, serializeConfig(snapshot), CONFIG_VERSION);
 
     return c.json(buildResourceResponse(snapshot));
   });

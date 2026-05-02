@@ -46,7 +46,7 @@ async function transitionProjectState(
 ): Promise<void> {
   await deps.stateManager.transition(projectId, targetStatus, reason);
   if (Object.keys(updates).length > 0) {
-    deps.db.updateProject(projectId, updates);
+    await deps.db.updateProject(projectId, updates);
   }
 }
 
@@ -69,7 +69,7 @@ export async function deployMonorepoService(
   const childStartTime = Date.now();
   const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
-  deps.db.createProject({
+  await deps.db.createProject({
     id: childId,
     name: childName,
     repoUrl: config.repoUrl,
@@ -121,7 +121,7 @@ export async function deployMonorepoService(
 
   try {
     deps.jobManager?.updatePhase(childId, 'building');
-    const envVars = resolveEnvVars(
+    const envVars = await resolveEnvVars(
       {
         projectId: childId,
         inlineEnvVars: config.envVars,
@@ -184,7 +184,7 @@ export async function deployMonorepoService(
       projectId: childId,
       containerPort: childContainerPort,
       envVars,
-      secretFiles: deps.env.getSecretFilesForDeploy(childId),
+      secretFiles: await deps.env.getSecretFilesForDeploy(childId),
       restartPolicy: { Name: 'unless-stopped' },
     });
     const { containerId, port, url: internalUrl } = runResult;
@@ -208,7 +208,7 @@ export async function deployMonorepoService(
       visibility: config.visibility ?? 'internal',
     });
 
-    deps.db.createDeployLog({
+    await deps.db.createDeployLog({
       id: nanoid(12),
       projectId: childId,
       status: 'success',
@@ -270,7 +270,7 @@ export async function deployMonorepoService(
       durationMs: Date.now() - childStartTime,
     });
 
-    deps.db.createDeployLog({
+    await deps.db.createDeployLog({
       id: nanoid(12),
       projectId: childId,
       status: 'failed',
@@ -310,13 +310,13 @@ export async function rollbackMonorepoService(
   if (!service.projectId) {
     return;
   }
-  const project = deps.db.getProject(service.projectId);
+  const project = await deps.db.getProject(service.projectId);
   if (!project) {
     return;
   }
 
   // PR 4.5: canonical-first read of container_id with `??` fallback.
-  const deployable = deps.db.getDeployableForProject(service.projectId);
+  const deployable = await deps.db.getDeployableForProject(service.projectId);
   const containerId = deployable?.container_id ?? project.container_id;
   if (containerId) {
     try {
@@ -338,7 +338,7 @@ export async function rollbackMonorepoService(
     'Rolled back due to dependency deployment failure',
   );
 
-  deps.db.createDeployLog({
+  await deps.db.createDeployLog({
     id: nanoid(12),
     projectId: service.projectId,
     status: 'failed',

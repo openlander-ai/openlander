@@ -113,14 +113,14 @@ const BUILD_FAILURE_PATTERNS: Array<{
  * @param input - The deploy request (repoUrl, branch, name)
  * @returns SmartDefaultsResult with suggestions
  */
-export function generateSmartDefaults(
+export async function generateSmartDefaults(
   db: Database,
   input: SmartDefaultsInput,
-): SmartDefaultsResult {
+): Promise<SmartDefaultsResult> {
   const suggestions: SmartDefault[] = [];
 
   // Find a previous project with the same repo URL or name
-  const previousProject = findPreviousProject(db, input);
+  const previousProject = await findPreviousProject(db, input);
   if (!previousProject) {
     return { hasSuggestions: false, suggestions };
   }
@@ -131,25 +131,25 @@ export function generateSmartDefaults(
   );
 
   // 1. Port reuse suggestion
-  const portSuggestion = suggestPort(db, previousProject);
+  const portSuggestion = await suggestPort(db, previousProject);
   if (portSuggestion) {
     suggestions.push(portSuggestion);
   }
 
   // 2. Environment variables reuse
-  const envSuggestion = suggestEnvVars(db, previousProject);
+  const envSuggestion = await suggestEnvVars(db, previousProject);
   if (envSuggestion) {
     suggestions.push(envSuggestion);
   }
 
   // 3. Git clone reuse (project still exists → git pull instead)
-  const cloneSuggestion = suggestCloneReuse(db, previousProject);
+  const cloneSuggestion = await suggestCloneReuse(db, previousProject);
   if (cloneSuggestion) {
     suggestions.push(cloneSuggestion);
   }
 
   // 4. Build failure workarounds
-  const buildFixSuggestion = suggestBuildFix(db, previousProject);
+  const buildFixSuggestion = await suggestBuildFix(db, previousProject);
   if (buildFixSuggestion) {
     suggestions.push(buildFixSuggestion);
   }
@@ -169,15 +169,18 @@ export function generateSmartDefaults(
  * Find a previous project matching the deploy request.
  * Matches by name first (exact), then by repo URL prefix.
  */
-function findPreviousProject(db: Database, input: SmartDefaultsInput): ProjectRow | undefined {
+async function findPreviousProject(
+  db: Database,
+  input: SmartDefaultsInput,
+): Promise<ProjectRow | undefined> {
   // Match by name if provided
   if (input.name) {
-    const byName = db.getProjectByName(input.name);
+    const byName = await db.getProjectByName(input.name);
     if (byName) return byName;
   }
 
   // Match by repo URL across all projects
-  const allProjects = db.listProjects();
+  const allProjects = await db.listProjects();
   const normalizedUrl = normalizeUrl(input.repoUrl);
 
   return allProjects.find((p) => {
@@ -197,9 +200,9 @@ function normalizeUrl(url: string): string {
 }
 
 /** Suggest reusing the previous port assignment. */
-function suggestPort(db: Database, project: ProjectRow): SmartDefault | null {
+async function suggestPort(db: Database, project: ProjectRow): Promise<SmartDefault | null> {
   // PR 4.5: canonical-first read of assigned_port with `??` fallback.
-  const deployable = db.getDeployableForProject(project.id);
+  const deployable = await db.getDeployableForProject(project.id);
   const assignedPort = deployable?.assigned_port ?? project.assigned_port;
   if (assignedPort == null) return null;
 
@@ -212,8 +215,8 @@ function suggestPort(db: Database, project: ProjectRow): SmartDefault | null {
 }
 
 /** Suggest reusing previous environment variables. */
-function suggestEnvVars(db: Database, project: ProjectRow): SmartDefault | null {
-  const envVars = db.getEnvVars(project.id);
+async function suggestEnvVars(db: Database, project: ProjectRow): Promise<SmartDefault | null> {
+  const envVars = await db.getEnvVars(project.id);
   const keys = Object.keys(envVars);
 
   if (keys.length === 0) return null;
@@ -237,9 +240,9 @@ function suggestEnvVars(db: Database, project: ProjectRow): SmartDefault | null 
  * Suggest git pull instead of fresh clone if the project already exists.
  * Only applicable when the project is in a non-error state and has a container.
  */
-function suggestCloneReuse(db: Database, project: ProjectRow): SmartDefault | null {
+async function suggestCloneReuse(db: Database, project: ProjectRow): Promise<SmartDefault | null> {
   // PR 4.5: canonical-first reads with `??` fallback.
-  const deployable = db.getDeployableForProject(project.id);
+  const deployable = await db.getDeployableForProject(project.id);
   const status = deployable?.status ?? project.status;
   const containerId = deployable?.container_id ?? project.container_id;
 
@@ -256,8 +259,8 @@ function suggestCloneReuse(db: Database, project: ProjectRow): SmartDefault | nu
 }
 
 /** Suggest build fixes based on previous failure logs. */
-function suggestBuildFix(db: Database, project: ProjectRow): SmartDefault | null {
-  const logs = db.getDeployLogs(project.id, MAX_LOGS_TO_SCAN);
+async function suggestBuildFix(db: Database, project: ProjectRow): Promise<SmartDefault | null> {
+  const logs = await db.getDeployLogs(project.id, MAX_LOGS_TO_SCAN);
 
   // Find the most recent failed deploy
   const failedLog = logs.find((l: DeployLogRow) => l.status === 'failed');

@@ -44,6 +44,8 @@ export class AlertMonitor {
   private readonly options: Required<AlertMonitorOptions>;
   private readonly alerts = new Map<string, Alert>();
   private readonly alertKeys = new Map<string, string>();
+  private readonly incidentAlerts = new Map<string, Alert>();
+  private incidentRefreshInFlight = false;
   private started = false;
   private hourlyCounts: number[] = [];
   private lastAlertTime = 0;
@@ -84,8 +86,6 @@ export class AlertMonitor {
   getActiveAlerts(): Alert[] {
     const memoryAlerts = Array.from(this.alerts.values()).filter((a) => !a.dismissed);
 
-    const openIncidents = this.db.listAllActiveOpsIncidents();
-
     const memoryAlertProjectIds = new Set(
       memoryAlerts
         .filter((a) => a.type === 'container-crash')
@@ -93,25 +93,51 @@ export class AlertMonitor {
         .filter(Boolean),
     );
 
-    for (const inc of openIncidents) {
-      if (memoryAlertProjectIds.has(inc.project_id)) continue;
+    void this.refreshIncidentAlerts().catch((err: unknown) => {
+      log.warn({ err }, 'Failed to refresh active incident alerts');
+    });
 
-      const project = this.db.getProject(inc.project_id);
-      const projectName = project?.name ?? inc.project_id;
+    const incidentAlerts = Array.from(this.incidentAlerts.values()).filter((alert) => {
+      const projectId = (alert.details as { projectId?: string }).projectId;
+      return projectId ? !memoryAlertProjectIds.has(projectId) : true;
+    });
 
-      memoryAlerts.push({
-        id: inc.id,
-        type: 'container-crash',
-        severity: inc.severity === 'info' ? 'warning' : inc.severity,
-        message: `Incident: ${projectName} — ${inc.root_cause ?? inc.status}`,
-        details: { projectId: inc.project_id, incidentId: inc.id, source: 'ops_incidents' },
-        suggestion: `Check ops incidents for project "${projectName}". Use get_logs to investigate.`,
-        createdAt: new Date(inc.created_at),
-        dismissed: false,
-      });
+    return [...memoryAlerts, ...incidentAlerts];
+  }
+
+  private async refreshIncidentAlerts(): Promise<void> {
+    if (this.incidentRefreshInFlight) {
+      return;
     }
 
-    return memoryAlerts;
+    this.incidentRefreshInFlight = true;
+    try {
+      const openIncidents = await this.db.listAllActiveOpsIncidents();
+      const nextIncidentAlerts = new Map<string, Alert>();
+
+      for (const inc of openIncidents) {
+        const project = await this.db.getProject(inc.project_id);
+        const projectName = project?.name ?? inc.project_id;
+
+        nextIncidentAlerts.set(inc.id, {
+          id: inc.id,
+          type: 'container-crash',
+          severity: inc.severity === 'info' ? 'warning' : inc.severity,
+          message: `Incident: ${projectName} — ${inc.root_cause ?? inc.status}`,
+          details: { projectId: inc.project_id, incidentId: inc.id, source: 'ops_incidents' },
+          suggestion: `Check ops incidents for project "${projectName}". Use get_logs to investigate.`,
+          createdAt: new Date(inc.created_at),
+          dismissed: false,
+        });
+      }
+
+      this.incidentAlerts.clear();
+      for (const [id, alert] of nextIncidentAlerts) {
+        this.incidentAlerts.set(id, alert);
+      }
+    } finally {
+      this.incidentRefreshInFlight = false;
+    }
   }
 
   dismissAlert(alertId: string): void {

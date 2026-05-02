@@ -28,16 +28,16 @@ export interface DeployLockOptions {
  * example, when an async event listener releases the lock after the call
  * returns. Prefer `withDeployLock` whenever possible.
  */
-export function acquireDeployLockOrThrow(
+export async function acquireDeployLockOrThrow(
   db: Pick<Database, 'acquireDeployLock' | 'getDeployLockInfo'>,
   opts: DeployLockOptions,
-): void {
-  const acquired = db.acquireDeployLock(opts.projectId, opts.sessionId);
+): Promise<void> {
+  const acquired = await db.acquireDeployLock(opts.projectId, opts.sessionId);
   if (acquired) {
     return;
   }
 
-  const lockInfo = db.getDeployLockInfo(opts.projectId);
+  const lockInfo = await db.getDeployLockInfo(opts.projectId);
   const lockedBy = lockInfo?.session ?? 'unknown';
   if (opts.onContention) {
     opts.onContention(lockedBy);
@@ -56,11 +56,11 @@ export async function withDeployLock<T>(
   opts: DeployLockOptions,
   fn: () => Promise<T>,
 ): Promise<T> {
-  acquireDeployLockOrThrow(db, opts);
+  await acquireDeployLockOrThrow(db, opts);
 
   try {
     return await fn();
   } finally {
-    db.releaseDeployLock(opts.projectId, opts.sessionId);
+    await db.releaseDeployLock(opts.projectId, opts.sessionId);
   }
 }

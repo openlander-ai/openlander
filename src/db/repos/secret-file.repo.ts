@@ -1,38 +1,42 @@
 import { and, eq, isNull, or, sql } from 'drizzle-orm';
 
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { secretFiles } from '../schema.drizzle.js';
 
 export class SecretFileRepo {
   private readonly db: DrizzleClient;
-  private readonly sqlite: SqliteDatabase;
+  private readonly client: PostgresClient;
 
-  constructor(db: DrizzleClient, sqlite: SqliteDatabase) {
+  constructor(db: DrizzleClient, client: PostgresClient) {
     this.db = db;
-    this.sqlite = sqlite;
-    void this.sqlite;
+    this.client = client;
+    void this.client;
   }
 
-  getSecretFiles(projectId: string | null): Array<{
-    id: string;
-    project_id: string | null;
-    filename: string;
-    encrypted_content: string;
-    iv: string;
-    mount_path: string;
-  }> {
+  async getSecretFiles(projectId: string | null): Promise<
+    Array<{
+      id: string;
+      project_id: string | null;
+      filename: string;
+      encrypted_content: string;
+      iv: string;
+      mount_path: string;
+    }>
+  > {
     const condition =
       projectId === null ? isNull(secretFiles.project_id) : eq(secretFiles.project_id, projectId);
-    return this.db.select().from(secretFiles).where(condition).all();
+    return await this.db.select().from(secretFiles).where(condition);
   }
 
-  getSecretFilesForDeploy(projectId: string): Array<{
-    filename: string;
-    encrypted_content: string;
-    iv: string;
-    mount_path: string;
-  }> {
-    return this.db
+  async getSecretFilesForDeploy(projectId: string): Promise<
+    Array<{
+      filename: string;
+      encrypted_content: string;
+      iv: string;
+      mount_path: string;
+    }>
+  > {
+    return await this.db
       .select({
         filename: secretFiles.filename,
         encrypted_content: secretFiles.encrypted_content,
@@ -40,52 +44,60 @@ export class SecretFileRepo {
         mount_path: secretFiles.mount_path,
       })
       .from(secretFiles)
-      .where(or(eq(secretFiles.project_id, projectId), isNull(secretFiles.project_id)))
-      .all();
+      .where(or(eq(secretFiles.project_id, projectId), isNull(secretFiles.project_id)));
   }
 
-  upsertSecretFile(
+  async upsertSecretFile(
     projectId: string | null,
     filename: string,
     encryptedContent: string,
     iv: string,
     mountPath: string = '/run/secrets',
-  ): void {
-    this.db
-      .insert(secretFiles)
-      .values({
-        id: sql<string>`lower(hex(randomblob(8)))`,
-        project_id: projectId,
-        filename,
-        encrypted_content: encryptedContent,
-        iv,
-        mount_path: mountPath,
-        updated_at: sql`CURRENT_TIMESTAMP`,
-      })
-      .onConflictDoUpdate({
-        target: [secretFiles.project_id, secretFiles.filename],
-        set: {
+  ): Promise<void> {
+    const whereClause =
+      projectId === null
+        ? and(isNull(secretFiles.project_id), eq(secretFiles.filename, filename))
+        : and(eq(secretFiles.project_id, projectId), eq(secretFiles.filename, filename));
+    const [selected] = await this.db
+      .select({ id: secretFiles.id })
+      .from(secretFiles)
+      .where(whereClause)
+      .limit(1);
+    const existing = selected ?? null;
+
+    if (existing) {
+      await this.db
+        .update(secretFiles)
+        .set({
           encrypted_content: encryptedContent,
           iv,
           mount_path: mountPath,
-          updated_at: sql`CURRENT_TIMESTAMP`,
-        },
-      })
-      .run();
+          updated_at: sql`now()::text`,
+        })
+        .where(eq(secretFiles.id, existing.id));
+      return;
+    }
+
+    await this.db.insert(secretFiles).values({
+      id: crypto.randomUUID(),
+      project_id: projectId,
+      filename,
+      encrypted_content: encryptedContent,
+      iv,
+      mount_path: mountPath,
+      updated_at: sql`now()::text`,
+    });
   }
 
-  deleteSecretFile(projectId: string | null, filename: string): boolean {
-    const existing = this.db
-      .select({ id: secretFiles.id })
-      .from(secretFiles)
-      .where(
-        projectId === null
-          ? and(isNull(secretFiles.project_id), eq(secretFiles.filename, filename))
-          : and(eq(secretFiles.project_id, projectId), eq(secretFiles.filename, filename)),
-      )
-      .get();
-    if (!existing) return false;
-    this.db.delete(secretFiles).where(eq(secretFiles.id, existing.id)).run();
-    return true;
+  async deleteSecretFile(projectId: string | null, filename: string): Promise<boolean> {
+    const whereClause =
+      projectId === null
+        ? and(isNull(secretFiles.project_id), eq(secretFiles.filename, filename))
+        : and(eq(secretFiles.project_id, projectId), eq(secretFiles.filename, filename));
+    const deleted = await this.db
+      .delete(secretFiles)
+      .where(whereClause)
+      .returning({ id: secretFiles.id });
+    return deleted.length > 0;
   }
 }

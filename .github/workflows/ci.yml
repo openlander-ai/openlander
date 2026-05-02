@@ -23,6 +23,24 @@ jobs:
   build:
     name: Lint, Type Check, Test & Build
     runs-on: ubuntu-latest
+    env:
+      OPENLANDER_DATABASE_URL: postgresql://postgres:test@localhost:5432/openlander_test
+      DATABASE_URL: postgresql://postgres:test@localhost:5432/openlander_test
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: openlander_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d openlander_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout

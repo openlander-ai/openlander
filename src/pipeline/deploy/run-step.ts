@@ -45,14 +45,14 @@ export class ContainerRunner {
       envType,
     );
 
-    let resourceLimits = loadResourceLimitsForProject(this.db, config.projectId);
+    let resourceLimits = await loadResourceLimitsForProject(this.db, config.projectId);
     if (!resourceLimits) {
       resourceLimits = buildResourceLimitConfig('small', null);
-      const configRow = this.db.loadDeployConfig(config.projectId);
+      const configRow = await this.db.loadDeployConfig(config.projectId);
       const existingSnapshot = configRow
         ? (deserializeConfig(configRow.config_json)?.snapshot ?? {})
         : {};
-      this.db.saveDeployConfig(
+      await this.db.saveDeployConfig(
         config.projectId,
         serializeConfig({ ...existingSnapshot, resourceProfile: 'small' as const }),
         CONFIG_VERSION,

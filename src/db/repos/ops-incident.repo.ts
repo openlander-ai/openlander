@@ -1,6 +1,5 @@
-import { and, desc, eq, gte, inArray, like, lte, or } from 'drizzle-orm';
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
-import { pickDefined } from '../helpers.js';
+import { and, desc, eq, gte, inArray, like, lte, or, type SQL } from 'drizzle-orm';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { opsIncidents } from '../schema.drizzle.js';
 import type { OpsIncidentRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
@@ -12,78 +11,85 @@ function escapeLikePattern(text: string): string {
 export class OpsIncidentRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
+    private readonly client: PostgresClient,
   ) {
-    void this.sqlite;
+    void this.client;
   }
 
-  create(data: {
+  async create(data: {
     id: string;
     project_id: string;
     severity: string;
     status?: string;
     root_cause?: string;
-  }): OpsIncidentRow {
-    this.db
-      .insert(opsIncidents)
-      .values({
-        id: data.id,
-        project_id: data.project_id,
-        severity: data.severity as 'critical' | 'warning' | 'info',
-        status: (data.status ?? 'open') as 'open' | 'active' | 'resolved' | 'escalated',
-        root_cause: data.root_cause,
-        created_at: Date.now(),
-      })
-      .run();
+  }): Promise<OpsIncidentRow> {
+    const created =
+      (
+        await this.db
+          .insert(opsIncidents)
+          .values({
+            id: data.id,
+            project_id: data.project_id,
+            severity: data.severity as OpsIncidentRow['severity'],
+            status: (data.status ?? 'open') as OpsIncidentRow['status'],
+            root_cause: data.root_cause,
+            created_at: Date.now(),
+          })
+          .returning()
+      )[0] ?? null;
 
-    const created = this.findById(data.id);
     if (!created) throw new RepoPersistenceError('ops incident', data.id);
     return created;
   }
 
-  findById(id: string): OpsIncidentRow | undefined {
-    return this.db.select().from(opsIncidents).where(eq(opsIncidents.id, id)).get();
+  async findById(id: string): Promise<OpsIncidentRow | undefined> {
+    const row =
+      (await this.db.select().from(opsIncidents).where(eq(opsIncidents.id, id)).limit(1))[0] ??
+      null;
+    return row ?? undefined;
   }
 
-  findByProjectId(projectId: string, limit?: number): OpsIncidentRow[] {
+  async findByProjectId(projectId: string, limit?: number): Promise<OpsIncidentRow[]> {
     const baseQuery = this.db
       .select()
       .from(opsIncidents)
       .where(eq(opsIncidents.project_id, projectId))
       .orderBy(desc(opsIncidents.created_at));
 
-    if (limit) {
-      return baseQuery.limit(limit).all();
-    }
-
-    return baseQuery.all();
+    return limit ? await baseQuery.limit(limit) : await baseQuery;
   }
 
-  findActive(projectId: string): OpsIncidentRow | undefined {
-    return this.db
-      .select()
-      .from(opsIncidents)
-      .where(
-        and(
-          eq(opsIncidents.project_id, projectId),
-          inArray(opsIncidents.status, ['open', 'active']),
-        ),
-      )
-      .orderBy(desc(opsIncidents.created_at))
-      .get();
+  async findActive(projectId: string): Promise<OpsIncidentRow | undefined> {
+    const row =
+      (
+        await this.db
+          .select()
+          .from(opsIncidents)
+          .where(
+            and(
+              eq(opsIncidents.project_id, projectId),
+              inArray(opsIncidents.status, ['open', 'active']),
+            ),
+          )
+          .orderBy(desc(opsIncidents.created_at))
+          .limit(1)
+      )[0] ?? null;
+    return row ?? undefined;
   }
 
-  findAllActive(): OpsIncidentRow[] {
-    return this.db
+  async findAllActive(): Promise<OpsIncidentRow[]> {
+    return await this.db
       .select()
       .from(opsIncidents)
       .where(inArray(opsIncidents.status, ['open', 'active']))
-      .orderBy(desc(opsIncidents.created_at))
-      .all();
+      .orderBy(desc(opsIncidents.created_at));
   }
 
-  findByDateRange(from: number, to: number, searchText?: string): OpsIncidentRow[] {
-    const conditions = [gte(opsIncidents.created_at, from), lte(opsIncidents.created_at, to)];
+  async findByDateRange(from: number, to: number, searchText?: string): Promise<OpsIncidentRow[]> {
+    const conditions: SQL[] = [
+      gte(opsIncidents.created_at, from),
+      lte(opsIncidents.created_at, to),
+    ];
     if (searchText) {
       const escaped = escapeLikePattern(searchText);
       const searchCondition = or(
@@ -92,15 +98,14 @@ export class OpsIncidentRepo {
       );
       if (searchCondition) conditions.push(searchCondition);
     }
-    return this.db
+    return await this.db
       .select()
       .from(opsIncidents)
       .where(and(...conditions))
-      .orderBy(desc(opsIncidents.created_at))
-      .all();
+      .orderBy(desc(opsIncidents.created_at));
   }
 
-  findBySearch(searchText: string, limit?: number): OpsIncidentRow[] {
+  async findBySearch(searchText: string, limit?: number): Promise<OpsIncidentRow[]> {
     const escaped = escapeLikePattern(searchText);
     const baseQuery = this.db
       .select()
@@ -113,20 +118,16 @@ export class OpsIncidentRepo {
       )
       .orderBy(desc(opsIncidents.created_at));
 
-    if (limit) {
-      return baseQuery.limit(limit).all();
-    }
-
-    return baseQuery.all();
+    return limit ? await baseQuery.limit(limit) : await baseQuery;
   }
 
-  updateStatus(
+  async updateStatus(
     id: string,
     status: string,
     extra?: { resolved_at?: number; escalated_at?: number },
-  ): void {
-    const setValues: Record<string, unknown> = {
-      status: status,
+  ): Promise<void> {
+    const setValues: Partial<typeof opsIncidents.$inferInsert> = {
+      status: status as OpsIncidentRow['status'],
     };
     if (extra?.resolved_at !== undefined) {
       setValues.resolved_at = extra.resolved_at;
@@ -135,10 +136,10 @@ export class OpsIncidentRepo {
       setValues.escalated_at = extra.escalated_at;
     }
 
-    this.db.update(opsIncidents).set(setValues).where(eq(opsIncidents.id, id)).run();
+    await this.db.update(opsIncidents).set(setValues).where(eq(opsIncidents.id, id));
   }
 
-  update(
+  async update(
     id: string,
     data: Partial<{
       root_cause: string;
@@ -146,19 +147,23 @@ export class OpsIncidentRepo {
       actions_taken: string;
       status: string;
     }>,
-  ): void {
-    const setValues: Record<string, unknown> = pickDefined(
-      data,
-      'root_cause',
-      'diagnosis',
-      'actions_taken',
-    );
+  ): Promise<void> {
+    const setValues: Partial<typeof opsIncidents.$inferInsert> = {};
+    if (data.root_cause !== undefined) {
+      setValues.root_cause = data.root_cause;
+    }
+    if (data.diagnosis !== undefined) {
+      setValues.diagnosis = data.diagnosis;
+    }
+    if (data.actions_taken !== undefined) {
+      setValues.actions_taken = data.actions_taken;
+    }
     if (data.status !== undefined) {
-      setValues.status = data.status;
+      setValues.status = data.status as OpsIncidentRow['status'];
     }
 
     if (Object.keys(setValues).length === 0) return;
 
-    this.db.update(opsIncidents).set(setValues).where(eq(opsIncidents.id, id)).run();
+    await this.db.update(opsIncidents).set(setValues).where(eq(opsIncidents.id, id));
   }
 }

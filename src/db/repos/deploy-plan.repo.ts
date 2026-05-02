@@ -1,7 +1,6 @@
 import { desc, eq, sql } from 'drizzle-orm';
 
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
-import { buildSetValues } from '../helpers.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { deployPlans } from '../schema.drizzle.js';
 import type { DeployPlanRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
@@ -9,12 +8,12 @@ import { RepoPersistenceError } from '../../errors.js';
 export class DeployPlanRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
+    private readonly client: PostgresClient,
   ) {
-    void this.sqlite;
+    void this.client;
   }
 
-  createDeployPlan(plan: {
+  async createDeployPlan(plan: {
     id: string;
     projectName?: string;
     projectId?: string;
@@ -22,8 +21,8 @@ export class DeployPlanRepo {
     complexity?: string;
     planJson: string;
     commitSha?: string;
-  }): DeployPlanRow {
-    this.db
+  }): Promise<DeployPlanRow> {
+    const [created] = await this.db
       .insert(deployPlans)
       .values({
         id: plan.id,
@@ -34,20 +33,22 @@ export class DeployPlanRepo {
         plan_json: plan.planJson,
         commit_sha: plan.commitSha ?? null,
       })
-      .run();
+      .returning();
 
-    const created = this.getDeployPlan(plan.id);
     if (!created) throw new RepoPersistenceError('deploy plan', plan.id);
-    return created;
+    return created as DeployPlanRow;
   }
 
-  getDeployPlan(planId: string): DeployPlanRow | undefined {
-    return this.db.select().from(deployPlans).where(eq(deployPlans.id, planId)).get() as
-      | DeployPlanRow
-      | undefined;
+  async getDeployPlan(planId: string): Promise<DeployPlanRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(deployPlans)
+      .where(eq(deployPlans.id, planId))
+      .limit(1);
+    return (row as DeployPlanRow | undefined) ?? undefined;
   }
 
-  updateDeployPlan(
+  async updateDeployPlan(
     planId: string,
     updates: Partial<{
       status: string;
@@ -59,59 +60,57 @@ export class DeployPlanRepo {
       projectName: string | null;
       projectId: string | null;
     }>,
-  ): void {
-    const setValues = buildSetValues(updates, {
-      status: 'status',
-      complexity: 'complexity',
-      errorMessage: 'error_message',
-      executedAt: 'executed_at',
-      completedAt: 'completed_at',
-      planJson: 'plan_json',
-      projectName: 'project_name',
-      projectId: 'project_id',
-    });
+  ): Promise<void> {
+    const setValues: Partial<typeof deployPlans.$inferInsert> = {};
+
+    if (updates.status !== undefined) setValues.status = updates.status;
+    if (updates.complexity !== undefined) setValues.complexity = updates.complexity;
+    if (updates.errorMessage !== undefined) setValues.error_message = updates.errorMessage;
+    if (updates.executedAt !== undefined) setValues.executed_at = updates.executedAt;
+    if (updates.completedAt !== undefined) setValues.completed_at = updates.completedAt;
+    if (updates.planJson !== undefined) setValues.plan_json = updates.planJson;
+    if (updates.projectName !== undefined) setValues.project_name = updates.projectName;
+    if (updates.projectId !== undefined) setValues.project_id = updates.projectId;
 
     if (Object.keys(setValues).length === 0) return;
 
-    this.db
+    await this.db
       .update(deployPlans)
-      .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
-      .where(eq(deployPlans.id, planId))
-      .run();
+      .set({ ...setValues, updated_at: sql`now()::text` })
+      .where(eq(deployPlans.id, planId));
   }
 
-  updateDeployPlanStatus(planId: string, status: string): void {
-    this.db
+  async updateDeployPlanStatus(planId: string, status: string): Promise<void> {
+    await this.db
       .update(deployPlans)
-      .set({ status, updated_at: sql`CURRENT_TIMESTAMP` })
-      .where(eq(deployPlans.id, planId))
-      .run();
+      .set({ status, updated_at: sql`now()::text` })
+      .where(eq(deployPlans.id, planId));
   }
 
   /** @param _serverId - Reserved for future server-side filtering. Currently ignored. */
-  listDeployPlans(projectName?: string, _serverId?: string): DeployPlanRow[] {
+  async listDeployPlans(projectName?: string, _serverId?: string): Promise<DeployPlanRow[]> {
     if (projectName) {
-      return this.db
+      const rows = await this.db
         .select()
         .from(deployPlans)
         .where(eq(deployPlans.project_name, projectName))
-        .orderBy(desc(deployPlans.created_at))
-        .all() as DeployPlanRow[];
+        .orderBy(desc(deployPlans.created_at), desc(deployPlans.id));
+      return rows as DeployPlanRow[];
     }
-    return this.db
+    const rows = await this.db
       .select()
       .from(deployPlans)
-      .orderBy(desc(deployPlans.created_at))
-      .all() as DeployPlanRow[];
+      .orderBy(desc(deployPlans.created_at), desc(deployPlans.id));
+    return rows as DeployPlanRow[];
   }
 
-  getLatestPlanForProject(projectName: string): DeployPlanRow | undefined {
-    return this.db
+  async getLatestPlanForProject(projectName: string): Promise<DeployPlanRow | undefined> {
+    const [row] = await this.db
       .select()
       .from(deployPlans)
       .where(eq(deployPlans.project_name, projectName))
-      .orderBy(desc(deployPlans.created_at), desc(sql`rowid`))
-      .limit(1)
-      .get() as DeployPlanRow | undefined;
+      .orderBy(desc(deployPlans.created_at), desc(deployPlans.id))
+      .limit(1);
+    return (row as DeployPlanRow | undefined) ?? undefined;
   }
 }

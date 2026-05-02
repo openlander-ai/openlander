@@ -3,8 +3,8 @@ import { defineConfig } from 'drizzle-kit';
 export default defineConfig({
   schema: './src/db/schema.drizzle.ts',
   out: './drizzle',
-  dialect: 'sqlite',
+  dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.OPENLANDER_DB_PATH ?? './data/openlander.db',
+    url: process.env.OPENLANDER_DATABASE_URL ?? process.env.DATABASE_URL ?? '',
   },
 });

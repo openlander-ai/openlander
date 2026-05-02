@@ -18,21 +18,21 @@ export function normalizeErrorSignature(errorLog: string): string {
     .slice(0, MAX_SIGNATURE_LENGTH);
 }
 
-export function saveRecoveryPattern(
+export async function saveRecoveryPattern(
   db: Database,
   projectId: string,
   errorLog: string,
   fixAction: string,
   success: boolean,
   patternType: string,
-): void {
+): Promise<void> {
   const signature = normalizeErrorSignature(errorLog);
   if (!signature) {
     log.warn({ projectId }, 'Empty error signature, skipping pattern save');
     return;
   }
 
-  const id = db.upsertDeploymentPattern({
+  const id = await db.upsertDeploymentPattern({
     project_id: projectId,
     pattern_type: patternType,
     error_signature: signature,
@@ -40,9 +40,9 @@ export function saveRecoveryPattern(
   });
 
   if (success) {
-    db.recordDeploymentPatternSuccess(id);
+    await db.recordDeploymentPatternSuccess(id);
   } else {
-    db.recordDeploymentPatternFailure(id);
+    await db.recordDeploymentPatternFailure(id);
   }
 
   log.debug(
@@ -51,17 +51,17 @@ export function saveRecoveryPattern(
   );
 }
 
-export function findMatchingPatterns(
+export async function findMatchingPatterns(
   db: Database,
   projectId: string,
   errorLog: string,
-): DeploymentPatternRow[] {
+): Promise<DeploymentPatternRow[]> {
   const signature = normalizeErrorSignature(errorLog);
   if (!signature) {
     return [];
   }
 
-  const exact = db.findDeploymentPatternBySignature(projectId, signature);
+  const exact = await db.findDeploymentPatternBySignature(projectId, signature);
   if (exact) {
     return [exact];
   }

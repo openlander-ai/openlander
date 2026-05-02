@@ -88,20 +88,22 @@ function deriveHealth(status: string): MonitoringServiceEntry['health'] {
 export function createMonitoringRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
-  api.get('/monitoring/services', (c) => {
+  api.get('/monitoring/services', async (c) => {
     const projectFilter = c.req.query('project');
     const projectScoped =
       projectFilter !== undefined && projectFilter !== '' && projectFilter !== 'all';
 
-    const allServices = ctx.db.listServices();
-    const projects = ctx.db.listProjects();
+    const [allServices, projects] = await Promise.all([
+      ctx.db.listServices(),
+      ctx.db.listProjects(),
+    ]);
     const projectNameById = new Map<string, string>();
     for (const p of projects) projectNameById.set(p.id, p.name);
 
     // service → first project connection (if any). One row per service.
     const projectIdByService = new Map<string, string>();
     for (const svc of allServices) {
-      const conns = ctx.db.listServiceConnectionsByService(svc.id);
+      const conns = await ctx.db.listServiceConnectionsByService(svc.id);
       const first = conns[0];
       if (first) projectIdByService.set(svc.id, first.service_id_consumer);
     }
@@ -121,16 +123,16 @@ export function createMonitoringRoutes(ctx: AppContext): Hono {
       // excluded. Services with historical samples but none in the recent
       // window are surfaced as stale (Codex CCG flagged the prior
       // behavior — silently dropping >60m-old services — as a HIGH).
-      if (!ctx.db.hasAnyServiceMetrics(svc.id)) {
+      if (!(await ctx.db.hasAnyServiceMetrics(svc.id))) {
         excluded += 1;
         continue;
       }
 
-      const samples = ctx.db.listServiceMetricsSince(svc.id, fromMs);
+      const samples = await ctx.db.listServiceMetricsSince(svc.id, fromMs);
       const cpu60 = samples.length > 0 ? downsample(samples.map((s) => s.cpu)) : [];
       const mem60 = samples.length > 0 ? downsample(samples.map((s) => s.mem)) : [];
       const lastInWindow = samples[samples.length - 1]?.recorded_at ?? null;
-      const lastEver = ctx.db.getLastServiceMetricAt(svc.id);
+      const lastEver = await ctx.db.getLastServiceMetricAt(svc.id);
       const lastSampleAt = lastInWindow ?? lastEver;
       const stale = lastSampleAt == null ? true : now - lastSampleAt > STALE_AFTER_MS;
 

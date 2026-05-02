@@ -15,7 +15,7 @@ export const infraToolDefs: ToolDef[] = [
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
       const domain = args['domain'] as string;
-      const project = appCtx.db.getProjectByName(projectName);
+      const project = await appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
@@ -45,8 +45,8 @@ export const infraToolDefs: ToolDef[] = [
       'List all custom domain mappings across all projects with domain name, project ID, and status. Use to check existing domain configurations. Returns { count, domains[] }. Always available, no errors.',
     mcpDescription: 'List all custom domain mappings across projects.',
     inputSchema: listDomainsSchema,
-    execute: (_args, { appCtx }) => {
-      const mappings = appCtx.db.listDomainMappings();
+    execute: async (_args, { appCtx }) => {
+      const mappings = await appCtx.db.listDomainMappings();
       return Promise.resolve({
         count: mappings.length,
         domains: mappings.map((mapping) => ({

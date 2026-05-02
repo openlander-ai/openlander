@@ -37,7 +37,7 @@ export class DriftDetector {
     const results: DriftResult[] = [];
 
     try {
-      const services = this.ctx.db.listServices();
+      const services = await this.ctx.db.listServices();
 
       for (const service of services) {
         try {

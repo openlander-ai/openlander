@@ -41,13 +41,14 @@ const DISK_FAIL_THRESHOLD_GB = 0.5;
 const DISK_WARNING_THRESHOLD_GB = 1;
 const MEMORY_WARNING_THRESHOLD_PERCENT = 90;
 
-function runEnvVarCompletenessCheck(
+async function runEnvVarCompletenessCheck(
   db: Database,
   projectName: string,
   options: PreflightOptions,
   warnings: string[],
-): PreflightCheck {
-  const configuredEnvVars = options.configuredEnvVars ?? getProjectEnvVarsByName(db, projectName);
+): Promise<PreflightCheck> {
+  const configuredEnvVars =
+    options.configuredEnvVars ?? (await getProjectEnvVarsByName(db, projectName));
   const envCheckResult = checkEnvRequirements(
     options.projectPath ?? process.cwd(),
     configuredEnvVars,
@@ -83,8 +84,11 @@ function runEnvVarCompletenessCheck(
   };
 }
 
-function getProjectEnvVarsByName(db: Database, projectName: string): Record<string, string> {
-  const project = db.getProjectByName(projectName);
+async function getProjectEnvVarsByName(
+  db: Database,
+  projectName: string,
+): Promise<Record<string, string>> {
+  const project = await db.getProjectByName(projectName);
   if (!project) {
     return {};
   }
@@ -239,7 +243,7 @@ export async function preflightCheck(
 
     warnings.push(...resourceWarnings);
 
-    const envVarCheck = runEnvVarCompletenessCheck(db, projectName, options, warnings);
+    const envVarCheck = await runEnvVarCompletenessCheck(db, projectName, options, warnings);
     const dockerfileCheck = runDockerfileSyntaxSanityCheck(options, warnings);
 
     // Proxy ready check

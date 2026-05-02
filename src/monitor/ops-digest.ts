@@ -30,11 +30,11 @@ export class DigestGenerator {
     this.ctx = ctx;
   }
 
-  generateDigest(): DigestReport {
+  async generateDigest(): Promise<DigestReport> {
     const now = Date.now();
     const from = now - 24 * 60 * 60 * 1000;
 
-    const allProjects = this.ctx.db.listProjects();
+    const allProjects = await this.ctx.db.listProjects();
     const projectStats = {
       total: allProjects.length,
       // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
@@ -45,12 +45,12 @@ export class DigestGenerator {
       error: allProjects.filter((p) => p.status === 'error').length,
     };
 
-    const recentIncidents = this.getRecentIncidents(from, now);
+    const recentIncidents = await this.getRecentIncidents(from, now);
     const incidentStats = this.computeIncidentStats(recentIncidents);
 
     const resources = this.getResources();
 
-    const openBreakers = this.getOpenCircuitBreakers();
+    const openBreakers = await this.getOpenCircuitBreakers();
 
     const report: DigestReport = {
       generatedAt: now,
@@ -108,25 +108,25 @@ export class DigestGenerator {
     this.stopSchedule();
 
     this.scheduleTimer = setInterval(() => {
-      const now = new Date();
-      const [hourStr, minStr] = timeOfDay.split(':');
-      const hour = Number(hourStr ?? 9);
-      const minute = Number(minStr ?? 0);
+      void (async () => {
+        const now = new Date();
+        const [hourStr, minStr] = timeOfDay.split(':');
+        const hour = Number(hourStr ?? 9);
+        const minute = Number(minStr ?? 0);
 
-      if (now.getHours() === hour && now.getMinutes() === minute) {
-        const lastMinute = this.lastDigestAt ? Date.now() - this.lastDigestAt : Infinity;
-        if (lastMinute > 60_000) {
-          try {
-            const report = this.generateDigest();
-            const alert = this.formatDigestForChannel(report);
-            void this.ctx.channelManager.broadcastStructured(alert).catch((err: unknown) => {
-              log.error({ err }, 'Failed to broadcast scheduled digest');
-            });
-          } catch (err: unknown) {
-            log.error({ err }, 'Failed to generate scheduled digest');
+        if (now.getHours() === hour && now.getMinutes() === minute) {
+          const lastMinute = this.lastDigestAt ? Date.now() - this.lastDigestAt : Infinity;
+          if (lastMinute > 60_000) {
+            try {
+              const report = await this.generateDigest();
+              const alert = this.formatDigestForChannel(report);
+              await this.ctx.channelManager.broadcastStructured(alert);
+            } catch (err: unknown) {
+              log.error({ err }, 'Failed to generate or broadcast scheduled digest');
+            }
           }
         }
-      }
+      })();
     }, 60_000);
   }
 
@@ -141,10 +141,11 @@ export class DigestGenerator {
     return this.lastReport;
   }
 
-  private getRecentIncidents(from: number, to: number) {
+  private async getRecentIncidents(from: number, to: number) {
     try {
-      return this.ctx.db.listOpsIncidentsByDateRange(from, to);
-    } catch {
+      return await this.ctx.db.listOpsIncidentsByDateRange(from, to);
+    } catch (err) {
+      log.warn({ err }, 'Failed to load recent incidents for digest');
       return [];
     }
   }
@@ -183,10 +184,11 @@ export class DigestGenerator {
     }
   }
 
-  private getOpenCircuitBreakers(): string[] {
+  private async getOpenCircuitBreakers(): Promise<string[]> {
     try {
-      return this.ctx.db.findAllOpenCircuitBreakers();
-    } catch {
+      return await this.ctx.db.findAllOpenCircuitBreakers();
+    } catch (err) {
+      log.warn({ err }, 'Failed to load open circuit breakers for digest');
       return [];
     }
   }

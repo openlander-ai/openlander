@@ -19,9 +19,17 @@ import {
   RepoPersistenceError,
 } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { buildSetValues } from '../helpers.js';
-import { environments, projects, services } from '../schema.drizzle.js';
+import {
+  environments,
+  envVars,
+  projects,
+  secretFiles,
+  services,
+  timelineEvents,
+  webhookConfigs,
+} from '../schema.drizzle.js';
 import { deployableServiceIdToProjectId, projectIdToDeployableServiceId } from '../service-ids.js';
 import type { EnvironmentRow, PendingFixRow, ProjectRow, ServiceRow } from '../types.js';
 
@@ -48,13 +56,31 @@ const log = createModuleLogger('project-repo');
  */
 const ORPHAN_MANAGED_GROUP_ID = '__orphan_managed';
 
+type ProjectSelectRow = typeof projects.$inferSelect;
+type ServiceSelectRow = typeof services.$inferSelect;
+type EnvironmentSelectRow = typeof environments.$inferSelect;
+
+function toProjectRow(row: ProjectSelectRow): ProjectRow {
+  return row as ProjectRow;
+}
+
+function toServiceRow(row: ServiceSelectRow): ServiceRow {
+  return row as ServiceRow;
+}
+
+function toEnvironmentRow(row: EnvironmentSelectRow & { project_id?: string }): EnvironmentRow {
+  return row as EnvironmentRow;
+}
+
 export class ProjectRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
-  ) {}
+    _client: PostgresClient,
+  ) {
+    void _client;
+  }
 
-  createProject(project: {
+  async createProject(project: {
     id: string;
     name: string;
     repoUrl: string;
@@ -68,7 +94,7 @@ export class ProjectRepo {
     imageUrl?: string;
     imageCmd?: string[];
     containerPort?: number;
-  }): ProjectRow {
+  }): Promise<ProjectRow> {
     const source = project.source ?? 'git';
     const buildMethod = project.buildMethod ?? null;
     const parentProjectId = project.parentProjectId ?? null;
@@ -86,10 +112,11 @@ export class ProjectRepo {
     }
 
     try {
-      const raw = this.db.transaction((tx) => {
+      const raw = await this.db.transaction(async (tx) => {
         // Post-0012: projects table is group-only; deployable runtime fields
         // live on the canonical services row inserted below.
-        tx.insert(projects)
+        const [created] = await tx
+          .insert(projects)
           .values({
             id: project.id,
             name: project.name,
@@ -97,7 +124,7 @@ export class ProjectRepo {
             branch: project.branch ?? 'main',
             // group-only: NO deployable fields, NO parent_project_id
           })
-          .run();
+          .returning();
 
         // Insert backing service row.
         // - Standalone / compose-parent: project_id = self id.
@@ -107,7 +134,8 @@ export class ProjectRepo {
         // NO onConflictDoNothing — a UNIQUE conflict here means an orphan service
         // row from a previously-deleted project; that is corrupt state and must
         // abort the whole transaction so the projects row is never committed.
-        tx.insert(services)
+        await tx
+          .insert(services)
           .values({
             id: projectIdToDeployableServiceId(project.id),
             project_id: parentProjectId ?? project.id,
@@ -127,21 +155,22 @@ export class ProjectRepo {
             image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
             container_port: project.containerPort ?? null,
           })
-          .run();
+          .returning({ id: services.id });
 
-        const created = tx.select().from(projects).where(eq(projects.id, project.id)).get() as
-          | ProjectRow
-          | undefined;
         if (!created) throw new RepoPersistenceError('project', project.id);
-        return created;
+        return toProjectRow(created);
       });
       // Hydrate deployable fields from the canonical __svc service row so
       // callers receive the full legacy runtime shape (status, visibility,
       // build_method, etc.) immediately after creation.
-      return this.hydrateDeployable(raw);
+      return await this.hydrateDeployable(raw);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('UNIQUE constraint failed')) {
+      if (
+        msg.includes('UNIQUE constraint failed') ||
+        msg.includes('duplicate key value') ||
+        msg.includes('unique constraint')
+      ) {
         if (msg.includes('services.id') || msg.includes('services.name')) {
           throw new Error(
             `A previous project with id "${project.id}" left orphan service rows. ` +
@@ -194,29 +223,25 @@ export class ProjectRepo {
     };
   }
 
-  private hydrateDeployable(row: ProjectRow): ProjectRow {
-    const svc = this.db
+  private async hydrateDeployable(row: ProjectRow): Promise<ProjectRow> {
+    const [svc] = await this.db
       .select()
       .from(services)
       .where(eq(services.id, projectIdToDeployableServiceId(row.id)))
-      .get() as ServiceRow | undefined;
-    return svc ? this.mergeDeployable(row, svc) : row;
+      .limit(1);
+    return svc ? this.mergeDeployable(row, toServiceRow(svc)) : row;
   }
 
-  getProject(id: string): ProjectRow | undefined {
-    const row = this.db.select().from(projects).where(eq(projects.id, id)).get() as
-      | ProjectRow
-      | undefined;
+  async getProject(id: string): Promise<ProjectRow | undefined> {
+    const [row] = await this.db.select().from(projects).where(eq(projects.id, id)).limit(1);
     if (!row) return undefined;
-    return this.hydrateDeployable(row);
+    return await this.hydrateDeployable(toProjectRow(row));
   }
 
-  getProjectByName(name: string): ProjectRow | undefined {
-    const row = this.db.select().from(projects).where(eq(projects.name, name)).get() as
-      | ProjectRow
-      | undefined;
+  async getProjectByName(name: string): Promise<ProjectRow | undefined> {
+    const [row] = await this.db.select().from(projects).where(eq(projects.name, name)).limit(1);
     if (!row) return undefined;
-    return this.hydrateDeployable(row);
+    return await this.hydrateDeployable(toProjectRow(row));
   }
 
   /**
@@ -227,11 +252,11 @@ export class ProjectRepo {
    *
    * @param _serverId - Reserved for future server-side filtering. Currently ignored.
    */
-  listProjects(
+  async listProjects(
     status?: 'running' | 'stopped' | 'building' | 'error' | 'recovering' | null,
     opts?: { includeArchived?: boolean },
     _serverId?: string,
-  ): ProjectRow[] {
+  ): Promise<ProjectRow[]> {
     const conditions = [
       ne(projects.id, ORPHAN_MANAGED_GROUP_ID),
       // Post-0012: exclude compose-child project rows (their service has kind
@@ -249,34 +274,30 @@ export class ProjectRepo {
     if (!opts?.includeArchived) {
       conditions.push(isNull(projects.archived_at));
     }
-    const rows = this.db
+    const rows = await this.db
       .select()
       .from(projects)
       .where(and(...conditions))
-      .orderBy(desc(projects.updated_at))
-      .all() as ProjectRow[];
-    if (rows.length === 0) return rows;
+      .orderBy(desc(projects.updated_at));
+    if (rows.length === 0) return [];
     // Batch-hydrate deployable fields from the canonical __svc service rows.
     const svcIds = rows.map((r) => projectIdToDeployableServiceId(r.id));
-    const svcRows = this.db
-      .select()
-      .from(services)
-      .where(inArray(services.id, svcIds))
-      .all() as ServiceRow[];
+    const svcRows = await this.db.select().from(services).where(inArray(services.id, svcIds));
     const svcById = new Map<string, ServiceRow>();
-    for (const s of svcRows) svcById.set(s.id, s);
+    for (const s of svcRows) svcById.set(s.id, toServiceRow(s));
     return rows.map((row) => {
       const svc = svcById.get(projectIdToDeployableServiceId(row.id));
-      return svc ? this.mergeDeployable(row, svc) : row;
+      const project = toProjectRow(row);
+      return svc ? this.mergeDeployable(project, svc) : project;
     });
   }
 
-  getDeployableServiceCountsByProjectIds(projectIds: string[]): Map<string, number> {
+  async getDeployableServiceCountsByProjectIds(projectIds: string[]): Promise<Map<string, number>> {
     if (projectIds.length === 0) {
       return new Map();
     }
 
-    const rows = this.db
+    const rows = await this.db
       .select({ parentId: services.project_id, cnt: count() })
       .from(services)
       .where(
@@ -285,8 +306,7 @@ export class ProjectRepo {
           notInArray(services.kind, ['postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose']),
         ),
       )
-      .groupBy(services.project_id)
-      .all() as Array<{ parentId: string | null; cnt: number }>;
+      .groupBy(services.project_id);
 
     const counts = new Map<string, number>();
     for (const row of rows) {
@@ -302,11 +322,11 @@ export class ProjectRepo {
    * pass over the projects table and at most two follow-up queries
    * (one for environments, one for child counts) keyed by project id.
    */
-  listProjectsWithMetadata(
+  async listProjectsWithMetadata(
     status?: 'running' | 'stopped' | 'building' | 'error' | 'recovering' | null,
     opts?: { includeArchived?: boolean },
-  ): ProjectWithMetadata[] {
-    const projectRows = this.listProjects(status, opts);
+  ): Promise<ProjectWithMetadata[]> {
+    const projectRows = await this.listProjects(status, opts);
     if (projectRows.length === 0) {
       return [];
     }
@@ -323,18 +343,17 @@ export class ProjectRepo {
     const projectIdByCanonicalServiceId = new Map(
       projectIds.map((projectId) => [projectIdToDeployableServiceId(projectId), projectId]),
     );
-    const envRows = this.db
+    const envRows = await this.db
       .select()
       .from(environments)
       .where(inArray(environments.service_id, canonicalServiceIds))
-      .orderBy(asc(environments.created_at))
-      .all() as EnvironmentRow[];
+      .orderBy(asc(environments.created_at));
 
     const envByProject = new Map<string, EnvironmentRow[]>();
     for (const env of envRows) {
       const projectId = projectIdByCanonicalServiceId.get(env.service_id);
       if (!projectId) continue;
-      const hydrated = { ...env, project_id: projectId };
+      const hydrated = toEnvironmentRow({ ...env, project_id: projectId });
       const list = envByProject.get(projectId);
       if (list) {
         list.push(hydrated);
@@ -345,11 +364,10 @@ export class ProjectRepo {
 
     // Compose detection still needs the whole service group so the UI can mark
     // compose parents even though environments above are canonical-only.
-    const groupServices = this.db
+    const groupServices = await this.db
       .select({ id: services.id, project_id: services.project_id, kind: services.kind })
       .from(services)
-      .where(inArray(services.project_id, projectIds))
-      .all() as Array<{ id: string; project_id: string | null; kind: string }>;
+      .where(inArray(services.project_id, projectIds));
 
     const isComposeByProject = new Map<string, boolean>();
     for (const s of groupServices) {
@@ -366,7 +384,7 @@ export class ProjectRepo {
     // Skip managed DBs (postgres etc.) and skip the synthetic 'compose' parent
     // metadata service — users think of compose as "3 services," not "1 parent
     // + 3 children = 4," so omit the parent meta from the badge.
-    const childCountByParent = this.getDeployableServiceCountsByProjectIds(projectIds);
+    const childCountByParent = await this.getDeployableServiceCountsByProjectIds(projectIds);
 
     return projectRows.map((project) => ({
       project,
@@ -382,7 +400,7 @@ export class ProjectRepo {
    * are written via ServiceRepo or service-manager directly. The accepted
    * update keys here are limited to the persisted columns on `projects`.
    */
-  updateProject(
+  async updateProject(
     id: string,
     updates: Partial<{
       branch: string;
@@ -413,18 +431,18 @@ export class ProjectRepo {
       recoveringStartedAt: string | null;
       pendingFix: string | null;
     }>,
-  ): void {
+  ): Promise<void> {
     // Group-scoped fields — write to projects table.
     const projectSetValues = buildSetValues(updates, {
       branch: 'branch',
       repoUrl: 'repo_url',
     });
     if (Object.keys(projectSetValues).length > 0) {
-      this.db
+      await this.db
         .update(projects)
         .set({ ...projectSetValues, updated_at: sql`CURRENT_TIMESTAMP` })
         .where(eq(projects.id, id))
-        .run();
+        .returning({ id: projects.id });
     }
 
     // Service-scoped fields — route to the canonical ${id}__svc service row.
@@ -461,52 +479,52 @@ export class ProjectRepo {
     if (updates.pendingFix !== undefined) svcSetValues.pending_fix = updates.pendingFix;
 
     if (Object.keys(svcSetValues).length > 0) {
-      this.db
+      await this.db
         .update(services)
         .set({ ...svcSetValues, updated_at: sql`CURRENT_TIMESTAMP` })
         .where(eq(services.id, projectIdToDeployableServiceId(id)))
-        .run();
+        .returning({ id: services.id });
     }
   }
 
-  setPendingFix(projectId: string, pendingFix: PendingFixRow): void {
+  async setPendingFix(projectId: string, pendingFix: PendingFixRow): Promise<void> {
     // Post-0012: pending_fix is a service-row column. Persist via the
     // canonical `<id>__svc` row.
-    this.db
+    await this.db
       .update(services)
       .set({ pending_fix: JSON.stringify(pendingFix), updated_at: sql`CURRENT_TIMESTAMP` })
       .where(eq(services.id, projectIdToDeployableServiceId(projectId)))
-      .run();
+      .returning({ id: services.id });
   }
 
-  consumePendingFix(projectId: string): string | null {
-    return this.sqlite.transaction(() => {
-      const svc = this.db
+  async consumePendingFix(projectId: string): Promise<string | null> {
+    return await this.db.transaction(async (tx) => {
+      const [svc] = await tx
         .select({ pending_fix: services.pending_fix })
         .from(services)
         .where(eq(services.id, projectIdToDeployableServiceId(projectId)))
-        .get();
+        .limit(1);
       const rawPendingFix = svc?.pending_fix ?? null;
       if (!rawPendingFix) {
         return null;
       }
-      this.db
+      await tx
         .update(services)
         .set({ pending_fix: null, updated_at: sql`CURRENT_TIMESTAMP` })
         .where(eq(services.id, projectIdToDeployableServiceId(projectId)))
-        .run();
+        .returning({ id: services.id });
       return rawPendingFix;
-    })();
+    });
   }
 
-  archiveProject(id: string): void {
-    const project = this.getProject(id);
+  async archiveProject(id: string): Promise<void> {
+    const project = await this.getProject(id);
     if (!project) {
       throw new ProjectNotFoundError(id);
     }
     // Post-0012: check environments for building status (services table has no 'building' state;
     // building is tracked per-environment in environments.status).
-    const buildingEnv = this.db
+    const [buildingEnv] = await this.db
       .select({ id: environments.id })
       .from(environments)
       .where(
@@ -515,7 +533,7 @@ export class ProjectRepo {
           sql`${environments.status} = 'building'`,
         ),
       )
-      .get();
+      .limit(1);
     if (buildingEnv) {
       throw new OpenLanderError(
         'Cannot archive a project that is currently building',
@@ -525,12 +543,12 @@ export class ProjectRepo {
       );
     }
     const archivedAt = new Date().toISOString();
-    this.db
+    await this.db
       .update(projects)
       .set({ archived_at: archivedAt, updated_at: sql`CURRENT_TIMESTAMP` })
       .where(eq(projects.id, id))
-      .run();
-    this.db
+      .returning({ id: projects.id });
+    await this.db
       .update(services)
       .set({
         archived_at: archivedAt,
@@ -541,16 +559,16 @@ export class ProjectRepo {
         updated_at: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(services.id, projectIdToDeployableServiceId(id)))
-      .run();
+      .returning({ id: services.id });
   }
 
-  unarchiveProject(id: string): void {
-    this.db
+  async unarchiveProject(id: string): Promise<void> {
+    await this.db
       .update(projects)
       .set({ archived_at: null, updated_at: sql`CURRENT_TIMESTAMP` })
       .where(eq(projects.id, id))
-      .run();
-    this.db
+      .returning({ id: projects.id });
+    await this.db
       .update(services)
       .set({
         archived_at: null,
@@ -558,52 +576,49 @@ export class ProjectRepo {
         updated_at: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(services.id, projectIdToDeployableServiceId(id)))
-      .run();
+      .returning({ id: services.id });
   }
 
-  listArchivedProjects(): ProjectRow[] {
-    const rows = this.db
+  async listArchivedProjects(): Promise<ProjectRow[]> {
+    const rows = await this.db
       .select()
       .from(projects)
       .where(and(isNotNull(projects.archived_at), ne(projects.id, ORPHAN_MANAGED_GROUP_ID)))
-      .orderBy(desc(projects.updated_at))
-      .all() as ProjectRow[];
-    if (rows.length === 0) return rows;
+      .orderBy(desc(projects.updated_at));
+    if (rows.length === 0) return [];
     // Batch-hydrate deployable fields from the canonical __svc service rows,
     // matching the pattern used by listProjects() so archived-project
     // consumers receive the full legacy runtime shape.
     const svcIds = rows.map((r) => projectIdToDeployableServiceId(r.id));
-    const svcRows = this.db
-      .select()
-      .from(services)
-      .where(inArray(services.id, svcIds))
-      .all() as ServiceRow[];
+    const svcRows = await this.db.select().from(services).where(inArray(services.id, svcIds));
     const svcById = new Map<string, ServiceRow>();
-    for (const s of svcRows) svcById.set(s.id, s);
+    for (const s of svcRows) svcById.set(s.id, toServiceRow(s));
     return rows.map((row) => {
       const svc = svcById.get(projectIdToDeployableServiceId(row.id));
-      return svc ? this.mergeDeployable(row, svc) : row;
+      const project = toProjectRow(row);
+      return svc ? this.mergeDeployable(project, svc) : project;
     });
   }
 
-  isArchived(id: string): boolean {
-    const project = this.getProject(id);
+  async isArchived(id: string): Promise<boolean> {
+    const project = await this.getProject(id);
     if (!project) return false;
     return project.archived_at !== null;
   }
 
-  deleteProject(id: string): void {
+  async deleteProject(id: string): Promise<void> {
     // Cascade-delete child projects whose service row is a child of this group.
-    const childSvcs = this.db
+    const childSvcs = await this.db
       .select({ id: services.id })
       .from(services)
-      .where(eq(services.parent_service_id, projectIdToDeployableServiceId(id)))
-      .all() as Array<{ id: string }>;
+      .where(eq(services.parent_service_id, projectIdToDeployableServiceId(id)));
     for (const s of childSvcs) {
       const childProjectId = deployableServiceIdToProjectId(s.id);
-      this.db.delete(projects).where(eq(projects.id, childProjectId)).run();
+      await this.db.delete(projects).where(eq(projects.id, childProjectId)).returning({
+        id: projects.id,
+      });
     }
-    this.db.delete(projects).where(eq(projects.id, id)).run();
+    await this.db.delete(projects).where(eq(projects.id, id)).returning({ id: projects.id });
   }
 
   /**
@@ -622,27 +637,30 @@ export class ProjectRepo {
    *
    * Throws if either side is missing or if source == target.
    */
-  attachServiceToProject(
+  async attachServiceToProject(
     serviceId: string,
     targetProjectId: string,
-  ): {
+  ): Promise<{
     sourceProjectId: string;
     targetProjectId: string;
     /** env_var keys that lost the UNIQUE(project_id, key) race — target won. */
     droppedEnvVarKeys: string[];
     /** secret_file filenames that lost the UNIQUE(project_id, filename) race. */
     droppedSecretFiles: string[];
-  } {
-    return this.sqlite.transaction(() => {
-      const svc = this.db
+  }> {
+    return await this.db.transaction(async (tx) => {
+      const [svc] = await tx
         .select({ project_id: services.project_id })
         .from(services)
         .where(eq(services.id, serviceId))
-        .get();
+        .limit(1);
       if (!svc) {
         throw new RepoPersistenceError('service', serviceId);
       }
       const sourceProjectId = svc.project_id;
+      if (!sourceProjectId) {
+        throw new RepoPersistenceError('project', serviceId);
+      }
 
       if (sourceProjectId === targetProjectId) {
         return {
@@ -653,20 +671,20 @@ export class ProjectRepo {
         };
       }
 
-      const target = this.db
+      const [target] = await tx
         .select({ id: projects.id })
         .from(projects)
         .where(eq(projects.id, targetProjectId))
-        .get();
+        .limit(1);
       if (!target) {
         throw new ProjectNotFoundError(targetProjectId);
       }
 
-      this.db
+      await tx
         .update(services)
         .set({ project_id: targetProjectId, updated_at: sql`CURRENT_TIMESTAMP` })
         .where(eq(services.id, serviceId))
-        .run();
+        .returning({ id: services.id });
 
       // CCG #4: when source is __orphan_managed (the synthetic pool that
       // hosts every managed service), do NOT migrate project-scoped rows.
@@ -683,38 +701,68 @@ export class ProjectRepo {
         // env_vars (project_id, key) UNIQUE. CCG #3: capture the collision
         // losers BEFORE we drop them so the caller can surface "key X was
         // dropped because the target already had it".
-        const envVarLosers = this.sqlite
-          .prepare(
-            `SELECT key FROM env_vars
-             WHERE project_id = ?
-               AND key IN (SELECT key FROM env_vars WHERE project_id = ?)`,
-          )
-          .all(sourceProjectId, targetProjectId) as Array<{ key: string }>;
-        droppedEnvVarKeys.push(...envVarLosers.map((row) => row.key));
-        this.sqlite
-          .prepare('UPDATE OR IGNORE env_vars SET project_id = ? WHERE project_id = ?')
-          .run(targetProjectId, sourceProjectId);
-        this.sqlite.prepare('DELETE FROM env_vars WHERE project_id = ?').run(sourceProjectId);
+        const targetEnvRows = await tx
+          .select({ key: envVars.key })
+          .from(envVars)
+          .where(eq(envVars.project_id, targetProjectId));
+        const targetEnvKeys = new Set(targetEnvRows.map((row) => row.key));
+        const sourceEnvRows = await tx
+          .select({ id: envVars.id, key: envVars.key })
+          .from(envVars)
+          .where(eq(envVars.project_id, sourceProjectId));
+        const movableEnvIds = sourceEnvRows
+          .filter((row) => !targetEnvKeys.has(row.key))
+          .map((row) => row.id);
+        droppedEnvVarKeys.push(
+          ...sourceEnvRows.filter((row) => targetEnvKeys.has(row.key)).map((row) => row.key),
+        );
+        if (movableEnvIds.length > 0) {
+          await tx
+            .update(envVars)
+            .set({ project_id: targetProjectId })
+            .where(inArray(envVars.id, movableEnvIds))
+            .returning({ id: envVars.id });
+        }
+        await tx.delete(envVars).where(eq(envVars.project_id, sourceProjectId)).returning({
+          id: envVars.id,
+        });
 
         // timeline_events: project_id FK only, no UNIQUE — straight UPDATE.
-        this.sqlite
-          .prepare('UPDATE timeline_events SET project_id = ? WHERE project_id = ?')
-          .run(targetProjectId, sourceProjectId);
+        await tx
+          .update(timelineEvents)
+          .set({ project_id: targetProjectId })
+          .where(eq(timelineEvents.project_id, sourceProjectId))
+          .returning({ id: timelineEvents.id });
 
         // secret_files (project_id, filename) UNIQUE — same collision-capture
         // pattern as env_vars.
-        const secretLosers = this.sqlite
-          .prepare(
-            `SELECT filename FROM secret_files
-             WHERE project_id = ?
-               AND filename IN (SELECT filename FROM secret_files WHERE project_id = ?)`,
-          )
-          .all(sourceProjectId, targetProjectId) as Array<{ filename: string }>;
-        droppedSecretFiles.push(...secretLosers.map((row) => row.filename));
-        this.sqlite
-          .prepare('UPDATE OR IGNORE secret_files SET project_id = ? WHERE project_id = ?')
-          .run(targetProjectId, sourceProjectId);
-        this.sqlite.prepare('DELETE FROM secret_files WHERE project_id = ?').run(sourceProjectId);
+        const targetSecretRows = await tx
+          .select({ filename: secretFiles.filename })
+          .from(secretFiles)
+          .where(eq(secretFiles.project_id, targetProjectId));
+        const targetSecretFilenames = new Set(targetSecretRows.map((row) => row.filename));
+        const sourceSecretRows = await tx
+          .select({ id: secretFiles.id, filename: secretFiles.filename })
+          .from(secretFiles)
+          .where(eq(secretFiles.project_id, sourceProjectId));
+        const movableSecretIds = sourceSecretRows
+          .filter((row) => !targetSecretFilenames.has(row.filename))
+          .map((row) => row.id);
+        droppedSecretFiles.push(
+          ...sourceSecretRows
+            .filter((row) => targetSecretFilenames.has(row.filename))
+            .map((row) => row.filename),
+        );
+        if (movableSecretIds.length > 0) {
+          await tx
+            .update(secretFiles)
+            .set({ project_id: targetProjectId })
+            .where(inArray(secretFiles.id, movableSecretIds))
+            .returning({ id: secretFiles.id });
+        }
+        await tx.delete(secretFiles).where(eq(secretFiles.project_id, sourceProjectId)).returning({
+          id: secretFiles.id,
+        });
 
         // service_ops_overrides was renamed/repointed in 0009/0012 and now
         // keys on service_id, not project_id — the row rides along with the
@@ -722,9 +770,10 @@ export class ProjectRepo {
 
         // webhook_configs is project-specific; the temp project's webhook
         // (auto-created by deploy) shouldn't leak into the target group.
-        this.sqlite
-          .prepare('DELETE FROM webhook_configs WHERE project_id = ?')
-          .run(sourceProjectId);
+        await tx
+          .delete(webhookConfigs)
+          .where(eq(webhookConfigs.project_id, sourceProjectId))
+          .returning({ id: webhookConfigs.id });
       }
 
       // Synthetic groups (the managed-service pool) are never deleted —
@@ -732,11 +781,13 @@ export class ProjectRepo {
       // project yet. Real per-deploy temp groups *are* deleted so the project
       // list doesn't fill with stub rows.
       if (sourceProjectId !== ORPHAN_MANAGED_GROUP_ID) {
-        this.db.delete(projects).where(eq(projects.id, sourceProjectId)).run();
+        await tx.delete(projects).where(eq(projects.id, sourceProjectId)).returning({
+          id: projects.id,
+        });
       }
 
       return { sourceProjectId, targetProjectId, droppedEnvVarKeys, droppedSecretFiles };
-    })();
+    });
   }
 
   /**
@@ -744,28 +795,25 @@ export class ProjectRepo {
    * Returns the legacy ProjectRow shape for the parent group of any compose-children
    * — callers that need ProjectRow data resolve through getComposeChildProjects.
    */
-  getChildProjects(parentId: string): ProjectRow[] {
+  async getChildProjects(parentId: string): Promise<ProjectRow[]> {
     // Find services whose parent_service_id = parent's __svc id.
     // The child service id follows the ${childProjectId}__svc convention,
     // so we strip __svc to get the child project id, then fetch + hydrate.
-    const childSvcs = this.db
+    const childSvcs = await this.db
       .select({ id: services.id })
       .from(services)
       .where(eq(services.parent_service_id, projectIdToDeployableServiceId(parentId)))
-      .orderBy(asc(services.name))
-      .all() as Array<{ id: string }>;
+      .orderBy(asc(services.name));
     if (childSvcs.length === 0) return [];
     const childProjectIds = childSvcs.map((s) => deployableServiceIdToProjectId(s.id));
-    return childProjectIds.flatMap((cid) => {
-      const row = this.getProject(cid);
-      return row ? [row] : [];
-    });
+    const rows = await Promise.all(childProjectIds.map((cid) => this.getProject(cid)));
+    return rows.filter((p): p is ProjectRow => p !== undefined);
   }
 
-  getPreviewProjects(parentProjectId: string): ProjectRow[] {
+  async getPreviewProjects(parentProjectId: string): Promise<ProjectRow[]> {
     // Post-0012: preview flag lives on the service row. Find child services
     // with is_preview = 1 under this parent, then fetch + hydrate their project rows.
-    const previewSvcs = this.db
+    const previewSvcs = await this.db
       .select({ id: services.id })
       .from(services)
       .where(
@@ -773,27 +821,26 @@ export class ProjectRepo {
           eq(services.parent_service_id, projectIdToDeployableServiceId(parentProjectId)),
           eq(services.is_preview, 1),
         ),
-      )
-      .all() as Array<{ id: string }>;
+      );
     if (previewSvcs.length === 0) return [];
-    return previewSvcs.flatMap((s) => {
-      const row = this.getProject(deployableServiceIdToProjectId(s.id));
-      return row ? [row] : [];
-    });
+    const rows = await Promise.all(
+      previewSvcs.map((s) => this.getProject(deployableServiceIdToProjectId(s.id))),
+    );
+    return rows.filter((p): p is ProjectRow => p !== undefined);
   }
 
-  isParentProject(id: string): boolean {
-    const row = this.db
+  async isParentProject(id: string): Promise<boolean> {
+    const [row] = await this.db
       .select({ cnt: count() })
       .from(services)
       .where(eq(services.parent_service_id, projectIdToDeployableServiceId(id)))
-      .get();
+      .limit(1);
     return (row?.cnt ?? 0) > 0;
   }
 
-  acquireDeployLock(projectId: string, sessionId: string): boolean {
-    this.cleanExpiredDeployLocks();
-    this.db
+  async acquireDeployLock(projectId: string, sessionId: string): Promise<boolean> {
+    await this.cleanExpiredDeployLocks();
+    const updated = await this.db
       .update(projects)
       .set({
         deploy_lock_session: sessionId,
@@ -806,16 +853,13 @@ export class ProjectRepo {
           or(isNull(projects.deploy_lock_session), eq(projects.deploy_lock_session, sessionId)),
         ),
       )
-      .run();
-    const row = this.sqlite.prepare('SELECT changes() as changes').get() as {
-      changes: number;
-    } | null;
-    return (row?.changes ?? 0) > 0;
+      .returning({ id: projects.id });
+    return updated.length > 0;
   }
 
-  releaseDeployLock(projectId: string, sessionId?: string): boolean {
+  async releaseDeployLock(projectId: string, sessionId?: string): Promise<boolean> {
     if (sessionId !== undefined) {
-      this.db
+      const updated = await this.db
         .update(projects)
         .set({
           deploy_lock_session: null,
@@ -823,14 +867,10 @@ export class ProjectRepo {
           updated_at: sql`CURRENT_TIMESTAMP`,
         })
         .where(and(eq(projects.id, projectId), eq(projects.deploy_lock_session, sessionId)))
-        .run();
+        .returning({ id: projects.id });
 
-      const row = this.sqlite.prepare('SELECT changes() as changes').get() as {
-        changes: number;
-      } | null;
-
-      if ((row?.changes ?? 0) === 0) {
-        const current = this.getDeployLockInfo(projectId);
+      if (updated.length === 0) {
+        const current = await this.getDeployLockInfo(projectId);
         if (current) {
           log.warn(
             { projectId, sessionId, currentSession: current.session },
@@ -848,17 +888,19 @@ export class ProjectRepo {
       return true;
     }
 
-    this.db
+    await this.db
       .update(projects)
       .set({ deploy_lock_session: null, deploy_lock_at: null, updated_at: sql`CURRENT_TIMESTAMP` })
       .where(eq(projects.id, projectId))
-      .run();
+      .returning({ id: projects.id });
 
     return true;
   }
 
-  getDeployLockInfo(projectId: string): { session: string; lockedAt: string } | null {
-    const project = this.getProject(projectId);
+  async getDeployLockInfo(
+    projectId: string,
+  ): Promise<{ session: string; lockedAt: string } | null> {
+    const project = await this.getProject(projectId);
     if (!project?.deploy_lock_session || !project.deploy_lock_at) return null;
     return { session: project.deploy_lock_session, lockedAt: project.deploy_lock_at };
   }
@@ -867,17 +909,14 @@ export class ProjectRepo {
   // `src/llm/agent-pool.ts`, 30min) so the in-memory project lock and
   // the persisted DB lock expire in the same window — also matches
   // recovery-policy.ts:DEFAULT_LOCK_STALE_MS.
-  cleanExpiredDeployLocks(timeoutMinutes = 30): number {
-    this.db
+  async cleanExpiredDeployLocks(timeoutMinutes = 30): Promise<number> {
+    const updated = await this.db
       .update(projects)
       .set({ deploy_lock_session: null, deploy_lock_at: null })
       .where(
-        sql`${projects.deploy_lock_session} IS NOT NULL AND ${projects.deploy_lock_at} < datetime('now', '-' || ${timeoutMinutes} || ' minutes')`,
+        sql`${projects.deploy_lock_session} IS NOT NULL AND (${projects.deploy_lock_at})::timestamp < now() - (${timeoutMinutes} * interval '1 minute')`,
       )
-      .run();
-    const row = this.sqlite.prepare('SELECT changes() as changes').get() as {
-      changes: number;
-    } | null;
-    return row?.changes ?? 0;
+      .returning({ id: projects.id });
+    return updated.length;
   }
 }

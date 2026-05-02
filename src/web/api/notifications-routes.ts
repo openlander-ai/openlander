@@ -45,9 +45,9 @@ function redactUserInfo(rawUrl: string): string {
 export function createNotificationsRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
-  api.get('/settings/notifications/webhook', (c) => {
+  api.get('/settings/notifications/webhook', async (c) => {
     try {
-      const row = ctx.db.getSetting(WEBHOOK_KEY);
+      const row = await ctx.db.getSetting(WEBHOOK_KEY);
       if (!row) {
         return c.json({ error: 'NOT_FOUND', message: 'No webhook configured' }, 404);
       }
@@ -114,7 +114,7 @@ export function createNotificationsRoutes(ctx: AppContext): Hono {
     };
 
     try {
-      ctx.db.upsertSetting(WEBHOOK_KEY, JSON.stringify(config));
+      await ctx.db.upsertSetting(WEBHOOK_KEY, JSON.stringify(config));
       return c.json(config);
     } catch (err) {
       log.debug({ err }, 'Save notification webhook failed');
@@ -125,9 +125,9 @@ export function createNotificationsRoutes(ctx: AppContext): Hono {
     }
   });
 
-  api.delete('/settings/notifications/webhook', (c) => {
+  api.delete('/settings/notifications/webhook', async (c) => {
     try {
-      ctx.db.deleteSetting(WEBHOOK_KEY);
+      await ctx.db.deleteSetting(WEBHOOK_KEY);
       return c.json({ status: 'deleted' });
     } catch (err) {
       log.debug({ err }, 'Delete notification webhook failed');

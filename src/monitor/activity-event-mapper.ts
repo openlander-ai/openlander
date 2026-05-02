@@ -72,8 +72,8 @@ export interface ActivityMapperDb {
   getActionRunsByApprovalStatus(
     status: 'pending' | 'approved' | 'rejected',
     limit: number,
-  ): Array<{ id: string; project_id: string }>;
-  getProject(id: string): { name: string } | undefined;
+  ): Array<{ id: string; project_id: string }> | Promise<Array<{ id: string; project_id: string }>>;
+  getProject(id: string): { name: string } | undefined | Promise<{ name: string } | undefined>;
 }
 
 // ── Mapping functions ──
@@ -82,11 +82,11 @@ export function formatEventName(eventType: string): string {
   return eventType.replace(/[:_-]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-export function resolveProjectIdFromEvent<T extends EventType>(
+export async function resolveProjectIdFromEvent<T extends EventType>(
   db: ActivityMapperDb,
   eventType: T,
   payload: EventPayload[T],
-): string | undefined {
+): Promise<string | undefined> {
   if (eventType === 'alert:new') {
     const alertPayload = payload as EventPayload['alert:new'];
     const projectId = alertPayload.alert.details.projectId;
@@ -102,9 +102,8 @@ export function resolveProjectIdFromEvent<T extends EventType>(
       'rejected',
     ];
     for (const status of statuses) {
-      const matched = db
-        .getActionRunsByApprovalStatus(status, 200)
-        .find((run) => run.id === approvalPayload.actionRunId);
+      const runs = await db.getActionRunsByApprovalStatus(status, 200);
+      const matched = runs.find((run) => run.id === approvalPayload.actionRunId);
       if (matched) {
         return matched.project_id;
       }
@@ -470,15 +469,15 @@ export function describeActivityEvent<T extends EventType>(
   };
 }
 
-export function buildActivityEvent<T extends EventType>(
+export async function buildActivityEvent<T extends EventType>(
   db: ActivityMapperDb,
   eventType: T,
   payload: EventPayload[T],
-): ActivityEvent | null {
-  const projectId = resolveProjectIdFromEvent(db, eventType, payload);
+): Promise<ActivityEvent | null> {
+  const projectId = await resolveProjectIdFromEvent(db, eventType, payload);
   if (!projectId) return null;
 
-  const project = db.getProject(projectId);
+  const project = await db.getProject(projectId);
   const projectName = project?.name ?? projectId;
   const timestamp = new Date().toISOString();
   const type = mapActivityType(eventType);

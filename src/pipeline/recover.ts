@@ -112,7 +112,7 @@ async function recoverService(
     if (container.exists && !container.running) {
       if (!dryRun) {
         await ctx.docker.startContainer(cName);
-        ctx.db.updateService(service.id, { status: 'running' });
+        await ctx.db.updateService(service.id, { status: 'running' });
       }
       return { name: service.name, status: 'started' };
     }
@@ -183,7 +183,7 @@ async function recoverService(
       cpuShares: memLimits.cpuShares,
     });
 
-    ctx.db.updateService(service.id, { status: 'running', containerId });
+    await ctx.db.updateService(service.id, { status: 'running', containerId });
 
     log.info({ service: service.name }, 'Service recovered');
     return { name: service.name, status: 'recreated' };
@@ -202,7 +202,7 @@ async function recoverProject(
   const cName = projectContainerName(project.name);
   // PR 4.5: canonical-first reads of runtime fields with `??` fallback to
   // legacy `projects` columns through migration 0012.
-  const deployable = ctx.db.getDeployableForProject(project.id);
+  const deployable = await ctx.db.getDeployableForProject(project.id);
   const status = deployable?.status ?? project.status;
   const imageTag = deployable?.image_tag ?? project.image_tag;
   const imageCmdRaw = deployable?.image_cmd ?? project.image_cmd;
@@ -251,8 +251,8 @@ async function recoverProject(
     }
 
     // Get env vars and secret files for the project
-    const envVars = ctx.db.getEnvVars(project.id);
-    const secretFiles = ctx.env.getSecretFilesForDeploy(project.id);
+    const envVars = await ctx.db.getEnvVars(project.id);
+    const secretFiles = await ctx.env.getSecretFilesForDeploy(project.id);
 
     // Determine port — reuse stored port or allocate new one
     const port = assignedPort ?? (await allocatePort(ctx.db, ctx.docker, {}, 'production'));
@@ -273,7 +273,7 @@ async function recoverProject(
 
     // Remove any stale container with same name
     await ctx.docker.safeRemoveContainer(cName);
-    const resourceLimits = loadResourceLimitsForProject(ctx.db, project.id);
+    const resourceLimits = await loadResourceLimitsForProject(ctx.db, project.id);
 
     // Create and start container
     const containerId = await ctx.docker.runContainer({
@@ -290,7 +290,7 @@ async function recoverProject(
       resourceLimits: resourceLimits ?? undefined,
     });
 
-    ctx.db.updateProject(project.id, {
+    await ctx.db.updateProject(project.id, {
       status: 'running',
       containerId,
       assignedPort: port,
@@ -326,13 +326,13 @@ export async function recover(
   }
 
   // Phase 2: Recover services (must come before projects — projects may depend on services)
-  const services = ctx.db.listServices();
+  const services = await ctx.db.listServices();
   for (const service of services) {
     result.services.push(await recoverService(ctx, service, dryRun));
   }
 
   // Phase 3: Recover projects
-  const projects = ctx.db.listProjects();
+  const projects = await ctx.db.listProjects();
   for (const project of projects) {
     result.projects.push(await recoverProject(ctx, project, dryRun));
   }

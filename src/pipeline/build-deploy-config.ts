@@ -35,17 +35,17 @@ function isValidDockerfilePath(path: string): boolean {
   );
 }
 
-export function buildDeployConfig(params: BuildDeployConfigParams): ProjectConfig {
+export async function buildDeployConfig(params: BuildDeployConfigParams): Promise<ProjectConfig> {
   const { projectId, runtimeOverrides, db } = params;
 
-  const project = db.getProject(projectId);
+  const project = await db.getProject(projectId);
   if (!project) {
     throw new Error(`Project not found: ${projectId}`);
   }
 
   // PR 4.5: canonical-first reads of deployable fields with `??` fallback to
   // legacy `projects` columns through migration 0012.
-  const deployable = db.getDeployableForProject(projectId);
+  const deployable = await db.getDeployableForProject(projectId);
   const buildMethod = deployable?.build_method ?? project.build_method;
   const source = deployable?.source ?? project.source;
   const imageUrl = deployable?.image_url ?? project.image_url;
@@ -78,7 +78,7 @@ export function buildDeployConfig(params: BuildDeployConfigParams): ProjectConfi
     _preferredPort: assignedPort ?? undefined,
   };
 
-  const stored = db.loadDeployConfig(projectId);
+  const stored = await db.loadDeployConfig(projectId);
   const storedConfig = stored ? validateStoredConfig(stored.config_json) : null;
   const mergedFromStored: ProjectConfig = storedConfig
     ? {

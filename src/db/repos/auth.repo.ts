@@ -6,49 +6,47 @@ import type { AuthRow } from '../types.js';
 export class AuthRepo {
   constructor(private readonly db: DrizzleClient) {}
 
-  isPasswordSet(): boolean {
-    const row = this.db.select().from(auth).where(eq(auth.id, 1)).get();
+  async isPasswordSet(): Promise<boolean> {
+    const [row] = await this.db.select().from(auth).where(eq(auth.id, 1)).limit(1);
     return row !== undefined && row.password_hash !== '';
   }
 
-  getAuth(): AuthRow | null {
-    const row = this.db.select().from(auth).where(eq(auth.id, 1)).get();
+  async getAuth(): Promise<AuthRow | null> {
+    const [row] = await this.db.select().from(auth).where(eq(auth.id, 1)).limit(1);
     return row ?? null;
   }
 
-  setPassword(hash: string): void {
-    const existing = this.getAuth();
+  async setPassword(hash: string): Promise<void> {
+    const existing = await this.getAuth();
     if (existing) {
-      this.db.update(auth).set({ password_hash: hash }).where(eq(auth.id, 1)).run();
+      await this.db.update(auth).set({ password_hash: hash }).where(eq(auth.id, 1));
     } else {
-      this.db.insert(auth).values({ id: 1, password_hash: hash, api_token: '' }).run();
+      await this.db.insert(auth).values({ id: 1, password_hash: hash, api_token: '' });
     }
   }
 
-  getApiToken(): { encrypted: string; iv: string } | null {
-    const row = this.db.select().from(auth).where(eq(auth.id, 1)).get();
+  async getApiToken(): Promise<{ encrypted: string; iv: string } | null> {
+    const [row] = await this.db.select().from(auth).where(eq(auth.id, 1)).limit(1);
     if (!row || !row.api_token || !row.api_token_iv) return null;
     return { encrypted: row.api_token, iv: row.api_token_iv };
   }
 
-  setApiToken(encrypted: string, iv: string): void {
-    const existing = this.getAuth();
+  async setApiToken(encrypted: string, iv: string): Promise<void> {
+    const existing = await this.getAuth();
     if (existing) {
-      this.db
+      await this.db
         .update(auth)
         .set({ api_token: encrypted, api_token_iv: iv })
-        .where(eq(auth.id, 1))
-        .run();
+        .where(eq(auth.id, 1));
     } else {
-      this.db
+      await this.db
         .insert(auth)
-        .values({ id: 1, password_hash: '', api_token: encrypted, api_token_iv: iv })
-        .run();
+        .values({ id: 1, password_hash: '', api_token: encrypted, api_token_iv: iv });
     }
   }
 
-  getSession(): { token: string; createdAt: number; expiresAt: number } | null {
-    const row = this.db.select().from(auth).where(eq(auth.id, 1)).get();
+  async getSession(): Promise<{ token: string; createdAt: number; expiresAt: number } | null> {
+    const [row] = await this.db.select().from(auth).where(eq(auth.id, 1)).limit(1);
     if (
       !row ||
       !row.session_token ||
@@ -64,42 +62,37 @@ export class AuthRepo {
     };
   }
 
-  createSession(token: string, createdAt: number, expiresAt: number): void {
-    const existing = this.getAuth();
+  async createSession(token: string, createdAt: number, expiresAt: number): Promise<void> {
+    const existing = await this.getAuth();
     if (existing) {
-      this.db
+      await this.db
         .update(auth)
         .set({
           session_token: token,
           session_created_at: createdAt,
           session_expires_at: expiresAt,
         })
-        .where(eq(auth.id, 1))
-        .run();
+        .where(eq(auth.id, 1));
     } else {
-      this.db
-        .insert(auth)
-        .values({
-          id: 1,
-          password_hash: '',
-          api_token: '',
-          session_token: token,
-          session_created_at: createdAt,
-          session_expires_at: expiresAt,
-        })
-        .run();
+      await this.db.insert(auth).values({
+        id: 1,
+        password_hash: '',
+        api_token: '',
+        session_token: token,
+        session_created_at: createdAt,
+        session_expires_at: expiresAt,
+      });
     }
   }
 
-  deleteSession(): void {
-    this.db
+  async deleteSession(): Promise<void> {
+    await this.db
       .update(auth)
       .set({
         session_token: null,
         session_created_at: null,
         session_expires_at: null,
       })
-      .where(eq(auth.id, 1))
-      .run();
+      .where(eq(auth.id, 1));
   }
 }

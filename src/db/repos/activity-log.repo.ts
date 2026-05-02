@@ -1,5 +1,5 @@
-import { and, asc, between, desc, eq, gt, lt } from 'drizzle-orm';
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import { and, asc, between, desc, eq, gt, lt, type SQL } from 'drizzle-orm';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { activityLog } from '../schema.drizzle.js';
 import type { ActivityLogRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
@@ -46,12 +46,12 @@ export function ulid(): string {
 export class ActivityLogRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
+    private readonly client: PostgresClient,
   ) {
-    void this.sqlite;
+    void this.client;
   }
 
-  insert(entry: {
+  async insert(entry: {
     event_type: string;
     activity_type: string;
     severity: string;
@@ -62,51 +62,51 @@ export class ActivityLogRepo {
     status: string;
     metadata?: string;
     created_at?: string;
-  }): ActivityLogRow {
+  }): Promise<ActivityLogRow> {
     const id = ulid();
     const now = entry.created_at ?? new Date().toISOString();
 
-    this.db
-      .insert(activityLog)
-      .values({
-        id,
-        event_type: entry.event_type,
-        activity_type: entry.activity_type,
-        severity: entry.severity,
-        project_id: entry.project_id,
-        correlation_id: entry.correlation_id ?? null,
-        title: entry.title,
-        description: entry.description,
-        status: entry.status,
-        metadata: entry.metadata ?? '{}',
-        created_at: now,
-      })
-      .run();
-
-    const created = this.db.select().from(activityLog).where(eq(activityLog.id, id)).get();
+    const created =
+      (
+        await this.db
+          .insert(activityLog)
+          .values({
+            id,
+            event_type: entry.event_type,
+            activity_type: entry.activity_type,
+            severity: entry.severity,
+            project_id: entry.project_id,
+            correlation_id: entry.correlation_id ?? null,
+            title: entry.title,
+            description: entry.description,
+            status: entry.status,
+            metadata: entry.metadata ?? '{}',
+            created_at: now,
+          })
+          .returning()
+      )[0] ?? null;
 
     if (!created) throw new RepoPersistenceError('activity log entry', id);
     return created;
   }
 
-  findSince(lastUlid: string, limit = 50): ActivityLogRow[] {
-    return this.db
+  async findSince(lastUlid: string, limit = 50): Promise<ActivityLogRow[]> {
+    return await this.db
       .select()
       .from(activityLog)
       .where(gt(activityLog.id, lastUlid))
       .orderBy(asc(activityLog.id))
-      .limit(limit)
-      .all();
+      .limit(limit);
   }
 
-  findByDateRange(
+  async findByDateRange(
     from: string,
     to: string,
     filters?: { project_id?: string; activity_type?: string },
     cursor?: string,
     limit = 50,
-  ): ActivityLogRow[] {
-    const conditions = [between(activityLog.created_at, from, to)];
+  ): Promise<ActivityLogRow[]> {
+    const conditions: SQL[] = [between(activityLog.created_at, from, to)];
 
     if (filters?.project_id) {
       conditions.push(eq(activityLog.project_id, filters.project_id));
@@ -118,17 +118,16 @@ export class ActivityLogRepo {
       conditions.push(gt(activityLog.id, cursor));
     }
 
-    return this.db
+    return await this.db
       .select()
       .from(activityLog)
       .where(and(...conditions))
       .orderBy(asc(activityLog.id))
-      .limit(limit)
-      .all();
+      .limit(limit);
   }
 
   /** Find recent activity log entries with optional filters (newest first). */
-  findRecent(
+  async findRecent(
     limit = 50,
     filters?: {
       project_id?: string;
@@ -136,8 +135,8 @@ export class ActivityLogRepo {
       severity?: string;
       correlation_id?: string;
     },
-  ): ActivityLogRow[] {
-    const conditions = [];
+  ): Promise<ActivityLogRow[]> {
+    const conditions: SQL[] = [];
     if (filters?.project_id) {
       conditions.push(eq(activityLog.project_id, filters.project_id));
     }
@@ -151,21 +150,21 @@ export class ActivityLogRepo {
       conditions.push(eq(activityLog.correlation_id, filters.correlation_id));
     }
 
-    const query =
+    const rows =
       conditions.length > 0
-        ? this.db
+        ? await this.db
             .select()
             .from(activityLog)
             .where(and(...conditions))
             .orderBy(desc(activityLog.id))
             .limit(limit)
-        : this.db.select().from(activityLog).orderBy(desc(activityLog.id)).limit(limit);
+        : await this.db.select().from(activityLog).orderBy(desc(activityLog.id)).limit(limit);
 
-    return (query.all() as ActivityLogRow[]).reverse();
+    return rows.reverse();
   }
 
   /** Find entries since a ULID cursor with optional filters (ascending order). */
-  findSinceFiltered(
+  async findSinceFiltered(
     lastUlid: string,
     limit = 50,
     filters?: {
@@ -174,8 +173,8 @@ export class ActivityLogRepo {
       severity?: string;
       correlation_id?: string;
     },
-  ): ActivityLogRow[] {
-    const conditions = [gt(activityLog.id, lastUlid)];
+  ): Promise<ActivityLogRow[]> {
+    const conditions: SQL[] = [gt(activityLog.id, lastUlid)];
     if (filters?.project_id) {
       conditions.push(eq(activityLog.project_id, filters.project_id));
     }
@@ -189,17 +188,19 @@ export class ActivityLogRepo {
       conditions.push(eq(activityLog.correlation_id, filters.correlation_id));
     }
 
-    return this.db
+    return await this.db
       .select()
       .from(activityLog)
       .where(and(...conditions))
       .orderBy(asc(activityLog.id))
-      .limit(limit)
-      .all();
+      .limit(limit);
   }
 
-  deleteOlderThan(isoDate: string): number {
-    const result = this.db.delete(activityLog).where(lt(activityLog.created_at, isoDate)).run();
-    return (result as { changes: number }).changes;
+  async deleteOlderThan(isoDate: string): Promise<number> {
+    const deleted = await this.db
+      .delete(activityLog)
+      .where(lt(activityLog.created_at, isoDate))
+      .returning({ id: activityLog.id });
+    return deleted.length;
   }
 }

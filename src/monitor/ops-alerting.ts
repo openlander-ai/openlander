@@ -29,7 +29,7 @@ export class OpsAlerting {
     if (alert.incident_id) {
       try {
         const eventId = `evt-${String(Date.now())}-${Math.random().toString(36).slice(2, 7)}`;
-        this.ctx.db.addOpsIncidentEvent({
+        await this.ctx.db.addOpsIncidentEvent({
           id: eventId,
           incident_id: alert.incident_id,
           event_type: 'alert_sent',

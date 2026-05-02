@@ -1,5 +1,5 @@
 import { eq, or } from 'drizzle-orm';
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import {
   projectDependencies,
   type ProjectDependencyRow,
@@ -25,9 +25,9 @@ type ProjectDependencyRowHydrated = ProjectDependencyRow & {
 export class ProjectDependencyRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
+    private readonly client: PostgresClient,
   ) {
-    void this.sqlite;
+    void this.client;
   }
 
   /**
@@ -55,13 +55,13 @@ export class ProjectDependencyRepo {
    * service ids here) or the post-0012 `source_service_id`/`target_service_id`
    * shape directly.
    */
-  create(
+  async create(
     data: Omit<NewProjectDependency, 'id' | 'created_at' | 'source_service_id'> & {
       source_service_id?: string;
       source_project_id?: string;
       target_project_id?: string | null;
     },
-  ): ProjectDependencyRowHydrated {
+  ): Promise<ProjectDependencyRowHydrated> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const sourceServiceId =
@@ -70,88 +70,83 @@ export class ProjectDependencyRepo {
     const targetServiceId =
       data.target_service_id ??
       (data.target_project_id ? projectIdToServiceId(data.target_project_id) : null);
-    this.db
-      .insert(projectDependencies)
-      .values({
-        id,
-        source_service_id: sourceServiceId,
-        target_service_id: targetServiceId,
-        dependency_type: data.dependency_type ?? 'custom',
-        source: data.source ?? 'manual',
-        created_at: now,
-      })
-      .run();
-    const row = this.db
-      .select()
-      .from(projectDependencies)
-      .where(eq(projectDependencies.id, id))
-      .get();
+    const row =
+      (
+        await this.db
+          .insert(projectDependencies)
+          .values({
+            id,
+            source_service_id: sourceServiceId,
+            target_service_id: targetServiceId,
+            dependency_type: data.dependency_type ?? 'custom',
+            source: data.source ?? 'manual',
+            created_at: now,
+          })
+          .returning()
+      )[0] ?? null;
+
     if (!row) throw new RepoPersistenceError('project dependency', id);
     return this.hydrateDeprecated(row);
   }
 
-  findByProject(projectId: string): ProjectDependencyRowHydrated[] {
-    const rows = this.db
+  async findByProject(projectId: string): Promise<ProjectDependencyRowHydrated[]> {
+    const rows = await this.db
       .select()
       .from(projectDependencies)
-      .where(eq(projectDependencies.source_service_id, projectIdToServiceId(projectId)))
-      .all() as ProjectDependencyRow[];
+      .where(eq(projectDependencies.source_service_id, projectIdToServiceId(projectId)));
     return rows.map((r) => this.hydrateDeprecated(r));
   }
 
-  findDependents(
+  async findDependents(
     targetProjectId?: string,
     targetServiceId?: string,
-  ): ProjectDependencyRowHydrated[] {
+  ): Promise<ProjectDependencyRowHydrated[]> {
     if (targetProjectId) {
-      const rows = this.db
+      const rows = await this.db
         .select()
         .from(projectDependencies)
-        .where(eq(projectDependencies.target_service_id, projectIdToServiceId(targetProjectId)))
-        .all() as ProjectDependencyRow[];
+        .where(eq(projectDependencies.target_service_id, projectIdToServiceId(targetProjectId)));
       return rows.map((r) => this.hydrateDeprecated(r));
     }
     if (targetServiceId) {
-      const rows = this.db
+      const rows = await this.db
         .select()
         .from(projectDependencies)
-        .where(eq(projectDependencies.target_service_id, targetServiceId))
-        .all() as ProjectDependencyRow[];
+        .where(eq(projectDependencies.target_service_id, targetServiceId));
       return rows.map((r) => this.hydrateDeprecated(r));
     }
     return [];
   }
 
-  findAll(): ProjectDependencyRowHydrated[] {
-    const rows = this.db.select().from(projectDependencies).all() as ProjectDependencyRow[];
+  async findAll(): Promise<ProjectDependencyRowHydrated[]> {
+    const rows = await this.db.select().from(projectDependencies);
     return rows.map((r) => this.hydrateDeprecated(r));
   }
 
-  delete(id: string): void {
-    this.db.delete(projectDependencies).where(eq(projectDependencies.id, id)).run();
+  async delete(id: string): Promise<void> {
+    await this.db.delete(projectDependencies).where(eq(projectDependencies.id, id));
   }
 
-  deleteByProject(projectId: string): void {
+  async deleteByProject(projectId: string): Promise<void> {
     const serviceId = projectIdToServiceId(projectId);
-    this.db
+    await this.db
       .delete(projectDependencies)
       .where(
         or(
           eq(projectDependencies.source_service_id, serviceId),
           eq(projectDependencies.target_service_id, serviceId),
         ),
-      )
-      .run();
+      );
   }
 
-  syncFromServiceConnections(
+  async syncFromServiceConnections(
     serviceConnections: Array<{
       project_id: string;
       service_id: string;
       service_type?: string;
     }>,
-  ): void {
-    this.db.delete(projectDependencies).where(eq(projectDependencies.source, 'auto')).run();
+  ): Promise<void> {
+    await this.db.delete(projectDependencies).where(eq(projectDependencies.source, 'auto'));
     for (const conn of serviceConnections) {
       const id = crypto.randomUUID();
       const depType =
@@ -160,17 +155,14 @@ export class ProjectDependencyRepo {
           : conn.service_type === 'redis'
             ? 'cache'
             : 'custom';
-      this.db
-        .insert(projectDependencies)
-        .values({
-          id,
-          source_service_id: projectIdToServiceId(conn.project_id),
-          target_service_id: conn.service_id,
-          dependency_type: depType as ProjectDependencyRow['dependency_type'],
-          source: 'auto',
-          created_at: new Date().toISOString(),
-        })
-        .run();
+      await this.db.insert(projectDependencies).values({
+        id,
+        source_service_id: projectIdToServiceId(conn.project_id),
+        target_service_id: conn.service_id,
+        dependency_type: depType as ProjectDependencyRow['dependency_type'],
+        source: 'auto',
+        created_at: new Date().toISOString(),
+      });
     }
   }
 }

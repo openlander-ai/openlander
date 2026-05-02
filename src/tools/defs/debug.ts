@@ -10,13 +10,13 @@ export const debugToolDefs: ToolDef[] = [
       'Get the raw build log for a project deployment. Returns the full unprocessed build output. Use this instead of debug_build_error when you need to parse the log yourself. Returns { status, build_log, duration_ms, created_at }. Errors: PROJECT_NOT_FOUND, NO_DEPLOY_LOGS.',
     mcpDescription: 'Get raw Docker build output for debugging build failures.',
     inputSchema: getBuildLogSchema,
-    execute: (args, { appCtx }) => {
+    execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
-      const project = appCtx.db.getProjectByName(projectName);
+      const project = await appCtx.db.getProjectByName(projectName);
       if (!project) throw new ProjectNotFoundError(projectName);
 
       const index = (args['deploy_index'] as number | undefined) ?? 0;
-      const logs = appCtx.db.getDeployLogs(project.id, index + 1);
+      const logs = await appCtx.db.getDeployLogs(project.id, index + 1);
       const log = logs[index];
       if (!log) {
         const activeJob = appCtx.jobManager.getStatus(project.id);
@@ -60,12 +60,12 @@ export const debugToolDefs: ToolDef[] = [
       }
 
       const projectName = args['project_name'] as string;
-      const project = appCtx.db.getProjectByName(projectName);
+      const project = await appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
-      const lastDeploy = appCtx.db.getLastDeployLog(project.id);
+      const lastDeploy = await appCtx.db.getLastDeployLog(project.id);
       if (!lastDeploy || lastDeploy.status !== 'failed') {
         throw new Error('No failed build found for this project.');
       }
@@ -84,7 +84,7 @@ export const debugToolDefs: ToolDef[] = [
         projectName,
         // PR 4.5: canonical-first read of image_tag with `??` fallback.
         imageTag:
-          appCtx.db.getDeployableForProject(project.id)?.image_tag ??
+          (await appCtx.db.getDeployableForProject(project.id))?.image_tag ??
           project.image_tag ??
           `openlander/${projectName}:latest`,
         failedStep: 'build',

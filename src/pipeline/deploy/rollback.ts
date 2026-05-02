@@ -42,9 +42,9 @@ function createFallbackStateManager(db: Database): {
   ) => Promise<boolean>;
 } {
   return {
-    transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
-      db.updateProject(projectId, { status: targetStatus });
-      return Promise.resolve(true);
+    async transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
+      await db.updateProject(projectId, { status: targetStatus });
+      return true;
     },
   };
 }
@@ -76,7 +76,7 @@ export class RollbackExecutor {
 
   async rollbackToImage(projectId: string, environmentId?: string): Promise<RollbackResult> {
     const startTime = Date.now();
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) {
       return {
         success: false,
@@ -86,16 +86,16 @@ export class RollbackExecutor {
       };
     }
 
-    const target = this.resolveTarget(project, environmentId);
+    const target = await this.resolveTarget(project, environmentId);
     if (!target.success) {
       return target.result;
     }
 
     const productionEnvironment =
       target.target.environment ??
-      this.db
-        .getEnvironmentsByProject(projectId)
-        .find((environment) => environment.type === 'production');
+      (await this.db.getEnvironmentsByProject(projectId)).find(
+        (environment) => environment.type === 'production',
+      );
 
     const rollbackImageTag =
       productionEnvironment?.previous_image_tag ?? target.target.project.previous_image_tag;
@@ -132,21 +132,21 @@ export class RollbackExecutor {
 
       const envType: OpenLanderEnv = 'production';
 
-      const resourceLimits = loadResourceLimitsForProject(this.db, projectId);
+      const resourceLimits = await loadResourceLimitsForProject(this.db, projectId);
 
       const containerId = await this.docker.runContainer({
         imageTag: rollbackImageTag,
         name: containerName,
         port,
         containerPort,
-        envVars: this.db.getEnvVars(projectId, productionEnvironment?.id),
+        envVars: await this.db.getEnvVars(projectId, productionEnvironment?.id),
         traefikLabels: buildTraefikLabels(project.name, containerPort, undefined, envType),
         network: getPolicy(envType).networkName,
         resourceLimits: resourceLimits ?? undefined,
       });
 
       await this.stateManager.transition(projectId, 'running', 'deploy-success');
-      this.db.updateProject(projectId, {
+      await this.db.updateProject(projectId, {
         assignedPort: port,
         containerPort,
         containerId,
@@ -155,7 +155,7 @@ export class RollbackExecutor {
       });
 
       if (productionEnvironment) {
-        this.db.updateEnvironment(productionEnvironment.id, {
+        await this.db.updateEnvironment(productionEnvironment.id, {
           status: 'running',
           containerId,
           imageTag: rollbackImageTag,
@@ -172,7 +172,7 @@ export class RollbackExecutor {
       });
 
       const totalDuration = Date.now() - startTime;
-      this.db.createDeployLog({
+      await this.db.createDeployLog({
         id: nanoid(12),
         projectId,
         environmentId: productionEnvironment?.id,
@@ -208,7 +208,7 @@ export class RollbackExecutor {
 
       await this.stateManager.transition(projectId, 'error', 'deploy-runtime-error');
       if (productionEnvironment) {
-        this.db.updateEnvironment(productionEnvironment.id, { status: 'error' });
+        await this.db.updateEnvironment(productionEnvironment.id, { status: 'error' });
       }
 
       return {
@@ -221,15 +221,17 @@ export class RollbackExecutor {
     }
   }
 
-  private resolveTarget(
+  private async resolveTarget(
     project: ProjectRow,
     environmentId?: string,
-  ): { success: true; target: RollbackTarget } | { success: false; result: RollbackResult } {
+  ): Promise<
+    { success: true; target: RollbackTarget } | { success: false; result: RollbackResult }
+  > {
     if (!environmentId) {
       return { success: true, target: { project } };
     }
 
-    const environment = this.db.getEnvironment(environmentId);
+    const environment = await this.db.getEnvironment(environmentId);
     if (!environment || environment.project_id !== project.id) {
       return {
         success: false,
@@ -247,7 +249,7 @@ export class RollbackExecutor {
 
   private async cleanupRunningContainer(target: RollbackTarget): Promise<void> {
     // PR 4.5: canonical-first read for project-level cleanup with `??` fallback.
-    const projectDeployable = this.db.getDeployableForProject(target.project.id);
+    const projectDeployable = await this.db.getDeployableForProject(target.project.id);
     const containerId = target.environment
       ? target.environment.container_id
       : (projectDeployable?.container_id ?? target.project.container_id);

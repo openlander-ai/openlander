@@ -1,38 +1,49 @@
 import { and, eq } from 'drizzle-orm';
 
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { webhookConfigs } from '../schema.drizzle.js';
 import type { WebhookConfigRow } from '../types.js';
+
+type WebhookConfigSelect = typeof webhookConfigs.$inferSelect;
+
+function toWebhookConfigRow(row: WebhookConfigSelect): WebhookConfigRow {
+  return {
+    ...row,
+    branch_filter: row.branch_filter ?? 'main',
+    enabled: row.enabled === 0 ? 0 : 1,
+    created_at: row.created_at ?? '',
+  };
+}
 
 export class WebhookRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
+    private readonly client: PostgresClient,
   ) {
-    void this.sqlite;
+    void this.client;
   }
 
-  getWebhookConfig(
+  async getWebhookConfig(
     projectId: string,
     source: WebhookConfigRow['source'],
-  ): WebhookConfigRow | undefined {
-    return this.db
+  ): Promise<WebhookConfigRow | null> {
+    const [row] = await this.db
       .select()
       .from(webhookConfigs)
       .where(and(eq(webhookConfigs.project_id, projectId), eq(webhookConfigs.source, source)))
-      .limit(1)
-      .get() as WebhookConfigRow | undefined;
+      .limit(1);
+    return row ? toWebhookConfigRow(row) : null;
   }
 
-  setWebhookConfig(config: {
+  async setWebhookConfig(config: {
     id: string;
     projectId: string;
     source: WebhookConfigRow['source'];
     secret: string;
     branchFilter?: string;
     enabled?: boolean;
-  }): void {
-    this.db
+  }): Promise<void> {
+    await this.db
       .insert(webhookConfigs)
       .values({
         id: config.id,
@@ -49,30 +60,27 @@ export class WebhookRepo {
           branch_filter: config.branchFilter ?? 'main',
           enabled: config.enabled === false ? 0 : 1,
         },
-      })
-      .run();
+      });
   }
 
-  setWebhookEnabled(id: string, enabled: boolean): void {
-    this.db
+  async setWebhookEnabled(id: string, enabled: boolean): Promise<void> {
+    await this.db
       .update(webhookConfigs)
       .set({ enabled: enabled ? 1 : 0 })
-      .where(eq(webhookConfigs.id, id))
-      .run();
+      .where(eq(webhookConfigs.id, id));
   }
 
-  getWebhookConfigs(projectId: string): WebhookConfigRow[] {
-    return this.db
+  async getWebhookConfigs(projectId: string): Promise<WebhookConfigRow[]> {
+    const rows = await this.db
       .select()
       .from(webhookConfigs)
-      .where(eq(webhookConfigs.project_id, projectId))
-      .all() as WebhookConfigRow[];
+      .where(eq(webhookConfigs.project_id, projectId));
+    return rows.map(toWebhookConfigRow);
   }
 
-  deleteWebhookConfig(projectId: string, source: WebhookConfigRow['source']): void {
-    this.db
+  async deleteWebhookConfig(projectId: string, source: WebhookConfigRow['source']): Promise<void> {
+    await this.db
       .delete(webhookConfigs)
-      .where(and(eq(webhookConfigs.project_id, projectId), eq(webhookConfigs.source, source)))
-      .run();
+      .where(and(eq(webhookConfigs.project_id, projectId), eq(webhookConfigs.source, source)));
   }
 }

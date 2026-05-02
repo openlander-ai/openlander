@@ -94,8 +94,8 @@ export class RecoveryPipeline {
   async execute(context: RecoveryExecuteContext): Promise<RecoveryOutcome> {
     const { projectId, incidentId } = context;
 
-    if (!this.isProductionRecovery(context)) {
-      this.addIncidentEvent(
+    if (!(await this.isProductionRecovery(context))) {
+      await this.addIncidentEvent(
         incidentId,
         'interrupted',
         'Recovery skipped because target is not production environment',
@@ -103,20 +103,21 @@ export class RecoveryPipeline {
       return 'skipped';
     }
 
-    if (this.ctx.db.isCircuitBreakerOpen(projectId)) {
+    if (await this.ctx.db.isCircuitBreakerOpen(projectId)) {
       log.warn({ projectId }, 'Circuit breaker open — skipping recovery');
       await this.escalate(context, 'Circuit breaker open — too many failures');
       return 'skipped';
     }
 
-    const isHalfOpenAttempt = this.ctx.db.getCircuitBreakerState(projectId)?.state === 'half_open';
+    const isHalfOpenAttempt =
+      (await this.ctx.db.getCircuitBreakerState(projectId))?.state === 'half_open';
 
     if (this.activeRecoveries.has(projectId)) {
       log.warn({ projectId }, 'Recovery already in progress — skipping');
       return 'skipped';
     }
 
-    const actionRunId = this.ctx.db.createActionRun({
+    const actionRunId = await this.ctx.db.createActionRun({
       projectId,
       triggerSource: 'auto_recovery',
       recoveryStrategy: 'recipe',
@@ -132,17 +133,17 @@ export class RecoveryPipeline {
     try {
       const outcome = await this.runRecoverySequence(executionContext);
       if (isHalfOpenAttempt && outcome === 'escalated') {
-        this.ctx.db.openCircuitBreaker(projectId);
+        await this.ctx.db.openCircuitBreaker(projectId);
         log.warn({ projectId }, 'Half-open recovery attempt failed — circuit breaker re-opened');
       }
-      this.ctx.db.updateActionRunStatus(
+      await this.ctx.db.updateActionRunStatus(
         actionRunId,
         outcome === 'recovered' ? 'succeeded' : 'failed',
         outcome === 'escalated' ? 'Recovery pipeline exhausted' : undefined,
       );
       return outcome;
     } catch (error) {
-      this.ctx.db.updateActionRunStatus(
+      await this.ctx.db.updateActionRunStatus(
         actionRunId,
         'failed',
         error instanceof Error ? error.message : String(error),
@@ -163,9 +164,9 @@ export class RecoveryPipeline {
       return 'proceed';
     }
 
-    this.ctx.db.updateActionRunStatus(context.actionRunId, 'pending_approval');
-    this.ctx.db.updateActionRunApproval(context.actionRunId, 'pending', step);
-    this.ctx.db.updateActionRunPlan(context.actionRunId, description);
+    await this.ctx.db.updateActionRunStatus(context.actionRunId, 'pending_approval');
+    await this.ctx.db.updateActionRunApproval(context.actionRunId, 'pending', step);
+    await this.ctx.db.updateActionRunPlan(context.actionRunId, description);
 
     await eventBus.emit('recovery:approval-needed', {
       projectId: context.projectId,
@@ -191,12 +192,12 @@ export class RecoveryPipeline {
     );
 
     if (result === 'approved') {
-      this.ctx.db.updateActionRunStatus(context.actionRunId, 'running');
-      this.ctx.db.updateActionRunApproval(context.actionRunId, 'approved', step);
+      await this.ctx.db.updateActionRunStatus(context.actionRunId, 'running');
+      await this.ctx.db.updateActionRunApproval(context.actionRunId, 'approved', step);
       return 'proceed';
     }
 
-    this.ctx.db.updateActionRunApproval(context.actionRunId, 'rejected', step);
+    await this.ctx.db.updateActionRunApproval(context.actionRunId, 'rejected', step);
     return result;
   }
 
@@ -206,7 +207,7 @@ export class RecoveryPipeline {
     // Single source of truth for eligibility — same invariants as
     // RecoveryCoordinator. Stale deploy locks (>30 min) are now treated as
     // expired here too, matching the policy applied elsewhere.
-    const eligibility = checkRecoveryEligibility(projectId, 'ops_sequence', {
+    const eligibility = await checkRecoveryEligibility(projectId, 'ops_sequence', {
       db: this.ctx.db,
     });
     if (!eligibility.eligible) {
@@ -218,7 +219,7 @@ export class RecoveryPipeline {
         { projectId, reason: eligibility.reason, message: eligibility.message },
         'Ops recovery skipped by eligibility policy',
       );
-      this.addIncidentEvent(incidentId, 'interrupted', description);
+      await this.addIncidentEvent(incidentId, 'interrupted', description);
       return 'skipped';
     }
 
@@ -230,10 +231,14 @@ export class RecoveryPipeline {
       );
     }
 
-    this.addIncidentEvent(incidentId, 'action_taken', 'Step restart: attempting container restart');
+    await this.addIncidentEvent(
+      incidentId,
+      'action_taken',
+      'Step restart: attempting container restart',
+    );
     const restartResult = await this.restartContainer(projectId, containerId);
     if (!restartResult.success) {
-      this.incrementAndCheckBreaker(projectId);
+      await this.incrementAndCheckBreaker(projectId);
       const restartFailureReason = `Restart failed: ${restartResult.reason}`;
 
       const diagnosisGate = await this.gateStep(
@@ -248,7 +253,7 @@ export class RecoveryPipeline {
         );
       }
 
-      this.addIncidentEvent(
+      await this.addIncidentEvent(
         context.incidentId,
         'diagnosed',
         `Step diagnosis: ${restartFailureReason}`,
@@ -261,7 +266,7 @@ export class RecoveryPipeline {
         restartLogs,
       );
       if (restartDiagnosis && context.incidentId) {
-        this.ctx.db.updateOpsIncident(context.incidentId, {
+        await this.ctx.db.updateOpsIncident(context.incidentId, {
           diagnosis: restartDiagnosis,
           root_cause: restartFailureReason,
         });
@@ -275,13 +280,13 @@ export class RecoveryPipeline {
       if (fixesGate === 'proceed') {
         restartFixNotes = await this.applyFixes(context, restartLogs);
         if (restartFixNotes.length > 0) {
-          this.addIncidentEvent(
+          await this.addIncidentEvent(
             context.incidentId,
             'action_taken',
             `Step fix: ${restartFixNotes.join(' | ')}`,
           );
           if (context.incidentId) {
-            this.ctx.db.updateOpsIncident(context.incidentId, {
+            await this.ctx.db.updateOpsIncident(context.incidentId, {
               actions_taken: restartFixNotes.join('\n'),
             });
           }
@@ -303,21 +308,23 @@ export class RecoveryPipeline {
       );
     }
 
-    this.addIncidentEvent(
+    await this.addIncidentEvent(
       incidentId,
       'action_taken',
       'Step healthcheck: waiting for HTTP and container health checks',
     );
     const healthy = await this.waitForHealthy(projectId, containerId);
     if (healthy) {
-      this.addIncidentEvent(incidentId, 'recovered', 'Container recovered after restart');
+      await this.addIncidentEvent(incidentId, 'recovered', 'Container recovered after restart');
       if (incidentId) {
-        this.ctx.db.updateOpsIncidentStatus(incidentId, 'resolved', { resolved_at: Date.now() });
+        await this.ctx.db.updateOpsIncidentStatus(incidentId, 'resolved', {
+          resolved_at: Date.now(),
+        });
       }
       return 'recovered';
     }
 
-    this.incrementAndCheckBreaker(projectId);
+    await this.incrementAndCheckBreaker(projectId);
     const healthFailureReason = 'Health check failed after restart (3 attempts over 90 seconds)';
 
     const diagnosisGate = await this.gateStep(
@@ -332,7 +339,7 @@ export class RecoveryPipeline {
       );
     }
 
-    this.addIncidentEvent(
+    await this.addIncidentEvent(
       context.incidentId,
       'diagnosed',
       `Step diagnosis: ${healthFailureReason}`,
@@ -341,7 +348,7 @@ export class RecoveryPipeline {
     const healthLogs = await this.readContainerLogs(context.containerId);
     const healthDiagnosis = await this.generateDiagnosis(context, healthFailureReason, healthLogs);
     if (healthDiagnosis && context.incidentId) {
-      this.ctx.db.updateOpsIncident(context.incidentId, {
+      await this.ctx.db.updateOpsIncident(context.incidentId, {
         diagnosis: healthDiagnosis,
         root_cause: healthFailureReason,
       });
@@ -355,13 +362,13 @@ export class RecoveryPipeline {
     if (fixesGate === 'proceed') {
       healthFixNotes = await this.applyFixes(context, healthLogs);
       if (healthFixNotes.length > 0) {
-        this.addIncidentEvent(
+        await this.addIncidentEvent(
           context.incidentId,
           'action_taken',
           `Step fix: ${healthFixNotes.join(' | ')}`,
         );
         if (context.incidentId) {
-          this.ctx.db.updateOpsIncident(context.incidentId, {
+          await this.ctx.db.updateOpsIncident(context.incidentId, {
             actions_taken: healthFixNotes.join('\n'),
           });
         }
@@ -401,9 +408,9 @@ export class RecoveryPipeline {
         setTimeout(resolve, HEALTH_CHECK_INTERVAL_MS);
       });
 
-      const project = this.ctx.db.getProject(projectId);
+      const project = await this.ctx.db.getProject(projectId);
       // PR 4.5: canonical-first read of assigned_port with `??` fallback.
-      const deployable = this.ctx.db.getDeployableForProject(projectId);
+      const deployable = await this.ctx.db.getDeployableForProject(projectId);
       // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       const port = deployable?.assigned_port ?? project?.assigned_port;
       const containerRunning = await this.isContainerRunning(containerId);
@@ -442,10 +449,10 @@ export class RecoveryPipeline {
       return null;
     }
 
-    const project = this.ctx.db.getProject(context.projectId);
+    const project = await this.ctx.db.getProject(context.projectId);
     // PR 4.5: canonical-first status read with `??` fallback.
     const diagDeployable = project
-      ? this.ctx.db.getDeployableForProject(context.projectId)
+      ? await this.ctx.db.getDeployableForProject(context.projectId)
       : undefined;
     // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const diagStatus = diagDeployable?.status ?? project?.status;
@@ -480,7 +487,7 @@ export class RecoveryPipeline {
         return null;
       }
 
-      this.ctx.db.updateActionRunRecoveryStrategy(context.actionRunId, 'llm');
+      await this.ctx.db.updateActionRunRecoveryStrategy(context.actionRunId, 'llm');
       const response = await withTracking(
         {
           projectId: context.projectId,
@@ -504,7 +511,7 @@ export class RecoveryPipeline {
       );
       const diagnosis = response.text.trim();
       this.ctx.llmCircuitBreaker.recordSuccess(providerId);
-      this.addIncidentEvent(
+      await this.addIncidentEvent(
         context.incidentId,
         'diagnosed',
         'Step diagnosis: LLM diagnosis generated',
@@ -527,10 +534,10 @@ export class RecoveryPipeline {
 
     const portConflictPattern = /eaddrinuse|address already in use|bind: address already in use/i;
     if (portConflictPattern.test(logs)) {
-      const project = this.ctx.db.getProject(context.projectId);
+      const project = await this.ctx.db.getProject(context.projectId);
       // PR 4.5: canonical-first read of assigned_port with `??` fallback.
       const portDeployable = project
-        ? this.ctx.db.getDeployableForProject(context.projectId)
+        ? await this.ctx.db.getDeployableForProject(context.projectId)
         : undefined;
       // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       const portAssigned = portDeployable?.assigned_port ?? project?.assigned_port;
@@ -565,7 +572,7 @@ export class RecoveryPipeline {
       }
 
       await this.ctx.docker.stopContainer(conflict.id);
-      this.addIncidentEvent(
+      await this.addIncidentEvent(
         context.incidentId,
         'action_taken',
         `Stopped conflicting container ${conflict.name} on port ${String(projectPort)}`,
@@ -581,10 +588,10 @@ export class RecoveryPipeline {
     context: RecoveryContext,
     reason: string,
   ): Promise<'recovered' | 'escalated'> {
-    const project = this.ctx.db.getProject(context.projectId);
+    const project = await this.ctx.db.getProject(context.projectId);
     // PR 4.5: canonical-first read of previous_image_tag with `??` fallback.
     const rollbackDeployable = project
-      ? this.ctx.db.getDeployableForProject(context.projectId)
+      ? await this.ctx.db.getDeployableForProject(context.projectId)
       : undefined;
     // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const previousImageTag = rollbackDeployable?.previous_image_tag ?? project?.previous_image_tag;
@@ -594,14 +601,14 @@ export class RecoveryPipeline {
 
     // Use the unified policy so rollback honours the same stale-lock window as
     // every other recovery entry point.
-    const lockEligibility = checkRecoveryEligibility(context.projectId, 'ops_sequence', {
+    const lockEligibility = await checkRecoveryEligibility(context.projectId, 'ops_sequence', {
       db: this.ctx.db,
     });
     if (!lockEligibility.eligible && lockEligibility.reason === 'deploy_in_progress') {
       return await this.escalate(context, `${reason}; deploy lock held during rollback`);
     }
 
-    this.addIncidentEvent(
+    await this.addIncidentEvent(
       context.incidentId,
       'action_taken',
       `Step rollback: attempting rollback to ${previousImageTag}`,
@@ -610,7 +617,7 @@ export class RecoveryPipeline {
     try {
       const result = await this.ctx.pipeline.rollback(context.projectId);
       if (!result.success) {
-        this.incrementAndCheckBreaker(context.projectId);
+        await this.incrementAndCheckBreaker(context.projectId);
         return await this.escalate(
           context,
           `${reason}; rollback failed: ${result.error ?? 'unknown'}`,
@@ -620,22 +627,22 @@ export class RecoveryPipeline {
       const containerId = result.containerId ?? context.containerId;
       const healthy = await this.waitForHealthy(context.projectId, containerId);
       if (healthy) {
-        this.addIncidentEvent(context.incidentId, 'recovered', 'Recovered via rollback');
+        await this.addIncidentEvent(context.incidentId, 'recovered', 'Recovered via rollback');
         if (context.incidentId) {
-          this.ctx.db.updateOpsIncidentStatus(context.incidentId, 'resolved', {
+          await this.ctx.db.updateOpsIncidentStatus(context.incidentId, 'resolved', {
             resolved_at: Date.now(),
           });
         }
         return 'recovered';
       }
 
-      this.incrementAndCheckBreaker(context.projectId);
+      await this.incrementAndCheckBreaker(context.projectId);
       return await this.escalate(
         context,
         `${reason}; rollback completed but service remained unhealthy`,
       );
     } catch (error) {
-      this.incrementAndCheckBreaker(context.projectId);
+      await this.incrementAndCheckBreaker(context.projectId);
       const message = error instanceof Error ? error.message : String(error);
       log.error({ error, projectId: context.projectId }, 'Rollback step threw an error');
       return await this.escalate(context, `${reason}; rollback failed: ${message}`);
@@ -644,20 +651,21 @@ export class RecoveryPipeline {
 
   private async escalate(context: RecoveryContextForGuards, reason: string): Promise<'escalated'> {
     if (context.incidentId) {
-      this.ctx.db.updateOpsIncidentStatus(context.incidentId, 'escalated', {
+      await this.ctx.db.updateOpsIncidentStatus(context.incidentId, 'escalated', {
         escalated_at: Date.now(),
       });
     }
-    this.addIncidentEvent(context.incidentId, 'escalated', `Step escalate: ${reason}`);
-    this.addIncidentEvent(
+    await this.addIncidentEvent(context.incidentId, 'escalated', `Step escalate: ${reason}`);
+    await this.addIncidentEvent(
       context.incidentId,
       'alert_sent',
       'Escalation alert emitted to event bus',
     );
 
+    const breakerState = await this.ctx.db.getCircuitBreakerState(context.projectId);
     await eventBus.emit('recovery:exhausted', {
       projectId: context.projectId,
-      totalAttempts: this.ctx.db.getCircuitBreakerState(context.projectId)?.failure_count ?? 0,
+      totalAttempts: breakerState?.failure_count ?? 0,
       lastError: reason,
       correlationId: context.incidentId ?? undefined,
     });
@@ -666,17 +674,17 @@ export class RecoveryPipeline {
     return 'escalated';
   }
 
-  private addIncidentEvent(
+  private async addIncidentEvent(
     incidentId: string | null,
     eventType: OpsIncidentEventRow['event_type'],
     description: string,
-  ): void {
+  ): Promise<void> {
     if (!incidentId) {
       return;
     }
 
     try {
-      this.ctx.db.addOpsIncidentEvent({
+      await this.ctx.db.addOpsIncidentEvent({
         id: `evt-${randomUUID()}`,
         incident_id: incidentId,
         event_type: eventType,
@@ -687,13 +695,13 @@ export class RecoveryPipeline {
     }
   }
 
-  private incrementAndCheckBreaker(projectId: string): void {
+  private async incrementAndCheckBreaker(projectId: string): Promise<void> {
     try {
-      const state = this.ctx.db.incrementCircuitBreakerFailure(projectId);
+      const state = await this.ctx.db.incrementCircuitBreakerFailure(projectId);
       const config = this.ctx.opsAgent?.getConfig();
       const threshold = config?.thresholds.recovery_max_per_day ?? 5;
       if (state.failure_count >= threshold) {
-        this.ctx.db.openCircuitBreaker(projectId);
+        await this.ctx.db.openCircuitBreaker(projectId);
         log.warn({ projectId, failures: state.failure_count, threshold }, 'Circuit breaker opened');
       }
     } catch (error) {
@@ -701,10 +709,10 @@ export class RecoveryPipeline {
     }
   }
 
-  private isProductionRecovery(context: RecoveryContextForGuards): boolean {
-    const environments = this.ctx.db.getEnvironmentsByProject(context.projectId);
+  private async isProductionRecovery(context: RecoveryContextForGuards): Promise<boolean> {
+    const environments = await this.ctx.db.getEnvironmentsByProject(context.projectId);
     const production = environments.find((environment) => environment.type === 'production');
-    const recentIncidents = this.ctx.db.listOpsIncidentsByProject(context.projectId, 1);
+    const recentIncidents = await this.ctx.db.listOpsIncidentsByProject(context.projectId, 1);
     void recentIncidents;
 
     if (!production) {

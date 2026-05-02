@@ -43,9 +43,9 @@ import {
 } from './deploy-log-source.js';
 
 export function registerDeployLogStreamRoutes(api: Hono, ctx: AppContext): void {
-  api.get('/deployments/:id/log/stream', (c) => {
+  api.get('/deployments/:id/log/stream', async (c) => {
     const id = c.req.param('id');
-    const resolved = resolveDeploymentLogSource(ctx, id);
+    const resolved = await resolveDeploymentLogSource(ctx, id);
     if (!resolved) {
       return c.json({ error: 'NOT_FOUND', message: 'Deployment not found' }, 404);
     }

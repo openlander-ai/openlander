@@ -79,7 +79,7 @@ export async function generatePostDeployInsights(
     checkHealth(ctx, db, resolvedLocale),
     checkStaleContainers(ctx.projectId, docker, db, resolvedLocale),
     Promise.resolve(checkResourceUsage(resolvedLocale)),
-    Promise.resolve(checkBuildTime(ctx, db, resolvedLocale)),
+    checkBuildTime(ctx, db, resolvedLocale),
   ]);
 
   for (const result of results) {
@@ -118,9 +118,9 @@ export async function generatePostDeployInsights(
  * Returns an insight about the health check result.
  */
 async function checkHealth(ctx: InsightContext, db: Database, locale: Locale): Promise<Insight> {
-  const project = db.getProject(ctx.projectId);
+  const project = await db.getProject(ctx.projectId);
   // PR 4.5: canonical-first read of assigned_port with `??` fallback.
-  const deployable = project ? db.getDeployableForProject(ctx.projectId) : undefined;
+  const deployable = project ? await db.getDeployableForProject(ctx.projectId) : undefined;
   // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
   const assignedPort = deployable?.assigned_port ?? project?.assigned_port;
   if (!project || assignedPort == null) {
@@ -204,11 +204,11 @@ async function checkStaleContainers(
   db: Database,
   locale: Locale,
 ): Promise<Insight | null> {
-  const project = db.getProject(projectId);
+  const project = await db.getProject(projectId);
   if (!project) return null;
 
   // PR 4.5: canonical-first read of container_id with `??` fallback.
-  const deployable = db.getDeployableForProject(projectId);
+  const deployable = await db.getDeployableForProject(projectId);
   const currentContainerId = deployable?.container_id ?? project.container_id;
   if (!currentContainerId) return null;
 
@@ -274,9 +274,13 @@ function checkResourceUsage(locale: Locale): Insight | null {
   }
 }
 
-function checkBuildTime(ctx: InsightContext, db: Database, locale: Locale): Insight | null {
+async function checkBuildTime(
+  ctx: InsightContext,
+  db: Database,
+  locale: Locale,
+): Promise<Insight | null> {
   try {
-    const logs = db.getDeployLogs(ctx.projectId, 10);
+    const logs = await db.getDeployLogs(ctx.projectId, 10);
 
     const previousSuccessful = logs.filter(
       (l: DeployLogRow) =>

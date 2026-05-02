@@ -22,13 +22,13 @@ const log = createModuleLogger('ops-routes');
  * Memoizing per request removes the duplication without introducing any
  * cross-request cache (each SSE flush still gets fresh data).
  */
-function makeProjectsMemo(ctx: AppContext): () => ProjectRow[] {
-  let cache: ProjectRow[] | undefined;
-  return () => {
+function makeProjectsMemo(ctx: AppContext): () => Promise<ProjectRow[]> {
+  let cache: Promise<ProjectRow[]> | undefined;
+  return async () => {
     if (cache === undefined) {
       cache = ctx.db.listProjects();
     }
-    return cache;
+    return await cache;
   };
 }
 
@@ -179,7 +179,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
   // --- Incidents ---
 
-  api.get('/incidents', (c) => {
+  api.get('/incidents', async (c) => {
     const projectId = c.req.query('projectId');
     const status = c.req.query('status');
     const search = c.req.query('search');
@@ -190,13 +190,13 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     try {
       let incidents;
       if (projectId) {
-        incidents = ctx.db.listOpsIncidentsByProject(projectId, limit);
+        incidents = await ctx.db.listOpsIncidentsByProject(projectId, limit);
       } else {
         const from = fromParam
           ? Math.max(0, parseInt(fromParam, 10) || 0)
           : Date.now() - 7 * 24 * 60 * 60 * 1000;
         const to = toParam ? Math.max(0, parseInt(toParam, 10) || 0) : Date.now();
-        incidents = ctx.db.listOpsIncidentsByDateRange(from, to, search);
+        incidents = await ctx.db.listOpsIncidentsByDateRange(from, to, search);
       }
 
       if (status) {
@@ -204,11 +204,13 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       }
 
       const page = incidents.slice(0, limit);
-      const events = ctx.db.listOpsIncidentEventsByIncidentIds(page.map((incident) => incident.id));
+      const events = await ctx.db.listOpsIncidentEventsByIncidentIds(
+        page.map((incident) => incident.id),
+      );
       const eventsByIncidentId = groupEventsByIncidentId(events);
 
       const getProjects = makeProjectsMemo(ctx);
-      const projects = getProjects();
+      const projects = await getProjects();
       const projectMap = new Map(projects.map((p) => [p.id, p.name]));
 
       return c.json({
@@ -226,19 +228,19 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     }
   });
 
-  api.get('/incidents/:id', (c) => {
+  api.get('/incidents/:id', async (c) => {
     const id = c.req.param('id');
 
     try {
-      const incident = ctx.db.getOpsIncident(id);
+      const incident = await ctx.db.getOpsIncident(id);
       if (!incident) {
         return c.json({ error: 'Incident not found' }, 404);
       }
 
-      const project = ctx.db.getProject(incident.project_id);
+      const project = await ctx.db.getProject(incident.project_id);
       const projectName = project?.name ?? incident.project_id;
 
-      const events = ctx.db.listOpsIncidentEvents(id);
+      const events = await ctx.db.listOpsIncidentEvents(id);
       return c.json({
         incident: mapIncidentResponse(incident, events, projectName),
         events: events.map(mapIncidentEventResponse),
@@ -249,16 +251,16 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     }
   });
 
-  api.get('/incidents/:id/events', (c) => {
+  api.get('/incidents/:id/events', async (c) => {
     const id = c.req.param('id');
 
     try {
-      const incident = ctx.db.getOpsIncident(id);
+      const incident = await ctx.db.getOpsIncident(id);
       if (!incident) {
         return c.json({ error: 'Incident not found' }, 404);
       }
 
-      const events = ctx.db.listOpsIncidentEvents(id);
+      const events = await ctx.db.listOpsIncidentEvents(id);
       return c.json({ events: events.map(mapIncidentEventResponse) });
     } catch (err) {
       log.warn({ err }, 'Failed to fetch incident events');
@@ -268,13 +270,15 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
   // --- OpsAgent Config ---
 
-  api.get('/agent/active', (c) => {
+  api.get('/agent/active', async (c) => {
     try {
       const getProjects = makeProjectsMemo(ctx);
-      const projects = getProjects();
+      const projects = await getProjects();
       const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
-      const activeRuns = projects
-        .flatMap((project) => ctx.db.getRunningActionRuns(project.id))
+      const activeRuns = (
+        await Promise.all(projects.map((project) => ctx.db.getRunningActionRuns(project.id)))
+      )
+        .flat()
         .sort((a, b) => b.started_at.localeCompare(a.started_at));
       const activeRun = activeRuns[0];
 
@@ -342,11 +346,11 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
   // --- Circuit Breaker ---
 
-  api.get('/circuit-breaker/:projectId', (c) => {
+  api.get('/circuit-breaker/:projectId', async (c) => {
     const projectId = c.req.param('projectId');
 
     try {
-      const state = ctx.db.getCircuitBreakerState(projectId);
+      const state = await ctx.db.getCircuitBreakerState(projectId);
       return c.json({ state });
     } catch (err) {
       log.warn({ err }, 'Failed to fetch circuit breaker state');
@@ -354,11 +358,11 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     }
   });
 
-  api.post('/circuit-breaker/:projectId/reset', (c) => {
+  api.post('/circuit-breaker/:projectId/reset', async (c) => {
     const projectId = c.req.param('projectId');
 
     try {
-      ctx.db.resetCircuitBreaker(projectId);
+      await ctx.db.resetCircuitBreaker(projectId);
       return c.json({ reset: true });
     } catch (err) {
       log.warn({ err }, 'Failed to reset circuit breaker');
@@ -378,11 +382,11 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
   // --- Global Circuit Breakers ---
 
-  api.get('/circuit-breakers', (c) => {
+  api.get('/circuit-breakers', async (c) => {
     try {
-      const allBreakers = ctx.db.listAllCircuitBreakers();
+      const allBreakers = await ctx.db.listAllCircuitBreakers();
       const getProjects = makeProjectsMemo(ctx);
-      const projects = getProjects();
+      const projects = await getProjects();
       const projectMap = new Map(projects.map((p) => [p.id, p.name]));
       const breakers = allBreakers
         .map((b) => ({
@@ -416,14 +420,14 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     });
   });
 
-  api.get('/projects/:projectId/automation', (c) => {
+  api.get('/projects/:projectId/automation', async (c) => {
     const projectId = c.req.param('projectId');
-    const project = ctx.db.getProject(projectId);
+    const project = await ctx.db.getProject(projectId);
     if (!project) {
       return c.json({ error: 'Project not found' }, 404);
     }
     const config = ctx.opsAgent?.getConfig() ?? DEFAULT_OPS_CONFIG;
-    const override = ctx.db.getProjectOpsOverride(projectId);
+    const override = await ctx.db.getProjectOpsOverride(projectId);
     const policy = resolveAutomationPolicy(config, override);
     return c.json({
       effective: policy,
@@ -434,7 +438,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
   api.put('/projects/:projectId/automation', async (c) => {
     const projectId = c.req.param('projectId');
-    const project = ctx.db.getProject(projectId);
+    const project = await ctx.db.getProject(projectId);
     if (!project) {
       return c.json({ error: 'Project not found' }, 404);
     }
@@ -456,11 +460,11 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       }
     }
     const typed = body.automation;
-    const existing = ctx.db.getProjectOpsOverride(projectId);
+    const existing = await ctx.db.getProjectOpsOverride(projectId);
     const merged = { ...existing?.automation, ...typed };
-    ctx.db.setProjectOpsOverride(projectId, { automation: merged });
+    await ctx.db.setProjectOpsOverride(projectId, { automation: merged });
     const config = ctx.opsAgent?.getConfig() ?? DEFAULT_OPS_CONFIG;
-    const override = ctx.db.getProjectOpsOverride(projectId);
+    const override = await ctx.db.getProjectOpsOverride(projectId);
     const policy = resolveAutomationPolicy(config, override);
     return c.json({
       effective: policy,
@@ -469,15 +473,15 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     });
   });
 
-  api.delete('/projects/:projectId/automation', (c) => {
+  api.delete('/projects/:projectId/automation', async (c) => {
     const projectId = c.req.param('projectId');
-    ctx.db.deleteProjectOpsOverride(projectId);
+    await ctx.db.deleteProjectOpsOverride(projectId);
     return c.json({ deleted: true });
   });
 
   // --- Unified Activity Feed ---
 
-  api.get('/activity', (c) => {
+  api.get('/activity', async (c) => {
     const isFollow = c.req.query('follow') === 'true';
 
     // Per-flush memoizer — each fetchActivities call gets its own fresh
@@ -486,7 +490,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     // project lookups. Cache lives only for the duration of one fetch,
     // so concurrent SSE clients still see freshly committed projects on
     // each 2-second flush.
-    const fetchActivities = (sinceParam?: string) => {
+    const fetchActivities = async (sinceParam?: string) => {
       const getProjects = makeProjectsMemo(ctx);
       const projectId = c.req.query('projectId');
       const types = c.req.query('types')?.split(',').filter(Boolean) ?? [];
@@ -498,7 +502,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       const fromParam = c.req.query('from');
       const toParam = c.req.query('to');
 
-      const projects = getProjects();
+      const projects = await getProjects();
       const projectMap = new Map(projects.map((p) => [p.id, p.name]));
       const activities: ActivityItem[] = [];
 
@@ -507,10 +511,10 @@ export function createOpsRoutes(ctx: AppContext): Hono {
         const from = fromParam ? Number(fromParam) : Date.now() - 7 * 24 * 60 * 60 * 1000;
         const to = toParam ? Number(toParam) : Date.now();
         const incidents = projectId
-          ? ctx.db.listOpsIncidentsByProject(projectId, 100)
-          : ctx.db.listOpsIncidentsByDateRange(from, to);
+          ? await ctx.db.listOpsIncidentsByProject(projectId, 100)
+          : await ctx.db.listOpsIncidentsByDateRange(from, to);
         const eventsByIncidentId = groupEventsByIncidentId(
-          ctx.db.listOpsIncidentEventsByIncidentIds(incidents.map((incident) => incident.id)),
+          await ctx.db.listOpsIncidentEventsByIncidentIds(incidents.map((incident) => incident.id)),
         );
 
         for (const inc of incidents) {
@@ -564,8 +568,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       // Action runs
       if (types.length === 0 || types.includes('recovery') || types.includes('approval')) {
         const candidateRuns = projectId
-          ? ctx.db.getActionRunsByProject(projectId, 100)
-          : ctx.db.getRecentActionRuns(200);
+          ? await ctx.db.getActionRunsByProject(projectId, 100)
+          : await ctx.db.getRecentActionRuns(200);
         const runs = candidateRuns;
         for (const run of runs) {
           if (
@@ -607,7 +611,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
         const aiTypes = ['ai:invoked', 'ai:completed'];
         for (const aiType of aiTypes) {
           if (types.length > 0 && !types.includes(aiType)) continue;
-          const aiRows = ctx.db.findActivityLogRecent(200, {
+          const aiRows = await ctx.db.findActivityLogRecent(200, {
             project_id: projectId,
             activity_type: aiType,
           });
@@ -657,7 +661,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
           if (flushInProgress) return;
           flushInProgress = true;
           try {
-            const page = fetchActivities(lastReportedId || undefined);
+            const page = await fetchActivities(lastReportedId || undefined);
             if (page.activities.length > 0) {
               const forward = [...page.activities].reverse();
               for (const act of forward) {
@@ -693,7 +697,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     }
 
     try {
-      const page = fetchActivities();
+      const page = await fetchActivities();
       return c.json(page);
     } catch (err) {
       return c.json({ error: String(err) }, 500);
@@ -769,12 +773,12 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
   // --- Deployment Patterns ---
 
-  api.get('/patterns', (c) => {
+  api.get('/patterns', async (c) => {
     const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '50', 10) || 50, 1), 200);
     const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10) || 0, 0);
 
     try {
-      const all = ctx.db.listAllDeploymentPatterns();
+      const all = await ctx.db.listAllDeploymentPatterns();
       const page = all.slice(offset, offset + limit);
       return c.json({ patterns: page, total: all.length });
     } catch (err) {
@@ -783,13 +787,13 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     }
   });
 
-  api.get('/patterns/:projectId', (c) => {
+  api.get('/patterns/:projectId', async (c) => {
     const projectId = c.req.param('projectId');
     const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '50', 10) || 50, 1), 200);
     const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10) || 0, 0);
 
     try {
-      const all = ctx.db.findDeploymentPatternsByProject(projectId);
+      const all = await ctx.db.findDeploymentPatternsByProject(projectId);
       const sorted = [...all].sort((a, b) =>
         (b.last_seen_at ?? '').localeCompare(a.last_seen_at ?? ''),
       );
@@ -803,12 +807,20 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
   // --- Dependency Graph ---
 
-  api.get('/dependencies', (c) => {
+  api.get('/dependencies', async (c) => {
     try {
       const getProjects = makeProjectsMemo(ctx);
-      const projects = getProjects();
-      const services = ctx.db.listServices();
-      const dependencies = ctx.db.findAllProjectDependencies();
+      const [projects, services, dependencies] = await Promise.all([
+        getProjects(),
+        ctx.db.listServices(),
+        ctx.db.findAllProjectDependencies(),
+      ]);
+      const deployables = await Promise.all(
+        projects.map((project) => ctx.db.getDeployableForProject(project.id)),
+      );
+      const deployableByProjectId = new Map(
+        projects.map((project, index) => [project.id, deployables[index]]),
+      );
 
       const nodes: Array<{
         id: string;
@@ -821,7 +833,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
           type: 'project' as const,
           name: p.name,
           // Fix 3: status is a deployable field — canonical-first ?? legacy fallback.
-          status: ctx.db.getDeployableForProject(p.id)?.status ?? p.status ?? '',
+          status: deployableByProjectId.get(p.id)?.status ?? p.status ?? '',
         })),
         ...services.map((s) => ({
           id: s.id,

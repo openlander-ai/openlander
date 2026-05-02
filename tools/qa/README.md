@@ -21,7 +21,8 @@
 
 ```bash
 # 시작 (기본: 24h, 5분 cycle, port 10116)
-./tools/qa/soak-test.sh start
+SOAK_DATABASE_URL='postgres://user:password@localhost:5432/openlander_soak' \
+  ./tools/qa/soak-test.sh start
 
 # 진행 상태 확인
 ./tools/qa/soak-test.sh status
@@ -35,14 +36,15 @@
 
 ### 환경 변수
 
-| 변수                | 기본값                 | 설명                      |
-| ------------------- | ---------------------- | ------------------------- |
-| `SOAK_PORT`         | `10116`                | 격리 인스턴스 listen 포트 |
-| `SOAK_HOME`         | `$TMPDIR/ol-soak-{ts}` | 격리 dataDir              |
-| `SOAK_PASSWORD`     | `soak-test-pwd`        | setup-password 값         |
-| `SOAK_CYCLE_SEC`    | `300`                  | cycle 간격 (5분)          |
-| `SOAK_DURATION_SEC` | `86400`                | 총 실행 시간 (24h)        |
-| `SEED_REPO`         | `test-no-dockerfile`   | seed 프로젝트 git URL     |
+| 변수                | 기본값                 | 설명                       |
+| ------------------- | ---------------------- | -------------------------- |
+| `SOAK_PORT`         | `10116`                | 격리 인스턴스 listen 포트  |
+| `SOAK_HOME`         | `$TMPDIR/ol-soak-{ts}` | 격리 dataDir               |
+| `SOAK_PASSWORD`     | `soak-test-pwd`        | setup-password 값          |
+| `SOAK_DATABASE_URL` | required               | 격리 인스턴스 Postgres URL |
+| `SOAK_CYCLE_SEC`    | `300`                  | cycle 간격 (5분)           |
+| `SOAK_DURATION_SEC` | `86400`                | 총 실행 시간 (24h)         |
+| `SEED_REPO`         | `test-no-dockerfile`   | seed 프로젝트 git URL      |
 
 ### Cycle 구성
 
@@ -73,7 +75,7 @@ jq -s 'map(.pm2MemMb) | {start: .[0], end: .[-1], delta: (.[-1] - .[0])}' "$RUN/
 # restart count growth
 jq -s 'map(.pm2RestartTotal) | {start: .[0], end: .[-1], delta: (.[-1] - .[0])}' "$RUN/metrics.jsonl"
 
-# disk growth
+# DB/API state growth
 jq -s 'map(.dbSizeKb) | {start: .[0], end: .[-1], delta: (.[-1] - .[0])}' "$RUN/metrics.jsonl"
 
 # activity row count growth

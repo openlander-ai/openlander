@@ -188,15 +188,15 @@ export class OpsAgent {
   private async reconcileOnBoot(): Promise<void> {
     try {
       const activeIncidents = new Map<string, OpsIncidentRow>();
-      for (const project of this.ctx.db.listProjects()) {
-        const incident = this.ctx.db.getActiveOpsIncident(project.id);
+      for (const project of await this.ctx.db.listProjects()) {
+        const incident = await this.ctx.db.getActiveOpsIncident(project.id);
         if (incident) {
           activeIncidents.set(incident.id, incident);
         }
       }
 
       for (const incident of activeIncidents.values()) {
-        this.ctx.db.addOpsIncidentEvent({
+        await this.ctx.db.addOpsIncidentEvent({
           id: `evt-${randomUUID()}`,
           incident_id: incident.id,
           event_type: 'interrupted',
@@ -205,18 +205,25 @@ export class OpsAgent {
       }
 
       const now = Date.now();
-      const staleCircuitBreakers = this.ctx.db.findAllOpenCircuitBreakers().filter((projectId) => {
-        const state = this.ctx.db.getCircuitBreakerState(projectId);
-        return typeof state?.opened_at === 'number' && now - state.opened_at > 86_400_000;
-      });
-
-      for (const projectId of staleCircuitBreakers) {
-        this.ctx.db.resetCircuitBreaker(projectId);
+      const staleCircuitBreakers: string[] = [];
+      for (const projectId of await this.ctx.db.findAllOpenCircuitBreakers()) {
+        const state = await this.ctx.db.getCircuitBreakerState(projectId);
+        if (typeof state?.opened_at === 'number' && now - state.opened_at > 86_400_000) {
+          staleCircuitBreakers.push(projectId);
+        }
       }
 
-      const pendingApprovals = this.ctx.db.getActionRunsByApprovalStatus('pending', 100);
+      for (const projectId of staleCircuitBreakers) {
+        await this.ctx.db.resetCircuitBreaker(projectId);
+      }
+
+      const pendingApprovals = await this.ctx.db.getActionRunsByApprovalStatus('pending', 100);
       for (const run of pendingApprovals) {
-        this.ctx.db.updateActionRunStatus(run.id, 'failed', 'Server restart interrupted approval');
+        await this.ctx.db.updateActionRunStatus(
+          run.id,
+          'failed',
+          'Server restart interrupted approval',
+        );
       }
 
       if (activeIncidents.size > 0 || staleCircuitBreakers.length > 0) {
@@ -228,8 +235,6 @@ export class OpsAgent {
           'Boot reconciliation completed',
         );
       }
-
-      await Promise.resolve();
     } catch (err) {
       log.warn({ err }, 'Boot reconciliation failed — continuing startup');
     }
@@ -250,9 +255,9 @@ export class OpsAgent {
     }
 
     // Skip projects not in running/error state — no recovery needed
-    const project = this.ctx.db.getProject(projectId);
+    const project = await this.ctx.db.getProject(projectId);
     // PR 4.5: canonical-first status read with `??` fallback.
-    const deployable = project ? this.ctx.db.getDeployableForProject(projectId) : undefined;
+    const deployable = project ? await this.ctx.db.getDeployableForProject(projectId) : undefined;
     // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const status = deployable?.status ?? project?.status;
     if (!project || (status !== 'running' && status !== 'error') || project.archived_at) {
@@ -262,14 +267,14 @@ export class OpsAgent {
 
     // If circuit breaker is open, suppress the entire crash handling chain
     // (no new incident, no alert, no recovery, no postmortem LLM call)
-    if (this.ctx.db.isCircuitBreakerOpen(projectId)) {
+    if (await this.ctx.db.isCircuitBreakerOpen(projectId)) {
       log.debug({ projectId }, 'Circuit breaker open — suppressing crash event');
       return;
     }
 
-    this.cascade.recordFailure(projectId);
+    await this.cascade.recordFailure(projectId);
 
-    const incident = this.incidents.openIncident(projectId, { type: event.type });
+    const incident = await this.incidents.openIncident(projectId, { type: event.type });
 
     const cascadeResult = await this.cascade.detectCascade();
     if (cascadeResult) {
@@ -290,7 +295,7 @@ export class OpsAgent {
     await this.alerting.sendAlert(alert);
 
     if (this.config.recovery.enabled && containerId) {
-      const projectOverride = this.ctx.db.getProjectOpsOverride(projectId);
+      const projectOverride = await this.ctx.db.getProjectOpsOverride(projectId);
       const automationPolicy = resolveAutomationPolicy(this.config, projectOverride ?? undefined);
       if (!automationPolicy) {
         return;
@@ -307,18 +312,18 @@ export class OpsAgent {
         });
       } catch (err) {
         log.error({ err, projectId }, 'Recovery pipeline threw — escalating incident');
-        this.incidents.escalateIncident(
+        await this.incidents.escalateIncident(
           incident.id,
           `Recovery failed with error: ${err instanceof Error ? err.message : String(err)}`,
         );
         return;
       }
       if (result === 'recovered') {
-        this.incidents.resolveIncident(incident.id, 'Auto-recovered after restart');
+        await this.incidents.resolveIncident(incident.id, 'Auto-recovered after restart');
       } else if (result === 'escalated') {
-        this.incidents.escalateIncident(incident.id, 'Recovery pipeline exhausted');
+        await this.incidents.escalateIncident(incident.id, 'Recovery pipeline exhausted');
       } else {
-        this.incidents.escalateIncident(
+        await this.incidents.escalateIncident(
           incident.id,
           'Recovery skipped — concurrent recovery or precondition not met',
         );
@@ -392,7 +397,7 @@ export class OpsAgent {
   }
 
   async generateDigest(): Promise<void> {
-    const report = this.digest.generateDigest();
+    const report = await this.digest.generateDigest();
     const alert = this.digest.formatDigestForChannel(report);
     await this.alerting.sendAlert(alert);
   }

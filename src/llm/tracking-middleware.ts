@@ -63,7 +63,7 @@ export function createTrackingMiddleware(
 
       try {
         const result = await options.doGenerate();
-        const usage = extractUsageFromResult(result.usage as Record<string, unknown>);
+        const usage = extractUsageFromResult(result.usage);
         const costUsd = calculateCost(provider, modelName, usage.inputTokens, usage.outputTokens);
 
         const payload: AiUsagePayload = {

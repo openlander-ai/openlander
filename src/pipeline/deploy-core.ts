@@ -14,7 +14,7 @@ import { getProjectUrl } from './traefik.js';
 import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
-import type { Database } from '../db/index.js';
+import type { Database, EnvironmentRow, ProjectRow } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { resolveEnvVars } from './resolve-env.js';
 
@@ -86,9 +86,9 @@ interface ProjectStateTransitioner {
 
 function createFallbackStateTransitioner(db: Database): ProjectStateTransitioner {
   return {
-    transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
-      db.updateProject(projectId, { status: targetStatus });
-      return Promise.resolve(true);
+    async transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
+      await db.updateProject(projectId, { status: targetStatus });
+      return true;
     },
   };
 }
@@ -313,7 +313,9 @@ export class DeployPipeline {
     this.rollbackExecutor = new RollbackExecutor(this.docker, this.db, this.stateManager);
     this.buildExecutor = new BuildExecutor(this.docker);
     this.containerRunner = new ContainerRunner(this.docker, this.db);
-    this.cleanupStaleTunnels();
+    void this.cleanupStaleTunnels().catch((err: unknown) => {
+      log.debug({ err }, 'Stale tunnel cleanup failed');
+    });
     void this.cleanupOrphanContainers();
   }
 
@@ -321,18 +323,30 @@ export class DeployPipeline {
    * On startup, any project with quick-share/shared visibility has a dead tunnel
    * (the cloudflared child process doesn't survive restarts). Reset to internal.
    */
-  private cleanupStaleTunnels(): void {
-    this.tunnelManager.cleanupStale();
+  private async cleanupStaleTunnels(): Promise<void> {
+    await this.tunnelManager.cleanupStale();
   }
 
   private async cleanupOrphanContainers(): Promise<void> {
     try {
       const managed = await this.docker.listManagedContainers();
+      const projects = await this.db.listProjects();
+      const services = await this.db.listServices();
+      const environmentsByProject = new Map<string, EnvironmentRow[]>(
+        await Promise.all(
+          projects.map(
+            async (project): Promise<[string, EnvironmentRow[]]> => [
+              project.id,
+              await this.db.getEnvironmentsByProject(project.id),
+            ],
+          ),
+        ),
+      );
       const { knownIds, knownNames } = collectKnownContainerNames(
-        this.db.listProjects(),
-        (projectId) => this.db.getEnvironmentsByProject(projectId),
+        projects,
+        (projectId) => environmentsByProject.get(projectId) ?? [],
         (projectName, env) => projectContainerName(getRouteName(projectName, env.type)),
-        this.db.listServices(),
+        services,
       );
 
       for (const container of managed) {
@@ -359,6 +373,19 @@ export class DeployPipeline {
     }
   }
 
+  private async assertProjectMutable(project: ProjectRow): Promise<void> {
+    const [deployable, circuitBreakerOpen] = await Promise.all([
+      this.db.getDeployableForProject(project.id),
+      this.db.isCircuitBreakerOpen(project.id),
+    ]);
+    assertProjectMutable(project, {
+      db: {
+        getDeployableForProject: () => deployable,
+        isCircuitBreakerOpen: () => circuitBreakerOpen,
+      },
+    });
+  }
+
   private async transitionProjectState(
     projectId: string,
     targetStatus: ProjectStatus,
@@ -367,7 +394,7 @@ export class DeployPipeline {
   ): Promise<void> {
     await this.stateManager.transition(projectId, targetStatus, reason);
     if (Object.keys(updates).length > 0) {
-      this.db.updateProject(projectId, updates);
+      await this.db.updateProject(projectId, updates);
     }
   }
 
@@ -429,7 +456,7 @@ export class DeployPipeline {
             composeDetected: false,
             preferDockerfile: false,
             envVarsProvided: config.envVars ? Object.keys(config.envVars).length : 0,
-            existingProject: !!this.db.getProjectByName(projectName),
+            existingProject: !!(await this.db.getProjectByName(projectName)),
           },
         };
       }
@@ -461,22 +488,22 @@ export class DeployPipeline {
           composeDetected: !!composePath,
           preferDockerfile,
           envVarsProvided: config.envVars ? Object.keys(config.envVars).length : 0,
-          existingProject: !!this.db.getProjectByName(projectName),
+          existingProject: !!(await this.db.getProjectByName(projectName)),
         },
       };
     }
 
     // Check if project with this name already exists
-    const existing = this.db.getProjectByName(projectName);
+    const existing = await this.db.getProjectByName(projectName);
     if (existing) {
       // Pipeline boundary policy: blocks archived/recovering/circuit-open projects
       // for callers that bypass the API route (e.g. webhook branch-target,
       // /api/deploy/start, plan engine, AI-approved fix flow).
-      assertProjectMutable(existing, { db: this.db });
+      await this.assertProjectMutable(existing);
 
       const isStale = existing.status === 'error';
       if (isStale) {
-        this.db.updateProject(existing.id, {
+        await this.db.updateProject(existing.id, {
           containerId: null,
           imageTag: null,
           assignedPort: null,
@@ -501,7 +528,12 @@ export class DeployPipeline {
       this.jobManager?.trackJob(existing.id, projectName);
 
       this.fireAndForgetDeploy(
-        { ...config, name: projectName, _projectId: existing.id },
+        {
+          ...config,
+          name: projectName,
+          _projectId: existing.id,
+          _lockSessionId: config._lockSessionId,
+        },
         existing.id,
         config.trigger,
       );
@@ -510,7 +542,7 @@ export class DeployPipeline {
     }
 
     // Preflight passed - create project and start background deploy
-    this.db.createProject({
+    await this.db.createProject({
       id: projectId,
       name: projectName,
       repoUrl: source === 'image' ? '' : config.repoUrl,
@@ -531,7 +563,12 @@ export class DeployPipeline {
     this.jobManager?.trackJob(projectId, projectName);
 
     this.fireAndForgetDeploy(
-      { ...config, name: projectName, _projectId: projectId },
+      {
+        ...config,
+        name: projectName,
+        _projectId: projectId,
+        _lockSessionId: config._lockSessionId,
+      },
       projectId,
       config.trigger,
     );
@@ -545,11 +582,11 @@ export class DeployPipeline {
     trigger?: 'chat' | 'webhook' | 'api',
   ): void {
     void this.deploy(config)
-      .then((result) => {
+      .then(async (result) => {
         if (!result.success) {
           // deploy() already emitted deploy:failed in its own catch path —
           // no need to re-emit here, just record bookkeeping.
-          this.recordBackgroundFailure(
+          await this.recordBackgroundFailure(
             projectId,
             result.error ?? 'Deploy returned failure',
             trigger,
@@ -567,28 +604,30 @@ export class DeployPipeline {
           err instanceof Error ? err.message : String(err),
           trigger,
           { emitTerminalEvent: true },
-        );
+        ).catch((failureErr: unknown) => {
+          log.error({ err: failureErr, projectId }, 'Failed to record background deploy failure');
+        });
       });
   }
 
-  private recordBackgroundFailure(
+  private async recordBackgroundFailure(
     projectId: string,
     errMsg: string,
     trigger: 'chat' | 'webhook' | 'api' = 'api',
     options: { emitTerminalEvent?: boolean } = {},
-  ): void {
+  ): Promise<void> {
     log.error({ projectId, error: errMsg }, 'Background deploy failed');
     this.jobManager?.updatePhase(projectId, 'failed', errMsg);
-    void this.stateManager.transition(projectId, 'error', 'deploy-failed');
-    for (const env of this.db.getEnvironmentsByProject(projectId)) {
-      this.db.updateEnvironment(env.id, { status: 'error' });
+    await this.stateManager.transition(projectId, 'error', 'deploy-failed');
+    for (const env of await this.db.getEnvironmentsByProject(projectId)) {
+      await this.db.updateEnvironment(env.id, { status: 'error' });
     }
     try {
-      const lastLog = this.db.getLastDeployLog(projectId);
+      const lastLog = await this.db.getLastDeployLog(projectId);
       if (lastLog?.status !== 'failed') {
-        const environments = this.db.getEnvironmentsByProject(projectId);
+        const environments = await this.db.getEnvironmentsByProject(projectId);
         const envId = environments[0]?.id;
-        this.db.createDeployLog({
+        await this.db.createDeployLog({
           id: nanoid(12),
           projectId,
           environmentId: envId,
@@ -598,8 +637,8 @@ export class DeployPipeline {
           durationMs: 0,
         });
       }
-    } catch {
-      // best-effort — outer catch already logged the error
+    } catch (err) {
+      log.warn({ err, projectId }, 'Failed to persist background deploy failure log');
     }
 
     if (options.emitTerminalEvent) {
@@ -615,18 +654,18 @@ export class DeployPipeline {
     }
   }
 
-  startMonorepoDeploy(config: MonorepoConfig): StartMonorepoResult {
+  async startMonorepoDeploy(config: MonorepoConfig): Promise<StartMonorepoResult> {
     const parentName = config.name ?? extractProjectName(config.repoUrl);
     const parentId = nanoid(12);
 
     // Create parent record NOW for immediate status queries
-    this.db.createProject({
+    await this.db.createProject({
       id: parentId,
       name: parentName,
       repoUrl: config.repoUrl,
       branch: config.branch,
     });
-    void this.stateManager.transition(parentId, 'building', 'deploy-started');
+    await this.stateManager.transition(parentId, 'building', 'deploy-started');
     this.jobManager?.trackJob(parentId, parentName);
 
     // Fire-and-forget: run the monorepo deploy in background
@@ -653,7 +692,7 @@ export class DeployPipeline {
     // row, changes() returns 0 and we'd spuriously throw DeployLockedError
     // on the very first top-level call.
     if (!config._projectId) {
-      this.db.createProject({
+      await this.db.createProject({
         id: projectId,
         name: projectName,
         repoUrl: source === 'image' ? '' : config.repoUrl,
@@ -712,7 +751,7 @@ export class DeployPipeline {
     // immediately after. Here we only apply caller overrides for existing
     // rows (config._projectId set by startDeploy or by an outer pipeline call).
     if (config._projectId && config.branch) {
-      this.db.updateProject(projectId, {
+      await this.db.updateProject(projectId, {
         branch: config.branch,
         ...(source === 'image'
           ? {
@@ -724,7 +763,7 @@ export class DeployPipeline {
           : {}),
       });
     } else if (config._projectId && source === 'image') {
-      this.db.updateProject(projectId, {
+      await this.db.updateProject(projectId, {
         source,
         imageUrl: config.imageUrl,
         imageCmd: config.imageCmd ? JSON.stringify(config.imageCmd) : null,
@@ -767,13 +806,13 @@ export class DeployPipeline {
     }
 
     const envType = 'production' as const;
-    let targetEnvironment = this.db
-      .getEnvironmentsByProject(projectId)
-      .find((env) => env.type === envType);
+    let targetEnvironment = (await this.db.getEnvironmentsByProject(projectId)).find(
+      (env) => env.type === envType,
+    );
 
     if (!targetEnvironment) {
-      const project = this.db.getProject(projectId);
-      targetEnvironment = this.db.createEnvironment({
+      const project = await this.db.getProject(projectId);
+      targetEnvironment = await this.db.createEnvironment({
         id: `${projectId}-${envType}`,
         projectId,
         type: envType,
@@ -799,7 +838,7 @@ export class DeployPipeline {
     config: Partial<ProjectConfig> = {},
   ): Promise<DeployResult> {
     const startTime = Date.now();
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) {
       // F3 (Day 9): emit deploy:failed before returning so terminal-event
       // listeners (plan-engine deploy lock release, questionBridge active-
@@ -825,8 +864,8 @@ export class DeployPipeline {
     }
     // Pipeline boundary policy: blocks archived/recovering/circuit-open projects.
     // Throws ProjectArchivedError / ProjectRecoveringError / CircuitBreakerOpenError (409).
-    assertProjectMutable(project, { db: this.db });
-    const environment = this.db.getEnvironment(environmentId);
+    await this.assertProjectMutable(project);
+    const environment = await this.db.getEnvironment(environmentId);
     if (!environment || environment.project_id !== projectId) {
       // F3 (Day 9): see above — same terminal-event guarantee for the
       // environment-disappeared race.
@@ -868,15 +907,15 @@ export class DeployPipeline {
     const routeName = getRouteName(projectName);
     const orchestrationDeps = this.createOrchestrationDeps();
     if (deployConfig.envVars) {
-      this.db.mergeEnvVars(projectId, deployConfig.envVars);
+      await this.db.mergeEnvVars(projectId, deployConfig.envVars);
     }
     if (environment.container_id) {
       try {
         const runtimeLog = await this.docker.getLogs(environment.container_id, 500);
         if (runtimeLog) {
-          const lastLog = this.db.getLastDeployLog(projectId, environmentId);
+          const lastLog = await this.db.getLastDeployLog(projectId, environmentId);
           if (lastLog) {
-            this.db.updateRuntimeLog(lastLog.id, runtimeLog);
+            await this.db.updateRuntimeLog(lastLog.id, runtimeLog);
           }
         }
       } catch {
@@ -890,7 +929,7 @@ export class DeployPipeline {
       }
     }
     await eventBus.emit('deploy:start', { projectId, repoUrl });
-    this.db.updateEnvironment(environmentId, {
+    await this.db.updateEnvironment(environmentId, {
       status: 'building',
       containerId: null,
       imageTag: null,
@@ -927,7 +966,7 @@ export class DeployPipeline {
     } else {
       const currentRunningTag = environment.image_tag ?? project.image_tag;
       if (currentRunningTag) {
-        this.db.updateProject(projectId, { previousImageTag: currentRunningTag });
+        await this.db.updateProject(projectId, { previousImageTag: currentRunningTag });
         preservedPreviousTag = currentRunningTag;
       }
     }
@@ -1082,9 +1121,9 @@ export class DeployPipeline {
       } catch (classifyError) {
         log.warn({ err: classifyError, projectId }, 'Build failure classification failed');
       }
-      this.db.updateEnvironment(environmentId, { status: 'error' });
+      await this.db.updateEnvironment(environmentId, { status: 'error' });
       await this.transitionProjectState(projectId, 'error', 'deploy-failed');
-      this.db.createDeployLog({
+      await this.db.createDeployLog({
         id: nanoid(12),
         projectId,
         environmentId,
@@ -1165,7 +1204,7 @@ export class DeployPipeline {
     const parentId = config._parentId ?? nanoid(12);
 
     if (!config._parentId) {
-      this.db.createProject({
+      await this.db.createProject({
         id: parentId,
         name: parentName,
         repoUrl: config.repoUrl,
@@ -1207,15 +1246,20 @@ export class DeployPipeline {
     });
 
     // PR 2: fetch existing children via services.parent_service_id.
-    const existingChildren = this.db.getComposeChildProjects(parentId);
+    const existingChildren = await this.db.getComposeChildProjects(parentId);
+    const existingChildEnvVarsByService = new Map<string, Record<string, string>>();
+    await Promise.all(
+      services.map(async (service) => {
+        const childName = `${parentName}/${service.name}`;
+        const existingChild = existingChildren.find((child) => child.name === childName);
+        if (existingChild) {
+          existingChildEnvVarsByService.set(service.name, await this.env.getAll(existingChild.id));
+        }
+      }),
+    );
     detectMonorepoDependencies(services, parentName, (serviceName) => {
       const envVarsToScan: Record<string, string> = {};
-      const childName = `${parentName}/${serviceName}`;
-      const existingChild = existingChildren.find((c) => c.name === childName);
-
-      if (existingChild) {
-        Object.assign(envVarsToScan, this.env.getAll(existingChild.id));
-      }
+      Object.assign(envVarsToScan, existingChildEnvVarsByService.get(serviceName) ?? {});
 
       if (config.envVars) {
         Object.assign(envVarsToScan, config.envVars);
@@ -1340,9 +1384,9 @@ export class DeployPipeline {
           return { healthy: true };
         }
 
-        const project = this.db.getProject(deployment.projectId);
+        const project = await this.db.getProject(deployment.projectId);
         // PR 4.5: canonical-first read of container_id with `??` fallback.
-        const deployableForHealth = this.db.getDeployableForProject(deployment.projectId);
+        const deployableForHealth = await this.db.getDeployableForProject(deployment.projectId);
         // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
         const containerId = deployableForHealth?.container_id ?? project?.container_id;
         if (!containerId) {
@@ -1435,7 +1479,7 @@ export class DeployPipeline {
 
   /** Redeploy an existing project (pull latest, rebuild, swap containers). */
   async redeploy(projectId: string, options?: RedeployOptions): Promise<DeployResult> {
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) {
       return {
         success: false,
@@ -1449,13 +1493,13 @@ export class DeployPipeline {
 
     // Pipeline boundary policy: blocks archived/recovering/circuit-open projects.
     // Throws ProjectArchivedError / ProjectRecoveringError / CircuitBreakerOpenError (409).
-    assertProjectMutable(project, { db: this.db });
+    await this.assertProjectMutable(project);
 
     const lockSession = options?.lockSessionId ?? nanoid(12);
     return withDeployLock(this.db, { projectId, sessionId: lockSession }, async () => {
-      const targetEnvironment = this.db
-        .getEnvironmentsByProject(projectId)
-        .find((environment) => environment.type === 'production');
+      const targetEnvironment = (await this.db.getEnvironmentsByProject(projectId)).find(
+        (environment) => environment.type === 'production',
+      );
       if (!targetEnvironment) {
         return {
           success: false,
@@ -1476,7 +1520,7 @@ export class DeployPipeline {
       const redeployRouteName = getRouteName(project.name);
       const redeployPreviousLabel = `openlander/${redeployRouteName}:previous`;
       // PR 4.5: canonical-first reads of deployable fields with `??` fallback.
-      const redeployDeployable = this.db.getDeployableForProject(projectId);
+      const redeployDeployable = await this.db.getDeployableForProject(projectId);
       const redeployImageTag = redeployDeployable?.image_tag ?? project.image_tag;
       const redeploySource = redeployDeployable?.source ?? project.source;
       const redeployAssignedPort = redeployDeployable?.assigned_port ?? project.assigned_port;
@@ -1506,7 +1550,7 @@ export class DeployPipeline {
 
       await this.cleanupProjectContainers(projectId, 'remove');
 
-      this.db.updateProject(projectId, { previousImageTag: redeployPreviousTag });
+      await this.db.updateProject(projectId, { previousImageTag: redeployPreviousTag });
 
       const previousPort = redeployAssignedPort ?? undefined;
 
@@ -1515,8 +1559,8 @@ export class DeployPipeline {
         imageTag: null,
         assignedPort: null,
       });
-      for (const env of this.db.getEnvironmentsByProject(projectId)) {
-        this.db.updateEnvironment(env.id, {
+      for (const env of await this.db.getEnvironmentsByProject(projectId)) {
+        await this.db.updateEnvironment(env.id, {
           assignedPort: null,
           containerId: null,
           imageTag: null,
@@ -1526,7 +1570,7 @@ export class DeployPipeline {
       }
       this.jobManager?.trackJob(projectId, project.name);
 
-      const config = buildDeployConfig({
+      const config = await buildDeployConfig({
         projectId,
         runtimeOverrides: {
           _projectId: projectId,
@@ -1578,7 +1622,7 @@ export class DeployPipeline {
     let environmentId: string | undefined;
 
     try {
-      const project = this.db.getProject(projectId);
+      const project = await this.db.getProject(projectId);
       if (!project) {
         return {
           success: false,
@@ -1592,7 +1636,7 @@ export class DeployPipeline {
       projectName = project.name;
       this.validateProjectName(projectName);
       // PR 4.5: canonical-first reads of deployable fields with `??` fallback.
-      const blueDeployable = this.db.getDeployableForProject(projectId);
+      const blueDeployable = await this.db.getDeployableForProject(projectId);
       const blueStatus = blueDeployable?.status ?? project.status;
       blueContainerId = blueDeployable?.container_id ?? project.container_id ?? undefined;
 
@@ -1616,12 +1660,12 @@ export class DeployPipeline {
         };
       }
 
-      const prodEnv = this.db
-        .getEnvironmentsByProject(projectId)
-        .find((env) => env.type === 'production');
+      const prodEnv = (await this.db.getEnvironmentsByProject(projectId)).find(
+        (env) => env.type === 'production',
+      );
       environmentId = prodEnv?.id;
 
-      const deployConfig = buildDeployConfig({
+      const deployConfig = await buildDeployConfig({
         projectId,
         runtimeOverrides: {
           _projectId: projectId,
@@ -1633,7 +1677,7 @@ export class DeployPipeline {
       this.jobManager?.trackJob(projectId, projectName);
       await this.transitionProjectState(projectId, 'building', 'deploy-started');
       if (prodEnv) {
-        this.db.updateEnvironment(prodEnv.id, { status: 'building' });
+        await this.db.updateEnvironment(prodEnv.id, { status: 'building' });
       }
 
       await eventBus.emit('deploy:start', { projectId, repoUrl: project.repo_url });
@@ -1679,13 +1723,13 @@ export class DeployPipeline {
       this.jobManager?.updatePhase(projectId, 'starting');
       newPort = await allocatePort(this.db, this.docker, {}, 'production');
       const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? newPort;
-      const envVars = resolveEnvVars({ projectId, environmentId }, { env: this.env });
-      const secretFiles = this.env.getSecretFilesForDeploy(projectId);
+      const envVars = await resolveEnvVars({ projectId, environmentId }, { env: this.env });
+      const secretFiles = await this.env.getSecretFilesForDeploy(projectId);
       const networkName = getPolicy('production').networkName;
 
       const greenName = projectContainerName(`${projectName}-green`);
       await this.removeStaleGreenContainer(greenName);
-      const resourceLimits = loadResourceLimitsForProject(this.db, projectId);
+      const resourceLimits = await loadResourceLimitsForProject(this.db, projectId);
 
       greenContainerId = await this.docker.runContainer({
         imageTag,
@@ -1756,7 +1800,7 @@ export class DeployPipeline {
         previousImageTag: blueDeployable?.image_tag ?? project.image_tag,
       });
       if (prodEnv) {
-        this.db.updateEnvironment(prodEnv.id, {
+        await this.db.updateEnvironment(prodEnv.id, {
           status: 'running',
           containerId: greenContainerId,
           assignedPort: newPort,
@@ -1769,7 +1813,7 @@ export class DeployPipeline {
       const durationMs = Date.now() - startTime;
       const projectUrl = getProjectUrl(projectName);
 
-      this.db.createDeployLog({
+      await this.db.createDeployLog({
         id: nanoid(12),
         projectId,
         environmentId,
@@ -1826,22 +1870,22 @@ export class DeployPipeline {
       if (blueStillServing) {
         await this.transitionProjectState(projectId, 'running', 'deploy-running');
         if (environmentId) {
-          const prodEnvErr = this.db.getEnvironment(environmentId);
+          const prodEnvErr = await this.db.getEnvironment(environmentId);
           if (prodEnvErr) {
-            this.db.updateEnvironment(environmentId, { status: 'running' });
+            await this.db.updateEnvironment(environmentId, { status: 'running' });
           }
         }
       } else {
         await this.transitionProjectState(projectId, 'error', 'deploy-runtime-error');
         if (environmentId) {
-          const prodEnvErr = this.db.getEnvironment(environmentId);
+          const prodEnvErr = await this.db.getEnvironment(environmentId);
           if (prodEnvErr) {
-            this.db.updateEnvironment(environmentId, { status: 'error' });
+            await this.db.updateEnvironment(environmentId, { status: 'error' });
           }
         }
       }
 
-      this.db.createDeployLog({
+      await this.db.createDeployLog({
         id: nanoid(12),
         projectId,
         environmentId,
@@ -1913,9 +1957,9 @@ export class DeployPipeline {
 
   async deployPreview(options: PreviewDeployOptions): Promise<PreviewDeployResult> {
     try {
-      const existing = this.db.getProjectByName(options.previewName);
+      const existing = await this.db.getProjectByName(options.previewName);
       if (existing) {
-        this.db.updateProject(existing.id, {
+        await this.db.updateProject(existing.id, {
           parentProjectId: options.parentProjectId,
           isPreview: 1,
           prNumber: options.prNumber,
@@ -1940,7 +1984,7 @@ export class DeployPipeline {
       }
 
       if (result.projectId) {
-        this.db.updateProject(result.projectId, {
+        await this.db.updateProject(result.projectId, {
           parentProjectId: options.parentProjectId,
           isPreview: 1,
           prNumber: options.prNumber,
@@ -1960,7 +2004,7 @@ export class DeployPipeline {
     environmentId?: string,
     lockSessionId?: string,
   ): Promise<DeployResult> {
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) {
       // Surface missing project explicitly so callers cannot accidentally bypass
       // the mutation policy + deploy lock by referencing an archived/deleted id.
@@ -1968,7 +2012,7 @@ export class DeployPipeline {
     }
 
     // Pipeline boundary policy: blocks archived/recovering/circuit-open projects.
-    assertProjectMutable(project, { db: this.db });
+    await this.assertProjectMutable(project);
 
     const lockSession = lockSessionId ?? nanoid(12);
     return withDeployLock(this.db, { projectId, sessionId: lockSession }, () =>
@@ -2003,7 +2047,7 @@ export class DeployPipeline {
   /** Stop a project's container. */
   async stop(projectId: string, environmentId?: string): Promise<void> {
     if (environmentId) {
-      const environment = this.db.getEnvironment(environmentId);
+      const environment = await this.db.getEnvironment(environmentId);
       if (!environment?.container_id) return;
 
       try {
@@ -2011,13 +2055,13 @@ export class DeployPipeline {
       } catch (err) {
         if (!(err instanceof ContainerNotFoundError)) throw err;
       }
-      this.db.updateEnvironment(environmentId, { status: 'stopped' });
+      await this.db.updateEnvironment(environmentId, { status: 'stopped' });
       await eventBus.emit('container:stop', { projectId, containerId: environment.container_id });
       return;
     }
 
     // PR 2: check compose children via services.parent_service_id.
-    const childProjects = this.db.getComposeChildProjects(projectId);
+    const childProjects = await this.db.getComposeChildProjects(projectId);
     if (childProjects.length > 0) {
       await this.lifecycle.stop(projectId);
       this.closeTunnel(projectId);
@@ -2031,7 +2075,7 @@ export class DeployPipeline {
   /** Start a stopped project's container. */
   async start(projectId: string, environmentId?: string): Promise<void> {
     if (environmentId) {
-      const environment = this.db.getEnvironment(environmentId);
+      const environment = await this.db.getEnvironment(environmentId);
       if (!environment?.container_id) return;
 
       try {
@@ -2046,7 +2090,7 @@ export class DeployPipeline {
           throw err;
         }
       }
-      this.db.updateEnvironment(environmentId, { status: 'running' });
+      await this.db.updateEnvironment(environmentId, { status: 'running' });
       await eventBus.emit('container:start', { projectId, containerId: environment.container_id });
       return;
     }
@@ -2056,7 +2100,7 @@ export class DeployPipeline {
 
   /** Remove a project entirely. */
   async remove(projectId: string, cloudflare?: CloudflareTunnelManager): Promise<void> {
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) return;
 
     if (this.composePipeline) {
@@ -2073,7 +2117,7 @@ export class DeployPipeline {
       const current = queue.shift();
       if (!current) continue;
       // PR 2: fetch compose children via services.parent_service_id.
-      const childProjects = this.db.getComposeChildProjects(current);
+      const childProjects = await this.db.getComposeChildProjects(current);
       for (const child of childProjects) {
         if (descendants.has(child.id)) continue;
         descendants.add(child.id);
@@ -2083,7 +2127,7 @@ export class DeployPipeline {
 
     if (cloudflare) {
       for (const targetId of descendants) {
-        const domains = this.db.getDomainMappings(targetId);
+        const domains = await this.db.getDomainMappings(targetId);
         for (const mapping of domains) {
           try {
             await cloudflare.removeTunnel(targetId, mapping.domain);
@@ -2127,8 +2171,8 @@ export class DeployPipeline {
     return this.lifecycle.getLogs(projectId, lines);
   }
 
-  private applyPendingFix(projectId: string, clonePath: string): string | null {
-    const rawPendingFix = this.db.consumePendingFix(projectId);
+  private async applyPendingFix(projectId: string, clonePath: string): Promise<string | null> {
+    const rawPendingFix = await this.db.consumePendingFix(projectId);
     if (!rawPendingFix) {
       return null;
     }

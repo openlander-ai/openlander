@@ -31,15 +31,15 @@ export const opsAutomationToolDefs: ToolDef[] = [
     description:
       'Get the effective recovery automation policy for a project. Shows which recovery steps (restart, diagnosis, apply_fixes, rollback) are set to automatic execution vs requiring operator confirmation.',
     inputSchema: getAutomationPolicySchema,
-    execute: (args, context) => {
+    execute: async (args, context) => {
       const projectName = args['project_name'] as string;
-      const project = context.appCtx.db.getProjectByName(projectName);
+      const project = await context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
       const config = context.appCtx.opsAgent?.getConfig() ?? DEFAULT_OPS_CONFIG;
-      const override = context.appCtx.db.getProjectOpsOverride(project.id);
+      const override = await context.appCtx.db.getProjectOpsOverride(project.id);
       const policy = resolveAutomationPolicy(config, override);
 
       return {
@@ -61,9 +61,9 @@ export const opsAutomationToolDefs: ToolDef[] = [
     description:
       'Set per-project recovery automation policy. Each recovery step can be "auto" (executes immediately) or "confirm" (requires operator approval before executing). Use this to tune which recovery actions happen automatically vs need human confirmation.',
     inputSchema: setAutomationPolicySchema,
-    execute: (args, context) => {
+    execute: async (args, context) => {
       const projectName = args['project_name'] as string;
-      const project = context.appCtx.db.getProjectByName(projectName);
+      const project = await context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
@@ -79,12 +79,12 @@ export const opsAutomationToolDefs: ToolDef[] = [
       if (automation.rollback !== undefined)
         patch.rollback = automation.rollback as 'auto' | 'confirm';
 
-      const existing = context.appCtx.db.getProjectOpsOverride(project.id);
+      const existing = await context.appCtx.db.getProjectOpsOverride(project.id);
       const merged = { ...existing?.automation, ...patch };
-      context.appCtx.db.setProjectOpsOverride(project.id, { automation: merged });
+      await context.appCtx.db.setProjectOpsOverride(project.id, { automation: merged });
 
       const config = context.appCtx.opsAgent?.getConfig() ?? DEFAULT_OPS_CONFIG;
-      const override = context.appCtx.db.getProjectOpsOverride(project.id);
+      const override = await context.appCtx.db.getProjectOpsOverride(project.id);
       const policy = resolveAutomationPolicy(config, override);
 
       return {

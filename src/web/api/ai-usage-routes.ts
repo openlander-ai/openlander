@@ -7,7 +7,7 @@ export function createAiUsageRoutes(ctx: AppContext): Hono {
 
   // --- Usage Summary ---
 
-  api.get('/usage/summary', (c) => {
+  api.get('/usage/summary', async (c) => {
     const projectId = c.req.query('projectId');
     const from = c.req.query('from');
     const to = c.req.query('to');
@@ -27,8 +27,10 @@ export function createAiUsageRoutes(ctx: AppContext): Hono {
       from: range.from,
       to: range.to,
     };
-    const summary = ctx.db.getAiTokenSummaryFiltered(filters);
-    const callCount = ctx.db.countAiUsageLogs(filters);
+    const [summary, callCount] = await Promise.all([
+      ctx.db.getAiTokenSummaryFiltered(filters),
+      ctx.db.countAiUsageLogs(filters),
+    ]);
 
     return c.json({
       totalInputTokens: summary.totalInputTokens,
@@ -40,7 +42,7 @@ export function createAiUsageRoutes(ctx: AppContext): Hono {
 
   // --- Recent Usage Logs ---
 
-  api.get('/usage/recent', (c) => {
+  api.get('/usage/recent', async (c) => {
     const limitParam = c.req.query('limit');
     const projectId = c.req.query('projectId');
     const from = c.req.query('from');
@@ -58,11 +60,13 @@ export function createAiUsageRoutes(ctx: AppContext): Hono {
       from: range.from,
       to: range.to,
     };
-    const logs = ctx.db.getRecentAiUsageLogs({
-      limit,
-      ...filters,
-    });
-    const total = ctx.db.countAiUsageLogs(filters);
+    const [logs, total] = await Promise.all([
+      ctx.db.getRecentAiUsageLogs({
+        limit,
+        ...filters,
+      }),
+      ctx.db.countAiUsageLogs(filters),
+    ]);
     const sliced = logs.map(mapLogToCamelCase);
 
     return c.json({ logs: sliced, count: total });

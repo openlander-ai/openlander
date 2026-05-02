@@ -88,8 +88,10 @@ export interface SetupAutoRecoveryParams {
   approvalGate?: ApprovalGateType;
   language: Locale;
   config: OpenLanderConfig;
-  shouldContinue?: (projectId: string) => boolean;
-  getAutomationPolicy?: (projectId: string) => RecoveryAutomationPolicy | null;
+  shouldContinue?: (projectId: string) => boolean | Promise<boolean>;
+  getAutomationPolicy?: (
+    projectId: string,
+  ) => RecoveryAutomationPolicy | null | Promise<RecoveryAutomationPolicy | null>;
   /**
    * Optional per-project lock provider. 1.0 GA replaces the global
    * DeployQueue with `AgentPool.acquireProjectLock` so two different
@@ -132,8 +134,8 @@ function isRecent(createdAt: string, nowMs: number): boolean {
   return ts > nowMs - RECOVERY_WINDOW_MS;
 }
 
-function getDynamicOutcomeTimeoutMs(db: Database, projectId: string): number {
-  const logs = db.getDeployLogs(projectId, 10);
+async function getDynamicOutcomeTimeoutMs(db: Database, projectId: string): Promise<number> {
+  const logs = await db.getDeployLogs(projectId, 10);
   const durations = logs
     .map((logRow) => logRow.duration_ms)
     .filter((duration): duration is number => typeof duration === 'number' && duration > 0);
@@ -330,11 +332,11 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
   const approvalGate = providedApprovalGate ?? new ApprovalGate();
   const shouldContinue =
     providedShouldContinue ??
-    ((projectId: string) => {
-      const project = db.getProject(projectId);
+    (async (projectId: string) => {
+      const project = await db.getProject(projectId);
       if (!project) return false;
       // PR 4.5: canonical-first status read with `??` fallback.
-      const deployable = db.getDeployableForProject(projectId);
+      const deployable = await db.getDeployableForProject(projectId);
       const status = deployable?.status ?? project.status;
       return status === 'running' && !project.archived_at;
     });
@@ -368,9 +370,9 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     }
 
     const nowMs = Date.now();
-    const recentFailedCount = db
-      .getActionRunsByProject(projectId, 20)
-      .filter((run) => run.status === 'failed' && isRecent(run.created_at, nowMs)).length;
+    const recentFailedCount = (await db.getActionRunsByProject(projectId, 20)).filter(
+      (run) => run.status === 'failed' && isRecent(run.created_at, nowMs),
+    ).length;
 
     const advisoryPatterns = [/disk space/i, /no space left/i, /out of memory/i, /killed/i];
     const isAdvisory = advisoryPatterns.some((pattern) => pattern.test(error));
@@ -402,9 +404,9 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     const lookupResult = await withRecoveryStage(
       'execute',
       { events: eventBus, projectId, metadata: { phase: 'pattern-lookup' } },
-      () => Promise.resolve(findMatchingPatterns(db, projectId, error)),
+      () => findMatchingPatterns(db, projectId, error),
     );
-    const matchingPatterns: ReturnType<typeof findMatchingPatterns> = lookupResult.ok
+    const matchingPatterns: Awaited<ReturnType<typeof findMatchingPatterns>> = lookupResult.ok
       ? lookupResult.value
       : [];
 
@@ -419,7 +421,9 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
       );
     }
 
-    const latestBuildLog = buildLog ?? db.getLastDeployLog(projectId)?.build_log;
+    const latestDeployLog =
+      buildLog === undefined ? await db.getLastDeployLog(projectId) : undefined;
+    const latestBuildLog = buildLog ?? latestDeployLog?.build_log;
     const combinedForMatch = `${error}\n${latestBuildLog ?? ''}`;
     const recipe = matchRecipe(combinedForMatch);
     const strategy = selectRecoveryStrategy(recipe !== null, agent !== null);
@@ -430,18 +434,15 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     // recovery:degraded rather than silently swallowed. Caller (success/fail
     // branches below) is fire-and-forget by design.
     const trySavePattern = (success: boolean): void => {
-      withRecoveryStage(
+      void withRecoveryStage(
         'execute',
         { events: eventBus, projectId, metadata: { phase: 'pattern-save', success } },
-        () => {
-          saveRecoveryPattern(db, projectId, error, fixActionStr, success, plan.category);
-          return Promise.resolve();
-        },
+        () => saveRecoveryPattern(db, projectId, error, fixActionStr, success, plan.category),
       ).catch((err: unknown) => {
         log.error({ err, projectId }, 'unhandled rejection in trySavePattern');
       });
     };
-    const actionRunId = db.createActionRun({
+    const actionRunId = await db.createActionRun({
       projectId,
       triggerSource: 'auto_recovery',
       recoveryStrategy: matchingPatterns.length > 0 ? 'memory' : strategy,
@@ -457,7 +458,7 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
 
     questionBridge.setActiveProject(projectId);
 
-    const project = db.getProject(projectId);
+    const project = await db.getProject(projectId);
     const projectName = project?.name ?? projectId;
 
     // 1.0 GA: when the LLM cooldown window is active, force the recipe path
@@ -488,7 +489,7 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
         const contextSnapshot = await buildContextSnapshot(db);
         // Snapshot automation policy at session start so mid-recovery config changes
         // don't affect the current session
-        const policySnapshot = getAutomationPolicy?.(projectId) ?? null;
+        const policySnapshot = getAutomationPolicy ? await getAutomationPolicy(projectId) : null;
         const approvalState: {
           blocked: 'rejected' | 'timed_out' | 'aborted' | null;
           toolName?: string;
@@ -525,7 +526,7 @@ ${plan.agentGuidance}
         await agent.chatStream(
           recoveryMessage,
           async (event) => {
-            if (event.type === 'tool_call' && !shouldContinue(projectId)) {
+            if (event.type === 'tool_call' && !(await shouldContinue(projectId))) {
               approvalState.blocked = 'aborted';
               log.info(
                 { projectId },
@@ -575,8 +576,8 @@ ${plan.agentGuidance}
                     correlationId: projectId,
                   });
 
-                  db.updateActionRunStatus(actionRunId, 'pending_approval');
-                  db.updateActionRunApproval(actionRunId, 'pending', event.toolName);
+                  await db.updateActionRunStatus(actionRunId, 'pending_approval');
+                  await db.updateActionRunApproval(actionRunId, 'pending', event.toolName);
                   approvalState.toolName = event.toolName;
                   const approvalResult = await approvalGate.waitForApproval(
                     actionRunId,
@@ -585,18 +586,18 @@ ${plan.agentGuidance}
 
                   if (approvalResult === 'rejected') {
                     approvalState.blocked = 'rejected';
-                    db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
+                    await db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
                     return;
                   }
 
                   if (approvalResult === 'timed_out') {
                     approvalState.blocked = 'timed_out';
-                    db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
+                    await db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
                     return;
                   }
 
-                  db.updateActionRunStatus(actionRunId, 'running');
-                  db.updateActionRunApproval(actionRunId, 'approved', event.toolName);
+                  await db.updateActionRunStatus(actionRunId, 'running');
+                  await db.updateActionRunApproval(actionRunId, 'approved', event.toolName);
                 }
               } else {
                 // No policy or tool not mapped — fall back to DecisionEngine behavior
@@ -617,8 +618,8 @@ ${plan.agentGuidance}
                   correlationId: projectId,
                 });
 
-                db.updateActionRunStatus(actionRunId, 'pending_approval');
-                db.updateActionRunApproval(actionRunId, 'pending', event.toolName);
+                await db.updateActionRunStatus(actionRunId, 'pending_approval');
+                await db.updateActionRunApproval(actionRunId, 'pending', event.toolName);
                 approvalState.toolName = event.toolName;
                 const approvalResult = await approvalGate.waitForApproval(
                   actionRunId,
@@ -627,18 +628,18 @@ ${plan.agentGuidance}
 
                 if (approvalResult === 'rejected') {
                   approvalState.blocked = 'rejected';
-                  db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
+                  await db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
                   return;
                 }
 
                 if (approvalResult === 'timed_out') {
                   approvalState.blocked = 'timed_out';
-                  db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
+                  await db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
                   return;
                 }
 
-                db.updateActionRunStatus(actionRunId, 'running');
-                db.updateActionRunApproval(actionRunId, 'approved', event.toolName);
+                await db.updateActionRunStatus(actionRunId, 'running');
+                await db.updateActionRunApproval(actionRunId, 'approved', event.toolName);
               }
             }
 
@@ -656,7 +657,7 @@ ${plan.agentGuidance}
             approvalState.blocked === 'aborted'
               ? 'Recovery aborted because project is no longer eligible to continue'
               : 'High-risk tool was rejected or timed out';
-          db.updateActionRunStatus(actionRunId, 'failed', failureReason);
+          await db.updateActionRunStatus(actionRunId, 'failed', failureReason);
           if (approvalState.blocked === 'aborted') {
             await eventBus.emit('recovery:stopped', {
               projectId,
@@ -675,11 +676,11 @@ ${plan.agentGuidance}
           return;
         }
 
-        const timeoutMs = getDynamicOutcomeTimeoutMs(db, projectId);
+        const timeoutMs = await getDynamicOutcomeTimeoutMs(db, projectId);
         const outcome = await waitForRecoveryOutcome(eventBus, projectId, timeoutMs);
         const durationMs = Date.now() - recoveryStartTime;
         if (outcome.success) {
-          db.updateActionRunStatus(actionRunId, 'succeeded');
+          await db.updateActionRunStatus(actionRunId, 'succeeded');
           await eventBus.emit('recovery:success', {
             projectId,
             attempt,
@@ -692,7 +693,7 @@ ${plan.agentGuidance}
           const failureReason = outcome.timedOut
             ? `Recovery verification timed out after ${String(Math.round(timeoutMs / 1000))}s`
             : error;
-          db.updateActionRunStatus(actionRunId, 'failed', failureReason);
+          await db.updateActionRunStatus(actionRunId, 'failed', failureReason);
           await eventBus.emit('recovery:failed', {
             projectId,
             error: failureReason,
@@ -714,7 +715,7 @@ ${plan.agentGuidance}
             { err, projectId, cooldownUntilMs: llmUnreachableCooldownUntilMs },
             `LLM unreachable — opening ${String(LLM_UNREACHABLE_COOLDOWN_MS / 60000)}min cooldown, will retry after`,
           );
-          db.updateActionRunStatus(
+          await db.updateActionRunStatus(
             actionRunId,
             'failed',
             'LLM provider unreachable — cooldown opened',
@@ -728,7 +729,7 @@ ${plan.agentGuidance}
           return;
         }
         const errorMessage = err instanceof Error ? err.message : error;
-        db.updateActionRunStatus(actionRunId, 'failed', errorMessage);
+        await db.updateActionRunStatus(actionRunId, 'failed', errorMessage);
         log.error({ err, projectId }, 'Auto-recovery agent call failed');
         await eventBus.emit('recovery:failed', {
           projectId,
@@ -760,10 +761,10 @@ ${plan.agentGuidance}
         if (recipe.action && recipe.action.type !== 'skip') {
           if (recipe.action.type === 'set_env') {
             try {
-              const productionEnvironment = db
-                .getEnvironmentsByProject(projectId)
-                .find((environment) => environment.type === 'production');
-              db.setEnvVar(
+              const productionEnvironment = (await db.getEnvironmentsByProject(projectId)).find(
+                (environment) => environment.type === 'production',
+              );
+              await db.setEnvVar(
                 projectId,
                 recipe.action.key,
                 recipe.action.value,
@@ -784,7 +785,7 @@ ${plan.agentGuidance}
             try {
               const pendingFix = buildPendingFixFromAction(recipe.action);
               if (pendingFix) {
-                db.setPendingFix(projectId, pendingFix);
+                await db.setPendingFix(projectId, pendingFix);
                 await emitTimelineMessage(
                   eventBus,
                   projectId,
@@ -808,12 +809,13 @@ ${plan.agentGuidance}
       }
 
       if (buildDebugger && latestBuildLog) {
+        const debugDeployable = await db.getDeployableForProject(projectId);
         const diagnosis = await buildDebugger.diagnose({
           buildLog: latestBuildLog,
           projectName,
           // PR 4.5: canonical-first read of image_tag with `??` fallback.
           imageTag:
-            db.getDeployableForProject(projectId)?.image_tag ??
+            debugDeployable?.image_tag ??
             // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             project?.image_tag ??
             `openlander/${projectName}:latest`,
@@ -844,7 +846,7 @@ ${plan.agentGuidance}
           { projectId },
           'Auto-recovery skipped: project lock already held by another session',
         );
-        db.updateActionRunStatus(actionRunId, 'failed', 'Project lock already held');
+        await db.updateActionRunStatus(actionRunId, 'failed', 'Project lock already held');
         await eventBus.emit('recovery:failed', {
           projectId,
           error: 'Project lock held by another session — recovery deferred',
@@ -870,7 +872,7 @@ ${plan.agentGuidance}
 
       const durationMs = Date.now() - recoveryStartTime;
       if (redeploySuccess) {
-        db.updateActionRunStatus(actionRunId, 'succeeded');
+        await db.updateActionRunStatus(actionRunId, 'succeeded');
         await eventBus.emit('recovery:success', {
           projectId,
           attempt,
@@ -879,7 +881,7 @@ ${plan.agentGuidance}
         });
         trySavePattern(true);
       } else {
-        db.updateActionRunStatus(actionRunId, 'failed', redeployError);
+        await db.updateActionRunStatus(actionRunId, 'failed', redeployError);
         await eventBus.emit('recovery:failed', {
           projectId,
           error: redeployError,
@@ -889,7 +891,7 @@ ${plan.agentGuidance}
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : error;
-      db.updateActionRunStatus(actionRunId, 'failed', errorMessage);
+      await db.updateActionRunStatus(actionRunId, 'failed', errorMessage);
       log.error({ err, projectId }, 'Programmatic auto-recovery failed');
       await eventBus.emit('recovery:failed', {
         projectId,

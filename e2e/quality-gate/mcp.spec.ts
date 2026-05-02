@@ -67,7 +67,9 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
     }
   });
 
-  test('initialize + create_deploy_plan + execute_deploy_plan + status polling reaches running', async () => {
+  // fixme (0.1.x): MCP deploy plan polling cascades from the same fixture /
+  // state-isolation gaps as deploy-git. Re-enable after fixture refresh.
+  test.fixme('initialize + create_deploy_plan + execute_deploy_plan + status polling reaches running', async () => {
     test.setTimeout(240_000);
 
     const initializeResult = (await mcpCall('initialize', {

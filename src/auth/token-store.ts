@@ -40,7 +40,11 @@ export interface DecryptedToken {
  * @param provider - Provider name (e.g., 'openai')
  * @param token - Token data to encrypt and store
  */
-export function encryptAndStoreToken(db: Database, provider: string, token: TokenData): void {
+export async function encryptAndStoreToken(
+  db: Database,
+  provider: string,
+  token: TokenData,
+): Promise<void> {
   // Encrypt the access token
   const accessEncrypted = encrypt(token.accessToken);
 
@@ -53,7 +57,7 @@ export function encryptAndStoreToken(db: Database, provider: string, token: Toke
   // Store in database
   // - iv column: stores the access token IV
   // - token_type: stores refresh token IV as "Bearer|{refresh_iv}" if refresh token exists
-  db.upsertOAuthTokens({
+  await db.upsertOAuthTokens({
     id: randomUUID(),
     provider,
     accessToken: accessEncrypted.encrypted,
@@ -75,8 +79,11 @@ export function encryptAndStoreToken(db: Database, provider: string, token: Toke
  * @param provider - Provider name
  * @returns Decrypted token data, or null if not found
  */
-export function loadDecryptedToken(db: Database, provider: string): DecryptedToken | null {
-  const row = db.getOAuthTokens(provider);
+export async function loadDecryptedToken(
+  db: Database,
+  provider: string,
+): Promise<DecryptedToken | null> {
+  const row = await db.getOAuthTokens(provider);
   if (!row) {
     return null;
   }
@@ -119,8 +126,8 @@ export function loadDecryptedToken(db: Database, provider: string): DecryptedTok
  * @param db - Database instance
  * @param provider - Provider name
  */
-export function deleteProviderToken(db: Database, provider: string): void {
-  db.deleteOAuthTokens(provider);
+export async function deleteProviderToken(db: Database, provider: string): Promise<void> {
+  await db.deleteOAuthTokens(provider);
   log.info({ provider }, 'OAuth token deleted');
 }
 
@@ -141,7 +148,7 @@ export async function refreshIfExpired(
   provider: string,
   config?: RefreshConfig,
 ): Promise<boolean> {
-  const token = loadDecryptedToken(db, provider);
+  const token = await loadDecryptedToken(db, provider);
   if (!token) {
     return false;
   }
@@ -187,7 +194,7 @@ export async function refreshIfExpired(
 
   const newExpiresAt = new Date(Date.now() + result.expires_in * 1000).toISOString();
 
-  encryptAndStoreToken(db, provider, {
+  await encryptAndStoreToken(db, provider, {
     accessToken: result.access_token,
     refreshToken: result.refresh_token ?? token.refreshToken,
     expiresAt: newExpiresAt,
@@ -209,7 +216,7 @@ export async function getValidToken(
   provider: string,
   refreshConfig?: RefreshConfig,
 ): Promise<string | null> {
-  const token = loadDecryptedToken(db, provider);
+  const token = await loadDecryptedToken(db, provider);
   if (!token) {
     return null;
   }
@@ -221,7 +228,7 @@ export async function getValidToken(
     if (expiresAtMs - now < EXPIRY_BUFFER_MS) {
       const refreshed = await refreshIfExpired(db, provider, refreshConfig);
       if (refreshed) {
-        const updated = loadDecryptedToken(db, provider);
+        const updated = await loadDecryptedToken(db, provider);
         return updated?.accessToken ?? null;
       }
       log.info({ provider }, 'OAuth token expired or expiring soon');
@@ -237,8 +244,8 @@ export async function getValidToken(
  *
  * For callers that cannot await — checks expiry with 5-minute buffer.
  */
-export function getValidTokenSync(db: Database, provider: string): string | null {
-  const token = loadDecryptedToken(db, provider);
+export async function getValidTokenSync(db: Database, provider: string): Promise<string | null> {
+  const token = await loadDecryptedToken(db, provider);
   if (!token) {
     return null;
   }

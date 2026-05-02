@@ -1,25 +1,37 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
-import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { envVars } from '../schema.drizzle.js';
 
 export class EnvVarRepo {
   constructor(
     private readonly db: DrizzleClient,
-    private readonly sqlite: SqliteDatabase,
-  ) {}
+    private readonly client: PostgresClient,
+  ) {
+    void this.client;
+  }
 
-  getEnvVars(projectId: string, environmentId?: string): Record<string, string> {
-    const whereClause =
-      environmentId === undefined
-        ? and(eq(envVars.project_id, projectId), isNull(envVars.environment_id))
-        : and(eq(envVars.project_id, projectId), eq(envVars.environment_id, environmentId));
+  private scopeWhere(projectId: string, environmentId?: string) {
+    return environmentId === undefined
+      ? and(eq(envVars.project_id, projectId), isNull(envVars.environment_id))
+      : and(eq(envVars.project_id, projectId), eq(envVars.environment_id, environmentId));
+  }
 
-    const rows = this.db
+  private scopedKeyWhere(projectId: string, key: string, environmentId?: string) {
+    return environmentId === undefined
+      ? and(eq(envVars.project_id, projectId), isNull(envVars.environment_id), eq(envVars.key, key))
+      : and(
+          eq(envVars.project_id, projectId),
+          eq(envVars.environment_id, environmentId),
+          eq(envVars.key, key),
+        );
+  }
+
+  async getEnvVars(projectId: string, environmentId?: string): Promise<Record<string, string>> {
+    const rows = await this.db
       .select({ key: envVars.key, value: envVars.value })
       .from(envVars)
-      .where(whereClause)
-      .all();
+      .where(this.scopeWhere(projectId, environmentId));
 
     const result: Record<string, string> = {};
     for (const row of rows) {
@@ -28,88 +40,111 @@ export class EnvVarRepo {
     return result;
   }
 
-  setEnvVar(projectId: string, key: string, value: string, environmentId?: string): void {
-    const whereClause =
-      environmentId === undefined
-        ? and(
-            eq(envVars.project_id, projectId),
-            isNull(envVars.environment_id),
-            eq(envVars.key, key),
-          )
-        : and(
-            eq(envVars.project_id, projectId),
-            eq(envVars.environment_id, environmentId),
-            eq(envVars.key, key),
-          );
-
-    const existing = this.db.select({ id: envVars.id }).from(envVars).where(whereClause).get();
+  async setEnvVar(
+    projectId: string,
+    key: string,
+    value: string,
+    environmentId?: string,
+  ): Promise<void> {
+    const [selected] = await this.db
+      .select({ id: envVars.id })
+      .from(envVars)
+      .where(this.scopedKeyWhere(projectId, key, environmentId))
+      .limit(1);
+    const existing = selected ?? null;
 
     if (existing) {
-      this.db.update(envVars).set({ value }).where(eq(envVars.id, existing.id)).run();
+      await this.db.update(envVars).set({ value }).where(eq(envVars.id, existing.id));
       return;
     }
 
-    this.db
-      .insert(envVars)
-      .values({
-        id: sql<string>`lower(hex(randomblob(8)))`,
-        project_id: projectId,
-        environment_id: environmentId ?? null,
-        key,
-        value,
-      })
-      .run();
+    await this.db.insert(envVars).values({
+      id: crypto.randomUUID(),
+      project_id: projectId,
+      environment_id: environmentId ?? null,
+      key,
+      value,
+    });
   }
 
-  setEnvVarsBulk(projectId: string, vars: Record<string, string>, environmentId?: string): void {
-    const transaction = this.sqlite.transaction(() => {
-      const existing = this.getEnvVars(projectId, environmentId);
-      for (const key of Object.keys(existing)) {
-        if (!(key in vars)) {
-          this.deleteEnvVar(projectId, key, environmentId);
+  async setEnvVarsBulk(
+    projectId: string,
+    vars: Record<string, string>,
+    environmentId?: string,
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const existingRows = await tx
+        .select({ key: envVars.key })
+        .from(envVars)
+        .where(this.scopeWhere(projectId, environmentId));
+
+      for (const row of existingRows) {
+        if (!(row.key in vars)) {
+          await tx.delete(envVars).where(this.scopedKeyWhere(projectId, row.key, environmentId));
         }
       }
+
       for (const [key, value] of Object.entries(vars)) {
-        this.setEnvVar(projectId, key, value, environmentId);
+        const [selected] = await tx
+          .select({ id: envVars.id })
+          .from(envVars)
+          .where(this.scopedKeyWhere(projectId, key, environmentId))
+          .limit(1);
+        const existing = selected ?? null;
+
+        if (existing) {
+          await tx.update(envVars).set({ value }).where(eq(envVars.id, existing.id));
+        } else {
+          await tx.insert(envVars).values({
+            id: crypto.randomUUID(),
+            project_id: projectId,
+            environment_id: environmentId ?? null,
+            key,
+            value,
+          });
+        }
       }
     });
-
-    transaction();
   }
 
-  mergeEnvVars(projectId: string, vars: Record<string, string>, environmentId?: string): void {
-    const transaction = this.sqlite.transaction(() => {
+  async mergeEnvVars(
+    projectId: string,
+    vars: Record<string, string>,
+    environmentId?: string,
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
       for (const [key, value] of Object.entries(vars)) {
-        this.setEnvVar(projectId, key, value, environmentId);
+        const [selected] = await tx
+          .select({ id: envVars.id })
+          .from(envVars)
+          .where(this.scopedKeyWhere(projectId, key, environmentId))
+          .limit(1);
+        const existing = selected ?? null;
+
+        if (existing) {
+          await tx.update(envVars).set({ value }).where(eq(envVars.id, existing.id));
+        } else {
+          await tx.insert(envVars).values({
+            id: crypto.randomUUID(),
+            project_id: projectId,
+            environment_id: environmentId ?? null,
+            key,
+            value,
+          });
+        }
       }
     });
-
-    transaction();
   }
 
-  deleteEnvVar(projectId: string, key: string, environmentId?: string): void {
-    const whereClause =
-      environmentId === undefined
-        ? and(
-            eq(envVars.project_id, projectId),
-            isNull(envVars.environment_id),
-            eq(envVars.key, key),
-          )
-        : and(
-            eq(envVars.project_id, projectId),
-            eq(envVars.environment_id, environmentId),
-            eq(envVars.key, key),
-          );
-
-    this.db.delete(envVars).where(whereClause).run();
+  async deleteEnvVar(projectId: string, key: string, environmentId?: string): Promise<void> {
+    await this.db.delete(envVars).where(this.scopedKeyWhere(projectId, key, environmentId));
   }
 
-  findProjectsByEnvKey(key: string): string[] {
-    const rows = this.db
+  async findProjectsByEnvKey(key: string): Promise<string[]> {
+    const rows = await this.db
       .selectDistinct({ project_id: envVars.project_id })
       .from(envVars)
-      .where(eq(envVars.key, key))
-      .all();
-    return rows.map((r: { project_id: string }) => r.project_id);
+      .where(eq(envVars.key, key));
+    return rows.map((r) => r.project_id);
   }
 }

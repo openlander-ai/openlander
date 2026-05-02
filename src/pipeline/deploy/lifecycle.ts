@@ -28,9 +28,9 @@ interface ProjectStateTransitioner {
 
 function createFallbackStateManager(db: Database): ProjectStateTransitioner {
   return {
-    transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
-      db.updateProject(projectId, { status: targetStatus });
-      return Promise.resolve(true);
+    async transition(projectId: string, targetStatus: ProjectStatus): Promise<boolean> {
+      await db.updateProject(projectId, { status: targetStatus });
+      return true;
     },
   };
 }
@@ -61,16 +61,16 @@ export class ContainerLifecycle {
   async start(projectId: string): Promise<void> {
     // PR 2: switch compose-child lookup from parent_project_id scan to
     // services.parent_service_id via getComposeChildProjects.
-    const children = this.db.getComposeChildProjects(projectId);
+    const children = await this.db.getComposeChildProjects(projectId);
     const hasChildren = children.length > 0;
     if (children.length > 0) {
       await Promise.all(children.map((child) => this.start(child.id)));
     }
 
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     // PR 4.5: canonical-first read of container_id with `??` fallback to
     // legacy `projects` column through migration 0012.
-    const startDeployable = project ? this.db.getDeployableForProject(projectId) : undefined;
+    const startDeployable = project ? await this.db.getDeployableForProject(projectId) : undefined;
     // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const startContainerId = startDeployable?.container_id ?? project?.container_id;
     if (!project || !startContainerId) {
@@ -89,8 +89,8 @@ export class ContainerLifecycle {
           'Container not found during start — may have been removed externally',
         );
         await this.stateManager.transition(projectId, 'error', 'container-unhealthy');
-        for (const env of this.db.getEnvironmentsByProject(projectId)) {
-          this.db.updateEnvironment(env.id, { status: 'error' });
+        for (const env of await this.db.getEnvironmentsByProject(projectId)) {
+          await this.db.updateEnvironment(env.id, { status: 'error' });
         }
         throw new Error(`Container for project ${project.name} no longer exists. Please redeploy.`);
       }
@@ -98,8 +98,8 @@ export class ContainerLifecycle {
     }
 
     await this.stateManager.transition(projectId, 'running', 'container-restart-success');
-    for (const env of this.db.getEnvironmentsByProject(projectId)) {
-      this.db.updateEnvironment(env.id, { status: 'running' });
+    for (const env of await this.db.getEnvironmentsByProject(projectId)) {
+      await this.db.updateEnvironment(env.id, { status: 'running' });
     }
     await eventBus.emit('container:start', { projectId, containerId: startContainerId });
   }
@@ -108,14 +108,14 @@ export class ContainerLifecycle {
     this.coordinator?.suppressProject(projectId, 60_000);
 
     // PR 2: switch compose-child lookup to services.parent_service_id.
-    const children = this.db.getComposeChildProjects(projectId);
+    const children = await this.db.getComposeChildProjects(projectId);
     if (children.length > 0) {
       await Promise.all(children.map((child) => this.stop(child.id)));
     }
 
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     // PR 4.5: canonical-first read of container_id.
-    const stopDeployable = project ? this.db.getDeployableForProject(projectId) : undefined;
+    const stopDeployable = project ? await this.db.getDeployableForProject(projectId) : undefined;
     // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
     const stopContainerId = stopDeployable?.container_id ?? project?.container_id;
     if (!project || !stopContainerId) {
@@ -140,21 +140,21 @@ export class ContainerLifecycle {
     }
 
     await this.stateManager.transition(projectId, 'stopped', 'container-remove');
-    this.db.updateProject(projectId, { containerId: null });
-    for (const env of this.db.getEnvironmentsByProject(projectId)) {
-      this.db.updateEnvironment(env.id, { status: 'stopped' });
+    await this.db.updateProject(projectId, { containerId: null });
+    for (const env of await this.db.getEnvironmentsByProject(projectId)) {
+      await this.db.updateEnvironment(env.id, { status: 'stopped' });
     }
     await eventBus.emit('container:stop', { projectId, containerId: stopContainerId });
   }
 
   async remove(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
     // PR 2: switch compose-child lookup to services.parent_service_id.
-    const children = this.db.getComposeChildProjects(projectId);
+    const children = await this.db.getComposeChildProjects(projectId);
     if (children.length > 0) {
       await Promise.all(children.map((child) => this.remove(child.id, tunnelManager)));
     }
 
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) return;
 
     await this.cleanupProjectContainers(projectId);
@@ -170,21 +170,21 @@ export class ContainerLifecycle {
 
     tunnelManager?.close(projectId);
     // PR 4.5: canonical-first read of container_id for the remove event.
-    const removeDeployable = this.db.getDeployableForProject(projectId);
+    const removeDeployable = await this.db.getDeployableForProject(projectId);
     const removeContainerId = removeDeployable?.container_id ?? project.container_id ?? '';
-    this.db.deleteProject(projectId);
+    await this.db.deleteProject(projectId);
     await eventBus.emit('container:remove', { projectId, containerId: removeContainerId });
   }
 
   async archive(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) return;
 
     this.coordinator?.suppressProject(projectId, 60_000);
 
     // PR 4.5: canonical-first reads of runtime fields with `??` fallback to
     // legacy `projects` columns through migration 0012.
-    const archiveDeployable = this.db.getDeployableForProject(projectId);
+    const archiveDeployable = await this.db.getDeployableForProject(projectId);
     const archiveStatus = archiveDeployable?.status ?? project.status;
     const archiveContainerId = archiveDeployable?.container_id ?? project.container_id;
     const archiveImageTag = archiveDeployable?.image_tag ?? project.image_tag;
@@ -199,14 +199,14 @@ export class ContainerLifecycle {
     }
 
     // PR 2: switch compose-child lookup to services.parent_service_id.
-    const children = this.db.getComposeChildProjects(projectId);
+    const children = await this.db.getComposeChildProjects(projectId);
     for (const child of children) {
       await this.archive(child.id, tunnelManager);
     }
 
     // Archive in DB first so if Docker emits a 'die' event during cleanup,
     // the Eligibility Gate will see archived_at and reject recovery
-    this.db.archiveProject(projectId);
+    await this.db.archiveProject(projectId);
 
     if (archiveContainerId) {
       try {
@@ -236,32 +236,32 @@ export class ContainerLifecycle {
   }
 
   async unarchive(projectId: string): Promise<void> {
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) return;
 
-    this.db.unarchiveProject(projectId);
+    await this.db.unarchiveProject(projectId);
     const port = await allocatePort(this.db, this.docker, {}, 'production');
-    this.db.updateProject(projectId, { assignedPort: port });
+    await this.db.updateProject(projectId, { assignedPort: port });
     await eventBus.emit('project:unarchive', { projectId, port });
   }
 
   async cleanupProjectContainers(projectId: string): Promise<void> {
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) return;
 
-    const environments = this.db.getEnvironmentsByProject(projectId);
+    const environments = await this.db.getEnvironmentsByProject(projectId);
     const ids = new Set<string>();
     const names = new Set<string>();
 
     // PR 4.5: canonical-first read of container_id with `??` fallback.
-    const cleanupDeployable = this.db.getDeployableForProject(projectId);
+    const cleanupDeployable = await this.db.getDeployableForProject(projectId);
     const cleanupContainerId = cleanupDeployable?.container_id ?? project.container_id;
     if (cleanupContainerId) ids.add(cleanupContainerId);
     names.add(projectContainerName(project.name));
 
-    const children = this.db.getChildProjects(projectId);
+    const children = await this.db.getChildProjects(projectId);
     for (const child of children) {
-      const childDeployable = this.db.getDeployableForProject(child.id);
+      const childDeployable = await this.db.getDeployableForProject(child.id);
       const childContainerId = childDeployable?.container_id ?? child.container_id;
       if (childContainerId) ids.add(childContainerId);
       names.add(projectContainerName(child.name));
@@ -378,12 +378,12 @@ export class ContainerLifecycle {
   }
 
   async getLogs(projectId: string, tail = 50): Promise<string> {
-    const project = this.db.getProject(projectId);
+    const project = await this.db.getProject(projectId);
     if (!project) {
       return 'No container running for this project.';
     }
     // PR 4.5: canonical-first read of container_id.
-    const logsDeployable = this.db.getDeployableForProject(projectId);
+    const logsDeployable = await this.db.getDeployableForProject(projectId);
     const logsContainerId = logsDeployable?.container_id ?? project.container_id;
     if (!logsContainerId) {
       return 'No container running for this project.';

@@ -76,7 +76,7 @@ function toServiceNameSuffix(serviceName: string): string {
     .replace(/_+/g, '_');
 }
 
-export function autoInjectServiceEnv(params: {
+export async function autoInjectServiceEnv(params: {
   db: Database;
   env: EnvManager;
   projectId: string;
@@ -85,48 +85,52 @@ export function autoInjectServiceEnv(params: {
   serviceType: string;
   containerName: string;
   credentials?: Record<string, string>;
-}): string[] {
+}): Promise<string[]> {
   const mapping = SERVICE_ENV_MAP[normalizeServiceType(params.serviceType)];
   if (!mapping) {
     return [];
   }
 
-  const existingConnections = params.db.listServiceConnectionsByProject(params.projectId);
-  const hasSameTypeConnection = existingConnections.some((connection) => {
+  const existingConnections = await params.db.listServiceConnectionsByProject(params.projectId);
+  let hasSameTypeConnection = false;
+  for (const connection of existingConnections) {
     if (connection.service_id_provider === params.serviceId) {
-      return false;
+      continue;
     }
-    const connectedService = params.db.getService(connection.service_id_provider);
+    const connectedService = await params.db.getService(connection.service_id_provider);
     if (!connectedService) {
-      return false;
+      continue;
     }
     // Post-0012: `type` column dropped; `kind` holds the canonical service type.
     const svcType = connectedService.kind;
-    return normalizeServiceType(svcType) === normalizeServiceType(params.serviceType);
-  });
+    if (normalizeServiceType(svcType) === normalizeServiceType(params.serviceType)) {
+      hasSameTypeConnection = true;
+      break;
+    }
+  }
 
   const envKey = hasSameTypeConnection
     ? `${mapping.varName}_${toServiceNameSuffix(params.serviceName)}`
     : mapping.varName;
   const envValue = mapping.template(params.serviceName);
 
-  const allVars = params.env.getAll(params.projectId);
+  const allVars = await params.env.getAll(params.projectId);
   if (Object.prototype.hasOwnProperty.call(allVars, envKey)) {
     return [];
   }
 
-  params.env.set(params.projectId, envKey, envValue);
+  await params.env.set(params.projectId, envKey, envValue);
   return [envKey];
 }
 
-export function cleanupAutoInjectedEnv(params: {
+export async function cleanupAutoInjectedEnv(params: {
   db: Database;
   env: EnvManager;
   projectId: string;
   autoInjectedEnvKeys: string[];
-}): void {
+}): Promise<void> {
   for (const key of params.autoInjectedEnvKeys) {
-    params.env.delete(params.projectId, key);
+    await params.env.delete(params.projectId, key);
   }
 }
 

@@ -13,23 +13,22 @@ import { encrypt, decrypt } from '../env/crypto.js';
 export class EnvManager {
   constructor(private readonly db: Database) {}
 
-  private getProductionEnvironmentId(projectId: string): string | undefined {
-    const production = this.db
-      .getEnvironmentsByProject(projectId)
-      .find((environment) => environment.type === 'production');
+  private async getProductionEnvironmentId(projectId: string): Promise<string | undefined> {
+    const environments = await this.db.getEnvironmentsByProject(projectId);
+    const production = environments.find((environment) => environment.type === 'production');
     return production?.id;
   }
 
   // ===== Project Env Vars (existing) =====
 
   /** Get all env vars for a project (values are raw, not masked). */
-  getAll(projectId: string, environmentId?: string): Record<string, string> {
+  getAll(projectId: string, environmentId?: string): Promise<Record<string, string>> {
     return this.db.getEnvVars(projectId, environmentId);
   }
 
   /** Get all env vars for a project with masked values. */
-  getAllMasked(projectId: string, environmentId?: string): Record<string, string> {
-    const vars = this.db.getEnvVars(projectId, environmentId);
+  async getAllMasked(projectId: string, environmentId?: string): Promise<Record<string, string>> {
+    const vars = await this.db.getEnvVars(projectId, environmentId);
     const masked: Record<string, string> = {};
     for (const [key, value] of Object.entries(vars)) {
       masked[key] = EnvManager.mask(value);
@@ -38,11 +37,9 @@ export class EnvManager {
   }
 
   /** Get all env vars for a project with inheritance (project + production) with masked values. */
-  getAllWithInheritanceMasked(projectId: string): Record<string, string> {
-    const vars = this.getAllWithInheritance(
-      projectId,
-      this.getProductionEnvironmentId(projectId) || '',
-    );
+  async getAllWithInheritanceMasked(projectId: string): Promise<Record<string, string>> {
+    const productionEnvironmentId = await this.getProductionEnvironmentId(projectId);
+    const vars = await this.getAllWithInheritance(projectId, productionEnvironmentId || '');
     const masked: Record<string, string> = {};
     for (const [key, value] of Object.entries(vars)) {
       masked[key] = EnvManager.mask(value);
@@ -51,18 +48,27 @@ export class EnvManager {
   }
 
   /** Set a single env var. Returns true if container needs restart. */
-  set(projectId: string, key: string, value: string, environmentId?: string): boolean {
-    const existing = this.db.getEnvVars(projectId, environmentId);
+  async set(
+    projectId: string,
+    key: string,
+    value: string,
+    environmentId?: string,
+  ): Promise<boolean> {
+    const existing = await this.db.getEnvVars(projectId, environmentId);
     const changed = existing[key] !== value;
     if (changed) {
-      this.db.setEnvVar(projectId, key, value, environmentId);
+      await this.db.setEnvVar(projectId, key, value, environmentId);
     }
     return changed;
   }
 
   /** Set multiple env vars at once (merge — existing keys not in `vars` are preserved). Returns true if any changed. */
-  setBulk(projectId: string, vars: Record<string, string>, environmentId?: string): boolean {
-    const existing = this.db.getEnvVars(projectId, environmentId);
+  async setBulk(
+    projectId: string,
+    vars: Record<string, string>,
+    environmentId?: string,
+  ): Promise<boolean> {
+    const existing = await this.db.getEnvVars(projectId, environmentId);
     let changed = false;
 
     for (const [key, value] of Object.entries(vars)) {
@@ -73,17 +79,17 @@ export class EnvManager {
     }
 
     if (changed) {
-      this.db.mergeEnvVars(projectId, vars, environmentId);
+      await this.db.mergeEnvVars(projectId, vars, environmentId);
     }
     return changed;
   }
 
-  verifyRoundTrip(
+  async verifyRoundTrip(
     projectId: string,
     expected: Record<string, string>,
     environmentId?: string,
-  ): string[] {
-    const stored = this.db.getEnvVars(projectId, environmentId);
+  ): Promise<string[]> {
+    const stored = await this.db.getEnvVars(projectId, environmentId);
     const mismatches: string[] = [];
     for (const [key, value] of Object.entries(expected)) {
       if (stored[key] !== value) {
@@ -94,51 +100,58 @@ export class EnvManager {
   }
 
   /** Delete an env var. Returns true if container needs restart. */
-  delete(projectId: string, key: string, environmentId?: string): boolean {
-    const existing = this.db.getEnvVars(projectId, environmentId);
+  async delete(projectId: string, key: string, environmentId?: string): Promise<boolean> {
+    const existing = await this.db.getEnvVars(projectId, environmentId);
     if (key in existing) {
-      this.db.deleteEnvVar(projectId, key, environmentId);
+      await this.db.deleteEnvVar(projectId, key, environmentId);
       return true;
     }
     return false;
   }
 
-  getAllWithInheritance(projectId: string, environmentId: string): Record<string, string> {
-    const projectVars = this.db.getEnvVars(projectId);
-    const productionEnvironmentId = this.getProductionEnvironmentId(projectId);
+  async getAllWithInheritance(
+    projectId: string,
+    environmentId: string,
+  ): Promise<Record<string, string>> {
+    const projectVars = await this.db.getEnvVars(projectId);
+    const productionEnvironmentId = await this.getProductionEnvironmentId(projectId);
     const productionVars =
       productionEnvironmentId === undefined
         ? {}
-        : this.db.getEnvVars(projectId, productionEnvironmentId);
+        : await this.db.getEnvVars(projectId, productionEnvironmentId);
 
     if (productionEnvironmentId === environmentId) {
       return { ...projectVars, ...productionVars };
     }
 
-    const environmentVars = this.db.getEnvVars(projectId, environmentId);
+    const environmentVars = await this.db.getEnvVars(projectId, environmentId);
     return { ...projectVars, ...productionVars, ...environmentVars };
   }
 
-  getInheritanceInfo(
+  async getInheritanceInfo(
     projectId: string,
     environmentId: string,
-  ): Record<
-    string,
-    {
-      value: string;
-      source: 'global' | 'project' | 'production' | 'environment';
-      isOverride?: boolean;
-    }
+  ): Promise<
+    Record<
+      string,
+      {
+        value: string;
+        source: 'global' | 'project' | 'production' | 'environment';
+        isOverride?: boolean;
+      }
+    >
   > {
-    const globalVars = this.getGlobalSecrets();
-    const projectVars = this.db.getEnvVars(projectId);
-    const productionEnvironmentId = this.getProductionEnvironmentId(projectId);
+    const globalVars = await this.getGlobalSecrets();
+    const projectVars = await this.db.getEnvVars(projectId);
+    const productionEnvironmentId = await this.getProductionEnvironmentId(projectId);
     const productionVars =
       productionEnvironmentId === undefined
         ? {}
-        : this.db.getEnvVars(projectId, productionEnvironmentId);
+        : await this.db.getEnvVars(projectId, productionEnvironmentId);
     const environmentVars =
-      productionEnvironmentId === environmentId ? {} : this.db.getEnvVars(projectId, environmentId);
+      productionEnvironmentId === environmentId
+        ? {}
+        : await this.db.getEnvVars(projectId, environmentId);
 
     const inherited: Record<
       string,
@@ -167,21 +180,21 @@ export class EnvManager {
   }
 
   /** Find all projects using a specific env var key. */
-  findProjectsWithKey(key: string): string[] {
+  findProjectsWithKey(key: string): Promise<string[]> {
     return this.db.findProjectsByEnvKey(key);
   }
 
   // ===== Global Secrets (v0.0.10) =====
 
   /** Set a global secret (encrypts before storing). */
-  setGlobalSecret(key: string, value: string, description?: string): void {
+  async setGlobalSecret(key: string, value: string, description?: string): Promise<void> {
     const { encrypted, iv } = encrypt(value);
-    this.db.setGlobalSecret(key, encrypted, iv, description);
+    await this.db.setGlobalSecret(key, encrypted, iv, description);
   }
 
   /** Get all global secrets as decrypted key-value pairs. */
-  getGlobalSecrets(): Record<string, string> {
-    const rows = this.db.getGlobalSecrets();
+  async getGlobalSecrets(): Promise<Record<string, string>> {
+    const rows = await this.db.getGlobalSecrets();
     const result: Record<string, string> = {};
     for (const row of rows) {
       result[row.key] = decrypt(row.encrypted_value, row.iv);
@@ -190,12 +203,14 @@ export class EnvManager {
   }
 
   /** Get all global secrets with masked values (for display). */
-  getGlobalSecretsMasked(): Array<{
-    key: string;
-    maskedValue: string;
-    description: string | null;
-  }> {
-    const rows = this.db.getGlobalSecrets();
+  async getGlobalSecretsMasked(): Promise<
+    Array<{
+      key: string;
+      maskedValue: string;
+      description: string | null;
+    }>
+  > {
+    const rows = await this.db.getGlobalSecrets();
     return rows.map((row) => {
       const plaintext = decrypt(row.encrypted_value, row.iv);
       return {
@@ -207,7 +222,7 @@ export class EnvManager {
   }
 
   /** Delete a global secret. Returns true if it existed. */
-  deleteGlobalSecret(key: string): boolean {
+  deleteGlobalSecret(key: string): Promise<boolean> {
     return this.db.deleteGlobalSecret(key);
   }
 
@@ -216,31 +231,34 @@ export class EnvManager {
    * Global secrets form the base, project-level env vars override.
    * @deprecated Use resolveEnvVars() instead.
    */
-  getMergedForDeploy(projectId: string, environmentId?: string): Record<string, string> {
-    const globalVars = this.getGlobalSecrets();
+  async getMergedForDeploy(
+    projectId: string,
+    environmentId?: string,
+  ): Promise<Record<string, string>> {
+    const globalVars = await this.getGlobalSecrets();
     const projectVars =
       environmentId === undefined
-        ? this.db.getEnvVars(projectId)
-        : this.getAllWithInheritance(projectId, environmentId);
+        ? await this.db.getEnvVars(projectId)
+        : await this.getAllWithInheritance(projectId, environmentId);
     return { ...globalVars, ...projectVars };
   }
 
   // ===== Secret Files =====
 
-  uploadSecretFile(
+  async uploadSecretFile(
     projectId: string | null,
     filename: string,
     content: string,
     mountPath: string = '/run/secrets',
-  ): void {
+  ): Promise<void> {
     const { encrypted, iv } = encrypt(content);
-    this.db.upsertSecretFile(projectId, filename, encrypted, iv, mountPath);
+    await this.db.upsertSecretFile(projectId, filename, encrypted, iv, mountPath);
   }
 
-  listSecretFiles(
+  async listSecretFiles(
     projectId: string | null,
-  ): Array<{ filename: string; mountPath: string; scope: 'project' | 'global' }> {
-    const rows = this.db.getSecretFiles(projectId);
+  ): Promise<Array<{ filename: string; mountPath: string; scope: 'project' | 'global' }>> {
+    const rows = await this.db.getSecretFiles(projectId);
     return rows.map((r) => ({
       filename: r.filename,
       mountPath: `${r.mount_path}/${r.filename}`,
@@ -248,16 +266,18 @@ export class EnvManager {
     }));
   }
 
-  removeSecretFile(projectId: string | null, filename: string): boolean {
+  removeSecretFile(projectId: string | null, filename: string): Promise<boolean> {
     return this.db.deleteSecretFile(projectId, filename);
   }
 
-  getSecretFilesForDeploy(projectId: string): Array<{
-    filename: string;
-    content: string;
-    mountPath: string;
-  }> {
-    const rows = this.db.getSecretFilesForDeploy(projectId);
+  async getSecretFilesForDeploy(projectId: string): Promise<
+    Array<{
+      filename: string;
+      content: string;
+      mountPath: string;
+    }>
+  > {
+    const rows = await this.db.getSecretFilesForDeploy(projectId);
     return rows.map((r) => ({
       filename: r.filename,
       content: decrypt(r.encrypted_content, r.iv),

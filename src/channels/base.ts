@@ -450,7 +450,7 @@ export class ChannelManager {
 
       switch (command) {
         case 'status': {
-          const projects = this.ctx.db.listProjects();
+          const projects = await this.ctx.db.listProjects();
           const lines =
             projects.map((p) => `${p.name}: ${p.status ?? 'unknown'}`).join('\n') || 'No projects';
           response = `📊 Project Status:\n${lines}`;
@@ -474,20 +474,20 @@ export class ChannelManager {
         case 'incidents': {
           const now = Date.now();
           const dayAgo = now - 24 * 60 * 60 * 1000;
-          const recent = this.ctx.db.listOpsIncidentsByDateRange(dayAgo, now);
+          const recent = await this.ctx.db.listOpsIncidentsByDateRange(dayAgo, now);
           const active = recent.filter((i) => i.status !== 'resolved');
           if (active.length === 0) {
             response = '✅ No active incidents';
           } else {
+            const incidentLines = await Promise.all(
+              active.map(async (i) => {
+                const project = await this.ctx.db.getProject(i.project_id);
+                const name = project?.name ?? i.project_id.slice(0, 8);
+                return `- [${i.severity}] ${name}: ${i.root_cause ?? i.status}`;
+              }),
+            );
             response =
-              `⚠️ Active Incidents (${String(active.length)}):\n` +
-              active
-                .map((i) => {
-                  const project = this.ctx.db.getProject(i.project_id);
-                  const name = project?.name ?? i.project_id.slice(0, 8);
-                  return `- [${i.severity}] ${name}: ${i.root_cause ?? i.status}`;
-                })
-                .join('\n');
+              `⚠️ Active Incidents (${String(active.length)}):\n` + incidentLines.join('\n');
           }
           break;
         }

@@ -33,7 +33,7 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
   const routes = new Hono();
 
   routes.post('/projects/:id/domains', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     const body = await c.req.json<{ domain?: string }>();
     if (!body.domain) {
@@ -52,7 +52,7 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
 
     try {
       await ctx.cloudflare.createTunnel(project.id, domain);
-      const mappings = ctx.cloudflare.listDomains(project.id);
+      const mappings = await ctx.cloudflare.listDomains(project.id);
       void runDomainPostAddAnalysis(ctx, {
         projectId: project.id,
         projectName: project.name,
@@ -74,14 +74,14 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
   });
 
   routes.delete('/projects/:id/domains/:domain', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
+    const project = await getProjectOrThrow(c, ctx);
 
     const domainParam = decodeURIComponent(c.req.param('domain'));
     const domain = normalizeDomainParam(domainParam);
 
     try {
       await ctx.cloudflare.removeTunnel(project.id, domain);
-      const mappings = ctx.cloudflare.listDomains(project.id);
+      const mappings = await ctx.cloudflare.listDomains(project.id);
       return c.json({
         status: 'unmapped',
         projectId: project.id,
@@ -94,10 +94,10 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
     }
   });
 
-  routes.get('/projects/:id/domains', (c) => {
-    const project = getProjectOrThrow(c, ctx);
+  routes.get('/projects/:id/domains', async (c) => {
+    const project = await getProjectOrThrow(c, ctx);
 
-    const domains = ctx.cloudflare.listDomains(project.id);
+    const domains = await ctx.cloudflare.listDomains(project.id);
     return c.json({
       projectId: project.id,
       count: domains.length,
@@ -319,7 +319,7 @@ async function requestEnvUpdateApprovalAndRedeploy(
   }
 
   const vars = Object.fromEntries(updates.map((entry) => [entry.key, entry.suggested]));
-  ctx.env.setBulk(projectId, vars);
+  await ctx.env.setBulk(projectId, vars);
 
   createTimelineEvent(ctx.db, {
     projectId,
@@ -375,15 +375,19 @@ function createTimelineEvent(
     toolName?: string;
   },
 ): void {
-  db.createTimelineEvent({
-    id: nanoid(16),
-    projectId: input.projectId,
-    type: input.type,
-    message: input.message,
-    detail: input.detail,
-    severity: input.severity,
-    toolName: input.toolName,
-  });
+  void db
+    .createTimelineEvent({
+      id: nanoid(16),
+      projectId: input.projectId,
+      type: input.type,
+      message: input.message,
+      detail: input.detail,
+      severity: input.severity,
+      toolName: input.toolName,
+    })
+    .catch((err: unknown) => {
+      log.warn({ err, projectId: input.projectId }, 'Failed to create domain timeline event');
+    });
 }
 
 function normalizeDomainParam(domain: string): string {

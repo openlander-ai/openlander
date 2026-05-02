@@ -102,7 +102,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   api.get('/setup/status', async (c) => {
-    const hasPassword = ctx.db.isPasswordSet();
+    const hasPassword = await ctx.db.isPasswordSet();
 
     // Day 14 follow-up to Day 13 M5: short-circuit anonymous calls before
     // we even hit Docker / Traefik / config. Once a password is set the
@@ -220,7 +220,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
 
     const model = body.model || modelDefaults[provider] || 'gemini-2.5-flash';
     const storedOauthToken = isOauthProvider
-      ? (loadDecryptedToken(ctx.db, provider)?.accessToken ?? '')
+      ? ((await loadDecryptedToken(ctx.db, provider))?.accessToken ?? '')
       : '';
     const authToken = rawAuthToken || storedOauthToken;
 

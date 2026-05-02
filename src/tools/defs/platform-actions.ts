@@ -25,6 +25,8 @@ function stripDockerName(name: string | undefined): string {
   return name.replace(/^\//, '');
 }
 
+type KnownEnvironment = { container_id: string | null; type: string };
+
 export const platformActionToolDefs: ToolDef[] = [
   {
     name: 'platform_cleanup_orphans',
@@ -40,11 +42,22 @@ export const platformActionToolDefs: ToolDef[] = [
       ensureConfirmed(confirm, 'platform_cleanup_orphans');
 
       const managedContainers = await context.appCtx.docker.listManagedContainers();
+      const projects = await context.appCtx.db.listProjects();
+      const services = await context.appCtx.db.listServices();
+      const environmentEntries = await Promise.all(
+        projects.map(
+          async (project): Promise<[string, KnownEnvironment[]]> => [
+            project.id,
+            await context.appCtx.db.getEnvironmentsByProject(project.id),
+          ],
+        ),
+      );
+      const environmentsByProject = new Map<string, KnownEnvironment[]>(environmentEntries);
       const { knownIds, knownNames } = collectKnownContainerNames(
-        context.appCtx.db.listProjects(),
-        (projectId) => context.appCtx.db.getEnvironmentsByProject(projectId),
+        projects,
+        (projectId) => environmentsByProject.get(projectId) ?? [],
         (projectName, env) => projectContainerName(getRouteName(projectName, env.type)),
-        context.appCtx.db.listServices(),
+        services,
       );
 
       const removed: Array<{ id: string; name: string }> = [];
@@ -102,19 +115,30 @@ export const platformActionToolDefs: ToolDef[] = [
       ensureConfirmed(confirm, 'platform_reconcile');
 
       const managedContainers = await context.appCtx.docker.listManagedContainers();
+      const projects = await context.appCtx.db.listProjects();
+      const services = await context.appCtx.db.listServices();
+      const environmentEntries = await Promise.all(
+        projects.map(
+          async (project): Promise<[string, KnownEnvironment[]]> => [
+            project.id,
+            await context.appCtx.db.getEnvironmentsByProject(project.id),
+          ],
+        ),
+      );
+      const environmentsByProject = new Map<string, KnownEnvironment[]>(environmentEntries);
       const { knownIds, knownNames } = collectKnownContainerNames(
-        context.appCtx.db.listProjects(),
-        (projectId) => context.appCtx.db.getEnvironmentsByProject(projectId),
+        projects,
+        (projectId) => environmentsByProject.get(projectId) ?? [],
         (projectName, env) => projectContainerName(getRouteName(projectName, env.type)),
-        context.appCtx.db.listServices(),
+        services,
       );
       const actions: Array<{ type: 'mark_error' | 'stop_orphan'; target: string; detail: string }> =
         [];
 
-      for (const project of context.appCtx.db.listProjects()) {
+      for (const project of projects) {
         // PR 4.5: canonical-first read of container_id with `??` fallback to
         // legacy `projects` column through migration 0012.
-        const deployable = context.appCtx.db.getDeployableForProject(project.id);
+        const deployable = await context.appCtx.db.getDeployableForProject(project.id);
         const containerId = deployable?.container_id ?? project.container_id;
         if (!containerId) {
           continue;
@@ -130,7 +154,7 @@ export const platformActionToolDefs: ToolDef[] = [
         }
 
         if (!dryRun) {
-          context.appCtx.db.updateProject(project.id, { status: 'error' });
+          await context.appCtx.db.updateProject(project.id, { status: 'error' });
         }
 
         actions.push({

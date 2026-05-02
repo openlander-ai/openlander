@@ -405,9 +405,17 @@ export function getDataDir(): string {
   return CONFIG_DIR;
 }
 
-/** Get the default database file path. */
+/** Get the Postgres database URL. */
+export function getDatabaseUrl(): string {
+  return process.env.OPENLANDER_DATABASE_URL ?? process.env.DATABASE_URL ?? '';
+}
+
+/**
+ * @deprecated OpenLander is Postgres-only. Kept temporarily so callers can be
+ * converted in a focused pass.
+ */
 export function getDbPath(): string {
-  return process.env.OPENLANDER_DB_PATH ?? join(CONFIG_DIR, 'openlander.db');
+  return getDatabaseUrl();
 }
 
 /** Get the config file path. */

@@ -264,7 +264,7 @@ export class PreviewDeployer {
   private async allocatePreviewPort(): Promise<number> {
     // Given no explicit env context, use production port policy for previews.
     let port = await allocatePort(this.db, this.docker, {}, 'production');
-    const dbPorts = new Set(this.db.getUsedPorts());
+    const dbPorts = new Set(await this.db.getUsedPorts());
     const previewPorts = new Set(this.list().map((preview) => preview.port));
     const { portRangeStart, portRangeEnd } = getPolicy('production');
 

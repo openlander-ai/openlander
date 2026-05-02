@@ -19,10 +19,11 @@ export default async function globalSetup() {
   const status = (await statusRes.json()) as { hasPassword?: boolean };
 
   if (!status.hasPassword) {
+    const setupSecret = process.env.OPENLANDER_SETUP_SECRET;
     const setupRes = await fetch(`${OPENLANDER_URL}/api/auth/setup-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: 'e2e-quality-gate' }),
+      body: JSON.stringify({ password: 'e2e-quality-gate', setupSecret }),
     });
     const setupData = (await setupRes.json()) as { apiToken?: string };
     if (setupData.apiToken) {

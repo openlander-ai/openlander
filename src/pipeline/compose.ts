@@ -183,7 +183,7 @@ export class ComposePipeline {
       return;
     }
 
-    this.db.updateProject(projectId, { status: targetStatus });
+    await this.db.updateProject(projectId, { status: targetStatus });
   }
 
   detectComposeFile(projectPath: string): string | null {
@@ -464,15 +464,15 @@ export class ComposePipeline {
     };
   }
 
-  startComposeDeploy(config: ComposeDeployConfig): {
+  async startComposeDeploy(config: ComposeDeployConfig): Promise<{
     parentProjectId: string;
     parentName: string;
     status: 'building';
-  } {
+  }> {
     const parentName = config.name ?? extractProjectName(config.repoUrl);
     const parentProjectId = nanoid(12);
 
-    this.db.createProject({
+    await this.db.createProject({
       id: parentProjectId,
       name: parentName,
       repoUrl: config.repoUrl,
@@ -480,7 +480,7 @@ export class ComposePipeline {
       dockerfilePath: relative(config.clonePath, config.composePath),
       buildMethod: 'compose',
     });
-    this.db.updateProject(parentProjectId, {
+    await this.db.updateProject(parentProjectId, {
       status: 'building',
       dockerfilePath: relative(config.clonePath, config.composePath),
       buildMethod: 'compose',
@@ -555,7 +555,7 @@ export class ComposePipeline {
     this.createComposeEnvFileIfMissing(filteredComposeProject.projectPath, envVars);
 
     if (!config._parentId) {
-      this.db.createProject({
+      await this.db.createProject({
         id: parentProjectId,
         name: parentName,
         repoUrl: config.repoUrl,
@@ -566,7 +566,7 @@ export class ComposePipeline {
       this.jobManager?.trackJob(parentProjectId, parentName);
     }
 
-    this.db.updateProject(parentProjectId, {
+    await this.db.updateProject(parentProjectId, {
       status: 'building',
       dockerfilePath: relative(config.clonePath, config.composePath),
       buildMethod: 'compose',
@@ -574,7 +574,7 @@ export class ComposePipeline {
 
     const childrenByService = new Map<string, string>();
     // PR 2: fetch existing children via services.parent_service_id.
-    const existingChildren = this.db.getComposeChildProjects(parentProjectId);
+    const existingChildren = await this.db.getComposeChildProjects(parentProjectId);
     const existingByName = new Map(existingChildren.map((c) => [c.name, c]));
 
     for (const service of filteredComposeProject.services) {
@@ -586,7 +586,7 @@ export class ComposePipeline {
         childId = existing.id;
       } else {
         childId = nanoid(12);
-        this.db.createProject({
+        await this.db.createProject({
           id: childId,
           name: childName,
           repoUrl: config.repoUrl,
@@ -612,18 +612,22 @@ export class ComposePipeline {
     for (const composeService of filteredComposeProject.services) {
       const sourceChildId = childrenByService.get(composeService.name);
       if (!sourceChildId) continue;
-      this.db.deleteProjectDependenciesByProject(sourceChildId);
+      await this.db.deleteProjectDependenciesByProject(sourceChildId);
       for (const depName of composeService.dependsOn ?? []) {
         const targetChildId = childrenByService.get(depName);
         if (!targetChildId) continue;
         try {
-          this.db.createProjectDependency({
+          await this.db.createProjectDependency({
             source_project_id: sourceChildId,
             target_project_id: targetChildId,
             dependency_type: 'custom',
             source: 'auto',
           });
-        } catch {
+        } catch (error) {
+          log.debug(
+            { err: error, sourceChildId, targetChildId },
+            'Skipped duplicate compose dependency edge',
+          );
           // best-effort — duplicate / FK race shouldn't fail the deploy
         }
       }
@@ -674,8 +678,8 @@ export class ComposePipeline {
           // Also explicitly delete the backing services row: compose-child service rows have
           // project_id = parentProjectId (not child.id), so the FK cascade on deleteProject
           // does NOT reach them. The __svc convention is established in createProject().
-          this.db.deleteService(`${child.id}__svc`);
-          this.db.deleteProject(child.id);
+          await this.db.deleteService(`${child.id}__svc`);
+          await this.db.deleteProject(child.id);
           removed.push(serviceName);
         }
 
@@ -700,7 +704,9 @@ export class ComposePipeline {
       { containerId: string; port: number; containerPort: number }
     >();
     const containerNameByService = new Map<string, string>();
-    const sharedSecretFiles = this.env?.getSecretFilesForDeploy(parentProjectId) ?? [];
+    const sharedSecretFiles = this.env
+      ? await this.env.getSecretFilesForDeploy(parentProjectId)
+      : [];
 
     try {
       this.jobManager?.updatePhase(parentProjectId, 'building');
@@ -856,7 +862,7 @@ export class ComposePipeline {
               containerPort,
             });
 
-            this.db.updateProject(childId, {
+            await this.db.updateProject(childId, {
               status: 'running',
               containerId,
               assignedPort: hostPort,
@@ -881,7 +887,7 @@ export class ComposePipeline {
               releasePortReservation(allocatedHostPort);
             }
 
-            this.db.updateProject(childId, {
+            await this.db.updateProject(childId, {
               status: 'error',
             });
             this.jobManager?.updatePhase(childId, 'failed', errorMsg);
@@ -946,7 +952,7 @@ export class ComposePipeline {
           }
 
           if (childId) {
-            this.db.updateProject(childId, {
+            await this.db.updateProject(childId, {
               status: 'error',
               containerId: null,
               assignedPort: null,
@@ -1027,7 +1033,7 @@ export class ComposePipeline {
           continue;
         }
 
-        this.db.updateProject(childId, {
+        await this.db.updateProject(childId, {
           status:
             status.status === 'running'
               ? 'running'
@@ -1074,11 +1080,11 @@ export class ComposePipeline {
             ? 'One or more services failed to start'
             : undefined;
 
-      this.db.updateProject(parentProjectId, {
+      await this.db.updateProject(parentProjectId, {
         status: hasError ? 'error' : 'running',
       });
 
-      this.db.createDeployLog({
+      await this.db.createDeployLog({
         id: nanoid(12),
         projectId: parentProjectId,
         status: hasError ? 'failed' : 'success',
@@ -1145,14 +1151,14 @@ export class ComposePipeline {
 
       await this.transitionProjectStatus(parentProjectId, 'error', 'compose-orchestration-error');
       for (const childId of childrenByService.values()) {
-        this.db.updateProject(childId, {
+        await this.db.updateProject(childId, {
           status: 'error',
           containerId: null,
           assignedPort: null,
         });
       }
 
-      this.db.createDeployLog({
+      await this.db.createDeployLog({
         id: nanoid(12),
         projectId: parentProjectId,
         status: 'failed',
@@ -1182,9 +1188,9 @@ export class ComposePipeline {
   }
 
   async stopCompose(projectId: string): Promise<void> {
-    const parent = this.resolveParentProject(projectId);
+    const parent = await this.resolveParentProject(projectId);
     // PR 2: fetch compose children via services.parent_service_id.
-    const children = this.db.getComposeChildProjects(parent.id);
+    const children = await this.db.getComposeChildProjects(parent.id);
 
     for (const child of children) {
       if (child.container_id) {
@@ -1217,9 +1223,9 @@ export class ComposePipeline {
   }
 
   async getServiceLogs(projectId: string, service?: string, lines = 100): Promise<string> {
-    const parent = this.resolveParentProject(projectId);
+    const parent = await this.resolveParentProject(projectId);
     // PR 2: fetch compose children via services.parent_service_id.
-    const children = this.db.getComposeChildProjects(parent.id);
+    const children = await this.db.getComposeChildProjects(parent.id);
 
     if (service) {
       const child = children.find((c) => c.name === `${parent.name}/${service}`);
@@ -1248,10 +1254,10 @@ export class ComposePipeline {
     return chunks.join('\n');
   }
 
-  getServiceStatuses(projectId: string): ComposeServiceStatus[] {
-    const parent = this.resolveParentProject(projectId);
+  async getServiceStatuses(projectId: string): Promise<ComposeServiceStatus[]> {
+    const parent = await this.resolveParentProject(projectId);
     // PR 2: fetch compose children via services.parent_service_id.
-    const children = this.db.getComposeChildProjects(parent.id);
+    const children = await this.db.getComposeChildProjects(parent.id);
     return children.map((child) => {
       const serviceName = child.name.startsWith(`${parent.name}/`)
         ? child.name.slice(parent.name.length + 1)
@@ -1307,21 +1313,21 @@ export class ComposePipeline {
     );
   }
 
-  private resolveParentProject(projectId: string): ProjectRow {
-    const project = this.db.getProject(projectId);
+  private async resolveParentProject(projectId: string): Promise<ProjectRow> {
+    const project = await this.db.getProject(projectId);
     if (!project) {
       throw new Error(`Project not found: ${projectId}`);
     }
     // PR 2: read parent relationship from services.parent_service_id instead of
     // projects.parent_project_id. Convention: deployable service id = <projectId>__svc.
-    const svc = this.db.getService(`${projectId}__svc`);
+    const svc = await this.db.getService(`${projectId}__svc`);
     if (!svc?.parent_service_id) {
       // No parent service — this is already a top-level group.
       return project;
     }
     // Derive parent project id by stripping the __svc suffix.
     const parentProjectId = svc.parent_service_id.replace(/__svc$/, '');
-    const parent = this.db.getProject(parentProjectId);
+    const parent = await this.db.getProject(parentProjectId);
     if (!parent) {
       throw new Error(`Parent project not found: ${parentProjectId}`);
     }

@@ -11,6 +11,10 @@ Run this before merging release-facing backend or platform changes:
 npm run qa:release
 ```
 
+`npm test` is intentionally aliased to the same Postgres-ready backend release
+suite. Legacy SQLite in-memory integration tests are not part of the default
+gate after the Postgres cutover.
+
 The command runs:
 
 - `npm run lint -- --quiet`
@@ -20,15 +24,19 @@ The command runs:
 
 Target coverage:
 
-- SQLite migrations, replay, backup/restore, and schema parity
-- REST/API contract and route vocabulary
-- auth/setup/LLM configuration routes
-- deploy mutation policy, deploy locks, rollback/recovery policy
-- Operations Center incident/recovery backend logic
+- Postgres migration file sanity and schema parity without Docker
+- REST/API wire-shape smoke tests that do not require a live database
+- auth/OAuth token flow checks that do not require DB state
+- deploy mutation policy, readiness, and no-DB recovery policy checks
+- Operations Center agent/recovery logic that does not require DB state
 - MCP/tool registry and mutation-policy tool surface
 
 The required gate must not require Docker daemon access. Docker-backed E2E,
 soak, and browser-only checks stay outside the required PR gate.
+
+> Postgres-backed integration tests are a follow-up lane. The old SQLite
+> in-memory suites are intentionally excluded until they are converted to an
+> `OPENLANDER_TEST_DATABASE_URL`-based harness.
 
 ## Focused Local Suites
 
@@ -42,7 +50,7 @@ npm run test:backend:release
 
 `test:migrations` is the DB safety lane. `test:api-contract` is the wire-shape
 compatibility lane. `test:backend:release` is the combined release-critical
-backend suite.
+backend suite that can run without Docker or a live Postgres service.
 
 ## CI Policy
 
@@ -66,7 +74,8 @@ For release candidates, run at least one short soak dry run before a longer
 watch:
 
 ```bash
-SOAK_DURATION_SEC=900 SOAK_CYCLE_SEC=120 tools/qa/soak-test.sh start
+SOAK_DATABASE_URL='postgres://user:password@localhost:5432/openlander_soak' \
+  SOAK_DURATION_SEC=900 SOAK_CYCLE_SEC=120 tools/qa/soak-test.sh start
 tools/qa/soak-test.sh status
 tools/qa/soak-test.sh stop
 ```

@@ -26,12 +26,12 @@ import type { ToolDef } from './types.js';
 const log = createModuleLogger('tools-defs-project-ops');
 
 async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1]['appCtx']) {
-  const projects = appCtx.db.listProjects();
+  const projects = await appCtx.db.listProjects();
 
   for (const project of projects) {
     // PR 4.5: canonical-first read of runtime fields with `??` fallback to
     // legacy `projects` columns through migration 0012.
-    const deployable = appCtx.db.getDeployableForProject(project.id);
+    const deployable = await appCtx.db.getDeployableForProject(project.id);
     const status = deployable?.status ?? project.status;
     const containerId = deployable?.container_id ?? project.container_id;
 
@@ -44,11 +44,11 @@ async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1
       const nextStatus = info.State.Running ? 'running' : 'stopped';
 
       if (nextStatus !== status || info.Id !== containerId) {
-        appCtx.db.updateProject(project.id, { status: nextStatus, containerId: info.Id });
+        await appCtx.db.updateProject(project.id, { status: nextStatus, containerId: info.Id });
       }
     } catch (err) {
       log.debug({ err, projectId: project.id, containerId }, 'Failed to inspect project container');
-      appCtx.db.updateProject(project.id, { status: 'error' });
+      await appCtx.db.updateProject(project.id, { status: 'error' });
     }
   }
 }
@@ -63,13 +63,13 @@ export const projectOpsToolDefs: ToolDef[] = [
     inputSchema: stopProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
-      const project = context.appCtx.db.getProjectByName(projectName);
+      const project = await context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
       // PR 4.5: canonical-first status read.
-      const deployable = context.appCtx.db.getDeployableForProject(project.id);
+      const deployable = await context.appCtx.db.getDeployableForProject(project.id);
       const projectStatus = deployable?.status ?? project.status;
       if (projectStatus === 'building') {
         context.appCtx.docker.cancelBuild(project.id);
@@ -101,16 +101,16 @@ export const projectOpsToolDefs: ToolDef[] = [
         await reconcileRunningProjects(context.appCtx);
       }
 
-      const projects = context.appCtx.db.listProjects();
+      const projects = await context.appCtx.db.listProjects();
       // PR 4.5: batch-resolve deployables once so per-project mapping
       // reads canonical-first with `??` fallback to the legacy `projects`
       // columns through migration 0012.
       const deployables = new Map<
         string,
-        ReturnType<typeof context.appCtx.db.getDeployableForProject>
+        Awaited<ReturnType<typeof context.appCtx.db.getDeployableForProject>>
       >();
       for (const p of projects) {
-        deployables.set(p.id, context.appCtx.db.getDeployableForProject(p.id));
+        deployables.set(p.id, await context.appCtx.db.getDeployableForProject(p.id));
       }
 
       if (context.target === 'mcp') {
@@ -184,14 +184,14 @@ export const projectOpsToolDefs: ToolDef[] = [
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
       const noCache = (args['no_cache'] as boolean | undefined) === true;
-      const project = context.appCtx.db.getProjectByName(projectName);
+      const project = await context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
       // Fire-and-forget pre-check: surface archived/recovering/circuit-open
       // immediately instead of stopping the project + returning a fake
       // "restarting" success while the pipeline boundary silently rejects.
-      const policyRejection = tryRejectIfNotMutable(project, context);
+      const policyRejection = await tryRejectIfNotMutable(project, context);
       if (policyRejection) {
         return policyRejection;
       }
@@ -267,7 +267,7 @@ export const projectOpsToolDefs: ToolDef[] = [
     inputSchema: startProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
-      const project = context.appCtx.db.getProjectByName(projectName);
+      const project = await context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
@@ -292,25 +292,25 @@ export const projectOpsToolDefs: ToolDef[] = [
     mcpDescription:
       'Redeploy a project with the same configuration. Pass no_cache=true to rebuild from scratch.',
     inputSchema: redeployProjectSchema,
-    execute: (args, context) => {
+    execute: async (args, context) => {
       const projectName = args['project_name'] as string;
       const toolSessionId = `mcp-redeploy-${nanoid(12)}`;
       const noCache = (args['no_cache'] as boolean | undefined) === true;
       const strategy = args['strategy'] as 'blue-green' | 'force' | undefined;
       const healthCheckPath = args['health_check_path'] as string | undefined;
       const cmd = args['cmd'] as string[] | undefined;
-      const project = context.appCtx.db.getProjectByName(projectName);
+      const project = await context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
       // Fire-and-forget pre-check: surface archived/recovering/circuit-open
       // immediately instead of returning a fake "redeploying" success while
       // the pipeline boundary silently rejects in the background.
-      const policyRejection = tryRejectIfNotMutable(project, context);
+      const policyRejection = await tryRejectIfNotMutable(project, context);
       if (policyRejection) {
         return policyRejection;
       }
-      const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
+      const lockResult = await tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
       if (lockResult) {
         return lockResult;
       }
@@ -342,7 +342,11 @@ export const projectOpsToolDefs: ToolDef[] = [
           log.error({ err, projectId: project.id }, 'Redeploy failed');
         })
         .finally(() => {
-          context.appCtx.db.releaseDeployLock(project.id, toolSessionId);
+          return context.appCtx.db
+            .releaseDeployLock(project.id, toolSessionId)
+            .catch((err: unknown) => {
+              log.warn({ err, projectId: project.id }, 'Failed to release redeploy lock');
+            });
         });
 
       return {
@@ -363,9 +367,9 @@ export const projectOpsToolDefs: ToolDef[] = [
     mcpDescription:
       'Update project build config (dockerfile_path, docker_target, build_context). Takes effect on next redeploy.',
     inputSchema: updateProjectConfigSchema,
-    execute: (args, context) => {
+    execute: async (args, context) => {
       const projectName = args['project_name'] as string;
-      const project = context.appCtx.db.getProjectByName(projectName);
+      const project = await context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
@@ -390,9 +394,9 @@ export const projectOpsToolDefs: ToolDef[] = [
         updates.buildContext = val === '' ? null : val;
       }
 
-      context.appCtx.db.updateProject(project.id, updates);
+      await context.appCtx.db.updateProject(project.id, updates);
 
-      const updated = context.appCtx.db.getProject(project.id);
+      const updated = await context.appCtx.db.getProject(project.id);
       return {
         status: 'updated',
         project: projectName,
@@ -416,13 +420,13 @@ export const projectOpsToolDefs: ToolDef[] = [
     inputSchema: archiveProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
-      const project = context.appCtx.db.getProjectByName(projectName);
+      const project = await context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
       // PR 4.5: canonical-first status read.
-      const deployable = context.appCtx.db.getDeployableForProject(project.id);
+      const deployable = await context.appCtx.db.getDeployableForProject(project.id);
       const projectStatus = deployable?.status ?? project.status;
       if (projectStatus === 'building') {
         context.appCtx.docker.cancelBuild(project.id);
@@ -450,14 +454,16 @@ export const projectOpsToolDefs: ToolDef[] = [
     inputSchema: unarchiveProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
-      const allProjects = context.appCtx.db.listProjects(undefined, { includeArchived: true });
+      const allProjects = await context.appCtx.db.listProjects(undefined, {
+        includeArchived: true,
+      });
       const project = allProjects.find((p) => p.name === projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
       await context.appCtx.pipeline.unarchive(project.id);
-      const updated = context.appCtx.db.getProject(project.id);
+      const updated = await context.appCtx.db.getProject(project.id);
       const newPort = updated?.assigned_port ?? 'unknown';
       return {
         status: 'unarchived',

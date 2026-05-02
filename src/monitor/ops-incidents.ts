@@ -18,8 +18,11 @@ export class IncidentManager {
   }
 
   /** Create a new incident for a project (or return existing active one — deduplication). */
-  openIncident(projectId: string, trigger: { type: string; details?: string }): OpsIncidentRow {
-    const existing = this.ctx.db.getActiveOpsIncident(projectId);
+  async openIncident(
+    projectId: string,
+    trigger: { type: string; details?: string },
+  ): Promise<OpsIncidentRow> {
+    const existing = await this.ctx.db.getActiveOpsIncident(projectId);
     const triggerSummary = this.describeTrigger(trigger);
     const triggerFingerprint = this.generateFingerprint(triggerSummary);
 
@@ -32,11 +35,11 @@ export class IncidentManager {
         existingFingerprint === triggerFingerprint &&
         incidentAgeMs <= INCIDENT_FINGERPRINT_WINDOW_MS
       ) {
-        this.addEvent(existing.id, 'detected', `Recurring event: ${triggerSummary}`);
+        await this.addEvent(existing.id, 'detected', `Recurring event: ${triggerSummary}`);
         return existing;
       }
 
-      this.addEvent(
+      await this.addEvent(
         existing.id,
         'cascade_detected',
         `New error pattern detected: ${triggerSummary}`,
@@ -51,7 +54,7 @@ export class IncidentManager {
 
     const id = this.generateIncidentId();
     const severity = this.inferSeverity(trigger.type);
-    const incident = this.ctx.db.createOpsIncident({
+    const incident = await this.ctx.db.createOpsIncident({
       id,
       project_id: projectId,
       severity,
@@ -59,7 +62,7 @@ export class IncidentManager {
       root_cause: triggerSummary,
     });
 
-    this.addEvent(
+    await this.addEvent(
       incident.id,
       'detected',
       `Incident detected: ${trigger.type}${trigger.details ? ` — ${trigger.details}` : ''}`,
@@ -71,17 +74,18 @@ export class IncidentManager {
 
     // Cascade detection: find dependent projects
     try {
-      const dependents = this.ctx.db.findProjectDependents(projectId, undefined);
+      const dependents = await this.ctx.db.findProjectDependents(projectId, undefined);
       if (dependents.length > 0) {
         const affectedProjectIds = dependents.map((d) => d.source_service_id);
-        this.addEvent(
+        await this.addEvent(
           incident.id,
           'cascade_detected',
           `${String(dependents.length)} dependent project(s) may be affected`,
           { affected_project_ids: affectedProjectIds },
         );
       }
-    } catch {
+    } catch (err) {
+      log.debug({ err, projectId }, 'Cascade detection failed while opening incident');
       // cascade detection is best-effort
     }
 
@@ -89,14 +93,14 @@ export class IncidentManager {
     return incident;
   }
 
-  addEvent(
+  async addEvent(
     incidentId: string,
     eventType: OpsIncidentEventRow['event_type'],
     description: string,
     metadata?: Record<string, unknown>,
-  ): void {
+  ): Promise<void> {
     const id = `evt-${String(Date.now())}-${Math.random().toString(36).slice(2, 7)}`;
-    this.ctx.db.addOpsIncidentEvent({
+    await this.ctx.db.addOpsIncidentEvent({
       id,
       incident_id: incidentId,
       event_type: eventType,
@@ -105,26 +109,28 @@ export class IncidentManager {
     });
   }
 
-  resolveIncident(incidentId: string, resolution?: string): void {
-    this.ctx.db.updateOpsIncidentStatus(incidentId, 'resolved', { resolved_at: Date.now() });
-    this.addEvent(incidentId, 'recovered', resolution ?? 'Incident resolved');
+  async resolveIncident(incidentId: string, resolution?: string): Promise<void> {
+    await this.ctx.db.updateOpsIncidentStatus(incidentId, 'resolved', { resolved_at: Date.now() });
+    await this.addEvent(incidentId, 'recovered', resolution ?? 'Incident resolved');
     log.info({ incidentId }, 'Incident resolved');
   }
 
-  escalateIncident(incidentId: string, reason: string): void {
-    this.ctx.db.updateOpsIncidentStatus(incidentId, 'escalated', { escalated_at: Date.now() });
-    this.addEvent(incidentId, 'escalated', reason);
+  async escalateIncident(incidentId: string, reason: string): Promise<void> {
+    await this.ctx.db.updateOpsIncidentStatus(incidentId, 'escalated', {
+      escalated_at: Date.now(),
+    });
+    await this.addEvent(incidentId, 'escalated', reason);
     log.warn({ incidentId, reason }, 'Incident escalated');
   }
 
-  getActiveIncident(projectId: string): OpsIncidentRow | null {
-    return this.ctx.db.getActiveOpsIncident(projectId) ?? null;
+  async getActiveIncident(projectId: string): Promise<OpsIncidentRow | null> {
+    return (await this.ctx.db.getActiveOpsIncident(projectId)) ?? null;
   }
 
-  getIncidentWithTimeline(incidentId: string): IncidentWithTimeline | null {
-    const incident = this.ctx.db.getOpsIncident(incidentId);
+  async getIncidentWithTimeline(incidentId: string): Promise<IncidentWithTimeline | null> {
+    const incident = await this.ctx.db.getOpsIncident(incidentId);
     if (!incident) return null;
-    const events = this.ctx.db.listOpsIncidentEvents(incidentId);
+    const events = await this.ctx.db.listOpsIncidentEvents(incidentId);
     return { incident, events };
   }
 

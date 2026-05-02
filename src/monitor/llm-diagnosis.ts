@@ -25,7 +25,7 @@ export async function diagnoseRuntimeCrash(params: {
   aiProvider?: LanguageModel | null;
 }): Promise<string | null> {
   try {
-    const existing = params.db.getRuntimeIncident(params.incidentId);
+    const existing = await params.db.getRuntimeIncident(params.incidentId);
     if (!existing) {
       return null;
     }
@@ -76,7 +76,7 @@ What's the likely cause and recommended fix?`;
       return null;
     }
 
-    const latestIncident = params.db.getRuntimeIncident(params.incidentId);
+    const latestIncident = await params.db.getRuntimeIncident(params.incidentId);
     if (!latestIncident) {
       return null;
     }
@@ -87,7 +87,7 @@ What's the likely cause and recommended fix?`;
       return null;
     }
 
-    params.db.updateRuntimeIncidentDiagnosis(params.incidentId, diagnosis);
+    await params.db.updateRuntimeIncidentDiagnosis(params.incidentId, diagnosis);
     return diagnosis;
   } catch (error) {
     log.warn(

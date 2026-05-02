@@ -252,9 +252,9 @@ export class PlanEngine {
     };
   }
 
-  private detectPlanServices(clonePath: string): PlanService[] {
+  private async detectPlanServices(clonePath: string): Promise<PlanService[]> {
     log.info({ clonePath }, 'Analyzing infrastructure');
-    const existingServices = this.db.listServices();
+    const existingServices = await this.db.listServices();
     const infraAnalysis = analyzeInfrastructure(clonePath, existingServices);
 
     const services: PlanService[] = [];
@@ -575,7 +575,7 @@ export class PlanEngine {
       }
 
       log.info({ planId, status: initialStatus, buildMethod: 'image' }, 'Creating deploy plan');
-      this.db.createDeployPlan({
+      await this.db.createDeployPlan({
         id: planId,
         projectName,
         status: initialStatus,
@@ -609,7 +609,7 @@ export class PlanEngine {
       relativeDockerfiles,
     } = this.resolveBuildConfig(clonePath, opts, warnings, detectedEnv);
 
-    const services = this.detectPlanServices(clonePath);
+    const services = await this.detectPlanServices(clonePath);
     this.detectEnvVars(clonePath, userDockerfile, detectedEnv);
     this.detectPersistenceWarnings(clonePath, warnings);
     this.detectServiceDependencies(envVars, warnings);
@@ -620,7 +620,7 @@ export class PlanEngine {
     const autoEnvVars = this.buildAutoEnvVars(services);
 
     // Fetch existing env vars from database if projectId is provided
-    const existingEnvVars = projectId ? this.env.getAll(projectId) : {};
+    const existingEnvVars = projectId ? await this.env.getAll(projectId) : {};
 
     const missingEntries = computeMissingEnvVars(
       detectedEnv,
@@ -671,7 +671,7 @@ export class PlanEngine {
     }
 
     log.info({ planId, status: initialStatus, buildMethod }, 'Creating deploy plan');
-    this.db.createDeployPlan({
+    await this.db.createDeployPlan({
       id: planId,
       projectName,
       status: initialStatus,
@@ -683,8 +683,8 @@ export class PlanEngine {
     return plan;
   }
 
-  updatePlan(planId: string, updates: PlanUpdates): DeployPlan {
-    const row = this.db.getDeployPlan(planId);
+  async updatePlan(planId: string, updates: PlanUpdates): Promise<DeployPlan> {
+    const row = await this.db.getDeployPlan(planId);
     if (!row) {
       throw new Error(`Deploy plan not found: ${planId}`);
     }
@@ -746,7 +746,7 @@ export class PlanEngine {
     merged.updated_at = new Date().toISOString();
 
     log.info({ planId, status: merged.status }, 'Updating deploy plan');
-    this.db.updateDeployPlan(planId, {
+    await this.db.updateDeployPlan(planId, {
       status: merged.status,
       planJson: JSON.stringify(this.preparePlanForStorage(merged)),
     });
@@ -760,7 +760,7 @@ export class PlanEngine {
     lockSessionId?: string,
   ): Promise<ExecutePlanResult> {
     // Re-read from DB to prevent race condition
-    const freshRow = this.db.getDeployPlan(planId);
+    const freshRow = await this.db.getDeployPlan(planId);
     if (!freshRow) {
       throw new Error(`Plan not found: ${planId}`);
     }
@@ -785,7 +785,7 @@ export class PlanEngine {
 
     const plan = freshPlan;
 
-    const existingProject = this.db.getProjectByName(plan.app.name);
+    const existingProject = await this.db.getProjectByName(plan.app.name);
     let lockProjectId: string | null = null;
     let deployLockReleased = false;
     const safeReleaseDeployLock = () => {
@@ -793,13 +793,13 @@ export class PlanEngine {
         return;
       }
 
-      try {
-        this.db.releaseDeployLock(lockProjectId, lockSessionId ?? `plan-${planId}`);
-      } catch (error) {
-        log.warn({ planId, projectId: lockProjectId, error }, 'Failed to release deploy lock');
-      } finally {
-        deployLockReleased = true;
-      }
+      const projectId = lockProjectId;
+      deployLockReleased = true;
+      void this.db
+        .releaseDeployLock(projectId, lockSessionId ?? `plan-${planId}`)
+        .catch((error: unknown) => {
+          log.warn({ planId, projectId, error }, 'Failed to release deploy lock');
+        });
     };
 
     if (existingProject) {
@@ -807,7 +807,7 @@ export class PlanEngine {
       // Release happens asynchronously in event listeners (deploy:success /
       // deploy:failed / compose:up / compose:failed) via `safeReleaseDeployLock`,
       // so we use the bare acquire helper instead of `withDeployLock`.
-      acquireDeployLockOrThrow(this.db, {
+      await acquireDeployLockOrThrow(this.db, {
         projectId: existingProject.id,
         sessionId: lockSession,
       });
@@ -815,13 +815,13 @@ export class PlanEngine {
     }
 
     const executingPlan = PlanStateMachine.transition(plan, 'executing');
-    this.db.updateDeployPlan(planId, {
+    await this.db.updateDeployPlan(planId, {
       status: 'executing',
       planJson: JSON.stringify(this.preparePlanForStorage(executingPlan)),
     });
 
     try {
-      const mergedEnv = resolveEnvVars(
+      const mergedEnv = await resolveEnvVars(
         {
           projectId: plan.project_id ?? plan.app.name,
           autoEnvVars: plan.env.auto,
@@ -858,6 +858,7 @@ export class PlanEngine {
       const deployMode = this.getDeployMode(plan);
       const execution = this.getExecutionContext(plan);
       const isImage = plan.build.method === 'image';
+      const propagatedLockSession = lockProjectId ? (lockSessionId ?? `plan-${planId}`) : undefined;
 
       let startedProjectId: string;
       let startedProjectName: string;
@@ -875,7 +876,12 @@ export class PlanEngine {
             : plan.build.dockerfiles_found && plan.build.dockerfiles_found.length > 0
               ? plan.build.dockerfiles_found
               : [plan.build.dockerfile];
-        const startResult = this.pipeline.startMonorepoDeploy({
+        // TODO(0.1.x): MonorepoConfig does not have _lockSessionId — monorepo deploys
+        // triggered via the plan engine are still vulnerable to the lock-session
+        // ownership regression fixed for single-project deploys. Add _lockSessionId
+        // to MonorepoConfig and thread it through startMonorepoDeploy / deployMonorepo
+        // when the plumbing is in place.
+        const startResult = await this.pipeline.startMonorepoDeploy({
           repoUrl: plan.app.source.repo_url,
           branch: plan.app.source.branch,
           clonePath: cloneResult.path,
@@ -918,6 +924,10 @@ export class PlanEngine {
           ...(execution.trigger
             ? { trigger: execution.trigger as 'chat' | 'webhook' | 'api' }
             : {}),
+          // Propagate the plan-engine's lock session so that startDeploy's
+          // inner deploy() runs inline under the same session (skipping a new
+          // acquire that would conflict with the already-held lock).
+          _lockSessionId: propagatedLockSession,
         });
 
         if (startResult.status === 'preflight_failed') {
@@ -932,10 +942,14 @@ export class PlanEngine {
         const unsubSuccess = this.events.on('deploy:success', (payload) => {
           if (payload.projectId === startedProjectId) {
             const completed = PlanStateMachine.transition(executingPlan, 'completed');
-            this.db.updateDeployPlan(planId, {
-              status: 'completed',
-              planJson: JSON.stringify(this.preparePlanForStorage(completed)),
-            });
+            void this.db
+              .updateDeployPlan(planId, {
+                status: 'completed',
+                planJson: JSON.stringify(this.preparePlanForStorage(completed)),
+              })
+              .catch((error: unknown) => {
+                log.warn({ planId, error }, 'Failed to mark deploy plan completed');
+              });
             safeReleaseDeployLock();
             log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
             cleanup();
@@ -946,11 +960,15 @@ export class PlanEngine {
           if (payload.projectId === startedProjectId) {
             const errMsg = payload.error || 'Deploy failed';
             const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
-            this.db.updateDeployPlan(planId, {
-              status: 'failed',
-              planJson: JSON.stringify(this.preparePlanForStorage(failed)),
-              errorMessage: errMsg,
-            });
+            void this.db
+              .updateDeployPlan(planId, {
+                status: 'failed',
+                planJson: JSON.stringify(this.preparePlanForStorage(failed)),
+                errorMessage: errMsg,
+              })
+              .catch((error: unknown) => {
+                log.warn({ planId, error }, 'Failed to mark deploy plan failed');
+              });
             safeReleaseDeployLock();
             log.info(
               { planId, projectId: payload.projectId, error: errMsg },
@@ -963,10 +981,14 @@ export class PlanEngine {
         const unsubComposeUp = this.events.on('compose:up', (payload) => {
           if (payload.projectId === startedProjectId) {
             const completed = PlanStateMachine.transition(executingPlan, 'completed');
-            this.db.updateDeployPlan(planId, {
-              status: 'completed',
-              planJson: JSON.stringify(this.preparePlanForStorage(completed)),
-            });
+            void this.db
+              .updateDeployPlan(planId, {
+                status: 'completed',
+                planJson: JSON.stringify(this.preparePlanForStorage(completed)),
+              })
+              .catch((error: unknown) => {
+                log.warn({ planId, error }, 'Failed to mark deploy plan completed');
+              });
             safeReleaseDeployLock();
             log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
             cleanup();
@@ -977,11 +999,15 @@ export class PlanEngine {
           if (payload.projectId === startedProjectId) {
             const errMsg = payload.error || 'Deploy failed';
             const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
-            this.db.updateDeployPlan(planId, {
-              status: 'failed',
-              planJson: JSON.stringify(this.preparePlanForStorage(failed)),
-              errorMessage: errMsg,
-            });
+            void this.db
+              .updateDeployPlan(planId, {
+                status: 'failed',
+                planJson: JSON.stringify(this.preparePlanForStorage(failed)),
+                errorMessage: errMsg,
+              })
+              .catch((error: unknown) => {
+                log.warn({ planId, error }, 'Failed to mark deploy plan failed');
+              });
             safeReleaseDeployLock();
             log.info(
               { planId, projectId: payload.projectId, error: errMsg },
@@ -1002,7 +1028,7 @@ export class PlanEngine {
       if (preflightError) {
         const errMsg = preflightError;
         const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
-        this.db.updateDeployPlan(planId, {
+        await this.db.updateDeployPlan(planId, {
           status: 'failed',
           planJson: JSON.stringify(this.preparePlanForStorage(failedPlan)),
           errorMessage: errMsg,
@@ -1016,10 +1042,10 @@ export class PlanEngine {
         };
       }
 
-      const existingProject = this.db.getProjectByName(startedProjectName);
+      const existingProject = await this.db.getProjectByName(startedProjectName);
       let estimatedSeconds = 60;
       if (existingProject) {
-        const lastLog = this.db.getLastDeployLog(existingProject.id);
+        const lastLog = await this.db.getLastDeployLog(existingProject.id);
         if (lastLog?.duration_ms != null && lastLog.status === 'success') {
           estimatedSeconds = Math.ceil(lastLog.duration_ms / 1000);
         }
@@ -1036,7 +1062,7 @@ export class PlanEngine {
       safeReleaseDeployLock();
       const errorMsg = error instanceof Error ? error.message : String(error);
       const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errorMsg);
-      this.db.updateDeployPlan(planId, {
+      await this.db.updateDeployPlan(planId, {
         status: 'failed',
         planJson: JSON.stringify(this.preparePlanForStorage(failedPlan)),
         errorMessage: errorMsg,

@@ -115,7 +115,9 @@ export class ServiceHealthMonitor {
 
     this.checking = true;
     try {
-      const services = this.db.listServices().filter((service) => service.container_id !== null);
+      const services = (await this.db.listServices()).filter(
+        (service) => service.container_id !== null,
+      );
 
       await Promise.all(services.map((service) => this.runServiceCheck(service)));
     } finally {
@@ -149,11 +151,11 @@ export class ServiceHealthMonitor {
 
       if (!info.State.Running) {
         if (service.status === 'running') {
-          this.db.updateService(service.id, { status: 'stopped' });
-          const conns = this.db.listServiceConnectionsByService(service.id);
+          await this.db.updateService(service.id, { status: 'stopped' });
+          const conns = await this.db.listServiceConnectionsByService(service.id);
           const affectedProjects = [...new Set(conns.map((c) => c.service_id_consumer))];
 
-          this.recordServiceDownIncident(service, affectedProjects);
+          await this.recordServiceDownIncident(service, affectedProjects);
 
           log.warn(
             {
@@ -169,7 +171,7 @@ export class ServiceHealthMonitor {
       }
 
       if (service.status === 'stopped' || service.status === 'error') {
-        this.db.updateService(service.id, { status: 'running' });
+        await this.db.updateService(service.id, { status: 'running' });
       }
 
       // Record one metric sample every Nth tick so the v4 service-detail
@@ -219,16 +221,16 @@ export class ServiceHealthMonitor {
       if (isContainerMissing) {
         // Clear stale container_id — the container is truly gone
         if (service.container_id !== null) {
-          this.db.updateService(service.id, { status: 'stopped', containerId: null });
+          await this.db.updateService(service.id, { status: 'stopped', containerId: null });
           log.info(
             { serviceId: service.id, serviceName: service.name, containerRef },
             'Service container missing — cleared stale reference',
           );
           // Record incident only on transition (status was 'running' before)
           if (service.status === 'running') {
-            const conns2 = this.db.listServiceConnectionsByService(service.id);
+            const conns2 = await this.db.listServiceConnectionsByService(service.id);
             const affectedProjects2 = [...new Set(conns2.map((c) => c.service_id_consumer))];
-            this.recordServiceDownIncident(service, affectedProjects2);
+            await this.recordServiceDownIncident(service, affectedProjects2);
           }
         }
         return;
@@ -249,17 +251,20 @@ export class ServiceHealthMonitor {
         return;
       }
 
-      this.db.updateService(service.id, { status: 'error' });
-      const conns3 = this.db.listServiceConnectionsByService(service.id);
+      await this.db.updateService(service.id, { status: 'error' });
+      const conns3 = await this.db.listServiceConnectionsByService(service.id);
       const affectedProjects3 = [...new Set(conns3.map((c) => c.service_id_consumer))];
 
-      this.recordServiceDownIncident(service, affectedProjects3);
+      await this.recordServiceDownIncident(service, affectedProjects3);
     }
   }
 
-  private recordServiceDownIncident(service: ServiceRow, affectedProjects: string[]): void {
+  private async recordServiceDownIncident(
+    service: ServiceRow,
+    affectedProjects: string[],
+  ): Promise<void> {
     try {
-      this.db.createRuntimeIncident({
+      await this.db.createRuntimeIncident({
         projectId: affectedProjects[0] ?? 'unknown',
         category: 'service_down',
         errorSnippet: JSON.stringify({

@@ -189,7 +189,7 @@ export class Agent {
       let actionRunId: string | undefined;
 
       if (this.actionType === 'web_agent') {
-        actionRunId = this.db.createActionRun({
+        actionRunId = await this.db.createActionRun({
           projectId: sessionId ?? 'web_agent',
           triggerSource: 'web_agent',
           triggerSessionId: sessionId,
@@ -306,7 +306,7 @@ export class Agent {
             case 'finish-step': {
               currentStepIndex++;
               if (actionRunId) {
-                this.db.updateActionRunStep(actionRunId, currentStepIndex);
+                await this.db.updateActionRunStep(actionRunId, currentStepIndex);
               }
               await onEvent({
                 type: 'step_progress',
@@ -382,7 +382,11 @@ export class Agent {
 
       if (didStreamFail) {
         if (actionRunId) {
-          this.db.updateActionRunStatus(actionRunId, 'failed', 'Agent stream execution failed');
+          await this.db.updateActionRunStatus(
+            actionRunId,
+            'failed',
+            'Agent stream execution failed',
+          );
         }
         return;
       }
@@ -398,7 +402,7 @@ export class Agent {
       await onEvent({ type: 'message', content: finalText });
 
       if (actionRunId) {
-        this.db.updateActionRunStatus(actionRunId, 'succeeded');
+        await this.db.updateActionRunStatus(actionRunId, 'succeeded');
       }
 
       const costUsd = calculateCost(
@@ -531,8 +535,8 @@ export class Agent {
               toolArgs: args,
             });
 
-            this.db.updateActionRunStatus(actionRunId, 'pending_approval');
-            this.db.updateActionRunApproval(actionRunId, 'pending', name);
+            await this.db.updateActionRunStatus(actionRunId, 'pending_approval');
+            await this.db.updateActionRunApproval(actionRunId, 'pending', name);
 
             const approvalResult = await this.approvalGate.waitForApproval(actionRunId, {
               projectId: toText(args['project_id'] ?? args['projectId']),
@@ -548,16 +552,16 @@ export class Agent {
                 approvalResult === 'timed_out'
                   ? 'Approval timed out for this action'
                   : 'User rejected the action';
-              this.db.updateActionRunStatus(actionRunId, 'failed', reason);
-              this.db.updateActionRunApproval(actionRunId, 'rejected', name);
+              await this.db.updateActionRunStatus(actionRunId, 'failed', reason);
+              await this.db.updateActionRunApproval(actionRunId, 'rejected', name);
               return {
                 error: approvalResult === 'timed_out' ? 'ACTION_TIMED_OUT' : 'ACTION_REJECTED',
                 message: reason,
               };
             }
 
-            this.db.updateActionRunStatus(actionRunId, 'running');
-            this.db.updateActionRunApproval(actionRunId, 'approved', name);
+            await this.db.updateActionRunStatus(actionRunId, 'running');
+            await this.db.updateActionRunApproval(actionRunId, 'approved', name);
           } else if (decision === 'NOTIFY_THEN_ALLOW') {
             await onEvent({
               type: 'notification',

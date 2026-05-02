@@ -45,12 +45,24 @@ export const PRICING_TABLE: Record<string, [number, number]> = {
   'glm-4.6': [0.6, 2.2],
 };
 
+type TokenValue = number | { total?: number; [key: string]: number | undefined } | undefined | null;
+
 interface UsageShape {
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  inputTokens?: number;
-  outputTokens?: number;
+  promptTokens?: TokenValue;
+  completionTokens?: TokenValue;
+  totalTokens?: TokenValue;
+  inputTokens?: TokenValue;
+  outputTokens?: TokenValue;
+}
+
+/** Coerce any token value (flat number, object with .total, string, etc.) to a safe integer. */
+function coerceToInt(value: TokenValue): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'object') {
+    return coerceToInt(value.total);
+  }
+  const n = Math.floor(value);
+  return Number.isFinite(n) ? n : 0;
 }
 
 interface UsageNormalized {
@@ -113,15 +125,17 @@ export function extractUsageFromResult(usage: UsageShape | undefined | null): Us
     return { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   }
 
-  const inputTokens = usage.promptTokens ?? usage.inputTokens ?? 0;
-  const outputTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
-  const totalTokens = usage.totalTokens ?? inputTokens + outputTokens;
+  const inputTokens = coerceToInt(usage.promptTokens ?? usage.inputTokens);
+  const outputTokens = coerceToInt(usage.completionTokens ?? usage.outputTokens);
+  const rawTotal = coerceToInt(usage.totalTokens);
+  const totalTokens =
+    rawTotal === 0 && (inputTokens > 0 || outputTokens > 0) ? inputTokens + outputTokens : rawTotal;
 
   return { inputTokens, outputTokens, totalTokens };
 }
 
 /** @deprecated Use tracking middleware (wrapLanguageModel + withTracking) instead. Retained for non-AI-SDK paths. */
-export function logAiUsage(
+export async function logAiUsage(
   db: Database,
   params: {
     projectId?: string;
@@ -144,7 +158,7 @@ export function logAiUsage(
     durationMs: number;
     source?: string;
   },
-): string {
+): Promise<string> {
   const costUsd = calculateCost(
     params.provider,
     params.modelName,
@@ -152,7 +166,7 @@ export function logAiUsage(
     params.outputTokens,
   );
 
-  const id = db.createAiUsageLog({
+  const id = await db.createAiUsageLog({
     project_id: params.projectId ?? null,
     session_id: params.sessionId ?? null,
     action_type: params.actionType,
