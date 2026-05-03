@@ -7,6 +7,8 @@ type MockContainer = {
   id: string;
   name: string;
   image: string;
+  imageTag?: string;
+  port?: number;
   status: string;
   labels?: Record<string, string>;
 };
@@ -40,6 +42,17 @@ function createMockPlatformActionContext(overrides?: {
   const listProjects = vi.fn(() => projects);
   const getEnvironmentsByProject = vi.fn((projectId: string) => envMap[projectId] ?? []);
   const listServices = vi.fn(() => services);
+  const adoptService = vi.fn(async (service: Record<string, unknown>) => ({
+    id: service['id'],
+    name: service['name'],
+    kind: service['kind'],
+    status: 'running',
+    container_id: service['containerId'],
+    container_name: service['containerName'],
+    image_url: service['imageUrl'],
+    assigned_port: service['assignedPort'],
+  }));
+  const insertActivityLog = vi.fn(async (_entry: unknown) => undefined);
   const updateProject = vi.fn((_id: string, _updates: unknown) => undefined);
 
   const ctx = {
@@ -54,6 +67,8 @@ function createMockPlatformActionContext(overrides?: {
       listProjects,
       getEnvironmentsByProject,
       listServices,
+      adoptService,
+      insertActivityLog,
       updateProject,
       getDeployableForProject: vi.fn().mockReturnValue(undefined),
     },
@@ -72,6 +87,8 @@ function createMockPlatformActionContext(overrides?: {
       listProjects,
       getEnvironmentsByProject,
       listServices,
+      adoptService,
+      insertActivityLog,
       updateProject,
     },
   };
@@ -88,9 +105,10 @@ describe('platform-action tools', () => {
     vi.restoreAllMocks();
   });
 
-  it('defines exactly three MCP-only tools', () => {
-    expect(platformActionToolDefs).toHaveLength(4);
+  it('defines MCP-only action tools', () => {
+    expect(platformActionToolDefs).toHaveLength(5);
     expect(platformActionToolDefs.map((tool) => tool.name)).toEqual([
+      'platform_adopt_orphan_service',
       'platform_cleanup_orphans',
       'platform_reconcile',
       'platform_force_remove',
@@ -129,6 +147,77 @@ describe('platform-action tools', () => {
         { target: 'mcp', appCtx: ctx },
       ),
     ).rejects.toThrow('CONFIRMATION_REQUIRED');
+  });
+
+  it('platform_adopt_orphan_service previews without confirm', async () => {
+    const { ctx, dbMocks } = createMockPlatformActionContext({
+      containers: [
+        {
+          id: 'svc-orphan',
+          name: 'ol-svc-flaresolverr',
+          image: 'ghcr.io/flaresolverr/flaresolverr:latest',
+          imageTag: 'ghcr.io/flaresolverr/flaresolverr:latest',
+          port: 8191,
+          status: 'running',
+          labels: { 'openlander.role': 'service', 'openlander.service': 'flaresolverr' },
+        },
+      ],
+    });
+
+    const result = (await getTool('platform_adopt_orphan_service').execute(
+      { container_name: 'ol-svc-flaresolverr' },
+      { target: 'mcp', appCtx: ctx },
+    )) as {
+      confirm_required: boolean;
+      proposed_service: { name: string; kind: string; assigned_port: number };
+    };
+
+    expect(result.confirm_required).toBe(true);
+    expect(result.proposed_service).toMatchObject({
+      name: 'flaresolverr',
+      kind: 'image',
+      assigned_port: 8191,
+    });
+    expect(dbMocks.adoptService).not.toHaveBeenCalled();
+  });
+
+  it('platform_adopt_orphan_service registers with confirm=true', async () => {
+    const { ctx, dbMocks } = createMockPlatformActionContext({
+      containers: [
+        {
+          id: 'svc-orphan',
+          name: 'ol-svc-flaresolverr',
+          image: 'ghcr.io/flaresolverr/flaresolverr:latest',
+          imageTag: 'ghcr.io/flaresolverr/flaresolverr:latest',
+          port: 8191,
+          status: 'running',
+          labels: { 'openlander.role': 'service', 'openlander.service': 'flaresolverr' },
+        },
+      ],
+    });
+
+    const result = (await getTool('platform_adopt_orphan_service').execute(
+      { container_id: 'svc-orphan', confirm: true },
+      { target: 'mcp', appCtx: ctx },
+    )) as {
+      status: string;
+      service: { name: string; kind: string };
+      unsupported_operations: string[];
+    };
+
+    expect(result.status).toBe('adopted');
+    expect(result.service).toMatchObject({ name: 'flaresolverr', kind: 'image' });
+    expect(result.unsupported_operations).toContain('deploy_service');
+    expect(dbMocks.adoptService).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'flaresolverr',
+        kind: 'image',
+        containerId: 'svc-orphan',
+        containerName: 'ol-svc-flaresolverr',
+        assignedPort: 8191,
+      }),
+    );
+    expect(dbMocks.insertActivityLog).toHaveBeenCalled();
   });
 
   it('platform_cleanup_orphans dry_run lists orphan and does not remove', async () => {

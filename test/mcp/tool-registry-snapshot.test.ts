@@ -23,6 +23,7 @@ const EXPECTED_TOOLS = [
   'analyze_infrastructure',
   'archive_project',
   'backup_service',
+  'bulk_delete_env_vars',
   'cleanup_docker',
   'cleanup_preview',
   'create_bucket',
@@ -31,6 +32,7 @@ const EXPECTED_TOOLS = [
   'create_service_user',
   'debug_build_error',
   'delete_bucket',
+  'delete_env_var',
   'deploy',
   'deploy_blue_green',
   'disable_webhook',
@@ -38,6 +40,7 @@ const EXPECTED_TOOLS = [
   'enable_webhook',
   'exec_service_container',
   'execute_deploy_plan',
+  'export_env_vars',
   'expose_public',
   'get_alerts',
   'get_automation_policy',
@@ -124,11 +127,11 @@ describe('MCP Tool Registry Snapshot', () => {
     expect(mcpTools).toEqual(EXPECTED_TOOLS);
   });
 
-  it('maintains exactly 70 non-platform MCP tools', () => {
+  it('maintains exactly 73 non-platform MCP tools', () => {
     const toolDefs = getMcpToolDefs(false);
     const mcpTools = toolDefs.filter(isMcpTargeted);
 
-    expect(mcpTools).toHaveLength(70);
+    expect(mcpTools).toHaveLength(73);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

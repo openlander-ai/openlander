@@ -1,52 +1,45 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../src/app.js';
-import { Database } from '../src/db/index.js';
 import { EnvManager } from '../src/pipeline/env.js';
 import { createSharedToolRegistry, type LegacyToolSpec } from './tools/shared-tool-registry.js';
 
+type EnvDbMock = {
+  getEnvVars: ReturnType<typeof vi.fn>;
+  mergeEnvVarsDetailed: ReturnType<typeof vi.fn>;
+  getEnvironmentsByProject?: ReturnType<typeof vi.fn>;
+};
+
+function createEnvManager(db: EnvDbMock): EnvManager {
+  return new EnvManager(db as unknown as ConstructorParameters<typeof EnvManager>[0]);
+}
+
 describe('EnvManager.verifyRoundTrip', () => {
-  let db: Database;
-  let env: EnvManager;
-  let tmpDir: string;
+  it('returns empty array when values match', async () => {
+    const db = {
+      getEnvVars: vi.fn().mockResolvedValue({ API_URL: 'https://api.example.com' }),
+      mergeEnvVarsDetailed: vi.fn(),
+    };
+    const env = createEnvManager(db);
 
-  beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'openlander-env-roundtrip-test-'));
-    db = new Database(join(tmpDir, 'test.db'));
-    env = new EnvManager(db);
-    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/a' });
+    await expect(env.verifyRoundTrip('p1', { API_URL: 'https://api.example.com' })).resolves.toEqual(
+      [],
+    );
   });
 
-  afterEach(() => {
-    db.close();
-    rmSync(tmpDir, { recursive: true, force: true });
+  it('returns mismatched keys when values differ', async () => {
+    const db = {
+      getEnvVars: vi.fn().mockResolvedValue({ API_URL: 'https://api.example.com', TOKEN: 'stored' }),
+      mergeEnvVarsDetailed: vi.fn(),
+    };
+    const env = createEnvManager(db);
+
+    await expect(
+      env.verifyRoundTrip('p1', { API_URL: 'https://api.example.com', TOKEN: 'different' }),
+    ).resolves.toEqual(['TOKEN']);
   });
 
-  it('verifyRoundTrip returns empty array when values match', () => {
-    const vars = { API_URL: 'https://api.example.com', FEATURE_FLAG: 'true' };
-    env.setBulk('p1', vars);
-
-    expect(env.verifyRoundTrip('p1', vars)).toEqual([]);
-  });
-
-  it('verifyRoundTrip returns mismatched keys when values differ', () => {
-    env.setBulk('p1', {
-      API_URL: 'https://api.example.com',
-      TOKEN: 'stored-value',
-    });
-
-    const mismatches = env.verifyRoundTrip('p1', {
-      API_URL: 'https://api.example.com',
-      TOKEN: 'different-value',
-    });
-
-    expect(mismatches).toEqual(['TOKEN']);
-  });
-
-  it('handles special characters: +, $, spaces, quotes, backslashes', () => {
+  it('handles special characters without mangling', async () => {
     const vars = {
       PLUS: 'a+b+c',
       DOLLAR: 'cost-$100',
@@ -54,42 +47,39 @@ describe('EnvManager.verifyRoundTrip', () => {
       QUOTES: '"quoted" and \'single\'',
       BACKSLASH: 'C:\\Users\\name\\file.txt',
     };
-    env.setBulk('p1', vars);
+    const db = {
+      getEnvVars: vi.fn().mockResolvedValue(vars),
+      mergeEnvVarsDetailed: vi.fn(),
+    };
+    const env = createEnvManager(db);
 
-    expect(env.verifyRoundTrip('p1', vars)).toEqual([]);
+    await expect(env.verifyRoundTrip('p1', vars)).resolves.toEqual([]);
   });
 });
 
 describe('set_env_vars round-trip verification', () => {
-  function getSetEnvVarsTool(ctx: AppContext) {
+  function getSetEnvVarsTool(ctx: AppContext): LegacyToolSpec {
     const tool = createSharedToolRegistry(ctx, {
       target: 'mcp',
       names: ['set_env_vars'],
     }).find((entry) => entry.name === 'set_env_vars');
 
-    if (!tool) {
-      throw new Error('set_env_vars tool not found');
-    }
-
+    if (!tool) throw new Error('set_env_vars tool not found');
     return tool;
   }
 
   it('set_env_vars returns error when round-trip verification fails', async () => {
     const redeploy = vi.fn();
-    const setBulk = vi.fn().mockReturnValue(true);
-    const verifyRoundTrip = vi.fn().mockReturnValue(['API_KEY']);
-    const getProjectByName = vi.fn().mockReturnValue({
-      id: 'p1',
-      name: 'my-app',
-      status: 'running',
-    });
-    const getEnvironmentsByProject = vi
-      .fn()
-      .mockReturnValue([{ id: 'env-prod', type: 'production' }]);
-
+    const setBulkDetailed = vi.fn().mockResolvedValue([{ key: 'API_KEY', op: 'update' }]);
+    const verifyRoundTrip = vi.fn().mockResolvedValue(['API_KEY']);
+    const getProjectByName = vi.fn().mockReturnValue({ id: 'p1', name: 'my-app', status: 'running' });
     const ctx = {
-      db: { getProjectByName, getEnvironmentsByProject },
-      env: { setBulk, verifyRoundTrip },
+      db: {
+        getProjectByName,
+        assertEnvToolSchemaReady: vi.fn().mockResolvedValue(undefined),
+        getDeployableForProject: vi.fn().mockResolvedValue({ status: 'running' }),
+      },
+      env: { setBulkDetailed, verifyRoundTrip },
       pipeline: { redeploy },
     } as unknown as AppContext;
 
@@ -99,15 +89,13 @@ describe('set_env_vars round-trip verification', () => {
         project_name: 'my-app',
         variables: JSON.stringify({ API_KEY: 'sk-abc+123$ \\ "quoted"' }),
       },
-      { target: 'mcp' },
+      { target: 'mcp', appCtx: ctx },
     );
 
-    expect(setBulk).toHaveBeenCalledWith('p1', { API_KEY: 'sk-abc+123$ \\ "quoted"' }, 'env-prod');
-    expect(verifyRoundTrip).toHaveBeenCalledWith(
-      'p1',
-      { API_KEY: 'sk-abc+123$ \\ "quoted"' },
-      'env-prod',
-    );
+    expect(setBulkDetailed).toHaveBeenCalledWith('p1', { API_KEY: 'sk-abc+123$ \\ "quoted"' });
+    expect(verifyRoundTrip).toHaveBeenCalledWith('p1', {
+      API_KEY: 'sk-abc+123$ \\ "quoted"',
+    });
     expect(redeploy).not.toHaveBeenCalled();
     expect(result).toEqual({
       status: 'error',
@@ -119,98 +107,73 @@ describe('set_env_vars round-trip verification', () => {
   });
 });
 
-describe('BUG-013: MCP and HTTP env vars share same storage path', () => {
-  let db: Database;
-  let env: EnvManager;
-  let tmpDir: string;
-  let prodEnvId: string;
-  let tools: LegacyToolSpec[];
-
-  beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'openlander-env-bug013-'));
-    db = new Database(join(tmpDir, 'test.db'));
-    env = new EnvManager(db);
-    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/a' });
-
-    const prodEnv = db.getEnvironmentsByProject('p1').find((e) => e.type === 'production');
-    prodEnvId = prodEnv!.id;
-
+describe('BUG-013: MCP and HTTP env vars share same project-scoped storage path', () => {
+  function createContext() {
+    const vars: Record<string, string> = {};
+    const getEnvVars = vi.fn(async () => ({ ...vars }));
+    const mergeEnvVarsDetailed = vi.fn(async (_projectId: string, next: Record<string, string>) => {
+      const changes = Object.entries(next).map(([key, value]) => {
+        const exists = key in vars;
+        const op = exists ? (vars[key] === value ? 'noop' : 'update') : 'insert';
+        vars[key] = value;
+        return { key, op };
+      });
+      return changes;
+    });
+    const env = createEnvManager({
+      getEnvVars,
+      mergeEnvVarsDetailed,
+      getEnvironmentsByProject: vi.fn().mockResolvedValue([]),
+    });
     const ctx = {
-      db,
+      db: {
+        getProjectByName: vi.fn().mockReturnValue({ id: 'p1', name: 'my-app', status: 'running' }),
+        assertEnvToolSchemaReady: vi.fn().mockResolvedValue(undefined),
+        getDeployableForProject: vi.fn().mockResolvedValue({ status: 'running' }),
+      },
       env,
       pipeline: { redeploy: vi.fn() },
-      deployQueue: { acquire: vi.fn().mockResolvedValue(() => {}) },
     } as unknown as AppContext;
-
-    tools = createSharedToolRegistry(ctx, {
+    const tools = createSharedToolRegistry(ctx, {
       target: 'mcp',
       names: ['set_env_vars', 'list_env_vars', 'get_env_var'],
     });
-  });
-
-  afterEach(() => {
-    db.close();
-    rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  function getTool(name: string): LegacyToolSpec {
-    const tool = tools.find((t) => t.name === name);
-    if (!tool) throw new Error(`Tool ${name} not found`);
-    return tool;
+    const getTool = (name: string) => {
+      const tool = tools.find((entry) => entry.name === name);
+      if (!tool) throw new Error(`Tool ${name} not found`);
+      return tool;
+    };
+    return { env, getTool, vars };
   }
 
-  it('MCP set_env_vars → HTTP getAllWithInheritance shows the vars', async () => {
-    const setTool = getTool('set_env_vars');
-    await setTool.execute(
+  it('MCP set_env_vars and EnvManager reads use the same storage path', async () => {
+    const { env, getTool } = createContext();
+
+    await getTool('set_env_vars').execute(
       { project_name: 'my-app', variables: JSON.stringify({ DB_URL: 'postgres://localhost/db' }) },
       { target: 'mcp' },
     );
 
-    const httpResult = env.getAllWithInheritance('p1', prodEnvId);
-    expect(httpResult).toHaveProperty('DB_URL', 'postgres://localhost/db');
+    await expect(env.getAllWithInheritance('p1', 'ignored-production')).resolves.toHaveProperty(
+      'DB_URL',
+      'postgres://localhost/db',
+    );
   });
 
-  it('HTTP setBulk with envId → MCP list_env_vars shows the vars', async () => {
-    env.setBulk('p1', { API_KEY: 'sk-secret-123' }, prodEnvId);
+  it('EnvManager setBulk and MCP list/get see the same vars', async () => {
+    const { env, getTool } = createContext();
+    await env.setBulk('p1', { API_KEY: 'sk-secret-123' }, 'ignored-env');
 
-    const listTool = getTool('list_env_vars');
-    const result = (await listTool.execute({ project_name: 'my-app' }, { target: 'mcp' })) as {
-      variables: Record<string, string>;
-    };
+    const listResult = (await getTool('list_env_vars').execute(
+      { project_name: 'my-app' },
+      { target: 'mcp' },
+    )) as { variables: Record<string, string> };
+    expect(listResult.variables).toHaveProperty('API_KEY', 'sk-****-123');
 
-    expect(result.variables).toHaveProperty('API_KEY', 'sk-****-123');
-  });
-
-  it('HTTP setBulk with envId → MCP get_env_var returns the value', async () => {
-    env.setBulk('p1', { SECRET: 'top-secret' }, prodEnvId);
-
-    const getVarTool = getTool('get_env_var');
-    const result = (await getVarTool.execute(
-      { project_name: 'my-app', key: 'SECRET' },
+    const getResult = (await getTool('get_env_var').execute(
+      { project_name: 'my-app', key: 'API_KEY' },
       { target: 'mcp' },
     )) as { key: string; value: string };
-
-    expect(result).toEqual({ key: 'SECRET', value: 'top-secret' });
-  });
-
-  it('both paths see vars set by the other path', async () => {
-    env.setBulk('p1', { FROM_HTTP: 'http-value' }, prodEnvId);
-
-    const setTool = getTool('set_env_vars');
-    await setTool.execute(
-      { project_name: 'my-app', variables: JSON.stringify({ FROM_MCP: 'mcp-value' }) },
-      { target: 'mcp' },
-    );
-
-    const httpResult = env.getAllWithInheritance('p1', prodEnvId);
-    expect(httpResult).toHaveProperty('FROM_HTTP', 'http-value');
-    expect(httpResult).toHaveProperty('FROM_MCP', 'mcp-value');
-
-    const listTool = getTool('list_env_vars');
-    const mcpResult = (await listTool.execute({ project_name: 'my-app' }, { target: 'mcp' })) as {
-      variables: Record<string, string>;
-    };
-    expect(mcpResult.variables).toHaveProperty('FROM_HTTP', 'htt****alue');
-    expect(mcpResult.variables).toHaveProperty('FROM_MCP', 'mcp****alue');
+    expect(getResult).toEqual({ key: 'API_KEY', value: 'sk-secret-123' });
   });
 });

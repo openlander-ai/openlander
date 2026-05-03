@@ -4,14 +4,14 @@ import type { ToolContext, ToolDef } from '../tools/defs/types.js';
 /**
  * MCP Composite Tool Mapping
  *
- * Maps all 70 non-platform MCP-exposed tools into 4 composite action groups.
- * Platform tools (11 total) are gated separately via config.mcp.platformTools.
+ * Maps all 73 non-platform MCP-exposed tools into 4 composite action groups.
+ * Platform tools (13 total) are gated separately via config.mcp.platformTools.
  *
  * Mapping Principles:
  * - Each tool appears in exactly ONE composite
- * - 4 composites + 1 platform group = 81 total tools
- * - Non-platform total: 70 tools (verified by test/mcp/tool-registry-snapshot.test.ts)
- * - Platform total: 11 tools (gated by config.mcp.platformTools)
+ * - 4 composites + 1 platform group = 86 total tools
+ * - Non-platform total: 73 tools (verified by test/mcp/tool-registry-snapshot.test.ts)
+ * - Platform total: 13 tools (gated by config.mcp.platformTools)
  */
 
 /**
@@ -55,7 +55,7 @@ export const DEPLOY_ACTIONS = [
  * - Secret files (encrypted credential files)
  * - Public URL exposure (Cloudflare tunnel)
  * - Webhook configuration
- * Total: 21 tools
+ * Total: 24 tools
  */
 export const PROJECT_ACTIONS = [
   'list_projects',
@@ -69,6 +69,9 @@ export const PROJECT_ACTIONS = [
   'list_env_vars',
   'get_env_var',
   'set_env_vars',
+  'export_env_vars',
+  'delete_env_var',
+  'bulk_delete_env_vars',
   'set_global_secret',
   'list_global_secrets',
   'upload_secret_file',
@@ -104,6 +107,9 @@ export const PROJECT_TO_SERVICE_ALIASES: Record<(typeof PROJECT_ACTIONS)[number]
   list_env_vars: 'list_env_vars',
   get_env_var: 'get_env_var',
   set_env_vars: 'set_env_vars',
+  export_env_vars: 'export_env_vars',
+  delete_env_var: 'delete_env_var',
+  bulk_delete_env_vars: 'bulk_delete_env_vars',
   set_global_secret: 'set_global_secret',
   list_global_secrets: 'list_global_secrets',
   upload_secret_file: 'upload_secret_file',
@@ -183,7 +189,7 @@ export const MANAGED_SERVICE_ACTIONS = [
  *   - Param-shape fallback: presence of `database_type`/`image` keys ⇒ managed.
  *   - Hard error last resort: ambiguous params + unresolved kind.
  *
- * Total: 21 tools
+ * Total: 24 tools
  */
 export const SERVICE_ACTIONS = [
   'list_services',
@@ -197,6 +203,9 @@ export const SERVICE_ACTIONS = [
   'list_env_vars',
   'get_env_var',
   'set_env_vars',
+  'export_env_vars',
+  'delete_env_var',
+  'bulk_delete_env_vars',
   'set_global_secret',
   'list_global_secrets',
   'upload_secret_file',
@@ -237,7 +246,7 @@ export const MONITOR_ACTIONS = [
  * - Event logging & audit
  * - Orphan cleanup & reconciliation
  * - Force removal & recovery
- * Total: 11 tools
+ * Total: 13 tools
  */
 export const PLATFORM_ACTIONS = [
   'platform_health',
@@ -248,7 +257,9 @@ export const PLATFORM_ACTIONS = [
   'platform_docker_ps',
   'platform_docker_inspect',
   'platform_db_inspect',
+  'platform_adopt_orphan_service',
   'platform_cleanup_orphans',
+  'platform_reconcile',
   'platform_force_remove',
   'recover_platform',
 ] as const;
@@ -256,14 +267,12 @@ export const PLATFORM_ACTIONS = [
 /**
  * Verification: Total tool counts
  * - DEPLOY_ACTIONS: 20 tools
- * - PROJECT_ACTIONS: 21 tools
- * - SERVICE_ACTIONS: 20 tools
+ * - PROJECT_ACTIONS: 24 tools
+ * - SERVICE_ACTIONS: 24 tools
  * - MONITOR_ACTIONS: 8 tools
- * - PLATFORM_ACTIONS: 11 tools (gated separately)
- * - Total non-platform: 70 tools (verified against test/mcp/tool-registry-snapshot.test.ts)
- * - Total with platform: 81 tools (11 platform)
- * Note: DEPLOY_ACTIONS(20) + PROJECT_ACTIONS(21) + SERVICE_ACTIONS(20) + MONITOR_ACTIONS(8) = 69, not 70
- * The 1-off is because create_database / list_databases were not included (create_service_database merged into create_database, but create_database itself is service.ts:205-235 which targets 'agent')
+ * - PLATFORM_ACTIONS: 13 tools (gated separately)
+ * - Total non-platform ToolDefs: 73 (verified against test/mcp/tool-registry-snapshot.test.ts)
+ * - Total with platform ToolDefs: 86
  */
 
 /**

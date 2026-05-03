@@ -1,15 +1,17 @@
+import { DOCKER_LABELS } from '../../config/index.js';
 import { getRouteName } from '../../pipeline/deploy/helpers.js';
 import {
   collectKnownContainerNames,
   containerName as projectContainerName,
 } from '../../pipeline/helpers.js';
 import {
+  platformAdoptOrphanServiceSchema,
   platformCleanupOrphansSchema,
   platformForceRemoveSchema,
   platformReconcileSchema,
   platformRecoverSchema,
 } from './schemas.js';
-import { isDockerNotFoundError } from '../../errors.js';
+import { OpenLanderError, isDockerNotFoundError } from '../../errors.js';
 import type { ToolDef } from './types.js';
 
 function ensureConfirmed(confirm: boolean, toolName: string): void {
@@ -27,7 +29,185 @@ function stripDockerName(name: string | undefined): string {
 
 type KnownEnvironment = { container_id: string | null; type: string };
 
+function normalizeAdoptServiceKind(input: string | undefined): string {
+  if (!input) return 'image';
+  switch (input) {
+    case 'postgresql':
+      return 'postgres';
+    case 'mongodb':
+      return 'mongo';
+    case 'postgres':
+    case 'mysql':
+    case 'redis':
+    case 'mongo':
+    case 'minio':
+    case 'image':
+      return input;
+    default:
+      return 'image';
+  }
+}
+
+async function recordServiceAdoptActivity(
+  context: Parameters<ToolDef['execute']>[1],
+  serviceName: string,
+  containerId: string,
+): Promise<void> {
+  const db = context.appCtx.db as unknown as {
+    insertActivityLog?: (entry: {
+      event_type: string;
+      activity_type: string;
+      severity: string;
+      project_id: string;
+      title: string;
+      description: string;
+      status: string;
+      metadata?: string;
+    }) => Promise<void> | void;
+  };
+  if (typeof db.insertActivityLog !== 'function') return;
+  await db.insertActivityLog({
+    event_type: 'service:adopted',
+    activity_type: 'config',
+    severity: 'info',
+    project_id: '__orphan_managed',
+    title: 'Service container adopted',
+    description: `Adopted orphan service container ${serviceName}`,
+    status: 'completed',
+    metadata: JSON.stringify({
+      actor: 'mcp',
+      operation: 'adopt_orphan_service',
+      service_name: serviceName,
+      container_id: containerId,
+    }),
+  });
+}
+
 export const platformActionToolDefs: ToolDef[] = [
+  {
+    name: 'platform_adopt_orphan_service',
+    riskLevel: 'high',
+    description:
+      'Adopt an OpenLander-managed service container that exists in Docker but is missing from the services table. Without confirm=true, returns a preview only. Adopted custom image services support logs/restart/stop/remove; build/redeploy remains unsupported.',
+    mcpDescription:
+      'Adopt an orphan OpenLander service container into the services table (confirm-gated).',
+    inputSchema: platformAdoptOrphanServiceSchema,
+    execute: async (args, context) => {
+      const containerId = args['container_id'] as string | undefined;
+      const containerName = args['container_name'] as string | undefined;
+      const confirm = (args['confirm'] as boolean | undefined) ?? false;
+      if (
+        (containerId === undefined && containerName === undefined) ||
+        (containerId && containerName)
+      ) {
+        throw new OpenLanderError(
+          'Provide exactly one of container_id or container_name.',
+          'BAD_REQUEST',
+          400,
+        );
+      }
+
+      const containers = await context.appCtx.docker.listManagedContainers();
+      const candidate = containers.find((container) =>
+        containerId !== undefined ? container.id === containerId : container.name === containerName,
+      );
+      if (!candidate) {
+        throw new OpenLanderError(
+          'Container not found in OpenLander managed containers.',
+          'CONTAINER_NOT_FOUND',
+          404,
+          {
+            container_id: containerId,
+            container_name: containerName,
+          },
+        );
+      }
+      if (candidate.labels?.[DOCKER_LABELS.ROLE] !== 'service') {
+        throw new OpenLanderError(
+          'Only OpenLander-managed service containers can be adopted.',
+          'SERVICE_OPERATION_UNSUPPORTED',
+          400,
+          { role: candidate.labels?.[DOCKER_LABELS.ROLE] ?? null },
+        );
+      }
+
+      const existingServices = await context.appCtx.db.listServices();
+      const alreadyRegistered = existingServices.find(
+        (service) =>
+          service.container_id === candidate.id ||
+          service.container_name === candidate.name ||
+          service.name === candidate.labels?.[DOCKER_LABELS.SERVICE],
+      );
+      if (alreadyRegistered) {
+        return {
+          status: 'already_registered',
+          service: alreadyRegistered.name,
+          service_id: alreadyRegistered.id,
+          container_id: candidate.id,
+        };
+      }
+
+      const proposedName =
+        (args['service_name'] as string | undefined) ??
+        candidate.labels[DOCKER_LABELS.SERVICE] ??
+        candidate.name.replace(/^ol-svc-/, '');
+      const proposedKind = normalizeAdoptServiceKind(args['service_type'] as string | undefined);
+      const proposedService = {
+        name: proposedName,
+        kind: proposedKind,
+        image: candidate.imageTag ?? null,
+        container_id: candidate.id,
+        container_name: candidate.name,
+        assigned_port: candidate.port ?? null,
+      };
+
+      if (!confirm) {
+        return {
+          candidate: {
+            id: candidate.id,
+            name: candidate.name,
+            status: candidate.status,
+            labels: candidate.labels ?? {},
+          },
+          proposed_service: proposedService,
+          confirm_required: true,
+        };
+      }
+
+      const created = await context.appCtx.db.adoptService({
+        id: crypto.randomUUID(),
+        name: proposedName,
+        kind: proposedKind,
+        imageUrl: candidate.imageTag ?? null,
+        containerId: candidate.id,
+        containerName: candidate.name,
+        assignedPort: candidate.port ?? null,
+      });
+      await recordServiceAdoptActivity(context, created.name, candidate.id);
+
+      return {
+        status: 'adopted',
+        service: {
+          id: created.id,
+          name: created.name,
+          kind: created.kind,
+          status: created.status,
+          container_id: created.container_id,
+          container_name: created.container_name,
+          image: created.image_url,
+          port: created.assigned_port,
+        },
+        supported_operations: [
+          'get_service_logs',
+          'start_service',
+          'stop_service',
+          'remove_service',
+        ],
+        unsupported_operations: ['deploy_service', 'redeploy_project', 'build'],
+      };
+    },
+    targets: ['mcp'],
+  },
   {
     name: 'platform_cleanup_orphans',
     riskLevel: 'high',

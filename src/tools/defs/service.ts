@@ -1,6 +1,6 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { getAllIps } from '../../pipeline/traefik.js';
-import { SHARED_NETWORK_NAME } from '../../config/index.js';
+import { DOCKER_LABELS, SHARED_NETWORK_NAME } from '../../config/index.js';
 import { isDockerNotFoundError, ServiceNotFoundError } from '../../errors.js';
 import { kindToLegacyType } from '../../db/repos/service.repo.js';
 import type { ToolDef } from './types.js';
@@ -169,11 +169,26 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'list_services',
     riskLevel: 'low',
     description:
-      'List all services (databases, caches, custom containers) with status, type, and connection details. Use to see what services are available and their current state. Returns { count, services[] } with id, name, type, status, port, and credentials.',
-    mcpDescription: 'List infrastructure services with type, status, and exposed port.',
+      'List all services (databases, caches, custom containers) with status, type, and connection details. Pass include_orphans=true to also list OpenLander-managed service containers that are not registered in the services table.',
+    mcpDescription:
+      'List infrastructure services with type, status, exposed port, and optional orphan service containers.',
     inputSchema: listServicesSchema,
     execute: async (_args, { appCtx, target }) => {
+      const includeOrphans = (_args['include_orphans'] as boolean | undefined) ?? false;
       const services = await appCtx.serviceManager.list();
+      const knownContainerRefs = new Set(
+        services.flatMap((service) => [
+          service.container_id ?? '',
+          service.container_name ?? '',
+          service.name,
+        ]),
+      );
+      const orphanContainers = includeOrphans
+        ? (await appCtx.docker.listManagedContainers()).filter((container) => {
+            if (container.labels?.[DOCKER_LABELS.ROLE] !== 'service') return false;
+            return !knownContainerRefs.has(container.id) && !knownContainerRefs.has(container.name);
+          })
+        : [];
 
       if (target === 'mcp') {
         return {
@@ -198,6 +213,22 @@ export const serviceToolDefs: ToolDef[] = [
               externalAccess: getServiceExternalAccess(svcPort ?? null),
             };
           }),
+          ...(includeOrphans
+            ? {
+                orphan_count: orphanContainers.length,
+                orphan_services: orphanContainers.map((container) => ({
+                  id: container.id,
+                  name:
+                    container.labels?.[DOCKER_LABELS.SERVICE] ??
+                    container.name.replace(/^ol-svc-/, ''),
+                  containerName: container.name,
+                  image: container.imageTag ?? '',
+                  status: container.status,
+                  port: container.port ?? null,
+                  labels: container.labels ?? {},
+                })),
+              }
+            : {}),
           _agent_guidance: {
             networking: [
               `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
@@ -226,6 +257,22 @@ export const serviceToolDefs: ToolDef[] = [
             credentials: parseServiceCredentials(service.credentials),
           };
         }),
+        ...(includeOrphans
+          ? {
+              orphan_count: orphanContainers.length,
+              orphan_services: orphanContainers.map((container) => ({
+                id: container.id,
+                name:
+                  container.labels?.[DOCKER_LABELS.SERVICE] ??
+                  container.name.replace(/^ol-svc-/, ''),
+                containerName: container.name,
+                image: container.imageTag ?? '',
+                status: container.status,
+                port: container.port ?? null,
+                labels: container.labels ?? {},
+              })),
+            }
+          : {}),
       };
     },
   },

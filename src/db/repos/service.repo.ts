@@ -19,14 +19,22 @@ export const MANAGED_SERVICE_KINDS: readonly ServiceKind[] = [
 ];
 
 /**
- * Map a managed-service `kind` value (postgres/mysql/redis/mongo/minio) onto
- * itself; falls back to `'postgres'` for unknown inputs so the NOT NULL kind
- * CHECK passes. Wire callers that emit a free-form `type` string still
- * transit through this mapping when persisting.
+ * Map a service `kind` value onto the canonical enum; unknown custom images
+ * are stored as `image` so adopted containers do not masquerade as databases.
  */
 function normalizeKind(kind: string): ServiceKind {
-  const known: ServiceKind[] = ['postgres', 'mysql', 'redis', 'mongo', 'minio'];
-  return (known as string[]).includes(kind) ? (kind as ServiceKind) : 'postgres';
+  const known: ServiceKind[] = [
+    'git',
+    'image',
+    'compose',
+    'compose-child',
+    'postgres',
+    'mysql',
+    'redis',
+    'mongo',
+    'minio',
+  ];
+  return (known as string[]).includes(kind) ? (kind as ServiceKind) : 'image';
 }
 
 /**
@@ -87,6 +95,36 @@ export class ServiceRepo {
         assigned_port: service.port,
         container_name: service.containerName,
         credentials: service.credentials ?? null,
+      })
+      .returning();
+
+    const row = created ?? null;
+    if (!row) throw new RepoPersistenceError('service', service.id);
+    return row as ServiceRow;
+  }
+
+  async adoptService(service: {
+    id: string;
+    name: string;
+    kind: string;
+    imageUrl: string | null;
+    containerId: string;
+    containerName: string;
+    assignedPort?: number | null;
+  }): Promise<ServiceRow> {
+    const [created] = await this.db
+      .insert(services)
+      .values({
+        id: service.id,
+        project_id: '__orphan_managed',
+        name: service.name,
+        kind: normalizeKind(service.kind),
+        image_url: service.imageUrl,
+        assigned_port: service.assignedPort ?? null,
+        container_id: service.containerId,
+        container_name: service.containerName,
+        status: 'running',
+        source: 'image',
       })
       .returning();
 

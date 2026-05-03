@@ -1,11 +1,15 @@
 import type { ToolDef } from './types.js';
-import { getProjectByName, getProductionEnvironmentId } from './helpers.js';
+import { getProjectByName } from './helpers.js';
 import {
   CircuitBreakerOpenError,
+  OpenLanderError,
   ProjectArchivedError,
   ProjectRecoveringError,
 } from '../../errors.js';
 import {
+  bulkDeleteEnvVarsSchema,
+  deleteEnvVarSchema,
+  exportEnvVarsSchema,
   getEnvVarSchema,
   listEnvVarsSchema,
   listGlobalSecretsSchema,
@@ -17,19 +21,181 @@ import {
   uploadSecretFileSchema,
 } from './schemas.js';
 
+type AppCtx = Parameters<ToolDef['execute']>[1]['appCtx'];
+
+const MAX_AUDIT_KEYS = 50;
+
+function parseEnvVariables(raw: string): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new OpenLanderError(
+      'variables must be a valid JSON object of string values.',
+      'BAD_REQUEST',
+      400,
+      {
+        cause: error instanceof Error ? error.message : String(error),
+      },
+    );
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new OpenLanderError(
+      'variables must be a JSON object of string values.',
+      'BAD_REQUEST',
+      400,
+    );
+  }
+
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value !== 'string') {
+      throw new OpenLanderError(
+        `Environment variable "${key}" must be a string. Use delete_env_var to remove a key.`,
+        'BAD_REQUEST',
+        400,
+        { key },
+      );
+    }
+    result[key] = value;
+  }
+  return result;
+}
+
+function formatDotenvValue(value: string): string {
+  if (value === '') return '""';
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) return value;
+  return JSON.stringify(value);
+}
+
+function toDotenv(vars: Record<string, string>): string {
+  return Object.entries(vars)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${formatDotenvValue(value)}`)
+    .join('\n');
+}
+
+async function recordEnvActivity(
+  appCtx: AppCtx,
+  projectId: string,
+  operation: string,
+  keys: string[],
+  extra?: Record<string, unknown>,
+): Promise<void> {
+  const db = appCtx.db as unknown as {
+    insertActivityLog?: (entry: {
+      event_type: string;
+      activity_type: string;
+      severity: string;
+      project_id: string;
+      title: string;
+      description: string;
+      status: string;
+      metadata?: string;
+    }) => Promise<void> | void;
+  };
+  if (typeof db.insertActivityLog !== 'function') return;
+
+  const visibleKeys = keys.slice(0, MAX_AUDIT_KEYS);
+  await db.insertActivityLog({
+    event_type: 'env:changed',
+    activity_type: 'config',
+    severity: operation === 'export' ? 'warning' : 'info',
+    project_id: projectId,
+    title: `Environment variables ${operation}`,
+    description: `${operation} ${String(keys.length)} environment variable(s)`,
+    status: 'completed',
+    metadata: JSON.stringify({
+      actor: 'mcp',
+      operation,
+      keys: visibleKeys,
+      truncated: keys.length > visibleKeys.length,
+      key_count: keys.length,
+      ...extra,
+    }),
+  });
+}
+
+async function applyRedeployIfRequested(
+  appCtx: AppCtx,
+  projectId: string,
+  projectName: string,
+  changed: boolean,
+  deferRedeploy: boolean,
+): Promise<{
+  redeployed: boolean;
+  needsRedeploy: boolean;
+  redeploySkipped?: { reason: string; message: string };
+}> {
+  const deployable = await appCtx.db.getDeployableForProject(projectId);
+  const status = deployable?.status;
+  const needsRedeploy = changed && status === 'running';
+  if (!needsRedeploy || deferRedeploy) {
+    return { redeployed: false, needsRedeploy };
+  }
+
+  const sessionId = `mcp-set-env-${projectId}-${Date.now().toString(36)}`;
+  const lockAcquired = appCtx.agentPool
+    ? appCtx.agentPool.acquireProjectLock(projectId, sessionId)
+    : true;
+  if (!lockAcquired) {
+    const lock = appCtx.agentPool?.getProjectLock(projectId);
+    return {
+      redeployed: false,
+      needsRedeploy: true,
+      redeploySkipped: {
+        reason: 'PROJECT_BUSY',
+        message: `Env vars saved but redeploy was skipped: another deploy is in progress (session ${lock?.sessionId ?? 'unknown'}).`,
+      },
+    };
+  }
+
+  try {
+    await appCtx.pipeline.redeploy(projectId);
+    return { redeployed: true, needsRedeploy: false };
+  } catch (err) {
+    if (
+      err instanceof ProjectArchivedError ||
+      err instanceof ProjectRecoveringError ||
+      err instanceof CircuitBreakerOpenError
+    ) {
+      return {
+        redeployed: false,
+        needsRedeploy: true,
+        redeploySkipped: {
+          reason: err.code,
+          message: `Env vars saved but redeploy was skipped for ${projectName}: ${err.message}`,
+        },
+      };
+    }
+    throw err;
+  } finally {
+    appCtx.agentPool?.releaseProjectLock(projectId, sessionId);
+  }
+}
+
 export const envToolDefs: ToolDef[] = [
   {
     name: 'list_env_vars',
     riskLevel: 'low',
     description:
-      'List all environment variables for a project (values are masked for security). Use to check what variables are currently set before adding or modifying. Returns { variables: { KEY: "sk-****7890" }, count }. Errors: PROJECT_NOT_FOUND.',
-    mcpDescription: 'List project-scoped environment variables with masked values.',
+      'List all environment variables for a project. Values are masked by default; pass reveal=true to return raw values for audit/export workflows. Public prefixes (NEXT_PUBLIC_, PUBLIC_, VITE_PUBLIC_, NUXT_PUBLIC_) are not masked. Returns { variables, count, revealed }.',
+    mcpDescription: 'List project-scoped environment variables. Pass reveal=true for raw values.',
     inputSchema: listEnvVarsSchema,
     execute: async (_args, { appCtx }) => {
       const projectName = _args['project_name'] as string;
+      const reveal = (_args['reveal'] as boolean | undefined) ?? false;
       const project = await getProjectByName(appCtx, projectName);
-      const vars = await appCtx.env.getAllWithInheritanceMasked(project.id);
-      return Promise.resolve({ variables: vars, count: Object.keys(vars).length });
+      await appCtx.db.assertEnvToolSchemaReady();
+      const vars = reveal
+        ? await appCtx.env.getAll(project.id)
+        : await appCtx.env.getAllMasked(project.id);
+      return Promise.resolve({
+        variables: vars,
+        count: Object.keys(vars).length,
+        revealed: reveal,
+      });
     },
   },
   {
@@ -43,32 +209,34 @@ export const envToolDefs: ToolDef[] = [
       const projectName = _args['project_name'] as string;
       const key = _args['key'] as string;
       const project = await getProjectByName(appCtx, projectName);
-      const prodEnvId = await getProductionEnvironmentId(appCtx, project.id);
-      const vars = prodEnvId
-        ? await appCtx.env.getAllWithInheritance(project.id, prodEnvId)
-        : await appCtx.env.getAll(project.id);
+      await appCtx.db.assertEnvToolSchemaReady();
+      const vars = await appCtx.env.getAll(project.id);
       if (key in vars) {
         return Promise.resolve({ key, value: vars[key] });
       }
-      throw new Error(`NOT_FOUND: Environment variable "${key}" not found`);
+      throw new OpenLanderError(`Environment variable "${key}" not found`, 'NOT_FOUND', 404, {
+        key,
+      });
     },
   },
   {
     name: 'set_env_vars',
     riskLevel: 'medium',
     description:
-      'Set environment variables for a project and trigger a redeploy if running. Use when user needs to configure DATABASE_URL, API keys, or other env vars. The variables parameter must be a JSON string of key-value pairs, e.g. {"DATABASE_URL": "postgresql://user:pass@ol-svc-pg:5432/db", "REDIS_URL": "redis://ol-svc-redis:6379"}. For host services use host.docker.internal as hostname. For OpenLander services use the container name (ol-svc-*). Returns { status, project, keys[] }. Errors: PROJECT_NOT_FOUND, JSON parse error if variables is malformed.',
+      'Set environment variables for a project. By default this saves only and does NOT redeploy; call redeploy_project/deploy_service separately to apply to a running container, or pass defer_redeploy=false for immediate apply. variables must be a JSON string object with string values only; null is rejected. Returns { status, project, keys, changed, needs_redeploy }.',
     mcpDescription:
-      'Set project-scoped environment variables. Triggers redeploy if project running. Use for DATABASE_URL, API keys, etc. For services: ol-svc-* for OpenLander, host.docker.internal for host.',
+      'Set project-scoped env vars. Default saves only; call redeploy to apply, or pass defer_redeploy=false.',
     inputSchema: setEnvVarsSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
       const project = await getProjectByName(appCtx, projectName);
-      const vars = JSON.parse(args['variables'] as string) as Record<string, string>;
-      const prodEnvId = await getProductionEnvironmentId(appCtx, project.id);
+      const vars = parseEnvVariables(args['variables'] as string);
+      const deferRedeploy = (args['defer_redeploy'] as boolean | undefined) ?? true;
+      await appCtx.db.assertEnvToolSchemaReady();
 
-      const changed = await appCtx.env.setBulk(project.id, vars, prodEnvId);
-      const mismatches = await appCtx.env.verifyRoundTrip(project.id, vars, prodEnvId);
+      const changes = await appCtx.env.setBulkDetailed(project.id, vars);
+      const changed = changes.some((change) => change.op !== 'noop');
+      const mismatches = await appCtx.env.verifyRoundTrip(project.id, vars);
 
       if (mismatches.length > 0) {
         return {
@@ -79,49 +247,38 @@ export const envToolDefs: ToolDef[] = [
         };
       }
 
-      // PR 4.5: canonical-first status read.
-      const setEnvDeployable = await appCtx.db.getDeployableForProject(project.id);
-      const setEnvStatus = setEnvDeployable?.status ?? project.status;
-      if (changed && setEnvStatus === 'running') {
-        // 1.0 GA: per-project lock instead of global DeployQueue.
-        const envSessionId = `mcp-set-env-${project.id}-${Date.now().toString(36)}`;
-        const memLockAcquired = appCtx.agentPool
-          ? appCtx.agentPool.acquireProjectLock(project.id, envSessionId)
-          : true;
-        if (!memLockAcquired) {
-          const lock = appCtx.agentPool?.getProjectLock(project.id);
-          return {
-            status: 'updated_redeploy_skipped',
-            project: projectName,
-            keys: Object.keys(vars),
-            reason: 'PROJECT_BUSY',
-            message: `Env vars saved but redeploy was skipped: another deploy is in progress (session ${lock?.sessionId ?? 'unknown'}).`,
-          };
-        }
-        try {
-          await appCtx.pipeline.redeploy(project.id);
-        } catch (err) {
-          if (
-            err instanceof ProjectArchivedError ||
-            err instanceof ProjectRecoveringError ||
-            err instanceof CircuitBreakerOpenError
-          ) {
-            return {
-              status: 'updated_redeploy_skipped',
-              project: projectName,
-              keys: Object.keys(vars),
-              reason: err.code,
-              message: `Env vars saved but redeploy was skipped: ${err.message}`,
-            };
-          }
-          throw err;
-        } finally {
-          appCtx.agentPool?.releaseProjectLock(project.id, envSessionId);
-        }
+      const redeploy = await applyRedeployIfRequested(
+        appCtx,
+        project.id,
+        projectName,
+        changed,
+        deferRedeploy,
+      );
+      await recordEnvActivity(appCtx, project.id, 'set', Object.keys(vars), {
+        changed_count: changes.filter((change) => change.op !== 'noop').length,
+        needs_redeploy: redeploy.needsRedeploy,
+        deferred: deferRedeploy,
+      });
+
+      if (redeploy.redeployed) {
         return {
           status: 'updated_and_redeployed',
           project: projectName,
           keys: Object.keys(vars),
+          changed: changes,
+          needs_redeploy: false,
+        };
+      }
+
+      if (redeploy.redeploySkipped) {
+        return {
+          status: 'updated_redeploy_skipped',
+          project: projectName,
+          keys: Object.keys(vars),
+          changed: changes,
+          needs_redeploy: true,
+          reason: redeploy.redeploySkipped.reason,
+          message: redeploy.redeploySkipped.message,
         };
       }
 
@@ -129,11 +286,121 @@ export const envToolDefs: ToolDef[] = [
         status: 'updated',
         project: projectName,
         keys: Object.keys(vars),
+        changed: changes,
+        needs_redeploy: redeploy.needsRedeploy,
         _agent_guidance: {
-          next_steps: [
-            'Redeploy required: call create_deploy_plan + execute_deploy_plan for changes to take effect',
-          ],
+          next_steps: redeploy.needsRedeploy
+            ? ['Redeploy required: call redeploy_project/deploy_service to apply env changes.']
+            : ['No redeploy required for these env changes.'],
         },
+      };
+    },
+  },
+  {
+    name: 'export_env_vars',
+    riskLevel: 'medium',
+    description:
+      'Export all environment variables for a project as .env text with raw unmasked values. This is intended for audit/migration workflows and records an audit activity without storing values.',
+    mcpDescription: 'Export project env vars as .env text with raw values.',
+    inputSchema: exportEnvVarsSchema,
+    execute: async (args, { appCtx }) => {
+      const projectName = args['project_name'] as string;
+      const project = await getProjectByName(appCtx, projectName);
+      await appCtx.db.assertEnvToolSchemaReady();
+      const vars = await appCtx.env.getAll(project.id);
+      const keys = Object.keys(vars).sort();
+      await recordEnvActivity(appCtx, project.id, 'export', keys);
+      return {
+        project: projectName,
+        count: keys.length,
+        format: 'dotenv',
+        env: toDotenv(vars),
+      };
+    },
+  },
+  {
+    name: 'delete_env_var',
+    riskLevel: 'medium',
+    description:
+      'Delete one project environment variable. By default this saves only and does NOT redeploy; call redeploy_project/deploy_service separately to apply to a running container, or pass defer_redeploy=false.',
+    mcpDescription: 'Delete one project env var. Default saves only; call redeploy to apply.',
+    inputSchema: deleteEnvVarSchema,
+    execute: async (args, { appCtx }) => {
+      const projectName = args['project_name'] as string;
+      const key = args['key'] as string;
+      const deferRedeploy = (args['defer_redeploy'] as boolean | undefined) ?? true;
+      const project = await getProjectByName(appCtx, projectName);
+      await appCtx.db.assertEnvToolSchemaReady();
+      const deleted = await appCtx.env.delete(project.id, key);
+      const redeploy = await applyRedeployIfRequested(
+        appCtx,
+        project.id,
+        projectName,
+        deleted,
+        deferRedeploy,
+      );
+      if (deleted) {
+        await recordEnvActivity(appCtx, project.id, 'delete', [key], {
+          needs_redeploy: redeploy.needsRedeploy,
+          deferred: deferRedeploy,
+        });
+      }
+      return {
+        status: deleted ? 'deleted' : 'not_found',
+        project: projectName,
+        key,
+        needs_redeploy: redeploy.needsRedeploy,
+      };
+    },
+  },
+  {
+    name: 'bulk_delete_env_vars',
+    riskLevel: 'high',
+    description:
+      'Delete multiple project environment variables. Omitting confirm=true returns a dry-run preview only. By default confirmed deletes do NOT redeploy; call redeploy_project/deploy_service separately to apply, or pass defer_redeploy=false.',
+    mcpDescription: 'Bulk delete project env vars with confirm-gated dry-run behavior.',
+    inputSchema: bulkDeleteEnvVarsSchema,
+    execute: async (args, { appCtx }) => {
+      const projectName = args['project_name'] as string;
+      const keys = args['keys'] as string[];
+      const confirm = (args['confirm'] as boolean | undefined) ?? false;
+      const deferRedeploy = (args['defer_redeploy'] as boolean | undefined) ?? true;
+      const project = await getProjectByName(appCtx, projectName);
+      await appCtx.db.assertEnvToolSchemaReady();
+      const existing = await appCtx.env.getAll(project.id);
+      const wouldDelete = keys.filter((key) => key in existing);
+      const notFound = keys.filter((key) => !(key in existing));
+
+      if (!confirm) {
+        return {
+          would_delete: wouldDelete,
+          not_found: notFound,
+          count_to_delete: wouldDelete.length,
+          confirm_required: true,
+        };
+      }
+
+      const result = await appCtx.env.deleteBulk(project.id, keys);
+      const redeploy = await applyRedeployIfRequested(
+        appCtx,
+        project.id,
+        projectName,
+        result.changed,
+        deferRedeploy,
+      );
+      if (result.deleted.length > 0) {
+        await recordEnvActivity(appCtx, project.id, 'bulk_delete', result.deleted, {
+          needs_redeploy: redeploy.needsRedeploy,
+          deferred: deferRedeploy,
+        });
+      }
+      return {
+        status: 'deleted',
+        project: projectName,
+        deleted: result.deleted,
+        not_found: result.notFound,
+        count_deleted: result.deleted.length,
+        needs_redeploy: redeploy.needsRedeploy,
       };
     },
   },

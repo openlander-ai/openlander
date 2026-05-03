@@ -46,11 +46,11 @@ describe('Platform Tool Registration', () => {
     expect(platformToolNames).toHaveLength(0);
   });
 
-  it('includes exactly 11 platform tools when platformTools is true', () => {
+  it('includes exactly 13 platform tools when platformTools is true', () => {
     const toolDefs = getMcpToolDefs(true);
     const platformToolNames = toolDefs.filter((t) => isPlatformTool(t.name)).map((t) => t.name);
 
-    expect(platformToolNames).toHaveLength(12);
+    expect(platformToolNames).toHaveLength(13);
   });
 
   it('maintains consistent non-platform tool count regardless of platformTools setting', () => {
@@ -60,7 +60,7 @@ describe('Platform Tool Registration', () => {
     const nonPlatformWithout = toolsWithoutPlatform.filter((t) => !isPlatformTool(t.name));
     const nonPlatformWith = toolsWithPlatform.filter((t) => !isPlatformTool(t.name));
 
-    expect(nonPlatformWithout).toHaveLength(71);
+    expect(nonPlatformWithout).toHaveLength(74);
     expect(nonPlatformWithout).toHaveLength(nonPlatformWith.length);
   });
 

@@ -27,4 +27,21 @@ describe('Environment Variable Masking', () => {
   it('masks database URLs', () => {
     expect(EnvManager.mask('postgresql://user:pass@host:5432/db')).toBe('pos****2/db');
   });
+
+  it('renders empty values explicitly', () => {
+    expect(EnvManager.mask('')).toBe('""');
+  });
+
+  it('does not mask public frontend variables', () => {
+    expect(EnvManager.maskForKey('NEXT_PUBLIC_API_URL', 'https://api.example.com')).toBe(
+      'https://api.example.com',
+    );
+    expect(EnvManager.maskForKey('PUBLIC_BASE_URL', 'https://example.com')).toBe(
+      'https://example.com',
+    );
+    expect(EnvManager.maskForKey('VITE_PUBLIC_TOKEN', 'not-secret')).toBe('not-secret');
+    expect(EnvManager.maskForKey('NUXT_PUBLIC_URL', 'https://nuxt.example.com')).toBe(
+      'https://nuxt.example.com',
+    );
+  });
 });

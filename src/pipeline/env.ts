@@ -1,5 +1,8 @@
 import type { Database } from '../db/index.js';
+import type { EnvVarChange } from '../db/repos/env-var.repo.js';
 import { encrypt, decrypt } from '../env/crypto.js';
+
+export type EnvVarChangeResult = EnvVarChange;
 
 /**
  * Environment variable management for deployed projects.
@@ -31,7 +34,7 @@ export class EnvManager {
     const vars = await this.db.getEnvVars(projectId, environmentId);
     const masked: Record<string, string> = {};
     for (const [key, value] of Object.entries(vars)) {
-      masked[key] = EnvManager.mask(value);
+      masked[key] = EnvManager.maskForKey(key, value);
     }
     return masked;
   }
@@ -42,7 +45,7 @@ export class EnvManager {
     const vars = await this.getAllWithInheritance(projectId, productionEnvironmentId || '');
     const masked: Record<string, string> = {};
     for (const [key, value] of Object.entries(vars)) {
-      masked[key] = EnvManager.mask(value);
+      masked[key] = EnvManager.maskForKey(key, value);
     }
     return masked;
   }
@@ -68,20 +71,17 @@ export class EnvManager {
     vars: Record<string, string>,
     environmentId?: string,
   ): Promise<boolean> {
-    const existing = await this.db.getEnvVars(projectId, environmentId);
-    let changed = false;
+    const changes = await this.setBulkDetailed(projectId, vars, environmentId);
+    return changes.some((change) => change.op !== 'noop');
+  }
 
-    for (const [key, value] of Object.entries(vars)) {
-      if (existing[key] !== value) {
-        changed = true;
-        break;
-      }
-    }
-
-    if (changed) {
-      await this.db.mergeEnvVars(projectId, vars, environmentId);
-    }
-    return changed;
+  async setBulkDetailed(
+    projectId: string,
+    vars: Record<string, string>,
+    environmentId?: string,
+  ): Promise<EnvVarChangeResult[]> {
+    void environmentId;
+    return await this.db.mergeEnvVarsDetailed(projectId, vars);
   }
 
   async verifyRoundTrip(
@@ -107,6 +107,27 @@ export class EnvManager {
       return true;
     }
     return false;
+  }
+
+  async deleteBulk(
+    projectId: string,
+    keys: string[],
+    environmentId?: string,
+  ): Promise<{ deleted: string[]; notFound: string[]; changed: boolean }> {
+    const existing = await this.db.getEnvVars(projectId, environmentId);
+    const deleted: string[] = [];
+    const notFound: string[] = [];
+
+    for (const key of keys) {
+      if (key in existing) {
+        await this.db.deleteEnvVar(projectId, key, environmentId);
+        deleted.push(key);
+      } else {
+        notFound.push(key);
+      }
+    }
+
+    return { deleted, notFound, changed: deleted.length > 0 };
   }
 
   async getAllWithInheritance(
@@ -289,8 +310,24 @@ export class EnvManager {
 
   /** Mask a value for display: sk-1234567890 → sk-****7890 */
   static mask(value: string): string {
+    if (value === '') return '""';
     if (value.length <= 8) return '****';
     return value.slice(0, 3) + '****' + value.slice(-4);
+  }
+
+  static maskForKey(key: string, value: string): string {
+    if (value === '') return '""';
+    if (EnvManager.isPublicKey(key)) return value;
+    return EnvManager.mask(value);
+  }
+
+  static isPublicKey(key: string): boolean {
+    return (
+      key.startsWith('NEXT_PUBLIC_') ||
+      key.startsWith('PUBLIC_') ||
+      key.startsWith('VITE_PUBLIC_') ||
+      key.startsWith('NUXT_PUBLIC_')
+    );
   }
 
   /** Check if a key name suggests it's a secret. */

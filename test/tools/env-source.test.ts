@@ -1,84 +1,170 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { join } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../../src/app.js';
-import { Database } from '../../src/db/index.js';
-import { EnvManager } from '../../src/pipeline/env.js';
+import { OpenLanderError } from '../../src/errors.js';
 import { envToolDefs } from '../../src/tools/defs/env.js';
-import { createMockContext } from '../helpers/web-route-mocks.js';
 
-describe('list_env_vars tool', () => {
-  let db: Database;
-  let tmpDir: string;
-  let ctx: AppContext;
-  let listEnvVarsTool: (typeof envToolDefs)[0];
+const project = { id: 'p1', name: 'my-app', status: 'running' };
 
-  beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'openlander-env-source-test-'));
-    db = new Database(join(tmpDir, 'test.db'));
+function createEnvToolContext() {
+  const db = {
+    getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+    assertEnvToolSchemaReady: vi.fn().mockResolvedValue(undefined),
+    getDeployableForProject: vi.fn().mockResolvedValue({ status: 'running' }),
+    insertActivityLog: vi.fn().mockResolvedValue(undefined),
+  };
+  const env = {
+    getAll: vi.fn().mockResolvedValue({
+      DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
+      NEXT_PUBLIC_URL: 'https://public.example.com',
+      EMPTY_VALUE: '',
+    }),
+    getAllMasked: vi.fn().mockResolvedValue({
+      DATABASE_URL: 'pos****2/db',
+      NEXT_PUBLIC_URL: 'https://public.example.com',
+      EMPTY_VALUE: '""',
+    }),
+    setBulkDetailed: vi.fn().mockResolvedValue([{ key: 'DATABASE_URL', op: 'update' }]),
+    verifyRoundTrip: vi.fn().mockResolvedValue([]),
+    delete: vi.fn().mockResolvedValue(true),
+    deleteBulk: vi.fn().mockResolvedValue({
+      deleted: ['DATABASE_URL'],
+      notFound: ['MISSING'],
+      changed: true,
+    }),
+  };
+  const pipeline = { redeploy: vi.fn().mockResolvedValue({ status: 'redeployed' }) };
 
-    ctx = createMockContext(db);
-    ctx.env = new EnvManager(db) as AppContext['env'];
+  const ctx = { db, env, pipeline } as unknown as AppContext;
+  return { ctx, db, env, pipeline };
+}
 
-    listEnvVarsTool = envToolDefs.find((tool) => tool.name === 'list_env_vars')!;
-    expect(listEnvVarsTool).toBeDefined();
-  });
+function getEnvTool(name: string) {
+  const tool = envToolDefs.find((entry) => entry.name === name);
+  expect(tool).toBeDefined();
+  return tool!;
+}
 
-  afterEach(() => {
-    db.close();
-    rmSync(tmpDir, { recursive: true, force: true });
-  });
+describe('env MCP tools', () => {
+  it('list_env_vars returns masked project env vars by default', async () => {
+    const { ctx, env } = createEnvToolContext();
 
-  it('returns masked project env vars when environment_name is omitted', async () => {
-    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/repo' });
-    ctx.env.set('p1', 'DATABASE_URL', 'postgresql://user:pass@localhost:5432/db');
-    ctx.env.set('p1', 'API_KEY', 'sk-1234567890abcdef');
-
-    const result = (await listEnvVarsTool.execute(
+    const result = await getEnvTool('list_env_vars').execute(
       { project_name: 'my-app' },
       { appCtx: ctx, target: 'mcp' },
-    )) as Record<string, unknown>;
+    );
 
+    expect(env.getAllMasked).toHaveBeenCalledWith('p1');
+    expect(env.getAll).not.toHaveBeenCalled();
     expect(result).toEqual({
       variables: {
         DATABASE_URL: 'pos****2/db',
-        API_KEY: 'sk-****cdef',
+        NEXT_PUBLIC_URL: 'https://public.example.com',
+        EMPTY_VALUE: '""',
       },
-      count: 2,
+      count: 3,
+      revealed: false,
     });
   });
 
-  it('ignores environment_name and still returns project-scoped env vars', async () => {
-    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/repo' });
-    db.createEnvironment({
-      id: 'env-dev',
-      projectId: 'p1',
-      type: 'development',
-      branch: 'develop',
-    });
+  it('list_env_vars supports reveal=true raw values', async () => {
+    const { ctx, env } = createEnvToolContext();
 
-    ctx.env.setGlobalSecret('GLOBAL_KEY', 'global-value');
-    ctx.env.set('p1', 'PROJECT_KEY', 'project-value');
-    ctx.env.set('p1', 'DEV_KEY', 'dev-value', 'env-dev');
-
-    const result = (await listEnvVarsTool.execute(
-      { project_name: 'my-app', environment_name: 'development' },
+    const result = await getEnvTool('list_env_vars').execute(
+      { project_name: 'my-app', reveal: true },
       { appCtx: ctx, target: 'mcp' },
-    )) as Record<string, unknown>;
+    );
 
-    expect(result).toEqual({
+    expect(env.getAll).toHaveBeenCalledWith('p1');
+    expect(result).toMatchObject({
       variables: {
-        PROJECT_KEY: 'pro****alue',
+        DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
+        EMPTY_VALUE: '',
       },
-      count: 1,
+      revealed: true,
     });
   });
 
-  it('throws error when project not found', () => {
-    expect(() => {
-      listEnvVarsTool.execute({ project_name: 'nonexistent' }, { appCtx: ctx, target: 'mcp' });
-    }).toThrow('Project not found: nonexistent');
+  it('set_env_vars rejects null values and does not redeploy by default', async () => {
+    const { ctx, env, pipeline } = createEnvToolContext();
+
+    await expect(
+      getEnvTool('set_env_vars').execute(
+        { project_name: 'my-app', variables: JSON.stringify({ API_KEY: null }) },
+        { appCtx: ctx, target: 'mcp' },
+      ),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    const result = await getEnvTool('set_env_vars').execute(
+      { project_name: 'my-app', variables: JSON.stringify({ DATABASE_URL: 'postgres://new' }) },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(env.setBulkDetailed).toHaveBeenCalledWith('p1', { DATABASE_URL: 'postgres://new' });
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      keys: ['DATABASE_URL'],
+      changed: [{ key: 'DATABASE_URL', op: 'update' }],
+      needs_redeploy: true,
+    });
+  });
+
+  it('export_env_vars returns dotenv text and records an audit activity', async () => {
+    const { ctx, db } = createEnvToolContext();
+
+    const result = (await getEnvTool('export_env_vars').execute(
+      { project_name: 'my-app' },
+      { appCtx: ctx, target: 'mcp' },
+    )) as { env: string; count: number };
+
+    expect(result.count).toBe(3);
+    expect(result.env).toContain('DATABASE_URL=postgresql://user:pass@localhost:5432/db');
+    expect(result.env).toContain('EMPTY_VALUE=""');
+    expect(db.insertActivityLog).toHaveBeenCalledWith(
+      expect.objectContaining({ event_type: 'env:changed', severity: 'warning' }),
+    );
+  });
+
+  it('bulk_delete_env_vars previews without confirm and deletes with confirm=true', async () => {
+    const { ctx, env } = createEnvToolContext();
+    const tool = getEnvTool('bulk_delete_env_vars');
+
+    await expect(
+      tool.execute(
+        { project_name: 'my-app', keys: ['DATABASE_URL', 'MISSING'] },
+        { appCtx: ctx, target: 'mcp' },
+      ),
+    ).resolves.toEqual({
+      would_delete: ['DATABASE_URL'],
+      not_found: ['MISSING'],
+      count_to_delete: 1,
+      confirm_required: true,
+    });
+    expect(env.deleteBulk).not.toHaveBeenCalled();
+
+    await expect(
+      tool.execute(
+        { project_name: 'my-app', keys: ['DATABASE_URL', 'MISSING'], confirm: true },
+        { appCtx: ctx, target: 'mcp' },
+      ),
+    ).resolves.toMatchObject({
+      status: 'deleted',
+      deleted: ['DATABASE_URL'],
+      not_found: ['MISSING'],
+      needs_redeploy: true,
+    });
+    expect(env.deleteBulk).toHaveBeenCalledWith('p1', ['DATABASE_URL', 'MISSING']);
+  });
+
+  it('get_env_var uses NOT_FOUND for missing keys', async () => {
+    const { ctx, env } = createEnvToolContext();
+    env.getAll.mockResolvedValueOnce({});
+
+    await expect(
+      getEnvTool('get_env_var').execute(
+        { project_name: 'my-app', key: 'MISSING' },
+        { appCtx: ctx, target: 'mcp' },
+      ),
+    ).rejects.toBeInstanceOf(OpenLanderError);
   });
 });

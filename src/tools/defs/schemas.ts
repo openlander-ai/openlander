@@ -98,6 +98,7 @@ export const platformDbInspectSchema = z.object({
     'domain_mappings',
     'webhook_configs',
     'deploy_configs',
+    'activity_log',
   ]),
   project_id: z.string().optional(),
   limit: z.number().optional(),
@@ -129,15 +130,43 @@ export const setEnvVarsSchema = z.object({
     .string()
     .min(1)
     .describe('JSON object of key-value pairs (e.g., {"DATABASE_URL": "..."})'),
+  defer_redeploy: z
+    .boolean()
+    .optional()
+    .describe('Default true. If true, save only and require an explicit redeploy to apply.'),
 });
 
 export const listEnvVarsSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
+  reveal: z.boolean().optional().describe('If true, return unmasked raw values. Default: false.'),
 });
 
 export const getEnvVarSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
   key: z.string().min(1).describe('Environment variable key to retrieve'),
+});
+
+export const exportEnvVarsSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+});
+
+export const deleteEnvVarSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+  key: z.string().min(1).describe('Environment variable key to delete'),
+  defer_redeploy: z
+    .boolean()
+    .optional()
+    .describe('Default true. If true, delete only and require an explicit redeploy to apply.'),
+});
+
+export const bulkDeleteEnvVarsSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+  keys: z.array(z.string().min(1)).min(1).describe('Environment variable keys to delete'),
+  confirm: z.boolean().optional().describe('Must be true to execute. Omit for dry-run preview.'),
+  defer_redeploy: z
+    .boolean()
+    .optional()
+    .describe('Default true. If true, delete only and require an explicit redeploy to apply.'),
 });
 
 export const setGlobalSecretSchema = z.object({
@@ -303,7 +332,28 @@ export const execServiceContainerSchema = z.object({
     ),
 });
 
-export const listServicesSchema = z.object({}).strict();
+export const listServicesSchema = z
+  .object({
+    include_orphans: z
+      .boolean()
+      .optional()
+      .describe('Include OpenLander-managed service containers missing from the services table.'),
+  })
+  .strict();
+
+export const platformAdoptOrphanServiceSchema = z.object({
+  container_id: z.string().optional().describe('Docker container id to adopt'),
+  container_name: z.string().optional().describe('Docker container name to adopt'),
+  service_name: z
+    .string()
+    .optional()
+    .describe('Service name to register (defaults from label/name)'),
+  service_type: z
+    .string()
+    .optional()
+    .describe('Service type/kind to register. Defaults to image for custom images.'),
+  confirm: z.boolean().optional().describe('Must be true to create the DB service row.'),
+});
 
 // Infrastructure & analysis schemas
 export const analyzeInfrastructureSchema = z.object({

@@ -22,8 +22,8 @@ this ledger lists every still-open spot so 1.1 (API compat layer) and
 
 | Surface | File:line | Note |
 |---|---|---|
-| `PROJECT_ACTIONS` (21 actions) | `src/mcp/composite-tools.ts:60-82` | All `*_project` named, but most operate on what GUIDE-01 calls a Service. Renaming is a public-API break — needs alias map + deprecation policy in 1.1. Verbatim list lives in `vocabulary-audit.test.ts` baseline. |
-| `SERVICE_ACTIONS` (managed only) | `src/mcp/composite-tools.ts:97-119` | Today refers to managed services (postgres/redis/etc). 1.1 must decide: extend to also serve deployables (rename today's), introduce `openlander_deployable`, or rename today's `openlander_service` → `openlander_managed_service`. |
+| `PROJECT_ACTIONS` (24 actions) | `src/mcp/composite-tools.ts:60-85` | All `*_project` named, but most operate on what GUIDE-01 calls a Service. Renaming is a public-API break — needs alias map + deprecation policy in 1.1. Verbatim list lives in `vocabulary-audit.test.ts` baseline. MCP env stability added explicit `export_env_vars`, `delete_env_var`, and `bulk_delete_env_vars`; these are intentional API additions, not new data-model vocabulary. |
+| `MANAGED_SERVICE_ACTIONS` / `SERVICE_ACTIONS` split | `src/mcp/composite-tools.ts` | Managed services (postgres/redis/etc) and deployable services now have separate action sets, with env actions intentionally mirrored on deployable services. 1.1 still needs deprecation policy for legacy `*_project` aliases. |
 
 ## REST endpoints (1.1+)
 

@@ -43,10 +43,10 @@ function isMcpTargeted(def: ToolDef): boolean {
 }
 
 describe('MCP Composite Tools', () => {
-  it('returns 5 composite tools from 70 underlying tool defs (rc.2: openlander_managed_service split)', () => {
+  it('returns 5 composite tools from 73 underlying tool defs (env export/delete actions included)', () => {
     const defs = getMcpToolDefs(false);
     const mcpDefs = defs.filter(isMcpTargeted);
-    expect(mcpDefs).toHaveLength(70);
+    expect(mcpDefs).toHaveLength(73);
 
     const composites = createCompositeTools(defs);
     expect(composites).toHaveLength(5);

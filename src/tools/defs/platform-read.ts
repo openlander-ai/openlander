@@ -215,7 +215,10 @@ export const platformReadToolDefs: ToolDef[] = [
 
       const orphanContainers = managedContainers
         .filter((container) => {
-          if (container.labels?.['openlander.role']) {
+          if (
+            container.labels?.['openlander.role'] &&
+            container.labels['openlander.role'] !== 'service'
+          ) {
             return false;
           }
           const hasOpenLanderLabel = Object.keys(container.labels ?? {}).some((key) =>

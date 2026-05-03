@@ -26,7 +26,7 @@ import { VERSION } from '../../src/version.js';
 const REPO_ROOT = resolve(__dirname, '..', '..');
 
 /**
- * 21-action baseline extracted verbatim from
+ * 24-action baseline extracted verbatim from
  * `src/mcp/composite-tools.ts:60-82` at the time 1.0 RC froze. Adding
  * a new `*_project` action means consciously growing the
  * design-vocab debt; the rule below makes that growth visible.
@@ -43,6 +43,9 @@ const FROZEN_PROJECT_ACTIONS_1_0_RC = [
   'list_env_vars',
   'get_env_var',
   'set_env_vars',
+  'export_env_vars',
+  'delete_env_var',
+  'bulk_delete_env_vars',
   'set_global_secret',
   'list_global_secrets',
   'upload_secret_file',
@@ -87,6 +90,7 @@ const FROZEN_MANAGED_SERVICE_ACTIONS_1_0_RC2 = [
 /**
  * rc.2 baseline: SERVICE_ACTIONS is the deployable-vocab composite
  * (apps + workers). Frozen verbatim per plan §6.7 lines 834-857.
+ * Extended in the MCP env stability pass with explicit export/delete actions.
  */
 const FROZEN_DEPLOYABLE_SERVICE_ACTIONS_1_0_RC2 = [
   'list_services',
@@ -100,6 +104,9 @@ const FROZEN_DEPLOYABLE_SERVICE_ACTIONS_1_0_RC2 = [
   'list_env_vars',
   'get_env_var',
   'set_env_vars',
+  'export_env_vars',
+  'delete_env_var',
+  'bulk_delete_env_vars',
   'set_global_secret',
   'list_global_secrets',
   'upload_secret_file',
@@ -181,12 +188,12 @@ describe('vocabulary-audit (data-model-alignment guardrail)', () => {
     }
   });
 
-  it('rc.2 — SERVICE_ACTIONS (deployable-vocab) matches the frozen 21-action baseline', () => {
+  it('rc.2 — SERVICE_ACTIONS (deployable-vocab) matches the frozen baseline', () => {
     const actions = SERVICE_ACTIONS as readonly string[];
 
     expect(
       actions.length,
-      `SERVICE_ACTIONS must have exactly 21 deployable entries; got ${String(actions.length)}.`,
+      `SERVICE_ACTIONS must have exactly ${String(FROZEN_DEPLOYABLE_SERVICE_ACTIONS_1_0_RC2.length)} deployable entries; got ${String(actions.length)}.`,
     ).toBe(FROZEN_DEPLOYABLE_SERVICE_ACTIONS_1_0_RC2.length);
 
     for (const expected of FROZEN_DEPLOYABLE_SERVICE_ACTIONS_1_0_RC2) {
@@ -235,9 +242,9 @@ describe('vocabulary-audit (data-model-alignment guardrail)', () => {
     ).toBe(true);
   });
 
-  it('PROJECT_TO_SERVICE_ALIASES exists, has exactly 21 entries, every value is a non-empty string', () => {
+  it('PROJECT_TO_SERVICE_ALIASES exists, has one entry per PROJECT_ACTION, every value is a non-empty string', () => {
     // Runtime import (not regex scan) — structural check is syntax-aware.
-    // 21 entries must match PROJECT_ACTIONS.length (frozen at 21 for 1.0-rc.1).
+    // Entries must match PROJECT_ACTIONS.length so aliases keep parity.
     const aliasMap = PROJECT_TO_SERVICE_ALIASES as Record<string, string>;
 
     expect(
@@ -249,8 +256,8 @@ describe('vocabulary-audit (data-model-alignment guardrail)', () => {
 
     expect(
       entries.length,
-      `PROJECT_TO_SERVICE_ALIASES must have exactly 21 entries (one per PROJECT_ACTION). Found ${String(entries.length)}.`,
-    ).toBe(21);
+      `PROJECT_TO_SERVICE_ALIASES must have one entry per PROJECT_ACTION. Found ${String(entries.length)}.`,
+    ).toBe(FROZEN_PROJECT_ACTIONS_1_0_RC.length);
 
     // Every key must be a PROJECT_ACTION
     const projectActionSet = new Set<string>(PROJECT_ACTIONS);

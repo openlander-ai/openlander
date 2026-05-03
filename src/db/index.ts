@@ -185,6 +185,8 @@ export class Database implements AuthDatabase {
   setEnvVarsBulk(projectId: string, vars: Record<string, string>, environmentId?: string) { return this.envVarRepo.setEnvVarsBulk(projectId, vars, environmentId); }
   mergeEnvVars(projectId: string, vars: Record<string, string>, environmentId?: string) { return this.envVarRepo.mergeEnvVars(projectId, vars, environmentId); }
   deleteEnvVar(projectId: string, key: string, environmentId?: string) { return this.envVarRepo.deleteEnvVar(projectId, key, environmentId); }
+  assertEnvToolSchemaReady() { return this.envVarRepo.assertEnvToolSchemaReady(); }
+  mergeEnvVarsDetailed(projectId: string, vars: Record<string, string>) { return this.envVarRepo.mergeEnvVarsDetailed(projectId, vars); }
   findProjectsByEnvKey(key: string) { return this.envVarRepo.findProjectsByEnvKey(key); }
   getGlobalSecrets() { return this.globalSecretRepo.getGlobalSecrets(); }
   getGlobalSecret(key: string) { return this.globalSecretRepo.getGlobalSecret(key); }
@@ -195,6 +197,7 @@ export class Database implements AuthDatabase {
   upsertSecretFile(projectId: string | null, filename: string, encryptedContent: string, iv: string, mountPath: string = '/run/secrets') { return this.secretFileRepo.upsertSecretFile(projectId, filename, encryptedContent, iv, mountPath); }
   deleteSecretFile(projectId: string | null, filename: string) { return this.secretFileRepo.deleteSecretFile(projectId, filename); }
   createService(service: Parameters<ServiceRepo['createService']>[0]) { return this.serviceRepo.createService(service); }
+  adoptService(service: Parameters<ServiceRepo['adoptService']>[0]) { return this.serviceRepo.adoptService(service); }
   getService(id: string) { return this.serviceRepo.getService(id); }
   listServices() { return this.serviceRepo.listServices(); }
   getServices(opts?: Parameters<ServiceRepo['getServices']>[0]) { return this.serviceRepo.getServices(opts); }

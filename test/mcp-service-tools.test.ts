@@ -36,7 +36,17 @@ function createServiceRow(partial: Partial<ServiceRow>): ServiceRow {
   };
 }
 
-function createMockContext(services: ServiceRow[] = []) {
+function createMockContext(
+  services: ServiceRow[] = [],
+  containers: Array<{
+    id: string;
+    name: string;
+    status: string;
+    imageTag?: string;
+    port?: number;
+    labels?: Record<string, string>;
+  }> = [],
+) {
   const serviceManager = {
     create: vi.fn(),
     list: vi.fn(async () => services),
@@ -55,6 +65,9 @@ function createMockContext(services: ServiceRow[] = []) {
       },
     },
     serviceManager,
+    docker: {
+      listManagedContainers: vi.fn(async () => containers),
+    },
   } as unknown as AppContext;
 
   return {
@@ -311,6 +324,44 @@ describe('MCP service tools (Task 8)', () => {
 
     serviceManager.list.mockRejectedValueOnce(new Error('Service list unavailable'));
     await expect(tool.execute({}, { target: 'mcp' })).rejects.toThrow('Service list unavailable');
+  });
+
+  it('list_services include_orphans returns unregistered service containers', async () => {
+    const services = [createServiceRow({ id: 'svc-pg', name: 'shared-pg' })];
+    const { ctx } = createMockContext(services, [
+      {
+        id: 'container-1',
+        name: 'ol-svc-shared-pg',
+        status: 'running',
+        imageTag: 'postgres:16-alpine',
+        labels: { 'openlander.role': 'service', 'openlander.service': 'shared-pg' },
+      },
+      {
+        id: 'orphan-flaresolverr',
+        name: 'ol-svc-flaresolverr',
+        status: 'running',
+        imageTag: 'ghcr.io/flaresolverr/flaresolverr:latest',
+        port: 8191,
+        labels: { 'openlander.role': 'service', 'openlander.service': 'flaresolverr' },
+      },
+    ]);
+    const tool = getTool(ctx, 'list_services');
+
+    const result = await tool.execute({ include_orphans: true }, { target: 'mcp' });
+
+    expect(result).toMatchObject({
+      count: 1,
+      orphan_count: 1,
+      orphan_services: [
+        {
+          id: 'orphan-flaresolverr',
+          name: 'flaresolverr',
+          containerName: 'ol-svc-flaresolverr',
+          status: 'running',
+          port: 8191,
+        },
+      ],
+    });
   });
 
   it('get_service_status/start/stop/remove/get_credentials support happy and invalid service paths', async () => {

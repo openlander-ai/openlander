@@ -48,7 +48,12 @@ export function getSystemStats(): SystemStats {
   const freeMem = getAvailableMemory();
   const usedMem = totalMem - freeMem;
   const load = loadavg();
-  const uptimeSec = uptime();
+  let uptimeSec = 0;
+  try {
+    uptimeSec = uptime();
+  } catch (err) {
+    log.debug({ err }, 'host uptime unavailable');
+  }
 
   // Disk usage for root partition
   let disk = { totalGB: 0, usedGB: 0, freeGB: 0, usagePercent: 0 };

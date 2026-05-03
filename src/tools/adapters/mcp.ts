@@ -7,6 +7,7 @@ import {
 import { z } from 'zod';
 
 import type { AppContext } from '../../app.js';
+import { OpenLanderError } from '../../errors.js';
 import type { CompositeTool } from '../../mcp/composite-tools.js';
 import type { ToolDef } from '../defs/types.js';
 
@@ -24,13 +25,53 @@ function successResponse(result: unknown): { content: Array<{ type: 'text'; text
   };
 }
 
+function sanitizeErrorText(message: string): string {
+  if (/failed query|params:|insert into|update\s+".+"|select\s+.+\s+from/i.test(message)) {
+    return 'Internal database error.';
+  }
+  return message.replace(
+    /(sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_]*TOKEN[A-Za-z0-9_]*=)[^\s,}]+/gi,
+    '$1***',
+  );
+}
+
+function inferErrorCode(message: string): string {
+  const match = /^([A-Z][A-Z0-9_]+):/.exec(message);
+  return match?.[1] ?? 'TOOL_ERROR';
+}
+
 function errorResponse(error: unknown): {
   content: Array<{ type: 'text'; text: string }>;
   isError: true;
 } {
-  const message = error instanceof Error ? error.message : String(error);
+  let payload: Record<string, unknown>;
+
+  if (error instanceof OpenLanderError) {
+    payload = {
+      error: error.code,
+      code: error.code,
+      message: sanitizeErrorText(error.message),
+      ...(error.details ? { details: error.details } : {}),
+    };
+  } else if (error instanceof McpError) {
+    const code = `MCP_${String(error.code)}`;
+    payload = {
+      error: code,
+      code,
+      message: sanitizeErrorText(error.message),
+    };
+  } else {
+    const message = error instanceof Error ? error.message : String(error);
+    const code = inferErrorCode(message);
+    payload = {
+      error: code,
+      code,
+      message: sanitizeErrorText(message.replace(/^([A-Z][A-Z0-9_]+):\s*/, '')),
+    };
+  }
+
   return {
-    content: [{ type: 'text', text: message }],
+    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
     isError: true,
   };
 }

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { getProjectUrl } from '../src/pipeline/traefik.js';
 import type { AppContext } from '../src/app.js';
-import { ProjectNotFoundError } from '../src/errors.js';
+import { OpenLanderError, ProjectNotFoundError } from '../src/errors.js';
 import * as gitPipeline from '../src/pipeline/git.js';
 import { createSharedToolRegistry } from './tools/shared-tool-registry.js';
 
@@ -74,6 +74,8 @@ function createMockContext(opts?: {
     getProjectByName: vi.fn().mockImplementation((name: string) => opts?.getProjectByName?.(name)),
     getEnvironmentsByProject: vi.fn().mockReturnValue([{ id: 'env-prod', type: 'production' }]),
     getDeployableForProject: vi.fn().mockReturnValue(undefined),
+    assertEnvToolSchemaReady: vi.fn().mockResolvedValue(undefined),
+    insertActivityLog: vi.fn().mockResolvedValue(undefined),
   };
 
   const pipeline = {
@@ -88,6 +90,7 @@ function createMockContext(opts?: {
 
   const env = {
     setBulk: vi.fn().mockReturnValue(false),
+    setBulkDetailed: vi.fn().mockResolvedValue([]),
     getAll: vi.fn().mockReturnValue({}),
     getAllWithInheritance: vi.fn().mockReturnValue({}),
     getAllMasked: vi.fn().mockReturnValue({}),
@@ -293,7 +296,7 @@ describe('Tool Registry', () => {
     expect(result).toHaveProperty('complexity');
   });
 
-  it('set_env_vars redeploys only when env changed and project is running', async () => {
+  it('set_env_vars defers redeploy by default and applies when explicitly requested', async () => {
     const project = {
       id: 'p1',
       name: 'my-app',
@@ -312,33 +315,41 @@ describe('Tool Registry', () => {
     });
     const setEnvVars = getTool(ctx, 'set_env_vars');
 
-    env.setBulk.mockReturnValueOnce(true);
+    db.getDeployableForProject.mockReturnValue({ status: 'running' });
+    env.setBulkDetailed.mockResolvedValueOnce([{ key: 'API_URL', op: 'insert' }]);
     const changed = await setEnvVars.execute(
       { project_name: 'my-app', variables: '{"API_URL":"https://api.local"}' },
       { target: 'agent' },
     );
     expect(db.getProjectByName).toHaveBeenCalledWith('my-app');
-    expect(pipeline.redeploy).toHaveBeenCalledWith('p1');
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
     expect(changed).toEqual({
-      status: 'updated_and_redeployed',
-      project: 'my-app',
-      keys: ['API_URL'],
-    });
-
-    env.setBulk.mockReturnValueOnce(false);
-    const unchanged = await setEnvVars.execute(
-      { project_name: 'my-app', variables: '{"API_URL":"https://api.local"}' },
-      { target: 'agent' },
-    );
-    expect(unchanged).toEqual({
       status: 'updated',
       project: 'my-app',
       keys: ['API_URL'],
+      changed: [{ key: 'API_URL', op: 'insert' }],
+      needs_redeploy: true,
       _agent_guidance: {
-        next_steps: [
-          'Redeploy required: call create_deploy_plan + execute_deploy_plan for changes to take effect',
-        ],
+        next_steps: ['Redeploy required: call redeploy_project/deploy_service to apply env changes.'],
       },
+    });
+
+    env.setBulkDetailed.mockResolvedValueOnce([{ key: 'API_URL', op: 'update' }]);
+    const applied = await setEnvVars.execute(
+      {
+        project_name: 'my-app',
+        variables: '{"API_URL":"https://api.local"}',
+        defer_redeploy: false,
+      },
+      { target: 'agent' },
+    );
+    expect(pipeline.redeploy).toHaveBeenCalledWith('p1');
+    expect(applied).toEqual({
+      status: 'updated_and_redeployed',
+      project: 'my-app',
+      keys: ['API_URL'],
+      changed: [{ key: 'API_URL', op: 'update' }],
+      needs_redeploy: false,
     });
   });
 
@@ -360,18 +371,19 @@ describe('Tool Registry', () => {
     });
     const listEnvVars = getTool(ctx, 'list_env_vars');
 
-    env.getAllWithInheritanceMasked.mockReturnValueOnce({
+    env.getAllMasked.mockReturnValueOnce({
       DATABASE_URL: 'pos****5432',
       API_KEY: 'sk-****cdef',
     });
     const result = await listEnvVars.execute({ project_name: 'my-app' }, { target: 'mcp' });
-    expect(env.getAllWithInheritanceMasked).toHaveBeenCalledWith('p1');
+    expect(env.getAllMasked).toHaveBeenCalledWith('p1');
     expect(result).toEqual({
       variables: {
         DATABASE_URL: 'pos****5432',
         API_KEY: 'sk-****cdef',
       },
       count: 2,
+      revealed: false,
     });
   });
 
@@ -395,7 +407,7 @@ describe('Tool Registry', () => {
 
     await expect(
       setEnvVars.execute({ project_name: 'my-app', variables: '{bad json' }, { target: 'agent' }),
-    ).rejects.toBeInstanceOf(SyntaxError);
+    ).rejects.toBeInstanceOf(OpenLanderError);
     expect(pipeline.redeploy).not.toHaveBeenCalled();
   });
 

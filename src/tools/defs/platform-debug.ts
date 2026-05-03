@@ -289,6 +289,12 @@ export const platformDebugToolDefs: ToolDef[] = [
           );
           return { table, count: rows.length, rows };
         }
+        case 'activity_log': {
+          const rows = await db.findActivityLogRecent(limit, {
+            ...(projectId !== undefined ? { project_id: projectId } : {}),
+          });
+          return { table, count: rows.length, rows };
+        }
         default:
           throw new Error(`UNSUPPORTED_TABLE: ${table}`);
       }
