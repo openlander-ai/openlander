@@ -102,3 +102,26 @@ docker ps -a --filter name=qa-soak- | head
 - 격리 dataDir + 격리 port → 운영 인스턴스 (10114) 영향 없음
 - Docker 컨테이너 prefix `qa-soak-` 강제 → `stop` 시 자동 cleanup
 - 본인 hotdeal-tracker 등에 절대 영향 없음
+
+## smoke-live.sh — 라이브 인스턴스 post-deploy 스모크
+
+배포 직후 라이브 인스턴스에 로그인해서 1.0 대시보드가 의존하는 GET 엔드포인트
+셋이 200 + 기대 shape 인지 1번 훑는다. 1개라도 실패 시 non-zero exit. 배포
+스크립트 hook 또는 cron paging 트리거에 물려 사용 가능.
+
+### 사용법
+
+```bash
+OPENLANDER_PASSWORD=xxx tools/qa/smoke-live.sh                     # 기본 http://localhost:10114
+OPENLANDER_PASSWORD=xxx OPENLANDER_URL=http://10.0.0.5:10114 tools/qa/smoke-live.sh  # 다른 인스턴스
+```
+
+### 검증 항목
+
+- `/api/projects`, `/api/system/stats`, `/api/activity`, `/api/deployments/recent`
+- `/api/mcp/status`
+- 첫 프로젝트의 `/`, `/topology`, `/services`
+- 첫 서비스의 로그 스트림(NDJSON 또는 SSE) Content-Type 핸드셰이크
+- 모두 HTTP 200 + jq shape assertion 통과해야 PASS
+
+비-mutating GET + 스트림 핸드셰이크만 다룬다. 본문 소비/지속 연결 없음.
