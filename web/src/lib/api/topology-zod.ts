@@ -18,6 +18,14 @@ export const ServiceNodeSchema = z.object({
   mem: z.string(),
   url: z.string().nullable(),
   dependsOn: z.array(z.string()),
+  source: z.string().nullable().optional(),
+  repoUrl: z.string().nullable().optional(),
+  branch: z.string().nullable().optional(),
+  deployedBranch: z.string().nullable().optional(),
+  dockerfilePath: z.string().nullable().optional(),
+  dockerTarget: z.string().nullable().optional(),
+  buildContext: z.string().nullable().optional(),
+  buildMethod: z.string().nullable().optional(),
 });
 
 export const ProjectTopologyResponseSchema = z.object({

@@ -34,6 +34,7 @@ const EXPECTED_TOOL_NAMES = [
   'list_domains',
   'get_deploy_status',
   'get_deploy_history',
+  'rollback_service',
   'scan_dockerfiles',
 
   'orchestrate_deploy',
@@ -235,7 +236,6 @@ describe('Tool Registry', () => {
           containerName: null,
           url: getProjectUrl('my-app'),
           publicUrl: null,
-          repoUrl: 'https://github.com/user/my-app',
         },
       ],
     });
@@ -330,7 +330,9 @@ describe('Tool Registry', () => {
       changed: [{ key: 'API_URL', op: 'insert' }],
       needs_redeploy: true,
       _agent_guidance: {
-        next_steps: ['Redeploy required: call redeploy_project/deploy_service to apply env changes.'],
+        next_steps: [
+          'Redeploy required: call redeploy_project/deploy_service to apply env changes.',
+        ],
       },
     });
 

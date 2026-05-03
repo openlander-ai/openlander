@@ -4,7 +4,7 @@ export interface Environment {
   id: string;
   projectId: string;
   type: EnvironmentType;
-  branch: string;
+  branch: string | null;
   status: 'running' | 'stopped' | 'building' | 'error' | 'idle';
   assignedPort: number | null;
   containerId: string | null;
@@ -22,8 +22,6 @@ export interface Project {
   name: string;
   status: 'running' | 'stopped' | 'building' | 'error' | 'idle';
   visibility: 'internal' | 'quick-share' | 'shared' | 'production';
-  repoUrl: string;
-  branch?: string;
   port?: number;
   previousImageTag?: string | null;
   url?: string;

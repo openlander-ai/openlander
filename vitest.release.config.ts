@@ -14,6 +14,8 @@ export default defineConfig({
       'test/auth/google-oauth.test.ts',
       'test/auth/token-refresh.test.ts',
       'test/contract/system-routes-services.test.ts',
+      'test/api/project-create-group.test.ts',
+      'test/api/service-deploy-route.test.ts',
       'test/llm/agent-pool.test.ts',
       'test/llm/llm-circuit-breaker.test.ts',
       'test/llm/transparency-extract-usage.test.ts',

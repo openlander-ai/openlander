@@ -32,7 +32,7 @@ interface ParsedPushEvent {
 interface EnvironmentBranchTarget {
   id: string;
   type: 'production' | 'development';
-  branch: string;
+  branch: string | null;
 }
 
 export interface ParsedPREvent {
@@ -175,10 +175,11 @@ export class WebhookManager {
       }
 
       const previewName = `${project.name}-pr-${String(prEvent.prNumber)}`;
+      const deployable = await this.db.getDeployableForProject(projectId);
       const result = await this.pipeline.deployPreview({
         parentProjectId: projectId,
         previewName,
-        repoUrl: prEvent.repoUrl || project.repo_url || '',
+        repoUrl: prEvent.repoUrl || deployable?.repo_url || '',
         branch: prEvent.branch,
         prNumber: prEvent.prNumber,
         commitSha: prEvent.commitSha,

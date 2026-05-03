@@ -25,6 +25,7 @@ import {
   MissingImageUrlError,
   PreflightCheckError,
   ProjectNotFoundError,
+  ServiceSourceMissingError,
   isDockerNotFoundError,
 } from '../errors.js';
 import { preflightCheckOrThrow } from './preflight.js';
@@ -753,6 +754,7 @@ export class DeployPipeline {
     if (config._projectId && config.branch) {
       await this.db.updateProject(projectId, {
         branch: config.branch,
+        repoUrl: source === 'image' ? null : config.repoUrl,
         ...(source === 'image'
           ? {
               source,
@@ -811,12 +813,11 @@ export class DeployPipeline {
     );
 
     if (!targetEnvironment) {
-      const project = await this.db.getProject(projectId);
       targetEnvironment = await this.db.createEnvironment({
         id: `${projectId}-${envType}`,
         projectId,
         type: envType,
-        branch: config.branch ?? project?.branch ?? 'main',
+        branch: source === 'image' ? null : (config.branch ?? null),
       });
     }
 
@@ -886,8 +887,11 @@ export class DeployPipeline {
     const deployConfig: Partial<ProjectConfig> = { ...config };
     const projectName = deployConfig.name ?? project.name;
     const trigger = deployConfig.trigger ?? 'api';
-    const source = deployConfig.source ?? 'git';
-    const repoUrl = deployConfig.repoUrl ?? project.repo_url ?? '';
+    const deployable = await this.db.getDeployableForProject(projectId);
+    const source =
+      deployConfig.source ?? (deployable?.source as 'git' | 'image' | undefined) ?? 'git';
+    const repoUrl = deployConfig.repoUrl ?? deployable?.repo_url ?? '';
+    const branch = deployConfig.branch ?? deployable?.branch ?? environment.branch ?? undefined;
     if (source !== 'image' && !repoUrl) {
       // F3 (Day 9): same terminal-event guarantee for missing-repo case.
       const errorMsg = `Missing repo URL for project: ${projectId}`;
@@ -903,6 +907,9 @@ export class DeployPipeline {
         error: errorMsg,
         buildDurationMs: Date.now() - startTime,
       };
+    }
+    if (source !== 'image' && deployable && !deployable.repo_url) {
+      throw new ServiceSourceMissingError(deployable.id);
     }
     const routeName = getRouteName(projectName);
     const orchestrationDeps = this.createOrchestrationDeps();
@@ -934,6 +941,7 @@ export class DeployPipeline {
       containerId: null,
       imageTag: null,
       assignedPort: null,
+      branch: source === 'image' ? null : (branch ?? null),
     });
     await this.transitionProjectState(projectId, 'building', 'deploy-started', {
       containerId: null,
@@ -1011,7 +1019,7 @@ export class DeployPipeline {
           projectName,
           environmentId,
           repoUrl,
-          branch: environment.branch,
+          branch,
           sshKeyPath: deployConfig.sshKeyPath,
         });
         clonePath = cloneResult.clonePath;
@@ -1022,7 +1030,7 @@ export class DeployPipeline {
         const buildResult = await buildProject(orchestrationDeps, {
           projectId,
           environmentId,
-          branch: environment.branch,
+          branch,
           routeName,
           trigger,
           imageTag,
@@ -1650,16 +1658,6 @@ export class DeployPipeline {
         };
       }
 
-      if (!project.repo_url) {
-        return {
-          success: false,
-          projectId,
-          projectName,
-          error: `Project ${projectName} does not have a repository URL`,
-          buildDurationMs: Date.now() - startTime,
-        };
-      }
-
       const prodEnv = (await this.db.getEnvironmentsByProject(projectId)).find(
         (env) => env.type === 'production',
       );
@@ -1680,13 +1678,13 @@ export class DeployPipeline {
         await this.db.updateEnvironment(prodEnv.id, { status: 'building' });
       }
 
-      await eventBus.emit('deploy:start', { projectId, repoUrl: project.repo_url });
+      await eventBus.emit('deploy:start', { projectId, repoUrl: deployConfig.repoUrl });
 
       this.jobManager?.updatePhase(projectId, 'cloning');
       buildLog += '[clone] Cloning repository...\n';
       const cloneResult = await cloneRepo({
-        repoUrl: project.repo_url,
-        branch: project.branch,
+        repoUrl: deployConfig.repoUrl,
+        branch: deployConfig.branch,
       });
       clonePath = cloneResult.path;
       commitSha = cloneResult.commitSha;
@@ -1807,6 +1805,7 @@ export class DeployPipeline {
           containerPort,
           imageTag,
           previousImageTag: prodEnv.image_tag,
+          branch: (deployConfig.source ?? 'git') === 'image' ? null : (deployConfig.branch ?? null),
         });
       }
 

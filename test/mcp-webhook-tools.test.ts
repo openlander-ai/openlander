@@ -63,21 +63,21 @@ function getTool(ctx: AppContext, name: string) {
 }
 
 describe('MCP webhook tools', () => {
-  it('enable_webhook creates config and returns webhook info', () => {
+  it('enable_webhook creates config and returns webhook info', async () => {
     const { ctx, db, webhookManager } = createMockContext();
     db.getProjectByName.mockReturnValue({ id: 'proj-1', name: 'demo' });
     db.getWebhookConfigs.mockReturnValue([]);
     webhookManager.generateSecret.mockReturnValue('proj-1.super-secret');
 
     const tool = getTool(ctx, 'enable_webhook');
-    const result = tool.execute(
+    const result = (await tool.execute(
       {
         project_name: 'demo',
         source: 'github',
         branch_filter: 'develop',
       },
       { target: 'mcp' },
-    ) as Record<string, unknown>;
+    )) as Record<string, unknown>;
 
     expect(db.setWebhookConfig).toHaveBeenCalledWith({
       id: expect.any(String),
@@ -98,13 +98,13 @@ describe('MCP webhook tools', () => {
     expect(typeof result.id).toBe('string');
   });
 
-  it('enable_webhook returns error for non-existent project', () => {
+  it('enable_webhook returns error for non-existent project', async () => {
     const { ctx, db } = createMockContext();
     db.getProjectByName.mockReturnValue(undefined);
 
     const tool = getTool(ctx, 'enable_webhook');
 
-    expect(() =>
+    await expect(
       tool.execute(
         {
           project_name: 'missing-project',
@@ -112,10 +112,10 @@ describe('MCP webhook tools', () => {
         },
         { target: 'mcp' },
       ),
-    ).toThrow(ProjectNotFoundError);
+    ).rejects.toThrow(ProjectNotFoundError);
   });
 
-  it('disable_webhook disables existing config', () => {
+  it('disable_webhook disables existing config', async () => {
     const { ctx, db } = createMockContext();
     db.getProjectByName.mockReturnValue({ id: 'proj-1', name: 'demo' });
     db.getWebhookConfigs.mockReturnValue([
@@ -129,7 +129,7 @@ describe('MCP webhook tools', () => {
     ]);
 
     const tool = getTool(ctx, 'disable_webhook');
-    const result = tool.execute(
+    const result = await tool.execute(
       {
         project_name: 'demo',
         source: 'github',
@@ -145,14 +145,14 @@ describe('MCP webhook tools', () => {
     });
   });
 
-  it('disable_webhook returns error when no webhook found', () => {
+  it('disable_webhook returns error when no webhook found', async () => {
     const { ctx, db } = createMockContext();
     db.getProjectByName.mockReturnValue({ id: 'proj-1', name: 'demo' });
     db.getWebhookConfigs.mockReturnValue([]);
 
     const tool = getTool(ctx, 'disable_webhook');
 
-    expect(() =>
+    await expect(
       tool.execute(
         {
           project_name: 'demo',
@@ -160,12 +160,12 @@ describe('MCP webhook tools', () => {
         },
         { target: 'mcp' },
       ),
-    ).toThrow('WEBHOOK_NOT_FOUND: No webhook configured for gitlab on project demo');
+    ).rejects.toThrow('WEBHOOK_NOT_FOUND: No webhook configured for gitlab on project demo');
 
     expect(db.setWebhookEnabled).not.toHaveBeenCalled();
   });
 
-  it('get_webhook_config returns all webhooks with masked secrets', () => {
+  it('get_webhook_config returns all webhooks with masked secrets', async () => {
     const { ctx, db } = createMockContext();
     db.getProjectByName.mockReturnValue({ id: 'proj-1', name: 'demo' });
     db.getWebhookConfigs.mockReturnValue([
@@ -186,12 +186,12 @@ describe('MCP webhook tools', () => {
     ]);
 
     const tool = getTool(ctx, 'get_webhook_config');
-    const result = tool.execute(
+    const result = (await tool.execute(
       {
         project_name: 'demo',
       },
       { target: 'mcp' },
-    ) as {
+    )) as {
       count: number;
       webhooks: Array<{ secret: string; enabled: boolean }>;
     };
@@ -205,13 +205,13 @@ describe('MCP webhook tools', () => {
     expect(result.webhooks.every((entry) => entry.secret.endsWith('...'))).toBe(true);
   });
 
-  it('get_webhook_config returns empty list for project with no webhooks', () => {
+  it('get_webhook_config returns empty list for project with no webhooks', async () => {
     const { ctx, db } = createMockContext();
     db.getProjectByName.mockReturnValue({ id: 'proj-1', name: 'demo' });
     db.getWebhookConfigs.mockReturnValue([]);
 
     const tool = getTool(ctx, 'get_webhook_config');
-    const result = tool.execute(
+    const result = await tool.execute(
       {
         project_name: 'demo',
       },
@@ -224,7 +224,7 @@ describe('MCP webhook tools', () => {
     });
   });
 
-  it('enable_webhook reuses existing disabled webhook credentials', () => {
+  it('enable_webhook reuses existing disabled webhook credentials and stored branch filter', async () => {
     const { ctx, db, webhookManager } = createMockContext();
     db.getProjectByName.mockReturnValue({ id: 'proj-1', name: 'demo' });
     db.getWebhookConfigs.mockReturnValue([
@@ -232,20 +232,19 @@ describe('MCP webhook tools', () => {
         id: 'wh-existing',
         source: 'github',
         enabled: 0,
-        branch_filter: 'main',
+        branch_filter: 'release',
         secret: 'proj-1.existing-secret',
       },
     ]);
 
     const tool = getTool(ctx, 'enable_webhook');
-    const result = tool.execute(
+    const result = (await tool.execute(
       {
         project_name: 'demo',
         source: 'github',
-        branch_filter: 'develop',
       },
       { target: 'mcp' },
-    ) as Record<string, unknown>;
+    )) as Record<string, unknown>;
 
     expect(db.setWebhookEnabled).toHaveBeenCalledWith('wh-existing', true);
     expect(db.setWebhookConfig).not.toHaveBeenCalled();
@@ -254,6 +253,7 @@ describe('MCP webhook tools', () => {
       source: 'github',
       secret: 'proj-1.existing-secret',
       enabled: true,
+      branchFilter: 'release',
       reused: true,
     });
     expect(result._agent_guidance).toMatchObject({
@@ -263,20 +263,20 @@ describe('MCP webhook tools', () => {
     });
   });
 
-  it('enable_webhook generates new credentials when no existing webhook', () => {
+  it('enable_webhook generates new credentials when no existing webhook', async () => {
     const { ctx, db, webhookManager } = createMockContext();
     db.getProjectByName.mockReturnValue({ id: 'proj-1', name: 'demo' });
     db.getWebhookConfigs.mockReturnValue([]);
     webhookManager.generateSecret.mockReturnValue('proj-1.new-secret');
 
     const tool = getTool(ctx, 'enable_webhook');
-    const result = tool.execute(
+    const result = (await tool.execute(
       {
         project_name: 'demo',
         source: 'github',
       },
       { target: 'mcp' },
-    ) as Record<string, unknown>;
+    )) as Record<string, unknown>;
 
     expect(db.setWebhookConfig).toHaveBeenCalledWith({
       id: expect.any(String),
@@ -300,7 +300,7 @@ describe('MCP webhook tools', () => {
     });
   });
 
-  it('enable_webhook generates new credentials when existing webhook is enabled', () => {
+  it('enable_webhook generates new credentials when existing webhook is enabled', async () => {
     const { ctx, db, webhookManager } = createMockContext();
     db.getProjectByName.mockReturnValue({ id: 'proj-1', name: 'demo' });
     db.getWebhookConfigs.mockReturnValue([
@@ -315,13 +315,13 @@ describe('MCP webhook tools', () => {
     webhookManager.generateSecret.mockReturnValue('proj-1.new-secret');
 
     const tool = getTool(ctx, 'enable_webhook');
-    const result = tool.execute(
+    const result = (await tool.execute(
       {
         project_name: 'demo',
         source: 'github',
       },
       { target: 'mcp' },
-    ) as Record<string, unknown>;
+    )) as Record<string, unknown>;
 
     expect(db.setWebhookConfig).toHaveBeenCalledWith({
       id: expect.any(String),

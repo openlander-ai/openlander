@@ -5,6 +5,7 @@ import {
   ProjectArchivedError,
   ProjectNotFoundError,
   ProjectRecoveringError,
+  ServiceSelectionRequiredError,
 } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
@@ -51,6 +52,30 @@ async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1
       await appCtx.db.updateProject(project.id, { status: 'error' });
     }
   }
+}
+
+async function requireSingleDeployable(
+  appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
+  project: { id: string; name: string },
+) {
+  const deployables =
+    typeof appCtx.db.getDeployablesByGroup === 'function'
+      ? await appCtx.db.getDeployablesByGroup(project.id)
+      : [await appCtx.db.getDeployableForProject(project.id)].filter((svc) => svc != null);
+  const actionable = deployables.filter((svc) => svc.kind !== 'compose-child');
+  if (actionable.length === 1) {
+    return undefined;
+  }
+  return new ServiceSelectionRequiredError(
+    project.id,
+    project.name,
+    actionable.map((svc) => ({
+      serviceId: svc.id,
+      serviceName: svc.name,
+      kind: svc.kind,
+      source: svc.source,
+    })),
+  ).toJSON();
 }
 
 export const projectOpsToolDefs: ToolDef[] = [
@@ -128,8 +153,6 @@ export const projectOpsToolDefs: ToolDef[] = [
               status,
               // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
               visibility: project.visibility,
-              repoUrl: project.repo_url,
-              branch: project.branch,
               port,
               containerName: containerId ? projectContainerName(project.name) : null,
               network: SHARED_NETWORK_NAME,
@@ -167,7 +190,6 @@ export const projectOpsToolDefs: ToolDef[] = [
             containerName: containerId ? projectContainerName(project.name) : null,
             url: port ? getProjectUrl(project.name) : null,
             publicUrl,
-            repoUrl: project.repo_url,
           };
         }),
       };
@@ -187,6 +209,10 @@ export const projectOpsToolDefs: ToolDef[] = [
       const project = await context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
+      }
+      const selectionError = await requireSingleDeployable(context.appCtx, project);
+      if (selectionError) {
+        return selectionError;
       }
       // Fire-and-forget pre-check: surface archived/recovering/circuit-open
       // immediately instead of stopping the project + returning a fake
@@ -302,6 +328,10 @@ export const projectOpsToolDefs: ToolDef[] = [
       const project = await context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
+      }
+      const selectionError = await requireSingleDeployable(context.appCtx, project);
+      if (selectionError) {
+        return selectionError;
       }
       // Fire-and-forget pre-check: surface archived/recovering/circuit-open
       // immediately instead of returning a fake "redeploying" success while

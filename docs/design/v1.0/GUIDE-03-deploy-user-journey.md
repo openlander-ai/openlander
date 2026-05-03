@@ -24,7 +24,7 @@ Preview deploys, rollback wizard, blue-green, multi-server, in-UI chat agent, in
 
 ## 2. Happy Path — "I have a repo; I want it running"
 
-Aligned with `web/src/pages/NewProjectFlow.tsx` (the existing repo-first form, not the empty-project flow v1 assumed).
+Aligned with the 1.0 group-first IA: create a project group, then add a service with a repo/image/compose source.
 
 ### 2.1 Flow shape
 
@@ -32,12 +32,16 @@ Aligned with `web/src/pages/NewProjectFlow.tsx` (the existing repo-first form, n
 [Projects list]
    │  click  "+ New Project"
    ▼
-[New Project form]  ← single page, not a wizard
+[Create Project dialog]
    fields:  name (slug)
-            git URL       (repo-first, not optional per DP-2)
-            branch        (default: main)
-            build method  (auto-detected; override in Advanced)
-   primary: "Create & Deploy"
+   primary: "Create project"
+   │  submit
+   ▼
+[Project detail · Services tab]
+   primary: "Add service"
+   │  opens Agent Guide / MCP prompt
+   ▼
+[Agent creates service from Git repo / image / compose source]
    │  submit
    ▼
 [Service detail · Deployments tab]         ← auto-navigated
@@ -51,7 +55,7 @@ Aligned with `web/src/pages/NewProjectFlow.tsx` (the existing repo-first form, n
 [Success banner with URL]   OR   [Failure summary card]
 ```
 
-Explicit **not in this flow**: service type picker (Application/Compose/Database) as a separate step. Backend detects from repo (`docker-compose.yml` → Compose, `Dockerfile*` → Application). If detection is ambiguous, a small disclosure in the form surfaces the guess and lets user override.
+Explicit **not in this flow**: binding `Project` to one repository. Repository, Docker image, and compose source belong to the deployable service. The legacy one-call deploy path can still create `project + first service` for MCP/API convenience.
 
 ### 2.2 Auto-detections at `Create & Deploy` time
 
@@ -165,7 +169,8 @@ Every interaction in this journey has a GUIDE-00 capability row. Before implemen
 
 | Journey reference                     | GUIDE-00 ID                   | 1.0 status                |
 | ------------------------------------- | ----------------------------- | ------------------------- |
-| §2 repo-first project creation        | DP-1                          | ✅ current code           |
+| §2 group-first project creation       | DP-2                          | ✅ current code           |
+| Legacy one-call deploy                | DP-1                          | ✅ MCP/API convenience    |
 | §2.2 auto-detect Dockerfile/target    | DP-4                          | ✅ in (~4h backend)       |
 | §2.3 Confirm-before-deploy            | DP-3                          | ✅ UI only                |
 | §2.4 sslip.io auto URL                | (existing OpenLander feature) | ✅ current                |
@@ -184,7 +189,7 @@ Anything not in GUIDE-00 is out of scope for this journey. Design can still refe
 
 **Asks**:
 
-- Clickable prototype covering §2 happy path (5 screens: Projects list → New Project form → Confirm modal → Deployments tab with log → Success banner)
+- Clickable prototype covering §2 happy path (5 screens: Projects list → Create Project dialog → Project Services tab → Service detail Deployments tab with log → Success banner)
 - Component specs for: Confirm dialog (reused in deploy/rollback/cancel), Trigger label chips (3 variants), Runtime config sub-card (Advanced tab)
 - Failure path variant of §2.5 — how the summary card inline with the stream looks
 

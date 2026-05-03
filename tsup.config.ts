@@ -6,6 +6,8 @@ const pkg = JSON.parse(readFileSync('./package.json', 'utf-8')) as { version: st
 
 // Runtime modules — resolved at runtime, not bundled
 const externals = ['postgres', 'nodemailer'];
+const emitDeclarations = process.env.OPENLANDER_BUILD_DTS !== 'false';
+const emitSourcemaps = process.env.OPENLANDER_BUILD_SOURCEMAP !== 'false';
 
 export default defineConfig([
   // CLI entry — needs shebang for `npx openlander`
@@ -14,8 +16,8 @@ export default defineConfig([
     format: ['esm'],
     target: 'node22',
     platform: 'node',
-    dts: true,
-    sourcemap: true,
+    dts: emitDeclarations,
+    sourcemap: emitSourcemaps,
     splitting: true,
     shims: false,
     banner: {
@@ -30,8 +32,8 @@ export default defineConfig([
     format: ['esm'],
     target: 'node22',
     platform: 'node',
-    dts: true,
-    sourcemap: true,
+    dts: emitDeclarations,
+    sourcemap: emitSourcemaps,
     splitting: true,
     shims: false,
     external: externals,

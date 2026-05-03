@@ -52,7 +52,7 @@ export function ProjectView() {
   // InfraMap + Services tab — the canonical `/api/projects/:p/services`
   // endpoint (`useGroupServices`) is reserved for callers that need
   // shaped GroupService data instead of the topology ServiceNode shape.
-  const { projects, loading: projectsLoading } = useProjectsContext();
+  const { projects, loading: projectsLoading, refetch: refetchProjects } = useProjectsContext();
   const realProject = projects.find((p) => p.id === projectId) ?? null;
   const { services, isMockFallback } = useProjectTopology(projectId || null);
   const isBelowMd = useIsBelowMd();
@@ -156,7 +156,7 @@ export function ProjectView() {
             <span>{realProject?.name ?? projectId}</span>
           </span>
         }
-        subtitle={realProject?.repoUrl ?? undefined}
+        subtitle="Project group"
         actions={
           <div className="flex items-center gap-3">
             <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
@@ -219,8 +219,16 @@ export function ProjectView() {
           {projectId && (
             <SettingsTab
               projectId={projectId}
+              project={realProject}
               projectStatus={realProject?.status}
               isCompose={false}
+              onProjectChanged={() => {
+                void refetchProjects();
+              }}
+              onProjectDeleted={() => {
+                void refetchProjects();
+                navigate('/projects');
+              }}
             />
           )}
         </TabPanel>

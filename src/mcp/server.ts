@@ -68,7 +68,7 @@ function getCompositeTools(allToolDefs: ToolDef[]): CompositeTool[] {
 
 const SERVER_INSTRUCTIONS = `You are connected to OpenLander — a self-hosted deployment platform.
 
-CRITICAL: Use ONLY the 4 tools below. Each tool takes an { action, params } input.
+CRITICAL: Use ONLY the 5 composite tools below. Each tool takes an { action, params } input.
 Use action="help" on any tool to list available operations.
 NEVER call docker CLI, curl localhost, or docker compose directly — use OpenLander tools instead.
 Docker may run on a remote host. Always use tools, not local commands.
@@ -80,12 +80,17 @@ All actions: action="help"
 
 ## openlander_project
 Project management & config: lifecycle, env vars, secrets, domains, webhooks, public URLs.
-Key actions: list_projects, redeploy_project, set_env_vars, archive_project, enable_webhook, expose_public
+Key actions: list_projects, redeploy_project, set_env_vars, delete_env_var, export_env_vars, archive_project, enable_webhook, expose_public
 All actions: action="help"
 
 ## openlander_service
-Infrastructure services & storage: databases, caches, backups, volumes, disk usage.
-Key actions: create_service, get_service_credentials, backup_service, add_volume, get_disk_usage
+Deployable services (apps + workers): lifecycle, config, env vars, secrets, public exposure, webhooks.
+Key actions: deploy_service, restart_service, set_env_vars, list_env_vars, archive_service, expose_public
+All actions: action="help"
+
+## openlander_managed_service
+Managed infrastructure services & storage: databases, caches, backups, volumes, disk usage.
+Key actions: create_service, list_services, get_service_credentials, backup_service, add_volume, get_disk_usage
 All actions: action="help"
 
 ## openlander_monitor
@@ -96,7 +101,13 @@ All actions: action="help"
 ## Usage
 Example: openlander_deploy({ action: "deploy", params: { repo_url: "https://github.com/user/repo" } })
 Example: openlander_project({ action: "help" })
-Example: openlander_service({ action: "create_service", params: { name: "pg", type: "postgres" } })
+Example: openlander_managed_service({ action: "create_service", params: { name: "pg", template: "postgresql" } })
+Example: openlander_project({ action: "set_env_vars", params: { project_name: "app", variables: '{"DATABASE_URL":"..."}' } })
+
+## Environment Variable Changes
+- set_env_vars/delete_env_var save only by default. To apply to a running container, call redeploy_project/deploy_service after the env change, or pass defer_redeploy=false for immediate apply.
+- list_env_vars masks values by default; pass reveal=true only when the user explicitly needs raw values for audit or migration.
+- export_env_vars returns raw .env text and should be used sparingly.
 
 ## Deploy Flow (ALWAYS follow for new projects)
 1. openlander_deploy({ action: "deploy", params: { repo_url: "...", name: "..." } })

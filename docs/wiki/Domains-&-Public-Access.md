@@ -41,8 +41,6 @@ Project Detail → **Share** button
 ### Via MCP
 
 ```
-share_project(project_name: "my-app")
-# or
 expose_public(project_name: "my-app")
 ```
 

@@ -146,7 +146,19 @@ export class Database implements AuthDatabase {
     return database;
   }
 
-  async createProject(project: Parameters<ProjectRepo['createProject']>[0]): Promise<ProjectRow> { const created = await this.projectRepo.createProject(project); await this.environmentRepo.createEnvironment({ id: `${project.id}-production`, projectId: created.id, type: 'production', branch: project.branch ?? 'main' }); return created; }
+  async createProject(project: Parameters<ProjectRepo['createProject']>[0]): Promise<ProjectRow> {
+    const created = await this.projectRepo.createProject(project);
+    await this.environmentRepo.createEnvironment({
+      id: `${project.id}-production`,
+      projectId: created.id,
+      type: 'production',
+      branch: project.source === 'image' ? null : (project.branch ?? null),
+    });
+    return created;
+  }
+  createProjectGroup(project: Parameters<ProjectRepo['createProjectGroup']>[0]) {
+    return this.projectRepo.createProjectGroup(project);
+  }
   getProject(id: string) { return this.projectRepo.getProject(id); }
   getProjectByName(name: string) { return this.projectRepo.getProjectByName(name); }
   listProjects(status?: ProjectRow['status'] | null, opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjects(status, opts); }
@@ -223,10 +235,9 @@ export class Database implements AuthDatabase {
   /**
    * PR 4 helper: resolve the auto-derived deployable services row for a
    * project group. Convention from `createProject`: deployable services use
-   * id = `<projectId>__svc`. Used by web/api route handlers to read
-   * canonical (kind/image_url/assigned_port/status/container_id/...)
-   * fields with `??` fallback to the legacy `projects` columns through
-   * migration 0012.
+   * id = `<projectId>__svc`. Used by web/api route handlers that still
+   * accept project-level compatibility routes but need canonical service
+   * fields (kind/image_url/assigned_port/status/container_id/...).
    */
   getDeployableForProject(projectId: string) { return this.serviceRepo.getService(`${projectId}__svc`); }
   createServiceConnection(opts: Parameters<ServiceConnectionRepo['createConnection']>[0]) { return this.serviceConnectionRepo.createConnection(opts); }

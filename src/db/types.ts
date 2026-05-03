@@ -18,8 +18,6 @@ export type EnvironmentType = 'production' | 'development';
 export interface ProjectRow {
   id: string;
   name: string;
-  repo_url: string | null;
-  branch: string;
   archived_at: string | null;
   created_at: string;
   updated_at: string;
@@ -83,7 +81,7 @@ export interface EnvironmentRow {
   /** Post-0012: deployable-scoped FK; legacy project_id dropped. */
   service_id: string;
   type: EnvironmentType;
-  branch: string;
+  branch: string | null;
   status: 'running' | 'stopped' | 'building' | 'error' | 'idle';
   assigned_port: number | null;
   container_id: string | null;
@@ -207,6 +205,8 @@ export interface ServiceRow {
   build_context: string | null;
   build_method: 'dockerfile' | 'compose' | null;
   source: string;
+  repo_url: string | null;
+  branch: string | null;
   image_url: string | null;
   image_cmd: string | null;
   pending_fix: string | null;

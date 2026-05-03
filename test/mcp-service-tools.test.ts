@@ -316,7 +316,7 @@ describe('MCP service tools (Task 8)', () => {
       _agent_guidance: {
         networking: [
           'All containers are on the shared Docker network ("openlander"). Do NOT create Docker networks manually.',
-          'For inter-container communication, use http://ol-{project-name}:{port} (DNS auto-resolved).',
+          'For managed service containers, use http://ol-svc-{service-name}:{port} (DNS auto-resolved). Deployable app containers use http://ol-{project-name}:{port}.',
           'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
         ],
       },

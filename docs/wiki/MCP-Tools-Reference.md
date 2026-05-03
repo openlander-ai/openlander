@@ -2,31 +2,45 @@
 
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
-- **4 composite tools** (`openlander_deploy`, `openlander_project`, `openlander_service`, `openlander_monitor`) bundling **70 actions** — enabled by default
-- **11 platform tools** for server admin (health, docker inspect, etc.) — gated behind `config.mcp.platformTools: true`
+- **5 composite tools** — enabled by default
+- **74 unique default operations** surfaced through those composites
+- **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g. `openlander_deploy({ action: "deploy", params: { repo_url: "..." } })`. Run `{ action: "help" }` on any composite to list its action catalog.
 
-Internally these compose 99 `ToolDef` entries (used by both the web UI and MCP adapter); the counts below refer to the underlying category groupings, which roll up into the 4 composites.
+Model note: **Project = workspace/group** and **Service = deployable unit**. Repository, image,
+branch, Dockerfile, and build context belong to services. Project-level actions are compatibility
+aliases and require a single deployable service in the group.
+
+Composite catalog:
+
+| Composite                    | Action slots | Purpose                                                                    |
+| ---------------------------- | ------------ | -------------------------------------------------------------------------- |
+| `openlander_deploy`          | 21           | Deploy plans, execution, previews, rollbacks, build logs, Git, domains     |
+| `openlander_project`         | 24           | Legacy project lifecycle, env vars, secrets, public exposure, webhooks     |
+| `openlander_service`         | 25           | Deployable app/worker lifecycle and config vocabulary                      |
+| `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage |
+| `openlander_monitor`         | 8            | Logs, alerts, system stats, project stats, automation policy, probes       |
+
+`openlander_project` and `openlander_service` intentionally overlap while the API transitions from project vocabulary to deployable-service vocabulary. The unique default operation count remains 74.
 
 ## Tool Categories
 
 | Category                                                 | Tools | Description                            |
 | -------------------------------------------------------- | ----- | -------------------------------------- |
 | [Deploy Plan](#deploy-plan)                              | 5     | Create, update, execute deploy plans   |
-| [Deployment Controls](#deployment-controls)              | 7     | Status, rollback, blue-green, previews |
-| [Project Operations](#project-operations)                | 8     | Start, stop, remove, redeploy, share   |
-| [Environment Variables](#environment-variables--secrets) | 10    | Env vars, secrets, secret files        |
+| [Deployment Controls](#deployment-controls)              | 8     | Status, rollback, blue-green, previews |
+| [Project Operations](#project-operations)                | 8     | Start, stop, archive, redeploy, expose |
+| [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files        |
 | [Services](#services--infrastructure)                    | 17    | Create databases, manage infra         |
 | [Domains](#domains)                                      | 2     | Map custom domains                     |
 | [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos          |
-| [Docker Compose](#docker-compose)                        | 3     | Deploy multi-service projects          |
 | [Monitoring](#monitoring--logs)                          | 5     | Logs, stats, alerts                    |
 | [Debug](#debug--troubleshooting)                         | 2     | Build logs, error analysis             |
 | [Volume Management](#volume-management)                  | 5     | Docker volumes, disk cleanup           |
 | [Webhooks](#webhooks)                                    | 3     | Auto-deploy webhooks                   |
 | [Infrastructure Analysis](#infrastructure-analysis)      | 2     | Repo analysis, web search              |
-| [Platform Admin](#platform-admin)                        | 12    | Health, events, docker inspect         |
+| [Platform Admin](#platform-admin)                        | 13    | Health, events, docker inspect         |
 
 ---
 
@@ -116,9 +130,9 @@ Get deployment history.
 | `project_name` | string | Yes      | Project name              |
 | `limit`        | number | No       | Max entries (default: 10) |
 
-### `rollback_project`
+### `rollback_project` / `rollback_service`
 
-Rollback to previous Docker image.
+Rollback to previous Docker image. `rollback_service` is the service-vocabulary alias; `rollback_project` remains for compatibility.
 
 | Parameter      | Type   | Required | Description  |
 | -------------- | ------ | -------- | ------------ |
@@ -170,9 +184,9 @@ List all projects with status, ports, URLs. No parameters.
 
 `restart_project` also accepts `no_cache` (boolean) to force fresh build.
 
-### `remove_project`
+### `archive_project` / `unarchive_project`
 
-Permanently remove project and container.
+Archive or restore a project while preserving configuration, environment variables, and history.
 
 | Parameter      | Type   | Required | Description  |
 | -------------- | ------ | -------- | ------------ |
@@ -189,9 +203,9 @@ Redeploy with same configuration.
 | `strategy`          | string  | No       | `'blue-green'` or `'force'` |
 | `health_check_path` | string  | No       | Health check path           |
 
-### `share_project`
+### `expose_public` / `unexpose_public`
 
-Generate temporary public URL via TryCloudflare.
+Expose a project publicly through a temporary tunnel, or remove that public exposure.
 
 | Parameter      | Type   | Required | Description  |
 | -------------- | ------ | -------- | ------------ |
@@ -214,17 +228,43 @@ Update build configuration.
 
 ### `list_env_vars` / `get_env_var`
 
-| Parameter      | Type   | Required       | Description  |
-| -------------- | ------ | -------------- | ------------ |
-| `project_name` | string | Yes            | Project name |
-| `key`          | string | Yes (get only) | Env var key  |
+| Parameter      | Type    | Required       | Description                                |
+| -------------- | ------- | -------------- | ------------------------------------------ |
+| `project_name` | string  | Yes            | Project name                               |
+| `key`          | string  | Yes (get only) | Env var key                                |
+| `reveal`       | boolean | No (list only) | Return raw values instead of masked values |
+
+`list_env_vars` masks by default. `NEXT_PUBLIC_*`, `PUBLIC_*`, `VITE_PUBLIC_*`, and `NUXT_PUBLIC_*` are treated as public and are not masked. Empty strings render as `""`; missing single-key lookups throw `NOT_FOUND`.
 
 ### `set_env_vars`
 
-| Parameter      | Type   | Required | Description     |
-| -------------- | ------ | -------- | --------------- |
-| `project_name` | string | Yes      | Project name    |
-| `variables`    | object | Yes      | Key-value pairs |
+| Parameter        | Type    | Required | Description                                       |
+| ---------------- | ------- | -------- | ------------------------------------------------- |
+| `project_name`   | string  | Yes      | Project name                                      |
+| `variables`      | object  | Yes      | Key-value pairs; values must be strings           |
+| `defer_redeploy` | boolean | No       | Default `true`; pass `false` to apply immediately |
+
+`set_env_vars` is an upsert keyed by `(project_id, key)`. It saves only by default and returns `changed: [{ key, op }]`, where `op` is `insert`, `update`, or `noop`. `null` values are rejected with `BAD_REQUEST`; `""` stores an explicit empty value. To apply saved changes to a running container, call `redeploy_project` / `deploy_service`, or pass `defer_redeploy=false`.
+
+### `export_env_vars`
+
+| Parameter      | Type   | Required | Description  |
+| -------------- | ------ | -------- | ------------ |
+| `project_name` | string | Yes      | Project name |
+
+Exports all project env vars as raw `.env` text and records an audit event without storing raw values in the audit log.
+
+### `delete_env_var` / `bulk_delete_env_vars`
+
+| Parameter        | Type     | Required            | Description                                       |
+| ---------------- | -------- | ------------------- | ------------------------------------------------- |
+| `project_name`   | string   | Yes                 | Project name                                      |
+| `key`            | string   | Yes (single delete) | Env var key                                       |
+| `keys`           | string[] | Yes (bulk delete)   | Env var keys                                      |
+| `confirm`        | boolean  | Yes (bulk apply)    | Omit or pass `false` for dry-run preview only     |
+| `defer_redeploy` | boolean  | No                  | Default `true`; pass `false` to apply immediately |
+
+`bulk_delete_env_vars` without `confirm=true` returns `{ would_delete, not_found, count_to_delete, confirm_required: true }` and makes no changes.
 
 ### `set_global_secret` / `list_global_secrets`
 
@@ -264,7 +304,13 @@ Update build configuration.
 
 ### `list_services`
 
-No parameters.
+| Parameter         | Type    | Required | Description                                     |
+| ----------------- | ------- | -------- | ----------------------------------------------- |
+| `include_orphans` | boolean | No       | Include unmanaged OpenLander service containers |
+
+`include_orphans=true` surfaces OpenLander-managed service containers that still exist in Docker but are missing from the `services` table.
+
+MCP `list_services` intentionally omits credential values. Use `get_service_credentials` for connection strings, users, passwords, and database names.
 
 ### `get_service_status` / `start_service` / `stop_service` / `remove_service`
 
@@ -287,7 +333,7 @@ No parameters.
 
 ### Database Operations
 
-`create_database` / `list_databases` / `create_service_database` / `create_service_user`
+`create_database` / `list_databases` / `create_service_user`
 
 | Parameter       | Type   | Required   | Description               |
 | --------------- | ------ | ---------- | ------------------------- |
@@ -352,35 +398,6 @@ No parameters.
 | Parameter | Type   | Required | Description  |
 | --------- | ------ | -------- | ------------ |
 | `query`   | string | Yes      | Search query |
-
----
-
-## Docker Compose
-
-### `deploy_compose`
-
-| Parameter  | Type     | Required | Description        |
-| ---------- | -------- | -------- | ------------------ |
-| `repo_url` | string   | Yes      | Git repository URL |
-| `branch`   | string   | No       | Branch             |
-| `name`     | string   | No       | Project name       |
-| `profiles` | string[] | No       | Compose profiles   |
-
-### `list_compose_services`
-
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `project_name` | string | Yes      | Project name |
-
-### `orchestrate_deploy`
-
-Deploy monorepo services in dependency order.
-
-| Parameter  | Type     | Required | Description        |
-| ---------- | -------- | -------- | ------------------ |
-| `repo_url` | string   | Yes      | Git repository URL |
-| `branch`   | string   | No       | Branch             |
-| `profiles` | string[] | No       | Compose profiles   |
 
 ---
 
@@ -566,6 +583,16 @@ Platform health summary. No parameters.
 | `table`      | string | Yes      | Table name        |
 | `project_id` | string | No       | Filter by project |
 | `limit`      | number | No       | Row limit         |
+
+### `platform_adopt_orphan_service`
+
+| Parameter        | Type    | Required              | Description                   |
+| ---------------- | ------- | --------------------- | ----------------------------- |
+| `container_id`   | string  | Yes, unless name used | Orphan container ID           |
+| `container_name` | string  | Yes, unless ID used   | Orphan container name         |
+| `confirm`        | boolean | No                    | Default `false`; preview only |
+
+Without `confirm=true`, this returns the service row that would be created and makes no DB changes. With `confirm=true`, OpenLander registers the existing container as an adopted custom image service. Adopted services support logs, restart, stop, and remove; build/redeploy is rejected with `SERVICE_OPERATION_UNSUPPORTED`.
 
 ### `platform_cleanup_orphans` / `platform_reconcile` / `platform_force_remove`
 

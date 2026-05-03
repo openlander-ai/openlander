@@ -34,6 +34,22 @@ This will:
 4. Preserve runtime state in `openlander-data` and `openlander-postgres`
 5. Let you walk through the setup wizard on first open
 
+### Low-Memory Runtime Image
+
+If the host kills `docker compose up --build` while the image is compiling
+TypeScript or the web UI, build the app artifacts on the host first and use the
+runtime-only Compose file:
+
+```bash
+npm install
+npm run docker:build:runtime
+OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose -f docker-compose.runtime.yml up -d
+```
+
+`npm run docker:build:runtime` disables declaration-file and sourcemap output for
+the deploy image, then builds `${OPENLANDER_IMAGE:-openlander:local}` from the
+existing `dist/` and `web/dist/` directories.
+
 ### Direct CLI Runtime
 
 Running `openlander` directly is supported for development or custom process
@@ -126,9 +142,10 @@ brew install --cask docker
 | `openlander config reset-password` | Reset admin password                                |
 | `openlander mcp`                   | Start MCP server (stdio mode)                       |
 
-> **1.0 change**: OpenLander runs in the foreground only. Use Docker Compose,
-> systemd, or pm2 for background lifecycle (see the
-> [Running as a Service](../../README.md#running-as-a-service) section in README).
+> **1.0 change**: OpenLander runs in the foreground only when started directly.
+> Use Docker Compose for the default background lifecycle. systemd or PM2 are
+> custom direct-CLI supervisors only (see
+> [Running as a Service](../../README.md#running-as-a-service) in README).
 
 > **Single-process only**: OpenLander 1.0 must run as a single process. Do **not** enable PM2 cluster mode (`exec_mode: 'cluster'` / `instances > 1`) or run multiple `openlander` workers behind a load balancer. The first-boot setup secret, the OAuth PKCE verifier map, and the agent pool are in-process state — workers would each generate a different setup secret and fail to share OAuth/session state. Multi-process support is tracked for a future minor release.
 

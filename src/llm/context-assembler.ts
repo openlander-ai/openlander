@@ -200,8 +200,8 @@ async function buildProjectGroups(projects: ProjectRow[], db: Database): Promise
       }
     }
 
-    if (p.repo_url) {
-      const normalized = p.repo_url.replace(/\.git$/, '').toLowerCase();
+    if (svc?.repo_url) {
+      const normalized = svc.repo_url.replace(/\.git$/, '').toLowerCase();
       const group = repoGroups.get(normalized);
       if (group) {
         group.push(p);

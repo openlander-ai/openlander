@@ -20,6 +20,14 @@ describe('DecisionEngine', () => {
     expect(engine.classify('rollback_project')).toBe('REQUIRE_APPROVAL');
   });
 
+  it('rollback_service → REQUIRE_APPROVAL', () => {
+    expect(engine.classify('rollback_service')).toBe('REQUIRE_APPROVAL');
+  });
+
+  it('archive_project → REQUIRE_APPROVAL', () => {
+    expect(engine.classify('archive_project')).toBe('REQUIRE_APPROVAL');
+  });
+
   it('remove_service → REQUIRE_APPROVAL', () => {
     expect(engine.classify('remove_service')).toBe('REQUIRE_APPROVAL');
   });

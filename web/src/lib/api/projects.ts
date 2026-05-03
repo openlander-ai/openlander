@@ -12,7 +12,7 @@ interface BackendEnvironment {
   id: string;
   project_id: string;
   type: Environment['type'];
-  branch: string;
+  branch: string | null;
   status: Environment['status'];
   assigned_port: number | null;
   container_id: string | null;
@@ -90,7 +90,7 @@ export async function deployProject(
 ): Promise<DeployResult> {
   const body: Record<string, unknown> = {
     branch,
-    name,
+    project_name: name,
     env_vars: envVars,
   };
 
@@ -104,17 +104,24 @@ export async function deployProject(
     body.repo_url = repoUrl;
   }
 
-  return apiPost<DeployResult>('/api/projects/deploy', body);
+  return apiPost<DeployResult>('/api/services/deploy', body);
 }
 
 export async function createProject(
-  repoUrl: string,
-  branch?: string,
   name?: string,
 ): Promise<{ project: { id: string; name: string; status: Project['status'] } }> {
   return apiPost<{ project: { id: string; name: string; status: Project['status'] } }>(
     '/api/projects',
-    { repo_url: repoUrl, branch, name },
+    { name },
+  );
+}
+
+export async function createProjectGroup(
+  name: string,
+): Promise<{ project: { id: string; name: string; status: Project['status'] } }> {
+  return apiPost<{ project: { id: string; name: string; status: Project['status'] } }>(
+    '/api/projects',
+    { name },
   );
 }
 

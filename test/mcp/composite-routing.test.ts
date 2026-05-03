@@ -90,6 +90,16 @@ describe('Composite Action Routing', () => {
       expect(result).toHaveProperty('composite', 'openlander_deploy');
     });
 
+    it('routes rollback_service alias action (validates params)', async () => {
+      const result = (await tool.execute(
+        { action: 'rollback_service', params: {} },
+        mockContext,
+      )) as Record<string, unknown>;
+      expect(result).toHaveProperty('error', 'INVALID_PARAMS');
+      expect(result).toHaveProperty('action', 'rollback_service');
+      expect(result).toHaveProperty('composite', 'openlander_deploy');
+    });
+
     it('help action lists all registered deploy actions', async () => {
       const result = (await tool.execute({ action: 'help' }, mockContext)) as Record<
         string,

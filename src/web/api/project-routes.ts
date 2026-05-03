@@ -10,6 +10,8 @@ import {
   OpenLanderError,
   ProjectArchivedError,
   ProjectRecoveringError,
+  ProjectSourceRemovedError,
+  ServiceSelectionRequiredError,
   TunnelStartError,
 } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
@@ -47,6 +49,11 @@ import {
 } from '../../db/service-ids.js';
 
 const log = createModuleLogger('api');
+type DeployableServiceRow = Awaited<ReturnType<AppContext['db']['getDeployablesByGroup']>>[number];
+
+type SingleDeployableSelection =
+  | { service: DeployableServiceRow; error: null }
+  | { service: null; error: ServiceSelectionRequiredError };
 
 // ---------------------------------------------------------------------------
 // Topology per-node cache (Phase 4 fix — Blocker 4)
@@ -152,8 +159,8 @@ function registerTopologyCacheInvalidation(ctx: AppContext): void {
     try {
       const project = await ctx.db.getProject(projectId);
       if (project) {
-        // PR 4 canonical-first: prefer the deployable service's container_id
-        // (post-0012 source of truth) over the legacy projects column.
+        // Project routes are compatibility surfaces; container ownership lives
+        // on the deployable service row post-0012.
         const deployable =
           typeof ctx.db.getDeployableForProject === 'function'
             ? await ctx.db.getDeployableForProject(projectId)
@@ -435,7 +442,7 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
   // Deployable runtime fields — canonical-first ?? legacy fallback.
   const port = deployable?.assigned_port ?? project.assigned_port ?? null;
   const imageUrl = deployable?.image_url ?? project.image_url ?? undefined;
-  const status = deployable?.status ?? project.status;
+  const status = deployable?.status ?? project.status ?? 'idle';
   const containerId = deployable?.container_id ?? project.container_id ?? null;
   const containerPort = deployable?.container_port ?? project.container_port ?? null;
   const imageTag = deployable?.image_tag ?? project.image_tag ?? null;
@@ -464,14 +471,12 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
   const parentProjectId = deployable?.parent_service_id
     ? deployableServiceIdToProjectId(deployable.parent_service_id)
     : parentProjectFallback;
-  const visibility = deployable?.visibility ?? visibilityFallback;
+  const visibility = deployable?.visibility ?? visibilityFallback ?? 'internal';
 
   return {
     // --- Identity / group fields (live on `projects` permanently) ---
     id: project.id,
     name: project.name,
-    repo_url: project.repo_url,
-    branch: project.branch,
     parent_project_id: parentProjectId,
     visibility,
     server_id: project.server_id,
@@ -501,7 +506,6 @@ function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
     url: port ? getProjectUrl(project.name) : null,
     urls: port ? getProjectUrls(project.name) : [],
     publicUrl,
-    repoUrl: project.repo_url,
     source,
     imageUrl,
     imageCmd: parseImageCmd(imageCmdRaw ?? null),
@@ -556,6 +560,31 @@ async function createMutationPolicySnapshot(
       getDeployableForProject: (projectId) => (projectId === project.id ? deployable : undefined),
       isCircuitBreakerOpen: (projectId) => projectId === project.id && circuitBreakerOpen,
     },
+  };
+}
+
+async function getSingleDeployableOrSelectionError(
+  ctx: AppContext,
+  project: ProjectRow,
+): Promise<SingleDeployableSelection> {
+  const deployables = await ctx.db.getDeployablesByGroup(project.id);
+  const actionable = deployables.filter((svc) => svc.kind !== 'compose-child');
+  const onlyService = actionable.length === 1 ? actionable[0] : undefined;
+  if (onlyService) {
+    return { service: onlyService, error: null };
+  }
+  return {
+    service: null,
+    error: new ServiceSelectionRequiredError(
+      project.id,
+      project.name,
+      actionable.map((svc) => ({
+        serviceId: svc.id,
+        serviceName: svc.name,
+        kind: svc.kind,
+        source: svc.source,
+      })),
+    ),
   };
 }
 
@@ -652,20 +681,17 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const body = await c.req
       .json<{ repo_url?: string; branch?: string; name?: string }>()
       .catch(() => ({ repo_url: undefined, branch: undefined, name: undefined }));
+    const repoUrl = body.repo_url?.trim() || undefined;
+    const explicitName = body.name?.trim();
 
-    if (!body.repo_url) {
-      return c.json({ error: 'MISSING_FIELD', message: 'repo_url is required' }, 400);
+    if (repoUrl || body.branch !== undefined) {
+      return c.json(new ProjectSourceRemovedError().toJSON(), 400);
     }
 
-    const projectName =
-      (body.name && body.name.trim()) ||
-      body.repo_url
-        .split('/')
-        .pop()
-        ?.replace(/\.git$/, '');
+    const projectName = explicitName;
     if (!projectName) {
       return c.json(
-        { error: 'INVALID_PROJECT_NAME', message: 'Could not determine project name' },
+        { error: 'MISSING_FIELD', code: 'MISSING_FIELD', message: 'name is required' },
         400,
       );
     }
@@ -694,18 +720,17 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
 
-    const created = await ctx.db.createProject({
-      id: crypto.randomUUID(),
+    const projectId = crypto.randomUUID();
+    const created = await ctx.db.createProjectGroup({
+      id: projectId,
       name: projectName,
-      repoUrl: body.repo_url,
-      branch: body.branch,
     });
 
     return c.json({
       project: {
         id: created.id,
         name: created.name,
-        status: created.status,
+        status: created.status ?? 'idle',
       },
     });
   });
@@ -713,9 +738,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.get('/projects/:id/stats', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
 
-    // PR 4 canonical-first: prefer the deployable services row for
-    // status + container_id; fall back to legacy projects columns through
-    // migration 0012.
+    // Project compatibility route: prefer the deployable service row for
+    // status + container_id, then use ProjectRow compatibility aliases.
     const deployable = await ctx.db.getDeployableForProject(project.id);
     const status = deployable?.status ?? project.status;
     const containerId = deployable?.container_id ?? project.container_id;
@@ -799,8 +823,6 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           status: mapped.status,
           visibility: mapped.visibility,
           source: mapped.source,
-          repoUrl: mapped.repoUrl,
-          branch: mapped.branch,
           port: mapped.port,
           url: mapped.port ? getProjectUrl(mapped.name) : null,
           urls: mapped.port
@@ -874,6 +896,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         : typeof ctx.db.getComposeChildProjects === 'function'
           ? await ctx.db.getComposeChildProjects(project.id)
           : await ctx.db.getChildProjects(project.id);
+      const groupEnvironments = useServices
+        ? await ctx.db.getEnvironmentsByProject(project.id)
+        : [];
 
       const nodeIds = new Set(
         useServices
@@ -932,6 +957,17 @@ export function createProjectRoutes(ctx: AppContext): Hono {
               cpu: runtime.cpuDisplay,
               mem: runtime.memDisplay,
               dependsOn: dependsOnMap.get(svc.id) ?? [],
+              source: svc.source,
+              repoUrl: svc.repo_url,
+              branch: svc.branch,
+              deployedBranch:
+                groupEnvironments.find(
+                  (env) => env.service_id === svc.id && env.type === 'production',
+                )?.branch ?? null,
+              dockerfilePath: svc.dockerfile_path,
+              dockerTarget: svc.docker_target,
+              buildContext: svc.build_context,
+              buildMethod: svc.build_method,
             };
           })
         : await mapWithConcurrency(
@@ -1141,6 +1177,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       project_id: project.id,
       kindNotIn: MANAGED_SERVICE_KINDS,
     });
+    const environments = await ctx.db.getEnvironmentsByProject(project.id);
     return c.json({
       count: deployables.length,
       services: deployables.map((svc) => ({
@@ -1156,6 +1193,16 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         container_id: svc.container_id,
         container_name: svc.container_name,
         image_tag: svc.image_tag,
+        source: svc.source,
+        repoUrl: svc.repo_url,
+        branch: svc.branch,
+        deployedBranch:
+          environments.find((env) => env.service_id === svc.id && env.type === 'production')
+            ?.branch ?? null,
+        dockerfilePath: svc.dockerfile_path,
+        dockerTarget: svc.docker_target,
+        buildContext: svc.build_context,
+        buildMethod: svc.build_method,
         created_at: normalizeTimestamp(svc.created_at),
         updated_at: normalizeTimestamp(svc.updated_at),
       })),
@@ -1342,8 +1389,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       throw err;
     }
 
-    // PR 4 canonical-first: read container_id from the deployable services
-    // row when available; fall back to the legacy projects column.
+    // Project compatibility route: read container_id from the deployable
+    // service row, then use ProjectRow compatibility aliases.
     const deployable = await ctx.db.getDeployableForProject(project.id);
     const containerId = deployable?.container_id ?? project.container_id;
     if (!containerId) {
@@ -1424,12 +1471,20 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       }
     }
 
+    const selection = await getSingleDeployableOrSelectionError(ctx, project);
+    if (selection.error) {
+      return c.json(selection.error.toJSON(), 400);
+    }
+
     // PR 4 canonical-first: source is on services post-0009 too. Read
     // canonical with legacy fallback.
-    const deployable = await ctx.db.getDeployableForProject(project.id);
-    const projectSource = deployable?.source ?? project.source;
-    if (projectSource === 'git' && !project.repo_url) {
-      return c.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
+    const deployable = selection.service;
+    const projectSource = deployable.source;
+    if (projectSource === 'git' && !deployable.repo_url) {
+      return c.json(
+        { success: false, error: 'SERVICE_SOURCE_MISSING', code: 'SERVICE_SOURCE_MISSING' },
+        400,
+      );
     }
 
     // Per-project lock instead of a global deploy queue (1.0 GA): two
@@ -1498,6 +1553,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       return environmentResolution.response;
     }
     const { environmentRow } = environmentResolution;
+    const selection = await getSingleDeployableOrSelectionError(ctx, project);
+    if (selection.error) {
+      return c.json(selection.error.toJSON(), 400);
+    }
 
     const body = await c.req
       .json<{ deployment_id?: unknown }>()
@@ -1752,8 +1811,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     switch (action) {
       case 'cleanup_stale': {
         // Remove old containers for this project (keep the current one).
-        // PR 4 canonical-first: prefer deployable services row's
-        // container_id; fall back to legacy projects column through 0012.
+        // Project compatibility route: prefer deployable service row's
+        // container_id, then use ProjectRow compatibility aliases.
         const deployable = await ctx.db.getDeployableForProject(project.id);
         const currentContainerId = deployable?.container_id ?? project.container_id;
         const managed = await ctx.docker.listManagedContainers();
@@ -1973,8 +2032,16 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   api.get('/projects/:id/env-example', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-    if (!project.repo_url) {
-      return c.json({ error: 'MISSING_REPO_URL', message: 'Project has no repository URL' }, 400);
+    const deployable = await ctx.db.getDeployableForProject(project.id);
+    if (!deployable?.repo_url) {
+      return c.json(
+        {
+          error: 'SERVICE_SOURCE_MISSING',
+          code: 'SERVICE_SOURCE_MISSING',
+          message: 'Service has no repository URL',
+        },
+        400,
+      );
     }
 
     const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
@@ -2000,8 +2067,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     let clonePath: string | null = null;
     try {
       const cloneResult = await cloneRepo({
-        repoUrl: project.repo_url,
-        branch: environmentRow?.branch ?? project.branch,
+        repoUrl: deployable.repo_url,
+        branch: environmentRow?.branch ?? deployable.branch ?? undefined,
       });
       clonePath = cloneResult.path;
       const scanResult = scanForEnvUsage(clonePath);
@@ -2396,9 +2463,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.get('/projects/:p/services/:s/stats', async (c) => {
     return withServiceAsId(c, async (cx) => {
       const project = await getProjectOrThrow(cx, ctx);
-      // PR 4 canonical-first: prefer the deployable services row's
-      // status + container_id; fall back to legacy projects columns
-      // through 0012.
+      // Project compatibility route: prefer the deployable service row's
+      // status + container_id, then use ProjectRow compatibility aliases.
       const deployable = await ctx.db.getDeployableForProject(project.id);
       const status = deployable?.status ?? project.status;
       const containerId = deployable?.container_id ?? project.container_id;
@@ -2483,6 +2549,17 @@ export function createProjectRoutes(ctx: AppContext): Hono {
             container_id: serviceRow.container_id,
             container_name: serviceRow.container_name,
             image_tag: serviceRow.image_tag,
+            source: serviceRow.source,
+            repoUrl: serviceRow.repo_url,
+            branch: serviceRow.branch,
+            deployedBranch:
+              environments.find(
+                (env) => env.service_id === serviceRow.id && env.type === 'production',
+              )?.branch ?? null,
+            dockerfilePath: serviceRow.dockerfile_path,
+            dockerTarget: serviceRow.docker_target,
+            buildContext: serviceRow.build_context,
+            buildMethod: serviceRow.build_method,
             created_at: normalizeTimestamp(serviceRow.created_at),
             updated_at: normalizeTimestamp(serviceRow.updated_at),
           }
@@ -2850,8 +2927,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       // PR 4 canonical-first: source from deployable services row.
       const deployable = await ctx.db.getDeployableForProject(project.id);
       const projectSource = deployable?.source ?? project.source;
-      if (projectSource === 'git' && !project.repo_url) {
-        return cx.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
+      if (projectSource === 'git' && !deployable?.repo_url) {
+        return cx.json(
+          { success: false, error: 'SERVICE_SOURCE_MISSING', code: 'SERVICE_SOURCE_MISSING' },
+          400,
+        );
       }
       const lockSessionId = `redeploy-${project.id}-${Date.now().toString(36)}`;
       if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(project.id, lockSessionId)) {

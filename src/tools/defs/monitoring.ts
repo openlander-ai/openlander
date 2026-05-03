@@ -19,8 +19,8 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'get_logs',
     riskLevel: 'low',
     description:
-      'Get recent container stdout/stderr logs for a project. Use when user asks about errors, crashes, or app behavior. Returns { project, logs } where logs is a string of the most recent 20 lines. Errors: PROJECT_NOT_FOUND. If logs show a build error, suggest debug_build_error for diagnosis. For deployment history (past deploys, triggers, durations), use get_deploy_history instead.',
-    mcpDescription: 'Get recent container logs for a project.',
+      'Get recent container stdout/stderr logs for a deployable project/app container. Use when user asks about errors, crashes, or app behavior. Returns { project, logs } where logs is a string of recent lines (agent default: 20, MCP default: 50). Errors: PROJECT_NOT_FOUND. If logs show a build error, suggest debug_build_error for diagnosis. For deployment history (past deploys, triggers, durations), use get_deploy_history instead.',
+    mcpDescription: 'Get recent deployable project logs. MCP default is 50 lines.',
     inputSchema: getLogsSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;

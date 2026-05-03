@@ -11,6 +11,7 @@ import {
   ProjectArchivedError,
   ProjectNotFoundError,
   ProjectRecoveringError,
+  ServiceSourceMissingError,
 } from '../../errors.js';
 import type { ToolDef } from '../defs/types.js';
 
@@ -157,9 +158,13 @@ export function toAiSdkTools(
 
       const { cloneRepo } = await import('../../pipeline/git.js');
       const { readDockerfile } = await import('../../pipeline/build-debugger.js');
+      const deployable = await appCtx.db.getDeployableForProject(project.id);
+      if (!deployable?.repo_url) {
+        throw new ServiceSourceMissingError(deployable?.id ?? `${project.id}__svc`);
+      }
       const cloneResult = await cloneRepo({
-        repoUrl: project.repo_url ?? '',
-        branch: project.branch,
+        repoUrl: deployable.repo_url,
+        branch: deployable.branch ?? undefined,
         sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
       });
       const currentDockerfile = readDockerfile(cloneResult.path) ?? 'Not available';
@@ -237,13 +242,6 @@ export function toAiSdkTools(
         };
       }
 
-      if (!project.repo_url) {
-        return {
-          error: 'MISSING_REPO_URL',
-          message: 'Project has no repository URL configured.',
-        };
-      }
-
       await savePendingFix(project.id, {
         filePath: 'Dockerfile',
         content: fixResult.dockerfileContent,
@@ -264,8 +262,8 @@ export function toAiSdkTools(
       }
       try {
         const deploy = await appCtx.pipeline.startDeploy({
-          repoUrl: project.repo_url,
-          branch: project.branch,
+          repoUrl: deployable.repo_url,
+          branch: deployable.branch ?? undefined,
           name: project.name,
           trigger: 'chat',
         });
@@ -383,10 +381,11 @@ export function toAiSdkTools(
             };
           }
 
-          if (!targetProject.repo_url) {
+          const targetDeployable = await appCtx.db.getDeployableForProject(targetProject.id);
+          if (!targetDeployable?.repo_url) {
             return {
-              error: 'MISSING_REPO_URL',
-              message: 'Project has no repository URL configured.',
+              error: 'SERVICE_SOURCE_MISSING',
+              message: 'Service has no repository URL configured.',
             };
           }
 
@@ -410,8 +409,8 @@ export function toAiSdkTools(
           }
           try {
             const deploy = await appCtx.pipeline.startDeploy({
-              repoUrl: targetProject.repo_url,
-              branch: targetProject.branch,
+              repoUrl: targetDeployable.repo_url,
+              branch: targetDeployable.branch ?? undefined,
               name: targetProject.name,
               trigger: 'chat',
             });

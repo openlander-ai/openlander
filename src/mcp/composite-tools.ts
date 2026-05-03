@@ -4,14 +4,14 @@ import type { ToolContext, ToolDef } from '../tools/defs/types.js';
 /**
  * MCP Composite Tool Mapping
  *
- * Maps all 73 non-platform MCP-exposed tools into 4 composite action groups.
+ * Maps 74 unique non-platform MCP-exposed ToolDefs into 5 composite action groups.
  * Platform tools (13 total) are gated separately via config.mcp.platformTools.
  *
  * Mapping Principles:
- * - Each tool appears in exactly ONE composite
- * - 4 composites + 1 platform group = 86 total tools
- * - Non-platform total: 73 tools (verified by test/mcp/tool-registry-snapshot.test.ts)
- * - Platform total: 13 tools (gated by config.mcp.platformTools)
+ * - Composite action names can intentionally overlap when aliases preserve compatibility
+ * - Default MCP surface: 5 composite tools
+ * - Non-platform total: 74 unique ToolDefs (verified by test/mcp/tool-registry-snapshot.test.ts)
+ * - Platform total: 13 direct tools (gated by config.mcp.platformTools)
  */
 
 /**
@@ -21,7 +21,7 @@ import type { ToolContext, ToolDef } from '../tools/defs/types.js';
  * - Build debugging & history
  * - Git integration (repo scanning)
  * - Infrastructure analysis
- * Total: 20 tools
+ * Total: 21 tools
  */
 export const DEPLOY_ACTIONS = [
   'create_deploy_plan',
@@ -35,6 +35,7 @@ export const DEPLOY_ACTIONS = [
   'cleanup_preview',
   'list_previews',
   'rollback_project',
+  'rollback_service',
   'deploy_blue_green',
   'get_build_log',
   'debug_build_error',
@@ -132,6 +133,19 @@ const SERVICE_ALIAS_TO_PROJECT_ACTION = new Map<string, (typeof PROJECT_ACTIONS)
     .map(([legacy, alias]) => [alias, legacy]),
 );
 
+const SERVICE_ALIAS_MCP_DESCRIPTIONS: Partial<Record<string, string>> = {
+  restart_service:
+    'Restart a deployable app/worker service by stopping and redeploying it. Pass no_cache=true to rebuild from scratch.',
+  deploy_service:
+    'Redeploy a deployable app/worker service with the same configuration. Pass no_cache=true to rebuild from scratch.',
+  archive_service:
+    'Archive a deployable app/worker service to stop its containers and free resources while preserving configuration and history.',
+  unarchive_service:
+    'Restore an archived deployable app/worker service. After unarchiving, call deploy_service to start the container.',
+  update_service_config:
+    'Update deployable service build config (dockerfile_path, docker_target, build_context). Takes effect on next deploy_service.',
+};
+
 /**
  * In-memory dedup set for deprecation warnings.
  * Key: `${sessionId}:${actionName}` — warn only once per session per action.
@@ -189,7 +203,7 @@ export const MANAGED_SERVICE_ACTIONS = [
  *   - Param-shape fallback: presence of `database_type`/`image` keys ⇒ managed.
  *   - Hard error last resort: ambiguous params + unresolved kind.
  *
- * Total: 24 tools
+ * Total: 25 tools
  */
 export const SERVICE_ACTIONS = [
   'list_services',
@@ -197,6 +211,7 @@ export const SERVICE_ACTIONS = [
   'start_service',
   'restart_service',
   'deploy_service',
+  'rollback_service',
   'archive_service',
   'unarchive_service',
   'update_service_config',
@@ -266,13 +281,13 @@ export const PLATFORM_ACTIONS = [
 
 /**
  * Verification: Total tool counts
- * - DEPLOY_ACTIONS: 20 tools
+ * - DEPLOY_ACTIONS: 21 tools
  * - PROJECT_ACTIONS: 24 tools
- * - SERVICE_ACTIONS: 24 tools
+ * - SERVICE_ACTIONS: 25 tools
  * - MONITOR_ACTIONS: 8 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
- * - Total non-platform ToolDefs: 73 (verified against test/mcp/tool-registry-snapshot.test.ts)
- * - Total with platform ToolDefs: 86
+ * - Total non-platform ToolDefs: 74 (verified against test/mcp/tool-registry-snapshot.test.ts)
+ * - Total with platform ToolDefs: 87
  */
 
 /**
@@ -296,7 +311,7 @@ export type AllAction = CompositeAction | PlatformAction;
 /**
  * Composite registry for routing.
  *
- * rc.2: `openlander_service` is the deployable-vocab composite (21 actions);
+ * rc.2: `openlander_service` is the deployable-vocab composite (25 actions);
  * the rc.1 managed-only set is exported as `openlander_managed_service`.
  * Plan §6.7 lines 859-866.
  */
@@ -611,7 +626,11 @@ export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): Compo
         if (aliased) {
           // Surface the deployable-vocab name so help / errors carry the
           // canonical rc.2 vocabulary, not the legacy *_project names.
-          return { ...aliased, name: alias };
+          return {
+            ...aliased,
+            name: alias,
+            mcpDescription: SERVICE_ALIAS_MCP_DESCRIPTIONS[alias] ?? aliased.mcpDescription,
+          };
         }
       }
       return undefined;

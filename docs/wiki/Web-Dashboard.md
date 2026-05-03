@@ -50,22 +50,28 @@ Grid-view list of all projects.
 
 ---
 
-### New Project (`/projects/new`)
+### New Project
 
-Deploy a new project from three sources:
+Create a project group first, then add deployable services inside it.
 
-| Tab              | Description                                        |
-| ---------------- | -------------------------------------------------- |
-| **My Repos**     | Fetch from connected GitHub account (paginated)    |
-| **Search**       | Search public/private repos by keyword             |
-| **Docker Image** | Deploy pre-built images (image URL, port, command) |
+In the 1.0 data model:
+
+| Noun        | Meaning                                                            |
+| ----------- | ------------------------------------------------------------------ |
+| **Project** | Workspace/group: shared env vars, webhooks, settings, service list |
+| **Service** | Deployable unit: Git repo app, worker, Docker image, compose stack |
 
 **Flow**:
 
-1. Select source → Choose repo/image
-2. Select branch
-3. Review auto-detected environment variables (from `.env.example`)
-4. Click Deploy
+1. Click **New Project**
+2. Enter a project name
+3. Open the project
+4. Click **Add service**
+5. Ask your agent to deploy a repo/image/compose stack into that project
+6. Open the service detail to watch deployments, logs, domains, and runtime config
+
+The legacy one-call deploy path remains available through MCP/API for convenience, but the UI uses
+the group-first model so projects are not tied to a single repository.
 
 ---
 

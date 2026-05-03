@@ -20,7 +20,6 @@ import {
 } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
-import { buildSetValues } from '../helpers.js';
 import {
   environments,
   envVars,
@@ -72,6 +71,15 @@ function toEnvironmentRow(row: EnvironmentSelectRow & { project_id?: string }): 
   return row as EnvironmentRow;
 }
 
+function isUniqueConstraintError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    msg.includes('UNIQUE constraint failed') ||
+    msg.includes('duplicate key value') ||
+    msg.includes('unique constraint')
+  );
+}
+
 export class ProjectRepo {
   constructor(
     private readonly db: DrizzleClient,
@@ -120,8 +128,6 @@ export class ProjectRepo {
           .values({
             id: project.id,
             name: project.name,
-            repo_url: project.repoUrl,
-            branch: project.branch ?? 'main',
             // group-only: NO deployable fields, NO parent_project_id
           })
           .returning();
@@ -148,6 +154,8 @@ export class ProjectRepo {
             visibility: 'internal',
             source,
             build_method: buildMethod,
+            repo_url: source === 'git' || kind === 'compose' ? project.repoUrl : null,
+            branch: source === 'git' || kind === 'compose' ? (project.branch ?? null) : null,
             dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
             docker_target: project.dockerTarget ?? null,
             build_context: project.buildContext ?? null,
@@ -180,6 +188,28 @@ export class ProjectRepo {
         throw new ProjectAlreadyExistsError(project.name);
       }
       throw error;
+    }
+  }
+
+  async createProjectGroup(project: { id: string; name: string }): Promise<ProjectRow> {
+    try {
+      const [created] = await this.db
+        .insert(projects)
+        .values({
+          id: project.id,
+          name: project.name,
+        })
+        .returning();
+
+      if (!created) throw new RepoPersistenceError('project', project.id);
+      return toProjectRow(created);
+    } catch (err) {
+      if (isUniqueConstraintError(err)) {
+        throw new ProjectAlreadyExistsError(project.name);
+      }
+      if (err instanceof OpenLanderError) throw err;
+      log.error({ err }, 'Failed to create project group');
+      throw new RepoPersistenceError('project', project.id);
     }
   }
 
@@ -395,16 +425,12 @@ export class ProjectRepo {
   }
 
   /**
-   * Post-0012: projects has only group-scoped fields (name, repo_url,
-   * branch). Deployable runtime fields (status, ports, container_id, etc.)
-   * are written via ServiceRepo or service-manager directly. The accepted
-   * update keys here are limited to the persisted columns on `projects`.
+   * Post-service-source: projects has only group-scoped fields. Deployable
+   * source/runtime fields are routed to the canonical service row.
    */
   async updateProject(
     id: string,
     updates: Partial<{
-      branch: string;
-      repoUrl: string | null;
       // @deprecated service-scoped fields — routed to the ${id}__svc service row.
       // These exist for backward-compat with pipeline/monitor callers that have
       // not yet been migrated to call updateService() directly.
@@ -418,6 +444,8 @@ export class ProjectRepo {
       containerPort: number | null;
       publicUrl: string | null;
       source: string;
+      repoUrl: string | null;
+      branch: string | null;
       buildMethod: string | null;
       buildContext: string | null;
       dockerfilePath: string | null;
@@ -432,19 +460,6 @@ export class ProjectRepo {
       pendingFix: string | null;
     }>,
   ): Promise<void> {
-    // Group-scoped fields — write to projects table.
-    const projectSetValues = buildSetValues(updates, {
-      branch: 'branch',
-      repoUrl: 'repo_url',
-    });
-    if (Object.keys(projectSetValues).length > 0) {
-      await this.db
-        .update(projects)
-        .set({ ...projectSetValues, updated_at: sql`CURRENT_TIMESTAMP` })
-        .where(eq(projects.id, id))
-        .returning({ id: projects.id });
-    }
-
     // Service-scoped fields — route to the canonical ${id}__svc service row.
     const svcSetValues: Partial<typeof services.$inferInsert> = {};
     if (updates.status !== undefined)
@@ -459,6 +474,8 @@ export class ProjectRepo {
     if (updates.containerPort !== undefined) svcSetValues.container_port = updates.containerPort;
     if (updates.publicUrl !== undefined) svcSetValues.public_url = updates.publicUrl;
     if (updates.source !== undefined) svcSetValues.source = updates.source;
+    if (updates.repoUrl !== undefined) svcSetValues.repo_url = updates.repoUrl;
+    if (updates.branch !== undefined) svcSetValues.branch = updates.branch;
     if (updates.buildMethod !== undefined) svcSetValues.build_method = updates.buildMethod;
     if (updates.buildContext !== undefined) svcSetValues.build_context = updates.buildContext;
     if (updates.dockerfilePath !== undefined) svcSetValues.dockerfile_path = updates.dockerfilePath;

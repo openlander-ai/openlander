@@ -180,6 +180,14 @@ export class ServiceRepo {
       status: ServiceRow['status'];
       containerId: string | null;
       imageUrl: string | null;
+      repoUrl: string | null;
+      branch: string | null;
+      source: string;
+      dockerfilePath: string | null;
+      dockerTarget: string | null;
+      buildContext: string | null;
+      buildMethod: string | null;
+      containerPort: number | null;
     }>,
   ): Promise<void> {
     const setValues: Partial<typeof services.$inferInsert> = {};
@@ -192,6 +200,30 @@ export class ServiceRepo {
     }
     if (updates.imageUrl !== undefined) {
       setValues.image_url = updates.imageUrl;
+    }
+    if (updates.repoUrl !== undefined) {
+      setValues.repo_url = updates.repoUrl;
+    }
+    if (updates.branch !== undefined) {
+      setValues.branch = updates.branch;
+    }
+    if (updates.source !== undefined) {
+      setValues.source = updates.source;
+    }
+    if (updates.dockerfilePath !== undefined) {
+      setValues.dockerfile_path = updates.dockerfilePath;
+    }
+    if (updates.dockerTarget !== undefined) {
+      setValues.docker_target = updates.dockerTarget;
+    }
+    if (updates.buildContext !== undefined) {
+      setValues.build_context = updates.buildContext;
+    }
+    if (updates.buildMethod !== undefined) {
+      setValues.build_method = updates.buildMethod;
+    }
+    if (updates.containerPort !== undefined) {
+      setValues.container_port = updates.containerPort;
     }
 
     if (Object.keys(setValues).length === 0) return;

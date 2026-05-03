@@ -5,6 +5,7 @@ import {
   ProjectArchivedError,
   ProjectNotFoundError,
   ProjectRecoveringError,
+  ServiceSelectionRequiredError,
 } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
@@ -18,7 +19,7 @@ import {
   tryAcquireDeployLockOrResponse,
   tryRejectIfNotMutable,
 } from './helpers.js';
-import type { ToolDef } from './types.js';
+import type { ToolContext, ToolDef } from './types.js';
 import {
   cleanupPreviewSchema,
   deployBlueGreenSchema,
@@ -30,6 +31,101 @@ import {
 } from './schemas.js';
 
 const log = createModuleLogger('tools-defs-deploy');
+
+async function requireSingleDeployable(
+  context: ToolContext,
+  project: { id: string; name: string },
+) {
+  const deployables =
+    typeof context.appCtx.db.getDeployablesByGroup === 'function'
+      ? await context.appCtx.db.getDeployablesByGroup(project.id)
+      : [await context.appCtx.db.getDeployableForProject(project.id)].filter((svc) => svc != null);
+  const actionable = deployables.filter((svc) => svc.kind !== 'compose-child');
+  if (actionable.length === 1) {
+    return undefined;
+  }
+  return new ServiceSelectionRequiredError(
+    project.id,
+    project.name,
+    actionable.map((svc) => ({
+      serviceId: svc.id,
+      serviceName: svc.name,
+      kind: svc.kind,
+      source: svc.source,
+    })),
+  ).toJSON();
+}
+
+async function executeRollbackProject(args: Record<string, unknown>, context: ToolContext) {
+  const projectName = args['project_name'] as string;
+  const toolSessionId = `mcp-rollback-${nanoid(12)}`;
+  const project = await context.appCtx.db.getProjectByName(projectName);
+  if (!project) {
+    throw new ProjectNotFoundError(projectName);
+  }
+  const selectionError = await requireSingleDeployable(context, project);
+  if (selectionError) {
+    return selectionError;
+  }
+  const policyRejection = await tryRejectIfNotMutable(project, context);
+  if (policyRejection) {
+    return policyRejection;
+  }
+  const lockResult = await tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
+  if (lockResult) {
+    return lockResult;
+  }
+  // 1.0 GA: replaced global DeployQueue with per-project lock so two
+  // different projects can rollback concurrently. The DB lock acquired
+  // above by `tryAcquireDeployLockOrResponse` plus this in-memory lock
+  // both reject same-project concurrent rollback.
+  const memLockAcquired = context.appCtx.agentPool
+    ? context.appCtx.agentPool.acquireProjectLock(project.id, toolSessionId)
+    : true;
+  if (!memLockAcquired) {
+    const lock = context.appCtx.agentPool?.getProjectLock(project.id);
+    return buildDeployLockedResponse(
+      new DeployLockedError(project.id, lock?.sessionId ?? 'unknown'),
+    );
+  }
+  let result;
+  try {
+    result = await context.appCtx.pipeline.rollback(project.id, undefined, toolSessionId);
+  } catch (err) {
+    if (err instanceof DeployLockedError) {
+      return buildDeployLockedResponse(err);
+    }
+    // Race-window: project was archived / sent to recovering / circuit
+    // tripped between the sync pre-check and the pipeline boundary check.
+    if (
+      err instanceof ProjectArchivedError ||
+      err instanceof ProjectRecoveringError ||
+      err instanceof CircuitBreakerOpenError
+    ) {
+      return buildPolicyRejectionResponse(err, project.name);
+    }
+    throw err;
+  } finally {
+    context.appCtx.agentPool?.releaseProjectLock(project.id, toolSessionId);
+  }
+  return {
+    ...result,
+    _agent_guidance: result.success
+      ? {
+          next_steps: [
+            'Call get_deploy_status to confirm rollback completed successfully.',
+            'Call get_logs to verify the application is running correctly.',
+          ],
+        }
+      : {
+          next_steps: [
+            'Rollback failed. Check the error field above for details.',
+            'Call get_deploy_history to review recent deployment state.',
+            'Call get_logs if a container was started to check runtime errors.',
+          ],
+        },
+  };
+}
 
 export const deployToolDefs: ToolDef[] = [
   {
@@ -64,72 +160,17 @@ export const deployToolDefs: ToolDef[] = [
       'Rollback a project to its previous Docker image. Use when a recent deploy broke something and user wants to revert. Returns { success, projectId, projectName, previousImageTag, rollbackImageTag, containerId, url, port, buildDurationMs } on success, or { success: false, error } on failure. Errors: PROJECT_NOT_FOUND. NO_PREVIOUS_IMAGE is returned in error, not thrown.',
     mcpDescription: 'Rollback a project to its previous image when available.',
     inputSchema: rollbackProjectSchema,
-    execute: async (args, context) => {
-      const projectName = args['project_name'] as string;
-      const toolSessionId = `mcp-rollback-${nanoid(12)}`;
-      const project = await context.appCtx.db.getProjectByName(projectName);
-      if (!project) {
-        throw new ProjectNotFoundError(projectName);
-      }
-      const policyRejection = await tryRejectIfNotMutable(project, context);
-      if (policyRejection) {
-        return policyRejection;
-      }
-      const lockResult = await tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
-      if (lockResult) {
-        return lockResult;
-      }
-      // 1.0 GA: replaced global DeployQueue with per-project lock so two
-      // different projects can rollback concurrently. The DB lock acquired
-      // above by `tryAcquireDeployLockOrResponse` plus this in-memory lock
-      // both reject same-project concurrent rollback.
-      const memLockAcquired = context.appCtx.agentPool
-        ? context.appCtx.agentPool.acquireProjectLock(project.id, toolSessionId)
-        : true;
-      if (!memLockAcquired) {
-        const lock = context.appCtx.agentPool?.getProjectLock(project.id);
-        return buildDeployLockedResponse(
-          new DeployLockedError(project.id, lock?.sessionId ?? 'unknown'),
-        );
-      }
-      let result;
-      try {
-        result = await context.appCtx.pipeline.rollback(project.id, undefined, toolSessionId);
-      } catch (err) {
-        if (err instanceof DeployLockedError) {
-          return buildDeployLockedResponse(err);
-        }
-        // Race-window: project was archived / sent to recovering / circuit
-        // tripped between the sync pre-check and the pipeline boundary check.
-        if (
-          err instanceof ProjectArchivedError ||
-          err instanceof ProjectRecoveringError ||
-          err instanceof CircuitBreakerOpenError
-        ) {
-          return buildPolicyRejectionResponse(err, project.name);
-        }
-        throw err;
-      } finally {
-        context.appCtx.agentPool?.releaseProjectLock(project.id, toolSessionId);
-      }
-      return {
-        ...result,
-        _agent_guidance: result.success
-          ? {
-              next_steps: [
-                'Call get_deploy_status to confirm rollback completed successfully.',
-                'Call get_logs to verify the application is running correctly.',
-              ],
-            }
-          : {
-              next_steps: [
-                'Rollback failed. Check the error field above for details.',
-                'Call get_deploy_history to review recent deployment state.',
-                'Call get_logs if a container was started to check runtime errors.',
-              ],
-            },
-      };
-    },
+    execute: executeRollbackProject,
+  },
+  {
+    name: 'rollback_service',
+    riskLevel: 'high',
+    description:
+      'Rollback a deployable app/worker service to its previous Docker image. Alias for rollback_project kept for service vocabulary. Returns { success, projectId, projectName, previousImageTag, rollbackImageTag, containerId, url, port, buildDurationMs } on success, or { success: false, error } on failure.',
+    mcpDescription:
+      'Rollback a deployable app/worker service to its previous image when available.',
+    inputSchema: rollbackProjectSchema,
+    execute: executeRollbackProject,
   },
   {
     name: 'deploy_blue_green',

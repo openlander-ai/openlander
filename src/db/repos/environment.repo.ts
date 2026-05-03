@@ -17,7 +17,7 @@ export class EnvironmentRepo {
     id: string;
     projectId: string;
     type: EnvironmentRow['type'];
-    branch: string;
+    branch?: string | null;
     status?: EnvironmentRow['status'];
     assignedPort?: number | null;
     containerId?: string | null;
@@ -31,7 +31,7 @@ export class EnvironmentRepo {
         id: environment.id,
         service_id: projectIdToDeployableServiceId(environment.projectId),
         type: environment.type,
-        branch: environment.branch,
+        branch: environment.branch ?? null,
         status: environment.status ?? 'idle',
         assigned_port: environment.assignedPort ?? null,
         container_id: environment.containerId ?? null,
@@ -99,7 +99,7 @@ export class EnvironmentRepo {
   async updateEnvironment(
     id: string,
     updates: Partial<{
-      branch: string;
+      branch: string | null;
       status: EnvironmentRow['status'];
       assignedPort: number | null;
       containerId: string | null;

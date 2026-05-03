@@ -45,6 +45,15 @@ export interface ServiceNode {
   url: string | null;
   /** Service IDs within the same project this service depends on (e.g. ['postgres', 'redis']) */
   dependsOn: string[];
+  /** Canonical deploy source. Source metadata belongs to services, not projects. */
+  source?: 'git' | 'image' | string | null;
+  repoUrl?: string | null;
+  branch?: string | null;
+  deployedBranch?: string | null;
+  dockerfilePath?: string | null;
+  dockerTarget?: string | null;
+  buildContext?: string | null;
+  buildMethod?: string | null;
 }
 
 export interface ProjectSummary {

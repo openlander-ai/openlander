@@ -28,9 +28,29 @@ Compose. The compose file intentionally fails fast when the password is missing.
 OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose up -d --build
 ```
 
+On memory-constrained hosts, prefer the prebuilt runtime image path:
+
+```bash
+npm install
+npm run docker:build:runtime
+OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose -f docker-compose.runtime.yml up -d
+```
+
 OpenLander-owned project containers are not treated as preserved state for this transition. If a
 dogfood/runtime reset is needed, preserve `openlander-postgres` and `openlander-data`, then recreate
 deployed projects from source.
+
+## Dogfood Data Cleanup
+
+The project/service split intentionally keeps empty project groups valid. Do not
+run a generic "delete all empty groups" migration: new users can create an empty
+group before adding services. If a dogfood database contains old empty groups
+that were clearly superseded by a consolidated group, remove them manually after
+checking that:
+
+- the group has zero services;
+- it has no env vars, webhooks, secret files, or timeline entries that should be preserved;
+- the replacement group contains the expected services.
 
 ## Explicitly Deferred
 

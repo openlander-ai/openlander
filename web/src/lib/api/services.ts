@@ -106,6 +106,14 @@ export interface GroupService {
   port: number | null;
   url: string | null;
   health: ServiceHealth | null;
+  source?: string | null;
+  repoUrl?: string | null;
+  branch?: string | null;
+  deployedBranch?: string | null;
+  dockerfilePath?: string | null;
+  dockerTarget?: string | null;
+  buildContext?: string | null;
+  buildMethod?: string | null;
 }
 
 export async function listGroupServices(groupId: string): Promise<GroupService[]> {

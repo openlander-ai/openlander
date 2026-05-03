@@ -1,8 +1,9 @@
 /**
  * Map backend Project shape → V2 prototype ProjectSummary shape.
  *
- * The backend Project carries different fields (id/name/status/repo_url/
- * environments) than the V2 prototype's ProjectSummary (initials/color/
+ * The backend Project carries group-level fields (id/name/status/
+ * environments) while source data lives on Service. This mapper synthesizes
+ * ProjectSummary fields for the V2 shell while consuming real data.
  * description/lastDeploy). This module computes/defaults the missing
  * fields so V2 components can keep their type contract while consuming
  * real data.
@@ -80,7 +81,7 @@ export function toProjectSummary(p: ProjectWithOptionalEnvironments): ProjectSum
     id: p.id,
     slug: p.id,
     name: p.name,
-    description: p.repoUrl ?? '',
+    description: `${p.serviceCount ?? 0} service${(p.serviceCount ?? 0) === 1 ? '' : 's'}`,
     initials: initialsFor(p.name),
     color: colorFor(p.id),
     lastDeploy: lastDeployFor(p),

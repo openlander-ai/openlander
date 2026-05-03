@@ -29,7 +29,12 @@ function createContext() {
   const ctx = {
     db: {
       getProjectByName: vi.fn((name: string) => (name === 'demo-app' ? project : undefined)),
-      getDeployableForProject: vi.fn().mockReturnValue(undefined),
+      getDeployableForProject: vi.fn().mockReturnValue({
+        id: 'project-1__svc',
+        name: 'demo-app__svc',
+        kind: 'git',
+        source: 'git',
+      }),
       isCircuitBreakerOpen: vi.fn(() => false),
     },
     pipeline: {

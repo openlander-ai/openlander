@@ -2,7 +2,9 @@
 
 ## Overview
 
-OpenLander deploys projects through a 3-step pipeline:
+OpenLander deploys deployable services through a 3-step pipeline. A **project** is the
+workspace/group that holds related services; a repository, Docker image, or compose stack is attached
+to a service inside that project.
 
 ```
 create_deploy_plan  →  execute_deploy_plan  →  get_deploy_status
@@ -18,16 +20,21 @@ There's also a convenience `deploy` tool that combines all 3 steps.
 
 ## Deploy via Web Dashboard
 
-### 1. Create New Project
+### 1. Create a Project Group
 
 1. Go to **Projects** → **New Project**
-2. Choose source:
-   - **My Repos** — Select from connected GitHub repos
-   - **Search** — Search public/private repos
-   - **Docker Image** — Deploy a pre-built image
-3. Select branch
-4. Review detected environment variables
-5. Click **Deploy**
+2. Enter a project name
+3. Open the project and click **Add service**
+4. Tell your agent what to deploy:
+   - Git repository application/worker
+   - Docker image
+   - Docker Compose stack
+   - Managed database/cache service
+5. Review the deploy output in the service detail page
+
+This keeps the mental model aligned with Dokploy-style IA: project = group, service = deployable
+unit. The canonical deploy API is `POST /api/services/deploy`; it can create a project group plus
+the initial service in one request for the common single-repository case.
 
 ### 2. Monitor Deployment
 
@@ -37,10 +44,10 @@ There's also a convenience `deploy` tool that combines all 3 steps.
 
 ### 3. Access Your App
 
-After successful deploy, your app gets a URL:
+After a service deploy succeeds, the service gets a URL:
 
 - **Internal**: `http://your-server:assigned-port`
-- **Traefik**: `http://project-name.your-server`
+- **Traefik**: `http://service-name.your-server`
 - **Public**: Quick Share via TryCloudflare (temporary URL)
 
 ---
@@ -57,7 +64,8 @@ deploy(
 )
 ```
 
-This clones, builds, runs, and waits for completion. Returns project URL on success.
+This clones, builds, runs, and waits for completion. It creates or selects a project group, then
+creates a deployable service that owns the repo/branch/build source.
 
 ### Step-by-Step Deploy
 
@@ -108,17 +116,59 @@ Poll until status is `completed` or `failed`.
 
 ## Deploy Options
 
+## API Migration Note
+
+`Project` is no longer a repository-backed entity. `POST /api/projects` only creates an empty
+group:
+
+```json
+{ "name": "my-stack" }
+```
+
+Sending `repo_url` or `branch` to `POST /api/projects` now returns `PROJECT_SOURCE_REMOVED`.
+Create deployables with the canonical service endpoint instead:
+
+```http
+POST /api/services/deploy
+```
+
+Git service body:
+
+```json
+{
+  "source": "git",
+  "repo_url": "https://github.com/user/my-app",
+  "branch": "main",
+  "project_name": "my-stack",
+  "service_name": "web"
+}
+```
+
+Image service body:
+
+```json
+{
+  "source": "image",
+  "image_url": "ghcr.io/user/my-worker:latest",
+  "project_name": "my-stack",
+  "service_name": "worker"
+}
+```
+
+If `project_id` and `project_name` are both sent, `project_id` wins and a mismatched name returns
+`INVALID_PROJECT_TARGET`.
+
 ### From Git Repository
 
-| Parameter           | Required | Description                             |
-| ------------------- | -------- | --------------------------------------- |
-| `repo_url`          | Yes      | Git repository URL                      |
-| `branch`            | No       | Branch to deploy (default: main)        |
-| `name`              | No       | Project name (auto-generated from repo) |
-| `env_vars`          | No       | JSON object of env vars                 |
-| `prefer_dockerfile` | No       | Use existing Dockerfile                 |
-| `dockerfile_path`   | No       | Path to Dockerfile                      |
-| `docker_target`     | No       | Multi-stage build target                |
+| Parameter           | Required | Description                                          |
+| ------------------- | -------- | ---------------------------------------------------- |
+| `repo_url`          | Yes      | Git repository URL for the service                   |
+| `branch`            | No       | Branch to deploy (default: repository default)       |
+| `name`              | No       | Service/project seed name (auto-generated from repo) |
+| `env_vars`          | No       | JSON object of env vars                              |
+| `prefer_dockerfile` | No       | Use existing Dockerfile                              |
+| `dockerfile_path`   | No       | Path to Dockerfile                                   |
+| `docker_target`     | No       | Multi-stage build target                             |
 
 ### From Docker Image
 

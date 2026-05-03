@@ -30,6 +30,7 @@ export const opsAutomationToolDefs: ToolDef[] = [
     name: 'get_automation_policy',
     description:
       'Get the effective recovery automation policy for a project. Shows which recovery steps (restart, diagnosis, apply_fixes, rollback) are set to automatic execution vs requiring operator confirmation.',
+    mcpDescription: 'Get effective recovery automation policy for a project.',
     inputSchema: getAutomationPolicySchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
@@ -60,6 +61,7 @@ export const opsAutomationToolDefs: ToolDef[] = [
     name: 'set_automation_policy',
     description:
       'Set per-project recovery automation policy. Each recovery step can be "auto" (executes immediately) or "confirm" (requires operator approval before executing). Use this to tune which recovery actions happen automatically vs need human confirmation.',
+    mcpDescription: 'Set per-project recovery automation policy.',
     inputSchema: setAutomationPolicySchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;

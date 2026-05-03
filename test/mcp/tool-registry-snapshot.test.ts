@@ -77,6 +77,7 @@ const EXPECTED_TOOLS = [
   'restart_project',
   'restore_service',
   'rollback_project',
+  'rollback_service',
   'scan_dockerfiles',
   'search_github_repos',
   'set_automation_policy',
@@ -127,11 +128,11 @@ describe('MCP Tool Registry Snapshot', () => {
     expect(mcpTools).toEqual(EXPECTED_TOOLS);
   });
 
-  it('maintains exactly 73 non-platform MCP tools', () => {
+  it('maintains exactly 74 non-platform MCP tools', () => {
     const toolDefs = getMcpToolDefs(false);
     const mcpTools = toolDefs.filter(isMcpTargeted);
 
-    expect(mcpTools).toHaveLength(73);
+    expect(mcpTools).toHaveLength(74);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

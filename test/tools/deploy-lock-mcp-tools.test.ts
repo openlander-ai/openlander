@@ -11,7 +11,12 @@ function createLockedContext(): AppContext {
   return {
     db: {
       getProjectByName: vi.fn((name: string) => (name === 'locked-app' ? project : undefined)),
-      getDeployableForProject: vi.fn().mockReturnValue(undefined),
+      getDeployableForProject: vi.fn().mockReturnValue({
+        id: 'proj-1__svc',
+        name: 'locked-app__svc',
+        kind: 'git',
+        source: 'git',
+      }),
       acquireDeployLock: vi.fn(() => false),
       isCircuitBreakerOpen: vi.fn(() => false),
       getDeployLockInfo: vi.fn(() => ({
@@ -44,6 +49,24 @@ function createLockedContext(): AppContext {
     },
     deployQueue: {
       acquire: vi.fn().mockResolvedValue(() => {}),
+    },
+  } as unknown as AppContext;
+}
+
+function createMultiServiceContext(): AppContext {
+  const project = { id: 'proj-1', name: 'group-app', status: 'running', archived_at: null };
+  return {
+    db: {
+      getProjectByName: vi.fn((name: string) => (name === 'group-app' ? project : undefined)),
+      getDeployablesByGroup: vi.fn(() => [
+        { id: 'svc-web', name: 'web', kind: 'git', source: 'git' },
+        { id: 'svc-worker', name: 'worker', kind: 'git', source: 'git' },
+      ]),
+      acquireDeployLock: vi.fn(() => true),
+      isCircuitBreakerOpen: vi.fn(() => false),
+    },
+    pipeline: {
+      redeploy: vi.fn(),
     },
   } as unknown as AppContext;
 }
@@ -98,6 +121,28 @@ describe('BUG-002 MCP deploy tool lock guard', () => {
     const result = await tool.execute({ project_name: 'locked-app' }, { target: 'mcp' });
 
     expectDeployLockedResult(result);
+    expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+  });
+
+  it('redeploy_project requires explicit service selection for multi-service groups', async () => {
+    const ctx = createMultiServiceContext();
+    const tool = getTool(ctx, 'redeploy_project');
+
+    const result = await tool.execute({ project_name: 'group-app' }, { target: 'mcp' });
+
+    expect(result).toMatchObject({
+      error: 'SERVICE_SELECTION_REQUIRED',
+      code: 'SERVICE_SELECTION_REQUIRED',
+      details: {
+        projectId: 'proj-1',
+        projectName: 'group-app',
+        candidates: [
+          { serviceId: 'svc-web', serviceName: 'web', kind: 'git', source: 'git' },
+          { serviceId: 'svc-worker', serviceName: 'worker', kind: 'git', source: 'git' },
+        ],
+      },
+    });
+    expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
   });
 

@@ -5,20 +5,20 @@
  * Home / Activity / MCPServer pages:
  *
  *   - deploy_logs                 → deploy_completed | deploy_failed | deploy_cancelled
+ *   - activity_log config rows    → config_changed
  *   - runtime_incidents           → service_crashed (active) | service_recovered (resolved)
- *   - active MCP session snapshot → mcp_connected (one event per active session)
+ *   - MCP session lifecycle       → mcp_connected | mcp_disconnected
  *
  * Notes on intentional gaps:
  *   - `deploy_started` is not emitted because deploy_logs only persists
  *     terminal status. Synthesizing a started-event from `created_at -
  *     duration_ms` would double the event count for marginal value.
- *   - `config_changed` has no persistence layer today. Skipped — UI handles
- *     missing kinds gracefully.
  *   - `mcp_disconnected` is not emitted because we don't persist disconnect
  *     events; only currently-active sessions are visible via the snapshot.
  *
- * Replaces the previous orphan /api/activity (DB-backed activity_log feed)
- * which had no UI consumer in the v4 IA.
+ * Post project/service split, deploy logs and runtime incidents are
+ * service-scoped. This route maps service_id back to the owning project group
+ * so dashboard rows still deep-link through project context.
  */
 import { Hono } from 'hono';
 
@@ -70,6 +70,38 @@ function parseTimestamp(value: string | number | null): number | null {
   return Number.isNaN(ms) ? null : ms;
 }
 
+interface ServiceActivityRef {
+  projectId: string;
+  serviceId: string;
+  serviceName: string;
+}
+
+function legacyProjectIdFromServiceId(serviceId: string): string {
+  return serviceId.endsWith('__svc') ? serviceId.slice(0, -'__svc'.length) : serviceId;
+}
+
+function parseMetadata(raw: string | null | undefined): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function actorFromActivityLog(metadata: Record<string, unknown>, eventType: string): Actor {
+  const actor = metadata['actor'];
+  if (actor === 'mcp' || actor === 'human' || actor === 'webhook' || actor === 'system') {
+    return actor;
+  }
+  if (eventType.startsWith('webhook:')) return 'webhook';
+  if (eventType.startsWith('env:')) return 'mcp';
+  return 'system';
+}
+
 export function createActivityRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
@@ -82,12 +114,31 @@ export function createActivityRoutes(ctx: AppContext): Hono {
     const now = Date.now();
     const events: V4ActivityEvent[] = [];
 
-    // Project name lookup is shared across the 3 sources; populate once.
+    // Project/service lookup is shared across sources; populate once.
     const projects = await ctx.db.listProjects();
     const projectNameById = new Map<string, string>();
     for (const p of projects) {
       projectNameById.set(p.id, p.name);
     }
+    const services = typeof ctx.db.getServices === 'function' ? await ctx.db.getServices() : [];
+    const serviceById = new Map<string, ServiceActivityRef>();
+    for (const svc of services) {
+      serviceById.set(svc.id, {
+        projectId: svc.project_id,
+        serviceId: svc.id,
+        serviceName: svc.name,
+      });
+    }
+
+    const resolveService = (serviceId: string): ServiceActivityRef => {
+      return (
+        serviceById.get(serviceId) ?? {
+          projectId: legacyProjectIdFromServiceId(serviceId),
+          serviceId,
+          serviceName: serviceId,
+        }
+      );
+    };
 
     const projectScoped =
       projectFilter !== undefined && projectFilter !== '' && projectFilter !== 'all';
@@ -97,7 +148,8 @@ export function createActivityRoutes(ctx: AppContext): Hono {
     // drop hot-project rows.
     const deployRows = await ctx.db.listRecentDeployLogsAcrossProjects(limit * 3);
     for (const row of deployRows) {
-      if (projectScoped && row.project_id !== projectFilter) continue;
+      const serviceRef = resolveService(row.service_id);
+      if (projectScoped && serviceRef.projectId !== projectFilter) continue;
       const ms = parseTimestamp(row.created_at);
       if (ms == null) continue;
       const { at, relTs } = relativeTime(ms, now);
@@ -120,8 +172,8 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         kind,
         at,
         relTs,
-        project: row.project_id ?? null,
-        service: null,
+        project: serviceRef.projectId,
+        service: serviceRef.serviceId,
         // Project name is intentionally omitted — ActivityRow renders the
         // project badge from `event.project`, so re-encoding it in the
         // title would duplicate.
@@ -130,16 +182,45 @@ export function createActivityRoutes(ctx: AppContext): Hono {
       });
     }
 
-    // --- Source 2: runtime_incidents ---
+    // --- Source 2: activity_log config rows ---
+    // Environment/config MCP operations land in activity_log, not deploy_logs.
+    // Pull only config rows here to avoid duplicating incident/recovery events
+    // that have dedicated sources below.
+    const activityRows = await ctx.db.findActivityLogRecent(limit * 3, {
+      activity_type: 'config',
+    });
+    for (const row of activityRows) {
+      const serviceRef = serviceById.get(row.project_id);
+      const projectId = serviceRef?.projectId ?? row.project_id;
+      if (projectScoped && projectId !== projectFilter) continue;
+      const ms = parseTimestamp(row.created_at);
+      if (ms == null) continue;
+      const { at, relTs } = relativeTime(ms, now);
+      const metadata = parseMetadata(row.metadata);
+      const actor = actorFromActivityLog(metadata, row.event_type);
+      events.push({
+        id: `activity-${row.id}`,
+        actor,
+        kind: 'config_changed',
+        at,
+        relTs,
+        project: projectId,
+        service: serviceRef?.serviceId ?? null,
+        title: row.title,
+        detail: row.description,
+      });
+    }
+
+    // --- Source 3: runtime_incidents ---
     // listUnresolved is cheap (filtered by `resolved=0`); recent resolved
     // ones come from a dedicated cross-project query for symmetry.
     const unresolved = await ctx.db.listUnresolvedRuntimeIncidents();
     for (const inc of unresolved) {
-      const incProjectId = inc.service_id;
-      if (projectScoped && incProjectId !== projectFilter) continue;
+      const serviceRef = resolveService(inc.service_id);
+      if (projectScoped && serviceRef.projectId !== projectFilter) continue;
       const ms = parseTimestamp(inc.created_at);
       if (ms == null) continue;
-      const projectName = projectNameById.get(incProjectId) ?? incProjectId;
+      const projectName = projectNameById.get(serviceRef.projectId) ?? serviceRef.projectId;
       const { at, relTs } = relativeTime(ms, now);
       const detailBits: string[] = [];
       if (inc.exit_code != null) detailBits.push(`exit ${String(inc.exit_code)}`);
@@ -153,8 +234,8 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         kind: 'service_crashed',
         at,
         relTs,
-        project: inc.service_id,
-        service: null,
+        project: serviceRef.projectId,
+        service: serviceRef.serviceId,
         // Title leans on project badge in the UI; raw project name kept
         // out of the headline so the timeline stays uniform.
         title: 'Service crashed',
@@ -164,8 +245,8 @@ export function createActivityRoutes(ctx: AppContext): Hono {
 
     const resolved = await ctx.db.listRecentResolvedRuntimeIncidents(limit * 2);
     for (const inc of resolved) {
-      const resolvedProjectId = inc.service_id;
-      if (projectScoped && resolvedProjectId !== projectFilter) continue;
+      const serviceRef = resolveService(inc.service_id);
+      if (projectScoped && serviceRef.projectId !== projectFilter) continue;
       const ms = parseTimestamp(inc.resolved_at ?? inc.created_at);
       if (ms == null) continue;
       const { at, relTs } = relativeTime(ms, now);
@@ -175,14 +256,14 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         kind: 'service_recovered',
         at,
         relTs,
-        project: inc.service_id,
-        service: null,
+        project: serviceRef.projectId,
+        service: serviceRef.serviceId,
         title: 'Service recovered',
         detail: inc.category ? `from ${inc.category}` : undefined,
       });
     }
 
-    // --- Source 3: MCP session lifecycle ---
+    // --- Source 4: MCP session lifecycle ---
     // Live sessions → mcp_connected (from in-memory snapshot).
     // Closed sessions → mcp_disconnected (from mcp_session_log table, ralplan
     // Phase 1 step 1). Both are suppressed when the caller asks for a specific

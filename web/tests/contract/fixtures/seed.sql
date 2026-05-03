@@ -2,24 +2,20 @@
 -- Loaded by tools/qa/start-test-backend.mjs after Postgres migrations run.
 
 -- Topology resolves `:id` via id-or-name, so id=name keeps the URL stable.
-INSERT INTO projects (id, name, repo_url, branch, server_id, created_at, updated_at)
+INSERT INTO projects (id, name, server_id, created_at, updated_at)
 VALUES (
   'hotdeal-tracker',
   'hotdeal-tracker',
-  'https://github.com/example/hotdeal-tracker.git',
-  'main',
   'local',
   '2025-01-15T00:00:00.000Z',
   '2025-01-15T00:00:00.000Z'
 );
 
 -- Managed-service rows need a project owner because services.project_id is an FK.
-INSERT INTO projects (id, name, repo_url, branch, server_id, created_at, updated_at)
+INSERT INTO projects (id, name, server_id, created_at, updated_at)
 VALUES (
   '__orphan_managed',
   '__orphan_managed',
-  NULL,
-  'main',
   'local',
   '2025-01-15T00:00:00.000Z',
   '2025-01-15T00:00:00.000Z'

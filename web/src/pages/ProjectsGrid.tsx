@@ -12,13 +12,13 @@
  * schema fields preserved on group rows during the transition so this
  * page keeps rendering without a behavioral rewire.
  */
-import { useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, Folder, MoreHorizontal, Plus } from 'lucide-react';
+import { ChevronDown, Folder, MoreHorizontal, Plus, X } from 'lucide-react';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useProjects } from '@/hooks/use-projects';
 import { OuterCard } from '@/components/Shell/OuterCard';
-import { AgentGuideDialog } from '@/components/agent-guide';
+import { createProjectGroup } from '@/lib/api/projects';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/types';
 
@@ -87,9 +87,39 @@ export function ProjectsGrid() {
   const archivedView = useProjects(true, { enabled: showArchived });
   const { projects, loading } = showArchived ? archivedView : ctx;
   const [q, setQ] = useState('');
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [projectName, setProjectName] = useState('');
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const filtered = projects.filter((p) => !q || p.name.toLowerCase().includes(q.toLowerCase()));
+
+  async function handleCreateProject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = projectName.trim();
+    if (!name) {
+      setCreateError('Project name is required.');
+      return;
+    }
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+      setCreateError('Use lowercase letters, numbers, and hyphens. Start with a letter or number.');
+      return;
+    }
+
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const result = await createProjectGroup(name);
+      await ctx.refetch();
+      setCreateOpen(false);
+      setProjectName('');
+      navigate(`/projects/${result.project.id}`);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to create project.');
+    } finally {
+      setCreating(false);
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-5xl">
@@ -99,7 +129,7 @@ export function ProjectsGrid() {
         actions={
           <button
             type="button"
-            onClick={() => setGuideOpen(true)}
+            onClick={() => setCreateOpen(true)}
             className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:opacity-90"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -130,7 +160,7 @@ export function ProjectsGrid() {
             </div>
             <button
               type="button"
-              onClick={() => setGuideOpen(true)}
+              onClick={() => setCreateOpen(true)}
               className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
@@ -258,7 +288,69 @@ export function ProjectsGrid() {
         )}
       </OuterCard>
 
-      <AgentGuideDialog open={guideOpen} onOpenChange={setGuideOpen} kind="add-service" />
+      {createOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-xl border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] p-5 shadow-xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-[16px] font-semibold text-[color:var(--ol-fg)]">
+                  Create project
+                </h2>
+                <p className="mt-1 text-[12.5px] text-[color:var(--ol-fg-muted)]">
+                  A project is a workspace for related services. Add repos, images, databases, or
+                  compose stacks after creation.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCreateOpen(false)}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
+                aria-label="Close create project dialog"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateProject} className="space-y-4">
+              <label className="block">
+                <span className="mb-1.5 block text-[12px] font-medium text-[color:var(--ol-fg-muted)]">
+                  Project name
+                </span>
+                <input
+                  value={projectName}
+                  onChange={(event) => setProjectName(event.target.value)}
+                  placeholder="hotdeal-tracker"
+                  autoFocus
+                  className="w-full rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-2 text-[13px] text-[color:var(--ol-fg)] outline-none transition-colors placeholder:text-[color:var(--ol-fg-subtle)] focus:border-[color:var(--ol-primary)]"
+                />
+              </label>
+
+              {createError && (
+                <p className="rounded-md border border-[color:var(--ol-error)]/30 bg-[color:var(--ol-error-soft)] px-3 py-2 text-[12px] text-[color:var(--ol-error)]">
+                  {createError}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(false)}
+                  className="rounded-md border border-[color:var(--ol-border)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="rounded-md bg-[color:var(--ol-primary)] px-3 py-2 text-[12.5px] font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {creating ? 'Creating...' : 'Create project'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

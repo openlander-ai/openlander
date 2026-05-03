@@ -17,8 +17,12 @@
     "web/dist",
     "drizzle",
     "Dockerfile",
+    "Dockerfile.runtime",
     ".dockerignore",
+    "Dockerfile.runtime.dockerignore",
     "docker-compose.yml",
+    "docker-compose.runtime.yml",
+    "scripts/build-runtime-image.sh",
     "LICENSE",
     "README.md",
     "CHANGELOG.md"
@@ -29,7 +33,9 @@
   "scripts": {
     "dev": "tsup --watch",
     "build": "npm run clean && tsup && npm run build:web",
-    "build:web": "cd web && npm install && npx vite build",
+    "build:web": "cd web && npm ci && npx vite build",
+    "docker:build:runtime": "bash scripts/build-runtime-image.sh",
+    "docker:up:runtime": "bash scripts/build-runtime-image.sh && docker compose -f docker-compose.runtime.yml up -d",
     "start": "node dist/cli/index.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

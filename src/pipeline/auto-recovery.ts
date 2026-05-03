@@ -54,6 +54,8 @@ type RecoveryStrategy = 'recipe' | 'llm';
 /** Maps high-risk tool names to their corresponding configurable recovery step. */
 export const TOOL_TO_RECOVERY_STEP: Record<string, ConfigurableRecoveryStep> = {
   rollback_project: 'rollback',
+  rollback_service: 'rollback',
+  archive_project: 'rollback',
   remove_project: 'rollback',
   platform_force_remove: 'rollback',
   remove_service: 'rollback',

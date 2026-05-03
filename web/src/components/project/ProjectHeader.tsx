@@ -21,7 +21,6 @@ import {
   RotateCw,
   Play,
   Square,
-  GitBranch,
   Globe,
   Share2,
   GlobeLock,
@@ -98,7 +97,6 @@ export function ProjectHeader({
   const isLlmConfigured = setupStatus?.llm.ok === true;
 
   const displayStatus = project.status;
-  const displayBranch = project.branch;
   const displayPublicUrl = project.publicUrl;
 
   const status = statusConfig[displayStatus] ?? statusConfig.stopped;
@@ -201,12 +199,6 @@ export function ProjectHeader({
             </div>
             <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-foreground/80">
               <span className={status.color}>{status.label}</span>
-              {displayBranch && (
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <GitBranch className="h-3 w-3" />
-                  {displayBranch}
-                </span>
-              )}
               <DomainUrlDisplay publicUrl={displayPublicUrl} urls={project.urls} />
             </div>
             {displayPublicUrl && (

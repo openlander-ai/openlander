@@ -21,6 +21,10 @@ You need to know Docker, reverse proxies, port mapping, SSL, DNS — or pay $10+
 
 **OpenLander fixes this.** A clean web dashboard for deploying — with AI that kicks in when things go wrong.
 
+**Mental model**: a Project is a workspace/group. A Service is the deployable unit that owns
+repository, image, branch, Dockerfile, build config, runtime state, and deploy history. The dashboard
+and MCP keep a one-step "deploy this repo" wrapper for the common single-service case.
+
 ```
 1. Paste a Git URL
 2. Click Deploy
@@ -65,6 +69,8 @@ OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose up -d --build
 > **Note**: The supported self-hosted runtime is Docker Compose with Postgres.
 > Running the CLI directly is for development or custom service managers and
 > requires `OPENLANDER_DATABASE_URL` / `DATABASE_URL` to point at Postgres.
+> On memory-constrained hosts, use the prebuilt runtime image path in
+> [Running as a Service](#running-as-a-service) instead of building inside Docker.
 
 1. Check Docker (install if missing, fix permissions if needed)
 2. Start the Traefik reverse proxy
@@ -75,59 +81,13 @@ OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose up -d --build
 
 ## Running as a Service
 
-`openlander` runs in the foreground. Use a process supervisor for background lifecycle.
+Docker Compose is the recommended background lifecycle for self-hosted installs. It runs
+OpenLander plus Postgres and keeps both data volumes attached across restarts.
 
 > **1.0 deployment constraints**
 >
 > - **Single-process only.** OpenLander 1.0 is not safe under PM2 cluster mode (or any other multi-worker supervisor). The first-boot setup secret, the OAuth PKCE verifier map, and the agent pool live in process memory — workers would each see a different secret and fail to share session state. Stick to a single instance.
 > - **Single-tenant LLM pool.** The agent pool has a hard cap of 5 concurrent LLM sessions and is not partitioned per user. Concurrent operation by multiple users will surface as `429 LLM_CONCURRENCY_EXCEEDED` once the cap is hit. Per-tenant fairness is planned for v1.1.
-
-### systemd
-
-```ini
-# /etc/systemd/system/openlander.service
-[Unit]
-Description=OpenLander
-After=docker.service
-Requires=docker.service
-
-[Service]
-Type=simple
-User=openlander
-ExecStart=/usr/local/bin/openlander start --no-open
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl enable --now openlander
-sudo systemctl status openlander
-```
-
-### pm2
-
-```js
-// ecosystem.config.cjs
-module.exports = {
-  apps: [
-    {
-      name: 'openlander',
-      script: 'openlander',
-      args: 'start --no-open',
-      autorestart: true,
-      max_restarts: 10,
-    },
-  ],
-};
-```
-
-```bash
-pm2 start ecosystem.config.cjs
-pm2 save
-```
 
 ### Docker
 
@@ -136,6 +96,19 @@ Recommended:
 ```bash
 OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose up -d --build
 ```
+
+Low-memory/prebuilt image path:
+
+```bash
+npm install
+npm run docker:build:runtime
+OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose -f docker-compose.runtime.yml up -d
+```
+
+The prebuilt path compiles TypeScript and the web UI on the host, disables
+Docker-image-only declaration/sourcemap output, then builds a small runtime image
+from `dist/` and `web/dist/`. Use it when `docker compose up --build` is killed
+by host memory pressure.
 
 This starts OpenLander plus a dedicated Postgres container and preserves data in
 Docker volumes:
@@ -158,6 +131,20 @@ docker run -d \
 ```
 
 > `openlander stop` and `openlander restart` are no-ops that point you back at the supervisor — terminating the supervised process is always the supported lifecycle path.
+
+### Direct CLI Runtime
+
+`openlander` runs in the foreground when started directly. This mode is for
+development or custom service managers only. You must provide an external
+Postgres URL:
+
+```bash
+OPENLANDER_DATABASE_URL='postgres://user:password@host:5432/openlander' \
+  openlander start --no-open
+```
+
+PM2/systemd can supervise that foreground process for custom installs, but the
+default supported production path is Docker Compose.
 
 ## Features
 
@@ -194,7 +181,7 @@ docker run -d \
 ### Infrastructure
 
 - **Auto-Dockerfile** — No Dockerfile? Auto-generates one for 28+ frameworks including Next.js, Express, NestJS, Vite, Nuxt, SvelteKit, Astro, FastAPI, Django, Flask, Gradio, Streamlit, Rails, Spring Boot, Laravel, ASP.NET, Go, Rust
-- **Monorepo support** — Scan Dockerfiles, parallel builds, parent-child project model
+- **Monorepo support** — Scan Dockerfiles, parallel builds, project/service grouping
 - **Logs & monitoring** — Container logs, health checks, system resource tracking
 - **Environment variables** — Project-scoped and global encrypted secrets
 - **DB provisioning** — PostgreSQL, MySQL, Redis, MongoDB, MinIO containers on demand
@@ -256,10 +243,10 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 
 ## Roadmap
 
-| Version    | Focus                  | Status  | Highlights                                                                                                                                                                                                                                                       |
-| ---------- | ---------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **v0.1.0** | First public release   | Current | Git → Docker → URL pipeline, auto-Dockerfile (28+ frameworks), Compose support, blue-green redeploy, AI auto-recovery (RecoveryCoordinator + ApprovalGate + 10 LLM providers), 99 MCP tools across 4 composite + 11 platform, web dashboard, Korean/English i18n |
-| **v0.2.x** | Post-launch refinement | TBD     | Driven by user feedback in the first 30 days. Likely: tighter MCP observability, runtime metrics snapshot, log rotation, rate limits, Operations Center revival if there is demand                                                                               |
+| Version    | Focus                  | Status  | Highlights                                                                                                                                                                                                                                                                         |
+| ---------- | ---------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **v0.1.0** | First public release   | Current | Git → Docker → URL pipeline, auto-Dockerfile (28+ frameworks), Compose support, blue-green redeploy, AI auto-recovery (RecoveryCoordinator + ApprovalGate + 10 LLM providers), 74 MCP operations across 5 composites + 13 gated platform tools, web dashboard, Korean/English i18n |
+| **v0.2.x** | Post-launch refinement | TBD     | Driven by user feedback in the first 30 days. Likely: tighter MCP observability, runtime metrics snapshot, log rotation, rate limits, Operations Center revival if there is demand                                                                                                 |
 
 ## MCP Integration (AI Coding Agents)
 
@@ -403,18 +390,19 @@ Authorization: Bearer <your-api-token>
 
 ### Available Tools
 
-Once connected, AI agents see **4 composite MCP tools** that bundle **70 actions** (plus 11 optional platform tools gated by `config.mcp.platformTools`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** over **74 unique default operations** (plus 13 optional platform tools gated by `config.mcp.platformTools`). Each composite takes `{ action, params }`:
 
-| Composite tool       | Actions | Key actions                                                                                                                                    |
-| -------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `openlander_deploy`  | 20      | `deploy`, `create_deploy_plan`, `execute_deploy_plan`, `rollback_project`, `deploy_blue_green`, `get_build_log`, `debug_build_error`           |
-| `openlander_project` | 21      | `list_projects`, `redeploy_project`, `stop_project`, `archive_project`, `set_env_vars`, `set_global_secret`, `enable_webhook`, `expose_public` |
-| `openlander_service` | ~17     | `create_service`, `get_service_credentials`, `create_service_database`, `backup_service`, `add_volume`, `get_disk_usage`                       |
-| `openlander_monitor` | ~12     | `get_logs`, `get_alerts`, `get_system_stats`, `get_project_stats`, `dismiss_alert`, `get_deploy_status`                                        |
+| Composite tool               | Actions | Key actions                                                                                                                                    |
+| ---------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `openlander_deploy`          | 21      | `deploy`, `create_deploy_plan`, `execute_deploy_plan`, `rollback_project`/`rollback_service`, `deploy_blue_green`, `get_build_log`             |
+| `openlander_project`         | 24      | `list_projects`, `redeploy_project`, `stop_project`, `archive_project`, `set_env_vars`, `delete_env_var`, `export_env_vars`, `expose_public`   |
+| `openlander_service`         | 25      | Deployable app/worker vocabulary: `deploy_service`, `rollback_service`, `restart_service`, `set_env_vars`, `archive_service`, `enable_webhook` |
+| `openlander_managed_service` | 21      | Managed infrastructure: `create_service`, `list_services`, `get_service_credentials`, `backup_service`, `add_volume`, `get_disk_usage`         |
+| `openlander_monitor`         | 8       | `get_logs`, `get_alerts`, `get_system_stats`, `get_project_stats`, `dismiss_alert`, `probe_host`                                               |
 
 Run `action: "help"` on any composite to list its full action catalog.
-| Infrastructure | `analyze_infrastructure`, `map_domain`, `list_domains` |
-| Webhooks | `enable_webhook`, `disable_webhook`, `get_webhook_config` |
+
+Environment variable changes through MCP are conservative by default: `set_env_vars`, `delete_env_var`, and `bulk_delete_env_vars` save changes without redeploying unless `defer_redeploy=false` is passed. Redeploy explicitly with `redeploy_project` or `deploy_service` to apply saved env changes to a running container.
 
 ## Requirements
 

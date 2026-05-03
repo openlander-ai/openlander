@@ -226,8 +226,15 @@ export interface AppContext {
 async function migrateDefaultResourceProfile(db: Database): Promise<void> {
   const allProjects = await db.listProjects(undefined, { includeArchived: true });
   let migratedCount = 0;
+  let skippedCount = 0;
 
   for (const project of allProjects) {
+    const deployable = await db.getDeployableForProject(project.id);
+    if (!deployable) {
+      skippedCount++;
+      continue;
+    }
+
     const configRow = await db.loadDeployConfig(project.id);
     if (!configRow) {
       const json = serializeConfig({ resourceProfile: 'small' });
@@ -246,6 +253,12 @@ async function migrateDefaultResourceProfile(db: Database): Promise<void> {
 
   if (migratedCount > 0) {
     log.info({ migratedCount }, 'Migration: applied default resource profile to existing projects');
+  }
+  if (skippedCount > 0) {
+    log.debug(
+      { skippedCount },
+      'Migration: skipped default resource profile for project groups without canonical deployable services',
+    );
   }
 }
 

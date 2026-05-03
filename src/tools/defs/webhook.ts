@@ -23,18 +23,21 @@ const enableWebhookTool: ToolDef = {
 
     let id: string;
     let secret: string;
+    let effectiveBranchFilter: string;
     let reused = false;
 
     if (existingConfig && existingConfig.enabled === 0) {
       // Reuse existing disabled webhook
       id = existingConfig.id;
       secret = existingConfig.secret;
+      effectiveBranchFilter = existingConfig.branch_filter;
       reused = true;
       await appCtx.db.setWebhookEnabled(id, true);
     } else {
       // Generate new webhook credentials
       id = nanoid(12);
       secret = appCtx.webhookManager.generateSecret(project.id);
+      effectiveBranchFilter = branchFilter ?? 'main';
       await appCtx.db.setWebhookConfig({
         id,
         projectId: project.id,
@@ -50,7 +53,7 @@ const enableWebhookTool: ToolDef = {
       source,
       secret,
       enabled: true,
-      branchFilter: branchFilter ?? 'main',
+      branchFilter: effectiveBranchFilter,
       webhookPath: `/api/webhooks/${project.id}/${source}`,
       reused,
       _agent_guidance: {

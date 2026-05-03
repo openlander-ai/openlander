@@ -85,7 +85,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_service',
     riskLevel: 'medium',
     description:
-      'Create a new service (database, cache, message broker, object storage, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, RabbitMQ, MinIO (S3-compatible storage), or custom Docker image service. Provide template (postgresql/mysql/redis/mongodb/rabbitmq/minio), custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17" gives you PostgreSQL credential generation with the pgvector image). Returns { service, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, RABBITMQ_URL, S3_ENDPOINT) for connecting a project. For MinIO: returns S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Call set_env_vars with the suggested key/value to auto-link. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+      'Create a new service (database, cache, message broker, object storage, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, RabbitMQ, MinIO (S3-compatible storage), or custom Docker image service. Provide template (postgresql/mysql/redis/mongodb/rabbitmq/minio), custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17" gives you PostgreSQL credential generation with the pgvector image). Returns { service, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, RABBITMQ_URL, S3_ENDPOINT) for connecting a project. For MinIO: returns S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Call set_env_vars with the suggested key/value to save the binding, then redeploy the running project/service to apply it. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
     mcpDescription:
       'Create a service. Supports template, custom image, or template + custom image combo (auto-credentials with custom image).',
     inputSchema: createServiceSchema,
@@ -169,9 +169,9 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'list_services',
     riskLevel: 'low',
     description:
-      'List all services (databases, caches, custom containers) with status, type, and connection details. Pass include_orphans=true to also list OpenLander-managed service containers that are not registered in the services table.',
+      'List all services (databases, caches, custom containers) with status, type, and connection details. Agent responses include parsed credentials; MCP responses intentionally omit credential values and expose them only through get_service_credentials. Pass include_orphans=true to also list OpenLander-managed service containers that are not registered in the services table.',
     mcpDescription:
-      'List infrastructure services with type, status, exposed port, and optional orphan service containers.',
+      'List infrastructure services with type, status, exposed port, and optional orphan service containers. Credentials are omitted; use get_service_credentials when needed.',
     inputSchema: listServicesSchema,
     execute: async (_args, { appCtx, target }) => {
       const includeOrphans = (_args['include_orphans'] as boolean | undefined) ?? false;
@@ -232,7 +232,7 @@ export const serviceToolDefs: ToolDef[] = [
           _agent_guidance: {
             networking: [
               `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
-              'For inter-container communication, use http://ol-{project-name}:{port} (DNS auto-resolved).',
+              'For managed service containers, use http://ol-svc-{service-name}:{port} (DNS auto-resolved). Deployable app containers use http://ol-{project-name}:{port}.',
               'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
             ],
           },
@@ -468,7 +468,7 @@ export const serviceToolDefs: ToolDef[] = [
         _agent_guidance: {
           networking: [
             `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
-            'For inter-container communication, use http://ol-{project-name}:{port} (DNS auto-resolved).',
+            'For managed service containers, use http://ol-svc-{service-name}:{port} (DNS auto-resolved). Deployable app containers use http://ol-{project-name}:{port}.',
             'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
           ],
         },

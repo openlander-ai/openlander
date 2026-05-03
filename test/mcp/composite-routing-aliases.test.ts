@@ -213,6 +213,21 @@ describe('openlander_service rc.2 disambiguation (kind-first → param-shape →
     tool = createOpenLanderServiceCompositeTool(allToolDefs);
   });
 
+  it('help uses deployable service vocabulary for project-backed aliases', async () => {
+    const result = (await tool.execute({ action: 'help' }, mockContext)) as {
+      actions: Array<{ name: string; description: string }>;
+    };
+
+    const byName = new Map(result.actions.map((action) => [action.name, action.description]));
+
+    expect(byName.get('restart_service')).toContain('deployable app/worker service');
+    expect(byName.get('deploy_service')).toContain('deployable app/worker service');
+    expect(byName.get('rollback_service')).toContain('deployable app/worker service');
+    expect(byName.get('archive_service')).toContain('deployable app/worker service');
+    expect(byName.get('unarchive_service')).toContain('deployable app/worker service');
+    expect(byName.get('update_service_config')).toContain('deployable service build config');
+  });
+
   it('kind-first lookup: services.kind=postgres → routes to managed handler', async () => {
     const ctx: ToolContext = {
       target: 'mcp',

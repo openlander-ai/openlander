@@ -183,10 +183,13 @@ async function findPreviousProject(
   const allProjects = await db.listProjects();
   const normalizedUrl = normalizeUrl(input.repoUrl);
 
-  return allProjects.find((p) => {
-    if (!p.repo_url) return false;
-    return normalizeUrl(p.repo_url) === normalizedUrl;
-  });
+  for (const project of allProjects) {
+    const deployable = await db.getDeployableForProject(project.id);
+    if (deployable?.repo_url && normalizeUrl(deployable.repo_url) === normalizedUrl) {
+      return project;
+    }
+  }
+  return undefined;
 }
 
 /** Normalize a repo URL for comparison (strip protocol, .git suffix, trailing slash). */

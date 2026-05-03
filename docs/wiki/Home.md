@@ -13,6 +13,15 @@ Paste a Git URL. It builds, deploys, and hands you a URL — if something breaks
 OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose up -d --build
 ```
 
+If the Docker image build is killed on a small host, use the prebuilt runtime
+path instead:
+
+```bash
+npm install
+npm run docker:build:runtime
+OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose -f docker-compose.runtime.yml up -d
+```
+
 Open `http://localhost:10114` and follow the setup wizard.
 
 **Requirements**: Docker >= 20.10 with Compose V2 >= 2.3.0, Git >= 2.x
@@ -57,7 +66,7 @@ Infrastructure (Docker + Traefik + Cloudflare + Postgres)
 
 ### Integration
 
-- [[MCP Tools Reference]] — Complete tool reference for AI agents (4 composite MCP tools, 70+ actions)
+- [[MCP Tools Reference]] — Complete tool reference for AI agents (5 composite MCP tools, 74 default operations)
 - [[Integration Guide]] — Connect OpenClaw, Claude Code, Cursor, and more
 
 ---

@@ -167,27 +167,30 @@ Local stdio connections (Claude Desktop, Cursor, Windsurf) don't need tokens —
 
 ## Available Tools
 
-Once connected, AI agents see **4 composite MCP tools** bundling **70 actions** (plus 11 optional platform tools with `config.mcp.platformTools: true`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** over **74 unique default operations** (plus 13 optional platform tools with `config.mcp.platformTools: true`). Each composite takes `{ action, params }`:
 
-| Composite            | Actions | Purpose                                               |
-| -------------------- | ------- | ----------------------------------------------------- |
-| `openlander_deploy`  | 20      | Deploy lifecycle: plans, execution, rollback, build   |
-| `openlander_project` | 21      | Project management: lifecycle, env, secrets, webhooks |
-| `openlander_service` | ~17     | Services & infra: databases, caches, volumes          |
-| `openlander_monitor` | ~12     | Monitoring & ops: logs, alerts, stats, recovery       |
+| Composite                    | Actions | Purpose                                                |
+| ---------------------------- | ------- | ------------------------------------------------------ |
+| `openlander_deploy`          | 21      | Deploy lifecycle: plans, execution, rollback, build    |
+| `openlander_project`         | 24      | Project management: lifecycle, env, secrets, webhooks  |
+| `openlander_service`         | 25      | Deployable app/worker lifecycle and config vocabulary  |
+| `openlander_managed_service` | 21      | Databases, caches, credentials, backups, volumes       |
+| `openlander_monitor`         | 8       | Monitoring & ops: logs, alerts, stats, recovery policy |
 
 Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 
-| Task     | Composite → action                        | Description                  |
-| -------- | ----------------------------------------- | ---------------------------- |
-| Deploy   | `openlander_deploy` → `deploy`            | One-call deploy from Git URL |
-| Status   | `openlander_deploy` → `get_deploy_status` | Check deployment status      |
-| List     | `openlander_project` → `list_projects`    | Show all projects            |
-| Logs     | `openlander_monitor` → `get_logs`         | Container logs               |
-| Env Vars | `openlander_project` → `set_env_vars`     | Set environment variables    |
-| Rollback | `openlander_deploy` → `rollback_project`  | Revert to previous version   |
-| Share    | `openlander_project` → `expose_public`    | Generate public URL          |
-| Service  | `openlander_service` → `create_service`   | Create database/cache        |
+| Task     | Composite → action                              | Description                  |
+| -------- | ----------------------------------------------- | ---------------------------- |
+| Deploy   | `openlander_deploy` → `deploy`                  | One-call deploy from Git URL |
+| Status   | `openlander_deploy` → `get_deploy_status`       | Check deployment status      |
+| List     | `openlander_project` → `list_projects`          | Show all projects            |
+| Logs     | `openlander_monitor` → `get_logs`               | Container logs               |
+| Env Vars | `openlander_project` → `set_env_vars`           | Save environment variables   |
+| Rollback | `openlander_deploy` → `rollback_service`        | Revert to previous version   |
+| Share    | `openlander_project` → `expose_public`          | Generate public URL          |
+| Service  | `openlander_managed_service` → `create_service` | Create database/cache        |
+
+MCP env changes are conservative by default: `set_env_vars`, `delete_env_var`, and `bulk_delete_env_vars` save changes without redeploying unless `defer_redeploy=false` is passed. To apply saved changes to a running container, call `redeploy_project` or `deploy_service`.
 
 Run `{ action: "help" }` on any composite for the full action list.
 
@@ -219,7 +222,7 @@ Agent will: `get_build_log` → `debug_build_error` → fix → `redeploy_projec
 
 > "Create a PostgreSQL database for my-app"
 
-Agent will: `create_service` → `create_database` → `get_service_credentials` → `set_env_vars`
+Agent will: `create_service` → `create_database` → `get_service_credentials` → `set_env_vars` → `redeploy_project` or `deploy_service`
 
 ---
 

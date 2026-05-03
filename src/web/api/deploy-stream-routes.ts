@@ -2,7 +2,11 @@ import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 
 import type { AppContext } from '../../app.js';
-import { PreflightCheckError } from '../../errors.js';
+import {
+  InvalidProjectTargetError,
+  InvalidSourceFieldsError,
+  PreflightCheckError,
+} from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { classifyDeployError } from '../../pipeline/error-classifier.js';
 import { extractProjectName } from '../../pipeline/helpers.js';
@@ -19,10 +23,187 @@ import { registerDeployLogStreamRoutes } from './deploy-log-stream-routes.js';
 
 const log = createModuleLogger('api');
 
+const NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+
+function normalizeName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\.git$/, '')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+}
+
+async function uniqueDeployName(ctx: AppContext, base: string): Promise<string> {
+  const normalized = normalizeName(base) || `service-${nanoid(6)}`;
+  const existingServices =
+    typeof ctx.db.getServices === 'function' ? await ctx.db.getServices() : [];
+  const serviceNames = new Set(existingServices.map((service) => service.name));
+
+  const isTaken = async (candidate: string): Promise<boolean> =>
+    Boolean(await ctx.db.getProjectByName(candidate)) ||
+    serviceNames.has(candidate) ||
+    serviceNames.has(`${candidate}__svc`);
+
+  if (!(await isTaken(normalized))) {
+    return normalized;
+  }
+  for (let i = 2; i < 100; i += 1) {
+    const candidate = `${normalized}-${String(i)}`;
+    if (!(await isTaken(candidate))) {
+      return candidate;
+    }
+  }
+  return `${normalized}-${nanoid(6)}`;
+}
+
 export function createDeployStreamRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   registerBuildProgressRoute(api, ctx);
+
+  api.post('/services/deploy', async (c) => {
+    const body = await c.req.json<{
+      source?: unknown;
+      repo_url?: string;
+      image_url?: string;
+      image_cmd?: string | string[];
+      port?: number;
+      branch?: string | null;
+      project_id?: string;
+      project_name?: string;
+      service_name?: string;
+      env_vars?: Record<string, string>;
+      visibility?: 'internal' | 'quick-share';
+      dockerfile_path?: string;
+      docker_target?: string;
+      build_context?: string;
+    }>();
+
+    const source = body.source;
+    if (source !== 'git' && source !== 'image') {
+      return c.json(new InvalidSourceFieldsError('source must be "git" or "image"').toJSON(), 400);
+    }
+    if (source === 'git') {
+      if (!body.repo_url || body.image_url) {
+        return c.json(
+          new InvalidSourceFieldsError(
+            'source="git" requires repo_url and forbids image_url',
+          ).toJSON(),
+          400,
+        );
+      }
+    } else {
+      if (!body.image_url || body.repo_url) {
+        return c.json(
+          new InvalidSourceFieldsError(
+            'source="image" requires image_url and forbids repo_url',
+          ).toJSON(),
+          400,
+        );
+      }
+      if (!parseImageUrl(body.image_url)) {
+        return c.json(
+          {
+            error: 'INVALID_IMAGE_URL',
+            code: 'INVALID_IMAGE_URL',
+            message: 'Invalid Docker image URL format',
+          },
+          400,
+        );
+      }
+    }
+
+    let targetProject = body.project_id ? await ctx.db.getProject(body.project_id) : undefined;
+    if (body.project_id && !targetProject) {
+      return c.json(
+        {
+          error: 'PROJECT_NOT_FOUND',
+          code: 'PROJECT_NOT_FOUND',
+          message: `Project not found: ${body.project_id}`,
+        },
+        404,
+      );
+    }
+
+    if (targetProject && body.project_name && targetProject.name !== body.project_name) {
+      return c.json(
+        new InvalidProjectTargetError(
+          targetProject.id,
+          targetProject.name,
+          body.project_name,
+        ).toJSON(),
+        400,
+      );
+    }
+
+    if (!targetProject && body.project_name) {
+      targetProject = await ctx.db.getProjectByName(body.project_name);
+      if (!targetProject) {
+        targetProject = await ctx.db.createProjectGroup({
+          id: crypto.randomUUID(),
+          name: body.project_name,
+        });
+      }
+    }
+
+    const sourceName =
+      source === 'image'
+        ? extractProjectName(body.image_url ?? 'image')
+        : extractProjectName(body.repo_url ?? 'service');
+    const groupName = targetProject?.name ?? normalizeName(body.project_name ?? sourceName);
+    const serviceName = normalizeName(body.service_name ?? sourceName);
+    if (!NAME_REGEX.test(groupName) || !NAME_REGEX.test(serviceName)) {
+      return c.json(
+        {
+          error: 'INVALID_PROJECT_NAME',
+          code: 'INVALID_PROJECT_NAME',
+          message: 'Names must contain only lowercase letters, numbers, and hyphens',
+        },
+        400,
+      );
+    }
+
+    const deployName = targetProject
+      ? await uniqueDeployName(ctx, serviceName)
+      : await uniqueDeployName(ctx, groupName);
+    const result =
+      source === 'image'
+        ? await ctx.pipeline.deploy({
+            repoUrl: '',
+            source: 'image',
+            imageUrl: body.image_url,
+            containerPort: body.port,
+            imageCmd:
+              typeof body.image_cmd === 'string' ? body.image_cmd.split(' ') : body.image_cmd,
+            name: deployName,
+            envVars: body.env_vars,
+            visibility: body.visibility,
+            trigger: 'api',
+            environment: 'production',
+          })
+        : await ctx.pipeline.deploy({
+            repoUrl: body.repo_url ?? '',
+            branch: body.branch ?? undefined,
+            name: deployName,
+            envVars: body.env_vars,
+            visibility: body.visibility,
+            sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+            trigger: 'api',
+            environment: 'production',
+            dockerfilePath: body.dockerfile_path,
+            dockerTarget: body.docker_target,
+            buildContext: body.build_context,
+          });
+
+    let projectId = result.projectId;
+    if (result.success && targetProject && result.projectId) {
+      await ctx.db.attachServiceToProject(`${result.projectId}__svc`, targetProject.id);
+      projectId = targetProject.id;
+    }
+
+    return c.json({ ...result, projectId, serviceName: deployName }, result.success ? 200 : 500);
+  });
 
   api.post('/projects/deploy', async (c) => {
     const body = await c.req.json<{

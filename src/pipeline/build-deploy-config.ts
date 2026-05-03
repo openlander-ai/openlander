@@ -1,4 +1,5 @@
 import type { Database } from '../db/index.js';
+import { ServiceSourceMissingError } from '../errors.js';
 import { validateStoredConfig } from './config-snapshot.js';
 import type { ProjectConfig } from './deploy-core.js';
 
@@ -48,6 +49,8 @@ export async function buildDeployConfig(params: BuildDeployConfigParams): Promis
   const deployable = await db.getDeployableForProject(projectId);
   const buildMethod = deployable?.build_method ?? project.build_method;
   const source = deployable?.source ?? project.source;
+  const repoUrl = deployable?.repo_url ?? '';
+  const branch = deployable?.branch ?? undefined;
   const imageUrl = deployable?.image_url ?? project.image_url;
   const imageCmdRaw = deployable?.image_cmd ?? project.image_cmd;
   const containerPort = deployable?.container_port ?? project.container_port;
@@ -57,10 +60,14 @@ export async function buildDeployConfig(params: BuildDeployConfigParams): Promis
   const assignedPort = deployable?.assigned_port ?? project.assigned_port;
 
   const isCompose = buildMethod === 'compose';
+  if ((source ?? 'git') === 'git' && !repoUrl) {
+    throw new ServiceSourceMissingError(deployable?.id ?? `${projectId}__svc`);
+  }
+
   const imageCmd = parseImageCmd(imageCmdRaw ?? null);
   const dbConfig: ProjectConfig = {
-    repoUrl: project.repo_url ?? '',
-    branch: project.branch,
+    repoUrl,
+    branch,
     name: project.name,
     visibility: project.visibility ?? undefined,
     source: (source as 'git' | 'image' | undefined) ?? undefined,

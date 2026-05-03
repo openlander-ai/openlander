@@ -43,22 +43,22 @@ Background data:
 
 ## 3. Deploy Flow (guide 03)
 
-| #     | Feature                                                 | Guide ref      | Current state                                                                        | Effort | 1.0 decision                                                                          |
-| ----- | ------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------- |
-| DP-1  | Repo-first project creation                             | 03 §2          | `web/src/pages/NewProjectFlow.tsx` — already the current UI                          | ✅     | In (use existing)                                                                     |
-| DP-2  | Empty project → Add service flow                        | 03 §2 Step 4-6 | `/projects` POST currently requires `repo_url` (`src/web/api/project-routes.ts:182`) | ⚠      | **User decides** — recommend: keep repo-first; scrap empty-project flow from GUIDE-03 |
-| DP-3  | Deploy button → Confirm modal → auto-nav to Deployments | 03 §2 Step 8   | Dokploy's UX; easy to replicate                                                      | ✅     | In                                                                                    |
-| DP-4  | Build target auto-detect (multi-stage Dockerfile)       | 03 §2 Step 7   | `update_project_config` has `docker_target`; needs Dockerfile parser                 | ✅     | In (write a small parser, ~4h)                                                        |
-| DP-5  | Nixpacks as default build method                        | 03 §2 Step 7   | No Nixpacks pipeline integration today                                               | 🔥     | Skip v1.0 — keep Dockerfile/Compose only                                              |
-| DP-6  | Kill Build button + endpoint                            | 03 §3.4        | No web endpoint                                                                      | ✅     | In (trivial `docker kill` wrapper)                                                    |
-| DP-7  | Trigger label in deploy history                         | 03 §5          | Backend stores `chat/webhook/api`; UI doesn't surface                                | ✅     | In — map `chat`→`mcp-agent` in UI; backend keeps enum                                 |
-| DP-8  | Runtime config view (from `docker inspect`)             | 03 §3.3        | Not exposed through API                                                              | ✅     | In (new read-only endpoint, ~4h)                                                      |
-| DP-9  | Rollback to specific deploy                             | 03 §3.2        | `openlander_deploy.rollback_project` exists                                          | ✅     | In (wire UI to existing tool)                                                         |
-| DP-10 | Watch Paths (selective rebuild)                         | 03 §2 Step 7   | No build system support                                                              | 🔥     | Skip v1.0                                                                             |
-| DP-11 | Preview deploys (ephemeral per branch)                  | 03 §1 scope    | `preview_deploy` action exists; UI flow missing                                      | ⚠      | **User decides** — recommend: v1.1                                                    |
-| DP-12 | Git provider PAT mode UI                                | 03 §4.1        | Backend supports SSH + PAT flows; UI exposes Git tab already                         | ✅     | In                                                                                    |
-| DP-13 | Healthcheck-gated state in UI                           | 03 §4.2        | Backend tracks health; UI needs status-reflecting state                              | ✅     | In                                                                                    |
-| DP-14 | Deploy history filters (status/type) + search           | 03 §1          | Dokploy has it; OpenLander needs list endpoint with filter params                    | ⚠      | **User decides** — recommend: 1.0 basic (status filter), full search v1.1             |
+| #     | Feature                                                 | Guide ref      | Current state                                                                        | Effort | 1.0 decision                                                              |
+| ----- | ------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------------------------- |
+| DP-1  | Legacy one-call deploy creates project + first service  | 03 §2          | `/api/projects/deploy` remains available for MCP/API convenience                     | ✅     | In                                                                        |
+| DP-2  | Empty project → Add service flow                        | 03 §2 Step 4-6 | `/projects` supports name-only group creation; services are added inside the project | ✅     | In — aligns Project = group, Service = deployable                         |
+| DP-3  | Deploy button → Confirm modal → auto-nav to Deployments | 03 §2 Step 8   | Dokploy's UX; easy to replicate                                                      | ✅     | In                                                                        |
+| DP-4  | Build target auto-detect (multi-stage Dockerfile)       | 03 §2 Step 7   | `update_project_config` has `docker_target`; needs Dockerfile parser                 | ✅     | In (write a small parser, ~4h)                                            |
+| DP-5  | Nixpacks as default build method                        | 03 §2 Step 7   | No Nixpacks pipeline integration today                                               | 🔥     | Skip v1.0 — keep Dockerfile/Compose only                                  |
+| DP-6  | Kill Build button + endpoint                            | 03 §3.4        | No web endpoint                                                                      | ✅     | In (trivial `docker kill` wrapper)                                        |
+| DP-7  | Trigger label in deploy history                         | 03 §5          | Backend stores `chat/webhook/api`; UI doesn't surface                                | ✅     | In — map `chat`→`mcp-agent` in UI; backend keeps enum                     |
+| DP-8  | Runtime config view (from `docker inspect`)             | 03 §3.3        | Not exposed through API                                                              | ✅     | In (new read-only endpoint, ~4h)                                          |
+| DP-9  | Rollback to specific deploy                             | 03 §3.2        | `openlander_deploy.rollback_project` exists                                          | ✅     | In (wire UI to existing tool)                                             |
+| DP-10 | Watch Paths (selective rebuild)                         | 03 §2 Step 7   | No build system support                                                              | 🔥     | Skip v1.0                                                                 |
+| DP-11 | Preview deploys (ephemeral per branch)                  | 03 §1 scope    | `preview_deploy` action exists; UI flow missing                                      | ⚠      | **User decides** — recommend: v1.1                                        |
+| DP-12 | Git provider PAT mode UI                                | 03 §4.1        | Backend supports SSH + PAT flows; UI exposes Git tab already                         | ✅     | In                                                                        |
+| DP-13 | Healthcheck-gated state in UI                           | 03 §4.2        | Backend tracks health; UI needs status-reflecting state                              | ✅     | In                                                                        |
+| DP-14 | Deploy history filters (status/type) + search           | 03 §1          | Dokploy has it; OpenLander needs list endpoint with filter params                    | ⚠      | **User decides** — recommend: 1.0 basic (status filter), full search v1.1 |
 
 ---
 
@@ -191,7 +191,7 @@ Hand this list to the backend session.
 
 ⚠ items where I made a recommendation but user should ratify:
 
-1. **DP-2 Empty project flow** — recommend drop it; keep current repo-first. Agree?
+1. **DP-2 Empty project flow** — ratified for 1.0; Project is a group, not a repo.
 2. **DP-11 Preview deploys** — recommend v1.1. Agree?
 3. **DP-14 Deploy list filters** — recommend status filter in 1.0, full search v1.1. Agree?
 4. **LS-2 Semantic prefix** — recommend client-side heuristic in 1.0. Agree?

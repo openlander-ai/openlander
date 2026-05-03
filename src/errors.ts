@@ -26,6 +26,7 @@ export class OpenLanderError extends Error {
   toJSON(): Record<string, unknown> {
     return {
       error: this.code,
+      code: this.code,
       message: this.message,
       ...(this.details ? { details: this.details } : {}),
     };
@@ -236,6 +237,67 @@ export class ProjectAlreadyExistsError extends OpenLanderError {
   constructor(name: string) {
     super(`Project already exists: ${name}`, 'PROJECT_ALREADY_EXISTS', 409, { name });
     this.name = 'ProjectAlreadyExistsError';
+  }
+}
+
+export class ProjectSourceRemovedError extends OpenLanderError {
+  constructor() {
+    super(
+      'Project-level repository source was removed. Create a project group first, then deploy a service with /api/services/deploy.',
+      'PROJECT_SOURCE_REMOVED',
+      400,
+    );
+    this.name = 'ProjectSourceRemovedError';
+  }
+}
+
+export class ServiceSourceMissingError extends OpenLanderError {
+  constructor(serviceId: string) {
+    super(
+      `Service ${serviceId} is missing required source configuration`,
+      'SERVICE_SOURCE_MISSING',
+      400,
+      {
+        serviceId,
+      },
+    );
+    this.name = 'ServiceSourceMissingError';
+  }
+}
+
+export class InvalidSourceFieldsError extends OpenLanderError {
+  constructor(message = 'Deploy source fields do not match the selected source') {
+    super(message, 'INVALID_SOURCE_FIELDS', 400);
+    this.name = 'InvalidSourceFieldsError';
+  }
+}
+
+export class InvalidProjectTargetError extends OpenLanderError {
+  constructor(projectId: string, actualName: string, providedName: string) {
+    super(
+      `project_id '${projectId}' has name '${actualName}', not '${providedName}'`,
+      'INVALID_PROJECT_TARGET',
+      400,
+      { projectId, actualName, providedName },
+    );
+    this.name = 'InvalidProjectTargetError';
+  }
+}
+
+export class ServiceSelectionRequiredError extends OpenLanderError {
+  constructor(
+    projectId: string,
+    projectName: string,
+    candidates: Array<{ serviceId: string; serviceName: string; kind: string; source: string }>,
+  ) {
+    const count = candidates.length;
+    super(
+      `Project '${projectName}' has ${String(count)} deployable services. Specify a service.`,
+      'SERVICE_SELECTION_REQUIRED',
+      400,
+      { projectId, projectName, candidates },
+    );
+    this.name = 'ServiceSelectionRequiredError';
   }
 }
 

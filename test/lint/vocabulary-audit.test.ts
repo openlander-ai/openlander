@@ -98,6 +98,7 @@ const FROZEN_DEPLOYABLE_SERVICE_ACTIONS_1_0_RC2 = [
   'start_service',
   'restart_service',
   'deploy_service',
+  'rollback_service',
   'archive_service',
   'unarchive_service',
   'update_service_config',

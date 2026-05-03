@@ -1,6 +1,6 @@
 # OpenLander 0.1.0 — First Public Release
 
-OpenLander is a self-hosted deployment platform: paste a Git URL, get a working URL back. AI auto-recovery handles build failures and runtime crashes. An MCP server lets agents like Claude Code or Cursor deploy and operate projects directly.
+OpenLander is a self-hosted deployment platform: create a project workspace, add deployable services, and get working URLs back. AI auto-recovery handles build failures and runtime crashes. An MCP server lets agents like Claude Code or Cursor deploy and operate projects directly.
 
 This is OpenLander's first public release. The codebase has been in private development through an extended pre-release cycle; cutting at 0.1.0 (rather than 1.0.0) is deliberate — early adopters should expect API and configuration changes between 0.x versions while the project incorporates real-world feedback.
 
@@ -8,7 +8,7 @@ This is OpenLander's first public release. The codebase has been in private deve
 
 ### Deploys
 
-Paste a Git URL, OpenLander clones it, generates a Dockerfile if one isn't present (28+ frameworks supported including Next.js, NestJS, Vite, Nuxt, SvelteKit, Astro, FastAPI, Django, Rails, Spring Boot, Laravel, ASP.NET, Go, Rust), builds the image, and runs it behind Traefik. Multi-service projects work via `docker-compose.yml`. Monorepos are supported through Dockerfile scanning and a parent-child project model.
+Create a project group, then add services from Git repositories, Docker images, or compose stacks. Project groups are workspaces; services are the deployable units that own repo/image/branch/build settings. OpenLander clones Git sources, generates a Dockerfile if one isn't present (28+ frameworks supported including Next.js, NestJS, Vite, Nuxt, SvelteKit, Astro, FastAPI, Django, Rails, Spring Boot, Laravel, ASP.NET, Go, Rust), builds the image, and runs it behind Traefik. The one-call deploy path still supports "paste a Git URL, get a URL back" for MCP/API convenience by creating a group and its first service together. Multi-service projects work via `docker-compose.yml`. Monorepos are supported through Dockerfile scanning and service grouping.
 
 Build logs stream to the browser in real time with full ANSI color rendering. Blue-green redeploys provide zero-downtime updates with health checks; one-click rollback is always available. Per-project deploy locks prevent concurrent state changes.
 
@@ -26,7 +26,7 @@ You bring your own LLM keys. Supported providers: Google Gemini, Anthropic Claud
 
 ### MCP integration
 
-Agents speak to OpenLander through 4 composite MCP tools (`openlander_deploy`, `openlander_project`, `openlander_service`, `openlander_monitor`), each accepting an `action` parameter that selects from 99 underlying operations. An additional 11 platform debug tools sit behind a config flag.
+Agents speak to OpenLander through 5 composite MCP tools (`openlander_deploy`, `openlander_project`, `openlander_service`, `openlander_managed_service`, `openlander_monitor`), each accepting an `action` parameter. The default surface covers 74 unique operations, with 13 additional platform admin tools behind a config flag.
 
 Three transports are supported: stdio (for local agent processes), Streamable HTTP at `POST /mcp` (current MCP standard), and SSE at `GET /mcp/sse` for older clients. Bearer-token authentication protects remote transports.
 

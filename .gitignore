@@ -59,6 +59,7 @@ web/@/test-results/
 # Local agent state (oh-my-claudecode + Claude Code)
 .omc/
 .claude/
+.agents/
 
 # Playwright run artifacts
 test-results/

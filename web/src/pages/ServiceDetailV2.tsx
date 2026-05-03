@@ -52,7 +52,7 @@ import { useServiceMetrics } from '@/hooks/use-service-metrics';
 import { useDeployments } from '@/hooks/use-deployments';
 import { getService, type MetricsRange, type Service } from '@/lib/api/services';
 import { getProjectDomains, getServiceEnvVars, type DomainMapping } from '@/lib/api';
-import type { DeployLogSummary, Project } from '@/types';
+import type { DeployLogSummary } from '@/types';
 import { cn } from '@/lib/utils';
 
 type ServiceTabId =
@@ -281,11 +281,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           labelledBy="service-general"
           className="p-5"
         >
-          <GeneralTab
-            service={service}
-            project={project}
-            onEditConfig={() => setActiveTab('advanced')}
-          />
+          <GeneralTab service={service} onEditConfig={() => setActiveTab('advanced')} />
         </TabPanel>
 
         <TabPanel
@@ -387,15 +383,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
 
 // ─── Tab content ────────────────────────────────────────────────────────────
 
-function GeneralTab({
-  service,
-  project,
-  onEditConfig,
-}: {
-  service: ServiceNode;
-  project: Project | null;
-  onEditConfig: () => void;
-}) {
+function GeneralTab({ service, onEditConfig }: { service: ServiceNode; onEditConfig: () => void }) {
   const handleCopyUrl = () => {
     if (!service.url) return;
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -406,19 +394,22 @@ function GeneralTab({
   };
 
   const sourceRows: [string, string][] = [];
-  if (project?.repoUrl) {
-    const parsed = parseRepoUrl(project.repoUrl);
+  if (service.repoUrl) {
+    const parsed = parseRepoUrl(service.repoUrl);
     if (parsed) {
       sourceRows.push(['Provider', parsed.provider]);
       sourceRows.push(['Repository', parsed.path]);
     } else {
-      sourceRows.push(['Source', project.repoUrl]);
+      sourceRows.push(['Source', service.repoUrl]);
     }
   } else if (service.image) {
     sourceRows.push(['Source', 'Container image']);
   }
-  if (project?.branch) {
-    sourceRows.push(['Branch', project.branch]);
+  if (service.branch) {
+    sourceRows.push(['Configured branch', service.branch]);
+  }
+  if (service.deployedBranch) {
+    sourceRows.push(['Deployed branch', service.deployedBranch]);
   }
   if (service.image) {
     sourceRows.push(['Image', service.image]);

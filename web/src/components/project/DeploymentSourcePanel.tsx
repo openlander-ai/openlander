@@ -84,14 +84,10 @@ export function DeploymentSourcePanel({ projectId }: DeploymentSourcePanelProps)
           <div className="space-y-2">
             <div>
               <label className="text-xs font-body text-foreground/80">Repository URL</label>
-              <div className="text-sm font-mono text-foreground mt-1">{project.repoUrl}</div>
-            </div>
-            {project.branch && (
-              <div>
-                <label className="text-xs font-body text-foreground/80">Branch</label>
-                <div className="text-sm font-mono text-foreground mt-1">{project.branch}</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                Source is configured on the deployable service, not the project group.
               </div>
-            )}
+            </div>
           </div>
           <p className="text-xs font-body text-muted-foreground">
             Git repository settings cannot be changed after project creation.

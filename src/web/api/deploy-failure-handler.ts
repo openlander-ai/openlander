@@ -416,16 +416,21 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
 
   api.post('/projects/:id/env/scan', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-    if (!project.repo_url) return c.json({ error: 'Project has no repo URL' }, 400);
+    const deployable = await ctx.db.getDeployableForProject(project.id);
+    if (!deployable?.repo_url) {
+      return c.json({ error: 'SERVICE_SOURCE_MISSING', code: 'SERVICE_SOURCE_MISSING' }, 400);
+    }
 
     let clonePath: string | null = null;
     try {
-      const cloneResult = await cloneRepo({ repoUrl: project.repo_url, branch: project.branch });
+      const cloneResult = await cloneRepo({
+        repoUrl: deployable.repo_url,
+        branch: deployable.branch ?? undefined,
+      });
       clonePath = cloneResult.path;
       // PR 4 canonical-first: dockerfile_path on the deployable services
       // row supersedes the legacy projects column post-0012.
-      const deployable = await ctx.db.getDeployableForProject(project.id);
-      const dockerfilePath = deployable?.dockerfile_path ?? project.dockerfile_path;
+      const dockerfilePath = deployable.dockerfile_path ?? project.dockerfile_path;
       const scanResult = scanRepoEnvVars(clonePath, {
         dockerfilePath: dockerfilePath ?? undefined,
       });

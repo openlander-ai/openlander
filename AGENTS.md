@@ -11,7 +11,7 @@ CLI (Commander)  →  AppContext  →  Hono HTTP Server
         ┌───────────────┼───────────────┐
         │               │               │
     Pipeline        Tools/MCP        Web API
-    (deploy,        (99 ToolDefs,    (routes,
+    (deploy,        (104 ToolDefs,   (routes,
      docker,         AI SDK +         middleware,
      traefik)        MCP adapters)    WebSocket)
         │               │               │
@@ -105,7 +105,7 @@ src/
 │   ├── service-manager.ts   #   Infrastructure services
 │   └── service-adapters/    #   DB adapters (postgres, mysql, redis)
 ├── tools/                   # MCP Tool System
-│   ├── defs/                #   ToolDef definitions (20 files, 99 tools — internal; MCP surface is 4 composite tools + 11 opt-in platform)
+│   ├── defs/                #   ToolDef definitions (internal; MCP surface is 5 composites + 13 opt-in platform tools)
 │   │   ├── types.ts         #   ToolDef interface
 │   │   └── index.ts         #   Registry exports
 │   └── adapters/            #   Protocol adapters
@@ -305,16 +305,17 @@ interface ToolDef {
 }
 ```
 
-20 tool definition files, 99 internal tools. The MCP adapter bundles these into **4 composite tools** (`openlander_deploy|_project|_service|_monitor`, 70 actions) exposed by default, plus **11 platform tools** gated by `config.mcp.platformTools`. Two adapters convert ToolDefs to:
+20 tool definition files back the MCP/AI tool system (104 internal ToolDefs total). The MCP adapter exposes **5 composite tools** (`openlander_deploy|_project|_service|_managed_service|_monitor`) over 74 unique default operations, plus **13 platform tools** gated by `config.mcp.platformTools`. Two adapters convert ToolDefs to:
 
-- `src/tools/adapters/mcp.ts` — MCP protocol format (4 composite tools)
+- `src/tools/adapters/mcp.ts` — MCP protocol format (5 composite tools + gated platform tools)
 - `src/tools/adapters/ai-sdk.ts` — Vercel AI SDK format
 
-MCP exposes 4 composite tools, each accepting an `action` parameter (`action="help"` lists operations):
+MCP exposes 5 composite tools, each accepting an `action` parameter (`action="help"` lists operations):
 
 - `openlander_deploy` — deploy lifecycle (create_deploy_plan, execute_deploy_plan, etc.)
-- `openlander_project` — project management, env vars
-- `openlander_service` — infrastructure services, volumes
+- `openlander_project` — legacy project management, env vars
+- `openlander_service` — deployable app/worker lifecycle and config
+- `openlander_managed_service` — infrastructure services, databases, volumes
 - `openlander_monitor` — monitoring, alerts, automation
 
 ### Docker Abstraction Layer

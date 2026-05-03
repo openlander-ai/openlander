@@ -163,3 +163,5 @@ set_env_vars(
   }
 )
 ```
+
+MCP env changes save only by default. Redeploy the app with `redeploy_project` / `deploy_service`, or pass `defer_redeploy=false` to `set_env_vars`, for the new value to reach a running container.

@@ -245,6 +245,22 @@ export const translations = {
     archiveSuccess: 'Project archived',
     deleteSuccess: 'Project deleted',
     goBack: 'Go back',
+    danger: {
+      nav: 'Danger',
+      title: 'Danger zone',
+      description: 'Archive or permanently delete this project group.',
+      archiveTitle: 'Archive project',
+      archiveBody:
+        'Stop the project and hide it from default lists while preserving configuration.',
+      restoreTitle: 'Restore project',
+      restoreBody: 'Bring this archived project back to the default project list.',
+      deleteTitle: 'Permanently delete project',
+      deleteBody: 'Remove the project group, services, containers, configuration, and history.',
+      purgeDescription:
+        'This permanently deletes the project group and related runtime resources. This action cannot be undone.',
+      unarchiveDescription: 'Restore this archived project to the active project list.',
+      error: 'Project action failed',
+    },
   },
   rollback: {
     title: 'Rollback',

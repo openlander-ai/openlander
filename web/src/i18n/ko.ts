@@ -245,6 +245,21 @@ export const translations = {
     archiveSuccess: '프로젝트 아카이브됨',
     deleteSuccess: '프로젝트 삭제됨',
     goBack: '돌아가기',
+    danger: {
+      nav: '위험',
+      title: '위험 구역',
+      description: '프로젝트 그룹을 보관하거나 영구 삭제합니다.',
+      archiveTitle: '프로젝트 보관',
+      archiveBody: '컨테이너를 중지하고 기본 목록에서 숨기되 설정은 보존합니다.',
+      restoreTitle: '프로젝트 복원',
+      restoreBody: '보관된 프로젝트를 기본 프로젝트 목록으로 되돌립니다.',
+      deleteTitle: '프로젝트 영구 삭제',
+      deleteBody: '프로젝트 그룹, 서비스, 컨테이너, 설정, 기록을 삭제합니다.',
+      purgeDescription:
+        '프로젝트 그룹과 관련 런타임 리소스를 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
+      unarchiveDescription: '보관된 프로젝트를 활성 프로젝트 목록으로 복원합니다.',
+      error: '프로젝트 작업에 실패했습니다',
+    },
   },
   rollback: {
     title: '롤백',

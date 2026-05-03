@@ -22,8 +22,6 @@ import {
 export const projects = pgTable('projects', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),
-  repo_url: text('repo_url'),
-  branch: text('branch').default('main'),
   archived_at: text('archived_at'),
   created_at: text('created_at').default(sql`now()::text`),
   updated_at: text('updated_at').default(sql`now()::text`),
@@ -42,7 +40,7 @@ export const environments = pgTable(
       .notNull()
       .references(() => services.id, { onDelete: 'cascade' }),
     type: text('type', { enum: ['production', 'development'] }).notNull(),
-    branch: text('branch').notNull().default('main'),
+    branch: text('branch'),
     status: text('status', { enum: ['running', 'stopped', 'building', 'error', 'idle'] }).default(
       'idle',
     ),
@@ -268,7 +266,13 @@ export const services = pgTable(
     docker_target: text('docker_target'),
     build_context: text('build_context'),
     build_method: text('build_method'),
+    // Source metadata is deployable-owned. For managed services, source='image'
+    // and repo_url/branch stay NULL; image_url points at the backing image.
     source: text('source').notNull().default('git'),
+    repo_url: text('repo_url'),
+    // Nullable by design: NULL means repo default branch for git/compose
+    // services, and "not applicable" for image/managed services.
+    branch: text('branch'),
     image_url: text('image_url'),
     image_cmd: text('image_cmd'),
     pending_fix: text('pending_fix'),
