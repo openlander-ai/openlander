@@ -1,0 +1,51 @@
+name: Docs Quality
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.md'
+      - 'src/tools/defs/**'
+      - 'src/events/index.ts'
+      - 'src/monitor/**'
+      - 'scripts/validate-doc-claims.ts'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.md'
+      - 'src/tools/defs/**'
+      - 'src/events/index.ts'
+      - 'src/monitor/**'
+      - 'scripts/validate-doc-claims.ts'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-claims:
+    name: Validate Doc Claims
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate doc claims match code
+        run: npx tsx scripts/validate-doc-claims.ts
+
+  check-links:
+    name: Check Markdown Links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check markdown links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --offline --no-progress './README.md' './AGENTS.md' './docs/**/*.md'
+          fail: true

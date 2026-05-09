@@ -1,0 +1,189 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/geist-mono';
+@import '@fontsource-variable/jetbrains-mono';
+
+@import './styles/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Typography Scale ── */
+    --font-size-xs: 0.75rem; /* 12px */
+    --font-size-sm: 0.875rem; /* 14px */
+    --font-size-base: 1rem; /* 16px */
+    --font-size-lg: 1.125rem; /* 18px */
+    --font-size-xl: 1.25rem; /* 20px */
+    --font-size-2xl: 1.5rem; /* 24px */
+    --font-size-3xl: 1.875rem; /* 30px */
+
+    /*
+     * ── Tailwind utility tokens (v4-aligned) ──
+     *
+     * These power the legacy `bg-bg-panel`, `text-color-accent`, etc.
+     * Tailwind utility classes that V1 pages still emit. Values are
+     * the v4 light-mode palette from styles/tokens.css translated
+     * into formats Tailwind theme expects (hex / HSL).
+     *
+     * v4 has NO theme toggle (chat1.md decision — light-mode default,
+     * Vercel/Linear restrained). The dark-mode block is removed; if
+     * the OS preference matters in future, re-introduce via
+     * `@media (prefers-color-scheme: dark)`.
+     */
+    --bg-app: oklch(0.992 0.001 250);   /* v4 --bg */
+    --bg-panel: oklch(1 0 0);           /* v4 --panel */
+    --bg-subtle: oklch(0.982 0.002 250); /* v4 --panel-2 */
+    --bg-surface: oklch(1 0 0);
+    --bg-terminal: oklch(0.155 0.004 250); /* v4 dark --bg (terminal contrast) */
+    --color-accent: oklch(0.62 0.16 152);  /* v4 --primary (green) */
+    --color-ai: oklch(0.62 0.16 152);      /* v4: agent identity is the same green */
+    --color-success: oklch(0.62 0.15 150); /* v4 --success */
+    --color-warning: oklch(0.72 0.15 75);  /* v4 --warning */
+    --color-error: oklch(0.58 0.19 25);    /* v4 --error */
+
+    --text-primary: oklch(0.16 0.005 250);   /* v4 --fg */
+    --text-secondary: oklch(0.44 0.006 250); /* v4 --fg-muted */
+    --text-muted: oklch(0.62 0.005 250);     /* v4 --fg-subtle */
+
+    /* ── shadcn/ui — HSL approximations of v4 light palette ── */
+    --background: 220 33% 99%;   /* v4 --bg ≈ near-white */
+    --foreground: 220 8% 10%;    /* v4 --fg ≈ near-black */
+    --card: 0 0% 100%;
+    --card-foreground: 220 8% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 8% 10%;
+    --primary: 152 45% 45%;      /* v4 --primary ≈ green */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 12% 96%;
+    --secondary-foreground: 220 8% 10%;
+    --muted: 220 12% 96%;
+    --muted-foreground: 220 5% 45%;
+    --accent: 220 12% 96%;
+    --accent-foreground: 152 45% 45%;
+    --destructive: 25 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 8% 88%;
+    --input: 220 8% 88%;
+    --ring: 152 45% 45%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  [hidden] {
+    display: none !important;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    font-family:
+      'Inter Variable',
+      'Inter',
+      system-ui,
+      -apple-system,
+      sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+  }
+}
+
+/* ── Motion & Micro-interactions ── */
+@layer utilities {
+  /* Timeline item slide-in */
+  .timeline-item-enter {
+    animation: timeline-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Card hover micro-interaction — subtle shadow + border shift, no lift */
+  .card-hover {
+    transition:
+      box-shadow 0.2s ease,
+      border-color 0.2s ease;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  }
+  .card-hover:hover {
+    box-shadow:
+      0 1px 3px 0 rgba(0, 0, 0, 0.1),
+      0 1px 2px -1px rgba(0, 0, 0, 0.1);
+    border-color: hsl(var(--border));
+  }
+
+  /* Dokploy-style custom scrollbar for log/terminal surfaces */
+  .custom-logs-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+  .custom-logs-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .custom-logs-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-logs-scrollbar::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 20px;
+  }
+  .custom-logs-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+@keyframes timeline-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes bounce-dot {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

@@ -1,0 +1,7 @@
+[project]
+name = "python-pyproject-postgres-redis"
+version = "0.1.0"
+dependencies = [
+  "asyncpg>=0.29.0",
+  "redis>=5.0.0"
+]

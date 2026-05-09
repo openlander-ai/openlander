@@ -1,0 +1,1080 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { createModuleLogger } from '../../lib/logger.js';
+import { findDockerfiles } from '../../lib/repo-scanner.js';
+import { scanDockerfileArgs, scanEnvFile, scanEnvTemplate } from '../../lib/env-parser.js';
+import { scanForEnvUsage } from '../env-scan.js';
+import { cloneRepo } from '../git.js';
+import { resolveEnvVars } from '../resolve-env.js';
+import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
+import {
+  extractProjectName,
+  composeContainerName,
+  containerName as projectContainerName,
+} from '../helpers.js';
+import { parseImageUrl } from '../image-utils.js';
+import type {
+  DeployPlan,
+  PlanService,
+  PlanEnvEntry,
+  PlanBuildService,
+  DeployPlanComplexity,
+} from './types.js';
+import { PlanStateMachine } from './types.js';
+import { computeComplexity, computeMissingEnvVars } from './plan-utils.js';
+import type { Database } from '../../db/index.js';
+import type { DeployPipeline } from '../deploy.js';
+import type { EnvManager } from '../env.js';
+import type { ServiceManager } from '../service-manager.js';
+import type { AutoDetector } from '../auto-detect.js';
+import type { OpenLanderConfig } from '../../config/index.js';
+import type { EventBus } from '../../events/index.js';
+import type { ComposePipeline } from '../compose.js';
+import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
+
+const log = createModuleLogger('plan-engine');
+
+export interface CreatePlanOptions {
+  repoUrl?: string;
+  branch?: string;
+  name?: string;
+  source?: 'git' | 'image';
+  imageUrl?: string;
+  imageCmd?: string[];
+  containerPort?: number;
+  envVars?: Record<string, string>;
+  visibility?: 'internal' | 'quick-share' | 'shared';
+  environment?: string;
+  sshKeyPath?: string;
+  trigger?: string;
+  preferDockerfile?: boolean;
+  dockerfilePath?: string;
+  dockerTarget?: string;
+  projectId?: string;
+}
+
+interface PlanExecutionContext {
+  visibility?: 'internal' | 'quick-share' | 'shared';
+  environment?: string;
+  sshKeyPath?: string;
+  trigger?: string;
+  imageCmd?: string[];
+  containerPort?: number;
+}
+
+export interface PlanUpdates {
+  env?: { provided?: Record<string, string> } | Record<string, string>;
+  build?: Partial<DeployPlan['build']>;
+  services?: PlanService[];
+  health?: Partial<DeployPlan['health']>;
+}
+
+export interface PlanEngineDeps {
+  db: Database;
+  pipeline: DeployPipeline;
+  env: EnvManager;
+  serviceManager: ServiceManager;
+  autoDetector: AutoDetector;
+  config: OpenLanderConfig;
+  events?: EventBus;
+  composePipeline?: ComposePipeline;
+}
+
+const SERVICE_ENV_VARS: Record<string, string> = {
+  postgresql: 'DATABASE_URL',
+  mysql: 'MYSQL_URL',
+  redis: 'REDIS_URL',
+  mongodb: 'MONGODB_URI',
+  rabbitmq: 'RABBITMQ_URL',
+};
+
+export interface ExecutePlanResult {
+  status: 'building' | 'failed';
+  plan_id: string;
+  project_name: string;
+  project_id?: string;
+  estimated_seconds?: number;
+  error?: string;
+}
+
+export class PlanEngine {
+  private db: Database;
+  private pipeline: DeployPipeline;
+  private env: EnvManager;
+  private serviceManager: ServiceManager;
+  private events?: EventBus;
+  private composePipeline?: ComposePipeline;
+
+  constructor(deps: PlanEngineDeps) {
+    this.db = deps.db;
+    this.pipeline = deps.pipeline;
+    this.env = deps.env;
+    this.serviceManager = deps.serviceManager;
+    this.events = deps.events;
+    this.composePipeline = deps.composePipeline;
+  }
+
+  private preparePlanForStorage(plan: DeployPlan): DeployPlan {
+    return plan;
+  }
+
+  private resolveBuildConfig(
+    clonePath: string,
+    opts: CreatePlanOptions,
+    warnings: string[],
+    detectedEnv: PlanEnvEntry[],
+  ): {
+    buildMethod: 'dockerfile' | 'compose';
+    userDockerfile: string;
+    generatedDockerfile?: string;
+    composeFilePath?: string;
+    composeBuildServices?: PlanBuildService[];
+    relativeDockerfiles: string[];
+  } {
+    const dockerfiles = findDockerfiles(clonePath);
+    const relativeDockerfiles = dockerfiles.map((d) => relative(clonePath, d));
+    let userDockerfile = opts.dockerfilePath ?? 'Dockerfile';
+    let dockerfileExists = existsSync(join(clonePath, userDockerfile));
+
+    // If the specified/default Dockerfile doesn't exist but we found one elsewhere, use it.
+    const firstFound = relativeDockerfiles[0];
+    if (!dockerfileExists && firstFound) {
+      userDockerfile = firstFound;
+      dockerfileExists = true;
+      warnings.push(
+        `Specified "${opts.dockerfilePath ?? 'Dockerfile'}" not found; using discovered ${userDockerfile}`,
+      );
+    }
+
+    if (relativeDockerfiles.length > 1) {
+      warnings.push(
+        `${String(relativeDockerfiles.length)} Dockerfiles found: ${relativeDockerfiles.join(', ')}`,
+      );
+    }
+
+    let buildMethod: 'dockerfile' | 'compose' = 'dockerfile';
+    let composeFilePath: string | undefined;
+    let composeBuildServices: PlanBuildService[] | undefined;
+    let generatedDockerfile: string | undefined;
+
+    if (!opts.preferDockerfile && !opts.dockerfilePath && this.composePipeline) {
+      const detectedComposeFile = this.composePipeline.detectComposeFile(clonePath);
+      if (detectedComposeFile) {
+        buildMethod = 'compose';
+        composeFilePath = relative(clonePath, detectedComposeFile);
+        const parsed = this.composePipeline.parseComposeFile(detectedComposeFile);
+
+        composeBuildServices = parsed.services.map((svc) => {
+          let dockerfile: string | undefined;
+          if (typeof svc.build === 'string') {
+            const candidate = join(svc.build, 'Dockerfile');
+            dockerfile = existsSync(join(clonePath, candidate)) ? candidate : svc.build;
+          } else if (svc.build && typeof svc.build === 'object') {
+            dockerfile = svc.build.dockerfile
+              ? join(svc.build.context, svc.build.dockerfile)
+              : join(svc.build.context, 'Dockerfile');
+          }
+
+          let port: number | undefined;
+          if (svc.ports?.[0]) {
+            const portMatch = svc.ports[0].match(/:(\d+)/);
+            if (portMatch?.[1]) {
+              port = parseInt(portMatch[1], 10);
+            }
+          }
+
+          return {
+            name: svc.name,
+            dockerfile,
+            port,
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+            image: svc.image,
+            depends_on: svc.dependsOn,
+            command: svc.command,
+            entrypoint: svc.entrypoint,
+            restart: svc.restart,
+            healthcheck: svc.healthcheck,
+          };
+        });
+
+        for (const svc of parsed.services) {
+          if (svc.envFile) {
+            for (const envFileRef of svc.envFile) {
+              const fullPath = join(clonePath, envFileRef.path);
+              if (!existsSync(fullPath)) {
+                detectedEnv.push(...scanEnvTemplate(clonePath, envFileRef.path, detectedEnv));
+                if (envFileRef.required) {
+                  warnings.push(
+                    `Service "${svc.name}" requires env_file "${envFileRef.path}" but file not in repo`,
+                  );
+                }
+              } else {
+                detectedEnv.push(...scanEnvFile(fullPath, envFileRef.path, detectedEnv));
+              }
+            }
+          }
+
+          if (!svc.volumes) {
+            continue;
+          }
+
+          for (const vol of svc.volumes) {
+            const bindParts = vol.split(':');
+            const hostPath = bindParts[0];
+            if (bindParts.length < 2 || !hostPath) {
+              continue;
+            }
+            if (!hostPath.startsWith('.') && !hostPath.startsWith('/')) {
+              continue;
+            }
+
+            const absHost = hostPath.startsWith('.') ? join(clonePath, hostPath) : hostPath;
+            if (!existsSync(absHost) && hostPath.startsWith('.')) {
+              warnings.push(`Service "${svc.name}" mounts "${hostPath}" but file not in repo`);
+            }
+          }
+        }
+      }
+    }
+
+    if (buildMethod === 'dockerfile' && !dockerfileExists) {
+      generatedDockerfile = 'auto-generated';
+      warnings.push('No Dockerfile found; will auto-generate one during build');
+    }
+
+    return {
+      buildMethod,
+      userDockerfile,
+      generatedDockerfile,
+      composeFilePath,
+      composeBuildServices,
+      relativeDockerfiles,
+    };
+  }
+
+  private async detectPlanServices(clonePath: string): Promise<PlanService[]> {
+    log.info({ clonePath }, 'Analyzing infrastructure');
+    const existingServices = await this.db.listServices();
+    const infraAnalysis = analyzeInfrastructure(clonePath, existingServices);
+
+    const services: PlanService[] = [];
+    for (const missingService of infraAnalysis.missing) {
+      services.push({
+        type: missingService.type,
+        action: 'create',
+        connect_via:
+          SERVICE_ENV_VARS[missingService.type] || `${missingService.type.toUpperCase()}_URL`,
+      });
+    }
+
+    for (const availableService of infraAnalysis.available) {
+      services.push({
+        type: availableService.type,
+        action: 'reuse',
+        name: availableService.name,
+        connect_via:
+          SERVICE_ENV_VARS[availableService.type] || `${availableService.type.toUpperCase()}_URL`,
+      });
+    }
+
+    return services;
+  }
+
+  private detectEnvVars(
+    clonePath: string,
+    userDockerfile: string,
+    detectedEnv: PlanEnvEntry[],
+  ): void {
+    // Scope env scanning to the build context directory (derived from dockerfile path).
+    // e.g., 'services/api/Dockerfile' → scopeDir='services/api'
+    // Falls back to full repo scan when Dockerfile is at root.
+    const scopeDir = userDockerfile.includes('/')
+      ? userDockerfile.substring(0, userDockerfile.lastIndexOf('/'))
+      : undefined;
+
+    const ENV_TEMPLATE_FILES = ['.env.example', '.env.sample', '.env.template'];
+    for (const envFileName of ENV_TEMPLATE_FILES) {
+      const envPath = scopeDir
+        ? join(clonePath, scopeDir, envFileName)
+        : join(clonePath, envFileName);
+      if (!existsSync(envPath)) {
+        continue;
+      }
+      const envSource = scopeDir ? join(scopeDir, envFileName) : envFileName;
+      detectedEnv.push(...scanEnvFile(envPath, envSource, detectedEnv));
+    }
+    detectedEnv.push(...scanDockerfileArgs(clonePath, userDockerfile, detectedEnv));
+
+    const sourceResult = scanForEnvUsage(clonePath, scopeDir);
+    for (const variable of sourceResult.vars) {
+      if (detectedEnv.some((entry) => entry.key === variable.key)) {
+        continue;
+      }
+
+      detectedEnv.push({
+        key: variable.key,
+        source: variable.files[0]?.path ?? 'source',
+        required: !variable.optional,
+      });
+    }
+  }
+
+  private buildExecutionContext(opts: CreatePlanOptions): PlanExecutionContext | undefined {
+    const execution: PlanExecutionContext = {
+      visibility: opts.visibility,
+      environment: opts.environment,
+      sshKeyPath: opts.sshKeyPath,
+      trigger: opts.trigger,
+      imageCmd: opts.imageCmd,
+      containerPort: opts.containerPort,
+    };
+
+    if (
+      !execution.visibility &&
+      !execution.environment &&
+      !execution.sshKeyPath &&
+      !execution.trigger &&
+      !execution.imageCmd &&
+      execution.containerPort === undefined
+    ) {
+      return undefined;
+    }
+
+    return execution;
+  }
+
+  private getExecutionContext(plan: DeployPlan): PlanExecutionContext {
+    return (plan as DeployPlan & { execution?: PlanExecutionContext }).execution ?? {};
+  }
+
+  private getDeployMode(plan: DeployPlan): 'single' | 'monorepo' | 'compose' {
+    if (plan.build.method === 'compose') {
+      return 'compose';
+    }
+
+    if (plan.build.dockerfile !== 'Dockerfile') {
+      return 'single';
+    }
+
+    if ((plan.build.dockerfiles_found?.length ?? 0) > 1) {
+      return 'monorepo';
+    }
+
+    return 'single';
+  }
+
+  private buildAutoEnvVars(services: PlanService[]): Record<string, string> {
+    const autoEnvVars: Record<string, string> = {};
+    for (const service of services) {
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+      const envVarName = SERVICE_ENV_VARS[service.type];
+      if (envVarName) {
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+        autoEnvVars[envVarName] = `${service.type}://localhost`;
+      }
+    }
+    return autoEnvVars;
+  }
+
+  private assemblePlan(params: {
+    planId: string;
+    status: DeployPlan['status'];
+    complexity: DeployPlanComplexity;
+    projectName: string;
+    repoUrl: string;
+    planBranch: string;
+    commitSha: string;
+    imageUrl?: string;
+    buildMethod: DeployPlan['build']['method'];
+    userDockerfile: string;
+    dockerTarget?: string;
+    generatedDockerfile?: string;
+    composeFilePath?: string;
+    composeBuildServices?: PlanBuildService[];
+    relativeDockerfiles: string[];
+    services: PlanService[];
+    autoEnvVars: Record<string, string>;
+    requiredEnvVars: string[];
+    envVars: Record<string, string>;
+    detectedEnv: PlanEnvEntry[];
+    missing: string[];
+    warnings: string[];
+  }): DeployPlan {
+    const now = new Date().toISOString();
+    const dockerfileDir = params.userDockerfile.includes('/')
+      ? params.userDockerfile.substring(0, params.userDockerfile.lastIndexOf('/'))
+      : '.';
+
+    const composeBuildServicesWithUrls = params.composeBuildServices?.map((service) => ({
+      name: service.name,
+      dockerfile: service.dockerfile,
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+      port: service.port,
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+      image: service.image,
+      depends_on: service.depends_on,
+      command: service.command,
+      entrypoint: service.entrypoint,
+      restart: service.restart,
+      healthcheck: service.healthcheck,
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+      internal_url: service.port
+        ? // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+          `http://${composeContainerName(params.projectName, service.name)}:${String(service.port)}`
+        : `http://${composeContainerName(params.projectName, service.name)}`,
+    }));
+
+    const internalUrl = `http://${projectContainerName(params.projectName)}`;
+    const internalUrlNote = 'Port determined after build. Set EXPOSE in Dockerfile.';
+
+    return {
+      plan_id: params.planId,
+      status: params.status,
+      complexity: params.complexity,
+      app: {
+        name: params.projectName,
+        source: {
+          repo_url: params.repoUrl,
+          branch: params.planBranch,
+          commit_sha: params.commitSha,
+          image_url: params.imageUrl,
+        },
+      },
+      build: {
+        method: params.buildMethod,
+        dockerfile: params.userDockerfile,
+        context: dockerfileDir,
+        target: params.dockerTarget,
+        generated_dockerfile: params.generatedDockerfile,
+        compose_file: params.composeFilePath,
+        compose_services: composeBuildServicesWithUrls,
+        dockerfiles_found:
+          params.relativeDockerfiles.length > 0 ? params.relativeDockerfiles : undefined,
+      },
+      services: params.services,
+      secrets: [],
+      env: {
+        auto: params.autoEnvVars,
+        required: params.requiredEnvVars,
+        provided: params.envVars,
+        detected: params.detectedEnv,
+      },
+      health: {
+        path: '/',
+        retries: 10,
+        interval_ms: 2000,
+      },
+      missing: params.missing,
+      warnings: params.warnings,
+      created_at: now,
+      updated_at: now,
+      internal_url: internalUrl,
+      internal_url_note: internalUrlNote,
+    };
+  }
+
+  private detectServiceDependencies(envVars: Record<string, string>, warnings: string[]): void {
+    const olHostPattern = /ol-[a-z0-9][\w-]*/gi;
+    const referencedServices: string[] = [];
+    for (const [key, value] of Object.entries(envVars)) {
+      const matches = value.match(olHostPattern);
+      if (matches) {
+        for (const match of matches) {
+          referencedServices.push(`${key} → ${match}`);
+        }
+      }
+    }
+    if (referencedServices.length > 0) {
+      warnings.push(
+        `Env vars reference other OpenLander containers: ${referencedServices.join(', ')}. ` +
+          'Ensure those projects are deployed and running first, or the app may fail to connect at startup.',
+      );
+    }
+  }
+
+  private detectPersistenceWarnings(clonePath: string, warnings: string[]): void {
+    const depFiles: { name: string; pattern: RegExp }[] = [
+      {
+        name: 'package.json',
+        pattern: /better-sqlite3|"sqlite3"|sql\.js|drizzle.*sqlite|prisma.*sqlite/i,
+      },
+      { name: 'requirements.txt', pattern: /sqlite|peewee|sqlalchemy/i },
+      { name: 'pyproject.toml', pattern: /sqlite|peewee|sqlalchemy/i },
+      { name: 'Gemfile', pattern: /sqlite3/i },
+      { name: 'go.mod', pattern: /go-sqlite3|modernc\.org\/sqlite/i },
+      { name: 'Cargo.toml', pattern: /rusqlite|diesel.*sqlite/i },
+    ];
+
+    for (const { name, pattern } of depFiles) {
+      const filePath = join(clonePath, name);
+      if (!existsSync(filePath)) continue;
+
+      try {
+        const content = readFileSync(filePath, 'utf-8');
+        if (pattern.test(content)) {
+          warnings.push(
+            'SQLite dependency detected. Data stored in SQLite will be lost on container restart ' +
+              'unless a persistent volume is mounted. Use add_volume to attach storage at the ' +
+              'database path (e.g., /app/data).',
+          );
+          return;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  async createPlan(opts: CreatePlanOptions): Promise<DeployPlan> {
+    const { repoUrl, branch, name, envVars = {}, sshKeyPath, source, imageUrl, projectId } = opts;
+    const { nanoid } = await import('nanoid');
+    const planId = `plan_${nanoid(12)}`;
+
+    if (source === 'image' || imageUrl) {
+      const normalizedImageUrl = imageUrl?.trim();
+      if (!normalizedImageUrl) {
+        throw new Error('imageUrl is required when source is "image"');
+      }
+
+      const parsedImage = parseImageUrl(normalizedImageUrl);
+      if (!parsedImage) {
+        throw new Error(`Invalid Docker image URL: ${normalizedImageUrl}`);
+      }
+
+      const imageNameParts = parsedImage.name.split('/');
+      const fallbackProjectName = imageNameParts[imageNameParts.length - 1] || parsedImage.name;
+      const projectName = name || fallbackProjectName;
+      const initialStatus: DeployPlan['status'] = 'ready';
+      const complexity: DeployPlanComplexity = 'simple';
+
+      const plan = this.assemblePlan({
+        planId,
+        status: initialStatus,
+        complexity,
+        projectName,
+        repoUrl: '',
+        planBranch: '',
+        commitSha: '',
+        imageUrl: normalizedImageUrl,
+        buildMethod: 'image',
+        userDockerfile: 'Dockerfile',
+        dockerTarget: opts.dockerTarget,
+        relativeDockerfiles: [],
+        services: [],
+        autoEnvVars: {},
+        requiredEnvVars: [],
+        envVars,
+        detectedEnv: [],
+        missing: [],
+        warnings: [],
+      });
+
+      const execution = this.buildExecutionContext(opts);
+      if (execution) {
+        (plan as DeployPlan & { execution?: PlanExecutionContext }).execution = execution;
+      }
+
+      log.info({ planId, status: initialStatus, buildMethod: 'image' }, 'Creating deploy plan');
+      await this.db.createDeployPlan({
+        id: planId,
+        projectName,
+        status: initialStatus,
+        complexity,
+        planJson: JSON.stringify(this.preparePlanForStorage(plan)),
+        commitSha: '',
+      });
+
+      return plan;
+    }
+
+    if (!repoUrl) {
+      throw new Error('repoUrl is required when source is "git" or undefined');
+    }
+
+    const projectName = name || extractProjectName(repoUrl);
+
+    log.info({ repoUrl, branch }, 'Cloning repository');
+    const cloneResult = await cloneRepo({ repoUrl, branch, sshKeyPath });
+    const clonePath = cloneResult.path;
+    const commitSha = cloneResult.commitSha;
+
+    const warnings: string[] = [];
+    const detectedEnv: PlanEnvEntry[] = [];
+    const {
+      buildMethod,
+      userDockerfile,
+      generatedDockerfile,
+      composeFilePath,
+      composeBuildServices,
+      relativeDockerfiles,
+    } = this.resolveBuildConfig(clonePath, opts, warnings, detectedEnv);
+
+    const services = await this.detectPlanServices(clonePath);
+    this.detectEnvVars(clonePath, userDockerfile, detectedEnv);
+    this.detectPersistenceWarnings(clonePath, warnings);
+    this.detectServiceDependencies(envVars, warnings);
+
+    const requiredEnvVars = Array.from(
+      new Set(detectedEnv.filter((e) => e.required).map((e) => e.key)),
+    );
+    const autoEnvVars = this.buildAutoEnvVars(services);
+
+    // Fetch existing env vars from database if projectId is provided
+    const existingEnvVars = projectId ? await this.env.getAll(projectId) : {};
+
+    const missingEntries = computeMissingEnvVars(
+      detectedEnv,
+      envVars,
+      autoEnvVars,
+      existingEnvVars,
+    );
+    const missing = missingEntries.map((entry) => entry.key);
+
+    const isCompose = buildMethod === 'compose';
+    const serviceCount = isCompose ? (composeBuildServices?.length ?? 0) : services.length;
+    const complexity = computeComplexity({
+      missingCount: missing.length,
+      serviceCount,
+      isCompose,
+    });
+
+    const initialStatus = missing.length > 0 ? 'needs_input' : 'ready';
+
+    const planBranch = cloneResult.branch;
+    const plan = this.assemblePlan({
+      planId,
+      status: initialStatus,
+      complexity,
+      projectName,
+      repoUrl,
+      planBranch,
+      commitSha,
+      buildMethod,
+      userDockerfile,
+      dockerTarget: opts.dockerTarget,
+      generatedDockerfile,
+      composeFilePath,
+      composeBuildServices,
+      relativeDockerfiles,
+      services,
+      autoEnvVars,
+      requiredEnvVars,
+      envVars,
+      detectedEnv,
+      missing,
+      warnings,
+    });
+
+    const execution = this.buildExecutionContext(opts);
+    if (execution) {
+      (plan as DeployPlan & { execution?: PlanExecutionContext }).execution = execution;
+    }
+
+    log.info({ planId, status: initialStatus, buildMethod }, 'Creating deploy plan');
+    await this.db.createDeployPlan({
+      id: planId,
+      projectName,
+      status: initialStatus,
+      complexity,
+      planJson: JSON.stringify(this.preparePlanForStorage(plan)),
+      commitSha,
+    });
+
+    return plan;
+  }
+
+  async updatePlan(planId: string, updates: PlanUpdates): Promise<DeployPlan> {
+    const row = await this.db.getDeployPlan(planId);
+    if (!row) {
+      throw new Error(`Deploy plan not found: ${planId}`);
+    }
+
+    const plan = JSON.parse(row.plan_json) as DeployPlan;
+
+    const terminalStatuses = ['executing', 'completed', 'failed', 'rolled_back'];
+    if (terminalStatuses.includes(plan.status)) {
+      throw new Error(`Cannot update plan in ${plan.status} status`);
+    }
+
+    const merged: DeployPlan = {
+      ...plan,
+      env: {
+        ...plan.env,
+        provided: plan.env.provided,
+      },
+      build: {
+        ...plan.build,
+        ...(updates.build || {}),
+      },
+    };
+
+    if (updates.env) {
+      const envUpdate = updates.env;
+      if ('provided' in envUpdate) {
+        // Structured: { provided: { KEY: "val" } }
+        const structured: { provided?: Record<string, string> } = envUpdate;
+        if (structured.provided) {
+          merged.env.provided = { ...plan.env.provided, ...structured.provided };
+        }
+      } else {
+        // Flat: { KEY: "val" } → treat as provided
+        merged.env.provided = { ...plan.env.provided, ...(envUpdate as Record<string, string>) };
+      }
+    }
+
+    if (updates.services) {
+      merged.services = updates.services;
+    }
+    if (updates.health) {
+      merged.health = { ...plan.health, ...updates.health };
+    }
+
+    const requiredEntries: PlanEnvEntry[] = merged.env.required.map((key) => {
+      const detected = merged.env.detected.find((entry) => entry.key === key && entry.required);
+      return detected || { key, source: 'required', required: true };
+    });
+
+    const missingEntries = computeMissingEnvVars(
+      requiredEntries,
+      merged.env.provided,
+      merged.env.auto,
+    );
+    const missing = missingEntries.map((entry) => entry.key);
+    merged.missing = missing;
+
+    merged.status = missing.length === 0 ? 'ready' : 'needs_input';
+    merged.updated_at = new Date().toISOString();
+
+    log.info({ planId, status: merged.status }, 'Updating deploy plan');
+    await this.db.updateDeployPlan(planId, {
+      status: merged.status,
+      planJson: JSON.stringify(this.preparePlanForStorage(merged)),
+    });
+
+    return merged;
+  }
+
+  async executePlan(
+    planId: string,
+    deployOnly?: string[],
+    lockSessionId?: string,
+  ): Promise<ExecutePlanResult> {
+    // Re-read from DB to prevent race condition
+    const freshRow = await this.db.getDeployPlan(planId);
+    if (!freshRow) {
+      throw new Error(`Plan not found: ${planId}`);
+    }
+    const freshPlan = JSON.parse(freshRow.plan_json) as DeployPlan;
+    if (freshPlan.status === 'needs_input') {
+      const missingKeys = freshPlan.missing.join(', ') || 'unknown';
+      throw new Error(
+        `Plan requires missing environment variables: ${missingKeys}. ` +
+          `Call update_deploy_plan to provide them, then execute again.`,
+      );
+    }
+    if (freshPlan.status !== 'ready') {
+      throw new Error(`Plan status is "${freshPlan.status}" — only "ready" plans can be executed.`);
+    }
+
+    const PROJECT_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+    if (!PROJECT_NAME_REGEX.test(freshPlan.app.name)) {
+      throw new Error(
+        `Invalid project name "${freshPlan.app.name}": must contain only lowercase letters, numbers, and hyphens, starting with a letter or number`,
+      );
+    }
+
+    const plan = freshPlan;
+
+    const existingProject = await this.db.getProjectByName(plan.app.name);
+    let lockProjectId: string | null = null;
+    let deployLockReleased = false;
+    const safeReleaseDeployLock = () => {
+      if (!lockProjectId || deployLockReleased) {
+        return;
+      }
+
+      const projectId = lockProjectId;
+      deployLockReleased = true;
+      void this.db
+        .releaseDeployLock(projectId, lockSessionId ?? `plan-${planId}`)
+        .catch((error: unknown) => {
+          log.warn({ planId, projectId, error }, 'Failed to release deploy lock');
+        });
+    };
+
+    if (existingProject) {
+      const lockSession = lockSessionId ?? `plan-${planId}`;
+      // Release happens asynchronously in event listeners (deploy:success /
+      // deploy:failed / compose:up / compose:failed) via `safeReleaseDeployLock`,
+      // so we use the bare acquire helper instead of `withDeployLock`.
+      await acquireDeployLockOrThrow(this.db, {
+        projectId: existingProject.id,
+        sessionId: lockSession,
+      });
+      lockProjectId = existingProject.id;
+    }
+
+    const executingPlan = PlanStateMachine.transition(plan, 'executing');
+    await this.db.updateDeployPlan(planId, {
+      status: 'executing',
+      planJson: JSON.stringify(this.preparePlanForStorage(executingPlan)),
+    });
+
+    try {
+      const mergedEnv = await resolveEnvVars(
+        {
+          projectId: plan.project_id ?? plan.app.name,
+          autoEnvVars: plan.env.auto,
+          inlineEnvVars: plan.env.provided,
+        },
+        { env: this.env },
+      );
+
+      for (const service of plan.services) {
+        if (service.action === 'create') {
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+          log.info({ serviceType: service.type }, 'Creating service');
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+          const serviceName = service.name || `${service.type}-${String(Date.now())}`;
+          const created = await this.serviceManager.create({
+            name: serviceName,
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+            template: service.type,
+          });
+          // Use created service's credentials for env injection
+          if (created.credentials) {
+            const creds = JSON.parse(created.credentials) as { connectionString?: string };
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+            const envVarName = SERVICE_ENV_VARS[service.type];
+            if (envVarName && creds.connectionString) {
+              mergedEnv[envVarName] = creds.connectionString;
+            }
+          }
+        }
+      }
+
+      log.info({ planId, planCommit: plan.app.source.commit_sha }, 'Executing plan (non-blocking)');
+
+      const deployMode = this.getDeployMode(plan);
+      const execution = this.getExecutionContext(plan);
+      const isImage = plan.build.method === 'image';
+      const propagatedLockSession = lockProjectId ? (lockSessionId ?? `plan-${planId}`) : undefined;
+
+      let startedProjectId: string;
+      let startedProjectName: string;
+      let preflightError: string | undefined;
+
+      if (deployMode === 'monorepo') {
+        const cloneResult = await cloneRepo({
+          repoUrl: plan.app.source.repo_url,
+          branch: plan.app.source.branch,
+          sshKeyPath: execution.sshKeyPath,
+        });
+        const dockerfiles =
+          deployOnly && deployOnly.length > 0
+            ? deployOnly
+            : plan.build.dockerfiles_found && plan.build.dockerfiles_found.length > 0
+              ? plan.build.dockerfiles_found
+              : [plan.build.dockerfile];
+        // TODO(0.1.x): MonorepoConfig does not have _lockSessionId — monorepo deploys
+        // triggered via the plan engine are still vulnerable to the lock-session
+        // ownership regression fixed for single-project deploys. Add _lockSessionId
+        // to MonorepoConfig and thread it through startMonorepoDeploy / deployMonorepo
+        // when the plumbing is in place.
+        const startResult = await this.pipeline.startMonorepoDeploy({
+          repoUrl: plan.app.source.repo_url,
+          branch: plan.app.source.branch,
+          clonePath: cloneResult.path,
+          commitSha: cloneResult.commitSha,
+          dockerfiles,
+          envVars: mergedEnv,
+          name: plan.app.name,
+          ...(execution.visibility ? { visibility: execution.visibility } : {}),
+          ...(execution.trigger
+            ? { trigger: execution.trigger as 'chat' | 'webhook' | 'api' }
+            : {}),
+        });
+
+        startedProjectId = startResult.parentProjectId;
+        startedProjectName = startResult.parentName;
+      } else {
+        const isCompose = deployMode === 'compose';
+        const startResult = await this.pipeline.startDeploy({
+          repoUrl: plan.app.source.repo_url,
+          branch: plan.app.source.branch,
+          name: plan.app.name,
+          envVars: mergedEnv,
+          ...(isImage ? { source: 'image' as const } : {}),
+          ...(isImage && plan.app.source.image_url ? { imageUrl: plan.app.source.image_url } : {}),
+          ...(execution.imageCmd ? { imageCmd: execution.imageCmd } : {}),
+          ...(execution.containerPort !== undefined
+            ? { containerPort: execution.containerPort }
+            : {}),
+          preferDockerfile: isCompose ? false : !plan.build.generated_dockerfile,
+          dockerfilePath:
+            !isCompose && plan.build.dockerfile !== 'Dockerfile'
+              ? plan.build.dockerfile
+              : undefined,
+          dockerTarget: plan.build.target,
+          buildContext: plan.build.context !== '.' ? plan.build.context : undefined,
+          composeServices: isCompose ? deployOnly : undefined,
+          ...(execution.visibility ? { visibility: execution.visibility } : {}),
+          ...(execution.environment ? { environment: execution.environment } : {}),
+          ...(execution.sshKeyPath ? { sshKeyPath: execution.sshKeyPath } : {}),
+          ...(execution.trigger
+            ? { trigger: execution.trigger as 'chat' | 'webhook' | 'api' }
+            : {}),
+          // Propagate the plan-engine's lock session so that startDeploy's
+          // inner deploy() runs inline under the same session (skipping a new
+          // acquire that would conflict with the already-held lock).
+          _lockSessionId: propagatedLockSession,
+        });
+
+        if (startResult.status === 'preflight_failed') {
+          preflightError = startResult.preflightError;
+        }
+
+        startedProjectId = startResult.projectId;
+        startedProjectName = startResult.projectName;
+      }
+
+      if (this.events) {
+        const unsubSuccess = this.events.on('deploy:success', (payload) => {
+          if (payload.projectId === startedProjectId) {
+            const completed = PlanStateMachine.transition(executingPlan, 'completed');
+            void this.db
+              .updateDeployPlan(planId, {
+                status: 'completed',
+                planJson: JSON.stringify(this.preparePlanForStorage(completed)),
+              })
+              .catch((error: unknown) => {
+                log.warn({ planId, error }, 'Failed to mark deploy plan completed');
+              });
+            safeReleaseDeployLock();
+            log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
+            cleanup();
+          }
+        });
+
+        const unsubFailed = this.events.on('deploy:failed', (payload) => {
+          if (payload.projectId === startedProjectId) {
+            const errMsg = payload.error || 'Deploy failed';
+            const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
+            void this.db
+              .updateDeployPlan(planId, {
+                status: 'failed',
+                planJson: JSON.stringify(this.preparePlanForStorage(failed)),
+                errorMessage: errMsg,
+              })
+              .catch((error: unknown) => {
+                log.warn({ planId, error }, 'Failed to mark deploy plan failed');
+              });
+            safeReleaseDeployLock();
+            log.info(
+              { planId, projectId: payload.projectId, error: errMsg },
+              'Plan failed via event',
+            );
+            cleanup();
+          }
+        });
+
+        const unsubComposeUp = this.events.on('compose:up', (payload) => {
+          if (payload.projectId === startedProjectId) {
+            const completed = PlanStateMachine.transition(executingPlan, 'completed');
+            void this.db
+              .updateDeployPlan(planId, {
+                status: 'completed',
+                planJson: JSON.stringify(this.preparePlanForStorage(completed)),
+              })
+              .catch((error: unknown) => {
+                log.warn({ planId, error }, 'Failed to mark deploy plan completed');
+              });
+            safeReleaseDeployLock();
+            log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
+            cleanup();
+          }
+        });
+
+        const unsubComposeFailed = this.events.on('compose:failed', (payload) => {
+          if (payload.projectId === startedProjectId) {
+            const errMsg = payload.error || 'Deploy failed';
+            const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
+            void this.db
+              .updateDeployPlan(planId, {
+                status: 'failed',
+                planJson: JSON.stringify(this.preparePlanForStorage(failed)),
+                errorMessage: errMsg,
+              })
+              .catch((error: unknown) => {
+                log.warn({ planId, error }, 'Failed to mark deploy plan failed');
+              });
+            safeReleaseDeployLock();
+            log.info(
+              { planId, projectId: payload.projectId, error: errMsg },
+              'Plan failed via event',
+            );
+            cleanup();
+          }
+        });
+
+        const cleanup = () => {
+          unsubSuccess();
+          unsubFailed();
+          unsubComposeUp();
+          unsubComposeFailed();
+        };
+      }
+
+      if (preflightError) {
+        const errMsg = preflightError;
+        const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
+        await this.db.updateDeployPlan(planId, {
+          status: 'failed',
+          planJson: JSON.stringify(this.preparePlanForStorage(failedPlan)),
+          errorMessage: errMsg,
+        });
+        safeReleaseDeployLock();
+        return {
+          status: 'failed',
+          plan_id: planId,
+          project_name: startedProjectName,
+          error: errMsg,
+        };
+      }
+
+      const existingProject = await this.db.getProjectByName(startedProjectName);
+      let estimatedSeconds = 60;
+      if (existingProject) {
+        const lastLog = await this.db.getLastDeployLog(existingProject.id);
+        if (lastLog?.duration_ms != null && lastLog.status === 'success') {
+          estimatedSeconds = Math.ceil(lastLog.duration_ms / 1000);
+        }
+      }
+
+      return {
+        status: 'building',
+        plan_id: planId,
+        project_name: startedProjectName,
+        project_id: startedProjectId,
+        estimated_seconds: estimatedSeconds,
+      };
+    } catch (error) {
+      safeReleaseDeployLock();
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errorMsg);
+      await this.db.updateDeployPlan(planId, {
+        status: 'failed',
+        planJson: JSON.stringify(this.preparePlanForStorage(failedPlan)),
+        errorMessage: errorMsg,
+      });
+
+      log.error({ planId, error }, 'Plan execution failed');
+      return {
+        status: 'failed',
+        plan_id: planId,
+        project_name: plan.app.name,
+        error: errorMsg,
+      };
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1777671502642,
+      "tag": "0000_initial-postgres",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777799347345,
+      "tag": "0001_regular_dracula",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777812200000,
+      "tag": "0002_managed_service_source_cleanup",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777820000000,
+      "tag": "0003_project_display_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777900000000,
+      "tag": "0004_service_level_env_vars",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777955449000,
+      "tag": "0005_mcp_destructive_safety",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777959000000,
+      "tag": "0006_scoped_mcp_pat_tokens",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test coverage
+coverage/
+
+# Local database artifacts
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Temporary files
+tmp/
+temp/
+
+# Web frontend build output
+/web/dist/
+
+
+# Runtime data
+.openlander/
+*.sock
+
+# Internal dev files (not part of OSS release)
+.agents/
+.opencode/
+.playwright-mcp/
+.sisyphus/
+logs/
+skills_index.json
+readme.html
+runtime_err.txt
+
+# Stale artifacts
+references/
+web/@/test-results/
+
+# Local agent state (oh-my-claudecode + Claude Code)
+.omc/
+.claude/
+
+# Playwright run artifacts
+test-results/
+playwright-report/
+/playwright/.cache/

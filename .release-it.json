@@ -1,0 +1,23 @@
+{
+  "git": {
+    "commitMessage": "chore: release v${version}",
+    "tagName": "v${version}",
+    "requireCleanWorkingDir": false
+  },
+  "npm": {
+    "publish": true
+  },
+  "github": {
+    "release": true
+  },
+  "hooks": {
+    "before:bump": "npm run build",
+    "after:bump": "cd web && npm pkg set version=${version} && npm install --package-lock-only && cd .. && npm install --package-lock-only"
+  },
+  "plugins": {
+    "@release-it/keep-a-changelog": {
+      "filename": "CHANGELOG.md",
+      "strictLatest": false
+    }
+  }
+}

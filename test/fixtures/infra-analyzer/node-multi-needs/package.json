@@ -1,0 +1,8 @@
+{
+  "name": "node-multi-needs",
+  "private": true,
+  "dependencies": {
+    "pg": "^8.11.0",
+    "ioredis": "^5.4.0"
+  }
+}

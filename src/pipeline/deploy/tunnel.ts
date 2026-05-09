@@ -1,0 +1,70 @@
+import { createModuleLogger } from '../../lib/logger.js';
+import type { Database } from '../../db/index.js';
+import { eventBus, type EventBus } from '../../events/index.js';
+import { CloudflareTunnel } from '../tunnel.js';
+
+const log = createModuleLogger('deploy:tunnel');
+
+export class TunnelManager {
+  private readonly tunnels = new Map<string, CloudflareTunnel>();
+
+  constructor(
+    private readonly db: Database,
+    private readonly events: EventBus = eventBus,
+  ) {}
+
+  async expose(projectId: string, _port: number): Promise<string> {
+    const project = await this.db.getProject(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    const tunnel = new CloudflareTunnel();
+    const url = await tunnel.start(project.name);
+    this.tunnels.set(projectId, tunnel);
+
+    await this.db.updateProject(projectId, {
+      visibility: 'quick-share',
+      publicUrl: url,
+    });
+
+    await this.events.emit('tunnel:url', { projectId, url });
+    return url;
+  }
+
+  close(projectId: string): void {
+    const tunnel = this.tunnels.get(projectId);
+    if (!tunnel) {
+      return;
+    }
+
+    tunnel.stop();
+    this.tunnels.delete(projectId);
+    void this.db
+      .updateProject(projectId, {
+        visibility: 'internal',
+        publicUrl: null,
+      })
+      .catch((err: unknown) => {
+        log.warn({ err, projectId }, 'Failed to clear quick-share tunnel state');
+      });
+  }
+
+  get(projectId: string): CloudflareTunnel | undefined {
+    return this.tunnels.get(projectId);
+  }
+
+  async cleanupStale(): Promise<void> {
+    const projects = await this.db.listProjects();
+    for (const project of projects) {
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
+      if (project.visibility === 'quick-share' || project.visibility === 'shared') {
+        log.info({ projectId: project.id, name: project.name }, 'Clearing stale tunnel state');
+        await this.db.updateProject(project.id, {
+          visibility: 'internal',
+          publicUrl: null,
+        });
+      }
+    }
+  }
+}
