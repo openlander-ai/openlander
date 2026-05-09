@@ -1,0 +1,143 @@
+/**
+ * Vocabulary audit — guardrails for the Project=group / Service=deployable model.
+ *
+ * Runtime/deploy actions belong to services only. Project composite keeps group
+ * listing and project-scoped configuration, but no *_project runtime aliases.
+ */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import {
+  MANAGED_SERVICE_ACTIONS,
+  PROJECT_ACTIONS,
+  SERVICE_ACTIONS,
+} from '../../src/mcp/composite-tools.js';
+import { VERSION } from '../../src/version.js';
+
+const REPO_ROOT = resolve(__dirname, '..', '..');
+
+const PROJECT_RUNTIME_ACTIONS_REMOVED = [
+  'stop_project',
+  'start_project',
+  'restart_project',
+  'redeploy_project',
+  'rollback_project',
+  'archive_project',
+  'unarchive_project',
+  'update_project_config',
+] as const;
+
+const FROZEN_PROJECT_GROUP_ACTIONS = [
+  'list_projects',
+  'list_env_vars',
+  'get_env_var',
+  'set_env_vars',
+  'export_env_vars',
+  'delete_env_var',
+  'bulk_delete_env_vars',
+  'set_global_secret',
+  'list_global_secrets',
+  'upload_secret_file',
+  'list_secret_files',
+  'remove_secret_file',
+  'expose_public',
+  'unexpose_public',
+] as const;
+
+const FROZEN_MANAGED_SERVICE_ACTIONS = [
+  'create_service',
+  'list_services',
+  'get_service_status',
+  'get_service_credentials',
+  'get_service_logs',
+  'start_service',
+  'stop_service',
+  'remove_service',
+  'backup_service',
+  'restore_service',
+  'list_service_backups',
+  'create_service_user',
+  'create_bucket',
+  'list_buckets',
+  'delete_bucket',
+  'exec_service_container',
+  'add_volume',
+  'list_volumes',
+  'remove_volume',
+  'get_disk_usage',
+  'cleanup_docker',
+] as const;
+
+const FROZEN_DEPLOYABLE_SERVICE_ACTIONS = [
+  'restart_service',
+  'deploy_service',
+  'rollback_service',
+  'archive_service',
+  'unarchive_service',
+  'update_service_config',
+  'list_env_vars',
+  'get_env_var',
+  'set_env_vars',
+  'export_env_vars',
+  'delete_env_var',
+  'bulk_delete_env_vars',
+  'set_global_secret',
+  'list_global_secrets',
+  'upload_secret_file',
+  'list_secret_files',
+  'remove_secret_file',
+  'expose_public',
+  'unexpose_public',
+] as const;
+
+describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () => {
+  it('PROJECT_ACTIONS contains only group/config actions', () => {
+    const actions = PROJECT_ACTIONS as readonly string[];
+    expect(actions).toEqual([...FROZEN_PROJECT_GROUP_ACTIONS]);
+    for (const removed of PROJECT_RUNTIME_ACTIONS_REMOVED) {
+      expect(actions, `${removed} must not return to openlander_project`).not.toContain(removed);
+    }
+  });
+
+  it('SERVICE_ACTIONS contains the canonical deployable runtime actions', () => {
+    const actions = SERVICE_ACTIONS as readonly string[];
+    expect(actions).toEqual([...FROZEN_DEPLOYABLE_SERVICE_ACTIONS]);
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        'deploy_service',
+        'restart_service',
+        'rollback_service',
+        'archive_service',
+        'unarchive_service',
+        'update_service_config',
+      ]),
+    );
+  });
+
+  it('MANAGED_SERVICE_ACTIONS remains the infrastructure-service surface', () => {
+    expect(MANAGED_SERVICE_ACTIONS as readonly string[]).toEqual([...FROZEN_MANAGED_SERVICE_ACTIONS]);
+  });
+
+  it('App.tsx exposes both /services/:id (deployable) and /managed-services/:id (managed) routes', () => {
+    const source = readFileSync(resolve(REPO_ROOT, 'web', 'src', 'App.tsx'), 'utf8');
+    expect(/<Route\s+path="\/services\/:id"/.test(source)).toBe(true);
+    expect(/<Route\s+path="\/managed-services\/:id"/.test(source)).toBe(true);
+    expect(/path="\/services"\s+element=\{<Navigate\s+to="\/managed-services"/.test(source)).toBe(
+      true,
+    );
+  });
+
+  it('i18n key services.detail.header.backToServices still exists', () => {
+    const en = readFileSync(resolve(REPO_ROOT, 'web', 'src', 'i18n', 'en.ts'), 'utf8');
+    expect(/backToServices\s*:/.test(en)).toBe(true);
+  });
+
+  it('MCP serverInfo.version reads VERSION from package.json', () => {
+    const versionTs = readFileSync(resolve(REPO_ROOT, 'src', 'version.ts'), 'utf8');
+    expect(/export const VERSION/.test(versionTs)).toBe(true);
+
+    const serverTs = readFileSync(resolve(REPO_ROOT, 'src', 'mcp', 'server.ts'), 'utf8');
+    expect(/name:\s*'openlander',\s*version:\s*VERSION/.test(serverTs)).toBe(true);
+    expect(typeof VERSION === 'string' && VERSION.length > 0).toBe(true);
+  });
+});

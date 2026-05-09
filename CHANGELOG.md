@@ -1,0 +1,92 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/),
+and this project adheres to [Semantic Versioning](https://semver.org/).
+
+## [0.1.0] — 2026-05-09
+
+First public release.
+
+OpenLander is a self-hosted deployment platform: paste a Git URL, get a deploy. The 0.1 release is MCP-first: Claude Code, Cursor, Codex, OpenCode, and other external agents can inspect logs/status and call deploy/service/config actions through the MCP server.
+
+This is an early release — expect breaking changes between 0.x versions. Production use is supported but configurations and APIs may evolve based on user feedback.
+
+### Architecture
+
+- **Platform metadata: PostgreSQL via Docker Compose.** OpenLander now ships with a managed `postgres:16-alpine` container alongside the application; the previous embedded SQLite (`better-sqlite3`) datastore has been removed. The recommended self-hosted runtime is `docker compose up`; the npm CLI path is supported for development with a user-provided `OPENLANDER_DATABASE_URL`. Aligns with industry pattern (Coolify, Dokploy).
+- **Project = group, Service = deployable.** Repository, image, build, and runtime actions are now owned by services. Projects are workspace groups only.
+
+### Removed
+
+- **Breaking:** removed project-level runtime MCP actions: `stop_project`, `start_project`, `restart_project`, `redeploy_project`, `rollback_project`, `archive_project`, `unarchive_project`, and `update_project_config`. Use `stop_service`, `start_service`, `restart_service`, `deploy_service`, `rollback_service`, `archive_service`, `unarchive_service`, and `update_service_config` instead.
+- **Breaking:** project-level runtime HTTP routes now return `410 PROJECT_RUNTIME_ACTION_REMOVED`: `POST /api/projects/:id/start`, `/stop`, `/redeploy`, `/rollback`, and `/blue-green`. Use the canonical service runtime routes under `/api/projects/:projectId/services/:serviceId/*`.
+
+### Highlights
+
+**Deployment**
+
+- Git → Docker → URL pipeline. Auto-detects ports, proxies, containers before deploying.
+- Auto-Dockerfile for 28+ frameworks (Next.js, Express, NestJS, Vite, Nuxt, SvelteKit, Astro, FastAPI, Django, Flask, Rails, Spring Boot, Laravel, ASP.NET, Go, Rust, etc.) when no Dockerfile is present.
+- Docker Compose support — multi-service projects via `docker-compose.yml`.
+- Monorepo support — scan multiple Dockerfiles, parallel builds, parent-child project model.
+- Real-time build log streaming with ANSI color rendering.
+- Blue-green redeploy with health check + one-click rollback.
+- Per-project deploy locks prevent concurrent mutations.
+
+**Web Dashboard**
+
+- Project overview, deployments list, activity feed.
+- Service detail with the v0.1 6-tab IA (Overview / Logs / Deployments / Monitoring / Environment / Domains).
+- xterm.js web terminal for `docker exec` from the browser.
+- MCP Server status page surfacing connected agents.
+- Korean / English UI (toggle during onboarding).
+
+**Built-in AI Ops**
+
+- Built-in LLM provider setup, web-agent chat, token usage tracking, and automatic AI remediation are disabled in 0.1.
+- Disabled AI endpoints return `410 FEATURE_DISABLED` instead of partially running.
+- External MCP agents remain the supported automation path: read logs/status, decide what to change, and call explicit MCP actions.
+- The internal AI Ops/recovery modules remain cold-storage code for a future product decision and are not started by the 0.1 runtime.
+
+**MCP Integration**
+
+- 64 unique default operations exposed through 5 composite MCP tools (`openlander_deploy`, `openlander_project`, `openlander_service`, `openlander_managed_service`, `openlander_monitor`) with an `action` parameter for sub-operations.
+- 13 platform debugging tools available behind a config flag.
+- Three transports: stdio (local), Streamable HTTP (`POST /mcp`), and SSE (`GET /mcp/sse`) for clients on the older standard.
+- Bearer token auth on remote transports.
+
+**Infrastructure**
+
+- Postgres-backed OpenLander runtime with Docker Compose deployment and a
+  dedicated persistent database volume.
+- Traefik reverse proxy with auto-routing per project.
+- Cloudflare Tunnel (production) and TryCloudflare (quick share) for public exposure.
+- Managed services: PostgreSQL, MySQL, Redis, MongoDB, MinIO containers on demand.
+- SSH key auth for private Git repos (GitHub, GitLab, Bitbucket, Gitea).
+- Environment variables: project-scoped and global encrypted secrets.
+
+**Authentication & Security**
+
+- Password login with session cookies.
+- Bearer token auth for remote MCP.
+- SSRF hardening on git clone and outbound URL test surfaces.
+- CSP, X-Frame-Options, Referrer-Policy, X-Content-Type-Options on every response.
+- Pino logger redacts credential field names (`*.password`, `*.token`, `*.api_key`, etc.) at the stream layer.
+
+### Known limitations
+
+- Single-tenant only. Multi-user and role-based access control are not in scope.
+- No built-in AI auto-recovery or web-agent chat in 0.1. Recovery decisions are explicit MCP/user actions, not background LLM automation.
+- Korean localization for relative-time strings (`6d ago`) is incomplete; affects the activity feed.
+- No log rotation, rate limiting, or LLM token spend cap. Recommended for single-developer / small-team use.
+- Windows is not supported. WSL2 on Windows works.
+
+### What's next
+
+User feedback in the first 30 days drives 0.2.x priorities. Likely candidates: tighter MCP observability (per-tool counters), runtime metrics snapshot table, Operations Center / built-in AI Ops revival if there is demand, log rotation, rate limits.
+
+---
+
+Earlier internal pre-release history is intentionally not enumerated here. This is OpenLander's first public release.

@@ -1,0 +1,227 @@
+/**
+ * GitHub provider implementation.
+ *
+ * Uses GitHub REST API v3 with a Personal Access Token (PAT).
+ * No external SDK — plain fetch against api.github.com.
+ */
+
+import type {
+  GitProvider,
+  GitRepo,
+  GitUser,
+  TokenValidation,
+  ListReposOptions,
+  ListReposResult,
+  SearchReposOptions,
+  SearchReposResult,
+} from './types.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('github');
+
+const DEFAULT_API_BASE = 'https://api.github.com';
+
+// --- GitHub-specific API response types ---
+
+interface GHApiRepo {
+  name: string;
+  full_name: string;
+  description: string | null;
+  html_url: string;
+  clone_url: string;
+  ssh_url: string;
+  private: boolean;
+  default_branch: string;
+  language: string | null;
+  updated_at: string;
+  stargazers_count: number;
+}
+
+interface GHApiUser {
+  login: string;
+  name: string | null;
+  avatar_url: string;
+  public_repos: number;
+  total_private_repos: number;
+}
+
+interface GHSearchResult {
+  total_count: number;
+  items: GHApiRepo[];
+}
+
+// --- Implementation ---
+
+export class GitHubProvider implements GitProvider {
+  readonly type = 'github' as const;
+  readonly displayName = 'GitHub';
+
+  private readonly apiBase: string;
+  private orgCache: string[] | null = null;
+
+  constructor(
+    private readonly token: string,
+    baseUrl?: string,
+  ) {
+    this.apiBase = baseUrl ?? DEFAULT_API_BASE;
+  }
+
+  async validateToken(): Promise<TokenValidation> {
+    try {
+      const res = await this.request('/user');
+      const userData = res.data as GHApiUser;
+      const scopes = (res.headers.get('x-oauth-scopes') ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      return {
+        valid: true,
+        user: mapUser(userData),
+        scopes,
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        user: null,
+        scopes: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  async listRepos(opts?: ListReposOptions): Promise<ListReposResult> {
+    const page = opts?.page ?? 1;
+    const perPage = opts?.perPage ?? 30;
+    const sort = opts?.sort ?? 'pushed';
+    const visibility = opts?.visibility ?? 'all';
+
+    // Use visibility + affiliation instead of type param.
+    // type overrides affiliation, which can exclude org repos.
+    // affiliation=organization_member explicitly includes repos from user's orgs.
+    const res = await this.request(
+      `/user/repos?page=${String(page)}&per_page=${String(perPage)}&sort=${sort}&visibility=${visibility}&affiliation=owner,collaborator,organization_member&direction=desc`,
+    );
+
+    const repoData = res.data as GHApiRepo[];
+
+    const repos = repoData.map((r) => mapRepo(r));
+    const linkHeader = res.headers.get('link') ?? '';
+    const hasMore = linkHeader.includes('rel="next"');
+
+    return { repos, hasMore };
+  }
+
+  async searchRepos(query: string, opts?: SearchReposOptions): Promise<SearchReposResult> {
+    const page = opts?.page ?? 1;
+    const perPage = opts?.perPage ?? 20;
+
+    // Include user's own repos + all org repos they belong to.
+    // user:@me alone only matches repos owned by the user, excluding org repos.
+    const orgs = await this.getUserOrgs();
+    const scopeParts = ['user:@me', ...orgs.map((o) => `org:${o}`)];
+    const encodedQuery = encodeURIComponent(`${query} ${scopeParts.join(' ')}`);
+    const res = await this.request(
+      `/search/repositories?q=${encodedQuery}&page=${String(page)}&per_page=${String(perPage)}&sort=updated`,
+    );
+    const searchData = res.data as GHSearchResult;
+
+    return {
+      repos: searchData.items.map((r) => mapRepo(r)),
+      total: searchData.total_count,
+    };
+  }
+
+  async getRepo(owner: string, name: string): Promise<GitRepo> {
+    const res = await this.request(`/repos/${owner}/${name}`);
+    return mapRepo(res.data as GHApiRepo);
+  }
+
+  async hasDockerfile(owner: string, name: string, branch?: string): Promise<boolean> {
+    try {
+      const ref = branch ?? 'HEAD';
+      await this.request(`/repos/${owner}/${name}/contents/Dockerfile?ref=${ref}`);
+      return true;
+    } catch (err) {
+      log.debug({ err, owner, name }, 'Dockerfile check failed — assuming not present');
+      return false;
+      return false;
+    }
+  }
+
+  getAuthCloneUrl(repoFullName: string): string {
+    return `https://x-access-token:${this.token}@github.com/${repoFullName}.git`;
+  }
+
+  // --- Internal ---
+
+  /**
+   * Fetch the authenticated user's organization logins.
+   * Cached after first call since orgs rarely change within a session.
+   */
+  private async getUserOrgs(): Promise<string[]> {
+    if (this.orgCache) return this.orgCache;
+    try {
+      const res = await this.request('/user/orgs?per_page=100');
+      const orgs = res.data as Array<{ login: string }>;
+      this.orgCache = orgs.map((o) => o.login);
+    } catch (_err) {
+      log.debug('Failed to fetch user orgs — falling back to user-only search');
+      this.orgCache = [];
+    }
+    return this.orgCache;
+  }
+
+  private async request(path: string): Promise<{ data: unknown; headers: Headers }> {
+    const url = `${this.apiBase}${path}`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(30_000),
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'OpenLander/0.4',
+      },
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      if (res.status === 401) throw new Error('Invalid or expired GitHub token');
+      if (res.status === 403) throw new Error('GitHub token lacks required permissions');
+      if (res.status === 404) throw new Error('GitHub resource not found');
+      throw new Error(`GitHub API error ${String(res.status)}: ${body.slice(0, 200)}`);
+    }
+
+    const data: unknown = await res.json();
+    return { data, headers: res.headers };
+  }
+}
+
+// --- Mappers ---
+
+function mapRepo(r: GHApiRepo): GitRepo {
+  return {
+    name: r.name,
+    fullName: r.full_name,
+    description: r.description,
+    htmlUrl: r.html_url,
+    cloneUrl: r.clone_url,
+    sshUrl: r.ssh_url,
+    isPrivate: r.private,
+    defaultBranch: r.default_branch,
+    language: r.language,
+    updatedAt: r.updated_at,
+    stars: r.stargazers_count,
+    provider: 'github',
+  };
+}
+
+function mapUser(u: GHApiUser): GitUser {
+  return {
+    username: u.login,
+    displayName: u.name,
+    avatarUrl: u.avatar_url,
+    publicRepoCount: u.public_repos,
+    privateRepoCount: u.total_private_repos,
+  };
+}

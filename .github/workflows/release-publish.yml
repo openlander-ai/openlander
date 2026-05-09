@@ -1,0 +1,144 @@
+name: Release Publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish release artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OPENLANDER_DATABASE_URL: postgresql://postgres:test@localhost:5432/openlander_test
+      DATABASE_URL: postgresql://postgres:test@localhost:5432/openlander_test
+      IMAGE_NAME: ghcr.io/openlander-ai/openlander
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: openlander_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d openlander_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+
+      - name: Pin npm version
+        run: |
+          corepack enable
+          corepack prepare npm@11.5.1 --activate
+          npm --version
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Verify tag matches package versions
+        id: version
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          package_version="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
+          web_version="$(node -p "JSON.parse(require('fs').readFileSync('web/package.json', 'utf8')).version")"
+          if [[ "$version" != "$package_version" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $package_version" >&2
+            exit 1
+          fi
+          if [[ "$version" != "$web_version" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match web/package.json version $web_version" >&2
+            exit 1
+          fi
+          major_minor="$(node -e "const [major, minor] = process.argv[1].split('.'); process.stdout.write(major + '.' + minor);" "$version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "major_minor=$major_minor" >> "$GITHUB_OUTPUT"
+
+      - name: Run release QA gate
+        run: npm run qa:release
+
+      - name: Run coverage gate
+        run: npm run test:coverage
+
+      - name: Verify npm package contents
+        run: npm pack --dry-run --json --ignore-scripts | tee /tmp/openlander-npm-pack.json
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Set up Docker Buildx
+        run: docker buildx create --use --name openlander-release-builder
+
+      - name: Build and push runtime image
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --file Dockerfile.runtime \
+            --platform linux/amd64,linux/arm64 \
+            --tag "${IMAGE_NAME}:${{ steps.version.outputs.version }}" \
+            --tag "${IMAGE_NAME}:${{ steps.version.outputs.major_minor }}" \
+            --tag "${IMAGE_NAME}:latest" \
+            --push \
+            .
+
+      - name: Extract release notes
+        run: |
+          node <<'NODE' > /tmp/openlander-release-notes.md
+          const fs = require('node:fs');
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const version = process.env.GITHUB_REF_NAME.slice(1);
+          const headingPrefix = `## [${version}]`;
+          const lines = changelog.split('\n');
+          const headingIndex = lines.findIndex((line) => line.startsWith(headingPrefix));
+          if (headingIndex === -1) {
+            throw new Error(`Could not find CHANGELOG section for ${process.env.GITHUB_REF_NAME}`);
+          }
+          const nextHeadingIndex = lines.findIndex(
+            (line, index) => index > headingIndex && line.startsWith('## ['),
+          );
+          const bodyEnd = nextHeadingIndex === -1 ? lines.length : nextHeadingIndex;
+          const notes = lines.slice(headingIndex + 1, bodyEnd).join('\n').trim();
+          console.log(notes.length > 0 ? notes : `OpenLander ${process.env.GITHUB_REF_NAME}`);
+          NODE
+          cat /tmp/openlander-release-notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file /tmp/openlander-release-notes.md \
+            --verify-tag

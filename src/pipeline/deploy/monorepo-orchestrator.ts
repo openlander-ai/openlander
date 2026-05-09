@@ -1,0 +1,448 @@
+import { join } from 'node:path';
+import { nanoid } from 'nanoid';
+
+import { createModuleLogger } from '../../lib/logger.js';
+import type { Database } from '../../db/index.js';
+import { eventBus } from '../../events/index.js';
+import { parseDockerfileExposePort } from '../dockerfile-gen.js';
+import { filterBuildTimeVars } from '../build-args.js';
+import { getCommitSubject } from '../git.js';
+import { resolveEnvVars } from '../resolve-env.js';
+import { JobManager as JobManagerClass } from '../job-manager.js';
+import type { Docker } from '../docker.js';
+import type { EnvManager } from '../env.js';
+import type { JobManager } from '../job-manager.js';
+import type { BuildExecutor } from './build-step.js';
+import type { ContainerRunner } from './run-step.js';
+import type { DeployResult, MonorepoConfig } from '../deploy-core.js';
+import type { OrchestrationResult, ServiceNode } from '../orchestrator.js';
+import type { ProjectStatus, StateTransitionOptions } from '../../monitor/project-state-manager.js';
+import { isDockerBuildCancelledError } from '../../errors.js';
+
+const log = createModuleLogger('deploy');
+
+export interface MonorepoOrchestrationDeps {
+  docker: Docker;
+  db: Database;
+  env: EnvManager;
+  stateManager: {
+    transition: (
+      projectId: string,
+      targetStatus: ProjectStatus,
+      reason: string,
+      options?: StateTransitionOptions,
+    ) => Promise<boolean>;
+  };
+  buildExecutor: BuildExecutor;
+  containerRunner: ContainerRunner;
+  jobManager?: JobManager;
+}
+
+async function transitionProjectState(
+  deps: MonorepoOrchestrationDeps,
+  projectId: string,
+  targetStatus: ProjectStatus,
+  reason: string,
+  updates: Record<string, unknown> = {},
+): Promise<void> {
+  await deps.stateManager.transition(projectId, targetStatus, reason);
+  if (Object.keys(updates).length > 0) {
+    await deps.db.updateProject(projectId, updates);
+  }
+}
+
+export async function deployMonorepoService(
+  deps: MonorepoOrchestrationDeps,
+  params: {
+    service: ServiceNode;
+    parentId: string;
+    parentName: string;
+    config: MonorepoConfig;
+    trigger: 'chat' | 'webhook' | 'api';
+    resultByService: Map<string, DeployResult>;
+  },
+): Promise<{ success: boolean; projectId?: string; url?: string; error?: string }> {
+  const { service, parentId, parentName, config, trigger, resultByService } = params;
+  const dockerfilePath = service.dockerfile;
+  const childName = `${parentName}/${service.name}`;
+  const childId = nanoid(12);
+  const imageTag = `openlander/${childName.replace('/', '-')}:latest`;
+  const childStartTime = Date.now();
+  const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
+
+  await deps.db.createProject({
+    id: childId,
+    name: childName,
+    repoUrl: config.repoUrl,
+    branch: config.branch,
+    parentProjectId: parentId,
+    dockerfilePath,
+  });
+  await transitionProjectState(deps, childId, 'building', 'deploy-started');
+  deps.jobManager?.trackJob(childId, childName);
+
+  await eventBus.emit('deploy:start', {
+    projectId: childId,
+    parentProjectId: parentId,
+    repoUrl: config.repoUrl,
+    phase: 'build',
+    scope: service.name,
+    status: 'in_progress',
+    message: `[${service.name}] Starting service deployment`,
+  });
+
+  if (!dockerfilePath) {
+    const noDockerfileError = `Service ${service.name} has no Dockerfile path`;
+    await eventBus.emit('deploy:failed', {
+      projectId: childId,
+      parentProjectId: parentId,
+      step: 'dockerfile',
+      error: noDockerfileError,
+      phase: 'build',
+      scope: service.name,
+      status: 'failed',
+      message: `[${service.name}] ${noDockerfileError}`,
+    });
+    const failed: DeployResult = {
+      success: false,
+      projectId: childId,
+      projectName: childName,
+      error: noDockerfileError,
+      buildDurationMs: Date.now() - childStartTime,
+    };
+    resultByService.set(service.name, failed);
+    return {
+      success: false,
+      projectId: childId,
+      error: failed.error,
+    };
+  }
+
+  let dockerBuildOutput = '';
+
+  try {
+    deps.jobManager?.updatePhase(childId, 'building');
+    const envVars = await resolveEnvVars(
+      {
+        projectId: childId,
+        serviceId: `${childId}__svc`,
+        inlineEnvVars: config.envVars,
+        serviceEnvVars: service.envVars,
+      },
+      { env: deps.env },
+    );
+    const buildTimeVarsForChild = filterBuildTimeVars(envVars);
+    let lastBuildOutputEmit = 0;
+    await deps.buildExecutor.build(
+      {
+        clonePath: config.clonePath,
+        projectId: childId,
+        imageTag,
+        dockerfilePath,
+        buildArgs: buildTimeVarsForChild,
+      },
+      (line) => {
+        dockerBuildOutput += line + '\n';
+        const stepInfo = JobManagerClass.parseDockerBuildStep(line);
+        if (stepInfo) {
+          deps.jobManager?.updateBuildStep(childId, stepInfo.step, stepInfo.total, stepInfo.desc);
+        }
+        const now = Date.now();
+        if (now - lastBuildOutputEmit <= 50) return;
+        lastBuildOutputEmit = now;
+
+        void eventBus.emit('build:output', {
+          projectId: childId,
+          parentProjectId: parentId,
+          line,
+          stream: 'stdout',
+          phase: 'build',
+          scope: service.name,
+          status: 'in_progress',
+          message: line,
+          logChunk: line,
+        });
+      },
+    );
+
+    await eventBus.emit('deploy:build', {
+      projectId: childId,
+      parentProjectId: parentId,
+      imageTag,
+      durationMs: Date.now() - childStartTime,
+      phase: 'build',
+      scope: service.name,
+      status: 'success',
+      message: `[${service.name}] Docker image built`,
+    });
+
+    deps.jobManager?.updatePhase(childId, 'starting');
+    const childDockerfilePath = join(config.clonePath, dockerfilePath);
+    const childContainerPort = parseDockerfileExposePort(childDockerfilePath) ?? undefined;
+    const runResult = await deps.containerRunner.run({
+      imageTag,
+      projectName: childName.replace('/', '-'),
+      containerName: childName.replace('/', '-'),
+      projectId: childId,
+      containerPort: childContainerPort,
+      envVars,
+      secretFiles: await deps.env.getSecretFilesForDeploy(childId),
+      restartPolicy: { Name: 'unless-stopped' },
+    });
+    const { containerId, port, url: internalUrl } = runResult;
+
+    await eventBus.emit('deploy:run', {
+      projectId: childId,
+      parentProjectId: parentId,
+      containerId,
+      port,
+      url: internalUrl,
+      phase: 'run',
+      scope: service.name,
+      status: 'success',
+      message: `[${service.name}] Service running on port ${String(port)}`,
+    });
+
+    await transitionProjectState(deps, childId, 'running', 'deploy-success', {
+      assignedPort: port,
+      containerId,
+      imageTag,
+      visibility: config.visibility ?? 'internal',
+    });
+
+    await deps.db.createDeployLog({
+      id: nanoid(12),
+      projectId: childId,
+      status: 'success',
+      trigger,
+      commitSha: config.commitSha,
+      commitMessage,
+      buildLog: `[monorepo] ${dockerfilePath} → ${imageTag}\n`,
+      durationMs: Date.now() - childStartTime,
+    });
+
+    deps.jobManager?.updatePhase(childId, 'done');
+
+    await eventBus.emit('deploy:success', {
+      projectId: childId,
+      parentProjectId: parentId,
+      url: internalUrl,
+      totalDurationMs: Date.now() - childStartTime,
+      phase: 'complete',
+      scope: service.name,
+      status: 'success',
+      message: `[${service.name}] Service deploy complete`,
+    });
+
+    const successResult: DeployResult = {
+      success: true,
+      projectId: childId,
+      projectName: childName,
+      containerId,
+      url: internalUrl,
+      port,
+      commitSha: config.commitSha,
+      buildDurationMs: Date.now() - childStartTime,
+    };
+    resultByService.set(service.name, successResult);
+    return {
+      success: true,
+      projectId: childId,
+      url: internalUrl,
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const isCancelled = isDockerBuildCancelledError(error);
+    const cancelMessage = 'Build cancelled by user';
+    const terminalLogLine = isCancelled
+      ? `[cancelled] [monorepo] ${dockerfilePath}: ${cancelMessage}\n`
+      : `[error] [monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`;
+    const buildLogWithOutput = dockerBuildOutput
+      ? `--- Docker build output ---\n${dockerBuildOutput}${terminalLogLine}`
+      : terminalLogLine;
+
+    await transitionProjectState(
+      deps,
+      childId,
+      isCancelled ? 'stopped' : 'error',
+      isCancelled ? 'deploy-cancelled' : 'deploy-build-error',
+    );
+    deps.jobManager?.updatePhase(childId, 'failed', isCancelled ? cancelMessage : errorMsg);
+
+    await eventBus.emit('deploy:failed', {
+      projectId: childId,
+      parentProjectId: parentId,
+      step: isCancelled ? 'cancelled' : 'service-deploy',
+      error: isCancelled ? cancelMessage : errorMsg,
+      buildLog: buildLogWithOutput,
+      phase: 'build',
+      scope: service.name,
+      status: 'failed',
+      message: `[${service.name}] ${isCancelled ? cancelMessage : errorMsg}`,
+      durationMs: Date.now() - childStartTime,
+      cancelled: isCancelled,
+    });
+
+    await deps.db.createDeployLog({
+      id: nanoid(12),
+      projectId: childId,
+      status: isCancelled ? 'cancelled' : 'failed',
+      trigger,
+      commitSha: config.commitSha,
+      commitMessage,
+      buildLog: buildLogWithOutput,
+      durationMs: Date.now() - childStartTime,
+    });
+
+    const failedResult: DeployResult = {
+      success: false,
+      projectId: childId,
+      projectName: childName,
+      error: isCancelled ? cancelMessage : errorMsg,
+      buildDurationMs: Date.now() - childStartTime,
+      ...(isCancelled ? { cancelled: true } : {}),
+    };
+    resultByService.set(service.name, failedResult);
+
+    return {
+      success: false,
+      projectId: childId,
+      error: isCancelled ? cancelMessage : errorMsg,
+    };
+  }
+}
+
+export async function rollbackMonorepoService(
+  deps: MonorepoOrchestrationDeps,
+  params: {
+    service: { name: string; projectId?: string; url?: string };
+    trigger: 'chat' | 'webhook' | 'api';
+    startTime: number;
+  },
+): Promise<void> {
+  const { service, trigger, startTime } = params;
+  if (!service.projectId) {
+    return;
+  }
+  const project = await deps.db.getProject(service.projectId);
+  if (!project) {
+    return;
+  }
+
+  // PR 4.5: canonical-first read of container_id with `??` fallback.
+  const deployable = await deps.db.getDeployableForProject(service.projectId);
+  const containerId = deployable?.container_id ?? project.container_id;
+  if (containerId) {
+    try {
+      await deps.docker.stopContainer(containerId);
+      await deps.docker.safeRemoveContainer(containerId);
+    } catch (error) {
+      log.warn({ err: error, service: service.name }, 'Monorepo rollback container cleanup failed');
+    }
+  }
+
+  await transitionProjectState(deps, service.projectId, 'error', 'deploy-failed', {
+    containerId: null,
+    assignedPort: null,
+  });
+
+  deps.jobManager?.updatePhase(
+    service.projectId,
+    'failed',
+    'Rolled back due to dependency deployment failure',
+  );
+
+  await deps.db.createDeployLog({
+    id: nanoid(12),
+    projectId: service.projectId,
+    status: 'failed',
+    trigger,
+    commitMessage: undefined,
+    buildLog: `[monorepo] ${service.name} ROLLED_BACK: dependency deployment failure\n`,
+    durationMs: Date.now() - startTime,
+  });
+}
+
+export function buildMonorepoResults(params: {
+  services: ServiceNode[];
+  parentName: string;
+  resultByService: Map<string, DeployResult>;
+  orchestration: OrchestrationResult;
+  startTime: number;
+}): DeployResult[] {
+  const { services, parentName, resultByService, orchestration, startTime } = params;
+  const orchestrationByService = new Map(
+    orchestration.services.map((service) => [service.name, service]),
+  );
+  return services.map((service) => {
+    const result = resultByService.get(service.name);
+    const orchestrationStatus = orchestrationByService.get(service.name);
+    const projectName = `${parentName}/${service.name}`;
+
+    if (!result) {
+      return {
+        success: false,
+        projectId: '',
+        projectName,
+        error: orchestrationStatus?.error ?? 'Service did not produce a deploy result',
+        buildDurationMs: Date.now() - startTime,
+      };
+    }
+
+    if (orchestrationStatus?.status === 'rolled_back') {
+      return {
+        ...result,
+        success: false,
+        error: result.error ?? 'Rolled back due to dependency deployment failure',
+      };
+    }
+
+    if (orchestrationStatus?.status === 'skipped') {
+      return {
+        ...result,
+        success: false,
+        error: result.error ?? 'Skipped due to dependency deployment failure',
+      };
+    }
+
+    // F1 (Day 9 Bug #5 follow-up): rollback was attempted but not actually
+    // performed — policy rejected it (archived/recovering/circuit-open) or
+    // it failed for a generic reason. The service container is still
+    // running, so keep `success: true` (the deploy half completed) and
+    // attach the orchestration-level reason. Without this, the result
+    // collapsed into a `success: true` row with no error annotation,
+    // exactly the silent partial-state UX the bug fix aims to remove.
+    if (orchestrationStatus?.status === 'rollback_failed_due_to_policy') {
+      return {
+        ...result,
+        success: false,
+        error:
+          result.error ??
+          orchestrationStatus.error ??
+          'Rollback blocked by policy (project archived / recovering / circuit-open); container still running.',
+      };
+    }
+
+    if (orchestrationStatus?.status === 'rollback_failed') {
+      return {
+        ...result,
+        success: false,
+        error:
+          result.error ?? orchestrationStatus.error ?? 'Rollback failed; container still running.',
+      };
+    }
+
+    if (orchestrationStatus?.status === 'rollback_skipped') {
+      return {
+        ...result,
+        success: false,
+        error:
+          result.error ??
+          orchestrationStatus.error ??
+          'Rollback was not attempted; service may be in inconsistent state.',
+      };
+    }
+
+    return result;
+  });
+}

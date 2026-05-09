@@ -1,0 +1,39 @@
+FROM node:22-bookworm-slim AS build
+
+WORKDIR /app
+ENV HUSKY=0
+ENV OPENLANDER_BUILD_DTS=false
+ENV OPENLANDER_BUILD_SOURCEMAP=false
+
+COPY package.json package-lock.json ./
+COPY web/package.json web/package-lock.json ./web/
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+FROM docker:27-cli AS docker-cli
+
+FROM node:22-bookworm-slim AS runtime
+
+WORKDIR /app
+ENV NODE_ENV=production
+ENV HUSKY=0
+ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates git openssh-client \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/web/dist ./web/dist
+COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/README.md /app/CHANGELOG.md /app/LICENSE ./
+
+EXPOSE 10114
+
+CMD ["node", "dist/cli/index.js", "start", "--no-open", "--host", "0.0.0.0"]

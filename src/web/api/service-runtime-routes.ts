@@ -1,0 +1,484 @@
+import { Hono } from 'hono';
+import type { Context } from 'hono';
+
+import type { AppContext } from '../../app.js';
+import { DOCKER_LABELS } from '../../config/index.js';
+import type { ProjectRow } from '../../db/index.js';
+import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import {
+  deployableServiceIdToProjectId,
+  projectIdToDeployableServiceId,
+} from '../../db/service-ids.js';
+import {
+  CircuitBreakerOpenError,
+  DeployLockedError,
+  OpenLanderError,
+  ProjectArchivedError,
+  ProjectRecoveringError,
+  ServiceHasConsumersError,
+} from '../../errors.js';
+import { createModuleLogger } from '../../lib/logger.js';
+import type { LifecycleAction } from '../../pipeline/mutation-policy.js';
+import { resolveEnvironmentByType } from './helpers/project-helpers.js';
+import {
+  assertProjectLifecycleMutableForRoute,
+  assertProjectMutableForRoute,
+  getServiceDeleteSlug,
+  withProjectRuntimeLock,
+} from './helpers/project-route-shared.js';
+
+const log = createModuleLogger('api:service-runtime');
+
+type ResolvedServiceForRequest = {
+  project: ProjectRow;
+  runtimeProject: ProjectRow;
+  service: NonNullable<Awaited<ReturnType<AppContext['db']['getService']>>>;
+};
+
+async function resolveServiceForRequest(
+  c: Context,
+  ctx: AppContext,
+): Promise<ResolvedServiceForRequest | Response> {
+  const p = c.req.param('p') ?? '';
+  const s = c.req.param('s') ?? '';
+  const project = (await ctx.db.getProject(p)) ?? (await ctx.db.getProjectByName(p));
+  if (!project) {
+    return c.json({ error: 'NOT_FOUND', message: `Project not found: ${p}` }, 404);
+  }
+
+  const service =
+    (await ctx.db.getService(s)) ??
+    (await ctx.db.getService(projectIdToDeployableServiceId(s))) ??
+    null;
+  if (!service || service.project_id !== project.id) {
+    return c.json({ error: 'NOT_FOUND', message: `Service not found: ${s}` }, 404);
+  }
+  const runtimeProjectId = deployableServiceIdToProjectId(service.id);
+  const runtimeProject = (await ctx.db.getProject(runtimeProjectId)) ?? project;
+  return { project, runtimeProject, service };
+}
+
+async function assertResolvedServiceMutable(
+  ctx: AppContext,
+  project: ProjectRow,
+  runtimeProject: ProjectRow,
+): Promise<void> {
+  if (runtimeProject.id !== project.id) {
+    await assertProjectMutableForRoute(project, ctx);
+  }
+  await assertProjectMutableForRoute(runtimeProject, ctx);
+}
+
+async function assertResolvedServiceLifecycleMutable(
+  ctx: AppContext,
+  project: ProjectRow,
+  runtimeProject: ProjectRow,
+  action: LifecycleAction,
+): Promise<void> {
+  if (runtimeProject.id !== project.id) {
+    await assertProjectLifecycleMutableForRoute(project, action, ctx);
+  }
+  await assertProjectLifecycleMutableForRoute(runtimeProject, action, ctx);
+}
+
+function mutationPolicyResponse(c: Context, err: unknown): Response | null {
+  if (
+    err instanceof ProjectArchivedError ||
+    err instanceof ProjectRecoveringError ||
+    err instanceof CircuitBreakerOpenError
+  ) {
+    return c.json(err.toJSON(), 409);
+  }
+  return null;
+}
+
+export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
+  const api = new Hono();
+
+  api.delete('/projects/:p/services/:s/instance', async (c) => {
+    const resolved = await resolveServiceForRequest(c, ctx);
+    if (resolved instanceof Response) return resolved;
+    const { project, runtimeProject, service } = resolved;
+    if ((MANAGED_SERVICE_KINDS as readonly string[]).includes(service.kind)) {
+      return c.json(
+        {
+          error: 'SERVICE_OPERATION_UNSUPPORTED',
+          code: 'SERVICE_OPERATION_UNSUPPORTED',
+          message: 'Managed infrastructure services use the managed-service removal flow.',
+        },
+        400,
+      );
+    }
+
+    const body: { confirmation?: unknown; typedSlug?: unknown; deleteVolumes?: unknown } =
+      await c.req
+        .json<{ confirmation?: unknown; typedSlug?: unknown; deleteVolumes?: unknown }>()
+        .catch(() => ({}));
+    const typedSlug =
+      typeof body.confirmation === 'string'
+        ? body.confirmation.trim()
+        : typeof body.typedSlug === 'string'
+          ? body.typedSlug.trim()
+          : '';
+    const expectedSlug = getServiceDeleteSlug(project, service);
+    const legacyRawSlug = `${project.name}/${service.name}`;
+    if (typedSlug !== expectedSlug && typedSlug !== legacyRawSlug) {
+      return c.json(
+        {
+          error: 'CONFIRMATION_REQUIRED',
+          code: 'CONFIRMATION_REQUIRED',
+          message: `Type '${expectedSlug}' to delete this service.`,
+          details: { expectedSlug },
+        },
+        400,
+      );
+    }
+
+    const providerConnections = await ctx.db.listServiceConsumersForProvider(service.id);
+    const dependencyConsumers = await ctx.db.findProjectDependents(undefined, service.id);
+    if (providerConnections.length > 0 || dependencyConsumers.length > 0) {
+      const connectionConsumers = await Promise.all(
+        providerConnections.map(async (connection) => {
+          const consumer = await ctx.db.getService(connection.service_id_consumer);
+          return {
+            serviceId: connection.service_id_consumer,
+            serviceName: consumer?.name ?? connection.service_id_consumer,
+            projectId: consumer?.project_id ?? '',
+          };
+        }),
+      );
+      const dependencyServiceIds = new Set(
+        dependencyConsumers
+          .map((dependency) => dependency.source_service_id)
+          .filter((serviceId): serviceId is string => Boolean(serviceId)),
+      );
+      const dependencyServiceConsumers = await Promise.all(
+        Array.from(dependencyServiceIds).map(async (serviceId) => {
+          const consumer = await ctx.db.getService(serviceId);
+          return {
+            serviceId,
+            serviceName: consumer?.name ?? serviceId,
+            projectId: consumer?.project_id ?? '',
+          };
+        }),
+      );
+      const consumers = [...connectionConsumers, ...dependencyServiceConsumers];
+      const error = new ServiceHasConsumersError(service.id, service.name, consumers);
+      return c.json(error.toJSON(), 409);
+    }
+
+    const result = await withProjectRuntimeLock(
+      ctx,
+      runtimeProject.id,
+      'delete-service',
+      async () => {
+        ctx.coordinator.suppressProject(runtimeProject.id, 60_000);
+
+        const removedDomains: string[] = [];
+        for (const mapping of await ctx.db.getDomainMappingsForService(service.id)) {
+          try {
+            await ctx.cloudflare.removeTunnelForService(service.id, mapping.domain);
+          } catch (err) {
+            log.warn(
+              { err, serviceId: service.id, domain: mapping.domain },
+              'Service delete domain disconnect failed; continuing with DB cleanup',
+            );
+            await ctx.db.deleteDomainMapping(mapping.id);
+          }
+          removedDomains.push(mapping.domain);
+        }
+        await ctx.db.deleteDomainMappingsByService(service.id);
+
+        const containerRef = service.container_id ?? service.container_name;
+        let containerRemoved = false;
+        if (containerRef) {
+          try {
+            await ctx.docker.stopContainer(containerRef);
+          } catch (err) {
+            log.debug({ err, serviceId: service.id }, 'Service delete stop skipped');
+          }
+          await ctx.docker.removeContainer(containerRef);
+          containerRemoved = true;
+        }
+
+        const deleteVolumes = body.deleteVolumes === true;
+        const siblingDeployables = (await ctx.db.getDeployablesByGroup(project.id)).filter(
+          (candidate) => candidate.id !== service.id,
+        );
+        const removedVolumes: string[] = [];
+        let volumeDeleteSkippedReason: string | null = null;
+        if (deleteVolumes) {
+          if (siblingDeployables.length > 0) {
+            volumeDeleteSkippedReason = 'PROJECT_HAS_SIBLING_SERVICES';
+          } else {
+            const volumes = await ctx.docker.listVolumes({
+              label: [`${DOCKER_LABELS.MANAGED}=true`, `${DOCKER_LABELS.PROJECT}=${project.name}`],
+            });
+            for (const volume of volumes) {
+              if (!volume.Name) continue;
+              await ctx.docker.removeVolume(volume.Name);
+              removedVolumes.push(volume.Name);
+            }
+          }
+        }
+
+        await ctx.db.deleteProjectDependenciesByService(service.id);
+        await ctx.db.deleteService(service.id);
+        if (runtimeProject.id !== project.id) {
+          // Current invariant: attached deployables have a preserved 1:1
+          // runtime project row with no remaining deployables under that row.
+          // If a future model lets multiple services share a runtime project,
+          // preserve the row until the last runtime-scoped service is gone.
+          const remainingRuntimeDeployables = await ctx.db.getDeployablesByGroup(runtimeProject.id);
+          if (remainingRuntimeDeployables.length === 0) {
+            await ctx.db.deleteProject(runtimeProject.id);
+          }
+        }
+
+        return {
+          status: 'deleted',
+          project: project.name,
+          service: service.name,
+          serviceId: service.id,
+          containerRemoved,
+          removedDomains,
+          volumes: {
+            deleted: removedVolumes,
+            preserved: !deleteVolumes || volumeDeleteSkippedReason !== null,
+            skippedReason: volumeDeleteSkippedReason,
+          },
+        };
+      },
+    );
+    if (result instanceof DeployLockedError) return c.json(result.toJSON(), 409);
+    return c.json(result);
+  });
+
+  api.post('/projects/:p/services/:s/start', async (c) => {
+    const resolved = await resolveServiceForRequest(c, ctx);
+    if (resolved instanceof Response) return resolved;
+    const { project, runtimeProject, service } = resolved;
+    try {
+      await assertResolvedServiceLifecycleMutable(ctx, project, runtimeProject, 'start');
+    } catch (err) {
+      const response = mutationPolicyResponse(c, err);
+      if (response) return response;
+      throw err;
+    }
+    const containerId = service.container_id ?? runtimeProject.container_id;
+    if (!containerId) {
+      return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
+    }
+    await ctx.pipeline.start(runtimeProject.id);
+    return c.json({ status: 'started', project: project.name, service: service.name });
+  });
+
+  api.post('/projects/:p/services/:s/stop', async (c) => {
+    const resolved = await resolveServiceForRequest(c, ctx);
+    if (resolved instanceof Response) return resolved;
+    const { project, runtimeProject, service } = resolved;
+    try {
+      await assertResolvedServiceLifecycleMutable(ctx, project, runtimeProject, 'stop');
+    } catch (err) {
+      const response = mutationPolicyResponse(c, err);
+      if (response) return response;
+      throw err;
+    }
+    const lockSessionId = `stop-${runtimeProject.id}-${Date.now().toString(36)}`;
+    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(runtimeProject.id, lockSessionId)) {
+      const lock = ctx.agentPool.getProjectLock(runtimeProject.id);
+      return c.json(
+        new DeployLockedError(runtimeProject.id, lock?.sessionId ?? 'unknown').toJSON(),
+        409,
+      );
+    }
+    try {
+      ctx.coordinator.suppressProject(runtimeProject.id, 60_000);
+      await ctx.pipeline.stop(runtimeProject.id);
+      return c.json({ status: 'stopped', project: project.name, service: service.name });
+    } finally {
+      ctx.agentPool?.releaseProjectLock(runtimeProject.id, lockSessionId);
+    }
+  });
+
+  api.post('/projects/:p/services/:s/restart', async (c) => {
+    const resolved = await resolveServiceForRequest(c, ctx);
+    if (resolved instanceof Response) return resolved;
+    const { project, runtimeProject, service } = resolved;
+    try {
+      await assertResolvedServiceLifecycleMutable(ctx, project, runtimeProject, 'stop');
+    } catch (err) {
+      const response = mutationPolicyResponse(c, err);
+      if (response) return response;
+      throw err;
+    }
+    const lockSessionId = `restart-${runtimeProject.id}-${Date.now().toString(36)}`;
+    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(runtimeProject.id, lockSessionId)) {
+      const lock = ctx.agentPool.getProjectLock(runtimeProject.id);
+      return c.json(
+        new DeployLockedError(runtimeProject.id, lock?.sessionId ?? 'unknown').toJSON(),
+        409,
+      );
+    }
+    try {
+      ctx.coordinator.suppressProject(runtimeProject.id, 30_000);
+      await ctx.pipeline.stop(runtimeProject.id);
+      await ctx.pipeline.start(runtimeProject.id);
+      return c.json({ status: 'restarted', project: project.name, service: service.name });
+    } finally {
+      ctx.agentPool?.releaseProjectLock(runtimeProject.id, lockSessionId);
+    }
+  });
+
+  api.post('/projects/:p/services/:s/deploy', async (c) => {
+    const resolved = await resolveServiceForRequest(c, ctx);
+    if (resolved instanceof Response) return resolved;
+    const { project, runtimeProject, service } = resolved;
+    try {
+      await assertResolvedServiceMutable(ctx, project, runtimeProject);
+    } catch (err) {
+      const response = mutationPolicyResponse(c, err);
+      if (response) return response;
+      throw err;
+    }
+    const strategy = (c.req.query('strategy') ?? 'force') as 'blue-green' | 'force';
+    const body = await c.req
+      .json<{
+        env_vars?: Record<string, string>;
+        no_cache?: boolean;
+        health_check_path?: string;
+      }>()
+      .catch(() => ({ env_vars: undefined, no_cache: undefined, health_check_path: undefined }));
+    if (body.env_vars && typeof body.env_vars === 'object') {
+      for (const [key, value] of Object.entries(body.env_vars)) {
+        if (value.trim()) await ctx.env.set(runtimeProject.id, key, value.trim());
+      }
+    }
+    if (service.source === 'git' && !service.repo_url) {
+      return c.json(
+        { success: false, error: 'SERVICE_SOURCE_MISSING', code: 'SERVICE_SOURCE_MISSING' },
+        400,
+      );
+    }
+    const lockSessionId = `redeploy-${runtimeProject.id}-${Date.now().toString(36)}`;
+    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(runtimeProject.id, lockSessionId)) {
+      const lock = ctx.agentPool.getProjectLock(runtimeProject.id);
+      return c.json(
+        new DeployLockedError(runtimeProject.id, lock?.sessionId ?? 'unknown').toJSON(),
+        409,
+      );
+    }
+    try {
+      ctx.coordinator.suppressProject(runtimeProject.id, 120_000);
+      if (strategy !== 'blue-green') {
+        await ctx.db.updateProject(runtimeProject.id, { status: 'building' });
+      }
+      const result = await ctx.pipeline.redeploy(runtimeProject.id, {
+        noCache: body.no_cache,
+        strategy,
+        healthCheckPath: body.health_check_path,
+      });
+      return c.json(
+        { ...result, projectId: project.id, serviceId: service.id },
+        result.success ? 200 : 500,
+      );
+    } catch (err) {
+      if (err instanceof DeployLockedError) return c.json(err.toJSON(), 409);
+      const response = mutationPolicyResponse(c, err);
+      if (response) return response;
+      if (err instanceof OpenLanderError) return c.json(err.toJSON(), err.statusCode as 400);
+      await ctx.db.updateProject(runtimeProject.id, { status: 'error' });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return c.json({ success: false, error: errMsg }, 500);
+    } finally {
+      ctx.agentPool?.releaseProjectLock(runtimeProject.id, lockSessionId);
+    }
+  });
+
+  api.post('/projects/:p/services/:s/rollback', async (c) => {
+    const resolved = await resolveServiceForRequest(c, ctx);
+    if (resolved instanceof Response) return resolved;
+    const { project, runtimeProject, service } = resolved;
+    try {
+      await assertResolvedServiceMutable(ctx, project, runtimeProject);
+    } catch (err) {
+      const response = mutationPolicyResponse(c, err);
+      if (response) return response;
+      throw err;
+    }
+    const environmentResolution = await resolveEnvironmentByType(c, ctx, runtimeProject);
+    if ('response' in environmentResolution) {
+      return environmentResolution.response;
+    }
+    const { environmentRow } = environmentResolution;
+    const lockSessionId = `rollback-${runtimeProject.id}-${Date.now().toString(36)}`;
+    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(runtimeProject.id, lockSessionId)) {
+      const lock = ctx.agentPool.getProjectLock(runtimeProject.id);
+      return c.json(
+        new DeployLockedError(runtimeProject.id, lock?.sessionId ?? 'unknown').toJSON(),
+        409,
+      );
+    }
+    try {
+      ctx.coordinator.suppressProject(runtimeProject.id, 120_000);
+      const result = await ctx.pipeline.rollback(
+        runtimeProject.id,
+        environmentRow?.id,
+        lockSessionId,
+      );
+      return c.json(
+        { ...result, projectId: project.id, serviceId: service.id },
+        result.success ? 200 : 500,
+      );
+    } catch (err) {
+      if (err instanceof DeployLockedError) return c.json(err.toJSON(), 409);
+      const response = mutationPolicyResponse(c, err);
+      if (response) return response;
+      if (err instanceof OpenLanderError) return c.json(err.toJSON(), err.statusCode as 400);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return c.json({ success: false, error: errMsg }, 500);
+    } finally {
+      ctx.agentPool?.releaseProjectLock(runtimeProject.id, lockSessionId);
+    }
+  });
+
+  api.post('/projects/:p/services/:s/archive', async (c) => {
+    const resolved = await resolveServiceForRequest(c, ctx);
+    if (resolved instanceof Response) return resolved;
+    const { project, runtimeProject, service } = resolved;
+    try {
+      await assertResolvedServiceLifecycleMutable(ctx, project, runtimeProject, 'archive');
+    } catch (err) {
+      const response = mutationPolicyResponse(c, err);
+      if (response) return response;
+      throw err;
+    }
+    const lockSessionId = `archive-${runtimeProject.id}-${Date.now().toString(36)}`;
+    if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(runtimeProject.id, lockSessionId)) {
+      const lock = ctx.agentPool.getProjectLock(runtimeProject.id);
+      return c.json(
+        new DeployLockedError(runtimeProject.id, lock?.sessionId ?? 'unknown').toJSON(),
+        409,
+      );
+    }
+    try {
+      ctx.coordinator.suppressProject(runtimeProject.id, 60_000);
+      await ctx.pipeline.archive(runtimeProject.id);
+      const updated = await ctx.db.getProject(runtimeProject.id);
+      return c.json({ project: project.name, service: service.name, runtimeProject: updated });
+    } finally {
+      ctx.agentPool?.releaseProjectLock(runtimeProject.id, lockSessionId);
+    }
+  });
+
+  api.post('/projects/:p/services/:s/unarchive', async (c) => {
+    const resolved = await resolveServiceForRequest(c, ctx);
+    if (resolved instanceof Response) return resolved;
+    const { project, runtimeProject, service } = resolved;
+    await ctx.pipeline.unarchive(runtimeProject.id);
+    const updated = await ctx.db.getProject(runtimeProject.id);
+    return c.json({ project: project.name, service: service.name, runtimeProject: updated });
+  });
+
+  return api;
+}

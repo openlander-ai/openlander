@@ -1,0 +1,40 @@
+services:
+  openlander-db:
+    image: postgres:16-alpine
+    container_name: openlander-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openlander
+      POSTGRES_USER: openlander
+      POSTGRES_PASSWORD: ${OPENLANDER_POSTGRES_PASSWORD:?Set OPENLANDER_POSTGRES_PASSWORD before starting OpenLander}
+    volumes:
+      - openlander-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U openlander -d openlander']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  openlander:
+    image: ${OPENLANDER_IMAGE:-ghcr.io/openlander-ai/openlander:latest}
+    container_name: openlander
+    restart: unless-stopped
+    depends_on:
+      openlander-db:
+        condition: service_healthy
+    environment:
+      OPENLANDER_DATABASE_URL: postgres://openlander:${OPENLANDER_POSTGRES_PASSWORD:?Set OPENLANDER_POSTGRES_PASSWORD before starting OpenLander}@openlander-db:5432/openlander
+      OPENLANDER_CONTAINERIZED: 'true'
+    ports:
+      - '10114:10114'
+    volumes:
+      - openlander-data:/root/.openlander
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+volumes:
+  openlander-data:
+    name: openlander-data
+  openlander-postgres:
+    name: openlander-postgres

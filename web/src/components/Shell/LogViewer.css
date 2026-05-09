@@ -1,0 +1,244 @@
+/*
+ * LogViewer — log line + phase header + ANSI color styles.
+ *
+ * Theme: the deploy log pane follows the app theme (was dark-only). The
+ * v0.1 design specifies a "white log surface" so the default palette
+ * resolves to the light `--log-*` tokens defined in tokens.css; the
+ * dark override below kicks in when the user opts into dark mode at
+ * the app level (`[data-theme='dark']` / `:root.dark` / `.dark`).
+ *
+ * The `--log-header-*` chrome palette is derived locally because
+ * tokens.css only defines `--log-*` body colors. Light defaults pull
+ * from `--ol-panel-2` / `--ol-border-subtle` / `--ol-fg` / `--ol-fg-muted`
+ * so the header surface stays in lockstep with the rest of the app
+ * chrome. The dark override switches to the previous handcrafted log
+ * palette so dark-mode rendering is unchanged from before.
+ *
+ * Tailwind handles layout; ANSI escape sequences need stable named classes
+ * since they're emitted by parseAnsi() at render time.
+ */
+
+.ol-log-pane {
+  /* Header chrome (pulled from app tokens so light/dark inherits). */
+  --log-header-bg:     var(--ol-panel-2);
+  --log-header-border: var(--ol-border-subtle);
+  --log-header-text:   var(--ol-fg);
+  --log-header-muted:  var(--ol-fg-muted);
+
+  background: var(--log-bg);
+  color: var(--log-text);
+  font-family: var(--ol-font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/*
+ * Dark theme override — restores the handcrafted dark chrome the pane
+ * used before v0.1 light-surface alignment. Applies under any of the
+ * three dark-mode selectors the app uses.
+ */
+[data-theme='dark'] .ol-log-pane,
+:root.dark .ol-log-pane,
+.dark .ol-log-pane {
+  --log-header-bg:     oklch(0.18 0.010 255);
+  --log-header-border: oklch(0.28 0.015 255);
+  --log-header-text:   oklch(0.92 0.005 250);
+  --log-header-muted:  oklch(0.62 0.008 250);
+}
+
+.ol-log-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0 18px;
+  white-space: pre;
+}
+.ol-log-line.error .ol-log-payload {
+  color: var(--log-error);
+}
+
+.ol-log-num {
+  color: var(--log-num);
+  width: 4ch;
+  text-align: right;
+  flex-shrink: 0;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.ol-log-prefix {
+  /*
+   * Prefix column. The original `width: 7ch` was the right size for
+   * the canonical 4 short prefixes (`info` / `success` / `warning` /
+   * `error`) but the backend now emits arbitrary `scope` strings via
+   * the SSE `prefix` field — `dockerfile` (10 chars), `image_pull`
+   * (10), `container_create` (16). With no overflow guard the long
+   * prefix spilled across the gap and overlapped the payload, which
+   * read as "build log glyphs are stacking on top of each other".
+   *
+   * Fix: keep the 7ch min so short prefixes still align; let the
+   * column grow up to 14ch for the long ones; clip + ellipsis with
+   * a `title` attribute on the JSX side surfaces the full string.
+   */
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  flex: 0 0 auto;
+  min-width: 7ch;
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.65;
+}
+.ol-log-prefix.info    { color: var(--log-muted); }
+.ol-log-prefix.success { color: var(--log-success); }
+.ol-log-prefix.warning { color: var(--log-warning); }
+.ol-log-prefix.error   { color: var(--log-error); }
+
+.ol-log-payload {
+  /*
+   * Force single-line rendering with horizontal overflow so each
+   * virtualized row has a stable 22px height. The previous `pre-wrap`
+   * + `word-break: break-word` combo let long lines (stack traces,
+   * unbreakable URLs/hashes) grow to 2-N visual lines while the
+   * virtualizer's estimate stayed at 22px — the next row's
+   * `transform: translateY(...)` then landed on top of the wrapped
+   * content, producing the "text overlapping" bug.
+   *
+   * Long lines are still recoverable: the row scrolls horizontally
+   * so the operator can sweep through long output without losing
+   * vertical alignment.
+   */
+  flex: 1;
+  min-width: 0;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.ol-step-marker {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: color-mix(in oklch, var(--ol-actor-mcp) 18%, transparent);
+  color: var(--log-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.ol-phase-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--log-muted);
+}
+.ol-phase-header::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--log-header-border);
+}
+.ol-phase-header.success {
+  color: var(--log-success);
+}
+.ol-phase-header.failed {
+  color: var(--log-error);
+}
+
+/* ANSI colors */
+.ansi-bold    { font-weight: 700; }
+.ansi-dim     { opacity: 0.7; }
+.ansi-red     { color: var(--log-error); }
+.ansi-green   { color: var(--log-success); }
+.ansi-yellow  { color: var(--log-warning); }
+.ansi-magenta { color: var(--log-magenta); }
+.ansi-cyan    { color: var(--log-cyan); }
+
+/* Inline progress bar (for {progress} entries) */
+.ol-progress-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 4px;
+}
+.ol-progress-inline-bar {
+  width: 120px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--log-header-border);
+  overflow: hidden;
+}
+.ol-progress-inline-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--ol-primary, oklch(0.72 0.18 145));
+  transition: width 0.18s linear;
+}
+
+/*
+ * Reduced-motion gate. The progress bar's width transition is the only
+ * motion in this stylesheet — drop it under the OS preference.
+ * Future header pulses (FsmBadge "live" dot, etc.) inherit this block
+ * and should add their own `animation: none` rules here.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .ol-progress-inline-bar > span {
+    transition: none;
+  }
+}
+
+/* Older-slabs notice (rendered above virtualizer) */
+.ol-older-slabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  margin: 0 18px 6px;
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--ol-actor-mcp) 14%, transparent);
+  color: var(--log-muted);
+  font-family: var(--ol-font-ui);
+  font-size: 12px;
+}
+
+/* Reconnect notice */
+.ol-recon-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  background: color-mix(in oklch, var(--log-warning) 18%, var(--log-header-bg));
+  color: var(--log-warning);
+  font-family: var(--ol-font-ui);
+  font-size: 12px;
+  border-bottom: 1px solid var(--log-header-border);
+}
+
+/* Jump-to-latest pill */
+.ol-jump-pill {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--log-header-bg);
+  color: var(--log-text);
+  font-family: var(--ol-font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--ol-border, oklch(0.28 0.015 255));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  z-index: 5;
+}

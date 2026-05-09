@@ -1,0 +1,290 @@
+import { Hono } from 'hono';
+import { describe, expect, it, vi } from 'vitest';
+
+import type { AppContext } from '../../src/app.js';
+import type { ProjectRow, ServiceRow } from '../../src/db/types.js';
+import { createServiceAuxRoutes } from '../../src/web/api/service-aux-routes.js';
+import { TunnelStartError } from '../../src/errors.js';
+
+function makeProjectRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
+  return {
+    id: 'group-1',
+    name: 'workspace',
+    display_name: 'Workspace',
+    description: null,
+    tags: null,
+    archived_at: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    server_id: 'local',
+    deploy_lock_session: null,
+    deploy_lock_at: null,
+    container_id: null,
+    ...overrides,
+  };
+}
+
+function makeServiceRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
+  return {
+    id: 'group-1__svc',
+    project_id: 'group-1',
+    name: 'group-1__svc',
+    kind: 'image',
+    parent_service_id: null,
+    status: 'running',
+    visibility: 'internal',
+    assigned_port: 10001,
+    container_id: 'container-1',
+    container_name: 'ol-workspace',
+    container_port: 3000,
+    image_tag: 'ol-workspace:latest',
+    previous_image_tag: null,
+    public_url: null,
+    dockerfile_path: null,
+    docker_target: null,
+    build_context: null,
+    build_method: null,
+    source: 'image',
+    repo_url: null,
+    branch: null,
+    image_url: 'nginx:alpine',
+    image_cmd: null,
+    pending_fix: null,
+    access_code: null,
+    access_code_iv: null,
+    is_preview: null,
+    pr_number: null,
+    project_type: 'web',
+    health_check_strategy: 'http',
+    health_check_path: '/',
+    recovering_started_at: null,
+    credentials: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    archived_at: null,
+    server_id: 'local',
+    ...overrides,
+  };
+}
+
+function createApp(ctx: Partial<AppContext>) {
+  const app = new Hono();
+  app.route('/api', createServiceAuxRoutes(ctx as AppContext));
+  return app;
+}
+
+const dockerStats = {
+  cpu_stats: {
+    cpu_usage: { total_usage: 300, percpu_usage: [0, 0] },
+    system_cpu_usage: 1000,
+    online_cpus: 2,
+  },
+  precpu_stats: { cpu_usage: { total_usage: 100 }, system_cpu_usage: 500 },
+  memory_stats: { usage: 64 * 1024 * 1024, limit: 256 * 1024 * 1024 },
+};
+
+describe('createServiceAuxRoutes', () => {
+  it('returns service stats using the deployable service container', async () => {
+    const project = makeProjectRow();
+    const service = makeServiceRow();
+    const docker = { getContainerStats: vi.fn(async () => dockerStats) };
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployableForProject: vi.fn(async () => service),
+      },
+      docker,
+    });
+
+    const res = await app.request('/api/projects/group-1/services/group-1__svc/stats');
+
+    expect(res.status).toBe(200);
+    expect(docker.getContainerStats).toHaveBeenCalledWith('container-1');
+    await expect(res.json()).resolves.toMatchObject({
+      cpu: 80,
+      memory: 67108864,
+      memoryLimit: 268435456,
+      status: 'running',
+    });
+  });
+
+  it('returns zeroed stats when the selected service is not running', async () => {
+    const project = makeProjectRow();
+    const service = makeServiceRow({ status: 'stopped', container_id: 'container-1' });
+    const docker = { getContainerStats: vi.fn(async () => dockerStats) };
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployableForProject: vi.fn(async () => service),
+      },
+      docker,
+    });
+
+    const res = await app.request('/api/projects/group-1/services/group-1__svc/stats');
+
+    expect(res.status).toBe(200);
+    expect(docker.getContainerStats).not.toHaveBeenCalled();
+    await expect(res.json()).resolves.toMatchObject({
+      cpu: 0,
+      memory: 0,
+      memoryLimit: 0,
+      status: 'stopped',
+    });
+  });
+
+  it('exposes and unexposes the service through the deployable service port', async () => {
+    const project = makeProjectRow();
+    const service = makeServiceRow({ assigned_port: 10042 });
+    const pipeline = {
+      exposeTunnel: vi.fn(async () => 'https://workspace.trycloudflare.com'),
+      closeTunnel: vi.fn(),
+    };
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployableForProject: vi.fn(async () => service),
+      },
+      pipeline,
+    });
+
+    const expose = await app.request('/api/projects/group-1/services/group-1__svc/expose', {
+      method: 'POST',
+    });
+    const unexpose = await app.request('/api/projects/group-1/services/group-1__svc/unexpose', {
+      method: 'POST',
+    });
+
+    expect(expose.status).toBe(200);
+    expect(pipeline.exposeTunnel).toHaveBeenCalledWith('group-1', 10042);
+    await expect(expose.json()).resolves.toMatchObject({
+      status: 'exposed',
+      project: 'workspace',
+      publicUrl: 'https://workspace.trycloudflare.com',
+    });
+    expect(unexpose.status).toBe(200);
+    expect(pipeline.closeTunnel).toHaveBeenCalledWith('group-1');
+  });
+
+  it('maps tunnel startup failures to the legacy 503 response', async () => {
+    const project = makeProjectRow();
+    const service = makeServiceRow({ assigned_port: 10042 });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployableForProject: vi.fn(async () => service),
+      },
+      pipeline: { exposeTunnel: vi.fn(async () => Promise.reject(new TunnelStartError('boom'))) },
+    });
+
+    const res = await app.request('/api/projects/group-1/services/group-1__svc/expose', {
+      method: 'POST',
+    });
+
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toMatchObject({ error: 'TUNNEL_START_FAILED' });
+  });
+
+  it('returns disabled responses for service webhook aliases', async () => {
+    const app = createApp({});
+
+    const get = await app.request('/api/projects/group-1/services/group-1__svc/webhooks');
+    const post = await app.request('/api/projects/group-1/services/group-1__svc/webhooks', {
+      method: 'POST',
+    });
+
+    expect(get.status).toBe(410);
+    expect(post.status).toBe(410);
+    await expect(get.json()).resolves.toMatchObject({ code: 'FEATURE_DISABLED' });
+  });
+
+  it('lists preview projects with deployable runtime status and normalized timestamps', async () => {
+    const project = makeProjectRow();
+    const preview = makeProjectRow({
+      id: 'preview-1',
+      name: 'workspace-pr-7',
+      status: 'stopped',
+      pr_number: 7,
+      public_url: 'https://old.example.com',
+      created_at: 1704067200000,
+      updated_at: new Date('2026-01-02T00:00:00.000Z'),
+    } as Partial<ProjectRow>);
+    const previewService = makeServiceRow({
+      id: 'preview-1__svc',
+      project_id: 'group-1',
+      status: 'running',
+      public_url: 'https://preview.example.com',
+    });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getPreviewProjects: vi.fn(async () => [preview]),
+        getDeployableForProject: vi.fn(async (id: string) =>
+          id === preview.id ? previewService : undefined,
+        ),
+      },
+    });
+
+    const res = await app.request('/api/projects/group-1/services/group-1__svc/previews');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      previews: [
+        {
+          id: 'preview-1',
+          name: 'workspace-pr-7',
+          status: 'running',
+          prNumber: 7,
+          publicUrl: 'https://preview.example.com',
+          createdAt: '1704067200000',
+          updatedAt: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+    });
+  });
+
+  it('returns service topology with legacy canonical response shape', async () => {
+    const project = makeProjectRow({ assigned_port: null });
+    const service = makeServiceRow({ assigned_port: 10001 });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getComposeChildProjects: vi.fn(async () => []),
+        getChildProjects: vi.fn(async () => []),
+        findDependenciesByProject: vi.fn(async () => []),
+        getDeployableForProject: vi.fn(async () => service),
+        getLatestServiceMetric: vi.fn(async () => ({
+          cpu: 12.34,
+          mem: 45.6,
+          recorded_at: Date.now(),
+        })),
+      },
+      docker: {
+        inspectContainer: vi.fn(async () => ({ State: { Health: { Status: 'healthy' } } })),
+      },
+    });
+
+    const res = await app.request('/api/projects/group-1/services/group-1__svc/topology');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      services: [
+        {
+          id: 'group-1',
+          name: 'workspace',
+          kind: 'Application',
+          health: 'healthy',
+          port: 10001,
+          cpu: '12.3%',
+          mem: '46 MB',
+          dependsOn: [],
+        },
+      ],
+    });
+  });
+});

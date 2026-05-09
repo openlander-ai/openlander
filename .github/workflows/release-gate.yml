@@ -1,0 +1,71 @@
+name: Release Gate
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  push:
+    branches: [develop]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+
+permissions:
+  contents: read
+
+jobs:
+  backend-release-gate:
+    name: Backend release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OPENLANDER_DATABASE_URL: postgresql://postgres:test@localhost:5432/openlander_test
+      DATABASE_URL: postgresql://postgres:test@localhost:5432/openlander_test
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: openlander_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d openlander_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Pin npm version
+        run: |
+          corepack enable
+          corepack prepare npm@11.5.1 --activate
+          npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Required for release-gated test/web/* files that import from web/src.
+      # Those imports resolve React and related frontend packages from
+      # web/node_modules, not the root install.
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Run release QA gate
+        run: npm run qa:release

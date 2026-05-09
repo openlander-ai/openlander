@@ -1,0 +1,75 @@
+name: Contract Tests
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+
+jobs:
+  contract-tests:
+    name: Vitest contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OPENLANDER_DATABASE_URL: postgresql://postgres:test@localhost:5432/openlander_test
+      DATABASE_URL: postgresql://postgres:test@localhost:5432/openlander_test
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: openlander_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d openlander_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      # Pin npm 11 — lockfile is generated locally with npm 11; npm 10 (Node 22
+      # default) misreads vitest's bundled esbuild platform deps and tries to
+      # install netbsd-arm64 on Linux. EBADPLATFORM follows.
+      # corepack handles npm-self-upgrade correctly (npm i -g npm@11 hits
+      # MODULE_NOT_FOUND promise-retry on Node 22's bundled npm 10).
+      - name: Pin npm version (corepack)
+        run: |
+          corepack enable
+          corepack prepare npm@11.5.1 --activate
+          npm --version
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      # tsc -b first so type errors fail CI fast (before the slower
+      # contract-tests pre/post-test backend boot). Develop-bound PRs
+      # don't currently hit the main-only ci.yml workflow which would
+      # otherwise type-check the web frontend, so this is the only gate
+      # catching latent web/src type errors before they merge.
+      - name: Type check web
+        working-directory: web
+        run: npx tsc -b
+
+      - name: Run contract tests
+        working-directory: web
+        run: npm run test:contract
+        env:
+          CONTRACT_TEST_PORT: 10117
+          NODE_ENV: test
