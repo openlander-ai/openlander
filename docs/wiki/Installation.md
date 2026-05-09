@@ -16,7 +16,7 @@
 
 ```bash
 # Start OpenLander plus its Postgres database
-OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose up -d --build
+docker compose up -d --build
 ```
 
 This starts:
@@ -39,12 +39,13 @@ The runtime Compose file pulls the published OpenLander image from GHCR and runs
 it with Postgres:
 
 ```bash
-OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose -f docker-compose.runtime.yml up -d
+docker compose -f docker-compose.runtime.yml up -d
 ```
 
 `docker-compose.runtime.yml` defaults to
-`ghcr.io/openlander-ai/openlander:latest`. Pin a release by setting
-`OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0`.
+`ghcr.io/openlander-ai/openlander:latest`, so updates do not require editing
+the image URL. Pin a release by setting
+`OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0` in `.env`.
 
 ### Low-Memory Local Runtime Image
 
@@ -55,7 +56,7 @@ the runtime image:
 ```bash
 npm install
 npm run docker:build:runtime
-OPENLANDER_IMAGE=openlander:local OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose -f docker-compose.runtime.yml up -d
+OPENLANDER_IMAGE=openlander:local docker compose -f docker-compose.runtime.yml up -d
 ```
 
 `npm run docker:build:runtime` disables declaration-file and sourcemap output for
@@ -182,7 +183,7 @@ Config file: `~/.openlander/config.json`
 
 ```bash
 docker compose -f docker-compose.runtime.yml pull
-OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose -f docker-compose.runtime.yml up -d
+docker compose -f docker-compose.runtime.yml up -d
 ```
 
 ## Uninstalling

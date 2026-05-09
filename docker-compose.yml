@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: openlander
       POSTGRES_USER: openlander
-      POSTGRES_PASSWORD: ${OPENLANDER_POSTGRES_PASSWORD:?Set OPENLANDER_POSTGRES_PASSWORD before starting OpenLander}
+      POSTGRES_PASSWORD: ${OPENLANDER_POSTGRES_PASSWORD:-openlander}
     volumes:
       - openlander-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -23,7 +23,7 @@ services:
       openlander-db:
         condition: service_healthy
     environment:
-      OPENLANDER_DATABASE_URL: postgres://openlander:${OPENLANDER_POSTGRES_PASSWORD:?Set OPENLANDER_POSTGRES_PASSWORD before starting OpenLander}@openlander-db:5432/openlander
+      OPENLANDER_DATABASE_URL: postgres://openlander:${OPENLANDER_POSTGRES_PASSWORD:-openlander}@openlander-db:5432/openlander
       OPENLANDER_CONTAINERIZED: 'true'
     ports:
       - '10114:10114'

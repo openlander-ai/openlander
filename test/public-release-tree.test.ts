@@ -51,6 +51,7 @@ describe('public release tree hygiene', () => {
 
   it('keeps public release config examples aligned with the Postgres runtime', () => {
     const changelog = readFileSync('CHANGELOG.md', 'utf8');
+    const compose = readFileSync('docker-compose.runtime.yml', 'utf8');
     const envExample = readFileSync('.env.example', 'utf8');
     const readme = readFileSync('README.md', 'utf8');
 
@@ -60,10 +61,16 @@ describe('public release tree hygiene', () => {
     expect(envExample).toContain('OPENLANDER_DATABASE_URL');
     expect(envExample).not.toContain('OPENLANDER_DB_PATH');
     expect(envExample).not.toContain('SQLite database file path');
+    expect(compose).toContain('OPENLANDER_POSTGRES_PASSWORD:-openlander');
+    expect(compose).toContain('OPENLANDER_IMAGE:-ghcr.io/openlander-ai/openlander:latest');
     expect(readme).toContain(
       'curl -fsSLO https://raw.githubusercontent.com/openlander-ai/openlander/v0.1.0/docker-compose.runtime.yml',
     );
-    expect(readme).toContain('OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0');
+    expect(readme).not.toContain('OPENLANDER_POSTGRES_PASSWORD=change-me');
+    expect(readme).not.toContain("cat > .env <<'EOF'");
+    expect(readme).toContain('By default the compose file uses');
+    expect(readme).toContain('ghcr.io/openlander-ai/openlander:latest');
+    expect(readme).toContain('set `OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0`');
     expect(readme).toContain('source checkout or local build is required');
   });
 

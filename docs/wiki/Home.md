@@ -11,13 +11,13 @@ OpenLander keeps the logs/status and your external MCP agent can inspect and red
 
 ```bash
 # Start OpenLander plus its Postgres database
-OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose up -d --build
+docker compose up -d --build
 ```
 
 To use the published runtime image instead of building locally:
 
 ```bash
-OPENLANDER_POSTGRES_PASSWORD='change-me' docker compose -f docker-compose.runtime.yml up -d
+docker compose -f docker-compose.runtime.yml up -d
 ```
 
 Open `http://localhost:10114` and follow the setup wizard.
