@@ -21,7 +21,6 @@ import { createCorsOriginPolicy } from './middleware/cors-policy.js';
 import { AuthService } from '../auth/auth-service.js';
 import { createMcpHttpRoutes } from '../mcp/server.js';
 import { OpenLanderError } from '../errors.js';
-import pc from 'picocolors';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
@@ -86,39 +85,6 @@ interface CreateAppOptions {
 }
 
 export type UpgradeWebSocketHandler = NodeWebSocket['upgradeWebSocket'];
-
-/**
- * Print the one-time setup secret to the server console when no password has
- * been configured yet. The secret authorizes the very first call to
- * `/auth/setup-password`, preventing a third party on the same network from
- * silently claiming the admin account on a fresh install.
- *
- * Idempotent: returns the same secret if invoked multiple times before setup
- * completes; returns null (and prints nothing) once a password exists.
- */
-async function announceSetupSecretIfNeeded(authService: AuthService): Promise<void> {
-  const secret = await authService.getOrCreateSetupSecret();
-  if (!secret) {
-    return;
-  }
-
-  const banner = pc.cyan('═'.repeat(60));
-  console.log();
-  console.log(banner);
-  console.log(pc.bold('  OpenLander first-run setup'));
-  console.log(banner);
-  console.log(`  ONE-TIME SETUP SECRET: ${pc.bold(pc.yellow(secret))}`);
-  console.log('  Paste this into the setup form to claim the admin account.');
-  console.log('  This value lives in memory only and rotates on restart.');
-  console.log(
-    pc.dim(
-      '  Note: this secret and the initial password travel over plain HTTP.\n' +
-        '  On an untrusted network, run setup over HTTPS or through an SSH tunnel.',
-    ),
-  );
-  console.log(banner);
-  console.log();
-}
 
 function startMonitoring(ctx: AppContext): void {
   ctx.dockerEventListener?.start();
@@ -409,7 +375,7 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   const wsAdapter = createNodeWebSocket({ app });
   // eslint-disable-next-line @typescript-eslint/unbound-method
   const { injectWebSocket, upgradeWebSocket } = wsAdapter;
-  const { app: appWithRoutes, authService } = createApp(ctx, { app, upgradeWebSocket });
+  const { app: appWithRoutes } = createApp(ctx, { app, upgradeWebSocket });
 
   const server = createAdaptorServer(appWithRoutes);
 
@@ -431,7 +397,6 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
     );
     const host = options.host || 'localhost';
     console.log(`\n  OpenLander v${VERSION}\n  http://${host}:${String(options.port)}\n`);
-    void announceSetupSecretIfNeeded(authService);
   });
   injectWebSocket(server);
 
@@ -455,7 +420,7 @@ export interface DaemonOptions {
  */
 export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<void> {
   serverStartTime = Date.now();
-  const { app, mcpRoutes, authService } = createApp(ctx);
+  const { app, mcpRoutes } = createApp(ctx);
 
   // Ensure socket directory exists
   mkdirSync(dirname(options.socketPath), { recursive: true });
@@ -472,7 +437,6 @@ export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<vo
     server.listen(options.socketPath, () => {
       chmodSync(options.socketPath, 0o660);
       log.debug({ socketPath: options.socketPath }, 'Daemon listening');
-      void announceSetupSecretIfNeeded(authService);
       resolve();
     });
   });

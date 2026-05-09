@@ -6,7 +6,7 @@
  *
  *   - signin (default) — password input only
  *   - setup  (when /api/setup/status hasPassword=false) — password +
- *     confirm + setupSecret, 12-char minimum
+ *     confirm, 12-char minimum
  *
  * The setup branch wires to /api/auth/setup-password, which on success
  * already sets the session cookie. We hard-reload into /projects so
@@ -36,7 +36,6 @@ export function LoginPage() {
   const [mode, setMode] = useState<Mode | null>(null);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [setupSecret, setSetupSecret] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -100,19 +99,14 @@ export function LoginPage() {
       setError(t('setup.password.mismatch'));
       return;
     }
-    if (!setupSecret.trim()) {
-      setError(t('setup.password.secretEmpty'));
-      return;
-    }
     setLoading(true);
     try {
-      await setupPassword(password, setupSecret.trim());
+      await setupPassword(password);
       // Backend created a session cookie on success. Hard-reload into
       // /projects so AuthProvider re-runs verifySession() and picks up
       // the cookie — avoids a follow-up /api/auth/login round-trip and
-      // removes the "setupPassword OK but login() fails" recovery hole
-      // (the one-time setup secret has been consumed by the time we'd
-      // need to retry, so a soft retry would 403). Use replace() so
+      // removes the "setupPassword OK but login() fails" recovery hole.
+      // Use replace() so
       // the back button doesn't return the user to /login.
       window.location.replace('/projects');
     } catch (err) {
@@ -189,25 +183,6 @@ export function LoginPage() {
                 className="bg-bg-panel border-border"
               />
             </div>
-            <div className="space-y-1">
-              <label htmlFor="setup-secret" className="sr-only">
-                {t('setup.password.secretPlaceholder')}
-              </label>
-              <Input
-                id="setup-secret"
-                type="text"
-                placeholder={t('setup.password.secretPlaceholder')}
-                value={setupSecret}
-                onChange={(e) => setSetupSecret(e.target.value)}
-                autoComplete="off"
-                aria-describedby="setup-secret-hint"
-                className="bg-bg-panel border-border font-mono"
-              />
-              <p id="setup-secret-hint" className="text-[11px] font-body text-foreground/60">
-                {t('setup.password.secretHint')}
-              </p>
-            </div>
-
             {error && (
               <p data-testid="login-error" role="alert" className="text-sm text-red-400 font-body">
                 {error}
@@ -217,11 +192,11 @@ export function LoginPage() {
             <Button
               type="submit"
               // Only block the click when nothing has been entered or a
-              // request is in flight. Length / mismatch / missing-secret
-              // are surfaced as inline errors on submit, so the user
-              // actually learns the rule instead of staring at a greyed
+              // request is in flight. Length / mismatch are surfaced as
+              // inline errors on submit, so the user actually learns the
+              // rule instead of staring at a greyed
               // button (CCG advisor feedback on PR #200).
-              disabled={loading || !password || !confirm || !setupSecret}
+              disabled={loading || !password || !confirm}
               className="w-full bg-agent hover:bg-agent/90 text-white font-body"
             >
               {loading ? t('setup.password.saving') : t('setup.password.submit')}

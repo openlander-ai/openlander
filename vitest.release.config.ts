@@ -19,6 +19,7 @@ export default defineConfig({
       'test/api/deploy-log-source.test.ts',
       'test/api/deploy-log-stream-routes.test.ts',
       'test/api/docker-log-timestamps.test.ts',
+      'test/web/api/auth-setup-password.test.ts',
       'test/api/service-log-routes.test.ts',
       'test/api/service-deploy-route.test.ts',
       'test/api/v0-1-backend-dormancy.test.ts',

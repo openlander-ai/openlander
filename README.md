@@ -23,14 +23,9 @@ This pulls the published OpenLander runtime image plus a Postgres sidecar; no
 source checkout or local build is required. Open the dashboard at
 `http://localhost:10114`.
 
-Follow the setup flow in the browser. If it asks for a setup secret, read it
-from the container logs:
-
-```bash
-docker compose -f docker-compose.runtime.yml logs openlander
-```
-
-After setup, copy the MCP token into your coding agent's MCP config. See
+Follow the setup flow in the browser to create the admin password. Complete
+this before exposing the host to the public internet. After setup, copy the
+MCP token into your coding agent's MCP config. See
 [MCP Tools Reference](docs/wiki/MCP-Tools-Reference.md).
 
 ---

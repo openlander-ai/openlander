@@ -66,4 +66,15 @@ describe('public release tree hygiene', () => {
     expect(readme).toContain('OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0');
     expect(readme).toContain('source checkout or local build is required');
   });
+
+  it('keeps first-run setup browser-only with no setup secret ceremony', () => {
+    const readme = readFileSync('README.md', 'utf8');
+    const serverSource = readFileSync('src/web/server.ts', 'utf8');
+    const authRoutes = readFileSync('src/web/api/auth-routes.ts', 'utf8');
+
+    expect(readme).not.toMatch(/setup secret/i);
+    expect(readme).not.toContain('docker compose -f docker-compose.runtime.yml logs openlander');
+    expect(serverSource).not.toContain('ONE-TIME SETUP SECRET');
+    expect(authRoutes).not.toContain('INVALID_SETUP_SECRET');
+  });
 });

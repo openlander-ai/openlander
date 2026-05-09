@@ -35,9 +35,15 @@ describe('AuthScreen v0.1 — single page, two modes', () => {
     expect(source).toMatch(/password\.trim\(\)/);
   });
 
-  it('requires setupSecret on setup submission', () => {
-    expect(source).toMatch(/!setupSecret\.trim\(\)/);
-    expect(source).toContain("t('setup.password.secretEmpty')");
+  it('does not require a setup secret on first-run password setup', () => {
+    expect(source).not.toMatch(/setupSecret/);
+    expect(source).not.toContain("t('setup.password.secretEmpty')");
+    expect(source).toMatch(/await setupPassword\(password\)/);
+    for (const dict of [enSource, koSource]) {
+      expect(dict).not.toMatch(/secretPlaceholder:/);
+      expect(dict).not.toMatch(/secretHint:/);
+      expect(dict).not.toMatch(/secretEmpty:/);
+    }
   });
 
   it('confirms password match before setup submit', () => {
@@ -81,7 +87,7 @@ describe('AuthScreen v0.1 — single page, two modes', () => {
     // The setup submit button must allow a click when password is short
     // so the user actually sees the tooShort message. Length validation
     // happens inline on submit.
-    expect(source).toMatch(/disabled=\{loading \|\| !password \|\| !confirm \|\| !setupSecret\}/);
+    expect(source).toMatch(/disabled=\{loading \|\| !password \|\| !confirm\}/);
     expect(source).not.toMatch(/disabled=\{[^}]*password\.length < MIN_LENGTH/);
   });
 

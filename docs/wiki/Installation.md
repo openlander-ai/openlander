@@ -152,7 +152,7 @@ brew install --cask docker
 > custom direct-CLI supervisors only (see
 > [Running as a Service](../../README.md#running-as-a-service) in README).
 
-> **Single-process only**: OpenLander 0.1 must run as a single process. Do **not** enable PM2 cluster mode (`exec_mode: 'cluster'` / `instances > 1`) or run multiple `openlander` workers behind a load balancer. The first-boot setup secret, the OAuth PKCE verifier map, and session-local state are in-process state — workers would each generate a different setup secret and fail to share OAuth/session state. Multi-process support is tracked for a future minor release.
+> **Single-process only**: OpenLander 0.1 must run as a single process. Do **not** enable PM2 cluster mode (`exec_mode: 'cluster'` / `instances > 1`) or run multiple `openlander` workers behind a load balancer. The OAuth PKCE verifier map and session-local state are in-process state — workers would fail to share OAuth/session state. Multi-process support is tracked for a future minor release.
 
 ---
 
