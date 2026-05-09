@@ -15,20 +15,18 @@ curl -fsSLO https://raw.githubusercontent.com/openlander-ai/openlander/v0.1.0/do
 docker compose -f docker-compose.runtime.yml up -d
 ```
 
-This pulls the published OpenLander runtime image plus a Postgres sidecar; no
-source checkout or local build is required. Open the dashboard at
-`http://localhost:10114`.
+Open `http://localhost:10114`, create the admin password, then copy the MCP
+token into your coding agent. The compose file uses the published
+`ghcr.io/openlander-ai/openlander:latest` image plus a Postgres sidecar.
 
-By default the compose file uses `ghcr.io/openlander-ai/openlander:latest`.
-Update later with `docker compose -f docker-compose.runtime.yml pull` followed
-by `docker compose -f docker-compose.runtime.yml up -d`. If you want a pinned
-install, set `OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0` in a
-local `.env` file.
+Update later with:
 
-Follow the setup flow in the browser to create the admin password. Complete
-this before exposing the host to the public internet. After setup, copy the
-MCP token into your coding agent's MCP config. See
-[MCP Tools Reference](docs/wiki/MCP-Tools-Reference.md).
+```bash
+docker compose -f docker-compose.runtime.yml pull
+docker compose -f docker-compose.runtime.yml up -d
+```
+
+For agent setup details, see [MCP Tools Reference](docs/wiki/MCP-Tools-Reference.md).
 
 ---
 

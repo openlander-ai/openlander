@@ -68,10 +68,10 @@ describe('public release tree hygiene', () => {
     );
     expect(readme).not.toContain('OPENLANDER_POSTGRES_PASSWORD=change-me');
     expect(readme).not.toContain("cat > .env <<'EOF'");
-    expect(readme).toContain('By default the compose file uses');
     expect(readme).toContain('ghcr.io/openlander-ai/openlander:latest');
-    expect(readme).toContain('set `OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0`');
-    expect(readme).toContain('source checkout or local build is required');
+    expect(readme).toContain('Update later with:');
+    expect(readme).not.toContain('set `OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0`');
+    expect(readme).toContain('image plus a Postgres sidecar');
   });
 
   it('keeps first-run setup browser-only with no setup secret ceremony', () => {
