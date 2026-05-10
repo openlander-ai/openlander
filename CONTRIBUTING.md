@@ -62,6 +62,24 @@ We use **Husky** + **lint-staged** to enforce quality on every commit:
 
 This means your code is auto-formatted on commit. If ESLint finds unfixable errors, the commit is rejected — fix the errors and try again.
 
+## Secret Scanning
+
+We use [gitleaks](https://github.com/gitleaks/gitleaks) to keep credentials out of the public history.
+
+- **Local hook** — `.husky/pre-commit` runs `gitleaks protect --staged` after `lint-staged`. The hook silently passes when the binary isn't installed; CI is the backstop. To install locally: `brew install gitleaks` (macOS) or download a release binary from [gitleaks/gitleaks](https://github.com/gitleaks/gitleaks/releases).
+- **CI** — `.github/workflows/secret-scan.yml` runs gitleaks on every push to `main` and on every PR. PR events scan only the PR's commit range; pushes to `main` scan the working tree.
+- **False positives in tests** — if a mocked credential in a test fixture trips a rule, run `gitleaks protect --staged` to read the fingerprint, manually confirm it's a fixture (not a real secret), and add the fingerprint line to `.gitleaksignore` with no extra commentary needed.
+- **Real secrets that landed by mistake** — public history is permanent. Rotate the leaked credential first, then open an issue so we can plan the rewrite carefully (it requires force-push and breaks anyone with an existing clone).
+
+## Branch Naming
+
+Branch names show up in the public PR list and stay there forever. Keep them descriptive of the technical change, not of internal context that should not be visible to users:
+
+- ✅ `feat/log-streaming-virtual-scroll`, `fix/build-cancel-race`, `chore/release-pipeline`
+- ❌ `feat/customer-acme-onboarding`, `feat/operation-blackbird`, `wip/stuff`
+
+Same goes for PR titles. If you need a working name for an unreleased capability, use a generic technical descriptor here and keep the marketing name out of git.
+
 ## Code Style
 
 We use ESLint with `strictTypeChecked` mode and Prettier.
