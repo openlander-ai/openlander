@@ -1,0 +1,31 @@
+# OpenLander gitleaks config
+#
+# Inherits the upstream gitleaks default ruleset and adds project-specific
+# allowlist entries for documented placeholders, lockfiles, and migration-doc
+# content that intentionally lists the same keywords gitleaks would flag.
+#
+# Used by:
+#   - .husky/pre-commit  (gitleaks protect --staged, when binary present)
+#   - .github/workflows/secret-scan.yml  (downloads gitleaks binary; the
+#     gitleaks-action would gate org repos behind a paid license)
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "OpenLander allowlist — documented placeholders, lockfiles, migration doc"
+
+paths = [
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)CHANGELOG\.md$''',
+  '''(^|/)docs/operations/migration/.+\.md$''',
+  '''(^|/)\.gitleaks\.toml$''',
+]
+
+# Anchored against the captured secret string (not substring) to avoid
+# suppressing real secrets that happen to embed a placeholder token.
+regexes = [
+  '''^change-me$''',
+  '''^your-password$''',
+  '''^your-secret-here$''',
+]
