@@ -76,8 +76,8 @@ Pushing `v*.*.*` triggers `.github/workflows/release-publish.yml`:
 
 ```bash
 docker pull ghcr.io/openlander-ai/openlander:0.1.0
-OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0 \
-  docker compose -f docker-compose.runtime.yml up -d
+curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh \
+  | sudo env OPENLANDER_VERSION=v0.1.0 bash
 curl -fsS http://localhost:10114/api/health
 ```
 

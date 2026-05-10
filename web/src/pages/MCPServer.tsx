@@ -1,7 +1,7 @@
 /**
  * Your Agent — v0.1 MCP surface.
  *
- * Single page, three cards (per `docs/design/v0.1/source-notes/v0.1-spec.md` §Your Agent):
+ * Single page, three cards:
  *
  *   1. Your Agent — Status row + Endpoint row + Token row.
  *      Single org-scoped token. In-page Generate / Reveal-on-issue /

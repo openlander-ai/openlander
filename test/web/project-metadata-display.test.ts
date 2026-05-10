@@ -9,7 +9,7 @@ function readRepoFile(relativePath: string): string {
 
 // PR #256 added `description` + `tags` to the project list response so
 // they survive a list refresh; the frontend never wired them into the
-// IA surfaces the design (docs/design/v1.0/GUIDE-02-page-skeleton.md) calls for, so users could save
+// IA surfaces the design calls for, so users could save
 // values via Settings but never see them outside the editor. This
 // suite pins the rendering surfaces so a regression can't silently
 // reopen the gap.
@@ -18,7 +18,7 @@ describe('Project metadata display (description + tags surface to IA)', () => {
   const viewSource = readRepoFile('web/src/pages/ProjectView.tsx');
 
   it('renders description as a 1-line subtitle on each project card', () => {
-    // Per docs/design/v1.0/GUIDE-02-page-skeleton.md §"Card grid": each card has a 1-line subtitle. We
+    // Card grid spec: each card has a 1-line subtitle. We
     // pin the truncated paragraph + the conditional guard so a future
     // refactor can't drop the description silently.
     expect(gridSource).toMatch(
@@ -27,7 +27,7 @@ describe('Project metadata display (description + tags surface to IA)', () => {
   });
 
   it('renders tags as a chip row above the stats strip', () => {
-    // Per docs/design/v1.0/GUIDE-02-page-skeleton.md §"Card grid": "optional status pills". Tags are
+    // Card grid spec: "optional status pills". Tags are
     // shown as small rounded chips; we cap the visible count at 6
     // and surface the overflow as `+N`.
     expect(gridSource).toMatch(/p\.tags && p\.tags\.length > 0/);
@@ -45,7 +45,7 @@ describe('Project metadata display (description + tags surface to IA)', () => {
   });
 
   it('uses description as the ProjectView header subtitle when present', () => {
-    // Per docs/design/v1.0/GUIDE-02-page-skeleton.md §"Page header": "Subtitle / description (muted,
+    // Page header spec: "Subtitle / description (muted,
     // 14px)". Description wins over the slug fallback so the v0.1
     // header reflects the user's metadata.
     expect(viewSource).toMatch(/realProject\?\.description\?\.trim\(\)/);

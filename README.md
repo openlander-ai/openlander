@@ -9,22 +9,27 @@
 ## Quickstart
 
 ```bash
-mkdir openlander
-cd openlander
-curl -fsSLO https://raw.githubusercontent.com/openlander-ai/openlander/v0.1.0/docker-compose.runtime.yml
-docker compose -f docker-compose.runtime.yml up -d
+curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh | sudo bash
 ```
 
-Open `http://localhost:10114`, create the admin password, then copy the MCP
-token into your coding agent. The compose file uses the published
-`ghcr.io/openlander-ai/openlander:latest` image plus a Postgres sidecar.
+Want to inspect it first? Download
+[`install.sh`](https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh)
+and read it before running with `sudo bash`.
+
+The installer sets up Docker/Compose if needed, starts the published
+`ghcr.io/openlander-ai/openlander:latest` image with Postgres, and prints the
+dashboard URL. Open it, create the admin password, then copy the MCP token into
+your coding agent.
 
 Update later with:
 
 ```bash
-docker compose -f docker-compose.runtime.yml pull
-docker compose -f docker-compose.runtime.yml up -d
+curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh | sudo bash -s update
 ```
+
+Prefer manual setup? Download
+[`docker-compose.runtime.yml`](docker-compose.runtime.yml) and run
+`docker compose -f docker-compose.runtime.yml up -d`.
 
 For agent setup details, see [MCP Tools Reference](docs/wiki/MCP-Tools-Reference.md).
 
@@ -54,13 +59,13 @@ Codex drive deploys, redeploys, log inspection, and recovery through the MCP
 protocol. No bespoke integration — if your coding agent speaks MCP, it can
 operate OpenLander.
 
-**You set the rules.** What agents are allowed to do. What needs human
-approval. When to override the agent. The dashboard surfaces every action
-the agent took, what's pending, and what's blocked — so you stay in the loop
-without staying at the keyboard.
+**Guardrails are built in.** Agents get org- and project-scoped tokens.
+Destructive MCP actions are either blocked outright or held for human
+approval. The dashboard surfaces what the agent did, what's pending, and
+what's blocked — so you stay in the loop without staying at the keyboard.
 
-It's not a dashboard with an API bolted on. It's a control plane built for
-agentic operation; the dashboard is the human surface on top.
+OpenLander is a control plane built for agentic operation; the dashboard
+is the human surface on top.
 
 ---
 
@@ -97,17 +102,19 @@ common single-service case.
 
 **Agent control**
 
-- MCP server bundled in. Org-scoped tokens, per-project audit trail, hold
-  queue for destructive actions.
-- High-risk MCP actions either require dashboard approval or are blocked
-  until a human uses the UI. Irreversible operations (delete project, drop
-  volumes) always block; reversible-but-risky operations (env overwrite,
-  force restart) wait for human approval.
+- MCP server bundled in. Org- and project-scoped tokens with cross-project
+  scope checks. Per-project audit trail.
+- Conservative built-in safety policy. Destructive operations such as
+  `delete_service`, `remove_volume`, and `cleanup_docker` are blocked
+  from MCP and must be completed in the dashboard. `remove_secret_file`
+  and confirmed `bulk_delete_env_vars` calls (with `confirm=true`) are
+  held in an approval queue before execution.
 
 **Self-hosted**
 
-- One `docker compose up` covers the runtime. Postgres ships in the same
-  compose file; no external database required.
+- The one-command installer sets up Docker/Compose if needed. Manual
+  `docker compose` setup is still supported.
+- Postgres ships in the same compose file; no external database required.
 - Traefik handles routing for deployed services. TLS depends on your domain
   / proxy setup.
 
@@ -160,7 +167,8 @@ more than waiting for it does.
 
 ## Requirements
 
-- Docker and Docker Compose
+- Linux server with root/sudo access for the one-command installer
+- Docker Engine with the Docker Compose v2 plugin for manual installation
 - ~1 GB free RAM for OpenLander + the bundled Postgres
 - A host that can expose port `10114` (or whatever you map)
 - Node.js 22+ for development; runtime ships in the Docker image
@@ -171,6 +179,8 @@ and inside Tailscale-only networks. Published runtime images support
 
 ### Installing Docker
 
+The quick installer does this for Linux servers. For manual setup:
+
 ```bash
 # Linux / WSL2
 curl -fsSL https://get.docker.com | sh
@@ -179,6 +189,22 @@ docker run --rm hello-world
 
 # macOS
 brew install --cask docker
+```
+
+Verify Docker Compose v2 is present (most installers include it, but some
+minimal Linux setups do not):
+
+```bash
+docker compose version
+```
+
+If the command is not found, install the Compose plugin:
+
+```bash
+# Debian / Ubuntu
+sudo apt-get update && sudo apt-get install -y docker-compose-plugin
+
+# Other distros: https://docs.docker.com/compose/install/linux/
 ```
 
 ---

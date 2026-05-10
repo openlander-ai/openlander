@@ -1,7 +1,7 @@
 /**
  * Sidebar — v0.1 IA.
  *
- * Per docs/design/v0.1/source-notes/v0.1-spec.md (final design lock):
+ * v0.1 final design lock:
  *
  *   Workspace (7):  Home · Your Agent · Projects · Activity · Deployments
  *                   · Monitoring · Web Server
@@ -257,8 +257,8 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
       </nav>
 
       {/* Account card pinned at bottom — single-admin v0.1. The legacy direct
-          Sign out button became a popover with Change password + Sign out per
-          docs/design/v0.1/source-notes/v0.1-spec.md. The legacy "self-hosted vX.Y.Z" version
+          Sign out button became a popover with Change password + Sign
+          out. The legacy "self-hosted vX.Y.Z" version
           stamp was dropped (replaced by the brand chip up top). */}
       <div className="border-t border-[color:var(--ol-border-subtle)] p-3">
         <AccountPopover collapsed={collapsed} />

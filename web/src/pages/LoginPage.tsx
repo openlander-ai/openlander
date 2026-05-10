@@ -1,7 +1,7 @@
 /**
  * LoginPage / AuthScreen — single page, two modes (v0.1).
  *
- * Per docs/design/v0.1/source-notes/v0.1-spec.md, first boot and sign-in
+ * For v0.1, first boot and sign-in
  * share one surface:
  *
  *   - signin (default) — password input only

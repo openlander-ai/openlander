@@ -7,9 +7,8 @@ function readRepoFile(relativePath: string): string {
   return readFileSync(path.join(process.cwd(), relativePath), 'utf8');
 }
 
-// Sidebar brand chip — top-left "OpenLander v0.1" stamp
-// (`docs/design/v0.1/source-notes/v0.1-decisions.md` §"Why move version
-// to brand area"). The pre-polish chip used 9.5px half-pixel font, an
+// Sidebar brand chip — top-left "OpenLander v0.1" stamp.
+// The pre-polish chip used 9.5px half-pixel font, an
 // uppercase transform, and a 24px glyph that read as a status badge
 // instead of a version stamp. This suite pins the polish so a future
 // theme tweak can't regress the visual back to the badge form.
@@ -27,7 +26,7 @@ describe('Sidebar brand chip — version pin polish', () => {
     // The uppercase utility on a `v0.1` literal produces "V0.1", which
     // breaks the canonical product version form. Drop the transform.
     const versionPinBlock = sidebarSource.match(
-      /aria-label="Version v0\.1"[\s\S]{0,200}/,
+      /<span\b[^>]*aria-label="Version v0\.1"[^>]*>[\s\S]*?<\/span>/,
     );
     expect(versionPinBlock).not.toBeNull();
     expect(versionPinBlock![0]).not.toMatch(/uppercase/);
@@ -35,7 +34,7 @@ describe('Sidebar brand chip — version pin polish', () => {
 
   it('drops the rounded-full border pill so the pin reads as text, not a status badge', () => {
     const versionPinBlock = sidebarSource.match(
-      /aria-label="Version v0\.1"[\s\S]{0,200}/,
+      /<span\b[^>]*aria-label="Version v0\.1"[^>]*>[\s\S]*?<\/span>/,
     );
     expect(versionPinBlock).not.toBeNull();
     expect(versionPinBlock![0]).not.toMatch(/rounded-full/);

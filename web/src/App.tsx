@@ -185,9 +185,8 @@ function App() {
                     }
                   />
                   {/* ── 1.0-rc.1: canonical deployable-service URL ─────────────
-                      `/projects/:p/services/:s` is the canonical route per
-                      docs/design/v1.0/GUIDE-01-IA-principles.md §4 vocabulary (Project = group,
-                      Service = deployable unit). ServiceDetailV2 dispatcher
+                      `/projects/:p/services/:s` is the canonical route — IA
+                      vocabulary: Project = group, Service = deployable unit. ServiceDetailV2 dispatcher
                       normalises both URL shapes via useParams() — when this
                       path matches, params are { p, s }; legacy path gives
                       { id } plus ?project= query.

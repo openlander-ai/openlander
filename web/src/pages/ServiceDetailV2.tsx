@@ -878,7 +878,7 @@ function DomainsTab({
   const { t } = useLanguage();
   // v0.1: Domains tab is read-only. Domain attach/detach happens through the
   // agent (MCP `attach_domain` / `detach_domain`). Edit UI ships in v0.2 alongside
-  // the Settings → Proxy editor. See docs/design/v0.1/source-notes/v0.1-spec.md.
+  // the Settings → Proxy editor.
   const [customDomains, setCustomDomains] = useState<DomainMapping[] | null>(null);
 
   useEffect(() => {

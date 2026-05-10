@@ -6,8 +6,8 @@
  *   - Services  → flat list of services with health pill + image + url
  *   - Settings  → group metadata and danger actions
  *
- * MCP tab was removed for v0.1 (project-scoped MCP tokens deferred to v0.2;
- * see docs/design/v0.1/source-notes/v0.1-spec.md). Activity is no longer a project tab — the
+ * MCP tab was removed for v0.1 (project-scoped MCP tokens deferred to v0.2).
+ * Activity is no longer a project tab — the
  * global Activity sidebar entry filters by project instead.
  *
  * "Add service" opens a native 1-step dialog (git / image / template)
@@ -166,8 +166,8 @@ export function ProjectView() {
           </span>
         }
         subtitle={
-          // Per docs/design/v1.0/GUIDE-02-page-skeleton.md §"Page header": "Subtitle / description
-          // (muted, 14px) — brief description of the page's purpose."
+          // Page header spec: "Subtitle / description (muted, 14px) —
+          // brief description of the page's purpose."
           //
           // Round-1 CCG: Codex flagged unbounded description risk +
           // Gemini flagged slug-precedence regression. Resolve both:

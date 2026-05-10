@@ -1,7 +1,7 @@
 /**
  * ChangePasswordModal — single-admin password rotation surface for v0.1.
  *
- * Per design docs/design/v0.1/source-notes/v0.1-decisions.md: password change is a 1-2 lifetime action,
+ * Password change is a 1-2 lifetime action,
  * surfaced from the sidebar Account popover (not a Settings page). Modal
  * stays scoped to current/new/confirm with client-side length + match
  * validation. Backend endpoint already exists at POST /api/auth/change-password

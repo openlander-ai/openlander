@@ -15,7 +15,7 @@ import { AlertOctagon, Code2, Copy, Edit, RefreshCw, Sparkles } from 'lucide-rea
 import { getErrorClass, type ErrorClassDef } from '@/lib/errorClasses';
 
 export interface FailureSummaryProps {
-  /** Error class id from docs/design/v1.0/GUIDE-05-error-taxonomy.md §2 — `BUILD_CONTEXT_MISMATCH`, etc. */
+  /** Error class id (e.g. `BUILD_CONTEXT_MISMATCH`). */
   errorClass: string;
   /** Optional override — bypasses the registry lookup. */
   override?: ErrorClassDef;

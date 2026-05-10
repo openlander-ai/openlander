@@ -22,6 +22,7 @@
     "Dockerfile.runtime.dockerignore",
     "docker-compose.yml",
     "docker-compose.runtime.yml",
+    "install.sh",
     "scripts/build-runtime-image.sh",
     "LICENSE",
     "README.md",

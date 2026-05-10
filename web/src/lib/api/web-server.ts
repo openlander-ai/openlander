@@ -8,8 +8,7 @@
  *   - GET /api/web-server/external-containers
  *
  * The page surface is intentionally read-only in v0.1 — there are no
- * write helpers here. Route editing ships in v0.2 per
- * `docs/design/v0.1/source-notes/v0.1-spec.md` §Web Server.
+ * write helpers here. Route editing ships in v0.2.
  */
 import { apiGet } from './client';
 

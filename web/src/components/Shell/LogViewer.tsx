@@ -1,7 +1,7 @@
 /**
  * LogViewer — Round 4 PR3 (further split in PR7-F).
  *
- * Two-axis FSM per docs/design/v1.0/GUIDE-04-log-streaming.md §2:
+ * Two-axis FSM:
  *
  *   connState: IDLE → CONNECTING → LIVE
  *              LIVE ⇄ RECONNECTING → BACKFILLING → LIVE

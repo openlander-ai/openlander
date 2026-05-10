@@ -2,8 +2,7 @@
  * OuterCard — Shell V2 primitive.
  *
  * The outer "card frame" that wraps every page body. Same shape across
- * every route per docs/design/v1.0/GUIDE-01-IA-principles.md mechanism M2 (Single Outer-Card Content
- * Frame).
+ * every route — mechanism M2 (Single Outer-Card Content Frame).
  *
  * Linear/Vercel tone: titles carry weight, no painted square accents.
  * If a leading glyph is desired, render it inside the `title` ReactNode

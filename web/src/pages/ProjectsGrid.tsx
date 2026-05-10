@@ -261,17 +261,17 @@ export function ProjectsGrid() {
                             </>
                           )}
                         </div>
-                        {/* Description — 1-line muted subtitle per
-                            docs/design/v1.0/GUIDE-02-page-skeleton.md §"Card grid": "icon + title + ... +
-                            1-line subtitle". Hidden when empty so the
-                            stats strip slides up to fill the gap. */}
+                        {/* Description — 1-line muted subtitle per the
+                            card grid spec ("icon + title + ... + 1-line
+                            subtitle"). Hidden when empty so the stats
+                            strip slides up to fill the gap. */}
                         {p.description && (
                           <p className="mt-1 truncate text-[12.5px] text-[color:var(--ol-fg-muted)]">
                             {p.description}
                           </p>
                         )}
-                        {/* Tags — chip row per docs/design/v1.0/GUIDE-02-page-skeleton.md §"Card grid":
-                            "optional status pills". Shown above the
+                        {/* Tags — chip row per the card grid spec
+                            ("optional status pills"). Shown above the
                             stats strip; hidden entirely when no tags. */}
                         {p.tags && p.tags.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-1.5">

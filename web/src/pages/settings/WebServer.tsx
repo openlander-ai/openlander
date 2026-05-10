@@ -1,7 +1,7 @@
 /**
  * Web Server — v0.1 read-only observability page.
  *
- * Implements `docs/design/v0.1/source-notes/v0.1-spec.md` §Web Server against the four read-model
+ * Implements the v0.1 Web Server surface against the four read-model
  * endpoints PR #209 added (`/api/web-server/{summary,routes,ports,external-containers}`).
  *
  * Layout (top → bottom):

@@ -2,20 +2,90 @@
 
 ## Requirements
 
-| Requirement       | Version  | Notes                                                                     |
-| ----------------- | -------- | ------------------------------------------------------------------------- |
-| **Node.js**       | >= 22    | Required for direct CLI development; Docker Compose runtime includes Node |
-| **Docker Engine** | >= 20.10 | With Compose V2 >= 2.3.0                                                  |
-| **Git**           | >= 2.x   | Required for direct/custom runtime; Docker Compose runtime includes git   |
+| Requirement       | Version   | Notes                                                    |
+| ----------------- | --------- | -------------------------------------------------------- |
+| **Linux server**  | root/sudo | Required for the one-command installer                   |
+| **Docker Engine** | >= 24     | Installed by the installer if missing                    |
+| **Compose V2**    | latest    | Installed by the installer if missing                    |
+| **Node.js**       | >= 22     | Development only; the Docker runtime image includes Node |
+| **Git**           | >= 2.x    | Development only; the Docker runtime image includes git  |
 
 **Platforms**: Linux (primary), macOS. Windows not supported (WSL2 works).
 
 ---
 
-## Install And Run
+## Quick Install
 
 ```bash
-# Start OpenLander plus its Postgres database
+curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh | sudo bash
+```
+
+Want to inspect it first? Download
+[`install.sh`](https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh)
+and read it before running with `sudo bash`.
+
+This installer:
+
+- Installs Docker if it is missing
+- Installs the Docker Compose v2 plugin if it is missing
+- Creates `/opt/openlander`
+- Downloads `docker-compose.runtime.yml`
+- Creates `/opt/openlander/.env` with a generated Postgres password
+- Starts OpenLander and Postgres
+
+`OPENLANDER_VERSION=latest` resolves the latest published GitHub Release for
+the compose file. It does not pull `main` branch compose content.
+
+Open the printed dashboard URL, usually `http://<server-ip>:10114`, and create
+the admin password.
+
+### Install A Specific Version
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh \
+  | sudo env OPENLANDER_VERSION=v0.1.0 bash
+```
+
+### Update
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh | sudo bash -s update
+```
+
+---
+
+## Manual Docker Compose Install
+
+Use this if you prefer to install Docker and Compose yourself.
+
+```bash
+mkdir openlander
+cd openlander
+curl -fsSLO https://raw.githubusercontent.com/openlander-ai/openlander/v0.1.0/docker-compose.runtime.yml
+docker compose -f docker-compose.runtime.yml up -d
+```
+
+The runtime Compose file pulls the published OpenLander image from GHCR and runs
+it with Postgres:
+
+`docker-compose.runtime.yml` defaults to
+`ghcr.io/openlander-ai/openlander:latest`, so updates do not require editing
+the image URL. Pin a release by setting
+`OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0` in `.env`.
+
+Manual updates:
+
+```bash
+docker compose -f docker-compose.runtime.yml pull
+docker compose -f docker-compose.runtime.yml up -d
+```
+
+---
+
+## Development Runtime
+
+```bash
+# Build from local source and start OpenLander plus Postgres
 docker compose up -d --build
 ```
 
@@ -24,28 +94,6 @@ This starts:
 - `openlander` — the web UI, API, MCP server, deploy pipeline, and passive monitors
 - `openlander-db` — Postgres 16 for OpenLander runtime state
 - `openlander-data` and `openlander-postgres` Docker volumes for persisted data
-
-This will:
-
-1. Start Postgres and OpenLander containers
-2. Mount the Docker socket so OpenLander can build and run project containers
-3. Serve the Web UI at `http://localhost:10114`
-4. Preserve runtime state in `openlander-data` and `openlander-postgres`
-5. Let you walk through the setup wizard on first open
-
-### Released Runtime Image
-
-The runtime Compose file pulls the published OpenLander image from GHCR and runs
-it with Postgres:
-
-```bash
-docker compose -f docker-compose.runtime.yml up -d
-```
-
-`docker-compose.runtime.yml` defaults to
-`ghcr.io/openlander-ai/openlander:latest`, so updates do not require editing
-the image URL. Pin a release by setting
-`OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0` in `.env`.
 
 ### Low-Memory Local Runtime Image
 
@@ -113,17 +161,31 @@ Configure MCP server for AI coding agent integration.
 
 ---
 
-## Docker Installation
+## Docker Installation For Manual Setup
+
+The quick installer handles Docker and Compose on Linux. If you install them
+yourself, verify Compose v2 is available:
+
+```bash
+docker compose version
+```
 
 ### Linux / WSL2
 
-The setup wizard can auto-install Docker. Or install manually:
+Install Docker manually:
 
 ```bash
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 # Log out and back in, then:
 sudo systemctl start docker
+```
+
+If `docker compose version` fails:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y docker-compose-plugin
 ```
 
 ### macOS

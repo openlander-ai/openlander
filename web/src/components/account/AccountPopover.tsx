@@ -1,7 +1,7 @@
 /**
  * AccountPopover — sidebar footer admin popover for v0.1.
  *
- * Per docs/design/v0.1/source-notes/v0.1-decisions.md: replaces the direct Sign out button with a small
+ * Replaces the direct Sign out button with a small
  * popover offering Change password + Sign out. Single-admin model — no
  * multi-user surfaces. Click trigger toggles the popover; outside click or
  * Escape closes it. Change password opens a separate modal.

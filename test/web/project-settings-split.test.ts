@@ -32,8 +32,8 @@ describe('Project Settings split contract', () => {
   it('keeps deployable ownership on Service Detail (v0.1 6-tab IA)', () => {
     // v0.1 service detail tabs: Overview / Logs / Deployments / Monitoring /
     // Environment / Domains. Resources is folded into Overview; Advanced and
-    // Settings tabs are cut. See docs/design/v0.1/source-notes/v0.1-spec.md
-    // §3 PR #198. SourceSettingsPanel was removed alongside the Advanced tab —
+    // Settings tabs are cut (PR #198). SourceSettingsPanel was removed
+    // alongside the Advanced tab —
     // source/build edits route through MCP for v0.1.
     expect(serviceDetailSource).toContain("'overview'");
     expect(serviceDetailSource).toContain("'environment'");

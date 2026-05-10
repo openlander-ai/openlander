@@ -1,7 +1,7 @@
 /**
  * Git Providers — v0.1 settings surface.
  *
- * Implements `docs/design/v0.1/source-notes/v0.1-spec.md` §Git Providers
+ * Implements the v0.1 Git Providers surface
  * against the `GET /api/git-providers/github` aggregator. Layout
  * (top → bottom):
  *

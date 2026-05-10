@@ -7,7 +7,7 @@
  * `config.gitProviders.github`, scopes come from a live `/user` call, and
  * `reposLinked` is derived by walking the services table.
  *
- * v0.1 spec: `docs/design/v0.1/source-notes/v0.1-spec.md` §Git Providers.
+ * v0.1 surface: Git Providers.
  */
 
 import { Hono } from 'hono';

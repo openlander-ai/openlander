@@ -54,6 +54,7 @@ describe('public release tree hygiene', () => {
     const compose = readFileSync('docker-compose.runtime.yml', 'utf8');
     const envExample = readFileSync('.env.example', 'utf8');
     const readme = readFileSync('README.md', 'utf8');
+    const installScript = readFileSync('install.sh', 'utf8');
 
     expect(changelog).toContain('## [0.1.0] — 2026-05-09');
     expect(changelog).not.toContain('## [0.1.0] — TBD');
@@ -63,15 +64,23 @@ describe('public release tree hygiene', () => {
     expect(envExample).not.toContain('SQLite database file path');
     expect(compose).toContain('OPENLANDER_POSTGRES_PASSWORD:-openlander');
     expect(compose).toContain('OPENLANDER_IMAGE:-ghcr.io/openlander-ai/openlander:latest');
-    expect(readme).toContain(
-      'curl -fsSLO https://raw.githubusercontent.com/openlander-ai/openlander/v0.1.0/docker-compose.runtime.yml',
-    );
+    expect(compose).toContain('${OPENLANDER_PORT:-10114}:10114');
+    expect(readme).toContain('https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh');
+    expect(readme).toContain('sudo bash -s update');
+    expect(readme).toContain('Want to inspect it first?');
     expect(readme).not.toContain('OPENLANDER_POSTGRES_PASSWORD=change-me');
     expect(readme).not.toContain("cat > .env <<'EOF'");
     expect(readme).toContain('ghcr.io/openlander-ai/openlander:latest');
     expect(readme).toContain('Update later with:');
     expect(readme).not.toContain('set `OPENLANDER_IMAGE=ghcr.io/openlander-ai/openlander:0.1.0`');
-    expect(readme).toContain('image plus a Postgres sidecar');
+    expect(readme).toContain('published');
+    expect(installScript).toContain('OPENLANDER_POSTGRES_PASSWORD=');
+    expect(installScript).toContain('OPENLANDER_PORT=${OPENLANDER_PORT}');
+    expect(installScript).toContain('docker compose -f docker-compose.runtime.yml up -d');
+    expect(installScript).toContain('https://api.github.com/repos/${OPENLANDER_REPO}/releases/latest');
+    expect(installScript).not.toContain("printf 'main'");
+    expect(installScript).toContain('.bak.$(date +%Y%m%d%H%M%S)');
+    expect(installScript).toContain('OPENLANDER_VERSION must be');
   });
 
   it('keeps first-run setup browser-only with no setup secret ceremony', () => {

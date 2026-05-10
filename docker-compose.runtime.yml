@@ -26,7 +26,7 @@ services:
       OPENLANDER_DATABASE_URL: postgres://openlander:${OPENLANDER_POSTGRES_PASSWORD:-openlander}@openlander-db:5432/openlander
       OPENLANDER_CONTAINERIZED: 'true'
     ports:
-      - '10114:10114'
+      - '${OPENLANDER_PORT:-10114}:10114'
     volumes:
       - openlander-data:/root/.openlander
       - /var/run/docker.sock:/var/run/docker.sock

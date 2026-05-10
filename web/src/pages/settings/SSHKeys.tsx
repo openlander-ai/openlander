@@ -1,7 +1,7 @@
 /**
  * SSH Keys settings.
  *
- * Deferred to v0.2 per `docs/design/v0.1/source-notes/v0.1-spec.md` (out-of-scope: "SSH Keys,
+ * Deferred to v0.2 (out-of-scope: "SSH Keys,
  * Notifications pages"). The route stays mounted at /settings/ssh-keys
  * so a direct link does not 404, but the page is intentionally a stub
  * — the v0.1 sidebar exposes only Git Providers under Settings, so the
