@@ -1,1 +1,9 @@
 npx lint-staged
+
+# Secret-scan (Phase 1 of public-first migration).
+# Skip silently if the gitleaks binary is not installed — CI runs the
+# same scan on every PR, so missing local install only loses the early
+# heads-up, not the safety net.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact -v
+fi
