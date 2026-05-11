@@ -9,6 +9,7 @@ function readRepoFile(relativePath: string): string {
 
 describe('Your Agent (MCP) v0.1 surface', () => {
   const source = readRepoFile('web/src/pages/MCPServer.tsx');
+  const snippetSource = readRepoFile('web/src/lib/mcp-config-snippets.ts');
   const enSource = readRepoFile('web/src/i18n/en.ts');
   const koSource = readRepoFile('web/src/i18n/ko.ts');
 
@@ -57,14 +58,26 @@ describe('Your Agent (MCP) v0.1 surface', () => {
     expect(source).toContain("t('mcpServer.tokens.regenerateConfirm')");
   });
 
-  it('renders a Claude Desktop config snippet with placeholder when token is not revealed', () => {
-    expect(source).toContain('mcpServers');
-    expect(source).toContain("'<your-token>'");
+  it('renders multi-client config tabs with placeholder when token is not revealed', () => {
+    // The Setup card no longer hardcodes a single Claude Desktop snippet;
+    // it walks the shared snippet module (web/src/lib/mcp-config-snippets.ts)
+    // for one tab per supported MCP client. Both the page and the setup
+    // wizard read the same source so they cannot drift.
+    expect(source).toMatch(/buildAllClientConfigs\(/);
+    expect(source).toMatch(/<TabsTrigger /);
+    expect(source).toMatch(/<TabsContent /);
+    expect(snippetSource).toContain('mcpServers');
     // Hide must redact the snippet too — embed the plaintext only
     // when the token row is currently revealed.
-    expect(source).toMatch(
-      /revealed && newTokenPlain \? newTokenPlain : ['"]<your-token>['"]/,
-    );
+    expect(source).toContain("'<your-token>'");
+    expect(source).toMatch(/revealed && newTokenPlain \? newTokenPlain : ['"]<your-token>['"]/);
+    // The shared module is the only place that owns per-client config
+    // shape — keep that contract pinned.
+    expect(snippetSource).toMatch(/buildClaudeCodeCmd/);
+    expect(snippetSource).toMatch(/buildClaudeDesktopConfig/);
+    expect(snippetSource).toMatch(/buildCursorConfig/);
+    expect(snippetSource).toMatch(/buildWindsurfConfig/);
+    expect(snippetSource).toMatch(/buildVscodeConfig/);
   });
 
   it('warns the user when the backend rotates a legacy ol_ token under their feet', () => {

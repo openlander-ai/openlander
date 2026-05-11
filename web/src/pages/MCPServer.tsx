@@ -7,7 +7,10 @@
  *      Single org-scoped token. In-page Generate / Reveal-on-issue /
  *      Copy / Regenerate; no modal, no per-token list.
  *
- *   2. Setup — Claude Desktop MCP config snippet, ready to copy.
+ *   2. Setup — Tabbed MCP client config snippets (Claude Code / Cursor /
+ *      Windsurf / Claude Desktop / VS Code / stdio), ready to copy.
+ *      Shares `web/src/lib/mcp-config-snippets.ts` with the setup wizard
+ *      so both surfaces render the same per-client template.
  *
  *   3. Recent agent calls — compact /api/activity?actor=mcp timeline.
  *      "Full timeline →" link routes to /activity.
@@ -29,6 +32,7 @@ import { toast } from 'sonner';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useActivityFeed } from '@/hooks/use-activity-feed';
 import { useMcpStatus } from '@/hooks/use-mcp-status';
 import { useLanguage } from '@/i18n/context';
@@ -38,6 +42,7 @@ import {
   regenerateOrgMcpToken,
   type McpPatTokenMetadata,
 } from '@/lib/api';
+import { buildAllClientConfigs, type McpClientId } from '@/lib/mcp-config-snippets';
 import { getMcpEndpoint } from '@/lib/mcp-endpoint';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
@@ -52,23 +57,6 @@ function formatRelative(iso: string, t: Translate): string {
   const h = Math.floor(m / 60);
   if (h < 24) return t('mcpServer.relative.hours', { count: h });
   return t('mcpServer.relative.days', { count: Math.floor(h / 24) });
-}
-
-function buildClaudeConfig(endpoint: string, token: string): string {
-  return JSON.stringify(
-    {
-      mcpServers: {
-        openlander: {
-          url: endpoint,
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      },
-    },
-    null,
-    2,
-  );
 }
 
 export function MCPServer() {
@@ -88,6 +76,7 @@ export function MCPServer() {
   const [endpointCopied, setEndpointCopied] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
   const [configCopied, setConfigCopied] = useState(false);
+  const [activeClient, setActiveClient] = useState<McpClientId>('claude-code');
 
   const tokenSuffix = activeToken ? activeToken.suffix : '';
   const tokenIssuedAt = activeToken ? activeToken.createdAt : null;
@@ -221,7 +210,8 @@ export function MCPServer() {
   // would mask while the config block continued to leak the same
   // plaintext to anyone glancing over the shoulder).
   const snippetToken = revealed && newTokenPlain ? newTokenPlain : '<your-token>';
-  const setupSnippet = buildClaudeConfig(mcpEndpoint, snippetToken);
+  const clientConfigs = buildAllClientConfigs({ endpoint: mcpEndpoint, token: snippetToken });
+  const activeConfig = clientConfigs.find((c) => c.id === activeClient) ?? clientConfigs[0];
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
@@ -358,26 +348,49 @@ export function MCPServer() {
         </div>
       </OuterCard>
 
-      {/* Setup card */}
+      {/* Setup card — one tab per supported MCP client, all driven by
+          the shared snippet module so this page and the setup wizard
+          can't drift. */}
       <OuterCard title={t('mcpServer.setup.title')} subtitle={t('mcpServer.setup.subtitle')}>
-        <div className="flex flex-col gap-3">
-          <pre className="ol-mono overflow-x-auto rounded-md bg-[color:var(--ol-panel-2)] p-3 text-[12px] leading-relaxed text-[color:var(--ol-fg)]">
-            <code>{setupSnippet}</code>
-          </pre>
+        <Tabs
+          value={activeConfig.id}
+          onValueChange={(v) => {
+            setActiveClient(v as McpClientId);
+            setConfigCopied(false);
+          }}
+          className="flex flex-col gap-3"
+        >
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-[color:var(--ol-panel-2)] p-1">
+            {clientConfigs.map((cfg) => (
+              <TabsTrigger key={cfg.id} value={cfg.id} className="text-[12px]">
+                {cfg.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {clientConfigs.map((cfg) => (
+            <TabsContent key={cfg.id} value={cfg.id} className="m-0 flex flex-col gap-2">
+              {cfg.filename && (
+                <p className="text-[11.5px] text-[color:var(--ol-fg-muted)]">{cfg.filename}</p>
+              )}
+              <pre className="ol-mono overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-[color:var(--ol-panel-2)] p-3 text-[12px] leading-relaxed text-[color:var(--ol-fg)]">
+                <code>{cfg.snippet}</code>
+              </pre>
+            </TabsContent>
+          ))}
           <div className="flex items-center justify-between gap-3">
             <p className="text-[12px] text-[color:var(--ol-fg-muted)]">
               {t('mcpServer.setup.restartHint')}
             </p>
             <button
               type="button"
-              onClick={() => void copy(setupSnippet, setConfigCopied)}
+              onClick={() => void copy(activeConfig.snippet, setConfigCopied)}
               className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
             >
               {configCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{' '}
               {configCopied ? t('mcpServer.row.copied') : t('mcpServer.setup.copyConfig')}
             </button>
           </div>
-        </div>
+        </Tabs>
       </OuterCard>
 
       {/* Recent agent calls */}
