@@ -68,6 +68,8 @@ CREATE TABLE "auth" (
 	"session_token" text,
 	"session_created_at" bigint,
 	"session_expires_at" bigint,
+	"active_scope_project_id" text,
+	"destructive_mcp_unlock" boolean DEFAULT false NOT NULL,
 	CONSTRAINT "auth_id_check" CHECK ("auth"."id" = 1)
 );
 --> statement-breakpoint
@@ -144,8 +146,14 @@ CREATE TABLE "domain_mappings" (
 	"cloudflare_zone_id" text,
 	"cloudflare_dns_record_id" text,
 	"status" text DEFAULT 'active',
+	"path_prefix" text DEFAULT '/' NOT NULL,
+	"strip_prefix" boolean DEFAULT false NOT NULL,
+	"upstream_path_prefix" text,
+	"target_port" integer,
+	"tls_enabled" boolean DEFAULT false NOT NULL,
+	"tls_resolver" text,
 	"created_at" text DEFAULT now()::text,
-	CONSTRAINT "domain_mappings_domain_unique" UNIQUE("domain"),
+	"updated_at" text DEFAULT now()::text,
 	CONSTRAINT "domain_mappings_status_check" CHECK ("domain_mappings"."status" IN ('active', 'pending', 'error'))
 );
 --> statement-breakpoint
@@ -163,7 +171,7 @@ CREATE TABLE "environments" (
 	"id" text PRIMARY KEY NOT NULL,
 	"service_id" text NOT NULL,
 	"type" text NOT NULL,
-	"branch" text DEFAULT 'main' NOT NULL,
+	"branch" text,
 	"status" text DEFAULT 'idle',
 	"assigned_port" integer,
 	"container_id" text,
@@ -197,16 +205,6 @@ CREATE TABLE "mcp_session_log" (
 	"connected_at" bigint NOT NULL,
 	"disconnected_at" bigint NOT NULL,
 	"client_info" text
-);
---> statement-breakpoint
-CREATE TABLE "migration_0009_audit" (
-	"phase" text NOT NULL,
-	"source_table" text NOT NULL,
-	"source_id" text NOT NULL,
-	"target_table" text NOT NULL,
-	"target_id" text NOT NULL,
-	"kind" text,
-	"created_at" bigint NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "oauth_tokens" (
@@ -249,6 +247,27 @@ CREATE TABLE "ops_incidents" (
 	CONSTRAINT "ops_incidents_status_check" CHECK ("ops_incidents"."status" IN ('open', 'active', 'resolved', 'escalated'))
 );
 --> statement-breakpoint
+CREATE TABLE "pat_tokens" (
+	"id" text PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"token_hash" text NOT NULL,
+	"token_suffix" text NOT NULL,
+	"scope_kind" text NOT NULL,
+	"scope_project_id" text,
+	"token_type" text DEFAULT 'pat' NOT NULL,
+	"capabilities" jsonb,
+	"last_used_at" text,
+	"expires_at" text,
+	"revoked_at" text,
+	"created_at" text DEFAULT now()::text NOT NULL,
+	"server_id" text DEFAULT 'local' NOT NULL,
+	CONSTRAINT "pat_tokens_token_hash_unique" UNIQUE("token_hash"),
+	CONSTRAINT "pat_tokens_scope_kind_check" CHECK ("pat_tokens"."scope_kind" IN ('org', 'project')),
+	CONSTRAINT "pat_tokens_type_check" CHECK ("pat_tokens"."token_type" IN ('pat', 'service', 'legacy-default')),
+	CONSTRAINT "pat_tokens_scope_project_check" CHECK (("pat_tokens"."scope_kind" = 'org' AND "pat_tokens"."scope_project_id" IS NULL) OR ("pat_tokens"."scope_kind" = 'project' AND "pat_tokens"."scope_project_id" IS NOT NULL)),
+	CONSTRAINT "pat_tokens_expiry_check" CHECK ("pat_tokens"."token_type" = 'legacy-default' OR "pat_tokens"."expires_at" IS NOT NULL)
+);
+--> statement-breakpoint
 CREATE TABLE "project_dependencies" (
 	"id" text PRIMARY KEY NOT NULL,
 	"source_service_id" text NOT NULL,
@@ -270,8 +289,9 @@ CREATE TABLE "service_ops_overrides" (
 CREATE TABLE "projects" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
-	"repo_url" text,
-	"branch" text DEFAULT 'main',
+	"display_name" text DEFAULT '' NOT NULL,
+	"description" text,
+	"tags" text,
 	"archived_at" text,
 	"created_at" text DEFAULT now()::text,
 	"updated_at" text DEFAULT now()::text,
@@ -350,6 +370,8 @@ CREATE TABLE "services" (
 	"build_context" text,
 	"build_method" text,
 	"source" text DEFAULT 'git' NOT NULL,
+	"repo_url" text,
+	"branch" text,
 	"image_url" text,
 	"image_cmd" text,
 	"pending_fix" text,
@@ -403,6 +425,7 @@ CREATE TABLE "webhook_configs" (
 	CONSTRAINT "webhook_configs_enabled_check" CHECK ("webhook_configs"."enabled" IN (0, 1))
 );
 --> statement-breakpoint
+ALTER TABLE "auth" ADD CONSTRAINT "auth_active_scope_project_id_projects_id_fk" FOREIGN KEY ("active_scope_project_id") REFERENCES "public"."projects"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deploy_logs" ADD CONSTRAINT "deploy_logs_service_id_services_id_fk" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deploy_logs" ADD CONSTRAINT "deploy_logs_environment_id_environments_id_fk" FOREIGN KEY ("environment_id") REFERENCES "public"."environments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deploy_configs" ADD CONSTRAINT "deploy_configs_service_id_services_id_fk" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -411,6 +434,7 @@ ALTER TABLE "env_vars" ADD CONSTRAINT "env_vars_project_id_projects_id_fk" FOREI
 ALTER TABLE "env_vars" ADD CONSTRAINT "env_vars_service_id_services_id_fk" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "env_vars" ADD CONSTRAINT "env_vars_environment_id_environments_id_fk" FOREIGN KEY ("environment_id") REFERENCES "public"."environments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "environments" ADD CONSTRAINT "environments_service_id_services_id_fk" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "pat_tokens" ADD CONSTRAINT "pat_tokens_scope_project_id_projects_id_fk" FOREIGN KEY ("scope_project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "service_ops_overrides" ADD CONSTRAINT "service_ops_overrides_service_id_services_id_fk" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "runtime_incidents" ADD CONSTRAINT "runtime_incidents_service_id_services_id_fk" FOREIGN KEY ("service_id") REFERENCES "public"."services"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "runtime_incidents" ADD CONSTRAINT "runtime_incidents_environment_id_environments_id_fk" FOREIGN KEY ("environment_id") REFERENCES "public"."environments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -440,8 +464,11 @@ CREATE INDEX "idx_deploy_configs_service" ON "deploy_configs" USING btree ("serv
 CREATE INDEX "idx_deployment_patterns_project" ON "deployment_patterns" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "idx_deployment_patterns_signature" ON "deployment_patterns" USING btree ("project_id","error_signature");--> statement-breakpoint
 CREATE INDEX "idx_domain_mappings_service" ON "domain_mappings" USING btree ("service_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "env_vars_project_key_unique" ON "env_vars" USING btree ("project_id","key");--> statement-breakpoint
+CREATE UNIQUE INDEX "domain_mappings_domain_path_unique" ON "domain_mappings" USING btree ("domain","path_prefix");--> statement-breakpoint
+CREATE UNIQUE INDEX "env_vars_service_key_unique" ON "env_vars" USING btree ("service_id","key") WHERE "env_vars"."service_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "env_vars_project_group_key_unique" ON "env_vars" USING btree ("project_id","key") WHERE "env_vars"."service_id" IS NULL;--> statement-breakpoint
 CREATE INDEX "idx_env_vars_project" ON "env_vars" USING btree ("project_id");--> statement-breakpoint
+CREATE INDEX "idx_env_vars_service" ON "env_vars" USING btree ("service_id");--> statement-breakpoint
 CREATE INDEX "idx_env_vars_environment" ON "env_vars" USING btree ("environment_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "environments_service_type_unique" ON "environments" USING btree ("service_id","type");--> statement-breakpoint
 CREATE INDEX "idx_environments_service" ON "environments" USING btree ("service_id");--> statement-breakpoint
@@ -451,6 +478,9 @@ CREATE INDEX "idx_oauth_tokens_provider" ON "oauth_tokens" USING btree ("provide
 CREATE INDEX "idx_ops_incident_events_incident" ON "ops_incident_events" USING btree ("incident_id");--> statement-breakpoint
 CREATE INDEX "idx_ops_incidents_project" ON "ops_incidents" USING btree ("project_id");--> statement-breakpoint
 CREATE INDEX "idx_ops_incidents_status" ON "ops_incidents" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "idx_pat_tokens_hash" ON "pat_tokens" USING btree ("token_hash");--> statement-breakpoint
+CREATE INDEX "idx_pat_tokens_scope" ON "pat_tokens" USING btree ("scope_kind","scope_project_id");--> statement-breakpoint
+CREATE INDEX "idx_pat_tokens_expires" ON "pat_tokens" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "idx_project_dependencies_source" ON "project_dependencies" USING btree ("source_service_id");--> statement-breakpoint
 CREATE INDEX "idx_project_dependencies_target_service" ON "project_dependencies" USING btree ("target_service_id");--> statement-breakpoint
 CREATE INDEX "idx_service_ops_overrides_service" ON "service_ops_overrides" USING btree ("service_id");--> statement-breakpoint

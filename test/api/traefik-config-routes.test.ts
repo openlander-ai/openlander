@@ -88,7 +88,14 @@ function makeMapping(overrides: Partial<DomainMappingRow> = {}): DomainMappingRo
     cloudflare_zone_id: null,
     cloudflare_dns_record_id: null,
     status: 'active',
+    path_prefix: '/',
+    strip_prefix: false,
+    upstream_path_prefix: null,
+    target_port: null,
+    tls_enabled: false,
+    tls_resolver: null,
     created_at: NOW,
+    updated_at: NOW,
     ...overrides,
   };
 }

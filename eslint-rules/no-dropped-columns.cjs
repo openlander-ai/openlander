@@ -22,7 +22,6 @@
  *   - test/** — tests can still seed/inspect the legacy shape.
  *   - drizzle/** SQL migrations.
  *   - src/db/types.ts — the type definition file itself.
- *   - tools/db/migration-phase-logger.ts and dry-run-migration.ts.
  *   - src/db/repos/*.ts — repos translate between old/new vocabulary.
  */
 
@@ -112,9 +111,7 @@ module.exports = {
       filename.includes('/drizzle/') ||
       filename.endsWith('/src/db/types.ts') ||
       filename.endsWith('/src/db/types.js') ||
-      filename.includes('/src/db/repos/') ||
-      filename.endsWith('migration-phase-logger.ts') ||
-      filename.endsWith('dry-run-migration.ts')
+      filename.includes('/src/db/repos/')
     ) {
       return {};
     }

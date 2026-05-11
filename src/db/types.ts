@@ -140,7 +140,14 @@ export interface DomainMappingRow {
   cloudflare_zone_id: string | null;
   cloudflare_dns_record_id: string | null;
   status: 'active' | 'pending' | 'error';
+  path_prefix: string;
+  strip_prefix: boolean;
+  upstream_path_prefix: string | null;
+  target_port: number | null;
+  tls_enabled: boolean;
+  tls_resolver: string | null;
   created_at: string;
+  updated_at: string | null;
   /** @deprecated 0012 — column dropped; canonical FK is `service_id`. */
   project_id?: string;
 }
