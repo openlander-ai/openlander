@@ -150,7 +150,7 @@ async function createDomainMappingResponse(
     stripPrefix: parsed.stripPrefix,
     upstreamPathPrefix: parsed.upstreamPathPrefix,
     targetPort: parsed.targetPort,
-    tlsEnabled: false,
+    tlsEnabled: null,
     tlsResolver: null,
   });
   const domains = await ctx.db.listDomainMappingsForService(service.id);
@@ -216,8 +216,18 @@ async function resolveService(
   if (project instanceof Response) return project;
 
   const service = await ctx.db.getService(serviceParam);
-  if (!service || service.project_id !== project.id || isManagedService(service)) {
+  if (!service || service.project_id !== project.id) {
     return c.json({ error: 'NOT_FOUND', message: `Service not found: ${serviceParam}` }, 404);
+  }
+  if (isManagedService(service)) {
+    return c.json(
+      {
+        error: 'INVALID_SERVICE_KIND',
+        code: 'INVALID_SERVICE_KIND',
+        message: 'Managed infrastructure services cannot accept custom domains.',
+      },
+      400,
+    );
   }
   return { project, service };
 }
@@ -322,6 +332,15 @@ function parseDomainHost(
   }
 
   const labels = domain.split('.');
+  if (labels.length < 2 || domain === 'localhost' || domain.endsWith('.localhost')) {
+    return {
+      ok: false,
+      message: 'domain must be a public DNS host, not localhost or a single-label name',
+    };
+  }
+  if (domain.endsWith('.local')) {
+    return { ok: false, message: '.local domains are not supported for public routing' };
+  }
   if (labels.some((label) => !DOMAIN_LABEL_RE.test(label))) {
     return { ok: false, message: 'domain contains an invalid label' };
   }
@@ -402,9 +421,9 @@ function mapDomainMapping(mapping: DomainMappingRow): Record<string, unknown> {
     upstreamPathPrefix: mapping.upstream_path_prefix,
     targetPort: mapping.target_port,
     tls: {
-      enabled: mapping.tls_enabled,
+      enabled: mapping.tls_enabled === true,
       resolver: mapping.tls_resolver,
-      status: mapping.tls_enabled ? 'unknown' : 'absent',
+      status: mapping.tls_enabled === true ? 'unknown' : 'absent',
     },
     legacyWarning:
       mapping.cloudflare_zone_id || mapping.cloudflare_dns_record_id

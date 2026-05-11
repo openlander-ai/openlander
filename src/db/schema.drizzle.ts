@@ -173,13 +173,17 @@ export const domainMappings = pgTable(
     strip_prefix: boolean('strip_prefix').notNull().default(false),
     upstream_path_prefix: text('upstream_path_prefix'),
     target_port: integer('target_port'),
-    tls_enabled: boolean('tls_enabled').notNull().default(false),
+    tls_enabled: boolean('tls_enabled'),
     tls_resolver: text('tls_resolver'),
     created_at: text('created_at').default(sql`now()::text`),
     updated_at: text('updated_at').default(sql`now()::text`),
   },
   (table) => [
     check('domain_mappings_status_check', sql`${table.status} IN ('active', 'pending', 'error')`),
+    check(
+      'domain_mappings_target_port_check',
+      sql`${table.target_port} IS NULL OR (${table.target_port} >= 1 AND ${table.target_port} <= 65535)`,
+    ),
     index('idx_domain_mappings_service').on(table.service_id),
     uniqueIndex('domain_mappings_domain_path_unique').on(table.domain, table.path_prefix),
   ],

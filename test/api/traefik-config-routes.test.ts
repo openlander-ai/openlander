@@ -111,7 +111,10 @@ function createTraefikConfigApp(params: {
   projects: ProjectRow[];
   services: ServiceRow[];
   mappings: DomainMappingRow[];
-}): { app: Hono; db: { getService: ReturnType<typeof vi.fn>; getProject: ReturnType<typeof vi.fn> } } {
+}): {
+  app: Hono;
+  db: { getService: ReturnType<typeof vi.fn>; getProject: ReturnType<typeof vi.fn> };
+} {
   const projectsById = new Map(params.projects.map((project) => [project.id, project]));
   const servicesById = new Map(params.services.map((service) => [service.id, service]));
 
@@ -300,12 +303,12 @@ describe('GET /api/traefik/config domain routing', () => {
 
     expect(router).toMatchObject({
       rule: 'Host(`api.example.com`) && PathPrefix(`/api`)',
-      middlewares: ['domain-domain-api-path-strip', 'domain-domain-api-path-add'],
+      middlewares: ['domain-api-path-strip', 'domain-api-path-add'],
     });
-    expect(config.http.middlewares['domain-domain-api-path-strip']).toEqual({
+    expect(config.http.middlewares['domain-api-path-strip']).toEqual({
       stripPrefix: { prefixes: ['/api'] },
     });
-    expect(config.http.middlewares['domain-domain-api-path-add']).toEqual({
+    expect(config.http.middlewares['domain-api-path-add']).toEqual({
       addPrefix: { prefix: '/internal' },
     });
   });
@@ -359,6 +362,56 @@ describe('GET /api/traefik/config domain routing', () => {
     const config = await requestTraefikConfig(app);
 
     expect(findRouterForDomain(config, 'bad`host.example.com')).toBeUndefined();
-    expect(config.http.services['svc-domain-domain-unsafe']).toBeUndefined();
+    expect(config.http.services['svc-domain-unsafe']).toBeUndefined();
+  });
+
+  it('skips unsafe path values instead of emitting invalid Traefik rules', async () => {
+    const project = makeProject();
+    const apiService = makeService({
+      id: 'stack-api__svc',
+      project_id: 'stack',
+      name: 'stack/api__svc',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      assigned_port: 18080,
+      container_port: 3000,
+      container_id: 'container-stack-api',
+      container_name: 'ol-stack-api',
+    });
+    const app = createTraefikConfigApp({
+      projects: [project],
+      services: [makeService(), apiService],
+      mappings: [makeMapping({ id: 'domain-unsafe-path', path_prefix: '/api bad' })],
+    }).app;
+
+    const config = await requestTraefikConfig(app);
+
+    expect(findRouterForDomain(config, 'api.example.com')).toBeUndefined();
+    expect(config.http.services['svc-domain-unsafe-path']).toBeUndefined();
+  });
+
+  it('skips invalid target_port values that bypassed API validation', async () => {
+    const project = makeProject();
+    const apiService = makeService({
+      id: 'stack-api__svc',
+      project_id: 'stack',
+      name: 'stack/api__svc',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      assigned_port: 18080,
+      container_port: 3000,
+      container_id: 'container-stack-api',
+      container_name: 'ol-stack-api',
+    });
+    const app = createTraefikConfigApp({
+      projects: [project],
+      services: [makeService(), apiService],
+      mappings: [makeMapping({ id: 'domain-bad-port', target_port: 70000 })],
+    }).app;
+
+    const config = await requestTraefikConfig(app);
+
+    expect(findRouterForDomain(config, 'api.example.com')).toBeUndefined();
+    expect(config.http.services['svc-domain-bad-port']).toBeUndefined();
   });
 });

@@ -21,6 +21,10 @@ The installer sets up Docker/Compose if needed, starts the published
 dashboard URL. Open it, create the admin password, then copy the MCP token into
 your coding agent.
 
+OpenLander `0.1.0` uses a fresh public Postgres baseline. If you ran a
+pre-public dogfood build, start from a new Postgres volume or export/import data
+manually before upgrading.
+
 Update later with:
 
 ```bash

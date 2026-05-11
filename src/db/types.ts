@@ -144,7 +144,7 @@ export interface DomainMappingRow {
   strip_prefix: boolean;
   upstream_path_prefix: string | null;
   target_port: number | null;
-  tls_enabled: boolean;
+  tls_enabled: boolean | null;
   tls_resolver: string | null;
   created_at: string;
   updated_at: string | null;

@@ -36,6 +36,10 @@ This installer:
 `OPENLANDER_VERSION=latest` resolves the latest published GitHub Release for
 the compose file. It does not pull `main` branch compose content.
 
+`0.1.0` is the first public Postgres migration baseline. Pre-public dogfood
+databases are not upgraded in place; use a fresh Postgres volume or manually
+export/import data.
+
 Open the printed dashboard URL, usually `http://<server-ip>:10114`, and create
 the admin password.
 

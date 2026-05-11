@@ -80,6 +80,9 @@ This is an early release — expect breaking changes between 0.x versions. Produ
 - Single-tenant only. Multi-user and role-based access control are not in scope.
 - No built-in AI auto-recovery or web-agent chat in 0.1. Recovery decisions are explicit MCP/user actions, not background LLM automation.
 - Korean localization for relative-time strings (`6d ago`) is incomplete; affects the activity feed.
+- The `0.1.0` database schema is the first public Postgres baseline. Pre-public dogfood
+  databases with older OpenLander migration histories are not upgraded in place; start from a
+  fresh Postgres volume or manually export/import data.
 - No log rotation, rate limiting, or LLM token spend cap. Recommended for single-developer / small-team use.
 - Windows is not supported. WSL2 on Windows works.
 

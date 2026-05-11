@@ -1206,8 +1206,7 @@
           "name": "tls_enabled",
           "type": "boolean",
           "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "notNull": false
         },
         "tls_resolver": {
           "name": "tls_resolver",
@@ -1286,6 +1285,10 @@
         "domain_mappings_status_check": {
           "name": "domain_mappings_status_check",
           "value": "\"domain_mappings\".\"status\" IN ('active', 'pending', 'error')"
+        },
+        "domain_mappings_target_port_check": {
+          "name": "domain_mappings_target_port_check",
+          "value": "\"domain_mappings\".\"target_port\" IS NULL OR (\"domain_mappings\".\"target_port\" >= 1 AND \"domain_mappings\".\"target_port\" <= 65535)"
         }
       },
       "isRLSEnabled": false
