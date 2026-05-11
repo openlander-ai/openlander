@@ -2,7 +2,7 @@ name: Contract Tests
 
 on:
   pull_request:
-    branches: [develop, main]
+    branches: [main]
     paths:
       - 'src/app.ts'
       - 'src/config/**'
@@ -14,7 +14,7 @@ on:
       - 'package-lock.json'
       - '.github/workflows/contract-tests.yml'
   push:
-    branches: [develop]
+    branches: [main]
     paths:
       - 'src/app.ts'
       - 'src/config/**'
@@ -28,7 +28,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   contract-tests:
