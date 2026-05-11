@@ -7,8 +7,15 @@ import { createApiRoutes } from '../../src/web/api/routes.js';
 
 interface TraefikConfigResponse {
   http: {
-    routers: Record<string, { rule: string; entryPoints: string[]; service: string }>;
+    routers: Record<
+      string,
+      { rule: string; entryPoints: string[]; service: string; middlewares?: string[] }
+    >;
     services: Record<string, { loadBalancer: { servers: Array<{ url: string }> } }>;
+    middlewares: Record<
+      string,
+      { stripPrefix?: { prefixes: string[] }; addPrefix?: { prefix: string } }
+    >;
   };
 }
 
@@ -260,5 +267,98 @@ describe('GET /api/traefik/config domain routing', () => {
 
     expect(findRouterForDomain(config, 'pending.example.com')).toBeUndefined();
     expect(findRouterForDomain(config, 'error.example.com')).toBeUndefined();
+  });
+
+  it('compiles path prefixes and strip/add middlewares from domain mappings', async () => {
+    const project = makeProject();
+    const apiService = makeService({
+      id: 'stack-api__svc',
+      project_id: 'stack',
+      name: 'stack/api__svc',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      assigned_port: 18080,
+      container_port: 3000,
+      container_id: 'container-stack-api',
+      container_name: 'ol-stack-api',
+    });
+    const app = createTraefikConfigApp({
+      projects: [project],
+      services: [makeService(), apiService],
+      mappings: [
+        makeMapping({
+          id: 'domain-api-path',
+          path_prefix: '/api',
+          strip_prefix: true,
+          upstream_path_prefix: '/internal',
+        }),
+      ],
+    }).app;
+
+    const config = await requestTraefikConfig(app);
+    const router = findRouterForDomain(config, 'api.example.com');
+
+    expect(router).toMatchObject({
+      rule: 'Host(`api.example.com`) && PathPrefix(`/api`)',
+      middlewares: ['domain-domain-api-path-strip', 'domain-domain-api-path-add'],
+    });
+    expect(config.http.middlewares['domain-domain-api-path-strip']).toEqual({
+      stripPrefix: { prefixes: ['/api'] },
+    });
+    expect(config.http.middlewares['domain-domain-api-path-add']).toEqual({
+      addPrefix: { prefix: '/internal' },
+    });
+  });
+
+  it('routes a domain mapping to target_port when provided', async () => {
+    const project = makeProject();
+    const apiService = makeService({
+      id: 'stack-api__svc',
+      project_id: 'stack',
+      name: 'stack/api__svc',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      assigned_port: 18080,
+      container_port: 3000,
+      container_id: 'container-stack-api',
+      container_name: 'ol-stack-api',
+    });
+    const app = createTraefikConfigApp({
+      projects: [project],
+      services: [makeService(), apiService],
+      mappings: [makeMapping({ id: 'domain-port', target_port: 9090 })],
+    }).app;
+
+    const config = await requestTraefikConfig(app);
+    const router = findRouterForDomain(config, 'api.example.com');
+
+    expect(config.http.services[router!.service]?.loadBalancer.servers[0]?.url).toBe(
+      'http://ol-stack-api:9090',
+    );
+  });
+
+  it('skips unsafe rule values instead of emitting invalid Traefik config', async () => {
+    const project = makeProject();
+    const apiService = makeService({
+      id: 'stack-api__svc',
+      project_id: 'stack',
+      name: 'stack/api__svc',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      assigned_port: 18080,
+      container_port: 3000,
+      container_id: 'container-stack-api',
+      container_name: 'ol-stack-api',
+    });
+    const app = createTraefikConfigApp({
+      projects: [project],
+      services: [makeService(), apiService],
+      mappings: [makeMapping({ id: 'domain-unsafe', domain: 'bad`host.example.com' })],
+    }).app;
+
+    const config = await requestTraefikConfig(app);
+
+    expect(findRouterForDomain(config, 'bad`host.example.com')).toBeUndefined();
+    expect(config.http.services['svc-domain-domain-unsafe']).toBeUndefined();
   });
 });
