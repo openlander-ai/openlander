@@ -581,7 +581,7 @@ All four must pass. Fix locally before pushing.
 
 When bumping the version (e.g. `0.6.2` → `0.6.3`), update ALL of these:
 
-### Automated by `npm run release` (release-it)
+### Automated by `npm run release:final` or `npm run release:rc` (release-it)
 
 - `package.json` — version field
 - `web/package.json` — synced via after:bump hook
@@ -594,7 +594,7 @@ When bumping the version (e.g. `0.6.2` → `0.6.3`), update ALL of these:
 
 - `README.md` — add row to roadmap table if the release has user-facing features
 
-### When NOT using `npm run release` (manual bump)
+### When NOT using `npm run release:final` / `npm run release:rc` (manual bump)
 
 All of the above must be done manually. In addition:
 

@@ -37,11 +37,11 @@ npm run test:coverage
 npm pack --dry-run --json --ignore-scripts
 ```
 
-`npm run release` uses release-it only for version/changelog/tag management. It
-intentionally does **not** publish to npm or create the GitHub Release; the tag
-workflow owns artifact publication. The workflow requires the tag, root
-`package.json`, web `package.json`, and `CHANGELOG.md` heading to use the exact
-same SemVer string.
+`npm run release:rc` and `npm run release:final` use release-it only for
+version/changelog/tag management. They intentionally do **not** publish to npm
+or create the GitHub Release; the tag workflow owns artifact publication. The
+workflow requires the tag, root `package.json`, web `package.json`, and
+`CHANGELOG.md` heading to use the exact same SemVer string.
 
 Use the explicit scripts below rather than raw `npm run release` so the RC path
 is not skipped by accident. The raw `release` script intentionally exits with an
@@ -138,17 +138,21 @@ Before tagging a final release:
 1. Verify the final tag will point at the same commit as the last accepted RC,
    or only at a commit that contains release-note/version-only changes. Confirm
    this with `git diff v0.1.1-rc.N..HEAD`; the only allowed final-only changes
-   are `CHANGELOG.md`, `package.json`, `web/package.json`, and lockfile version
-   updates.
+   are `CHANGELOG.md`, `package.json`, `web/package.json`, and package lockfile
+   version mirrors. No dependency graph changes are allowed in
+   `package-lock.json` or `web/package-lock.json`.
 2. Install and smoke-test the exact RC image on the release QA host, for example
    `ghcr.io/openlander-ai/openlander:0.1.1-rc.2`. The smoke pass must cover
    setup/login, project creation, one deploy or redeploy, MCP token visibility,
-   and `docker compose` update from the RC image.
+   and `docker compose` update from the RC image. If any smoke item fails, cut a
+   new `vX.Y.Z-rc.N+1` instead of promoting.
 3. Consolidate the accepted RC changelog entries into the final heading, for
    example `## [0.1.1] - 2026-05-14`.
 4. Run the local release prep commands again:
    `npm ci`, `cd web && npm ci`, `npm run qa:release`,
    `npm run test:coverage`, and `npm pack --dry-run --json --ignore-scripts`.
+   Inspect the pack output for unexpected files, secrets, test artifacts, or a
+   size jump from the previous accepted RC.
 5. Run `npm run release:final`.
 6. Confirm the GitHub Release is not marked prerelease and that GHCR moved
    `<major>.<minor>` and `latest` to the final image.
