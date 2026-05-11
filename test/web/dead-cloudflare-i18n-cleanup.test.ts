@@ -8,11 +8,13 @@ function readRepoFile(relativePath: string): string {
 }
 
 describe('Cloudflare-tied i18n keys stay pruned (v0.1)', () => {
-  // PR #198 cut the Cloudflare auto-DNS frontend, and PR #244 retired
+  // PR #198 cut the Cloudflare auto-DNS frontend, PR #244 retired
   // the legacy /settings tab page that hosted the only remaining
   // consumer of `settings.proxy.cloudflare.*` and the `tunnelGuide`
-  // sibling. Together they orphaned a sizeable Cloudflare wiring
-  // block in both locales:
+  // sibling, and the v0.1 domain-routing CRUD UI (this PR) replaces
+  // the previous read-only "Cloudflare auto-DNS returns in v0.2"
+  // copy with the manual-DNS + external-proxy-TLS framing. Together
+  // they orphaned a sizeable Cloudflare wiring block in both locales:
   //
   //   - `settings.proxy.*` (entire block) — Traefik tab body, included
   //     `cloudflare:` and `tunnelGuide:` sub-blocks plus the `ports`,
@@ -20,12 +22,9 @@ describe('Cloudflare-tied i18n keys stay pruned (v0.1)', () => {
   //   - `domains.cloudflareNotConfigured` / `cloudflareGoToSettings` /
   //     `customDomainsHelp` / `notExposed` — four messages from the
   //     pre-cut Cloudflare auto-DNS UX that nobody renders any more.
-  //
-  // The single intentional Cloudflare reference that stays is
-  // `projectDetail.domains.readOnlyHint` ("Cloudflare auto-DNS
-  // returns in v0.2.") — that is the live v0.1 read-only message
-  // shown on the Domains tab and is pinned by
-  // `cloudflare-frontend-cut-v0-1.test.ts` independently.
+  //   - `domains.readOnlyHint` previously promised "Cloudflare auto-DNS
+  //     returns in v0.2." That promise is retired; auto-DNS is fully
+  //     cold-storage and the v0.1 plan does not bring it back.
 
   for (const locale of ['en', 'ko']) {
     const dict = readRepoFile(`web/src/i18n/${locale}.ts`);
@@ -55,15 +54,16 @@ describe('Cloudflare-tied i18n keys stay pruned (v0.1)', () => {
       expect(dict).not.toMatch(/^ {4}notExposed:/m);
     });
 
-    it(`keeps the live v0.1 Cloudflare-mention in projectDetail.domains.readOnlyHint (${locale}.ts)`, () => {
-      // The Domains tab read-only hint intentionally tells users that
-      // Cloudflare auto-DNS returns in v0.2. That copy must stay
-      // intact — it is the only remaining Cloudflare reference and
-      // its presence is also pinned by cloudflare-frontend-cut-v0-1.
+    it(`retires the "Cloudflare auto-DNS returns in v0.2" promise (${locale}.ts)`, () => {
+      // The v0.1 CRUD plan deliberately keeps Cloudflare integration in
+      // cold-storage. The old promise that auto-DNS "returns in v0.2"
+      // must be gone from user-facing copy — TLS is handled by an
+      // external proxy in v0.1, and ACME (not Cloudflare DNS provider
+      // automation) is the v0.2 successor.
       if (locale === 'en') {
-        expect(dict).toMatch(/Cloudflare auto-DNS returns in v0\.2/);
+        expect(dict).not.toMatch(/Cloudflare auto-DNS returns in v0\.2/);
       } else {
-        expect(dict).toMatch(/Cloudflare 자동 DNS는 v0\.2에서 돌아옵니다/);
+        expect(dict).not.toMatch(/Cloudflare 자동 DNS는 v0\.2에서 돌아옵니다/);
       }
     });
   }

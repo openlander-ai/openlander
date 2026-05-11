@@ -896,14 +896,20 @@ function DomainsTab({
   const [deleteTarget, setDeleteTarget] = useState<DomainMapping | null>(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!projectId) return;
     try {
       const resp = await getServiceDomains(projectId, service.id);
       setDomains(resp.domains);
-    } catch {
-      setDomains([]);
+      setLoadError(null);
+    } catch (err) {
+      // Do NOT silently set domains=[] — that masks the failure as an
+      // empty state. Surface the error explicitly so the operator knows
+      // the list might be stale and Add can be blocked when needed.
+      const message = err instanceof Error ? err.message : 'Failed to load domains';
+      setLoadError(message);
     }
   }, [projectId, service.id]);
 
@@ -976,6 +982,22 @@ function DomainsTab({
             </div>
           </div>
         )}
+        {loadError && (
+          <div className="rounded-md border border-[color:var(--ol-danger)] bg-[color:var(--ol-danger-soft)] p-3">
+            <div className="flex items-center gap-2">
+              <span className="ol-mono min-w-0 flex-1 truncate text-[12px] text-[color:var(--ol-danger)]">
+                {t('projectDetail.domains.loadError')}
+              </span>
+              <button
+                type="button"
+                onClick={() => void refresh()}
+                className="shrink-0 rounded-md border border-[color:var(--ol-danger)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--ol-danger)] hover:bg-[color:var(--ol-danger-soft)]"
+              >
+                {t('projectDetail.domains.retry')}
+              </button>
+            </div>
+          </div>
+        )}
         {domains?.map((d) => (
           <DomainRow
             key={d.id}
@@ -985,11 +1007,15 @@ function DomainsTab({
             disabled={busy}
           />
         ))}
-        {!service.url && domains !== null && domains.length === 0 && !externalMode && (
-          <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
-            {t('projectDetail.domains.empty')}
-          </p>
-        )}
+        {!service.url &&
+          !loadError &&
+          domains !== null &&
+          domains.length === 0 &&
+          !externalMode && (
+            <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
+              {t('projectDetail.domains.empty')}
+            </p>
+          )}
         {externalMode && (
           <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
             {t('projectDetail.domains.emptyExternal')}
@@ -1001,9 +1027,15 @@ function DomainsTab({
         <button
           type="button"
           onClick={() => setShowAdd(true)}
-          disabled={externalMode || busy || !projectId}
+          disabled={externalMode || busy || !projectId || loadError !== null}
           className="inline-flex items-center gap-2 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--ol-primary-fg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          title={externalMode ? t('projectDetail.domains.emptyExternal') : undefined}
+          title={
+            externalMode
+              ? t('projectDetail.domains.emptyExternal')
+              : loadError
+                ? t('projectDetail.domains.loadError')
+                : undefined
+          }
         >
           <Plus className="h-3 w-3" />
           {t('projectDetail.domains.add')}
@@ -1033,7 +1065,7 @@ function DomainsTab({
         open={showAdd}
         onOpenChange={(open) => setShowAdd(open)}
         onSubmit={handleAdd}
-        defaultPort={service.port ?? null}
+        defaultPort={service.containerPort ?? service.port ?? null}
         t={t}
         busy={busy}
       />
@@ -1134,6 +1166,7 @@ function AddDomainDialog({
   const [domainValue, setDomainValue] = useState('');
   const [pathValue, setPathValue] = useState('/');
   const [stripPrefix, setStripPrefix] = useState(false);
+  const [stripTouched, setStripTouched] = useState(false);
   const [upstreamPath, setUpstreamPath] = useState('');
   const [targetPort, setTargetPort] = useState('');
   const [advanced, setAdvanced] = useState(false);
@@ -1144,12 +1177,32 @@ function AddDomainDialog({
       setDomainValue('');
       setPathValue('/');
       setStripPrefix(false);
+      setStripTouched(false);
       setUpstreamPath('');
       setTargetPort('');
       setAdvanced(false);
       setFieldError(null);
     }
   }, [open]);
+
+  // Auto-enable strip_prefix when the user picks a non-root path, unless
+  // they've already touched the strip toggle explicitly. Most non-root
+  // routes want StripPrefix (so /api/users hits the backend as /users);
+  // making the user dig through Advanced is the #1 v0.1 UX trap.
+  function handlePathChange(value: string) {
+    setPathValue(value);
+    if (!stripTouched && value !== '/' && value !== '' && value.startsWith('/')) {
+      setStripPrefix(true);
+    }
+    if (!stripTouched && (value === '/' || value === '')) {
+      setStripPrefix(false);
+    }
+  }
+
+  function handleStripChange(checked: boolean) {
+    setStripPrefix(checked);
+    setStripTouched(true);
+  }
 
   function validate(): CreateDomainBody | null {
     const domain = domainValue.trim().toLowerCase();
@@ -1187,7 +1240,10 @@ function AddDomainDialog({
     return {
       domain,
       pathPrefix: path,
-      stripPrefix,
+      // StripPrefix is meaningless on the root path — force false there
+      // even if the toggle state still says true (e.g. user picked /api
+      // then went back to /).
+      stripPrefix: path === '/' ? false : stripPrefix,
       upstreamPathPrefix: upstream,
       targetPort: port,
     };
@@ -1266,7 +1322,7 @@ function AddDomainDialog({
             <input
               type="text"
               value={pathValue}
-              onChange={(e) => setPathValue(e.target.value)}
+              onChange={(e) => handlePathChange(e.target.value)}
               placeholder="/"
               className={cn(
                 'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
@@ -1276,6 +1332,23 @@ function AddDomainDialog({
               )}
             />
           </label>
+
+          {pathValue !== '/' && pathValue !== '' && (
+            <label className="flex items-start gap-2 text-[12px]">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={stripPrefix}
+                onChange={(e) => handleStripChange(e.target.checked)}
+              />
+              <span className="flex flex-col">
+                <span>{t('projectDetail.domains.dialog.stripPrefix')}</span>
+                <span className="text-[11px] text-[color:var(--ol-fg-muted)]">
+                  {t('projectDetail.domains.dialog.stripPrefixHint')}
+                </span>
+              </span>
+            </label>
+          )}
 
           <button
             type="button"
@@ -1287,14 +1360,6 @@ function AddDomainDialog({
 
           {advanced && (
             <div className="flex flex-col gap-3 border-l-2 border-[color:var(--ol-border-subtle)] pl-3">
-              <label className="flex items-center gap-2 text-[12px]">
-                <input
-                  type="checkbox"
-                  checked={stripPrefix}
-                  onChange={(e) => setStripPrefix(e.target.checked)}
-                />
-                <span>{t('projectDetail.domains.dialog.stripPrefix')}</span>
-              </label>
               <label className="flex flex-col gap-1 text-[12px]">
                 <span className="text-[color:var(--ol-fg-muted)]">
                   {t('projectDetail.domains.dialog.upstreamPathPrefix')}

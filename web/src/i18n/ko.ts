@@ -370,8 +370,10 @@ export const translations = {
         'A/AAAA/CNAME 레코드를 OpenLander가 실행되는 서버를 가리키도록 직접 설정하세요. OpenLander는 DNS를 자동 관리하지 않습니다.',
       legacyBadge: 'legacy CF',
       legacyTooltip:
-        '이 매핑은 v0.1 이전 Cloudflare 통합 시기의 메타데이터를 가지고 있습니다. 삭제 시 OpenLander 매핑만 제거되며 외부 DNS 레코드는 그대로 유지됩니다.',
+        '이 매핑은 v0.1 이전 Cloudflare 통합 시 생성되었습니다. 현재는 호환 모드로 동작 중이며, 삭제 시 OpenLander 매핑만 제거됩니다. 외부 DNS 레코드는 그대로 유지됩니다.',
       readOnlyHint: '',
+      loadError: '도메인 목록을 불러오지 못했습니다. 목록이 최신이 아닐 수 있습니다.',
+      retry: '다시 시도',
       dialog: {
         title: '도메인 추가',
         domain: '도메인',
@@ -382,8 +384,10 @@ export const translations = {
         upstreamPathPrefix: '업스트림 경로',
         upstreamPathPlaceholder: '/backend (선택)',
         targetPort: '대상 포트',
-        targetPortPlaceholder: '{port} (서비스 기본값)',
+        targetPortPlaceholder: '{port} (컨테이너 포트)',
         targetPortPlaceholderNone: '서비스 컨테이너 포트',
+        stripPrefixHint:
+          '컨테이너로 전달할 때 경로 접두사를 제거합니다 (대부분의 non-root 경로에 필요).',
         submit: '도메인 추가',
         cancel: '취소',
         submitting: '추가 중…',

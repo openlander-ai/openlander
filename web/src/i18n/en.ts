@@ -374,6 +374,8 @@ export const translations = {
       legacyTooltip:
         'This mapping carries Cloudflare metadata from before v0.1 cold-storage. Deleting it removes only the OpenLander mapping; external DNS records are untouched.',
       readOnlyHint: '',
+      loadError: 'Could not load domains. The list may be out of date.',
+      retry: 'Retry',
       dialog: {
         title: 'Add Domain',
         domain: 'Domain',
@@ -384,8 +386,10 @@ export const translations = {
         upstreamPathPrefix: 'Upstream path',
         upstreamPathPlaceholder: '/backend (optional)',
         targetPort: 'Target port',
-        targetPortPlaceholder: '{port} (service default)',
+        targetPortPlaceholder: '{port} (container port)',
         targetPortPlaceholderNone: 'Service container port',
+        stripPrefixHint:
+          'Strip the path prefix before forwarding to the container (most non-root routes need this).',
         submit: 'Add Domain',
         cancel: 'Cancel',
         submitting: 'Adding…',
