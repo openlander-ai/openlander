@@ -30,7 +30,7 @@ describe('AuthScreen v0.1 — single page, two modes', () => {
     expect(source).toMatch(/role="status"/);
   });
 
-  it('uses the dedicated tooShort key (not empty) for sub-12-char passwords', () => {
+  it('uses the dedicated tooShort key (not empty) for sub-8-char passwords', () => {
     expect(source).toContain("t('setup.password.tooShort')");
     expect(source).toMatch(/password\.trim\(\)/);
   });
