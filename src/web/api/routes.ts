@@ -28,10 +28,26 @@ import { createNotificationsRoutes } from './notifications-routes.js';
 import { createWebServerRoutes } from './web-server-routes.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getEnvironmentProjectHostname, getAllIps } from '../../pipeline/traefik.js';
+import { projectIdToDeployableServiceId } from '../../db/service-ids.js';
+import type { ProjectRow, ServiceRow } from '../../db/types.js';
 
 const log = createModuleLogger('api');
 const API_SLOW_REQUEST_MS = 300;
 const API_OBSERVE_REQUEST_MS = 150;
+
+type TraefikHttpService = { loadBalancer: { servers: Array<{ url: string }> } };
+
+function traefikObjectName(value: string): string {
+  return value.replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function resolveServiceContainerName(service: ServiceRow, project: ProjectRow): string | null {
+  if (service.container_name) return service.container_name;
+  if (service.id === projectIdToDeployableServiceId(project.id)) {
+    return projectContainerName(project.name);
+  }
+  return null;
+}
 
 export function createApiRoutes(ctx: AppContext): Hono {
   const api = new Hono();
@@ -178,7 +194,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
   api.get('/traefik/config', async (c) => {
     const routers: Record<string, { rule: string; entryPoints: string[]; service: string }> = {};
-    const services: Record<string, { loadBalancer: { servers: Array<{ url: string }> } }> = {};
+    const traefikServices: Record<string, TraefikHttpService> = {};
 
     // Build self-contained services for projects with an active container.
     // Uses Docker DNS (container name) + container port — no @docker dependency.
@@ -187,8 +203,10 @@ export function createApiRoutes(ctx: AppContext): Hono {
     // PR 4 canonical-first: read status / container_id / container_port /
     // assigned_port via the deployable services row when available; fall
     // back to legacy projects columns through migration 0012.
+    const projects = await ctx.db.listProjects();
+    const projectsById = new Map(projects.map((project) => [project.id, project]));
     const allProjects = [];
-    for (const p of await ctx.db.listProjects()) {
+    for (const p of projects) {
       const deployable = await ctx.db.getDeployableForProject(p.id);
       const status = deployable?.status ?? p.status;
       const containerId = deployable?.container_id ?? p.container_id;
@@ -206,7 +224,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
         project.assigned_port;
       if (!internalPort) continue;
       const svcName = `svc-${project.name}`;
-      services[svcName] = {
+      traefikServices[svcName] = {
         loadBalancer: {
           servers: [
             { url: `http://${projectContainerName(project.name)}:${String(internalPort)}` },
@@ -215,49 +233,55 @@ export function createApiRoutes(ctx: AppContext): Hono {
       };
     }
 
+    const serviceRows = await ctx.db.listServices();
+    const servicesById = new Map(serviceRows.map((service) => [service.id, service]));
+    const domainsByService = new Map<string, { routerName: string; domains: Set<string> }>();
     const mappings = await ctx.db.listDomainMappings();
-    const projectDomains = new Map<string, { projectName: string; domains: string[] }>();
     for (const mapping of mappings) {
-      if (!mapping.project_id) continue;
-      const existing = projectDomains.get(mapping.project_id);
+      if (mapping.status !== 'active') continue;
+
+      const service = servicesById.get(mapping.service_id);
+      const serviceStatus = service?.status as ServiceRow['status'] | 'building' | undefined;
+      const isRoutable =
+        serviceStatus === 'running' || (serviceStatus === 'building' && service?.container_id);
+      if (!service || service.archived_at || !isRoutable) continue;
+
+      const project = projectsById.get(service.project_id);
+      if (!project) continue;
+
+      const internalPort = service.container_port ?? service.assigned_port;
+      const containerName = resolveServiceContainerName(service, project);
+      if (!internalPort) continue;
+      if (!containerName) {
+        log.warn(
+          { serviceId: service.id, domain: mapping.domain },
+          'Skipping domain mapping without a resolvable service container name',
+        );
+        continue;
+      }
+
+      const objectName = traefikObjectName(service.id);
+      const svcName = `svc-domain-${objectName}`;
+      traefikServices[svcName] ??= {
+        loadBalancer: {
+          servers: [{ url: `http://${containerName}:${String(internalPort)}` }],
+        },
+      };
+
+      const existing = domainsByService.get(svcName);
       if (existing) {
-        existing.domains.push(mapping.domain);
+        existing.domains.add(mapping.domain);
       } else {
-        const project = await ctx.db.getProject(mapping.project_id);
-        if (project) {
-          projectDomains.set(mapping.project_id, {
-            projectName: project.name,
-            domains: [mapping.domain],
-          });
-        }
+        domainsByService.set(svcName, {
+          routerName: `domain-${objectName}`,
+          domains: new Set([mapping.domain]),
+        });
       }
     }
-    for (const [projectId, { projectName, domains }] of projectDomains) {
-      const svcName = `svc-${projectName}`;
-      if (!services[svcName]) {
-        const project = await ctx.db.getProject(projectId);
-        // PR 4 canonical-first: container_port + assigned_port via
-        // deployable services row when available.
-        const deployable = project ? await ctx.db.getDeployableForProject(project.id) : undefined;
-        const internalPort =
-          deployable?.container_port ??
-          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-          project?.container_port ??
-          deployable?.assigned_port ??
-          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-          project?.assigned_port;
-        if (!internalPort) continue;
-        services[svcName] = {
-          loadBalancer: {
-            servers: [
-              { url: `http://${projectContainerName(projectName)}:${String(internalPort)}` },
-            ],
-          },
-        };
-      }
-      const routeRule = domains.map((d) => `Host(\`${d}\`)`).join(' || ');
-      routers[`prod-${projectName}`] = {
-        rule: routeRule,
+
+    for (const [svcName, { routerName, domains }] of domainsByService) {
+      routers[routerName] = {
+        rule: [...domains].map((d) => `Host(\`${d}\`)`).join(' || '),
         entryPoints: ['web'],
         service: svcName,
       };
@@ -266,7 +290,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const detectedIps = getAllIps();
     for (const project of allProjects) {
       const svcName = `svc-${project.name}`;
-      if (!services[svcName]) continue;
+      if (!traefikServices[svcName]) continue;
       for (const ip of detectedIps) {
         const sslipHost = getEnvironmentProjectHostname(project.name, 'production', ip.address);
         if (sslipHost && !sslipHost.endsWith('.localhost')) {
@@ -297,7 +321,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
       }
     }
 
-    return c.json({ http: { routers, services } });
+    return c.json({ http: { routers, services: traefikServices } });
   });
 
   api.route('/', createActivityRoutes(ctx));
