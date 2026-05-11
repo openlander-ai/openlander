@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { existsSync } from 'node:fs';
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { isNotNull } from 'drizzle-orm';
 import { OpenLanderError } from '../errors.js';
 import { createModuleLogger } from '../lib/logger.js';
@@ -62,6 +62,11 @@ export type {
 } from './types.js';
 
 const log = createModuleLogger('db-migration');
+const OPENLANDER_MIGRATION_LOCK_ID = 10114;
+
+interface MigrationSqlClient {
+  unsafe: PostgresClient['unsafe'];
+}
 
 function resolveMigrationsFolder(): string {
   const candidates = [
@@ -73,7 +78,7 @@ function resolveMigrationsFolder(): string {
   return candidates.find((p) => existsSync(path.join(p, 'meta/_journal.json'))) ?? cwdFallback;
 }
 
-async function relationExists(client: PostgresClient, relationName: string): Promise<boolean> {
+async function relationExists(client: MigrationSqlClient, relationName: string): Promise<boolean> {
   const rows = (await client.unsafe('SELECT to_regclass($1) IS NOT NULL AS "exists"', [
     relationName,
   ])) as ReadonlyArray<{ exists: boolean }>;
@@ -81,7 +86,7 @@ async function relationExists(client: PostgresClient, relationName: string): Pro
 }
 
 async function columnExists(
-  client: PostgresClient,
+  client: MigrationSqlClient,
   schemaName: string,
   tableName: string,
   columnName: string,
@@ -102,15 +107,30 @@ function quotePgIdentifier(identifier: string): string {
 }
 
 async function listDrizzleMigrationTables(
-  client: PostgresClient,
+  client: MigrationSqlClient,
 ): Promise<Array<{ schema: string; name: string; rowCount: number }>> {
   const rows = (await client.unsafe(
-    `SELECT n.nspname AS "schema", c.relname AS "name"
-     FROM pg_class c
-     JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE c.relname = '__drizzle_migrations'
-       AND c.relkind IN ('r', 'p')
-       AND n.nspname NOT IN ('pg_catalog', 'information_schema')`,
+    `SELECT "schema", "name"
+     FROM (
+       SELECT
+         n.nspname AS "schema",
+         c.relname AS "name",
+         bool_or(a.attname = 'id') AS "hasId",
+         bool_or(a.attname = 'hash' AND format_type(a.atttypid, a.atttypmod) = 'text') AS "hasHash",
+         bool_or(
+           a.attname = 'created_at'
+           AND format_type(a.atttypid, a.atttypmod) IN ('bigint', 'integer', 'numeric', 'text')
+         ) AS "hasCreatedAt"
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       LEFT JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+       WHERE c.relkind IN ('r', 'p')
+         AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+       GROUP BY n.nspname, c.relname
+     ) migration_like_tables
+     WHERE "name" = '__drizzle_migrations'
+        OR ("hasId" AND "hasHash" AND "hasCreatedAt")
+     ORDER BY "schema", "name"`,
   )) as ReadonlyArray<{ schema: string; name: string }>;
 
   const tables: Array<{ schema: string; name: string; rowCount: number }> = [];
@@ -125,7 +145,7 @@ async function listDrizzleMigrationTables(
   return tables;
 }
 
-export async function assertV01BaselineCompatible(client: PostgresClient): Promise<void> {
+export async function assertV01BaselineCompatible(client: MigrationSqlClient): Promise<void> {
   const hasLegacyMigrationAudit = await relationExists(client, 'public.migration_0009_audit');
   const hasLegacyProjectsRepoUrl = await columnExists(client, 'public', 'projects', 'repo_url');
   const migrationTables = await listDrizzleMigrationTables(client);
@@ -148,6 +168,51 @@ export async function assertV01BaselineCompatible(client: PostgresClient): Promi
           'Back up the old database, create a fresh OpenLander 0.1 Postgres volume, then re-create projects/services through the supported API.',
       },
     );
+  }
+}
+
+async function migrateWithV01BaselineGuard(
+  client: PostgresClient,
+  migrationsFolder: string,
+): Promise<void> {
+  await client.begin(async (txClient) => {
+    await txClient.unsafe('SELECT pg_advisory_xact_lock($1)', [OPENLANDER_MIGRATION_LOCK_ID]);
+    await assertV01BaselineCompatible(txClient);
+    await runV01Migrations(txClient, migrationsFolder);
+  });
+}
+
+async function runV01Migrations(
+  client: MigrationSqlClient,
+  migrationsFolder: string,
+): Promise<void> {
+  const migrations = readMigrationFiles({ migrationsFolder });
+
+  await client.unsafe('CREATE SCHEMA IF NOT EXISTS "drizzle"');
+  await client.unsafe(`
+    CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
+      id SERIAL PRIMARY KEY,
+      hash text NOT NULL,
+      created_at bigint
+    )
+  `);
+
+  const rows = (await client.unsafe(
+    'SELECT id, hash, created_at FROM "drizzle"."__drizzle_migrations" ORDER BY created_at DESC LIMIT 1',
+  )) as ReadonlyArray<{ id: number; hash: string; created_at: string | number }>;
+  const lastDbMigration = rows[0];
+
+  for (const migration of migrations) {
+    if (!lastDbMigration || Number(lastDbMigration.created_at) < migration.folderMillis) {
+      for (const statement of migration.sql) {
+        if (statement.trim().length === 0) continue;
+        await client.unsafe(statement);
+      }
+      await client.unsafe(
+        'INSERT INTO "drizzle"."__drizzle_migrations" ("hash", "created_at") VALUES($1, $2)',
+        [migration.hash, migration.folderMillis],
+      );
+    }
   }
 }
 
@@ -223,8 +288,7 @@ export class Database implements AuthDatabase {
     const { client, db } = createDrizzleDatabase(databaseUrl);
     const migrationsFolder = resolveMigrationsFolder();
     try {
-      await assertV01BaselineCompatible(client);
-      await migrate(db, { migrationsFolder });
+      await migrateWithV01BaselineGuard(client, migrationsFolder);
     } catch (err) {
       await client.end({ timeout: 5 }).catch((closeErr: unknown) => {
         // postgres-js timeout is seconds, not milliseconds.

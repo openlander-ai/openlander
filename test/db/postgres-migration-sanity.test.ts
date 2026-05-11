@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
+import postgres from 'postgres';
 import { describe, expect, it } from 'vitest';
 
-import { assertV01BaselineCompatible } from '../../src/db/index.js';
+import { assertV01BaselineCompatible, Database } from '../../src/db/index.js';
 import type { PostgresClient } from '../../src/db/drizzle.js';
 import {
   DRIZZLE_DIR,
@@ -54,7 +55,7 @@ function createFakePostgresClient(state: FakePostgresState): PostgresClient {
       ];
     }
 
-    if (sql.includes("c.relname = '__drizzle_migrations'")) {
+    if (sql.includes('__drizzle_migrations') && sql.includes('pg_attribute')) {
       return (state.migrationTables ?? []).map((table) => ({
         schema: table.schema,
         name: table.name,
@@ -72,6 +73,42 @@ function createFakePostgresClient(state: FakePostgresState): PostgresClient {
   };
 
   return { unsafe } as unknown as PostgresClient;
+}
+
+const databaseUrl = process.env.OPENLANDER_DATABASE_URL ?? process.env.DATABASE_URL ?? '';
+const describeWithDatabase = databaseUrl ? describe : describe.skip;
+
+function quotePgIdentifier(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+function postgresMaintenanceUrl(url: string): string {
+  const parsed = new URL(url);
+  parsed.pathname = '/postgres';
+  return parsed.toString();
+}
+
+async function withIsolatedPostgresDatabase(
+  label: string,
+  fn: (url: string) => Promise<void>,
+): Promise<void> {
+  const dbName = `ol_${label}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const admin = postgres(postgresMaintenanceUrl(databaseUrl), { max: 1, prepare: false });
+  const quotedDbName = quotePgIdentifier(dbName);
+
+  try {
+    await admin.unsafe(`CREATE DATABASE ${quotedDbName}`);
+    const isolatedUrl = new URL(databaseUrl);
+    isolatedUrl.pathname = `/${dbName}`;
+    await fn(isolatedUrl.toString());
+  } finally {
+    await admin
+      .unsafe(`DROP DATABASE IF EXISTS ${quotedDbName} WITH (FORCE)`)
+      .catch(async () => {
+        await admin.unsafe(`DROP DATABASE IF EXISTS ${quotedDbName}`);
+      });
+    await admin.end({ timeout: 5 });
+  }
 }
 
 const SQLITE_ONLY_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
@@ -245,9 +282,7 @@ describe('Postgres migration sanity gate', () => {
     [
       'custom-schema drizzle migration history',
       {
-        migrationTables: [
-          { schema: 'custom_migrations', name: '__drizzle_migrations', rowCount: 6 },
-        ],
+        migrationTables: [{ schema: 'custom_migrations', name: 'openlander_history', rowCount: 6 }],
       } satisfies FakePostgresState,
     ],
     [
@@ -262,6 +297,59 @@ describe('Postgres migration sanity gate', () => {
     ).rejects.toMatchObject({
       code: 'DATABASE_BASELINE_RESET_REQUIRED',
       statusCode: 500,
+    });
+  });
+});
+
+describeWithDatabase('Postgres baseline guard integration', () => {
+  it('boots a fresh isolated Postgres database under the v0.1 baseline', async () => {
+    await withIsolatedPostgresDatabase('fresh_baseline', async (url) => {
+      const db = await Database.connect(url);
+      await db.close();
+
+      const sql = postgres(url, { max: 1, prepare: false });
+      try {
+        const rows = (await sql.unsafe(
+          'SELECT COUNT(*)::integer AS "count" FROM drizzle.__drizzle_migrations',
+        )) as ReadonlyArray<{ count: number }>;
+        expect(rows[0]?.count).toBe(1);
+        await expect(sql.unsafe('SELECT 1 FROM domain_mappings LIMIT 1')).resolves.toBeDefined();
+      } finally {
+        await sql.end({ timeout: 5 });
+      }
+    });
+  });
+
+  it('detects custom-named Drizzle migration history tables by shape', async () => {
+    await withIsolatedPostgresDatabase('custom_history', async (url) => {
+      const sql = postgres(url, { max: 1, prepare: false });
+      try {
+        await sql.unsafe('CREATE SCHEMA custom_migrations');
+        await sql.unsafe(`
+          CREATE TABLE custom_migrations.openlander_history (
+            id SERIAL PRIMARY KEY,
+            hash text NOT NULL,
+            created_at bigint
+          )
+        `);
+        await sql.unsafe(`
+          INSERT INTO custom_migrations.openlander_history (hash, created_at)
+          VALUES ('legacy-0001', 1), ('legacy-0002', 2)
+        `);
+
+        await expect(assertV01BaselineCompatible(sql)).rejects.toMatchObject({
+          code: 'DATABASE_BASELINE_RESET_REQUIRED',
+          statusCode: 500,
+          details: {
+            drizzleMigrationCount: 2,
+            migrationTables: [
+              { schema: 'custom_migrations', name: 'openlander_history', rowCount: 2 },
+            ],
+          },
+        });
+      } finally {
+        await sql.end({ timeout: 5 });
+      }
     });
   });
 });
