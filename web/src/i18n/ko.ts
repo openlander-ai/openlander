@@ -54,6 +54,7 @@ export const translations = {
       adminLabel: '관리자',
       subtitle: '계정',
       changePassword: '비밀번호 변경',
+      language: '언어',
       signOut: '로그아웃',
     },
     changePassword: {
