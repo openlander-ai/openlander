@@ -2,17 +2,43 @@ name: Release Gate
 
 on:
   pull_request:
-    branches: [develop, main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'web/src/**'
+      - 'test/**'
+      - 'e2e/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'web/package.json'
+      - 'web/package-lock.json'
+      - 'tsconfig*.json'
+      - 'vitest*.config.ts'
+      - 'drizzle/**'
+      - 'scripts/**'
+      - '.github/workflows/release-gate.yml'
   push:
-    branches: [develop]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'web/src/**'
+      - 'test/**'
+      - 'e2e/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'web/package.json'
+      - 'web/package-lock.json'
+      - 'tsconfig*.json'
+      - 'vitest*.config.ts'
+      - 'drizzle/**'
+      - 'scripts/**'
+      - '.github/workflows/release-gate.yml'
+  workflow_dispatch:
+
+# Same trade-off as CI: cancel PR retries, complete every main run.
+concurrency:
+  group: release-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

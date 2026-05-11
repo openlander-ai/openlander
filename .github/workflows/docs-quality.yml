@@ -9,6 +9,7 @@ on:
       - 'src/events/index.ts'
       - 'src/monitor/**'
       - 'scripts/validate-doc-claims.ts'
+      - '.github/workflows/docs-quality.yml'
   pull_request:
     branches: [main]
     paths:
@@ -17,6 +18,11 @@ on:
       - 'src/events/index.ts'
       - 'src/monitor/**'
       - 'scripts/validate-doc-claims.ts'
+      - '.github/workflows/docs-quality.yml'
+
+concurrency:
+  group: docs-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
