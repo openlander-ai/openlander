@@ -3,8 +3,32 @@ name: Contract Tests
 on:
   pull_request:
     branches: [develop, main]
+    paths:
+      - 'src/app.ts'
+      - 'src/config/**'
+      - 'src/db/**'
+      - 'src/web/**'
+      - 'test/setup.ts'
+      - 'web/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/contract-tests.yml'
   push:
     branches: [develop]
+    paths:
+      - 'src/app.ts'
+      - 'src/config/**'
+      - 'src/db/**'
+      - 'src/web/**'
+      - 'test/setup.ts'
+      - 'web/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/contract-tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   contract-tests:
@@ -38,7 +62,9 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
 
       # Pin npm 11 — lockfile is generated locally with npm 11; npm 10 (Node 22
       # default) misreads vitest's bundled esbuild platform deps and tries to

@@ -82,8 +82,14 @@ jobs:
             exit 1
           fi
           major_minor="$(node -e "const [major, minor] = process.argv[1].split('.'); process.stdout.write(major + '.' + minor);" "$version")"
+          if [[ "$version" == *-* ]]; then
+            is_prerelease=true
+          else
+            is_prerelease=false
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "major_minor=$major_minor" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$is_prerelease" >> "$GITHUB_OUTPUT"
 
       - name: Run release QA gate
         run: npm run qa:release
@@ -103,12 +109,21 @@ jobs:
       - name: Build and push runtime image
         run: |
           set -euo pipefail
+          tags=(
+            --tag "${IMAGE_NAME}:${{ steps.version.outputs.version }}"
+          )
+          if [[ "${{ steps.version.outputs.is_prerelease }}" == "true" ]]; then
+            tags+=(--tag "${IMAGE_NAME}:rc")
+          else
+            tags+=(
+              --tag "${IMAGE_NAME}:${{ steps.version.outputs.major_minor }}"
+              --tag "${IMAGE_NAME}:latest"
+            )
+          fi
           docker buildx build \
             --file Dockerfile.runtime \
             --platform linux/amd64,linux/arm64 \
-            --tag "${IMAGE_NAME}:${{ steps.version.outputs.version }}" \
-            --tag "${IMAGE_NAME}:${{ steps.version.outputs.major_minor }}" \
-            --tag "${IMAGE_NAME}:latest" \
+            "${tags[@]}" \
             --push \
             .
 
@@ -137,8 +152,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          args=()
+          if [[ "${{ steps.version.outputs.is_prerelease }}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
             --notes-file /tmp/openlander-release-notes.md \
-            --verify-tag
+            --verify-tag \
+            "${args[@]}"
