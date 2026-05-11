@@ -7,6 +7,7 @@ export default defineConfig({
       'test/db/postgres-migration-sanity.test.ts',
       'test/db/schema-parity.test.ts',
       'test/db/domain-mapping-schema.test.ts',
+      'test/domain-routes.test.ts',
       'test/db-attach-service.test.ts',
       'test/console-contract.test.ts',
       'test/github-oauth.test.ts',
