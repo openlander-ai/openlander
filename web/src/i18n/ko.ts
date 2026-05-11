@@ -132,37 +132,45 @@ export const translations = {
       dockerRequired: '계속하려면 Docker가 실행 중이어야 합니다.',
     },
     github: {
-      title: '준비 완료',
+      // Chrome.
+      title: 'Ready for Launch',
+      switchAccount: 'Switch account',
+      // Content — descriptive copy stays Korean.
       subtitle: '레포지토리 배포를 시작하려면 GitHub 계정을 연결하세요.',
       description: '비공개 레포지토리 배포용입니다. 공개 레포는 없어도 됩니다.',
       connectedAs: '{username} 계정으로 연결됨',
-      switchAccount: '계정 전환',
     },
     language: {
-      title: '언어',
+      // Chrome.
+      title: 'Language',
+      // Content.
       subtitle: '사용할 언어를 선택하세요.',
     },
     password: {
-      title: '비밀번호 설정',
+      // Chrome.
+      title: 'Set Password',
+      placeholder: 'Password',
+      confirmPlaceholder: 'Confirm password',
+      submit: 'Set Password & Continue',
+      saving: 'Setting up...',
+      // Content — descriptions + hints + errors stay Korean.
       subtitle: '대시보드를 비밀번호로 보호하세요.',
-      placeholder: '비밀번호',
-      confirmPlaceholder: '비밀번호 확인',
       lengthHint: '최소 8자 이상이어야 합니다.',
       mismatch: '비밀번호가 일치하지 않습니다',
       empty: '비밀번호를 입력해주세요',
       tooShort: '비밀번호는 최소 8자 이상이어야 합니다',
-      saving: '설정 중...',
-      submit: '비밀번호 설정 후 계속',
       errorGeneric: '비밀번호 저장에 실패했습니다. 다시 시도해주세요.',
     },
     mcp: {
-      title: 'AI 코딩 도구 연결',
+      // Chrome.
+      title: 'Connect AI Coding Tools',
+      manualSetup: 'Manual setup instructions',
+      skipForNow: 'Skip for now',
+      startDeploying: 'Start Deploying',
+      tokenName: 'Setup wizard',
+      // Content.
       subtitle: 'Claude Code, Cursor 또는 모든 MCP 클라이언트에서 배포하세요.',
       copyPrompt: '아래를 AI 코딩 도구에 붙여넣으세요:',
-      manualSetup: '수동 설정 안내',
-      skipForNow: '나중에',
-      startDeploying: '배포 시작',
-      tokenName: '설정 마법사',
       tokenAlreadyIssued:
         'MCP 토큰(olp_…{suffix})이 이미 발급되어 있습니다. 설정 코드에 사용할 새 토큰을 받으려면 사이드바의 Your Agent에서 재발급하세요. 기존 토큰은 무효화됩니다.',
       tokenError:
@@ -171,16 +179,18 @@ export const translations = {
         '기존에 사용하던 레거시 API 토큰(ol_…)이 설정 과정에서 무효화되었습니다. 해당 토큰을 사용 중인 MCP 클라이언트는 위의 신규 토큰으로 갱신해주세요.',
     },
     common: {
-      back: '뒤로',
-      continue: '계속',
-      getStarted: '시작하기',
-      refreshStatus: '상태 새로고침',
+      // Chrome — bare verbs.
+      back: 'Back',
+      continue: 'Continue',
+      getStarted: 'Get Started',
+      refreshStatus: 'Refresh Status',
     },
     infra: {
+      // Chrome — status pills.
       dockerEngine: 'Docker Engine',
       traefikProxy: 'Traefik Proxy',
-      running: '실행 중',
-      stopped: '중지됨',
+      running: 'Running',
+      stopped: 'Stopped',
     },
   },
   notifications: {
