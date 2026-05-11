@@ -2,6 +2,7 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { isNotNull } from 'drizzle-orm';
+import { OpenLanderError } from '../errors.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { createDrizzleDatabase, type DrizzleClient, type PostgresClient } from './drizzle.js';
 import { environments, services } from './schema.drizzle.js';
@@ -70,6 +71,40 @@ function resolveMigrationsFolder(): string {
   ];
   const cwdFallback = path.resolve(process.cwd(), 'drizzle');
   return candidates.find((p) => existsSync(path.join(p, 'meta/_journal.json'))) ?? cwdFallback;
+}
+
+async function relationExists(client: PostgresClient, relationName: string): Promise<boolean> {
+  const rows = (await client.unsafe('SELECT to_regclass($1) IS NOT NULL AS "exists"', [
+    relationName,
+  ])) as ReadonlyArray<{ exists: boolean }>;
+  return rows[0]?.exists === true;
+}
+
+async function assertV01BaselineCompatible(client: PostgresClient): Promise<void> {
+  const hasLegacyMigrationAudit = await relationExists(client, 'public.migration_0009_audit');
+  const hasDrizzleMigrations = await relationExists(client, 'drizzle.__drizzle_migrations');
+  let drizzleMigrationCount = 0;
+
+  if (hasDrizzleMigrations) {
+    const rows = (await client.unsafe(
+      'SELECT COUNT(*)::integer AS "count" FROM drizzle.__drizzle_migrations',
+    )) as ReadonlyArray<{ count: number }>;
+    drizzleMigrationCount = rows[0]?.count ?? 0;
+  }
+
+  if (hasLegacyMigrationAudit || drizzleMigrationCount > 1) {
+    throw new OpenLanderError(
+      'This database was initialized with a pre-0.1 OpenLander migration history. OpenLander 0.1 uses a fresh Postgres baseline; start with a fresh database or export/import data manually before booting this release.',
+      'DATABASE_BASELINE_RESET_REQUIRED',
+      500,
+      {
+        hasLegacyMigrationAudit,
+        drizzleMigrationCount,
+        remediation:
+          'Back up the old database, create a fresh OpenLander 0.1 Postgres volume, then re-create projects/services through the supported API.',
+      },
+    );
+  }
 }
 
 // prettier-ignore
@@ -143,7 +178,15 @@ export class Database implements AuthDatabase {
   static async connect(databaseUrl: string): Promise<Database> {
     const { client, db } = createDrizzleDatabase(databaseUrl);
     const migrationsFolder = resolveMigrationsFolder();
-    await migrate(db, { migrationsFolder });
+    try {
+      await assertV01BaselineCompatible(client);
+      await migrate(db, { migrationsFolder });
+    } catch (err) {
+      await client.end({ timeout: 5 }).catch((closeErr: unknown) => {
+        log.warn({ err: closeErr }, 'Failed to close database client after migration failure');
+      });
+      throw err;
+    }
     log.info({ migrationsFolder }, 'Postgres migrations applied');
     const database = new Database(client, db);
     await database.actionRunRepo.markStaleAsFailedOnStartup();

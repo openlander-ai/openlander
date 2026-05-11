@@ -141,16 +141,25 @@ function createDb(overrides: Partial<DomainRouteDb> = {}): DomainRouteDb {
       mappings.filter((mapping) => mapping.service_id === serviceId),
     ),
     findDomainMappingByHostAndPath: vi.fn(async () => undefined),
-    createDomainMappingForService: vi.fn(async (input: { id: string; serviceId: string; domain: string; pathPrefix?: string; stripPrefix?: boolean; upstreamPathPrefix?: string | null; targetPort?: number | null; }) =>
-      createDomainMapping({
-        id: input.id,
-        service_id: input.serviceId,
-        domain: input.domain,
-        path_prefix: input.pathPrefix ?? '/',
-        strip_prefix: input.stripPrefix ?? false,
-        upstream_path_prefix: input.upstreamPathPrefix ?? null,
-        target_port: input.targetPort ?? null,
-      }),
+    createDomainMappingForService: vi.fn(
+      async (input: {
+        id: string;
+        serviceId: string;
+        domain: string;
+        pathPrefix?: string;
+        stripPrefix?: boolean;
+        upstreamPathPrefix?: string | null;
+        targetPort?: number | null;
+      }) =>
+        createDomainMapping({
+          id: input.id,
+          service_id: input.serviceId,
+          domain: input.domain,
+          path_prefix: input.pathPrefix ?? '/',
+          strip_prefix: input.stripPrefix ?? false,
+          upstream_path_prefix: input.upstreamPathPrefix ?? null,
+          target_port: input.targetPort ?? null,
+        }),
     ),
     deleteDomainMapping: vi.fn(async () => undefined),
     ...overrides,
@@ -211,7 +220,7 @@ describe('createDomainRoutes', () => {
         stripPrefix: true,
         upstreamPathPrefix: '/internal',
         targetPort: 8080,
-        tlsEnabled: false,
+        tlsEnabled: null,
         tlsResolver: null,
       }),
     );
@@ -238,22 +247,60 @@ describe('createDomainRoutes', () => {
     expect(db.createDomainMappingForService).not.toHaveBeenCalled();
   });
 
-  it('rejects URL-shaped and wildcard domains', async () => {
+  it('rejects URL-shaped, wildcard, and non-public domains', async () => {
     const db = createDb();
     const urlResponse = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ domain: 'https://api.example.com/path' }),
     });
-    const wildcardResponse = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ domain: '*.example.com' }),
-    });
+    const wildcardResponse = await createApp(db).request(
+      '/api/projects/proj-1/services/svc-1/domains',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: '*.example.com' }),
+      },
+    );
+    const localhostResponse = await createApp(db).request(
+      '/api/projects/proj-1/services/svc-1/domains',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: 'localhost' }),
+      },
+    );
+    const localResponse = await createApp(db).request(
+      '/api/projects/proj-1/services/svc-1/domains',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: 'api.local' }),
+      },
+    );
 
     expect(urlResponse.status).toBe(400);
     expect(wildcardResponse.status).toBe(400);
+    expect(localhostResponse.status).toBe(400);
+    expect(localResponse.status).toBe(400);
     expect(db.createDomainMappingForService).not.toHaveBeenCalled();
+  });
+
+  it('rejects managed infrastructure services with an explicit kind error', async () => {
+    const managedService = createServiceRow({ kind: 'postgres' });
+    const db = createDb({
+      getService: vi.fn(async (id: string) =>
+        id === managedService.id ? managedService : undefined,
+      ),
+    });
+
+    const response = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains');
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'INVALID_SERVICE_KIND',
+      code: 'INVALID_SERVICE_KIND',
+    });
   });
 
   it('blocks domain writes only when Traefik is explicitly external mode', async () => {
@@ -272,11 +319,25 @@ describe('createDomainRoutes', () => {
     expect(db.createDomainMappingForService).not.toHaveBeenCalled();
   });
 
+  it('still allows domain cleanup while Traefik is explicitly external mode', async () => {
+    const db = createDb();
+    const response = await createApp(db, createConfig('external')).request(
+      '/api/projects/proj-1/services/svc-1/domains/dom-1',
+      { method: 'DELETE' },
+    );
+
+    expect(response.status).toBe(200);
+    expect(db.deleteDomainMapping).toHaveBeenCalledWith('dom-1');
+  });
+
   it('deletes service-scoped domain mappings by id', async () => {
     const db = createDb();
-    const response = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains/dom-1', {
-      method: 'DELETE',
-    });
+    const response = await createApp(db).request(
+      '/api/projects/proj-1/services/svc-1/domains/dom-1',
+      {
+        method: 'DELETE',
+      },
+    );
 
     expect(response.status).toBe(200);
     expect(db.deleteDomainMapping).toHaveBeenCalledWith('dom-1');
@@ -305,7 +366,10 @@ describe('createDomainRoutes', () => {
   });
 
   it('aggregates project-scoped domain reads across deployables', async () => {
-    const services = [createServiceRow({ id: 'svc-1' }), createServiceRow({ id: 'svc-2', name: 'web' })];
+    const services = [
+      createServiceRow({ id: 'svc-1' }),
+      createServiceRow({ id: 'svc-2', name: 'web' }),
+    ];
     const db = createDb({
       getDeployablesByGroup: vi.fn(async () => services),
       listDomainMappingsForService: vi.fn(async (serviceId: string) => [

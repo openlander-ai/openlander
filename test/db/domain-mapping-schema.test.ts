@@ -16,9 +16,13 @@ describe('domain mapping route schema', () => {
     expect(sql).toContain('"strip_prefix" boolean DEFAULT false NOT NULL');
     expect(sql).toContain('"upstream_path_prefix" text');
     expect(sql).toContain('"target_port" integer');
-    expect(sql).toContain('"tls_enabled" boolean DEFAULT false NOT NULL');
+    expect(sql).toContain('"tls_enabled" boolean');
+    expect(sql).not.toContain('"tls_enabled" boolean DEFAULT false NOT NULL');
     expect(sql).toContain('"tls_resolver" text');
     expect(sql).toContain('"updated_at" text DEFAULT now()::text');
+    expect(sql).toContain(
+      'CONSTRAINT "domain_mappings_target_port_check" CHECK ("domain_mappings"."target_port" IS NULL OR ("domain_mappings"."target_port" >= 1 AND "domain_mappings"."target_port" <= 65535))',
+    );
   });
 
   it('uses domain plus path prefix uniqueness in the v0.1 baseline', () => {

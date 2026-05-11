@@ -23,7 +23,7 @@ interface DomainMappingCreateInput {
   stripPrefix?: boolean;
   upstreamPathPrefix?: string | null;
   targetPort?: number | null;
-  tlsEnabled?: boolean;
+  tlsEnabled?: boolean | null;
   tlsResolver?: string | null;
 }
 
@@ -34,7 +34,7 @@ interface DomainMappingUpdatePatch {
   stripPrefix?: boolean;
   upstreamPathPrefix?: string | null;
   targetPort?: number | null;
-  tlsEnabled?: boolean;
+  tlsEnabled?: boolean | null;
   tlsResolver?: string | null;
 }
 
@@ -145,7 +145,7 @@ export class DomainMappingRepo {
         strip_prefix: mapping.stripPrefix ?? false,
         upstream_path_prefix: normalizeNullableDomainPathPrefix(mapping.upstreamPathPrefix),
         target_port: mapping.targetPort ?? null,
-        tls_enabled: mapping.tlsEnabled ?? false,
+        tls_enabled: mapping.tlsEnabled ?? null,
         tls_resolver: mapping.tlsResolver ?? null,
         updated_at: timestamp,
       })

@@ -30,6 +30,7 @@ import { containerName as projectContainerName } from '../../pipeline/helpers.js
 import { getEnvironmentProjectHostname, getAllIps } from '../../pipeline/traefik.js';
 import { projectIdToDeployableServiceId } from '../../db/service-ids.js';
 import type { ProjectRow, ServiceRow } from '../../db/types.js';
+import { normalizeDomainPathPrefix } from '../../db/repos/domain-mapping.repo.js';
 
 const log = createModuleLogger('api');
 const API_SLOW_REQUEST_MS = 300;
@@ -50,15 +51,14 @@ function traefikObjectName(value: string): string {
   return value.replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'route';
 }
 
-function normalizeTraefikPathPrefix(value: string | null | undefined): string {
-  const raw = value?.trim() ?? '';
-  if (!raw || raw === '/') return '/';
-  const withLeadingSlash = raw.startsWith('/') ? raw : `/${raw}`;
-  return withLeadingSlash.replace(/\/{2,}/g, '/').replace(/\/+$/g, '') || '/';
+function domainRouteObjectName(mappingId: string): string {
+  return traefikObjectName(mappingId.replace(/^domain[-_]+/i, ''));
 }
 
+const TRAEFIK_RULE_VALUE_RE = /^[A-Za-z0-9._~/-]+$/;
+
 function isSafeTraefikRuleValue(value: string): boolean {
-  return !value.includes('`') && !value.includes('\n') && !value.includes('\r');
+  return TRAEFIK_RULE_VALUE_RE.test(value);
 }
 
 function hostPathRule(domain: string, pathPrefix: string): string | null {
@@ -277,6 +277,19 @@ export function createApiRoutes(ctx: AppContext): Hono {
       const project = projectsById.get(service.project_id);
       if (!project) continue;
 
+      if (
+        mapping.target_port !== null &&
+        (!Number.isInteger(mapping.target_port) ||
+          mapping.target_port < 1 ||
+          mapping.target_port > 65535)
+      ) {
+        log.warn(
+          { serviceId: service.id, domain: mapping.domain, targetPort: mapping.target_port },
+          'Skipping domain mapping with invalid target port',
+        );
+        continue;
+      }
+
       const internalPort = mapping.target_port ?? service.container_port ?? service.assigned_port;
       const containerName = resolveServiceContainerName(service, project);
       if (!internalPort) continue;
@@ -288,8 +301,8 @@ export function createApiRoutes(ctx: AppContext): Hono {
         continue;
       }
 
-      const routeObjectName = traefikObjectName(mapping.id);
-      const pathPrefix = normalizeTraefikPathPrefix(mapping.path_prefix);
+      const routeObjectName = domainRouteObjectName(mapping.id);
+      const pathPrefix = normalizeDomainPathPrefix(mapping.path_prefix);
       const rule = hostPathRule(mapping.domain, pathPrefix);
       if (!rule) {
         log.warn(
@@ -300,13 +313,21 @@ export function createApiRoutes(ctx: AppContext): Hono {
       }
 
       const svcName = `svc-domain-${routeObjectName}`;
+      const routerName = `domain-${routeObjectName}`;
+      if (routers[routerName] || traefikServices[svcName]) {
+        log.warn(
+          { mappingId: mapping.id, serviceId: service.id, domain: mapping.domain },
+          'Skipping domain mapping with colliding Traefik object name',
+        );
+        continue;
+      }
+
       traefikServices[svcName] = {
         loadBalancer: {
           servers: [{ url: `http://${containerName}:${String(internalPort)}` }],
         },
       };
 
-      const routerName = `domain-${routeObjectName}`;
       const routerMiddlewares: string[] = [];
       if (mapping.strip_prefix && pathPrefix !== '/') {
         const middlewareName = `${routerName}-strip`;
@@ -314,7 +335,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
         routerMiddlewares.push(middlewareName);
       }
 
-      const upstreamPathPrefix = normalizeTraefikPathPrefix(mapping.upstream_path_prefix);
+      const upstreamPathPrefix = normalizeDomainPathPrefix(mapping.upstream_path_prefix);
       if (upstreamPathPrefix !== '/') {
         if (!isSafeTraefikRuleValue(upstreamPathPrefix)) {
           log.warn(
@@ -324,6 +345,8 @@ export function createApiRoutes(ctx: AppContext): Hono {
         } else {
           const middlewareName = `${routerName}-add`;
           middlewares[middlewareName] = { addPrefix: { prefix: upstreamPathPrefix } };
+          // Order matters: StripPrefix first removes the public path, then
+          // AddPrefix maps the request into the service's internal route tree.
           routerMiddlewares.push(middlewareName);
         }
       }

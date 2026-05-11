@@ -150,4 +150,26 @@ describe('Postgres migration sanity gate', () => {
 
     expect(failures).toEqual([]);
   });
+
+  it('keeps v0.1 baseline as a single fresh-install migration with merged critical tables', () => {
+    const journal = readMigrationJournal();
+    const sql = readMigrationSqlInJournalOrder();
+
+    expect(journal.entries.map((entry) => entry.tag)).toEqual(['0000_v0_1_initial']);
+    expect(activeMigrationSqlFiles()).toEqual(['0000_v0_1_initial.sql']);
+    expect(sql).toContain('CREATE TABLE "pat_tokens"');
+    expect(sql).toContain('"active_scope_project_id" text');
+    expect(sql).toContain('CREATE TABLE "domain_mappings"');
+    expect(sql).toContain('"target_port" integer');
+    expect(sql).toContain('CONSTRAINT "domain_mappings_target_port_check"');
+  });
+
+  it('fails fast on pre-0.1 migration histories instead of silently replaying the reset baseline', () => {
+    const source = readFileSync('src/db/index.ts', 'utf8');
+
+    expect(source).toContain('DATABASE_BASELINE_RESET_REQUIRED');
+    expect(source).toContain('public.migration_0009_audit');
+    expect(source).toContain('drizzle.__drizzle_migrations');
+    expect(source).toContain('drizzleMigrationCount > 1');
+  });
 });

@@ -150,11 +150,12 @@ CREATE TABLE "domain_mappings" (
 	"strip_prefix" boolean DEFAULT false NOT NULL,
 	"upstream_path_prefix" text,
 	"target_port" integer,
-	"tls_enabled" boolean DEFAULT false NOT NULL,
+	"tls_enabled" boolean,
 	"tls_resolver" text,
 	"created_at" text DEFAULT now()::text,
 	"updated_at" text DEFAULT now()::text,
-	CONSTRAINT "domain_mappings_status_check" CHECK ("domain_mappings"."status" IN ('active', 'pending', 'error'))
+	CONSTRAINT "domain_mappings_status_check" CHECK ("domain_mappings"."status" IN ('active', 'pending', 'error')),
+	CONSTRAINT "domain_mappings_target_port_check" CHECK ("domain_mappings"."target_port" IS NULL OR ("domain_mappings"."target_port" >= 1 AND "domain_mappings"."target_port" <= 65535))
 );
 --> statement-breakpoint
 CREATE TABLE "env_vars" (
