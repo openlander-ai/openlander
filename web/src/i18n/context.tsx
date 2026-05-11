@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { translations as enTranslations } from './en';
 import { translations as koTranslations } from './ko';
 import { setLanguage as apiSetLanguage } from '@/lib/api';
@@ -36,16 +36,31 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     localStorage.setItem('openlander-language', language);
+    // Keep <html lang> in sync so assistive tech (and CSS :lang selectors)
+    // see the active locale. Without this, screen readers configured for
+    // English mispronounce Korean content (and vice versa) regardless of
+    // span-level lang hints elsewhere — Codex CCG M3.
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = language;
+    }
   }, [language]);
+
+  // Serialize backend writes so two quick toggles cannot complete out of
+  // order. Without this, POSTing en then ko in rapid succession could
+  // leave the server on en while the UI shows ko — Codex CCG M1.
+  // Idempotent per locale, so chaining (not cancelling) is sufficient.
+  const writeQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const setLanguage = async (lang: Language) => {
     setLanguageState(lang);
     localStorage.setItem('openlander-language', lang);
-    try {
-      await apiSetLanguage(lang);
-    } catch (error) {
-      console.error('Failed to save language to backend:', error);
-    }
+    const next = writeQueueRef.current.then(() =>
+      apiSetLanguage(lang).catch((error) => {
+        console.error('Failed to save language to backend:', error);
+      }),
+    );
+    writeQueueRef.current = next;
+    await next;
   };
 
   const t = (key: string, params?: Record<string, string | number>): string => {

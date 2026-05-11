@@ -7,19 +7,24 @@
  * Escape closes it. Change password opens a separate modal.
  */
 import { useEffect, useRef, useState } from 'react';
-import { ChevronUp, KeyRound, LogOut } from 'lucide-react';
+import { ChevronUp, Globe, KeyRound, LogOut } from 'lucide-react';
 import { logout } from '@/lib/api/auth';
 import { useLanguage } from '@/i18n/context';
 import { BRAND } from '@/lib/brand';
 import { cn } from '@/lib/utils';
 import { ChangePasswordModal } from './ChangePasswordModal';
 
+// Language autonyms — always rendered in the target locale's own script
+// so the toggle stays self-explanatory regardless of which side is
+// currently active.
+const LANGUAGE_AUTONYM = { en: 'English', ko: '한국어' } as const;
+
 interface AccountPopoverProps {
   collapsed?: boolean;
 }
 
 export function AccountPopover({ collapsed = false }: AccountPopoverProps) {
-  const { t } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
   const [open, setOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -45,6 +50,17 @@ export function AccountPopover({ collapsed = false }: AccountPopoverProps) {
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
+
+  // Cycle through supported locales. v0.1 only ships en/ko so this is a
+  // straight toggle; adding more locales later would mean replacing the
+  // single row with a submenu rather than chaining more conditionals.
+  // The popover intentionally stays open so the user can read the row
+  // re-render in the new locale and confirm the change without
+  // re-opening the menu — Gemini CCG G3.
+  const targetLanguage = language === 'en' ? 'ko' : 'en';
+  const handleToggleLanguage = () => {
+    void setLanguage(targetLanguage);
+  };
 
   const handleSignOut = () => {
     setOpen(false);
@@ -120,6 +136,18 @@ export function AccountPopover({ collapsed = false }: AccountPopoverProps) {
           >
             <KeyRound className="h-3.5 w-3.5 text-[color:var(--ol-fg-muted)]" />
             <span className="flex-1 text-left">{t('account.popover.changePassword')}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleToggleLanguage}
+            className="flex w-full items-center gap-2 border-t border-[color:var(--ol-border-subtle)] px-3 py-2 text-[13px] text-[color:var(--ol-fg)] transition-colors hover:bg-[color:var(--ol-panel-2)]"
+          >
+            <Globe className="h-3.5 w-3.5 text-[color:var(--ol-fg-muted)]" />
+            <span className="flex-1 text-left">{t('account.popover.switchLanguage')}</span>
+            <span lang={targetLanguage} className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
+              {LANGUAGE_AUTONYM[targetLanguage]}
+            </span>
           </button>
           <button
             type="button"
