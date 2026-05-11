@@ -25,6 +25,7 @@ describe('public release tree hygiene', () => {
     const workflow = readFileSync('.github/workflows/release-publish.yml', 'utf8');
     const packageJson = readFileSync('package.json', 'utf8');
     const releaseProcess = readFileSync('docs/release/RELEASE_PROCESS.md', 'utf8');
+    const pkg = JSON.parse(packageJson) as { scripts: Record<string, string> };
 
     expect(workflow).toContain('major_minor="$major.$minor"');
     expect(workflow).toContain('prerelease_channel="${prerelease%%.*}"');
@@ -32,10 +33,13 @@ describe('public release tree hygiene', () => {
     expect(workflow).toContain('--tag "${IMAGE_NAME}:${{ steps.version.outputs.major_minor }}"');
     expect(workflow).toContain('--tag "${IMAGE_NAME}:${{ steps.version.outputs.prerelease_channel }}"');
     expect(workflow).toContain('echo "Tag $GITHUB_REF_NAME is not a SemVer release tag"');
-    expect(packageJson).toContain('"release:rc": "release-it --preRelease=rc"');
-    expect(packageJson).toContain('"release:final": "release-it"');
+    expect(pkg.scripts['release:rc']).toBe('release-it --preRelease=rc');
+    expect(pkg.scripts['release:final']).toBe('release-it');
+    expect(pkg.scripts.release).toContain('Raw npm run release is disabled');
     expect(releaseProcess).toContain('npm run release:rc');
     expect(releaseProcess).toContain('npm run release:final');
+    expect(releaseProcess).toContain('raw `release` script intentionally exits with an');
+    expect(releaseProcess).toContain('git diff v0.1.1-rc.N..HEAD');
   });
 
   it('publishes multi-architecture runtime images', () => {

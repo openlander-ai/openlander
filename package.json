@@ -51,7 +51,7 @@
     "test:coverage": "vitest run --config vitest.release.config.ts --coverage",
     "qa:release": "npm run lint -- --quiet && npm run typecheck && npm run test:backend:release && npm run build",
     "clean": "rm -rf dist",
-    "release": "release-it",
+    "release": "node -e \"console.error('Use npm run release:rc or npm run release:final. Raw npm run release is disabled to avoid skipping RC validation.'); process.exit(1)\"",
     "release:rc": "release-it --preRelease=rc",
     "release:final": "release-it",
     "prepublishOnly": "npm run build",
