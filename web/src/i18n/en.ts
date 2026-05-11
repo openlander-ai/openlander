@@ -373,7 +373,7 @@ export const translations = {
       legacyBadge: 'legacy CF',
       legacyTooltip:
         'This mapping carries Cloudflare metadata from before v0.1 cold-storage. Deleting it removes only the OpenLander mapping; external DNS records are untouched.',
-      readOnlyHint: '',
+      removeAria: 'Remove domain',
       loadError: 'Could not load domains. The list may be out of date.',
       retry: 'Retry',
       dialog: {

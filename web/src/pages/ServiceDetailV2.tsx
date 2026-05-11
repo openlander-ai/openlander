@@ -1138,7 +1138,7 @@ function DomainRow({
           type="button"
           onClick={onDelete}
           disabled={disabled}
-          aria-label="Remove domain"
+          aria-label={t('projectDetail.domains.removeAria')}
           className="shrink-0 rounded-md p-1 text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-danger)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Trash2 className="h-3.5 w-3.5" />

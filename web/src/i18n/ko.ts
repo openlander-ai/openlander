@@ -371,7 +371,7 @@ export const translations = {
       legacyBadge: 'legacy CF',
       legacyTooltip:
         '이 매핑은 v0.1 이전 Cloudflare 통합 시 생성되었습니다. 현재는 호환 모드로 동작 중이며, 삭제 시 OpenLander 매핑만 제거됩니다. 외부 DNS 레코드는 그대로 유지됩니다.',
-      readOnlyHint: '',
+      removeAria: '도메인 제거',
       loadError: '도메인 목록을 불러오지 못했습니다. 목록이 최신이 아닐 수 있습니다.',
       retry: '다시 시도',
       dialog: {

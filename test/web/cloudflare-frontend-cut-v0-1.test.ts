@@ -32,8 +32,8 @@ describe('Cloudflare frontend cut for v0.1', () => {
     // v0.1 ships the manual-DNS + service-scoped CRUD UI. The previous
     // "read-only + Cloudflare auto-DNS in v0.2" framing is retired —
     // domain mapping is now a first-class managed-Traefik feature and
-    // Cloudflare auto-DNS is fully cold-storage. See
-    // openlander-internal/planning/v0.1/domain-routing/ for the locked plan.
+    // Cloudflare auto-DNS is fully cold-storage per the locked v0.1
+    // domain-routing plan.
 
     // The tab now has Add/Delete entry points sourced from the new client.
     expect(serviceDetailSource).toMatch(/projectDetail\.domains\.add/);
