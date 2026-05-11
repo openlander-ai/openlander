@@ -71,6 +71,14 @@ jobs:
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
+          if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-([0-9A-Za-z][0-9A-Za-z.-]*))?$ ]]; then
+            major="${BASH_REMATCH[1]}"
+            minor="${BASH_REMATCH[2]}"
+            prerelease="${BASH_REMATCH[5]:-}"
+          else
+            echo "Tag $GITHUB_REF_NAME is not a SemVer release tag" >&2
+            exit 1
+          fi
           package_version="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
           web_version="$(node -p "JSON.parse(require('fs').readFileSync('web/package.json', 'utf8')).version")"
           if [[ "$version" != "$package_version" ]]; then
@@ -81,15 +89,18 @@ jobs:
             echo "Tag $GITHUB_REF_NAME does not match web/package.json version $web_version" >&2
             exit 1
           fi
-          major_minor="$(node -e "const [major, minor] = process.argv[1].split('.'); process.stdout.write(major + '.' + minor);" "$version")"
-          if [[ "$version" == *-* ]]; then
+          major_minor="$major.$minor"
+          prerelease_channel=""
+          if [[ -n "$prerelease" ]]; then
             is_prerelease=true
+            prerelease_channel="${prerelease%%.*}"
           else
             is_prerelease=false
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "major_minor=$major_minor" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=$is_prerelease" >> "$GITHUB_OUTPUT"
+          echo "prerelease_channel=$prerelease_channel" >> "$GITHUB_OUTPUT"
 
       - name: Run release QA gate
         run: npm run qa:release
@@ -113,7 +124,7 @@ jobs:
             --tag "${IMAGE_NAME}:${{ steps.version.outputs.version }}"
           )
           if [[ "${{ steps.version.outputs.is_prerelease }}" == "true" ]]; then
-            tags+=(--tag "${IMAGE_NAME}:rc")
+            tags+=(--tag "${IMAGE_NAME}:${{ steps.version.outputs.prerelease_channel }}")
           else
             tags+=(
               --tag "${IMAGE_NAME}:${{ steps.version.outputs.major_minor }}"
