@@ -6,6 +6,7 @@ export default defineConfig({
     include: [
       'test/db/postgres-migration-sanity.test.ts',
       'test/db/schema-parity.test.ts',
+      'test/db/domain-mapping-schema.test.ts',
       'test/db-attach-service.test.ts',
       'test/console-contract.test.ts',
       'test/github-oauth.test.ts',
@@ -100,9 +101,6 @@ export default defineConfig({
       'e2e/**',
       'web/**',
       'test/manual-qa/**',
-      // Pre-Postgres SQLite migration replay suites are archived out of the
-      // release gate until they are replaced with Postgres-backed tests.
-      'test/db/migration-*.test.ts',
       'test/pipeline/docker/**',
       'test/docker.test.ts',
       'test/network-service-integration.test.ts',

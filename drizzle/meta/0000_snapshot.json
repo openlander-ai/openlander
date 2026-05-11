@@ -1,5 +1,5 @@
 {
-  "id": "a53ccd43-9324-4c49-b5b4-f09f75955745",
+  "id": "a7ebfda0-a76b-47a4-809e-eca921c5983e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -569,10 +569,33 @@
           "type": "bigint",
           "primaryKey": false,
           "notNull": false
+        },
+        "active_scope_project_id": {
+          "name": "active_scope_project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "destructive_mcp_unlock": {
+          "name": "destructive_mcp_unlock",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "auth_active_scope_project_id_projects_id_fk": {
+          "name": "auth_active_scope_project_id_projects_id_fk",
+          "tableFrom": "auth",
+          "tableTo": "projects",
+          "columnsFrom": ["active_scope_project_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -1153,8 +1176,54 @@
           "notNull": false,
           "default": "'active'"
         },
+        "path_prefix": {
+          "name": "path_prefix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'/'"
+        },
+        "strip_prefix": {
+          "name": "strip_prefix",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "upstream_path_prefix": {
+          "name": "upstream_path_prefix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_port": {
+          "name": "target_port",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tls_enabled": {
+          "name": "tls_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "tls_resolver": {
+          "name": "tls_resolver",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()::text"
+        },
+        "updated_at": {
+          "name": "updated_at",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -1176,6 +1245,27 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "domain_mappings_domain_path_unique": {
+          "name": "domain_mappings_domain_path_unique",
+          "columns": [
+            {
+              "expression": "domain",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "path_prefix",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -1190,13 +1280,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "domain_mappings_domain_unique": {
-          "name": "domain_mappings_domain_unique",
-          "nullsNotDistinct": false,
-          "columns": ["domain"]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "domain_mappings_status_check": {
@@ -1255,8 +1339,30 @@
         }
       },
       "indexes": {
-        "env_vars_project_key_unique": {
-          "name": "env_vars_project_key_unique",
+        "env_vars_service_key_unique": {
+          "name": "env_vars_service_key_unique",
+          "columns": [
+            {
+              "expression": "service_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"env_vars\".\"service_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "env_vars_project_group_key_unique": {
+          "name": "env_vars_project_group_key_unique",
           "columns": [
             {
               "expression": "project_id",
@@ -1272,6 +1378,7 @@
             }
           ],
           "isUnique": true,
+          "where": "\"env_vars\".\"service_id\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1281,6 +1388,21 @@
           "columns": [
             {
               "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_env_vars_service": {
+          "name": "idx_env_vars_service",
+          "columns": [
+            {
+              "expression": "service_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1368,8 +1490,7 @@
           "name": "branch",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'main'"
+          "notNull": false
         },
         "status": {
           "name": "status",
@@ -1643,61 +1764,6 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.migration_0009_audit": {
-      "name": "migration_0009_audit",
-      "schema": "",
-      "columns": {
-        "phase": {
-          "name": "phase",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_table": {
-          "name": "source_table",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_id": {
-          "name": "source_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "target_table": {
-          "name": "target_table",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "target_id": {
-          "name": "target_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -1994,6 +2060,185 @@
       },
       "isRLSEnabled": false
     },
+    "public.pat_tokens": {
+      "name": "pat_tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_suffix": {
+          "name": "token_suffix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope_kind": {
+          "name": "scope_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope_project_id": {
+          "name": "scope_project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_type": {
+          "name": "token_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pat'"
+        },
+        "capabilities": {
+          "name": "capabilities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()::text"
+        },
+        "server_id": {
+          "name": "server_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'local'"
+        }
+      },
+      "indexes": {
+        "idx_pat_tokens_hash": {
+          "name": "idx_pat_tokens_hash",
+          "columns": [
+            {
+              "expression": "token_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_pat_tokens_scope": {
+          "name": "idx_pat_tokens_scope",
+          "columns": [
+            {
+              "expression": "scope_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "scope_project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_pat_tokens_expires": {
+          "name": "idx_pat_tokens_expires",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "pat_tokens_scope_project_id_projects_id_fk": {
+          "name": "pat_tokens_scope_project_id_projects_id_fk",
+          "tableFrom": "pat_tokens",
+          "tableTo": "projects",
+          "columnsFrom": ["scope_project_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "pat_tokens_token_hash_unique": {
+          "name": "pat_tokens_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": ["token_hash"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "pat_tokens_scope_kind_check": {
+          "name": "pat_tokens_scope_kind_check",
+          "value": "\"pat_tokens\".\"scope_kind\" IN ('org', 'project')"
+        },
+        "pat_tokens_type_check": {
+          "name": "pat_tokens_type_check",
+          "value": "\"pat_tokens\".\"token_type\" IN ('pat', 'service', 'legacy-default')"
+        },
+        "pat_tokens_scope_project_check": {
+          "name": "pat_tokens_scope_project_check",
+          "value": "(\"pat_tokens\".\"scope_kind\" = 'org' AND \"pat_tokens\".\"scope_project_id\" IS NULL) OR (\"pat_tokens\".\"scope_kind\" = 'project' AND \"pat_tokens\".\"scope_project_id\" IS NOT NULL)"
+        },
+        "pat_tokens_expiry_check": {
+          "name": "pat_tokens_expiry_check",
+          "value": "\"pat_tokens\".\"token_type\" = 'legacy-default' OR \"pat_tokens\".\"expires_at\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.project_dependencies": {
       "name": "project_dependencies",
       "schema": "",
@@ -2170,18 +2415,24 @@
           "primaryKey": false,
           "notNull": true
         },
-        "repo_url": {
-          "name": "repo_url",
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "description": {
+          "name": "description",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "branch": {
-          "name": "branch",
+        "tags": {
+          "name": "tags",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
-          "default": "'main'"
+          "notNull": false
         },
         "archived_at": {
           "name": "archived_at",
@@ -2851,6 +3102,18 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'git'"
+        },
+        "repo_url": {
+          "name": "repo_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "branch": {
+          "name": "branch",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "image_url": {
           "name": "image_url",

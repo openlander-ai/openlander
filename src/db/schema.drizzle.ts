@@ -165,15 +165,23 @@ export const domainMappings = pgTable(
     service_id: text('service_id')
       .notNull()
       .references(() => services.id, { onDelete: 'cascade' }),
-    domain: text('domain').notNull().unique(),
+    domain: text('domain').notNull(),
     cloudflare_zone_id: text('cloudflare_zone_id'),
     cloudflare_dns_record_id: text('cloudflare_dns_record_id'),
     status: text('status', { enum: ['active', 'pending', 'error'] }).default('active'),
+    path_prefix: text('path_prefix').notNull().default('/'),
+    strip_prefix: boolean('strip_prefix').notNull().default(false),
+    upstream_path_prefix: text('upstream_path_prefix'),
+    target_port: integer('target_port'),
+    tls_enabled: boolean('tls_enabled').notNull().default(false),
+    tls_resolver: text('tls_resolver'),
     created_at: text('created_at').default(sql`now()::text`),
+    updated_at: text('updated_at').default(sql`now()::text`),
   },
   (table) => [
     check('domain_mappings_status_check', sql`${table.status} IN ('active', 'pending', 'error')`),
     index('idx_domain_mappings_service').on(table.service_id),
+    uniqueIndex('domain_mappings_domain_path_unique').on(table.domain, table.path_prefix),
   ],
 );
 
@@ -752,26 +760,6 @@ export const projectDependencies = pgTable(
   ],
 );
 
-/**
- * Migration 0009 audit table — append-only log of every source-row -> target-row
- * remap performed by the project/service split. Plan §6.3 / §6.5.
- *
- * Post-0012 the table accumulates 45 additional rows recording column drops,
- * FK repoints, and UNIQUE rebuilds done by 0012 Phases C/D/E/G/H.
- */
-export const migration0009Audit = pgTable('migration_0009_audit', {
-  phase: text('phase').notNull(),
-  source_table: text('source_table').notNull(),
-  source_id: text('source_id').notNull(),
-  target_table: text('target_table').notNull(),
-  target_id: text('target_id').notNull(),
-  kind: text('kind'),
-  created_at: bigint('created_at', { mode: 'number' }).notNull(),
-});
-
-export type Migration0009AuditRow = typeof migration0009Audit.$inferSelect;
-export type NewMigration0009Audit = typeof migration0009Audit.$inferInsert;
-
 export type ServiceTableRow = typeof services.$inferSelect;
 export type NewServiceTableRow = typeof services.$inferInsert;
 export type ProjectTableRow = typeof projects.$inferSelect;
@@ -928,5 +916,4 @@ export const drizzleSchema = {
   settings,
   activityLog,
   mcpSessionLog,
-  migration0009Audit,
 };

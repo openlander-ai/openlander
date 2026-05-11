@@ -1,5 +1,6 @@
 import { and, desc, eq } from 'drizzle-orm';
 
+import { RepoPersistenceError } from '../../errors.js';
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { domainMappings, projects, services } from '../schema.drizzle.js';
 import type { DomainMappingRow } from '../types.js';
@@ -10,6 +11,32 @@ type DomainMappingSelectable = DomainMappingSelect & {
   project_id?: string | null;
   project_name?: string | null;
 };
+
+interface DomainMappingCreateInput {
+  id: string;
+  serviceId: string;
+  domain: string;
+  cloudflareZoneId?: string;
+  cloudflareDnsRecordId?: string;
+  status?: DomainMappingRow['status'];
+  pathPrefix?: string;
+  stripPrefix?: boolean;
+  upstreamPathPrefix?: string | null;
+  targetPort?: number | null;
+  tlsEnabled?: boolean;
+  tlsResolver?: string | null;
+}
+
+interface DomainMappingUpdatePatch {
+  domain?: string;
+  status?: DomainMappingRow['status'];
+  pathPrefix?: string;
+  stripPrefix?: boolean;
+  upstreamPathPrefix?: string | null;
+  targetPort?: number | null;
+  tlsEnabled?: boolean;
+  tlsResolver?: string | null;
+}
 
 /**
  * Post-0012: domain_mappings is service-scoped. Callers still pass
@@ -32,7 +59,14 @@ function toDomainMappingRow(row: DomainMappingSelectable): DomainMappingResultRo
     cloudflare_zone_id: row.cloudflare_zone_id,
     cloudflare_dns_record_id: row.cloudflare_dns_record_id,
     status: row.status ?? 'active',
+    path_prefix: row.path_prefix,
+    strip_prefix: row.strip_prefix,
+    upstream_path_prefix: row.upstream_path_prefix ?? null,
+    target_port: row.target_port ?? null,
+    tls_enabled: row.tls_enabled,
+    tls_resolver: row.tls_resolver ?? null,
     created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? null,
     project_id: row.project_id ?? serviceIdToProjectId(row.service_id),
   };
 
@@ -41,6 +75,32 @@ function toDomainMappingRow(row: DomainMappingSelectable): DomainMappingResultRo
   }
 
   return mapped;
+}
+
+export function normalizeDomainHost(domain: string): string {
+  return domain.trim().toLowerCase().replace(/\.+$/g, '');
+}
+
+export function normalizeDomainPathPrefix(pathPrefix: string | null | undefined): string {
+  const raw = pathPrefix?.trim() ?? '';
+  if (raw.length === 0 || raw === '/') {
+    return '/';
+  }
+
+  const withLeadingSlash = raw.startsWith('/') ? raw : `/${raw}`;
+  const collapsed = withLeadingSlash.replace(/\/{2,}/g, '/');
+  return collapsed.replace(/\/+$/g, '') || '/';
+}
+
+function normalizeNullableDomainPathPrefix(pathPrefix: string | null | undefined): string | null {
+  if (pathPrefix == null || pathPrefix.trim().length === 0) {
+    return null;
+  }
+  return normalizeDomainPathPrefix(pathPrefix);
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
 }
 
 export class DomainMappingRepo {
@@ -57,30 +117,44 @@ export class DomainMappingRepo {
     domain: string;
     cloudflareZoneId?: string;
     cloudflareDnsRecordId?: string;
-  }): Promise<void> {
-    await this.db.insert(domainMappings).values({
-      id: mapping.id,
-      service_id: projectIdToServiceId(mapping.projectId),
-      domain: mapping.domain,
-      cloudflare_zone_id: mapping.cloudflareZoneId ?? null,
-      cloudflare_dns_record_id: mapping.cloudflareDnsRecordId ?? null,
+    pathPrefix?: string;
+    stripPrefix?: boolean;
+    upstreamPathPrefix?: string | null;
+    targetPort?: number | null;
+    tlsEnabled?: boolean;
+    tlsResolver?: string | null;
+  }): Promise<DomainMappingRow> {
+    return this.createForServiceId({
+      ...mapping,
+      serviceId: projectIdToServiceId(mapping.projectId),
     });
   }
 
-  async createForServiceId(mapping: {
-    id: string;
-    serviceId: string;
-    domain: string;
-    cloudflareZoneId?: string;
-    cloudflareDnsRecordId?: string;
-  }): Promise<void> {
-    await this.db.insert(domainMappings).values({
-      id: mapping.id,
-      service_id: mapping.serviceId,
-      domain: mapping.domain,
-      cloudflare_zone_id: mapping.cloudflareZoneId ?? null,
-      cloudflare_dns_record_id: mapping.cloudflareDnsRecordId ?? null,
-    });
+  async createForServiceId(mapping: DomainMappingCreateInput): Promise<DomainMappingRow> {
+    const timestamp = nowIso();
+    const [created] = await this.db
+      .insert(domainMappings)
+      .values({
+        id: mapping.id,
+        service_id: mapping.serviceId,
+        domain: normalizeDomainHost(mapping.domain),
+        cloudflare_zone_id: mapping.cloudflareZoneId ?? null,
+        cloudflare_dns_record_id: mapping.cloudflareDnsRecordId ?? null,
+        status: mapping.status ?? 'active',
+        path_prefix: normalizeDomainPathPrefix(mapping.pathPrefix),
+        strip_prefix: mapping.stripPrefix ?? false,
+        upstream_path_prefix: normalizeNullableDomainPathPrefix(mapping.upstreamPathPrefix),
+        target_port: mapping.targetPort ?? null,
+        tls_enabled: mapping.tlsEnabled ?? false,
+        tls_resolver: mapping.tlsResolver ?? null,
+        updated_at: timestamp,
+      })
+      .returning();
+
+    if (!created) {
+      throw new RepoPersistenceError('domain mapping', mapping.id);
+    }
+    return toDomainMappingRow(created);
   }
 
   async getDomainMappings(projectId: string): Promise<DomainMappingRow[]> {
@@ -93,6 +167,67 @@ export class DomainMappingRepo {
       .from(domainMappings)
       .where(eq(domainMappings.service_id, serviceId));
     return rows.map(toDomainMappingRow);
+  }
+
+  async listDomainMappingsForService(serviceId: string): Promise<DomainMappingRow[]> {
+    return this.listByServiceId(serviceId);
+  }
+
+  async findByHostAndPath(
+    domain: string,
+    pathPrefix: string | null | undefined = '/',
+  ): Promise<DomainMappingRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(domainMappings)
+      .where(
+        and(
+          eq(domainMappings.domain, normalizeDomainHost(domain)),
+          eq(domainMappings.path_prefix, normalizeDomainPathPrefix(pathPrefix)),
+        ),
+      )
+      .limit(1);
+    return row ? toDomainMappingRow(row) : undefined;
+  }
+
+  async updateDomainMapping(
+    id: string,
+    patch: DomainMappingUpdatePatch,
+  ): Promise<DomainMappingRow | undefined> {
+    const setValues: Partial<typeof domainMappings.$inferInsert> = {};
+
+    if (patch.domain !== undefined) {
+      setValues.domain = normalizeDomainHost(patch.domain);
+    }
+    if (patch.status !== undefined) {
+      setValues.status = patch.status;
+    }
+    if (patch.pathPrefix !== undefined) {
+      setValues.path_prefix = normalizeDomainPathPrefix(patch.pathPrefix);
+    }
+    if (patch.stripPrefix !== undefined) {
+      setValues.strip_prefix = patch.stripPrefix;
+    }
+    if (patch.upstreamPathPrefix !== undefined) {
+      setValues.upstream_path_prefix = normalizeNullableDomainPathPrefix(patch.upstreamPathPrefix);
+    }
+    if (patch.targetPort !== undefined) {
+      setValues.target_port = patch.targetPort;
+    }
+    if (patch.tlsEnabled !== undefined) {
+      setValues.tls_enabled = patch.tlsEnabled;
+    }
+    if (patch.tlsResolver !== undefined) {
+      setValues.tls_resolver = patch.tlsResolver;
+    }
+
+    const [updated] = await this.db
+      .update(domainMappings)
+      .set({ ...setValues, updated_at: nowIso() })
+      .where(eq(domainMappings.id, id))
+      .returning();
+
+    return updated ? toDomainMappingRow(updated) : undefined;
   }
 
   /**
@@ -108,7 +243,14 @@ export class DomainMappingRepo {
         cloudflare_zone_id: domainMappings.cloudflare_zone_id,
         cloudflare_dns_record_id: domainMappings.cloudflare_dns_record_id,
         status: domainMappings.status,
+        path_prefix: domainMappings.path_prefix,
+        strip_prefix: domainMappings.strip_prefix,
+        upstream_path_prefix: domainMappings.upstream_path_prefix,
+        target_port: domainMappings.target_port,
+        tls_enabled: domainMappings.tls_enabled,
+        tls_resolver: domainMappings.tls_resolver,
         created_at: domainMappings.created_at,
+        updated_at: domainMappings.updated_at,
         project_name: projects.name,
       })
       .from(domainMappings)

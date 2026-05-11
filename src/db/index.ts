@@ -280,6 +280,9 @@ export class Database implements AuthDatabase {
   createDomainMappingForService(mapping: Parameters<DomainMappingRepo['createForServiceId']>[0]) { return this.domainMappingRepo.createForServiceId(mapping); }
   getDomainMappings(projectId: string) { return this.domainMappingRepo.getDomainMappings(projectId); }
   getDomainMappingsForService(serviceId: string) { return this.domainMappingRepo.listByServiceId(serviceId); }
+  listDomainMappingsForService(serviceId: string) { return this.domainMappingRepo.listDomainMappingsForService(serviceId); }
+  findDomainMappingByHostAndPath(domain: string, pathPrefix?: string | null) { return this.domainMappingRepo.findByHostAndPath(domain, pathPrefix); }
+  updateDomainMapping(id: string, patch: Parameters<DomainMappingRepo['updateDomainMapping']>[1]) { return this.domainMappingRepo.updateDomainMapping(id, patch); }
   listDomainMappings() { return this.domainMappingRepo.listDomainMappings(); }
   deleteDomainMapping(id: string) { return this.domainMappingRepo.deleteDomainMapping(id); }
   deleteDomainMappingByServiceAndDomain(serviceId: string, domain: string) { return this.domainMappingRepo.deleteByServiceIdAndDomain(serviceId, domain); }
