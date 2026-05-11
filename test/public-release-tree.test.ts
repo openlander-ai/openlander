@@ -23,6 +23,8 @@ describe('public release tree hygiene', () => {
 
   it('computes stable and prerelease Docker tags without shell-interpreted backticks', () => {
     const workflow = readFileSync('.github/workflows/release-publish.yml', 'utf8');
+    const packageJson = readFileSync('package.json', 'utf8');
+    const releaseProcess = readFileSync('docs/release/RELEASE_PROCESS.md', 'utf8');
 
     expect(workflow).toContain('major_minor="$major.$minor"');
     expect(workflow).toContain('prerelease_channel="${prerelease%%.*}"');
@@ -30,6 +32,10 @@ describe('public release tree hygiene', () => {
     expect(workflow).toContain('--tag "${IMAGE_NAME}:${{ steps.version.outputs.major_minor }}"');
     expect(workflow).toContain('--tag "${IMAGE_NAME}:${{ steps.version.outputs.prerelease_channel }}"');
     expect(workflow).toContain('echo "Tag $GITHUB_REF_NAME is not a SemVer release tag"');
+    expect(packageJson).toContain('"release:rc": "release-it --preRelease=rc"');
+    expect(packageJson).toContain('"release:final": "release-it"');
+    expect(releaseProcess).toContain('npm run release:rc');
+    expect(releaseProcess).toContain('npm run release:final');
   });
 
   it('publishes multi-architecture runtime images', () => {
