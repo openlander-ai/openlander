@@ -35,10 +35,38 @@ const log = createModuleLogger('api');
 const API_SLOW_REQUEST_MS = 300;
 const API_OBSERVE_REQUEST_MS = 150;
 
+type TraefikHttpRouter = {
+  rule: string;
+  entryPoints: string[];
+  service: string;
+  middlewares?: string[];
+};
 type TraefikHttpService = { loadBalancer: { servers: Array<{ url: string }> } };
+type TraefikHttpMiddleware =
+  | { stripPrefix: { prefixes: string[] } }
+  | { addPrefix: { prefix: string } };
 
 function traefikObjectName(value: string): string {
-  return value.replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+  return value.replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'route';
+}
+
+function normalizeTraefikPathPrefix(value: string | null | undefined): string {
+  const raw = value?.trim() ?? '';
+  if (!raw || raw === '/') return '/';
+  const withLeadingSlash = raw.startsWith('/') ? raw : `/${raw}`;
+  return withLeadingSlash.replace(/\/{2,}/g, '/').replace(/\/+$/g, '') || '/';
+}
+
+function isSafeTraefikRuleValue(value: string): boolean {
+  return !value.includes('`') && !value.includes('\n') && !value.includes('\r');
+}
+
+function hostPathRule(domain: string, pathPrefix: string): string | null {
+  if (!isSafeTraefikRuleValue(domain) || !isSafeTraefikRuleValue(pathPrefix)) {
+    return null;
+  }
+  const hostRule = `Host(\`${domain}\`)`;
+  return pathPrefix === '/' ? hostRule : `${hostRule} && PathPrefix(\`${pathPrefix}\`)`;
 }
 
 function resolveServiceContainerName(service: ServiceRow, project: ProjectRow): string | null {
@@ -193,8 +221,9 @@ export function createApiRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/traefik/config', async (c) => {
-    const routers: Record<string, { rule: string; entryPoints: string[]; service: string }> = {};
+    const routers: Record<string, TraefikHttpRouter> = {};
     const traefikServices: Record<string, TraefikHttpService> = {};
+    const middlewares: Record<string, TraefikHttpMiddleware> = {};
 
     // Build self-contained services for projects with an active container.
     // Uses Docker DNS (container name) + container port — no @docker dependency.
@@ -235,7 +264,6 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
     const serviceRows = await ctx.db.listServices();
     const servicesById = new Map(serviceRows.map((service) => [service.id, service]));
-    const domainsByService = new Map<string, { routerName: string; domains: Set<string> }>();
     const mappings = await ctx.db.listDomainMappings();
     for (const mapping of mappings) {
       if (mapping.status !== 'active') continue;
@@ -249,7 +277,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
       const project = projectsById.get(service.project_id);
       if (!project) continue;
 
-      const internalPort = service.container_port ?? service.assigned_port;
+      const internalPort = mapping.target_port ?? service.container_port ?? service.assigned_port;
       const containerName = resolveServiceContainerName(service, project);
       if (!internalPort) continue;
       if (!containerName) {
@@ -260,30 +288,51 @@ export function createApiRoutes(ctx: AppContext): Hono {
         continue;
       }
 
-      const objectName = traefikObjectName(service.id);
-      const svcName = `svc-domain-${objectName}`;
-      traefikServices[svcName] ??= {
+      const routeObjectName = traefikObjectName(mapping.id);
+      const pathPrefix = normalizeTraefikPathPrefix(mapping.path_prefix);
+      const rule = hostPathRule(mapping.domain, pathPrefix);
+      if (!rule) {
+        log.warn(
+          { serviceId: service.id, domain: mapping.domain, pathPrefix },
+          'Skipping domain mapping with unsafe Traefik rule value',
+        );
+        continue;
+      }
+
+      const svcName = `svc-domain-${routeObjectName}`;
+      traefikServices[svcName] = {
         loadBalancer: {
           servers: [{ url: `http://${containerName}:${String(internalPort)}` }],
         },
       };
 
-      const existing = domainsByService.get(svcName);
-      if (existing) {
-        existing.domains.add(mapping.domain);
-      } else {
-        domainsByService.set(svcName, {
-          routerName: `domain-${objectName}`,
-          domains: new Set([mapping.domain]),
-        });
+      const routerName = `domain-${routeObjectName}`;
+      const routerMiddlewares: string[] = [];
+      if (mapping.strip_prefix && pathPrefix !== '/') {
+        const middlewareName = `${routerName}-strip`;
+        middlewares[middlewareName] = { stripPrefix: { prefixes: [pathPrefix] } };
+        routerMiddlewares.push(middlewareName);
       }
-    }
 
-    for (const [svcName, { routerName, domains }] of domainsByService) {
+      const upstreamPathPrefix = normalizeTraefikPathPrefix(mapping.upstream_path_prefix);
+      if (upstreamPathPrefix !== '/') {
+        if (!isSafeTraefikRuleValue(upstreamPathPrefix)) {
+          log.warn(
+            { serviceId: service.id, domain: mapping.domain, upstreamPathPrefix },
+            'Skipping AddPrefix middleware with unsafe value',
+          );
+        } else {
+          const middlewareName = `${routerName}-add`;
+          middlewares[middlewareName] = { addPrefix: { prefix: upstreamPathPrefix } };
+          routerMiddlewares.push(middlewareName);
+        }
+      }
+
       routers[routerName] = {
-        rule: [...domains].map((d) => `Host(\`${d}\`)`).join(' || '),
+        rule,
         entryPoints: ['web'],
         service: svcName,
+        ...(routerMiddlewares.length > 0 ? { middlewares: routerMiddlewares } : {}),
       };
     }
 
@@ -321,7 +370,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
       }
     }
 
-    return c.json({ http: { routers, services: traefikServices } });
+    return c.json({ http: { routers, services: traefikServices, middlewares } });
   });
 
   api.route('/', createActivityRoutes(ctx));
