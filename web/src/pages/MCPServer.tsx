@@ -25,7 +25,7 @@
  * on reuse — backend stores hashes, mirroring the spec's "treat like a
  * password" framing.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Cable, Check, Copy, Eye, EyeOff, Plus, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -77,6 +77,13 @@ export function MCPServer() {
   const [tokenCopied, setTokenCopied] = useState(false);
   const [configCopied, setConfigCopied] = useState(false);
   const [activeClient, setActiveClient] = useState<McpClientId>('claude-code');
+  // Track the most recent "Copied!" reset so that copying a second row
+  // (or the same row's snippet in a different tab) cancels the prior
+  // 1400ms timer instead of letting it race against the new flag. Codex
+  // CCG (M1): without this, copying tab A → switching to tab B →
+  // copying tab B before A's timeout fires lets A's timeout flip B's
+  // Copied state back to false at the wrong moment.
+  const copyResetRef = useRef<{ timer: number; setFlag: (v: boolean) => void } | null>(null);
 
   const tokenSuffix = activeToken ? activeToken.suffix : '';
   const tokenIssuedAt = activeToken ? activeToken.createdAt : null;
@@ -169,8 +176,21 @@ export function MCPServer() {
     if (typeof navigator === 'undefined' || !navigator.clipboard) return;
     try {
       await navigator.clipboard.writeText(value);
+      // Clear the previous "Copied" indicator immediately so only one
+      // row shows the success state at a time, and cancel its pending
+      // timer so it cannot race against this flag's lifecycle.
+      if (copyResetRef.current) {
+        window.clearTimeout(copyResetRef.current.timer);
+        copyResetRef.current.setFlag(false);
+      }
       setFlag(true);
-      window.setTimeout(() => setFlag(false), 1400);
+      const timer = window.setTimeout(() => {
+        setFlag(false);
+        if (copyResetRef.current?.timer === timer) {
+          copyResetRef.current = null;
+        }
+      }, 1400);
+      copyResetRef.current = { timer, setFlag };
     } catch {
       /* clipboard rejected — best-effort */
     }
