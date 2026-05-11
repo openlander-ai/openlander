@@ -30,9 +30,10 @@ export const translations = {
     },
   },
   nav: {
-    overview: '개요',
-    projects: '프로젝트',
-    deployments: '배포',
+    // Chrome — primary nav labels.
+    overview: 'Overview',
+    projects: 'Projects',
+    deployments: 'Deployments',
   },
   login: {
     signInPrompt: '로그인하여 계속하기',
@@ -232,8 +233,10 @@ export const translations = {
     deployImage: '이미지 배포',
   },
   projects: {
-    title: '프로젝트 개요',
-    newProject: '새 프로젝트',
+    // Chrome — page title + primary action + filter toggle.
+    title: 'Projects overview',
+    newProject: 'New project',
+    // Content — empty state + descriptive copy + error.
     monitored: '프로젝트 {count}개 모니터링 중',
     noProjects: '프로젝트가 없습니다',
     deployFirstApp: '첫 번째 앱 배포하기',
@@ -243,31 +246,39 @@ export const translations = {
         '프로젝트 이름은 소문자 또는 숫자로 시작해야 하며, 소문자, 숫자, 하이픈만 포함할 수 있습니다',
     },
     filter: {
-      showArchived: '보관된 항목 표시',
+      // Chrome — toggle label.
+      showArchived: 'Show archived',
     },
     card: {
-      archivedBadge: '보관됨',
-      lastDeploy: '최근 배포',
-      branch: '브랜치',
-      endpoint: '엔드포인트',
-      public: '퍼블릭',
+      // Chrome — card field labels + badges.
+      archivedBadge: 'archived',
+      lastDeploy: 'Last deploy',
+      branch: 'Branch',
+      endpoint: 'Endpoint',
+      public: 'public',
     },
     archive: {
-      button: '보관',
+      // Chrome — button.
+      button: 'Archive',
+      // Content — toast + confirmation prose.
       success: '프로젝트가 보관되었습니다',
       description:
         '이 프로젝트를 보관하시겠습니까? 컨테이너는 중지되지만 모든 구성과 기록은 보존됩니다.',
     },
     unarchive: {
-      button: '복원',
+      // Chrome — button.
+      button: 'Restore',
+      // Content — toast.
       success: '프로젝트가 복원되었습니다',
     },
     purge: {
-      button: '영구 삭제',
-      title: '프로젝트 영구 삭제',
+      // Chrome — destructive button + modal title + confirm button.
+      button: 'Delete permanently',
+      title: 'Delete project permanently',
+      confirm: 'Delete permanently',
+      // Content — confirmation prose + input placeholder (hint).
       description: '이 작업은 되돌릴 수 없습니다. 확인을 위해 프로젝트 이름을 입력하세요.',
       inputPlaceholder: '프로젝트 이름 입력',
-      confirm: '영구 삭제',
     },
   },
   projectDetail: {
