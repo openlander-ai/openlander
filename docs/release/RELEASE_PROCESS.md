@@ -44,7 +44,8 @@ workflow owns artifact publication. The workflow requires the tag, root
 same SemVer string.
 
 Use the explicit scripts below rather than raw `npm run release` so the RC path
-is not skipped by accident.
+is not skipped by accident. The raw `release` script intentionally exits with an
+error.
 
 For normal 0.x patch/minor releases:
 
@@ -135,12 +136,19 @@ Prereleases never move `latest`.
 Before tagging a final release:
 
 1. Verify the final tag will point at the same commit as the last accepted RC,
-   or only at a commit that contains release-note/version-only changes.
-2. Install and smoke-test the exact RC image, for example
-   `ghcr.io/openlander-ai/openlander:0.1.1-rc.2`.
+   or only at a commit that contains release-note/version-only changes. Confirm
+   this with `git diff v0.1.1-rc.N..HEAD`; the only allowed final-only changes
+   are `CHANGELOG.md`, `package.json`, `web/package.json`, and lockfile version
+   updates.
+2. Install and smoke-test the exact RC image on the release QA host, for example
+   `ghcr.io/openlander-ai/openlander:0.1.1-rc.2`. The smoke pass must cover
+   setup/login, project creation, one deploy or redeploy, MCP token visibility,
+   and `docker compose` update from the RC image.
 3. Consolidate the accepted RC changelog entries into the final heading, for
    example `## [0.1.1] - 2026-05-14`.
-4. Run the local release prep commands again.
+4. Run the local release prep commands again:
+   `npm ci`, `cd web && npm ci`, `npm run qa:release`,
+   `npm run test:coverage`, and `npm pack --dry-run --json --ignore-scripts`.
 5. Run `npm run release:final`.
 6. Confirm the GitHub Release is not marked prerelease and that GHCR moved
    `<major>.<minor>` and `latest` to the final image.
