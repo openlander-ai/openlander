@@ -1,6 +1,7 @@
 export * from './auth.js';
 export * from './approvals.js';
 export * from './projects.js';
+export * from './domains.js';
 export * from './services.js';
 export * from './system.js';
 export * from './topology.js';

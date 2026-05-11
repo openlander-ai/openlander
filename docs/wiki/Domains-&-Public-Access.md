@@ -6,7 +6,7 @@
 | --------------- | ------------- | ------------------------ | --------------- |
 | **Internal**    | Same network  | Local IP + Traefik       | No              |
 | **Quick Share** | Demo / review | TryCloudflare (temp URL) | No              |
-| **Production**  | Always-on     | Cloudflare Tunnel        | Yes             |
+| **Production**  | Always-on     | Manual DNS + Traefik     | Yes             |
 
 Default is **Internal** (safe).
 
@@ -56,29 +56,21 @@ unexpose_public(project_name: "my-app")
 
 ---
 
-## Custom Domains (Cloudflare Tunnel)
+## Custom Domains
 
 For permanent public URLs with your own domain.
 
 ### Prerequisites
 
-1. Domain managed by Cloudflare
-2. Cloudflare API token
-3. Cloudflare Tunnel ID
+1. A domain you control
+2. OpenLander running in managed Traefik mode
+3. DNS pointed at the server that runs OpenLander
 
 ### Configure
 
-In Settings → Proxy, add Cloudflare credentials. Or via config:
-
-```json
-{
-  "cloudflare": {
-    "apiToken": "your-token",
-    "tunnelId": "your-tunnel-id",
-    "accountId": "your-account-id"
-  }
-}
-```
+Create an `A`, `AAAA`, or `CNAME` record for your domain that points to the
+server running OpenLander. OpenLander does not manage DNS records automatically
+in v0.1.
 
 ### Map Domain
 
@@ -86,17 +78,16 @@ In Settings → Proxy, add Cloudflare credentials. Or via config:
 
 Service Detail → **Domains** tab → Add Domain
 
-#### Via MCP
+#### Via API
 
 ```
-map_domain(service_name: "my-app-web", project_name: "my-app", domain: "app.example.com")
+POST /api/projects/:projectId/services/:serviceId/domains
 ```
 
 ### List Domains
 
-```
-list_domains()
-```
+Use Service Detail → **Domains** tab for day-to-day management. The API returns
+the same service-scoped domain mappings used by the dashboard.
 
 ---
 
@@ -105,6 +96,6 @@ list_domains()
 A service can have multiple domains mapped:
 
 ```
-map_domain(service_name: "my-app-web", project_name: "my-app", domain: "app.example.com")
-map_domain(service_name: "my-app-web", project_name: "my-app", domain: "www.example.com")
+app.example.com
+www.example.com
 ```

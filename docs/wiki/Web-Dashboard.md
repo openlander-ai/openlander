@@ -140,14 +140,14 @@ Manage infrastructure services (databases, caches, etc.).
 
 **Tabs (observability-first per the v0.1 spec)**:
 
-| Tab             | Features                                                                                                       |
-| --------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Overview**    | General details, resource limits, health, danger zone (typed-confirm delete).                                  |
-| **Logs**        | Live runtime container logs.                                                                                   |
-| **Deployments** | Per-service deployment history with deploy-in-place log streaming.                                             |
-| **Monitoring**  | CPU / memory time-series and request-side health.                                                              |
-| **Environment** | Service env vars (read/write).                                                                                 |
-| **Domains**     | Public hosts mapped to the service. Read-only in v0.1; v0.2 brings managed Cloudflare Tunnel domains back.     |
+| Tab             | Features                                                                                                 |
+| --------------- | -------------------------------------------------------------------------------------------------------- |
+| **Overview**    | General details, resource limits, health, danger zone (typed-confirm delete).                            |
+| **Logs**        | Live runtime container logs.                                                                             |
+| **Deployments** | Per-service deployment history with deploy-in-place log streaming.                                       |
+| **Monitoring**  | CPU / memory time-series and request-side health.                                                        |
+| **Environment** | Service env vars (read/write).                                                                           |
+| **Domains**     | Public hosts mapped to the service. v0.1 supports manual-DNS CRUD for OpenLander-managed Traefik routes. |
 
 The same surface is used for both deployable services (`/projects/:p/services/:s`) and managed services (`/managed-services/:id`). Managed services historically had Connection / Databases panels — those are folded into Overview in v0.1 and return as v0.2 spec work.
 

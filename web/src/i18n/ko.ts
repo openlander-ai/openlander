@@ -362,8 +362,67 @@ export const translations = {
     },
     domains: {
       empty: '아직 연결된 도메인이 없습니다.',
-      readOnlyHint:
-        'v0.1에서는 읽기 전용입니다. 커스텀 도메인을 연결하려면 A 또는 CNAME 레코드를 이 서버 IP로 지정한 뒤, 에이전트에게 MCP로 연결을 요청하세요. Cloudflare 자동 DNS는 v0.2에서 돌아옵니다.',
+      emptyExternal:
+        'Infrastructure-only 모드입니다. 라우팅은 외부 프록시(nginx, Caddy, Apache 등)에서 관리하세요.',
+      add: '도메인 추가',
+      tlsHint: 'v0.1에서는 TLS를 외부 프록시가 책임집니다. ACME 자동 발급은 v0.2 예정입니다.',
+      dnsHint:
+        'A/AAAA/CNAME 레코드를 OpenLander가 실행되는 서버를 가리키도록 직접 설정하세요. OpenLander는 DNS를 자동 관리하지 않습니다.',
+      legacyBadge: 'legacy CF',
+      legacyTooltip:
+        '이 매핑은 v0.1 이전 Cloudflare 통합 시 생성되었습니다. 현재는 호환 모드로 동작 중이며, 삭제 시 OpenLander 매핑만 제거됩니다. 외부 DNS 레코드는 그대로 유지됩니다.',
+      removeAria: '도메인 제거',
+      loadError: '도메인 목록을 불러오지 못했습니다. 목록이 최신이 아닐 수 있습니다.',
+      retry: '다시 시도',
+      dialog: {
+        title: '도메인 추가',
+        domain: '도메인',
+        domainPlaceholder: 'api.example.com',
+        path: '경로',
+        advanced: '고급',
+        stripPrefix: '경로 접두사 제거',
+        upstreamPathPrefix: '업스트림 경로',
+        upstreamPathPlaceholder: '/backend (선택)',
+        targetPort: '대상 포트',
+        targetPortPlaceholder: '{port} (컨테이너 포트)',
+        targetPortPlaceholderNone: '서비스 컨테이너 포트',
+        stripPrefixHint:
+          '컨테이너로 전달할 때 경로 접두사를 제거합니다 (대부분의 non-root 경로에 필요).',
+        submit: '도메인 추가',
+        cancel: '취소',
+        submitting: '추가 중…',
+      },
+      delete: {
+        title: '도메인 제거',
+        description: 'OpenLander 매핑만 제거합니다. 외부 DNS 레코드는 그대로 유지됩니다.',
+        confirm: '제거',
+        cancel: '취소',
+      },
+      status: {
+        active: '활성',
+        pending: '대기',
+        error: '오류',
+      },
+      toast: {
+        added: '도메인이 연결되었습니다. DNS 레코드를 OpenLander 서버로 설정하세요.',
+        removed: '도메인 연결이 해제되었습니다.',
+        routingDisabled:
+          'Infrastructure-only 모드에서는 도메인 라우팅을 OpenLander가 관리하지 않습니다.',
+        addFailed: '도메인 추가에 실패했습니다.',
+        deleteFailed: '도메인 제거에 실패했습니다.',
+      },
+      error: {
+        duplicate: '동일한 도메인과 경로 조합이 이미 존재합니다.',
+        invalidDomain: '도메인 형식이 올바르지 않습니다.',
+        invalidPath: '경로는 "/"로 시작해야 합니다.',
+        invalidPort: '대상 포트는 1-65535 범위여야 합니다.',
+        missingDomain: '도메인은 필수입니다.',
+        invalidServiceKind: '도메인은 deployable 서비스에만 연결할 수 있습니다.',
+        serviceSelectionRequired:
+          '프로젝트에 deployable 서비스가 여러 개 있습니다. 서비스 단위 API를 사용하세요.',
+        notFound: '매핑을 찾을 수 없습니다.',
+        serverError: '서버 오류가 발생했습니다.',
+      },
     },
   },
   rollback: {
