@@ -6,7 +6,7 @@
  *
  *   - signin (default) — password input only
  *   - setup  (when /api/setup/status hasPassword=false) — password +
- *     confirm, 12-char minimum
+ *     confirm, 8-char minimum
  *
  * The setup branch wires to /api/auth/setup-password, which on success
  * already sets the session cookie. We hard-reload into /projects so
@@ -30,7 +30,7 @@ import { setupPassword } from '@/lib/api/auth';
 
 type Mode = 'signin' | 'setup';
 
-const MIN_LENGTH = 12;
+const MIN_LENGTH = 8;
 
 export function LoginPage() {
   const [mode, setMode] = useState<Mode | null>(null);
@@ -88,7 +88,7 @@ export function LoginPage() {
     e.preventDefault();
     setError('');
     // Trim only for the length check — bcrypt happily hashes whitespace,
-    // so a "            " (12 spaces) password should not be accepted as
+    // so a whitespace-only password should not be accepted as
     // meaningful entropy.
     const trimmed = password.trim();
     if (trimmed.length < MIN_LENGTH) {
