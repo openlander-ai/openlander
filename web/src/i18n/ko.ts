@@ -49,27 +49,34 @@ export const translations = {
   },
   account: {
     popover: {
+      // aria-label / title attribute — kept in Korean so Korean screen
+      // readers and on-hover tooltips read naturally to ko users
+      // (Content register override on the form-label Chrome default).
       openLabel: '계정 메뉴 열기',
       menuLabel: '계정 메뉴',
-      adminLabel: '관리자',
-      subtitle: '계정',
-      changePassword: '비밀번호 변경',
-      switchLanguage: '언어 변경',
-      signOut: '로그아웃',
+      // Visible chrome — same English string as en.ts (Chrome register
+      // per docs/i18n-policy.md).
+      adminLabel: 'admin',
+      subtitle: 'Account',
+      changePassword: 'Change password',
+      switchLanguage: 'Switch language',
+      signOut: 'Sign out',
     },
     changePassword: {
-      title: '비밀번호 변경',
-      close: '닫기',
-      currentLabel: '현재 비밀번호',
-      newLabel: '새 비밀번호',
-      confirmLabel: '새 비밀번호 확인',
+      // Chrome — modal chrome and form labels stay English in ko.ts.
+      title: 'Change password',
+      close: 'Close',
+      currentLabel: 'Current password',
+      newLabel: 'New password',
+      confirmLabel: 'Confirm new password',
+      cancel: 'Cancel',
+      submit: 'Update password',
+      saving: 'Saving…',
+      // Content — hints and errors stay locale-native.
       minHint: '최소 {count}자 이상.',
       tooShort: '새 비밀번호는 최소 {count}자 이상이어야 합니다.',
       mismatch: '새 비밀번호와 확인 값이 일치하지 않습니다.',
       failed: '비밀번호 변경에 실패했습니다.',
-      cancel: '취소',
-      submit: '비밀번호 변경',
-      saving: '저장 중…',
     },
   },
   activity: {
