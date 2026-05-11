@@ -21,12 +21,15 @@ describe('public release tree hygiene', () => {
     expect(gitCheckIgnore('web/src/components/logs/StaticLogViewer.tsx')).toBe(false);
   });
 
-  it('computes release minor Docker tags without shell-interpreted backticks', () => {
+  it('computes stable and prerelease Docker tags without shell-interpreted backticks', () => {
     const workflow = readFileSync('.github/workflows/release-publish.yml', 'utf8');
 
-    expect(workflow).toContain("process.stdout.write(major + '.' + minor)");
+    expect(workflow).toContain('major_minor="$major.$minor"');
+    expect(workflow).toContain('prerelease_channel="${prerelease%%.*}"');
     expect(workflow).not.toContain('console.log(`${major}.${minor}`)');
     expect(workflow).toContain('--tag "${IMAGE_NAME}:${{ steps.version.outputs.major_minor }}"');
+    expect(workflow).toContain('--tag "${IMAGE_NAME}:${{ steps.version.outputs.prerelease_channel }}"');
+    expect(workflow).toContain('echo "Tag $GITHUB_REF_NAME is not a SemVer release tag"');
   });
 
   it('publishes multi-architecture runtime images', () => {

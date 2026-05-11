@@ -39,7 +39,9 @@ npm pack --dry-run --json --ignore-scripts
 
 `npm run release` uses release-it only for version/changelog/tag management. It
 intentionally does **not** publish to npm or create the GitHub Release; the tag
-workflow owns artifact publication.
+workflow owns artifact publication. The workflow requires the tag, root
+`package.json`, web `package.json`, and `CHANGELOG.md` heading to use the exact
+same SemVer string.
 
 For normal 0.x patch/minor releases:
 
@@ -64,6 +66,30 @@ v0.1.2-rc.1 -> v0.1.2-rc.2 -> v0.1.2
 Release candidates are GitHub prereleases. They publish immutable version tags
 plus the moving `rc` image tag, but they do not update `latest` or the
 `<major>.<minor>` image tag.
+
+Each release candidate needs its own changelog heading because release notes are
+extracted from the exact tag version:
+
+```markdown
+## [0.1.1-rc.2] - 2026-05-13
+
+### Fixed
+
+- Fix domain route validation regression.
+
+## [0.1.1-rc.1] - 2026-05-12
+
+### Added
+
+- Add service domain routing.
+```
+
+When promoting to the final release, consolidate the RC notes into the final
+heading:
+
+```markdown
+## [0.1.1] - 2026-05-14
+```
 
 For the first `v0.1.0` release, `package.json` is already at `0.1.0`. If
 release-it would otherwise increment the version, create the first tag manually
@@ -96,7 +122,8 @@ Final releases push:
 Prereleases push:
 
 - `ghcr.io/openlander-ai/openlander:<version>`
-- `ghcr.io/openlander-ai/openlander:rc`
+- `ghcr.io/openlander-ai/openlander:<prerelease-channel>` (`rc` for
+  `v0.1.1-rc.1`)
 
 Prereleases never move `latest`.
 
@@ -107,6 +134,13 @@ docker pull ghcr.io/openlander-ai/openlander:0.1.0
 curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh \
   | sudo env OPENLANDER_VERSION=v0.1.0 bash
 curl -fsS http://localhost:10114/api/health
+```
+
+For a release candidate, pin the installer to the exact prerelease tag:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh \
+  | sudo env OPENLANDER_VERSION=v0.1.1-rc.1 bash
 ```
 
 After the first GHCR package is created, verify package visibility in GitHub's
