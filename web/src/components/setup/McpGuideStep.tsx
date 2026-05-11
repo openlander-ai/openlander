@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { CopyButton } from './shared';
 import { useLanguage } from '@/i18n/context';
 import { getMcpEndpoint } from '@/lib/mcp-endpoint';
+import { buildAllClientConfigs } from '@/lib/mcp-config-snippets';
 
 interface McpGuideStepProps {
   onNext: () => void;
@@ -88,71 +89,7 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
 
   const quickCopyText = `Connect the OpenLander MCP server.\nURL: ${mcpUrl}\nToken: ${tokenForSnippet}`;
 
-  const claudeCodeCmd = `claude mcp add openlander --url ${mcpUrl} --header "Authorization: Bearer ${tokenForSnippet}"`;
-  const cursorConfig = JSON.stringify(
-    {
-      mcpServers: {
-        openlander: {
-          url: mcpUrl,
-          headers: { Authorization: `Bearer ${tokenForSnippet}` },
-        },
-      },
-    },
-    null,
-    2,
-  );
-
-  const windsurfConfig = JSON.stringify(
-    {
-      mcpServers: {
-        openlander: {
-          serverUrl: mcpUrl,
-          headers: { Authorization: `Bearer ${tokenForSnippet}` },
-        },
-      },
-    },
-    null,
-    2,
-  );
-
-  const claudeDesktopConfig = JSON.stringify(
-    {
-      mcpServers: {
-        openlander: {
-          command: 'npx',
-          args: [
-            '-y',
-            'mcp-remote',
-            mcpUrl,
-            '--header',
-            `Authorization: Bearer ${tokenForSnippet}`,
-          ],
-        },
-      },
-    },
-    null,
-    2,
-  );
-
-  const vscodeConfig = JSON.stringify(
-    {
-      servers: {
-        openlander: {
-          command: 'npx',
-          args: [
-            '-y',
-            'mcp-remote',
-            mcpUrl,
-            '--header',
-            `Authorization: Bearer ${tokenForSnippet}`,
-          ],
-        },
-      },
-    },
-    null,
-    2,
-  );
-  const stdioCmd = `openlander mcp`;
+  const clientConfigs = buildAllClientConfigs({ endpoint: mcpUrl, token: tokenForSnippet });
 
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
@@ -223,83 +160,22 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
 
           {showManual && (
             <div className="px-4 pb-4 space-y-4 border-t border-border">
-              <div className="space-y-1 pt-3">
-                <p className="text-xs font-body text-foreground/80 font-medium">Claude Code</p>
-                <div className="relative bg-bg-app rounded p-3">
-                  <code className="text-xs font-mono text-foreground break-all pr-8 block">
-                    {claudeCodeCmd}
-                  </code>
-                  <div className="absolute top-1.5 right-1.5">
-                    <CopyButton text={claudeCodeCmd} />
+              {clientConfigs.map((cfg, idx) => (
+                <div key={cfg.id} className={`space-y-1 ${idx === 0 ? 'pt-3' : ''}`}>
+                  <p className="text-xs font-body text-foreground/80 font-medium">
+                    {cfg.label}
+                    {cfg.filename ? ` (${cfg.filename})` : ''}
+                  </p>
+                  <div className="relative bg-bg-app rounded p-3">
+                    <pre className="text-xs font-mono text-foreground break-all pr-8 overflow-auto max-h-40 whitespace-pre-wrap">
+                      {cfg.snippet}
+                    </pre>
+                    <div className="absolute top-1.5 right-1.5">
+                      <CopyButton text={cfg.snippet} />
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-xs font-body text-foreground/80 font-medium">
-                  Cursor (.cursor/mcp.json)
-                </p>
-                <div className="relative bg-bg-app rounded p-3">
-                  <pre className="text-xs font-mono text-foreground break-all pr-8 overflow-auto max-h-40">
-                    {cursorConfig}
-                  </pre>
-                  <div className="absolute top-1.5 right-1.5">
-                    <CopyButton text={cursorConfig} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-xs font-body text-foreground/80 font-medium">
-                  Windsurf (~/.codeium/windsurf/mcp_config.json)
-                </p>
-                <div className="relative bg-bg-app rounded p-3">
-                  <pre className="text-xs font-mono text-foreground break-all pr-8 overflow-auto max-h-40">
-                    {windsurfConfig}
-                  </pre>
-                  <div className="absolute top-1.5 right-1.5">
-                    <CopyButton text={windsurfConfig} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-xs font-body text-foreground/80 font-medium">
-                  Claude Desktop (claude_desktop_config.json)
-                </p>
-                <div className="relative bg-bg-app rounded p-3">
-                  <pre className="text-xs font-mono text-foreground break-all pr-8 overflow-auto max-h-40">
-                    {claudeDesktopConfig}
-                  </pre>
-                  <div className="absolute top-1.5 right-1.5">
-                    <CopyButton text={claudeDesktopConfig} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-xs font-body text-foreground/80 font-medium">
-                  VS Code (.vscode/mcp.json)
-                </p>
-                <div className="relative bg-bg-app rounded p-3">
-                  <pre className="text-xs font-mono text-foreground break-all pr-8 overflow-auto max-h-40">
-                    {vscodeConfig}
-                  </pre>
-                  <div className="absolute top-1.5 right-1.5">
-                    <CopyButton text={vscodeConfig} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-xs font-body text-foreground/80 font-medium">stdio (local)</p>
-                <div className="relative bg-bg-app rounded p-3">
-                  <code className="text-xs font-mono text-foreground pr-8 block">{stdioCmd}</code>
-                  <div className="absolute top-1.5 right-1.5">
-                    <CopyButton text={stdioCmd} />
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
           )}
         </div>

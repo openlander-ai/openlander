@@ -899,7 +899,7 @@ export const translations = {
       regenerating: 'Regenerating…',
       regenerateConfirm:
         'Regenerate this token? Existing MCP clients using the old token will be disconnected.',
-      regenerateSuccess: 'Token regenerated. Update your Claude Desktop config with the new value.',
+      regenerateSuccess: 'Token regenerated. Update your MCP client config with the new value.',
       regenerateFailed: 'Failed to regenerate token',
       legacyTokenRotated:
         'Your old API token (ol_…) was retired as part of this change. Update any MCP client still using it.',
@@ -907,17 +907,16 @@ export const translations = {
       hide: 'Hide',
       revealedHint:
         'Treat this like a password. We can only show it once — copy it before closing.',
-      passwordHint:
-        'Treat this like a password. One token grants access to all your projects. Lost your token? Regenerate.',
+      passwordHint: 'Treat like a password — one token unlocks every project. Regenerate if lost.',
       issuedAt: 'issued {when}',
       loadFailed: 'Failed to load tokens',
     },
     setup: {
       title: 'Setup',
-      subtitle: 'Add OpenLander to Claude Desktop’s MCP config.',
+      subtitle: 'Pick your MCP client and paste the snippet into its config.',
       copyConfig: 'Copy config',
       restartHint:
-        'Restart Claude Desktop after saving. The status above flips to Connected on the first call.',
+        'Restart your MCP client after saving. The status above flips to Connected on the first call.',
     },
     recent: {
       title: 'Recent agent calls',

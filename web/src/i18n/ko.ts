@@ -897,24 +897,22 @@ export const translations = {
       regenerateAction: '재발급',
       regenerating: '재발급 중…',
       regenerateConfirm: '토큰을 재발급할까요? 기존 토큰을 쓰는 MCP 클라이언트는 즉시 끊깁니다.',
-      regenerateSuccess: '토큰이 재발급되었습니다. Claude Desktop 설정을 새 값으로 갱신하세요.',
+      regenerateSuccess: '토큰이 재발급되었습니다. 클라이언트 설정을 새 토큰으로 업데이트하세요.',
       regenerateFailed: '토큰 재발급에 실패했습니다',
       legacyTokenRotated:
         '이전에 사용하던 API 토큰(ol_…)이 이번 변경과 함께 무효화되었습니다. 해당 토큰을 사용 중인 MCP 클라이언트가 있다면 갱신해주세요.',
       reveal: '보기',
       hide: '숨기기',
       revealedHint: '비밀번호처럼 취급하세요. 한 번만 표시되니 닫기 전에 복사해두세요.',
-      passwordHint:
-        '비밀번호처럼 취급하세요. 토큰 하나가 모든 프로젝트 접근 권한을 가집니다. 분실했나요? 재발급하세요.',
+      passwordHint: '비밀번호와 같습니다. 유출 시 모든 프로젝트가 노출되니 주의하세요.',
       issuedAt: '{when} 발급',
       loadFailed: '토큰 목록을 불러오지 못했습니다',
     },
     setup: {
       title: '설정',
-      subtitle: 'Claude Desktop의 MCP 설정에 OpenLander를 추가하세요.',
+      subtitle: '클라이언트를 선택하고 설정 스니펫을 붙여넣으세요.',
       copyConfig: '설정 복사',
-      restartHint:
-        '저장 후 Claude Desktop을 재시작하세요. 첫 호출 시 위 상태가 연결됨으로 바뀝니다.',
+      restartHint: '저장 후 클라이언트를 재시작하세요. 첫 호출 시 위 상태가 연결됨으로 바뀝니다.',
     },
     recent: {
       title: '최근 에이전트 호출',
