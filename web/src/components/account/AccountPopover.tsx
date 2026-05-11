@@ -54,9 +54,12 @@ export function AccountPopover({ collapsed = false }: AccountPopoverProps) {
   // Cycle through supported locales. v0.1 only ships en/ko so this is a
   // straight toggle; adding more locales later would mean replacing the
   // single row with a submenu rather than chaining more conditionals.
+  // The popover intentionally stays open so the user can read the row
+  // re-render in the new locale and confirm the change without
+  // re-opening the menu — Gemini CCG G3.
+  const targetLanguage = language === 'en' ? 'ko' : 'en';
   const handleToggleLanguage = () => {
-    setOpen(false);
-    void setLanguage(language === 'en' ? 'ko' : 'en');
+    void setLanguage(targetLanguage);
   };
 
   const handleSignOut = () => {
@@ -141,9 +144,9 @@ export function AccountPopover({ collapsed = false }: AccountPopoverProps) {
             className="flex w-full items-center gap-2 border-t border-[color:var(--ol-border-subtle)] px-3 py-2 text-[13px] text-[color:var(--ol-fg)] transition-colors hover:bg-[color:var(--ol-panel-2)]"
           >
             <Globe className="h-3.5 w-3.5 text-[color:var(--ol-fg-muted)]" />
-            <span className="flex-1 text-left">{t('account.popover.language')}</span>
-            <span className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
-              {LANGUAGE_AUTONYM[language]}
+            <span className="flex-1 text-left">{t('account.popover.switchLanguage')}</span>
+            <span lang={targetLanguage} className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
+              {LANGUAGE_AUTONYM[targetLanguage]}
             </span>
           </button>
           <button

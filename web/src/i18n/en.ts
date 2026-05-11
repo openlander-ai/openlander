@@ -54,7 +54,7 @@ export const translations = {
       adminLabel: 'admin',
       subtitle: 'Account',
       changePassword: 'Change password',
-      language: 'Language',
+      switchLanguage: 'Switch language',
       signOut: 'Sign out',
     },
     changePassword: {
