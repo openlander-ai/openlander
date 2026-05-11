@@ -155,6 +155,7 @@ CREATE TABLE "domain_mappings" (
 	"created_at" text DEFAULT now()::text,
 	"updated_at" text DEFAULT now()::text,
 	CONSTRAINT "domain_mappings_status_check" CHECK ("domain_mappings"."status" IN ('active', 'pending', 'error')),
+	CONSTRAINT "domain_mappings_path_prefix_check" CHECK ("domain_mappings"."path_prefix" LIKE '/%'),
 	CONSTRAINT "domain_mappings_target_port_check" CHECK ("domain_mappings"."target_port" IS NULL OR ("domain_mappings"."target_port" >= 1 AND "domain_mappings"."target_port" <= 65535))
 );
 --> statement-breakpoint

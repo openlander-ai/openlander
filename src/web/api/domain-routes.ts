@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { nanoid } from 'nanoid';
+import { domainToASCII } from 'node:url';
 
 import type { AppContext } from '../../app.js';
 import type { DomainMappingRow, ProjectRow, ServiceRow } from '../../db/index.js';
@@ -39,6 +40,7 @@ type ParsedDomainBody = {
 };
 
 const DOMAIN_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const IPV4_LITERAL_RE = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 const MANAGED_SERVICE_KIND_SET = new Set<string>(MANAGED_SERVICE_KINDS);
 
 export function createDomainRoutes(ctx: DomainRouteContext): Hono {
@@ -322,11 +324,15 @@ function parseDomainHost(
   if (raw.includes('*')) {
     return { ok: false, message: 'wildcard domains are not supported in v0.1' };
   }
+  if (IPV4_LITERAL_RE.test(raw)) {
+    return { ok: false, message: 'IP addresses are not valid domain hosts' };
+  }
   if (raw.includes(':')) {
-    return { ok: false, message: 'domain must not include a port' };
+    return { ok: false, message: 'domain must not include a port or IP address' };
   }
 
-  const domain = normalizeDomainHost(raw);
+  const asciiDomain = domainToASCII(raw);
+  const domain = normalizeDomainHost(asciiDomain);
   if (domain.length === 0 || domain.length > 253 || domain.includes('..')) {
     return { ok: false, message: 'domain is invalid' };
   }
@@ -339,7 +345,11 @@ function parseDomainHost(
     };
   }
   if (domain.endsWith('.local')) {
-    return { ok: false, message: '.local domains are not supported for public routing' };
+    return {
+      ok: false,
+      message:
+        '.local is reserved for mDNS/Bonjour; use public DNS or sslip.io-style hostnames in v0.1',
+    };
   }
   if (labels.some((label) => !DOMAIN_LABEL_RE.test(label))) {
     return { ok: false, message: 'domain contains an invalid label' };

@@ -1286,6 +1286,10 @@
           "name": "domain_mappings_status_check",
           "value": "\"domain_mappings\".\"status\" IN ('active', 'pending', 'error')"
         },
+        "domain_mappings_path_prefix_check": {
+          "name": "domain_mappings_path_prefix_check",
+          "value": "\"domain_mappings\".\"path_prefix\" LIKE '/%'"
+        },
         "domain_mappings_target_port_check": {
           "name": "domain_mappings_target_port_check",
           "value": "\"domain_mappings\".\"target_port\" IS NULL OR (\"domain_mappings\".\"target_port\" >= 1 AND \"domain_mappings\".\"target_port\" <= 65535)"
