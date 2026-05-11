@@ -25,7 +25,12 @@ describe('public release tree hygiene', () => {
     const workflow = readFileSync('.github/workflows/release-publish.yml', 'utf8');
     const packageJson = readFileSync('package.json', 'utf8');
     const releaseProcess = readFileSync('docs/release/RELEASE_PROCESS.md', 'utf8');
+    const agentInstructions = readFileSync('AGENTS.md', 'utf8');
     const pkg = JSON.parse(packageJson) as { scripts: Record<string, string> };
+    const rawRelease = spawnSync('npm', ['run', 'release', '--silent'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+    });
 
     expect(workflow).toContain('major_minor="$major.$minor"');
     expect(workflow).toContain('prerelease_channel="${prerelease%%.*}"');
@@ -35,11 +40,20 @@ describe('public release tree hygiene', () => {
     expect(workflow).toContain('echo "Tag $GITHUB_REF_NAME is not a SemVer release tag"');
     expect(pkg.scripts['release:rc']).toBe('release-it --preRelease=rc');
     expect(pkg.scripts['release:final']).toBe('release-it');
-    expect(pkg.scripts.release).toContain('Raw npm run release is disabled');
+    expect(pkg.scripts.release).not.toContain('release-it');
+    expect(pkg.scripts.release).toContain('process.exit(1)');
+    expect(rawRelease.status).not.toBe(0);
+    expect(`${rawRelease.stdout}${rawRelease.stderr}`).toMatch(/release:rc|release:final/);
     expect(releaseProcess).toContain('npm run release:rc');
     expect(releaseProcess).toContain('npm run release:final');
-    expect(releaseProcess).toContain('raw `release` script intentionally exits with an');
-    expect(releaseProcess).toContain('git diff v0.1.1-rc.N..HEAD');
+    expect(releaseProcess).not.toContain('`npm run release` uses release-it');
+    expect(releaseProcess).toMatch(/raw `release` script intentionally exits/i);
+    expect(releaseProcess).toMatch(/git diff .*rc\.N\.\.HEAD/);
+    expect(releaseProcess).toContain('No dependency graph changes are allowed');
+    expect(releaseProcess).toContain('If any smoke item fails');
+    expect(releaseProcess).toContain('Inspect the pack output');
+    expect(agentInstructions).toContain('npm run release:final` or `npm run release:rc');
+    expect(agentInstructions).not.toContain('Automated by `npm run release`');
   });
 
   it('publishes multi-architecture runtime images', () => {
