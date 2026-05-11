@@ -52,6 +52,8 @@
     "qa:release": "npm run lint -- --quiet && npm run typecheck && npm run test:backend:release && npm run build",
     "clean": "rm -rf dist",
     "release": "release-it",
+    "release:rc": "release-it --preRelease=rc",
+    "release:final": "release-it",
     "prepublishOnly": "npm run build",
     "prepare": "husky",
     "test:e2e": "playwright test",

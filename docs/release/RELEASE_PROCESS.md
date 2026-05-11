@@ -43,17 +43,20 @@ workflow owns artifact publication. The workflow requires the tag, root
 `package.json`, web `package.json`, and `CHANGELOG.md` heading to use the exact
 same SemVer string.
 
+Use the explicit scripts below rather than raw `npm run release` so the RC path
+is not skipped by accident.
+
 For normal 0.x patch/minor releases:
 
 ```bash
-npm run release
+npm run release:final
 ```
 
 For dogfood candidates, cut prerelease tags first and promote only after live
 QA is clean:
 
 ```bash
-npm run release -- --preRelease=rc
+npm run release:rc
 ```
 
 Recommended flow:
@@ -126,6 +129,21 @@ Prereleases push:
   `v0.1.1-rc.1`)
 
 Prereleases never move `latest`.
+
+## RC to Final Promotion Checklist
+
+Before tagging a final release:
+
+1. Verify the final tag will point at the same commit as the last accepted RC,
+   or only at a commit that contains release-note/version-only changes.
+2. Install and smoke-test the exact RC image, for example
+   `ghcr.io/openlander-ai/openlander:0.1.1-rc.2`.
+3. Consolidate the accepted RC changelog entries into the final heading, for
+   example `## [0.1.1] - 2026-05-14`.
+4. Run the local release prep commands again.
+5. Run `npm run release:final`.
+6. Confirm the GitHub Release is not marked prerelease and that GHCR moved
+   `<major>.<minor>` and `latest` to the final image.
 
 ## Post-Release Verification
 
