@@ -271,25 +271,32 @@ export const translations = {
     },
   },
   projectDetail: {
+    // Content — descriptive copy.
     notFound: '프로젝트를 찾을 수 없습니다',
     noDeployments: '아직 배포가 없습니다',
     confirmDelete: '이 프로젝트를 삭제하시겠습니까?',
     tabs: {
-      services: '서비스',
-      settings: '설정',
+      // Chrome — nav tabs.
+      services: 'Services',
+      settings: 'Settings',
     },
     diagnosis: {
+      // Content — error/notice copy.
       noFixes: '구체적인 해결책이 반환되지 않았습니다.',
       fixFailed: 'AI로 수정 실패',
     },
+    // Content — success toasts.
     redeploySuccess: '프로젝트 리디플로이 중...',
     stopSuccess: '프로젝트 중지됨',
     startSuccess: '프로젝트 시작됨',
     archiveSuccess: '프로젝트 아카이브됨',
     deleteSuccess: '프로젝트 삭제됨',
-    goBack: '돌아가기',
+    // Chrome — back button.
+    goBack: 'Back',
     danger: {
-      nav: '위험',
+      // Chrome — nav label.
+      nav: 'Danger',
+      // Content — section titles + descriptive copy.
       title: '위험 구역',
       description: '프로젝트 그룹을 보관하거나 영구 삭제합니다.',
       archiveTitle: '프로젝트 보관',
@@ -304,23 +311,25 @@ export const translations = {
       error: '프로젝트 작업에 실패했습니다',
     },
     env: {
+      // Chrome — form labels + buttons + status.
+      add: 'Add',
+      paste: 'Paste .env',
+      cancel: 'Cancel',
+      import: 'Parse & import',
+      key: 'Key',
+      value: 'Value',
+      showValue: 'Show value',
+      hideValue: 'Hide value',
+      delete: 'Delete variable',
+      save: 'Save',
+      saving: 'Saving…',
+      // Content — section copy, errors, hints, success toasts.
       title: '서비스 환경 변수',
       description:
         '이 변수들은 이 배포 서비스에만 적용됩니다. 먼저 저장한 뒤, 실행 중인 컨테이너에 반영하려면 이 서비스를 재배포하세요.',
       loading: '환경 변수를 불러오는 중…',
       empty: '이 서비스에 설정된 환경 변수가 없습니다.',
-      add: '추가',
-      paste: '.env 붙여넣기',
       pasteTitle: '.env 내용 붙여넣기',
-      cancel: '취소',
-      import: '파싱 후 가져오기',
-      key: '키',
-      value: '값',
-      showValue: '값 보기',
-      hideValue: '값 숨기기',
-      delete: '변수 삭제',
-      save: '환경 변수 저장',
-      saving: '저장 중…',
       saved: '환경 변수를 저장했습니다.',
       savedNeedsRedeploy:
         '환경 변수를 저장했습니다. 변경사항을 반영하려면 이 서비스를 재배포하세요.',
@@ -379,47 +388,54 @@ export const translations = {
       error: '서비스 삭제에 실패했습니다',
     },
     domains: {
+      // Chrome — action button + retry + badge.
+      add: 'Add domain',
+      legacyBadge: 'legacy CF',
+      retry: 'Retry',
+      // Content — empty state + descriptive hints + tooltip + load error + aria.
       empty: '아직 연결된 도메인이 없습니다.',
       emptyExternal:
         'Infrastructure-only 모드입니다. 라우팅은 외부 프록시(nginx, Caddy, Apache 등)에서 관리하세요.',
-      add: '도메인 추가',
       tlsHint: 'v0.1에서는 TLS를 외부 프록시가 책임집니다. ACME 자동 발급은 v0.2 예정입니다.',
       dnsHint:
         'A/AAAA/CNAME 레코드를 OpenLander가 실행되는 서버를 가리키도록 직접 설정하세요. OpenLander는 DNS를 자동 관리하지 않습니다.',
-      legacyBadge: 'legacy CF',
       legacyTooltip:
         '이 매핑은 v0.1 이전 Cloudflare 통합 시 생성되었습니다. 현재는 호환 모드로 동작 중이며, 삭제 시 OpenLander 매핑만 제거됩니다. 외부 DNS 레코드는 그대로 유지됩니다.',
       removeAria: '도메인 제거',
       loadError: '도메인 목록을 불러오지 못했습니다. 목록이 최신이 아닐 수 있습니다.',
-      retry: '다시 시도',
       dialog: {
-        title: '도메인 추가',
-        domain: '도메인',
+        // Chrome — dialog title + form labels + buttons.
+        title: 'Add domain',
+        domain: 'Domain',
+        path: 'Path',
+        advanced: 'Advanced',
+        stripPrefix: 'Strip path prefix',
+        upstreamPathPrefix: 'Upstream path',
+        targetPort: 'Target port',
+        submit: 'Add domain',
+        cancel: 'Cancel',
+        submitting: 'Adding…',
+        // Content — placeholders that include hint text + hint copy.
         domainPlaceholder: 'api.example.com',
-        path: '경로',
-        advanced: '고급',
-        stripPrefix: '경로 접두사 제거',
-        upstreamPathPrefix: '업스트림 경로',
         upstreamPathPlaceholder: '/backend (선택)',
-        targetPort: '대상 포트',
         targetPortPlaceholder: '{port} (컨테이너 포트)',
         targetPortPlaceholderNone: '서비스 컨테이너 포트',
         stripPrefixHint:
           '컨테이너로 전달할 때 경로 접두사를 제거합니다 (대부분의 non-root 경로에 필요).',
-        submit: '도메인 추가',
-        cancel: '취소',
-        submitting: '추가 중…',
       },
       delete: {
-        title: '도메인 제거',
+        // Chrome — modal chrome.
+        title: 'Remove domain',
+        confirm: 'Remove',
+        cancel: 'Cancel',
+        // Content — confirmation prose.
         description: 'OpenLander 매핑만 제거합니다. 외부 DNS 레코드는 그대로 유지됩니다.',
-        confirm: '제거',
-        cancel: '취소',
       },
       status: {
-        active: '활성',
-        pending: '대기',
-        error: '오류',
+        // Chrome — status pills.
+        active: 'active',
+        pending: 'pending',
+        error: 'error',
       },
       toast: {
         added: '도메인이 연결되었습니다. DNS 레코드를 OpenLander 서버로 설정하세요.',
