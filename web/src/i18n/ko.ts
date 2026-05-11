@@ -36,10 +36,12 @@ export const translations = {
     deployments: 'Deployments',
   },
   login: {
+    // Chrome — form label + button + status.
+    password: 'Password',
+    signingIn: 'Signing in...',
+    signIn: 'Sign In',
+    // Content — page-level prompts, loading states, errors.
     signInPrompt: '로그인하여 계속하기',
-    password: '비밀번호',
-    signingIn: '로그인 중...',
-    signIn: '로그인',
     errorGeneric: '로그인에 실패했습니다. 다시 시도해주세요.',
     checkingStatus: '서버 상태 확인 중...',
     loadingLabel: '불러오는 중',
@@ -216,21 +218,23 @@ export const translations = {
     },
   },
   newProject: {
+    // Chrome — modal title + tab labels + form labels + button.
+    title: 'New Project',
+    myRepos: 'My Repos',
+    search: 'Search',
+    dockerImage: 'Docker Image',
+    portLabel: 'Port (Optional)',
+    portPlaceholder: '80',
+    commandLabel: 'Command (Optional)',
+    deployImage: 'Deploy Image',
+    // Content — descriptive prompts, error copy, placeholder hints.
     selectRepo: '배포할 레포지토리를 선택하세요',
     noReposFound: '검색 결과가 없습니다:',
     githubNotConnected: 'GitHub가 연결되지 않았습니다. 설정에서 계정을 추가하세요.',
     fetchFailed: '레포지토리를 가져오는데 실패했습니다',
-    title: '새 프로젝트',
-    myRepos: '내 레포지토리',
-    search: '검색',
-    dockerImage: '도커 이미지',
     searchPlaceholder: '레포지토리 검색...',
     imagePlaceholder: '예: nginx:latest 또는 ghcr.io/user/app:v1',
-    portLabel: '포트 (선택)',
-    portPlaceholder: '80',
-    commandLabel: '명령어 (선택)',
     commandPlaceholder: '예: --model-id BAAI/bge-m3',
-    deployImage: '이미지 배포',
   },
   projects: {
     // Chrome — page title + primary action + filter toggle.
@@ -455,24 +459,29 @@ export const translations = {
     },
   },
   rollback: {
-    title: '롤백',
+    // Chrome — modal title + buttons + recommendation chip.
+    title: 'Rollback',
+    confirm: 'Confirm rollback',
+    cancel: 'Cancel',
+    aiSuggestion: 'AI suggestion',
+    useSuggestion: 'Use this suggestion',
+    // Content — prompts + loading state + empty state.
     selectVersion: '롤백할 버전을 선택하세요',
-    confirm: '롤백 확인',
-    cancel: '취소',
     aiAnalyzing: 'AI가 롤백 대상을 분석 중...',
-    aiSuggestion: 'AI 추천',
-    useSuggestion: '이 추천 사용',
     noDeployments: '사용 가능한 배포가 없습니다',
   },
   blueGreen: {
-    title: '블루-그린 배포',
+    // Chrome — modal title + form label + buttons.
+    title: 'Blue-green deploy',
+    healthCheckPath: 'Health check path (optional)',
+    confirm: 'Start blue-green deploy',
+    cancel: 'Cancel',
+    // Content — description + placeholder hint.
     description: '새 컨테이너를 생성하고, 헬스체크 후 트래픽을 전환합니다. 제로 다운타임.',
-    healthCheckPath: '헬스체크 경로 (선택 사항)',
     healthCheckPlaceholder: '/health 또는 /api/health',
-    confirm: '블루-그린 배포 시작',
-    cancel: '취소',
   },
   deploy: {
+    // Content — empty + descriptive copy + confirm prompt.
     notFound: '배포를 찾을 수 없습니다',
     backToDeployments: '배포 목록으로 돌아가기',
     buildFailureDetected:
@@ -480,55 +489,62 @@ export const translations = {
     noBuildLog: '빌드 로그가 없습니다',
     killConfirm: '이 배포를 중지하시겠습니까?',
     dialog: {
-      title: '새 프로젝트 배포',
+      // Chrome — modal title + form label + action buttons + status pills.
+      title: 'Deploy New Project',
+      projectName: 'Project name (optional)',
+      parseAndMap: 'Parse & map',
+      matched: 'matched',
+      missing: 'missing',
+      extra: 'extra',
+      rePaste: 'Re-paste',
+      skipEnvVars: 'Skip — deploy without env vars',
+      // Content — descriptive copy, errors, formatted counters.
       description:
         '배포할 레포지토리 URL을 입력하세요. OpenLander가 클론, 빌드 및 실행을 처리합니다.',
-      projectName: '프로젝트 이름 (선택 사항)',
       autoDetected: '레포지토리에서 자동 감지됨',
       failed: '프로젝트 배포 실패',
       pasteEnvTitle: '환경 변수 붙여넣기',
       pasteEnvDescription:
         '.env 파일 내용을 아래에 붙여넣으세요. 프로젝트에 필요한 변수와 자동으로 매핑됩니다.',
       pasteEnvPlaceholder: 'DATABASE_URL=postgresql://...\nAPI_KEY=sk-...\n# 주석은 무시됩니다',
-      parseAndMap: '분석 및 매핑',
-      matched: '매칭됨',
-      missing: '누락됨',
-      extra: '추가',
       noValidPairs: '유효한 KEY=VALUE 쌍을 찾을 수 없습니다. 형식을 확인하세요.',
-      rePaste: '다시 붙여넣기',
-      skipEnvVars: '건너뛰기 — 환경 변수 없이 배포',
       varsMatched: '개 변수 매칭됨',
       varsMissing: '개 변수 누락됨',
       varsExtra: '개 추가 변수',
     },
     detail: {
-      goBack: '돌아가기',
-      deployment: '배포',
-      status: '상태',
-      trigger: '트리거',
-      started: '시작',
-      duration: '소요 시간',
-      buildLogs: '빌드 로그',
-      runtimeLogs: '런타임 로그',
+      // Chrome — back button + table column labels.
+      goBack: 'Back',
+      deployment: 'Deployment',
+      status: 'Status',
+      trigger: 'Trigger',
+      started: 'Started',
+      duration: 'Duration',
+      buildLogs: 'Build logs',
+      runtimeLogs: 'Runtime logs',
+      // Content — hint copy.
       runtimeLogsHint: '(리디플로이 전 최근 500줄)',
     },
   },
   settings: {
     nav: {
-      general: '일반',
+      // Chrome — sub-nav label.
+      general: 'General',
     },
     general: {
-      title: '일반',
-      description: '프로젝트 그룹의 표시 정보를 수정합니다. 슬러그는 고정됩니다.',
-      displayName: '표시 이름',
-      displayNameRequired: '표시 이름을 입력하세요.',
-      slug: '슬러그',
-      slugHelp: '안정적인 URL, 컨테이너, Traefik 라벨, MCP project_name에 사용됩니다.',
-      projectDescription: '설명',
-      tags: '태그',
+      // Chrome — section title + form labels + buttons.
+      title: 'General',
+      displayName: 'Display name',
+      slug: 'Slug',
+      projectDescription: 'Description',
+      tags: 'Tags',
       tagsPlaceholder: 'api, production',
-      save: '변경사항 저장',
-      saving: '저장 중...',
+      save: 'Save changes',
+      saving: 'Saving...',
+      // Content — descriptive prose, hints, errors, success toasts.
+      description: '프로젝트 그룹의 표시 정보를 수정합니다. 슬러그는 고정됩니다.',
+      displayNameRequired: '표시 이름을 입력하세요.',
+      slugHelp: '안정적인 URL, 컨테이너, Traefik 라벨, MCP project_name에 사용됩니다.',
       saved: '프로젝트 정보가 저장되었습니다.',
       saveFailed: '프로젝트 정보를 저장하지 못했습니다.',
     },
