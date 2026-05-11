@@ -970,31 +970,27 @@ function DomainsTab({
     <SubCard title="Domains">
       <div className="flex flex-col gap-2">
         {service.url && (
-          <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3">
+          <div className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle/30 p-3">
             <div className="flex items-center gap-2">
-              <Globe className="h-3.5 w-3.5 shrink-0 text-[color:var(--ol-primary)]" />
-              <span className="ol-mono min-w-0 flex-1 truncate text-[12px] text-[color:var(--ol-primary)]">
+              <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="ol-mono min-w-0 flex-1 truncate text-[12px] text-foreground">
                 {service.url}
               </span>
-              <span className="shrink-0 rounded-full bg-[color:var(--ol-panel)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-fg-muted)]">
+              <Badge variant="neutral" className="shrink-0 uppercase tracking-wide">
                 Auto
-              </span>
+              </Badge>
             </div>
           </div>
         )}
         {loadError && (
-          <div className="rounded-md border border-[color:var(--ol-danger)] bg-[color:var(--ol-danger-soft)] p-3">
+          <div className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle/30 p-3">
             <div className="flex items-center gap-2">
-              <span className="ol-mono min-w-0 flex-1 truncate text-[12px] text-[color:var(--ol-danger)]">
+              <span className="min-w-0 flex-1 text-xs text-muted-foreground">
                 {t('projectDetail.domains.loadError')}
               </span>
-              <button
-                type="button"
-                onClick={() => void refresh()}
-                className="shrink-0 rounded-md border border-[color:var(--ol-danger)] px-2 py-0.5 text-[11px] font-medium text-[color:var(--ol-danger)] hover:bg-[color:var(--ol-danger-soft)]"
-              >
+              <Button type="button" variant="outline" size="sm" onClick={() => void refresh()}>
                 {t('projectDetail.domains.retry')}
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -1024,11 +1020,11 @@ function DomainsTab({
       </div>
 
       <div className="mt-3 flex items-center gap-2">
-        <button
+        <Button
           type="button"
+          size="sm"
           onClick={() => setShowAdd(true)}
           disabled={externalMode || busy || !projectId || loadError !== null}
-          className="inline-flex items-center gap-2 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--ol-primary-fg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           title={
             externalMode
               ? t('projectDetail.domains.emptyExternal')
@@ -1037,16 +1033,16 @@ function DomainsTab({
                 : undefined
           }
         >
-          <Plus className="h-3 w-3" />
+          <Plus />
           {t('projectDetail.domains.add')}
-        </button>
+        </Button>
         {feedback && (
           <span
             className={cn(
-              'text-[12px]',
+              'text-xs',
               feedback.kind === 'ok'
-                ? 'text-[color:var(--ol-success)]'
-                : 'text-[color:var(--ol-danger)]',
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-destructive',
             )}
           >
             {feedback.msg}
@@ -1054,12 +1050,8 @@ function DomainsTab({
         )}
       </div>
 
-      <p className="mt-2.5 text-[11.5px] text-[color:var(--ol-fg-muted)]">
-        {t('projectDetail.domains.tlsHint')}
-      </p>
-      <p className="mt-1 text-[11.5px] text-[color:var(--ol-fg-muted)]">
-        {t('projectDetail.domains.dnsHint')}
-      </p>
+      <p className="mt-3 text-xs text-muted-foreground">{t('projectDetail.domains.tlsHint')}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{t('projectDetail.domains.dnsHint')}</p>
 
       <AddDomainDialog
         open={showAdd}
@@ -1107,42 +1099,38 @@ function DomainRow({
     | 'projectDetail.domains.status.active'
     | 'projectDetail.domains.status.pending'
     | 'projectDetail.domains.status.error';
-  const statusColor =
-    domain.status === 'active'
-      ? 'var(--ol-success)'
-      : domain.status === 'error'
-        ? 'var(--ol-danger)'
-        : 'var(--ol-warning)';
+  const statusVariant: 'green' | 'yellow' | 'red' =
+    domain.status === 'active' ? 'green' : domain.status === 'error' ? 'red' : 'yellow';
   return (
-    <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3">
+    <div className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle/30 p-3">
       <div className="flex items-center gap-2">
-        <Globe className="h-3.5 w-3.5 shrink-0" style={{ color: statusColor }} />
-        <span className="ol-mono min-w-0 flex-1 truncate text-[12px] text-[color:var(--ol-fg)]">
+        <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="ol-mono min-w-0 flex-1 truncate text-[12px] text-foreground">
           {displayUrl}
         </span>
         {domain.legacyWarning && (
-          <span
-            className="shrink-0 rounded-full bg-[color:var(--ol-warning-soft)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-warning)]"
+          <Badge
+            variant="yellow"
+            className="shrink-0 uppercase tracking-wide"
             title={t('projectDetail.domains.legacyTooltip')}
           >
             {t('projectDetail.domains.legacyBadge')}
-          </span>
+          </Badge>
         )}
-        <span
-          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
-          style={{ color: statusColor, backgroundColor: 'var(--ol-panel)' }}
-        >
+        <Badge variant={statusVariant} className="shrink-0 uppercase tracking-wide">
           {t(statusKey)}
-        </span>
-        <button
+        </Badge>
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={onDelete}
           disabled={disabled}
           aria-label={t('projectDetail.domains.removeAria')}
-          className="shrink-0 rounded-md p-1 text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-danger)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
         >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+          <Trash2 />
+        </Button>
       </div>
     </div>
   );
@@ -1296,54 +1284,51 @@ function AddDomainDialog({
         <DialogHeader>
           <DialogTitle>{t('projectDetail.domains.dialog.title')}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 pt-2">
-          <label className="flex flex-col gap-1 text-[12px]">
-            <span className="text-[color:var(--ol-fg-muted)]">
-              {t('projectDetail.domains.dialog.domain')}
-            </span>
-            <input
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 pt-2">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="domain-add-host">{t('projectDetail.domains.dialog.domain')}</Label>
+            <Input
+              id="domain-add-host"
               type="text"
               value={domainValue}
               onChange={(e) => setDomainValue(e.target.value)}
               placeholder={t('projectDetail.domains.dialog.domainPlaceholder')}
-              className={cn(
-                'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
-                fieldError?.field === 'domain'
-                  ? 'border-[color:var(--ol-danger)]'
-                  : 'border-[color:var(--ol-border-subtle)]',
-              )}
               autoFocus
+              aria-invalid={fieldError?.field === 'domain' || undefined}
+              className={cn(
+                fieldError?.field === 'domain' &&
+                  'border-destructive focus-visible:ring-destructive',
+              )}
             />
-          </label>
-          <label className="flex flex-col gap-1 text-[12px]">
-            <span className="text-[color:var(--ol-fg-muted)]">
-              {t('projectDetail.domains.dialog.path')}
-            </span>
-            <input
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="domain-add-path">{t('projectDetail.domains.dialog.path')}</Label>
+            <Input
+              id="domain-add-path"
               type="text"
               value={pathValue}
               onChange={(e) => handlePathChange(e.target.value)}
               placeholder="/"
+              aria-invalid={fieldError?.field === 'path' || undefined}
               className={cn(
-                'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
-                fieldError?.field === 'path'
-                  ? 'border-[color:var(--ol-danger)]'
-                  : 'border-[color:var(--ol-border-subtle)]',
+                fieldError?.field === 'path' && 'border-destructive focus-visible:ring-destructive',
               )}
             />
-          </label>
+          </div>
 
           {pathValue !== '/' && pathValue !== '' && (
-            <label className="flex items-start gap-2 text-[12px]">
+            <label className="flex items-start gap-2 text-sm">
               <input
                 type="checkbox"
-                className="mt-0.5"
+                className="mt-1 h-4 w-4 rounded border-input"
                 checked={stripPrefix}
                 onChange={(e) => handleStripChange(e.target.checked)}
               />
               <span className="flex flex-col">
-                <span>{t('projectDetail.domains.dialog.stripPrefix')}</span>
-                <span className="text-[11px] text-[color:var(--ol-fg-muted)]">
+                <span className="font-medium leading-none">
+                  {t('projectDetail.domains.dialog.stripPrefix')}
+                </span>
+                <span className="mt-1 text-xs text-muted-foreground">
                   {t('projectDetail.domains.dialog.stripPrefixHint')}
                 </span>
               </span>
@@ -1353,74 +1338,64 @@ function AddDomainDialog({
           <button
             type="button"
             onClick={() => setAdvanced((v) => !v)}
-            className="self-start text-[11.5px] text-[color:var(--ol-fg-muted)] underline-offset-2 hover:underline"
+            className="self-start text-xs text-muted-foreground underline-offset-2 hover:underline"
           >
             {advanced ? '▾' : '▸'} {t('projectDetail.domains.dialog.advanced')}
           </button>
 
           {advanced && (
-            <div className="flex flex-col gap-3 border-l-2 border-[color:var(--ol-border-subtle)] pl-3">
-              <label className="flex flex-col gap-1 text-[12px]">
-                <span className="text-[color:var(--ol-fg-muted)]">
+            <div className="flex flex-col gap-3 border-l border-border pl-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="domain-add-upstream">
                   {t('projectDetail.domains.dialog.upstreamPathPrefix')}
-                </span>
-                <input
+                </Label>
+                <Input
+                  id="domain-add-upstream"
                   type="text"
                   value={upstreamPath}
                   onChange={(e) => setUpstreamPath(e.target.value)}
                   placeholder={t('projectDetail.domains.dialog.upstreamPathPlaceholder')}
+                  aria-invalid={fieldError?.field === 'upstream' || undefined}
                   className={cn(
-                    'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
-                    fieldError?.field === 'upstream'
-                      ? 'border-[color:var(--ol-danger)]'
-                      : 'border-[color:var(--ol-border-subtle)]',
+                    fieldError?.field === 'upstream' &&
+                      'border-destructive focus-visible:ring-destructive',
                   )}
                 />
-              </label>
-              <label className="flex flex-col gap-1 text-[12px]">
-                <span className="text-[color:var(--ol-fg-muted)]">
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="domain-add-port">
                   {t('projectDetail.domains.dialog.targetPort')}
-                </span>
-                <input
+                </Label>
+                <Input
+                  id="domain-add-port"
                   type="number"
                   min={1}
                   max={65535}
                   value={targetPort}
                   onChange={(e) => setTargetPort(e.target.value)}
                   placeholder={portPlaceholder}
+                  aria-invalid={fieldError?.field === 'port' || undefined}
                   className={cn(
-                    'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
-                    fieldError?.field === 'port'
-                      ? 'border-[color:var(--ol-danger)]'
-                      : 'border-[color:var(--ol-border-subtle)]',
+                    fieldError?.field === 'port' &&
+                      'border-destructive focus-visible:ring-destructive',
                   )}
                 />
-              </label>
+              </div>
             </div>
           )}
 
-          {fieldError && (
-            <p className="text-[11.5px] text-[color:var(--ol-danger)]">{fieldError.msg}</p>
-          )}
+          {fieldError && <p className="text-xs text-destructive">{fieldError.msg}</p>}
 
-          <DialogFooter>
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-1.5 text-[12px]"
-            >
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               {t('projectDetail.domains.dialog.cancel')}
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="inline-flex items-center gap-2 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--ol-primary-fg)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? <Loader2 className="animate-spin" /> : null}
               {busy
                 ? t('projectDetail.domains.dialog.submitting')
                 : t('projectDetail.domains.dialog.submit')}
-            </button>
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -374,6 +374,7 @@ export const translations = {
       removeAria: '도메인 제거',
       loadError: '도메인 목록을 불러오지 못했습니다. 목록이 최신이 아닐 수 있습니다.',
       retry: '다시 시도',
+      removeAria: '도메인 제거',
       dialog: {
         title: '도메인 추가',
         domain: '도메인',

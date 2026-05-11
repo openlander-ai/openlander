@@ -376,6 +376,7 @@ export const translations = {
       removeAria: 'Remove domain',
       loadError: 'Could not load domains. The list may be out of date.',
       retry: 'Retry',
+      removeAria: 'Remove domain',
       dialog: {
         title: 'Add Domain',
         domain: 'Domain',
