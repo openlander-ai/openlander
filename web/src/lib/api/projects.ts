@@ -6,7 +6,7 @@ import type {
   Project,
 } from '../../types';
 import { fetchWithAuth } from './auth.js';
-import { apiDelete, apiGet, apiPost, apiPostVoid } from './client';
+import { apiDelete, apiPost, apiPostVoid } from './client';
 
 interface BackendEnvironment {
   id: string;
@@ -600,67 +600,8 @@ export async function unshareProject(id: string): Promise<void> {
   return apiDelete(`/api/projects/${id}/share`);
 }
 
-export interface DomainMapping {
-  domain: string;
-  hostname?: string;
-}
-
-export async function getProjectDomains(projectId: string): Promise<DomainMapping[]> {
-  const res = await fetch(`/api/projects/${projectId}/domains`);
-  if (!res.ok) throw new Error('Failed to fetch domains');
-  const data = await res.json();
-  return data.domains;
-}
-
-export async function addProjectDomain(projectId: string, domain: string): Promise<void> {
-  const res = await fetch(`/api/projects/${projectId}/domains`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ domain }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({ message: 'Failed to add domain' }));
-    throw new Error(data.message || 'Failed to add domain');
-  }
-}
-
-export async function removeProjectDomain(projectId: string, domain: string): Promise<void> {
-  const res = await fetch(`/api/projects/${projectId}/domains/${encodeURIComponent(domain)}`, {
-    method: 'DELETE',
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({ message: 'Failed to remove domain' }));
-    throw new Error(data.message || 'Failed to remove domain');
-  }
-}
-
-export async function getServiceDomains(
-  projectId: string,
-  serviceId: string,
-): Promise<DomainMapping[]> {
-  const data = await apiGet<{ domains: DomainMapping[] }>(
-    `/api/projects/${projectId}/services/${serviceId}/domains`,
-  );
-  return data.domains;
-}
-
-export async function addServiceDomain(
-  projectId: string,
-  serviceId: string,
-  domain: string,
-): Promise<void> {
-  await apiPost(`/api/projects/${projectId}/services/${serviceId}/domains`, { domain });
-}
-
-export async function removeServiceDomain(
-  projectId: string,
-  serviceId: string,
-  domain: string,
-): Promise<void> {
-  await apiDelete(
-    `/api/projects/${projectId}/services/${serviceId}/domains/${encodeURIComponent(domain)}`,
-  );
-}
+// Domain routing API moved to `./domains.ts` for the v0.1 manual-DNS +
+// service-scoped CRUD model. See domains.ts for the new contract.
 
 export interface EnvVarInfo {
   key: string;

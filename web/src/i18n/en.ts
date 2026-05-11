@@ -363,8 +363,64 @@ export const translations = {
     },
     domains: {
       empty: 'No domains attached yet.',
-      readOnlyHint:
-        "Read-only in v0.1. To attach a custom domain, point an A or CNAME record at this server's IP, then ask your agent to attach it via MCP. Cloudflare auto-DNS returns in v0.2.",
+      emptyExternal:
+        'Infrastructure-only mode. Manage routing in your external proxy (nginx, Caddy, Apache, etc.).',
+      add: 'Add Domain',
+      tlsHint:
+        'TLS is handled by your external proxy in v0.1. Automatic HTTPS (ACME) is planned for v0.2.',
+      dnsHint:
+        "Point this domain's A/AAAA/CNAME record to the server that runs OpenLander. OpenLander does not manage DNS automatically.",
+      legacyBadge: 'legacy CF',
+      legacyTooltip:
+        'This mapping carries Cloudflare metadata from before v0.1 cold-storage. Deleting it removes only the OpenLander mapping; external DNS records are untouched.',
+      readOnlyHint: '',
+      dialog: {
+        title: 'Add Domain',
+        domain: 'Domain',
+        domainPlaceholder: 'api.example.com',
+        path: 'Path',
+        advanced: 'Advanced',
+        stripPrefix: 'Strip path prefix',
+        upstreamPathPrefix: 'Upstream path',
+        upstreamPathPlaceholder: '/backend (optional)',
+        targetPort: 'Target port',
+        targetPortPlaceholder: '{port} (service default)',
+        targetPortPlaceholderNone: 'Service container port',
+        submit: 'Add Domain',
+        cancel: 'Cancel',
+        submitting: 'Adding…',
+      },
+      delete: {
+        title: 'Remove domain',
+        description:
+          'This removes the OpenLander mapping only. External DNS records are not touched.',
+        confirm: 'Remove',
+        cancel: 'Cancel',
+      },
+      status: {
+        active: 'active',
+        pending: 'pending',
+        error: 'error',
+      },
+      toast: {
+        added: 'Domain mapped. Point your DNS to the server that runs OpenLander.',
+        removed: 'Domain unmapped.',
+        routingDisabled: 'Domain routing is disabled (Infrastructure-only mode).',
+        addFailed: 'Could not add domain.',
+        deleteFailed: 'Could not remove domain.',
+      },
+      error: {
+        duplicate: 'A route for this domain and path already exists.',
+        invalidDomain: 'Domain looks invalid.',
+        invalidPath: 'Path must start with "/".',
+        invalidPort: 'Target port must be 1-65535.',
+        missingDomain: 'Domain is required.',
+        invalidServiceKind: 'Domains can only be attached to deployable services.',
+        serviceSelectionRequired:
+          'This project has multiple deployable services; use the service-scoped API.',
+        notFound: 'Mapping not found.',
+        serverError: 'Server returned an error.',
+      },
     },
   },
   rollback: {

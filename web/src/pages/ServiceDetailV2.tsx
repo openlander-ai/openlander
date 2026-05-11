@@ -22,7 +22,7 @@
  * contract is enforced server-side.
  */
 /* eslint-disable openlander-internal/no-dropped-columns */
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Activity as ActivityIcon,
@@ -66,12 +66,26 @@ import {
   type Service,
 } from '@/lib/api/services';
 import {
+  buildDomainUrl,
+  createServiceDomain,
+  deleteServiceDomain,
   deleteServiceEnvVar,
+  DomainApiError,
   getServiceDomains,
   getServiceEnvVars,
+  getWebServerSummary,
   updateServiceEnvVars,
+  type CreateDomainBody,
   type DomainMapping,
 } from '@/lib/api';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { DeployLogSummary } from '@/types';
 import { cn } from '@/lib/utils';
 import { isValidEnvKey } from '@/lib/env-key';
@@ -876,26 +890,75 @@ function DomainsTab({
   projectName?: string;
 }) {
   const { t } = useLanguage();
-  // v0.1: Domains tab is read-only. Domain attach/detach happens through the
-  // agent (MCP `attach_domain` / `detach_domain`). Edit UI ships in v0.2 alongside
-  // the Settings → Proxy editor.
-  const [customDomains, setCustomDomains] = useState<DomainMapping[] | null>(null);
+  const [domains, setDomains] = useState<DomainMapping[] | null>(null);
+  const [proxyMode, setProxyMode] = useState<'managed' | 'external' | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<DomainMapping | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const resp = await getServiceDomains(projectId, service.id);
+      setDomains(resp.domains);
+    } catch {
+      setDomains([]);
+    }
+  }, [projectId, service.id]);
 
   useEffect(() => {
-    if (!projectId) return;
     let cancelled = false;
     void (async () => {
       try {
-        const domains = await getServiceDomains(projectId, service.id);
-        if (!cancelled) setCustomDomains(domains);
+        const summary = await getWebServerSummary();
+        if (!cancelled) setProxyMode(summary.proxy.mode);
       } catch {
-        if (!cancelled) setCustomDomains([]);
+        // Default to managed when summary is unavailable: passive
+        // detection failures must not silently disable Add Domain.
+        if (!cancelled) setProxyMode('managed');
       }
     })();
+    void refresh();
     return () => {
       cancelled = true;
     };
-  }, [projectId, service.id]);
+  }, [refresh]);
+
+  const externalMode = proxyMode === 'external';
+
+  const handleAdd = async (body: CreateDomainBody): Promise<DomainApiError | null> => {
+    if (!projectId) return null;
+    setBusy(true);
+    try {
+      await createServiceDomain(projectId, service.id, body);
+      await refresh();
+      setShowAdd(false);
+      setFeedback({ kind: 'ok', msg: t('projectDetail.domains.toast.added') });
+      return null;
+    } catch (err) {
+      if (err instanceof DomainApiError) return err;
+      setFeedback({ kind: 'err', msg: t('projectDetail.domains.toast.addFailed') });
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!projectId || !deleteTarget) return;
+    setBusy(true);
+    try {
+      await deleteServiceDomain(projectId, service.id, deleteTarget.id);
+      await refresh();
+      setFeedback({ kind: 'ok', msg: t('projectDetail.domains.toast.removed') });
+    } catch {
+      setFeedback({ kind: 'err', msg: t('projectDetail.domains.toast.deleteFailed') });
+    } finally {
+      setBusy(false);
+      setDeleteTarget(null);
+    }
+  };
 
   return (
     <SubCard title="Domains">
@@ -913,32 +976,390 @@ function DomainsTab({
             </div>
           </div>
         )}
-        {customDomains?.map((d) => (
-          <div
-            key={d.domain}
-            className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3"
-          >
-            <div className="flex items-center gap-2">
-              <Globe className="h-3.5 w-3.5 shrink-0 text-[color:var(--ol-success)]" />
-              <span className="ol-mono min-w-0 flex-1 truncate text-[12px] text-[color:var(--ol-fg)]">
-                {d.domain}
-              </span>
-              <span className="shrink-0 rounded-full bg-[color:var(--ol-success-soft)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-success)]">
-                Custom
-              </span>
-            </div>
-          </div>
+        {domains?.map((d) => (
+          <DomainRow
+            key={d.id}
+            domain={d}
+            onDelete={() => setDeleteTarget(d)}
+            t={t}
+            disabled={busy}
+          />
         ))}
-        {!service.url && customDomains !== null && customDomains.length === 0 && (
+        {!service.url && domains !== null && domains.length === 0 && !externalMode && (
           <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
             {t('projectDetail.domains.empty')}
           </p>
         )}
+        {externalMode && (
+          <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
+            {t('projectDetail.domains.emptyExternal')}
+          </p>
+        )}
       </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setShowAdd(true)}
+          disabled={externalMode || busy || !projectId}
+          className="inline-flex items-center gap-2 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--ol-primary-fg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          title={externalMode ? t('projectDetail.domains.emptyExternal') : undefined}
+        >
+          <Plus className="h-3 w-3" />
+          {t('projectDetail.domains.add')}
+        </button>
+        {feedback && (
+          <span
+            className={cn(
+              'text-[12px]',
+              feedback.kind === 'ok'
+                ? 'text-[color:var(--ol-success)]'
+                : 'text-[color:var(--ol-danger)]',
+            )}
+          >
+            {feedback.msg}
+          </span>
+        )}
+      </div>
+
       <p className="mt-2.5 text-[11.5px] text-[color:var(--ol-fg-muted)]">
-        {t('projectDetail.domains.readOnlyHint')}
+        {t('projectDetail.domains.tlsHint')}
       </p>
+      <p className="mt-1 text-[11.5px] text-[color:var(--ol-fg-muted)]">
+        {t('projectDetail.domains.dnsHint')}
+      </p>
+
+      <AddDomainDialog
+        open={showAdd}
+        onOpenChange={(open) => setShowAdd(open)}
+        onSubmit={handleAdd}
+        defaultPort={service.port ?? null}
+        t={t}
+        busy={busy}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={
+          deleteTarget
+            ? `${t('projectDetail.domains.delete.title')} — ${deleteTarget.domain}${
+                deleteTarget.pathPrefix === '/' ? '' : ' ' + deleteTarget.pathPrefix
+              }`
+            : t('projectDetail.domains.delete.title')
+        }
+        description={t('projectDetail.domains.delete.description')}
+        confirmLabel={t('projectDetail.domains.delete.confirm')}
+        cancelLabel={t('projectDetail.domains.delete.cancel')}
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
     </SubCard>
+  );
+}
+
+function DomainRow({
+  domain,
+  onDelete,
+  t,
+  disabled,
+}: {
+  domain: DomainMapping;
+  onDelete: () => void;
+  t: ReturnType<typeof useLanguage>['t'];
+  disabled: boolean;
+}) {
+  const displayUrl = buildDomainUrl(domain);
+  const statusKey = `projectDetail.domains.status.${domain.status}` as
+    | 'projectDetail.domains.status.active'
+    | 'projectDetail.domains.status.pending'
+    | 'projectDetail.domains.status.error';
+  const statusColor =
+    domain.status === 'active'
+      ? 'var(--ol-success)'
+      : domain.status === 'error'
+        ? 'var(--ol-danger)'
+        : 'var(--ol-warning)';
+  return (
+    <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3">
+      <div className="flex items-center gap-2">
+        <Globe className="h-3.5 w-3.5 shrink-0" style={{ color: statusColor }} />
+        <span className="ol-mono min-w-0 flex-1 truncate text-[12px] text-[color:var(--ol-fg)]">
+          {displayUrl}
+        </span>
+        {domain.legacyWarning && (
+          <span
+            className="shrink-0 rounded-full bg-[color:var(--ol-warning-soft)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-warning)]"
+            title={t('projectDetail.domains.legacyTooltip')}
+          >
+            {t('projectDetail.domains.legacyBadge')}
+          </span>
+        )}
+        <span
+          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+          style={{ color: statusColor, backgroundColor: 'var(--ol-panel)' }}
+        >
+          {t(statusKey)}
+        </span>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={disabled}
+          aria-label="Remove domain"
+          className="shrink-0 rounded-md p-1 text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-danger)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AddDomainDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+  defaultPort,
+  t,
+  busy,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (body: CreateDomainBody) => Promise<DomainApiError | null>;
+  defaultPort: number | null;
+  t: ReturnType<typeof useLanguage>['t'];
+  busy: boolean;
+}) {
+  const [domainValue, setDomainValue] = useState('');
+  const [pathValue, setPathValue] = useState('/');
+  const [stripPrefix, setStripPrefix] = useState(false);
+  const [upstreamPath, setUpstreamPath] = useState('');
+  const [targetPort, setTargetPort] = useState('');
+  const [advanced, setAdvanced] = useState(false);
+  const [fieldError, setFieldError] = useState<{ field?: string; msg: string } | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setDomainValue('');
+      setPathValue('/');
+      setStripPrefix(false);
+      setUpstreamPath('');
+      setTargetPort('');
+      setAdvanced(false);
+      setFieldError(null);
+    }
+  }, [open]);
+
+  function validate(): CreateDomainBody | null {
+    const domain = domainValue.trim().toLowerCase();
+    if (!domain) {
+      setFieldError({ field: 'domain', msg: t('projectDetail.domains.error.missingDomain') });
+      return null;
+    }
+    if (!/^[a-z0-9]([a-z0-9-.]*[a-z0-9])?$/.test(domain) || !domain.includes('.')) {
+      setFieldError({ field: 'domain', msg: t('projectDetail.domains.error.invalidDomain') });
+      return null;
+    }
+    const path = pathValue.trim() || '/';
+    if (!path.startsWith('/')) {
+      setFieldError({ field: 'path', msg: t('projectDetail.domains.error.invalidPath') });
+      return null;
+    }
+    let upstream: string | null = null;
+    if (upstreamPath.trim()) {
+      if (!upstreamPath.trim().startsWith('/')) {
+        setFieldError({ field: 'upstream', msg: t('projectDetail.domains.error.invalidPath') });
+        return null;
+      }
+      upstream = upstreamPath.trim();
+    }
+    let port: number | null = null;
+    if (targetPort.trim()) {
+      const n = Number(targetPort);
+      if (!Number.isInteger(n) || n < 1 || n > 65535) {
+        setFieldError({ field: 'port', msg: t('projectDetail.domains.error.invalidPort') });
+        return null;
+      }
+      port = n;
+    }
+    setFieldError(null);
+    return {
+      domain,
+      pathPrefix: path,
+      stripPrefix,
+      upstreamPathPrefix: upstream,
+      targetPort: port,
+    };
+  }
+
+  function mapServerError(err: DomainApiError) {
+    if (err.code === 'DOMAIN_ROUTE_EXISTS') {
+      setFieldError({ field: 'domain', msg: t('projectDetail.domains.error.duplicate') });
+      return;
+    }
+    if (err.code === 'DOMAIN_ROUTING_DISABLED') {
+      setFieldError({ msg: t('projectDetail.domains.toast.routingDisabled') });
+      return;
+    }
+    if (err.code === 'INVALID_SERVICE_KIND') {
+      setFieldError({ msg: t('projectDetail.domains.error.invalidServiceKind') });
+      return;
+    }
+    if (err.code === 'SERVICE_SELECTION_REQUIRED') {
+      setFieldError({ msg: t('projectDetail.domains.error.serviceSelectionRequired') });
+      return;
+    }
+    if (err.code === 'MISSING_FIELD') {
+      setFieldError({ field: 'domain', msg: t('projectDetail.domains.error.missingDomain') });
+      return;
+    }
+    if (err.status === 404) {
+      setFieldError({ msg: t('projectDetail.domains.error.notFound') });
+      return;
+    }
+    // INVALID_FIELD or unknown — surface backend message
+    setFieldError({ msg: err.message || t('projectDetail.domains.error.serverError') });
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    const body = validate();
+    if (!body) return;
+    const err = await onSubmit(body);
+    if (err) mapServerError(err);
+  }
+
+  const portPlaceholder = defaultPort
+    ? t('projectDetail.domains.dialog.targetPortPlaceholder').replace('{port}', String(defaultPort))
+    : t('projectDetail.domains.dialog.targetPortPlaceholderNone');
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t('projectDetail.domains.dialog.title')}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3 pt-2">
+          <label className="flex flex-col gap-1 text-[12px]">
+            <span className="text-[color:var(--ol-fg-muted)]">
+              {t('projectDetail.domains.dialog.domain')}
+            </span>
+            <input
+              type="text"
+              value={domainValue}
+              onChange={(e) => setDomainValue(e.target.value)}
+              placeholder={t('projectDetail.domains.dialog.domainPlaceholder')}
+              className={cn(
+                'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
+                fieldError?.field === 'domain'
+                  ? 'border-[color:var(--ol-danger)]'
+                  : 'border-[color:var(--ol-border-subtle)]',
+              )}
+              autoFocus
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-[12px]">
+            <span className="text-[color:var(--ol-fg-muted)]">
+              {t('projectDetail.domains.dialog.path')}
+            </span>
+            <input
+              type="text"
+              value={pathValue}
+              onChange={(e) => setPathValue(e.target.value)}
+              placeholder="/"
+              className={cn(
+                'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
+                fieldError?.field === 'path'
+                  ? 'border-[color:var(--ol-danger)]'
+                  : 'border-[color:var(--ol-border-subtle)]',
+              )}
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={() => setAdvanced((v) => !v)}
+            className="self-start text-[11.5px] text-[color:var(--ol-fg-muted)] underline-offset-2 hover:underline"
+          >
+            {advanced ? '▾' : '▸'} {t('projectDetail.domains.dialog.advanced')}
+          </button>
+
+          {advanced && (
+            <div className="flex flex-col gap-3 border-l-2 border-[color:var(--ol-border-subtle)] pl-3">
+              <label className="flex items-center gap-2 text-[12px]">
+                <input
+                  type="checkbox"
+                  checked={stripPrefix}
+                  onChange={(e) => setStripPrefix(e.target.checked)}
+                />
+                <span>{t('projectDetail.domains.dialog.stripPrefix')}</span>
+              </label>
+              <label className="flex flex-col gap-1 text-[12px]">
+                <span className="text-[color:var(--ol-fg-muted)]">
+                  {t('projectDetail.domains.dialog.upstreamPathPrefix')}
+                </span>
+                <input
+                  type="text"
+                  value={upstreamPath}
+                  onChange={(e) => setUpstreamPath(e.target.value)}
+                  placeholder={t('projectDetail.domains.dialog.upstreamPathPlaceholder')}
+                  className={cn(
+                    'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
+                    fieldError?.field === 'upstream'
+                      ? 'border-[color:var(--ol-danger)]'
+                      : 'border-[color:var(--ol-border-subtle)]',
+                  )}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-[12px]">
+                <span className="text-[color:var(--ol-fg-muted)]">
+                  {t('projectDetail.domains.dialog.targetPort')}
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={targetPort}
+                  onChange={(e) => setTargetPort(e.target.value)}
+                  placeholder={portPlaceholder}
+                  className={cn(
+                    'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
+                    fieldError?.field === 'port'
+                      ? 'border-[color:var(--ol-danger)]'
+                      : 'border-[color:var(--ol-border-subtle)]',
+                  )}
+                />
+              </label>
+            </div>
+          )}
+
+          {fieldError && (
+            <p className="text-[11.5px] text-[color:var(--ol-danger)]">{fieldError.msg}</p>
+          )}
+
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-1.5 text-[12px]"
+            >
+              {t('projectDetail.domains.dialog.cancel')}
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="inline-flex items-center gap-2 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--ol-primary-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              {busy
+                ? t('projectDetail.domains.dialog.submitting')
+                : t('projectDetail.domains.dialog.submit')}
+            </button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
