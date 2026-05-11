@@ -589,8 +589,10 @@ export const translations = {
     },
   },
   services: {
-    title: '서비스',
-    createService: '서비스 생성',
+    // Chrome — page title + primary action.
+    title: 'Services',
+    createService: 'Create service',
+    // Content — descriptive copy + empty states + format strings.
     subtitle:
       'Docker 이미지를 공유 인프라로 실행합니다. 여러 프로젝트가 이 서비스에 연결할 수 있습니다.',
     noServices: '실행 중인 서비스 없음',
@@ -602,30 +604,36 @@ export const translations = {
     createdAgo: '{time} 전',
     updatedAgo: '{time} 전에 업데이트',
     metrics: {
-      health: '상태',
-      uptime: '가동 시간',
-      restarts: '재시작',
+      // Chrome — KPI labels.
+      health: 'Health',
+      uptime: 'Uptime',
+      restarts: 'Restarts',
     },
     health: {
-      healthy: '정상',
-      unhealthy: '비정상',
-      starting: '시작 중',
+      // Chrome — status pills.
+      healthy: 'healthy',
+      unhealthy: 'unhealthy',
+      starting: 'starting',
     },
     status: {
-      running: '실행 중',
-      stopped: '중지됨',
-      error: '오류',
+      // Chrome — status pills.
+      running: 'running',
+      stopped: 'stopped',
+      error: 'error',
     },
     detail: {
+      // Content — empty state.
       notFound: '서비스를 찾을 수 없습니다',
       tabs: {
-        overview: '개요',
-        connection: '연결',
-        databases: '데이터베이스',
-        logs: '로그',
-        settings: '설정',
+        // Chrome — nav tabs.
+        overview: 'Overview',
+        connection: 'Connection',
+        databases: 'Databases',
+        logs: 'Logs',
+        settings: 'Settings',
       },
       toasts: {
+        // Content — toast prose.
         started: '서비스가 시작되었습니다',
         stopped: '서비스가 중지되었습니다',
         deleted: '서비스가 삭제되었습니다',
@@ -634,11 +642,15 @@ export const translations = {
         deleteFailed: '서비스 삭제에 실패했습니다',
       },
       header: {
-        backToServices: '서비스 목록으로',
-        start: '시작',
-        stop: '중지',
-        delete: '삭제',
+        // Chrome — back link + action buttons.
+        backToServices: 'Back to services',
+        start: 'Start',
+        stop: 'Stop',
+        delete: 'Delete',
       },
+      // Chrome — refresh button.
+      refresh: 'Refresh',
+      // Content — loading / empty / format strings.
       loadingDatabases: '데이터베이스 로딩 중...',
       serviceIsStopped: '서비스가 중지되었습니다',
       serviceStoppedHint: '로그를 보려면 서비스를 시작하세요.',
@@ -648,17 +660,18 @@ export const translations = {
       selectVersion: '버전 선택',
       loadingLogs: '로그 로딩 중...',
       noLogsAvailable: '표시할 로그가 없습니다',
-      refresh: '새로고침',
       linesCount: '{count}줄',
       overview: {
-        status: '상태',
-        container: '컨테이너',
+        // Chrome — KPI tile labels.
+        status: 'Status',
+        container: 'Container',
         cpu: 'CPU',
-        memory: '메모리',
-        network: '네트워크',
-        volume: '볼륨',
-        connections: '연결',
-        connectedProjects: '연결된 프로젝트',
+        memory: 'Memory',
+        network: 'Network',
+        volume: 'Volume',
+        connections: 'Connections',
+        connectedProjects: 'Connected projects',
+        // Content — loading + format strings.
         loading: '로딩 중...',
         na: '없음',
         portLabel: '포트 {port}',
@@ -666,6 +679,7 @@ export const translations = {
       },
     },
     empty: {
+      // Content — empty state.
       title: '서비스가 없습니다',
       description: '데이터베이스, 캐시 또는 기타 인프라 서비스를 생성하세요',
     },
@@ -719,14 +733,16 @@ export const translations = {
     },
   },
   share: {
-    title: '프로젝트 공유',
-    accessCode: '접근 코드',
+    // Chrome — modal title + form label + buttons.
+    title: 'Share project',
+    accessCode: 'Access code',
+    generate: 'Generate',
+    shareButton: 'Share via access code',
+    stopSharing: 'Stop sharing',
+    copyInvitation: 'Copy invitation',
+    copied: 'Copied!',
+    // Content — hints and notices.
     accessCodeHint: '최소 4자. 이 코드가 있으면 누구나 프로젝트에 접근할 수 있습니다.',
-    generate: '생성',
-    shareButton: '접근 코드로 공유',
-    stopSharing: '공유 중지',
-    copyInvitation: '초대 복사',
-    copied: '복사됨!',
     alreadyShared: '이 프로젝트는 현재 공유 중입니다.',
     notRunning: '공유하려면 프로젝트가 실행 중이어야 합니다.',
   },
@@ -779,11 +795,13 @@ export const translations = {
     terminalReconnect: '셸 다시 연결',
   },
   command: {
+    // Chrome — command palette entries (action labels).
+    noResults: 'No results',
+    deployNewRepo: 'Deploy new repo',
+    triggerFreshDeploy: 'Trigger fresh deploy',
+    stopContainer: 'Stop running container',
+    // Content — placeholder hint.
     searchPlaceholder: '명령어 입력 또는 검색...',
-    noResults: '결과가 없습니다',
-    deployNewRepo: '새 레포지토리 배포',
-    triggerFreshDeploy: '새 배포 트리거',
-    stopContainer: '실행 중인 컨테이너 중지',
   },
   oauth: {
     startFailed: '인증 시작 실패',
@@ -804,75 +822,87 @@ export const translations = {
   },
   project: {
     tabs: {
-      overview: '개요',
-      deployments: '배포',
-      recovery: '복구',
-      runtime: '런타임',
-      settings: '설정',
+      // Chrome — primary nav tabs.
+      overview: 'Overview',
+      deployments: 'Deployments',
+      recovery: 'Recovery',
+      runtime: 'Runtime',
+      settings: 'Settings',
     },
     confirm: {
+      // Chrome — modal buttons.
+      confirm: 'Confirm',
+      cancel: 'Cancel',
+      // Content — confirmation prose.
       stopTitle: '프로젝트 중지',
       stopDescription: '이 프로젝트를 중지하시겠습니까?',
       deleteTitle: '프로젝트 삭제',
       deleteDescription: '이 프로젝트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
-      confirm: '확인',
-      cancel: '취소',
     },
     header: {
       status: {
-        live: '실행 중',
-        stopped: '중지됨',
-        deploying: '배포 중',
-        pulling: '이미지 받는 중',
-        failed: '실패',
-        idle: '대기',
+        // Chrome — status pills.
+        live: 'Live',
+        stopped: 'Stopped',
+        deploying: 'Deploying',
+        pulling: 'Pulling image',
+        failed: 'Failed',
+        idle: 'Idle',
       },
       action: {
-        deploy: '배포',
-        deploying: '배포 중...',
-        pulling: '이미지 받는 중...',
-        start: '시작',
-        redeploy: '재배포',
-        pullRestart: '이미지 갱신 및 재시작',
-        stop: '중지',
-        rollback: '롤백',
-        blueGreen: '블루-그린 배포',
-        more: '더 많은 작업',
+        // Chrome — action buttons.
+        deploy: 'Deploy',
+        deploying: 'Deploying...',
+        pulling: 'Pulling image...',
+        start: 'Start',
+        redeploy: 'Redeploy',
+        pullRestart: 'Pull & restart',
+        stop: 'Stop',
+        rollback: 'Rollback',
+        blueGreen: 'Blue-green deploy',
+        more: 'More actions',
+        // Content — tooltip prose (hover, descriptive).
         aiPipelineTooltip: 'OpenLander가 배포 파이프라인을 처리합니다',
         pipelineTooltip: 'OpenLander가 배포 파이프라인을 처리합니다',
       },
       share: {
-        share: '공유',
-        shared: '공유됨',
-        exposed: '공개됨',
+        // Chrome — buttons + status.
+        share: 'Share',
+        shared: 'Shared',
+        exposed: 'Exposed',
       },
     },
-    disconnectService: '서비스 연결 해제',
-    copyUrl: 'URL 복사',
+    // Chrome — action labels.
+    disconnectService: 'Disconnect service',
+    copyUrl: 'Copy URL',
   },
   approval: {
     banner: {
+      // Chrome — field labels + buttons.
+      project: 'Project',
+      tool: 'Tool',
+      attempt: 'Attempt',
+      approve: 'Approve',
+      reject: 'Reject',
+      // Content — banner title + result + error text.
       title: '복구 승인 필요',
-      project: '프로젝트',
-      tool: '작업',
-      attempt: '시도',
-      approve: '승인',
-      reject: '거부',
       approved: '복구가 승인되었습니다',
       rejected: '복구가 거부되었습니다',
       error: '승인 처리에 실패했습니다',
       timedOut: '승인 시간 초과',
     },
     pendingStrip: {
+      // Chrome — source labels + buttons.
+      mcpSource: 'MCP',
+      recoverySource: 'Recovery',
+      details: 'Details:',
+      actor: 'Requested by:',
+      approve: 'Approve',
+      reject: 'Reject',
+      // Content — strip title + body + result + error + format.
       title: '에이전트 작업이 승인을 기다리고 있습니다',
       body: 'OpenLander가 실행하기 전에 위험 MCP 작업을 검토하세요.',
       loadWarning: '승인 대기 목록을 새로고침하지 못했습니다. 마지막으로 확인된 요청을 표시합니다.',
-      mcpSource: 'MCP',
-      recoverySource: '복구',
-      details: '대상:',
-      actor: '요청 주체:',
-      approve: '승인',
-      reject: '거부',
       approved: '승인을 보냈습니다',
       rejected: '거부를 보냈습니다',
       error: '승인 처리에 실패했습니다',
@@ -886,63 +916,74 @@ export const translations = {
   'ai-completed': '자동화 완료',
 
   recovery: {
-    incidentHistory: '장애/복구 기록',
+    // Chrome — section titles.
+    incidentHistory: 'Incident history',
+    postmortems: 'Postmortems',
+    pendingApprovals: 'Pending approvals',
+    activeRecovery: 'Active recovery',
+    // Content — empty states + format strings.
     noIncidents: '기록된 장애가 없습니다.',
-    postmortems: '장애 분석',
     noPostmortems:
       '성공적인 복구 후 보고서가 자동 생성됩니다. 메모리에 보관되며 서버 재시작 시 초기화됩니다.',
-    pendingApprovals: '대기 중인 승인',
     noApprovals: '대기 중인 승인 요청이 없습니다.',
-    activeRecovery: '진행 중인 복구',
     agentStep: '단계 {current}/{total}: {description}',
     agentStarted: '{time}에 시작됨',
     agentAnalyzing: '분석 중...',
   },
   recoveryTab: {
-    retry: '다시 시도',
-    approve: '승인',
-    reject: '거부',
-    postmortemReport: '장애 분석 보고서',
-    attempt: '시도',
+    // Chrome — buttons + labels.
+    retry: 'Retry',
+    approve: 'Approve',
+    reject: 'Reject',
+    postmortemReport: 'Postmortem report',
+    attempt: 'Attempt',
   },
   approvalsTab: {
+    // Chrome — labels + buttons.
+    requested: 'Requested',
+    approve: 'Approve',
+    reject: 'Reject',
+    // Content — empty state.
     noPendingApprovals: '대기 중인 승인이 없습니다',
     emptyMessage: '승인 요청이 검토가 필요할 때 여기에 표시됩니다.',
-    requested: '요청됨',
-    approve: '승인',
-    reject: '거부',
   },
   postmortemsTab: {
+    // Chrome — entry labels.
+    postmortem: 'Postmortem',
+    generated: 'Generated',
+    // Content — empty state.
     noPostmortems: '아직 장애 분석이 없습니다',
     emptyMessage:
       '성공적인 복구 후 보고서가 자동 생성됩니다. 메모리에 보관되며 서버 재시작 시 초기화됩니다.',
-    postmortem: '장애 분석',
-    generated: '생성됨',
   },
   patternsTab: {
+    // Chrome — table column labels.
+    patternType: 'Pattern type',
+    errorSignature: 'Error signature',
+    fixAction: 'Fix action',
+    successFailure: 'Success / failure',
+    lastSeen: 'Last seen',
+    unknown: 'Unknown',
+    // Content — empty state.
     noPatterns: '아직 학습된 패턴이 없습니다',
     emptyMessage: '플랫폼이 오류를 만나고 해결할 때마다 패턴이 누적됩니다.',
-    patternType: '패턴 유형',
-    errorSignature: '오류 서명',
-    fixAction: '수정 작업',
-    successFailure: '성공 / 실패',
-    lastSeen: '마지막 확인',
-    unknown: '알 수 없음',
   },
   usageTab: {
+    // Chrome — KPI + table column labels.
+    totalCost: 'Total cost',
+    totalTokens: 'Total tokens',
+    in: 'In',
+    out: 'Out',
+    totalCalls: 'Total calls',
+    recentActivity: 'Recent activity',
+    time: 'Time',
+    action: 'Action',
+    model: 'Model',
+    tokens: 'Tokens',
+    cost: 'Cost',
+    // Content — empty states.
     noUsage: '내장 사용 기록이 없습니다',
     emptyMessage: '이 기능이 활성화되면 사용 데이터가 표시됩니다.',
-    totalCost: '총 비용',
-    totalTokens: '총 토큰',
-    in: '입력',
-    out: '출력',
-    totalCalls: '총 호출',
-    recentActivity: '최근 활동',
-    time: '시간',
-    action: '작업',
-    model: '모델',
-    tokens: '토큰',
-    cost: '비용',
     noRecentActivity: '최근 활동이 없습니다',
   },
   mcpServer: {
