@@ -958,36 +958,42 @@ export const translations = {
     },
   },
   webServer: {
+    // Chrome — section title.
     title: 'Web Server',
+    // Content — descriptive copy.
     subtitle: '라우트와 포트 현황을 실시간으로 보여주는 읽기 전용 화면입니다.',
     dockerUnavailable: 'Docker가 응답하지 않습니다. 라우트와 포트 정보가 최신이 아닐 수 있습니다.',
     footer: '읽기 전용 · 라우트 편집은 v0.2에서 제공됩니다.',
     strip: {
-      proxy: '프록시',
-      routes: '라우트',
-      entrypoints: '엔트리포인트',
-      allHealthy: '모두 정상',
+      // Chrome — short labels + status pills.
+      proxy: 'Proxy',
+      routes: 'Routes',
+      entrypoints: 'Entrypoints',
+      allHealthy: 'all healthy',
+      unknown: 'status unavailable',
+      // Content — formatted display.
       issuesCount: '{count}건 이슈',
       lastReload: '{when} 재로드',
-      unknown: '상태 정보 없음',
     },
     proxy: {
-      checking: '확인 중…',
-      unknown: '알 수 없음',
+      // Chrome — status pills double as ProxyStatusCode log values.
+      checking: 'Checking…',
+      unknown: 'Unknown',
       // src/web/api/web-server-routes.ts의 `ProxyStatusCode` union과
       // 동기화. backend가 statusCode를 노출하지 않는 구버전(롤링 업그레이드
       // 중)에서는 free-form `proxy.status`를 그대로 폴백 렌더링합니다.
       statusCode: {
-        docker_unavailable: 'Docker 연결 불가',
-        no_proxy_managed: '프록시 미감지 · Traefik 자동 시작',
-        no_proxy_external: '프록시 미감지',
+        docker_unavailable: 'Docker unreachable',
+        no_proxy_managed: 'No proxy · OpenLander will start Traefik',
+        no_proxy_external: 'No proxy detected',
         traefik_managed: 'Traefik{versionLabel}',
-        traefik_external: 'Traefik{versionLabel} (외부)',
-        traefik_provider_disabled: 'Traefik · Docker 프로바이더 비활성화',
-        unsupported_proxy: '{type} (미통합)',
+        traefik_external: 'Traefik{versionLabel} (external)',
+        traefik_provider_disabled: 'Traefik · Docker provider disabled',
+        unsupported_proxy: '{type} (not integrated)',
       },
     },
     issues: {
+      // Content — formatted alert title + sentence-shape diagnostic codes.
       title: '라우트 이슈 {count}건이 감지되었습니다',
       codes: {
         service_not_running: '서비스가 실행 중이 아닙니다',
@@ -999,58 +1005,67 @@ export const translations = {
       },
     },
     routes: {
-      title: '라우트',
+      // Chrome — section title + table headers.
+      title: 'Routes',
+      col: {
+        host: 'Public host',
+        service: 'Service',
+        port: 'Port',
+        tls: 'TLS',
+        status: 'Status',
+      },
+      // Content — descriptive copy + loading / empty messages.
       subtitle: '서비스에 매핑된 공개 호스트입니다.',
       loading: '라우트를 불러오는 중…',
       loadFailed: '라우트를 불러오지 못했습니다.',
       empty: '아직 공개 라우트가 없습니다. 서비스가 외부에 노출되면 여기에 표시됩니다.',
-      col: {
-        host: '공개 호스트',
-        service: '서비스',
-        port: '포트',
-        tls: 'TLS',
-        status: '상태',
-      },
     },
     ports: {
-      title: '포트 할당',
+      // Chrome — section title + table headers + status pills.
+      title: 'Port allocation',
+      unmanaged: 'Unmanaged',
+      col: {
+        service: 'Service',
+        hostPort: 'Port',
+        environment: 'Environment',
+      },
+      env: {
+        production: 'production',
+        development: 'development',
+        outside: 'outside range',
+      },
+      // Content — summary + loading / empty messages.
       summary: '호스트 포트 {count}개가 사용 중',
       loading: '포트 할당을 불러오는 중…',
       loadFailed: '포트 할당을 불러오지 못했습니다.',
       empty: '아직 포트 할당이 없습니다.',
-      unmanaged: '비관리',
-      col: {
-        service: '서비스',
-        hostPort: '포트',
-        environment: '환경',
-      },
-      env: {
-        production: '프로덕션',
-        development: '개발',
-        outside: '범위 밖',
-      },
     },
     external: {
-      title: '외부 컨테이너',
+      // Chrome — section title.
+      title: 'External containers',
+      // Content — summary + loading / empty messages.
       summary: '호스트에서 {count}개 실행 중',
       empty: '감지되지 않음',
       loading: '외부 컨테이너를 불러오는 중…',
       loadFailed: '외부 컨테이너를 불러오지 못했습니다.',
     },
     tls: {
-      ok: '유효',
-      expiring: '만료 임박',
-      invalid: '유효하지 않음',
-      absent: 'TLS 없음',
-      unknown: '알 수 없음',
+      // Chrome — status pills.
+      ok: 'valid',
+      expiring: 'expires soon',
+      invalid: 'invalid',
+      absent: 'no TLS',
+      unknown: 'unknown',
     },
     status: {
-      healthy: '정상',
-      warning: '경고',
-      error: '오류',
-      inactive: '비활성',
+      // Chrome — status pills.
+      healthy: 'healthy',
+      warning: 'warning',
+      error: 'error',
+      inactive: 'inactive',
     },
     relative: {
+      // Content — relative time reads naturally in user's locale.
       justNow: '방금',
       minutes: '{count}분 전',
       hours: '{count}시간 전',

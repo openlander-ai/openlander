@@ -47,6 +47,24 @@ For normal 0.x patch/minor releases:
 npm run release
 ```
 
+For dogfood candidates, cut prerelease tags first and promote only after live
+QA is clean:
+
+```bash
+npm run release -- --preRelease=rc
+```
+
+Recommended flow:
+
+```text
+v0.1.1-rc.1 -> v0.1.1-rc.2 -> v0.1.1
+v0.1.2-rc.1 -> v0.1.2-rc.2 -> v0.1.2
+```
+
+Release candidates are GitHub prereleases. They publish immutable version tags
+plus the moving `rc` image tag, but they do not update `latest` or the
+`<major>.<minor>` image tag.
+
 For the first `v0.1.0` release, `package.json` is already at `0.1.0`. If
 release-it would otherwise increment the version, create the first tag manually
 after the full local gate passes:
@@ -66,11 +84,21 @@ Pushing `v*.*.*` triggers `.github/workflows/release-publish.yml`:
 4. Run `npm run test:coverage`.
 5. Run `npm pack --dry-run --json --ignore-scripts`.
 6. Build and push `Dockerfile.runtime` to GHCR for `linux/amd64` and
-   `linux/arm64` with tags:
-   - `ghcr.io/openlander-ai/openlander:<version>`
-   - `ghcr.io/openlander-ai/openlander:<major>.<minor>`
-   - `ghcr.io/openlander-ai/openlander:latest`
+   `linux/arm64`.
 7. Create the GitHub Release from the matching `CHANGELOG.md` section.
+
+Final releases push:
+
+- `ghcr.io/openlander-ai/openlander:<version>`
+- `ghcr.io/openlander-ai/openlander:<major>.<minor>`
+- `ghcr.io/openlander-ai/openlander:latest`
+
+Prereleases push:
+
+- `ghcr.io/openlander-ai/openlander:<version>`
+- `ghcr.io/openlander-ai/openlander:rc`
+
+Prereleases never move `latest`.
 
 ## Post-Release Verification
 
