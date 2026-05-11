@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.1-rc.1] — 2026-05-12
+
+Release candidate for the first 0.1 patch line. This RC focuses on custom
+domain routing, MCP/onboarding polish, release automation hardening, and public
+repository safety checks.
+
+### Added
+
+- Service-level custom domain management with database-backed mappings, path
+  prefixes, optional upstream prefixes, target-port overrides, and dynamic
+  Traefik config generation.
+- Domains tab UI for service detail pages, including add/delete flows and
+  advanced path/port controls.
+- Multi-vendor MCP client setup tabs and a clearer Your Agent surface.
+- Account popover language switching for Korean/English.
+- Public release secret scanning with gitleaks and documented branch-naming
+  policy.
+
+### Changed
+
+- Release publishing now supports release candidates without moving `latest`;
+  prerelease tags publish immutable version images plus the moving prerelease
+  channel tag.
+- CI workflows were throttled to reduce duplicate release-gate and scan runs.
+- Korean and English UI copy was swept across setup, navigation, project,
+  service, Web Server, MCP, and account surfaces.
+- Raw `npm run release` is guarded; maintainers must explicitly choose
+  `npm run release:rc` or `npm run release:final`.
+
+### Fixed
+
+- Custom domain routing now resolves by service id rather than project id, which
+  keeps multi-service project routing correct.
+- v0.1 baseline migration guards now fail fast on incompatible pre-public
+  dogfood databases and are covered by integration tests.
+- Setup password minimum was lowered to eight characters.
+
 ## [0.1.0] — 2026-05-09
 
 First public release.
