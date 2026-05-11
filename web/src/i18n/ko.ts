@@ -82,48 +82,57 @@ export const translations = {
   activity: {
     filter: {
       type: {
-        label: '유형',
-        all: '전체',
-        deploy: '배포',
-        config: '설정 변경',
-        crash: '충돌',
+        // Chrome — filter chip labels.
+        label: 'Type',
+        all: 'All',
+        deploy: 'Deploys',
+        config: 'Config',
+        crash: 'Crashes',
         mcp: 'MCP',
       },
     },
   },
   overview: {
-    title: '개요',
+    // Chrome — page title + KPI tile labels.
+    title: 'Overview',
     kpi: {
-      activeDeploys: '진행중인 배포',
-      recoveries: '복구',
-      approvals: '승인 대기',
-      incidents: '장애',
-      services: '비정상 서비스',
-      aiSpend: 'AI 사용량',
+      activeDeploys: 'Active Deploys',
+      recoveries: 'Recoveries',
+      approvals: 'Approvals',
+      incidents: 'Alerts',
+      services: 'Unhealthy Services',
+      aiSpend: 'AI Spend',
     },
     activity: {
-      title: '실시간 활동',
+      // Chrome — section title.
+      title: 'Live Activity',
+      // Content — empty state + formatted display.
       empty: '아직 활동이 없습니다.',
       timeAgo: '{time} 전',
     },
     attention: {
-      title: '주의 필요',
+      // Chrome — section title.
+      title: 'Needs Attention',
+      // Content — empty state + formatted display.
       empty: '모든 시스템이 정상입니다.',
       projectError: '{name} 배포 실패',
       pendingApprovals: '{count}개의 승인 대기',
       unhealthyServices: '{count}개의 비정상 서비스',
     },
     health: {
-      title: '프로젝트 상태',
+      // Chrome — section title.
+      title: 'Project Health',
     },
+    // Content — empty state.
     empty: '아직 활동이 없습니다. 첫 번째 프로젝트를 배포하여 실시간 업데이트를 확인하세요.',
   },
   pulse: {
-    deploying: '배포 중',
-    recovery: '복구 중',
-    approval: '승인 대기',
-    incidents: '장애',
-    aiSpend: 'AI 비용',
+    // Chrome — status pills.
+    deploying: 'Deploying',
+    recovery: 'Recovery',
+    approval: 'Approval',
+    incidents: 'Alerts',
+    aiSpend: 'AI Spend',
   },
   setup: {
     welcome: {
@@ -194,9 +203,14 @@ export const translations = {
     },
   },
   notifications: {
-    title: '알림',
+    // Chrome — section title.
+    title: 'Notifications',
+    // Content — empty state.
     empty: '알림이 없습니다',
     type: {
+      // Content — sentence-shape notification kind labels read more clearly
+      // in Korean (these are descriptive diagnostic categories, not pill
+      // statuses).
       'container-crash': '컨테이너 시작 실패',
       'restart-loop': '재시작 루프',
       'resource-saturation': '리소스 할당량 초과',
@@ -207,11 +221,12 @@ export const translations = {
       'orphan-container': '고아 컨테이너',
     },
     action: {
-      view_logs: '로그 보기',
-      view_stats: '상세 보기',
-      cleanup_disk: '정리하기',
-      cleanup_images: '정리하기',
-      view_details: '상세 보기',
+      // Chrome — action buttons.
+      view_logs: 'View Logs',
+      view_stats: 'View Details',
+      cleanup_disk: 'Clean Up',
+      cleanup_images: 'Clean Up',
+      view_details: 'View Details',
     },
   },
   newProject: {
