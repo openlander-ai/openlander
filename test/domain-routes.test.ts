@@ -247,43 +247,38 @@ describe('createDomainRoutes', () => {
     expect(db.createDomainMappingForService).not.toHaveBeenCalled();
   });
 
-  it('rejects URL-shaped, wildcard, and non-public domains', async () => {
+  it.each([
+    ['URL-shaped', 'https://api.example.com/path'],
+    ['wildcard', '*.example.com'],
+    ['localhost', 'localhost'],
+    ['.local', 'api.local'],
+    ['IPv4 literal', '192.168.1.1'],
+    ['port-suffixed', 'api.example.com:443'],
+  ])('rejects %s domains', async (_label, domain) => {
     const db = createDb();
-    const urlResponse = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains', {
+    const response = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ domain: 'https://api.example.com/path' }),
+      body: JSON.stringify({ domain }),
     });
-    const wildcardResponse = await createApp(db).request(
-      '/api/projects/proj-1/services/svc-1/domains',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: '*.example.com' }),
-      },
-    );
-    const localhostResponse = await createApp(db).request(
-      '/api/projects/proj-1/services/svc-1/domains',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: 'localhost' }),
-      },
-    );
-    const localResponse = await createApp(db).request(
-      '/api/projects/proj-1/services/svc-1/domains',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain: 'api.local' }),
-      },
-    );
 
-    expect(urlResponse.status).toBe(400);
-    expect(wildcardResponse.status).toBe(400);
-    expect(localhostResponse.status).toBe(400);
-    expect(localResponse.status).toBe(400);
+    expect(response.status).toBe(400);
     expect(db.createDomainMappingForService).not.toHaveBeenCalled();
+  });
+
+  it('normalizes IDN domains to ASCII punycode before storage', async () => {
+    const db = createDb();
+    const response = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain: '예시.example' }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(db.findDomainMappingByHostAndPath).toHaveBeenCalledWith('xn--vv4b11d.example', '/');
+    expect(db.createDomainMappingForService).toHaveBeenCalledWith(
+      expect.objectContaining({ domain: 'xn--vv4b11d.example' }),
+    );
   });
 
   it('rejects managed infrastructure services with an explicit kind error', async () => {

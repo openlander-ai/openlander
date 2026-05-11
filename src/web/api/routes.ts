@@ -52,6 +52,9 @@ function traefikObjectName(value: string): string {
 }
 
 function domainRouteObjectName(mappingId: string): string {
+  // Some legacy/generated mapping ids already carry a synthetic "domain-"
+  // prefix. Strip only that leading marker so Traefik object names do not
+  // become `domain-domain-*`.
   return traefikObjectName(mappingId.replace(/^domain[-_]+/i, ''));
 }
 

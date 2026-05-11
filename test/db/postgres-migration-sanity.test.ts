@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
+import { assertV01BaselineCompatible } from '../../src/db/index.js';
+import type { PostgresClient } from '../../src/db/drizzle.js';
 import {
   DRIZZLE_DIR,
   activeMigrationSqlFiles,
@@ -12,6 +14,65 @@ import {
   staticTableShapeFromSql,
   type StaticTableShape,
 } from './postgres-migration-helpers.js';
+
+interface FakeMigrationTable {
+  schema: string;
+  name: string;
+  rowCount: number;
+}
+
+interface FakePostgresState {
+  legacyMigrationAudit?: boolean;
+  legacyProjectsRepoUrl?: boolean;
+  migrationTables?: FakeMigrationTable[];
+}
+
+function quotedIdentifier(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+function createFakePostgresClient(state: FakePostgresState): PostgresClient {
+  const unsafe = async (sql: string, params: unknown[] = []): Promise<unknown[]> => {
+    if (sql.includes('to_regclass')) {
+      return [
+        {
+          exists:
+            params[0] === 'public.migration_0009_audit' && state.legacyMigrationAudit === true,
+        },
+      ];
+    }
+
+    if (sql.includes('information_schema.columns')) {
+      return [
+        {
+          exists:
+            params[0] === 'public' &&
+            params[1] === 'projects' &&
+            params[2] === 'repo_url' &&
+            state.legacyProjectsRepoUrl === true,
+        },
+      ];
+    }
+
+    if (sql.includes("c.relname = '__drizzle_migrations'")) {
+      return (state.migrationTables ?? []).map((table) => ({
+        schema: table.schema,
+        name: table.name,
+      }));
+    }
+
+    if (sql.includes('COUNT(*)::integer')) {
+      const table = (state.migrationTables ?? []).find((candidate) =>
+        sql.includes(`${quotedIdentifier(candidate.schema)}.${quotedIdentifier(candidate.name)}`),
+      );
+      return [{ count: table?.rowCount ?? 0 }];
+    }
+
+    throw new Error(`Unexpected fake SQL: ${sql}`);
+  };
+
+  return { unsafe } as unknown as PostgresClient;
+}
 
 const SQLITE_ONLY_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
   { label: 'PRAGMA', pattern: /\bPRAGMA\b/i },
@@ -161,15 +222,46 @@ describe('Postgres migration sanity gate', () => {
     expect(sql).toContain('"active_scope_project_id" text');
     expect(sql).toContain('CREATE TABLE "domain_mappings"');
     expect(sql).toContain('"target_port" integer');
+    expect(sql).toContain('CONSTRAINT "domain_mappings_path_prefix_check"');
     expect(sql).toContain('CONSTRAINT "domain_mappings_target_port_check"');
   });
 
-  it('fails fast on pre-0.1 migration histories instead of silently replaying the reset baseline', () => {
-    const source = readFileSync('src/db/index.ts', 'utf8');
+  it('allows a fresh database or already-applied single v0.1 baseline row', async () => {
+    await expect(
+      assertV01BaselineCompatible(createFakePostgresClient({})),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 1 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  });
 
-    expect(source).toContain('DATABASE_BASELINE_RESET_REQUIRED');
-    expect(source).toContain('public.migration_0009_audit');
-    expect(source).toContain('drizzle.__drizzle_migrations');
-    expect(source).toContain('drizzleMigrationCount > 1');
+  it.each([
+    ['legacy migration audit table', { legacyMigrationAudit: true } satisfies FakePostgresState],
+    ['legacy project runtime columns', { legacyProjectsRepoUrl: true } satisfies FakePostgresState],
+    [
+      'custom-schema drizzle migration history',
+      {
+        migrationTables: [
+          { schema: 'custom_migrations', name: '__drizzle_migrations', rowCount: 6 },
+        ],
+      } satisfies FakePostgresState,
+    ],
+    [
+      'public-schema drizzle migration history',
+      {
+        migrationTables: [{ schema: 'public', name: '__drizzle_migrations', rowCount: 2 }],
+      } satisfies FakePostgresState,
+    ],
+  ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {
+    await expect(
+      assertV01BaselineCompatible(createFakePostgresClient(state)),
+    ).rejects.toMatchObject({
+      code: 'DATABASE_BASELINE_RESET_REQUIRED',
+      statusCode: 500,
+    });
   });
 });

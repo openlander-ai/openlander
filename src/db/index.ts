@@ -80,26 +80,70 @@ async function relationExists(client: PostgresClient, relationName: string): Pro
   return rows[0]?.exists === true;
 }
 
-async function assertV01BaselineCompatible(client: PostgresClient): Promise<void> {
-  const hasLegacyMigrationAudit = await relationExists(client, 'public.migration_0009_audit');
-  const hasDrizzleMigrations = await relationExists(client, 'drizzle.__drizzle_migrations');
-  let drizzleMigrationCount = 0;
+async function columnExists(
+  client: PostgresClient,
+  schemaName: string,
+  tableName: string,
+  columnName: string,
+): Promise<boolean> {
+  const rows = (await client.unsafe(
+    `SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
+    ) AS "exists"`,
+    [schemaName, tableName, columnName],
+  )) as ReadonlyArray<{ exists: boolean }>;
+  return rows[0]?.exists === true;
+}
 
-  if (hasDrizzleMigrations) {
-    const rows = (await client.unsafe(
-      'SELECT COUNT(*)::integer AS "count" FROM drizzle.__drizzle_migrations',
+function quotePgIdentifier(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`;
+}
+
+async function listDrizzleMigrationTables(
+  client: PostgresClient,
+): Promise<Array<{ schema: string; name: string; rowCount: number }>> {
+  const rows = (await client.unsafe(
+    `SELECT n.nspname AS "schema", c.relname AS "name"
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE c.relname = '__drizzle_migrations'
+       AND c.relkind IN ('r', 'p')
+       AND n.nspname NOT IN ('pg_catalog', 'information_schema')`,
+  )) as ReadonlyArray<{ schema: string; name: string }>;
+
+  const tables: Array<{ schema: string; name: string; rowCount: number }> = [];
+  for (const row of rows) {
+    const tableRef = `${quotePgIdentifier(row.schema)}.${quotePgIdentifier(row.name)}`;
+    const countRows = (await client.unsafe(
+      `SELECT COUNT(*)::integer AS "count" FROM ${tableRef}`,
     )) as ReadonlyArray<{ count: number }>;
-    drizzleMigrationCount = rows[0]?.count ?? 0;
+    tables.push({ schema: row.schema, name: row.name, rowCount: countRows[0]?.count ?? 0 });
   }
 
-  if (hasLegacyMigrationAudit || drizzleMigrationCount > 1) {
+  return tables;
+}
+
+export async function assertV01BaselineCompatible(client: PostgresClient): Promise<void> {
+  const hasLegacyMigrationAudit = await relationExists(client, 'public.migration_0009_audit');
+  const hasLegacyProjectsRepoUrl = await columnExists(client, 'public', 'projects', 'repo_url');
+  const migrationTables = await listDrizzleMigrationTables(client);
+  const drizzleMigrationCount = migrationTables.reduce((total, table) => total + table.rowCount, 0);
+
+  // The v0.1 public baseline records exactly one migration row after it has
+  // been applied. Pre-public histories carry 0001..0006+ rows, so any count
+  // above one means the database predates the baseline reset.
+  if (hasLegacyMigrationAudit || hasLegacyProjectsRepoUrl || drizzleMigrationCount > 1) {
     throw new OpenLanderError(
       'This database was initialized with a pre-0.1 OpenLander migration history. OpenLander 0.1 uses a fresh Postgres baseline; start with a fresh database or export/import data manually before booting this release.',
       'DATABASE_BASELINE_RESET_REQUIRED',
       500,
       {
         hasLegacyMigrationAudit,
+        hasLegacyProjectsRepoUrl,
         drizzleMigrationCount,
+        migrationTables,
         remediation:
           'Back up the old database, create a fresh OpenLander 0.1 Postgres volume, then re-create projects/services through the supported API.',
       },
@@ -183,6 +227,7 @@ export class Database implements AuthDatabase {
       await migrate(db, { migrationsFolder });
     } catch (err) {
       await client.end({ timeout: 5 }).catch((closeErr: unknown) => {
+        // postgres-js timeout is seconds, not milliseconds.
         log.warn({ err: closeErr }, 'Failed to close database client after migration failure');
       });
       throw err;

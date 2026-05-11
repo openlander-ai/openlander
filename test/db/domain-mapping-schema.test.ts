@@ -21,6 +21,9 @@ describe('domain mapping route schema', () => {
     expect(sql).toContain('"tls_resolver" text');
     expect(sql).toContain('"updated_at" text DEFAULT now()::text');
     expect(sql).toContain(
+      'CONSTRAINT "domain_mappings_path_prefix_check" CHECK ("domain_mappings"."path_prefix" LIKE \'/%\')',
+    );
+    expect(sql).toContain(
       'CONSTRAINT "domain_mappings_target_port_check" CHECK ("domain_mappings"."target_port" IS NULL OR ("domain_mappings"."target_port" >= 1 AND "domain_mappings"."target_port" <= 65535))',
     );
   });
