@@ -1,21 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 
-import type { Database, ProjectRow, ServiceRow } from '../src/db/index.js';
-import { eventBus } from '../src/events/index.js';
+import type { Database, DomainMappingRow, ProjectRow, ServiceRow } from '../src/db/index.js';
+import type { OpenLanderConfig } from '../src/config/index.js';
 import { createDomainRoutes } from '../src/web/api/domain-routes.js';
 
-async function waitFor(condition: () => boolean, timeoutMs = 1000): Promise<void> {
-  const start = Date.now();
-  while (!condition()) {
-    if (Date.now() - start > timeoutMs) {
-      throw new Error('Timed out waiting for async domain analysis');
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-}
-
-function createProjectRow(): ProjectRow {
+function createProjectRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
   return {
     id: 'proj-1',
     name: 'demo-project',
@@ -52,13 +42,14 @@ function createProjectRow(): ProjectRow {
     health_check_path: null,
     server_id: 'local',
     recovering_started_at: null,
+    ...overrides,
   };
 }
 
-function createServiceRow(projectId = 'proj-1'): ServiceRow {
+function createServiceRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
   return {
     id: 'svc-1',
-    project_id: projectId,
+    project_id: 'proj-1',
     name: 'demo-api',
     kind: 'git',
     parent_service_id: null,
@@ -94,325 +85,275 @@ function createServiceRow(projectId = 'proj-1'): ServiceRow {
     updated_at: '2026-01-01T00:00:00.000Z',
     archived_at: null,
     server_id: 'local',
+    ...overrides,
   };
 }
 
-type TimelineEvent = {
-  projectId: string;
-  type: string;
-  message?: string;
-  detail?: string;
-  severity?: string;
-  toolName?: string;
-};
+function createDomainMapping(overrides: Partial<DomainMappingRow> = {}): DomainMappingRow {
+  return {
+    id: 'dom-1',
+    service_id: 'svc-1',
+    project_id: 'proj-1',
+    domain: 'api.example.com',
+    cloudflare_zone_id: null,
+    cloudflare_dns_record_id: null,
+    status: 'active',
+    path_prefix: '/',
+    strip_prefix: false,
+    upstream_path_prefix: null,
+    target_port: null,
+    tls_enabled: false,
+    tls_resolver: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
 
 type DomainRouteDb = {
   getProject: ReturnType<typeof vi.fn>;
   getProjectByName: ReturnType<typeof vi.fn>;
   getService: ReturnType<typeof vi.fn>;
-  createTimelineEvent: ReturnType<typeof vi.fn>;
-  getTimelineEvents: ReturnType<typeof vi.fn>;
+  getDeployablesByGroup: ReturnType<typeof vi.fn>;
+  listDomainMappingsForService: ReturnType<typeof vi.fn>;
+  findDomainMappingByHostAndPath: ReturnType<typeof vi.fn>;
+  createDomainMappingForService: ReturnType<typeof vi.fn>;
+  deleteDomainMapping: ReturnType<typeof vi.fn>;
 };
 
-function createDomainRouteDb(): DomainRouteDb {
+function createConfig(mode: 'managed' | 'external' = 'managed'): OpenLanderConfig {
+  return { traefik: { mode } } as OpenLanderConfig;
+}
+
+function createDb(overrides: Partial<DomainRouteDb> = {}): DomainRouteDb {
   const project = createProjectRow();
-  const service = createServiceRow(project.id);
-  const timelineEvents: TimelineEvent[] = [];
+  const service = createServiceRow({ project_id: project.id });
+  const mappings = [createDomainMapping({ service_id: service.id, project_id: project.id })];
 
   return {
     getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
     getProjectByName: vi.fn(async (name: string) => (name === project.name ? project : undefined)),
     getService: vi.fn(async (id: string) => (id === service.id ? service : undefined)),
-    createTimelineEvent: vi.fn(async (event: TimelineEvent) => {
-      timelineEvents.unshift(event);
-      return event;
-    }),
-    getTimelineEvents: vi.fn((projectId: string) =>
-      timelineEvents.filter((event) => event.projectId === projectId),
+    getDeployablesByGroup: vi.fn(async (projectId: string) =>
+      projectId === project.id ? [service] : [],
     ),
+    listDomainMappingsForService: vi.fn(async (serviceId: string) =>
+      mappings.filter((mapping) => mapping.service_id === serviceId),
+    ),
+    findDomainMappingByHostAndPath: vi.fn(async () => undefined),
+    createDomainMappingForService: vi.fn(async (input: { id: string; serviceId: string; domain: string; pathPrefix?: string; stripPrefix?: boolean; upstreamPathPrefix?: string | null; targetPort?: number | null; }) =>
+      createDomainMapping({
+        id: input.id,
+        service_id: input.serviceId,
+        domain: input.domain,
+        path_prefix: input.pathPrefix ?? '/',
+        strip_prefix: input.stripPrefix ?? false,
+        upstream_path_prefix: input.upstreamPathPrefix ?? null,
+        target_port: input.targetPort ?? null,
+      }),
+    ),
+    deleteDomainMapping: vi.fn(async () => undefined),
+    ...overrides,
   };
 }
 
+function createApp(db: DomainRouteDb, config = createConfig()): Hono {
+  const app = new Hono();
+  app.route('/api', createDomainRoutes({ db: db as unknown as Database, config }));
+  return app;
+}
+
 describe('createDomainRoutes', () => {
-  let db: DomainRouteDb;
-
-  const cloudflare = {
-    createTunnel: vi.fn().mockResolvedValue(undefined),
-    createTunnelForService: vi.fn().mockResolvedValue(undefined),
-    removeTunnel: vi.fn().mockResolvedValue(undefined),
-    removeTunnelForService: vi.fn().mockResolvedValue(undefined),
-    listDomains: vi.fn().mockReturnValue(['api.example.com']),
-    listDomainsForService: vi.fn().mockReturnValue(['api.example.com']),
-  };
-
-  const traefik = {
-    start: vi.fn().mockResolvedValue(undefined),
-  };
-
-  const env = {
-    setBulk: vi.fn().mockReturnValue(true),
-  };
-
-  const pipeline = {
-    redeploy: vi.fn().mockResolvedValue({ success: true }),
-  };
-
-  const deployQueue = {
-    acquire: vi.fn().mockResolvedValue(() => {}),
-  };
-
-  const questionBridge = {
-    setActiveProject: vi.fn(),
-    ask: vi.fn(),
-  };
-
-  beforeEach(() => {
-    db = createDomainRouteDb();
-
-    cloudflare.createTunnel.mockClear();
-    cloudflare.createTunnelForService.mockClear();
-    cloudflare.removeTunnel.mockClear();
-    cloudflare.removeTunnelForService.mockClear();
-    cloudflare.listDomains.mockClear();
-    cloudflare.listDomainsForService.mockClear();
-    traefik.start.mockClear();
-    env.setBulk.mockClear();
-    pipeline.redeploy.mockClear();
-    questionBridge.setActiveProject.mockClear();
-    questionBridge.ask.mockClear();
-  });
-
-  afterEach(() => {
-    eventBus.clear();
-    vi.restoreAllMocks();
-  });
-
-  it('maps domain and skips post-add analysis when agent is null', async () => {
-    const app = new Hono();
-    app.route(
-      '/api',
-      createDomainRoutes({
-        db: db as unknown as Database,
-        cloudflare: cloudflare as never,
-        traefik: traefik as never,
-        agent: null,
-        env: env as never,
-        pipeline: pipeline as never,
-        questionBridge: questionBridge as never,
-        deployQueue: deployQueue as never,
-      }),
-    );
-
-    const response = await app.request('/api/projects/proj-1/domains', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ domain: 'https://api.example.com' }),
-    });
-
-    expect(response.status).toBe(201);
-    expect(cloudflare.createTunnel).toHaveBeenCalledWith('proj-1', 'api.example.com');
-    expect(questionBridge.ask).not.toHaveBeenCalled();
-    expect(env.setBulk).not.toHaveBeenCalled();
-    expect(pipeline.redeploy).not.toHaveBeenCalled();
-  });
-
-  it('lists service-scoped domains', async () => {
-    const app = new Hono();
-    app.route(
-      '/api',
-      createDomainRoutes({
-        db: db as unknown as Database,
-        cloudflare: cloudflare as never,
-        traefik: traefik as never,
-        agent: null,
-        env: env as never,
-        pipeline: pipeline as never,
-        questionBridge: questionBridge as never,
-        deployQueue: deployQueue as never,
-      }),
-    );
-
-    const response = await app.request('/api/projects/proj-1/services/svc-1/domains');
+  it('lists service-scoped domain mappings from the database', async () => {
+    const db = createDb();
+    const response = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains');
 
     expect(response.status).toBe(200);
-    expect(cloudflare.listDomainsForService).toHaveBeenCalledWith('svc-1');
+    expect(db.listDomainMappingsForService).toHaveBeenCalledWith('svc-1');
     await expect(response.json()).resolves.toMatchObject({
       projectId: 'proj-1',
       serviceId: 'svc-1',
       count: 1,
-      domains: ['api.example.com'],
+      domains: [
+        {
+          id: 'dom-1',
+          domain: 'api.example.com',
+          pathPrefix: '/',
+          stripPrefix: false,
+          tls: { enabled: false, status: 'absent' },
+        },
+      ],
     });
   });
 
-  it('maps service-scoped domain without project post-add analysis', async () => {
-    const app = new Hono();
-    app.route(
-      '/api',
-      createDomainRoutes({
-        db: db as unknown as Database,
-        cloudflare: cloudflare as never,
-        traefik: traefik as never,
-        agent: null,
-        env: env as never,
-        pipeline: pipeline as never,
-        questionBridge: questionBridge as never,
-        deployQueue: deployQueue as never,
+  it('creates service-scoped domain mappings without Cloudflare runtime calls', async () => {
+    const db = createDb();
+    const response = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        domain: 'API.Example.COM.',
+        pathPrefix: 'api/v1/',
+        stripPrefix: true,
+        upstreamPathPrefix: '/internal/',
+        targetPort: 8080,
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(db.findDomainMappingByHostAndPath).toHaveBeenCalledWith('api.example.com', '/api/v1');
+    expect(db.createDomainMappingForService).toHaveBeenCalledWith(
+      expect.objectContaining({
+        serviceId: 'svc-1',
+        domain: 'api.example.com',
+        status: 'active',
+        pathPrefix: '/api/v1',
+        stripPrefix: true,
+        upstreamPathPrefix: '/internal',
+        targetPort: 8080,
+        tlsEnabled: false,
+        tlsResolver: null,
       }),
     );
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'mapped',
+      projectId: 'proj-1',
+      serviceId: 'svc-1',
+      domain: { domain: 'api.example.com', pathPrefix: '/api/v1', targetPort: 8080 },
+    });
+  });
 
-    const response = await app.request('/api/projects/proj-1/services/svc-1/domains', {
+  it('rejects duplicate domain plus path mappings', async () => {
+    const existing = createDomainMapping({ id: 'existing', path_prefix: '/api' });
+    const db = createDb({ findDomainMappingByHostAndPath: vi.fn(async () => existing) });
+
+    const response = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain: 'api.example.com', pathPrefix: '/api' }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'DOMAIN_ROUTE_EXISTS' });
+    expect(db.createDomainMappingForService).not.toHaveBeenCalled();
+  });
+
+  it('rejects URL-shaped and wildcard domains', async () => {
+    const db = createDb();
+    const urlResponse = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ domain: 'https://api.example.com/path' }),
     });
+    const wildcardResponse = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain: '*.example.com' }),
+    });
 
-    expect(response.status).toBe(201);
-    expect(cloudflare.createTunnelForService).toHaveBeenCalledWith('svc-1', 'api.example.com');
-    expect(cloudflare.createTunnel).not.toHaveBeenCalled();
-    expect(questionBridge.ask).not.toHaveBeenCalled();
+    expect(urlResponse.status).toBe(400);
+    expect(wildcardResponse.status).toBe(400);
+    expect(db.createDomainMappingForService).not.toHaveBeenCalled();
   });
 
-  it('removes service-scoped domain', async () => {
-    const app = new Hono();
-    app.route(
-      '/api',
-      createDomainRoutes({
-        db: db as unknown as Database,
-        cloudflare: cloudflare as never,
-        traefik: traefik as never,
-        agent: null,
-        env: env as never,
-        pipeline: pipeline as never,
-        questionBridge: questionBridge as never,
-        deployQueue: deployQueue as never,
-      }),
-    );
-
-    const response = await app.request(
-      '/api/projects/proj-1/services/svc-1/domains/api.example.com',
+  it('blocks domain writes only when Traefik is explicitly external mode', async () => {
+    const db = createDb();
+    const response = await createApp(db, createConfig('external')).request(
+      '/api/projects/proj-1/services/svc-1/domains',
       {
-        method: 'DELETE',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: 'api.example.com' }),
       },
     );
 
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'DOMAIN_ROUTING_DISABLED' });
+    expect(db.createDomainMappingForService).not.toHaveBeenCalled();
+  });
+
+  it('deletes service-scoped domain mappings by id', async () => {
+    const db = createDb();
+    const response = await createApp(db).request('/api/projects/proj-1/services/svc-1/domains/dom-1', {
+      method: 'DELETE',
+    });
+
     expect(response.status).toBe(200);
-    expect(cloudflare.removeTunnelForService).toHaveBeenCalledWith('svc-1', 'api.example.com');
-    expect(cloudflare.removeTunnel).not.toHaveBeenCalled();
+    expect(db.deleteDomainMapping).toHaveBeenCalledWith('dom-1');
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'unmapped',
+      domain: { id: 'dom-1', domain: 'api.example.com' },
+      usedLegacyFallback: false,
+    });
   });
 
-  it('asks approval and redeploys when agent suggests URL env updates', async () => {
-    const agentEvents: string[] = [];
-    eventBus.on('agent:event', (payload) => {
-      if (payload.projectId === 'proj-1') {
-        agentEvents.push(payload.event.type);
-      }
+  it('keeps legacy delete-by-domain fallback only for root path mappings', async () => {
+    const root = createDomainMapping({ id: 'root', domain: 'api.example.com', path_prefix: '/' });
+    const api = createDomainMapping({ id: 'api', domain: 'api.example.com', path_prefix: '/api' });
+    const db = createDb({
+      listDomainMappingsForService: vi.fn(async () => [api, root]),
     });
 
-    const agent = {
-      chatStream: vi
-        .fn()
-        .mockImplementation(
-          async (_message: string, onEvent: (event: unknown) => Promise<void>) => {
-            await onEvent({ type: 'thinking' });
-            await onEvent({ type: 'tool_call', toolName: 'list_env_vars', arguments: {} });
-            await onEvent({
-              type: 'message',
-              content:
-                '{"needs_env_update":true,"reason":"public URL changed","env_updates":[{"key":"NEXT_PUBLIC_APP_URL","suggested":"https://api.example.com"}]}',
-            });
-            await onEvent({ type: 'done' });
-          },
-        ),
-    };
-
-    questionBridge.ask.mockResolvedValue([
-      { questionIndex: 0, selectedLabels: ['Approve and redeploy'] },
-    ]);
-
-    const app = new Hono();
-    app.route(
-      '/api',
-      createDomainRoutes({
-        db: db as unknown as Database,
-        cloudflare: cloudflare as never,
-        traefik: traefik as never,
-        agent: agent as never,
-        env: env as never,
-        pipeline: pipeline as never,
-        questionBridge: questionBridge as never,
-        deployQueue: deployQueue as never,
-      }),
+    const response = await createApp(db).request(
+      '/api/projects/proj-1/services/svc-1/domains/api.example.com',
+      { method: 'DELETE' },
     );
 
-    const response = await app.request('/api/projects/proj-1/domains', {
+    expect(response.status).toBe(200);
+    expect(db.deleteDomainMapping).toHaveBeenCalledWith('root');
+    await expect(response.json()).resolves.toMatchObject({ usedLegacyFallback: true });
+  });
+
+  it('aggregates project-scoped domain reads across deployables', async () => {
+    const services = [createServiceRow({ id: 'svc-1' }), createServiceRow({ id: 'svc-2', name: 'web' })];
+    const db = createDb({
+      getDeployablesByGroup: vi.fn(async () => services),
+      listDomainMappingsForService: vi.fn(async (serviceId: string) => [
+        createDomainMapping({ id: `${serviceId}-domain`, service_id: serviceId }),
+      ]),
+    });
+
+    const response = await createApp(db).request('/api/projects/proj-1/domains');
+
+    expect(response.status).toBe(200);
+    expect(db.listDomainMappingsForService).toHaveBeenCalledWith('svc-1');
+    expect(db.listDomainMappingsForService).toHaveBeenCalledWith('svc-2');
+    await expect(response.json()).resolves.toMatchObject({ count: 2 });
+  });
+
+  it('keeps project-scoped write compatibility for single-deployable projects', async () => {
+    const db = createDb();
+    const response = await createApp(db).request('/api/projects/proj-1/domains', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ domain: 'api.example.com' }),
     });
 
     expect(response.status).toBe(201);
-
-    await waitFor(() => questionBridge.ask.mock.calls.length === 1);
-
-    expect(agent.chatStream).toHaveBeenCalledOnce();
-    expect(agentEvents).toContain('thinking');
-    expect(agentEvents).toContain('tool_call');
-    expect(questionBridge.setActiveProject).toHaveBeenCalledWith('proj-1');
-    expect(questionBridge.setActiveProject).toHaveBeenCalledWith(null);
-    expect(env.setBulk).toHaveBeenCalledWith('proj-1', {
-      NEXT_PUBLIC_APP_URL: 'https://api.example.com',
-    });
-    expect(pipeline.redeploy).toHaveBeenCalledWith('proj-1');
-
-    const timelineTypes = db
-      .getTimelineEvents('proj-1')
-      .map((event) => event.type)
-      .slice(0, 12);
-    expect(timelineTypes).toContain('agent_tool_call');
-    expect(timelineTypes).toContain('question_pending');
+    expect(db.createDomainMappingForService).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceId: 'svc-1', domain: 'api.example.com' }),
+    );
   });
 
-  it('does not ask question when AI reports no env change needed', async () => {
-    const agent = {
-      chatStream: vi
-        .fn()
-        .mockImplementation(
-          async (_message: string, onEvent: (event: unknown) => Promise<void>) => {
-            await onEvent({
-              type: 'message',
-              content:
-                '{"needs_env_update":false,"reason":"no URL env var found","env_updates":[]}',
-            });
-            await onEvent({ type: 'done' });
-          },
-        ),
-    };
+  it('requires service selection for project-scoped writes on multi-deployable projects', async () => {
+    const db = createDb({
+      getDeployablesByGroup: vi.fn(async () => [
+        createServiceRow({ id: 'svc-1', name: 'api' }),
+        createServiceRow({ id: 'svc-2', name: 'web' }),
+      ]),
+    });
 
-    const app = new Hono();
-    app.route(
-      '/api',
-      createDomainRoutes({
-        db: db as unknown as Database,
-        cloudflare: cloudflare as never,
-        traefik: traefik as never,
-        agent: agent as never,
-        env: env as never,
-        pipeline: pipeline as never,
-        questionBridge: questionBridge as never,
-        deployQueue: deployQueue as never,
-      }),
-    );
-
-    const response = await app.request('/api/projects/proj-1/domains', {
+    const response = await createApp(db).request('/api/projects/proj-1/domains', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ domain: 'api.example.com' }),
     });
 
-    expect(response.status).toBe(201);
-    await waitFor(() => agent.chatStream.mock.calls.length === 1);
-    expect(questionBridge.ask).not.toHaveBeenCalled();
-    expect(env.setBulk).not.toHaveBeenCalled();
-    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'SERVICE_SELECTION_REQUIRED',
+      details: { candidates: [{ serviceId: 'svc-1' }, { serviceId: 'svc-2' }] },
+    });
+    expect(db.createDomainMappingForService).not.toHaveBeenCalled();
   });
 });
