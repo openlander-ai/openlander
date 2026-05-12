@@ -7,12 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1-rc.3] — 2026-05-12
+
+Release candidate with MCP deploy action vocabulary cleanup and token
+confirmation-dialog polish.
+
 ### Changed
 
 - **Breaking (MCP):** renamed `openlander_deploy.deploy` to
   `openlander_deploy.deploy_app` and `openlander_service.deploy_service` to
   `openlander_service.redeploy_app`. `create_service` remains the managed
   infrastructure action for databases, caches, and storage.
+
+### Fixed
+
+- Replaced the browser-native token regeneration confirmation with the
+  OpenLander `ConfirmDialog` so the token flow stays inside the dashboard UI.
 
 ## [0.1.1-rc.2] — 2026-05-12
 
