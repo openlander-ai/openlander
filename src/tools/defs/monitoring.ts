@@ -204,7 +204,7 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'diagnose_service',
     riskLevel: 'low',
     description:
-      'Diagnose a deployable app/worker service in one MCP call. Returns service/source summary, masked env key inventory, build-time env warnings, sanitized recent deployment status/log tail, container status, sanitized service logs, local HTTP probe, dependency probes, and recommended next actions. Use this after deploy_service or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior. For raw container logs only use get_logs; for full untruncated build output use get_build_log.',
+      'Diagnose a deployable app/worker service in one MCP call. Returns service/source summary, masked env key inventory, build-time env warnings, sanitized recent deployment status/log tail, container status, sanitized service logs, local HTTP probe, dependency probes, and recommended next actions. Use this after redeploy_app or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior. For raw container logs only use get_logs; for full untruncated build output use get_build_log.',
     mcpDescription:
       'One-shot service diagnostics after deploy/runtime failures. For raw logs use get_logs; for full build output use get_build_log.',
     inputSchema: diagnoseServiceSchema,
@@ -807,13 +807,13 @@ function buildDiagnoseNextSteps(input: {
   const suspected = input.buildDiagnostics['suspectedMissingBuildTimeKeys'];
   if (Array.isArray(suspected) && suspected.length > 0) {
     nextSteps.push(
-      `${suspected.join(', ')} is currently runtime-only. If the app reads it during Docker/Next build, change the app so build does not require the secret, or add an explicit safe build-time variable path before retrying deploy_service.`,
+      `${suspected.join(', ')} is currently runtime-only. If the app reads it during Docker/Next build, change the app so build does not require the secret, or add an explicit safe build-time variable path before retrying redeploy_app.`,
     );
   }
 
   if (input.container['running'] !== true) {
     nextSteps.push(
-      'Container is not running. Check recentDeployment.buildLogTail, then call deploy_service after fixing the cause.',
+      'Container is not running. Check recentDeployment.buildLogTail, then call redeploy_app after fixing the cause.',
     );
   } else if (input.httpCheck['reachable'] === false) {
     nextSteps.push(
@@ -827,7 +827,7 @@ function buildDiagnoseNextSteps(input: {
     depChecks.some((item) => asRecord(item)?.['reachable'] === false)
   ) {
     nextSteps.push(
-      'One or more declared dependency endpoints are unreachable from Docker. Fix service host/port/env values, then call deploy_service.',
+      'One or more declared dependency endpoints are unreachable from Docker. Fix service host/port/env values, then call redeploy_app.',
     );
   }
 
@@ -837,7 +837,7 @@ function buildDiagnoseNextSteps(input: {
     );
   }
   nextSteps.push(
-    'For existing services, use openlander_service.deploy_service. Use openlander_deploy.deploy only for creating a new app.',
+    'For existing services, use openlander_service.redeploy_app. Use openlander_deploy.deploy_app only for creating a new app.',
   );
   return nextSteps;
 }

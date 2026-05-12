@@ -75,7 +75,7 @@ Docker may run on a remote host. Always use tools, not local commands.
 
 ## openlander_deploy
 Deploy & build operations: plans, execution, rollbacks, previews, build logs, Git, infrastructure.
-Key actions: deploy, create_deploy_plan, execute_deploy_plan, get_deploy_status, rollback_service, get_build_log
+Key actions: deploy_app, create_deploy_plan, execute_deploy_plan, get_deploy_status, rollback_service, get_build_log
 All actions: action="help"
 
 ## openlander_project
@@ -85,7 +85,7 @@ All actions: action="help"
 
 ## openlander_service
 Deployable services (apps + workers): lifecycle, config, env vars, secrets, public exposure.
-Key actions: deploy_service, restart_service, set_env_vars, list_env_vars, archive_service, expose_public
+Key actions: redeploy_app, restart_service, set_env_vars, list_env_vars, archive_service, expose_public
 All actions: action="help"
 
 ## openlander_managed_service
@@ -99,19 +99,19 @@ Key actions: diagnose_service, get_logs, get_alerts, get_system_stats, get_proje
 All actions: action="help"
 
 ## Usage
-Example: openlander_deploy({ action: "deploy", params: { repo_url: "https://github.com/user/repo" } })
+Example: openlander_deploy({ action: "deploy_app", params: { repo_url: "https://github.com/user/repo" } })
 Example: openlander_project({ action: "help" })
 Example: openlander_managed_service({ action: "create_service", params: { name: "pg", template: "postgresql" } })
 Example: openlander_service({ action: "set_env_vars", params: { service_name: "app-web", variables: '{"DATABASE_URL":"..."}' } })
 
 ## Environment Variable Changes
 - Env vars belong to deployable services. Prefer service_id or service_name; project_name works only when the group has exactly one deployable service.
-- set_env_vars/delete_env_var save only by default. To apply to a running container, call deploy_service after the env change, or pass defer_redeploy=false for immediate apply.
+- set_env_vars/delete_env_var save only by default. To apply to a running container, call redeploy_app after the env change, or pass defer_redeploy=false for immediate apply.
 - list_env_vars masks values by default; pass reveal=true only when the user explicitly needs raw values for audit or migration.
 - export_env_vars returns raw .env text and should be used sparingly.
 
 ## Deploy Flow (ALWAYS follow for new projects)
-1. openlander_deploy({ action: "deploy", params: { repo_url: "...", name: "..." } })
+1. openlander_deploy({ action: "deploy_app", params: { repo_url: "...", name: "..." } })
 2. openlander_deploy({ action: "get_deploy_status", params: { project_name: "..." } })  ← poll until done
 3. openlander_project({ action: "list_projects" })  ← confirm running
 

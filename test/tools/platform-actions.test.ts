@@ -207,7 +207,7 @@ describe('platform-action tools', () => {
 
     expect(result.status).toBe('adopted');
     expect(result.service).toMatchObject({ name: 'flaresolverr', kind: 'image' });
-    expect(result.unsupported_operations).toContain('deploy_service');
+    expect(result.unsupported_operations).toContain('redeploy_app');
     expect(dbMocks.adoptService).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'flaresolverr',

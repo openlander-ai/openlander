@@ -12,7 +12,7 @@ function getTool(ctx: AppContext, name: string) {
 }
 
 describe('deploy MCP guidance', () => {
-  it('points existing project failures at deploy_service with a concrete service id', async () => {
+  it('points existing project failures at redeploy_app with a concrete service id', async () => {
     const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
     const service = {
       id: 'app__svc',
@@ -48,7 +48,7 @@ describe('deploy MCP guidance', () => {
       },
     } as unknown as AppContext;
 
-    const result = (await getTool(ctx, 'deploy').execute(
+    const result = (await getTool(ctx, 'deploy_app').execute(
       { repo_url: 'https://github.com/acme/app', name: 'app', wait: false },
       { target: 'mcp' },
     )) as Record<string, unknown>;
@@ -61,13 +61,13 @@ describe('deploy MCP guidance', () => {
       },
       suggested_call: {
         tool: 'openlander_service',
-        action: 'deploy_service',
+        action: 'redeploy_app',
         params: { service_id: 'app__svc' },
       },
     });
     expect(result._agent_guidance).toMatchObject({
       next_steps: expect.arrayContaining([
-        expect.stringContaining('openlander_service.deploy_service'),
+        expect.stringContaining('openlander_service.redeploy_app'),
       ]),
     });
   });

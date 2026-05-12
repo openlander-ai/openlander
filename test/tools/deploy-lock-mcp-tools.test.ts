@@ -114,7 +114,7 @@ function getTool(ctx: AppContext, name: string) {
 describe('BUG-002 MCP deploy tool lock guard', () => {
   it('deploy returns DEPLOY_LOCKED response when project lock is held', async () => {
     const ctx = createLockedContext();
-    const result = await getTool(ctx, 'deploy').execute(
+    const result = await getTool(ctx, 'deploy_app').execute(
       { repo_url: 'https://github.com/test/app' },
       { target: 'mcp' },
     );
@@ -132,9 +132,9 @@ describe('BUG-002 MCP deploy tool lock guard', () => {
     expect(ctx.planEngine.executePlan).not.toHaveBeenCalled();
   });
 
-  it('deploy_service returns DEPLOY_LOCKED response when project lock is held', async () => {
+  it('redeploy_app returns DEPLOY_LOCKED response when project lock is held', async () => {
     const ctx = createLockedContext();
-    const result = await getTool(ctx, 'deploy_service').execute(
+    const result = await getTool(ctx, 'redeploy_app').execute(
       { service_name: 'locked-api' },
       { target: 'mcp' },
     );

@@ -70,7 +70,7 @@ const FROZEN_MANAGED_SERVICE_ACTIONS = [
 
 const FROZEN_DEPLOYABLE_SERVICE_ACTIONS = [
   'restart_service',
-  'deploy_service',
+  'redeploy_app',
   'rollback_service',
   'archive_service',
   'unarchive_service',
@@ -104,7 +104,7 @@ describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () =
     expect(actions).toEqual([...FROZEN_DEPLOYABLE_SERVICE_ACTIONS]);
     expect(actions).toEqual(
       expect.arrayContaining([
-        'deploy_service',
+        'redeploy_app',
         'restart_service',
         'rollback_service',
         'archive_service',

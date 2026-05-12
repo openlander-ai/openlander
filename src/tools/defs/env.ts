@@ -355,9 +355,9 @@ export const envToolDefs: ToolDef[] = [
     name: 'set_env_vars',
     riskLevel: 'medium',
     description:
-      'Set environment variables for a deployable service. By default this saves only and does NOT redeploy; call deploy_service separately to apply to a running container, or pass defer_redeploy=false for immediate apply. variables must be a JSON string object with string values only; null is rejected. Returns { status, project, service, keys, changed, needs_redeploy }.',
+      'Set environment variables for a deployable service. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false for immediate apply. variables must be a JSON string object with string values only; null is rejected. Returns { status, project, service, keys, changed, needs_redeploy }.',
     mcpDescription:
-      'Set service-scoped env vars. Default saves only; call deploy_service to apply, or pass defer_redeploy=false.',
+      'Set service-scoped env vars. Default saves only; call redeploy_app to apply, or pass defer_redeploy=false.',
     inputSchema: setEnvVarsSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolveEnvTarget(args, appCtx);
@@ -429,7 +429,7 @@ export const envToolDefs: ToolDef[] = [
         needs_redeploy: redeploy.needsRedeploy,
         _agent_guidance: {
           next_steps: redeploy.needsRedeploy
-            ? ['Redeploy required: call deploy_service to apply env changes.']
+            ? ['Redeploy required: call redeploy_app to apply env changes.']
             : ['No redeploy required for these env changes.'],
         },
       };
@@ -464,8 +464,8 @@ export const envToolDefs: ToolDef[] = [
     name: 'delete_env_var',
     riskLevel: 'medium',
     description:
-      'Delete one service environment variable. By default this saves only and does NOT redeploy; call deploy_service separately to apply to a running container, or pass defer_redeploy=false.',
-    mcpDescription: 'Delete one service env var. Default saves only; call deploy_service to apply.',
+      'Delete one service environment variable. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false.',
+    mcpDescription: 'Delete one service env var. Default saves only; call redeploy_app to apply.',
     inputSchema: deleteEnvVarSchema,
     execute: async (args, { appCtx }) => {
       const key = args['key'] as string;
@@ -495,7 +495,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'bulk_delete_env_vars',
     riskLevel: 'high',
     description:
-      'Delete multiple service environment variables. Omitting confirm=true returns a dry-run preview only. By default confirmed deletes do NOT redeploy; call deploy_service separately to apply, or pass defer_redeploy=false.',
+      'Delete multiple service environment variables. Omitting confirm=true returns a dry-run preview only. By default confirmed deletes do NOT redeploy; call redeploy_app separately to apply, or pass defer_redeploy=false.',
     mcpDescription: 'Bulk delete service env vars with confirm-gated dry-run behavior.',
     inputSchema: bulkDeleteEnvVarsSchema,
     execute: async (args, { appCtx }) => {

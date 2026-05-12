@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking (MCP):** renamed `openlander_deploy.deploy` to
+  `openlander_deploy.deploy_app` and `openlander_service.deploy_service` to
+  `openlander_service.redeploy_app`. `create_service` remains the managed
+  infrastructure action for databases, caches, and storage.
+
 ## [0.1.1-rc.2] — 2026-05-12
 
 Release candidate with MCP diagnostics and post-rc.1 UI copy hardening.

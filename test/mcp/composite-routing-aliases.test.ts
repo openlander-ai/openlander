@@ -103,7 +103,7 @@ describe('openlander_service direct deployable runtime actions', () => {
     const byName = new Map(result.actions.map((action) => [action.name, action.description]));
 
     expect(byName.get('restart_service')).toContain('deployable app/worker service');
-    expect(byName.get('deploy_service')).toContain('deployable app/worker service');
+    expect(byName.get('redeploy_app')).toContain('deployable app/worker service');
     expect(byName.get('rollback_service')).toContain('deployable app/worker service');
     expect(byName.get('archive_service')).toContain('deployable app/worker service');
     expect(byName.get('unarchive_service')).toContain('deployable app/worker service');
@@ -111,7 +111,7 @@ describe('openlander_service direct deployable runtime actions', () => {
   });
 
   it('routes deployable service actions directly and validates service target params', async () => {
-    for (const action of ['deploy_service', 'restart_service', 'rollback_service'] as const) {
+    for (const action of ['redeploy_app', 'restart_service', 'rollback_service'] as const) {
       const result = (await tool.execute({ action, params: {} }, mockContext)) as Record<
         string,
         unknown
