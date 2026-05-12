@@ -347,6 +347,16 @@ describe('probe_host tool', () => {
 
 describe('diagnose_service tool', () => {
   it('summarizes masked env keys and flags runtime-only build-time errors', async () => {
+    const jwtFixture = [
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
+      'eyJzdWIiOiIxMjM0NTY3ODkwIn0',
+      'sflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
+    ].join('.');
+    const githubPatFixture = ['github', '_pat_', '11ABCDE1234567890abcdefTOKEN'].join('');
+    const ghpFixture = ['gh', 'p_', '1234567890abcdef1234567890abcdef1234'].join('');
+    const slackBotFixture = ['xox', 'b-', '1234567890-abcdefSECRET'].join('');
+    const stripeFixture = ['stripe_', 'sk_test_', '4eC39HqLyjWDarjtT1zdp7dc'].join('');
+    const apiKeyFixture = ['abcdef', '123456'].join('');
     const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
     const service = {
       id: 'app__svc',
@@ -409,7 +419,7 @@ describe('diagnose_service tool', () => {
             commit_sha: 'abc123',
             commit_message: 'test',
             build_log:
-              'Collecting page data\nDATABASE_URL=postgresql://postgres:secret@ol-db:5432/app\nError: DATABASE_URL is not set',
+              `Collecting page data\nDATABASE_URL=postgresql://postgres:secret@ol-db:5432/app\nAuthorization: Bearer ${jwtFixture}\nplain ${githubPatFixture}\nError: DATABASE_URL is not set`,
             runtime_log: null,
             duration_ms: 12000,
             created_at: '2026-05-12T00:01:00.000Z',
@@ -417,7 +427,10 @@ describe('diagnose_service tool', () => {
         ]),
       },
       pipeline: {
-        getLogs: vi.fn(async () => 'runtime log line\nREDIS_URL=redis://:secret@redis:6379/0'),
+        getLogs: vi.fn(
+          async () =>
+            `runtime log line\nREDIS_URL=redis://:secret@redis:6379/0\n${slackBotFixture}\nAPI_KEY = ${apiKeyFixture}`,
+        ),
       },
       docker: {
         inspectContainer: vi.fn(async () => ({
@@ -427,7 +440,8 @@ describe('diagnose_service tool', () => {
             Running: false,
             Status: 'exited',
             ExitCode: 1,
-            Error: 'pull failed https://robot:secret@registry.example.com/image',
+            Error:
+              `pull failed https://robot:secret@registry.example.com/image with ${ghpFixture} and ${stripeFixture}`,
             StartedAt: '2026-05-12T00:00:00.000Z',
             FinishedAt: '2026-05-12T00:02:00.000Z',
           },
@@ -457,7 +471,22 @@ describe('diagnose_service tool', () => {
       expect(JSON.stringify(result)).not.toContain('postgres:secret');
       expect(JSON.stringify(result)).not.toContain('robot:secret');
       expect(JSON.stringify(result)).not.toContain('redis://:secret');
+      expect(JSON.stringify(result)).not.toContain('eyJhbGci');
+      expect(JSON.stringify(result)).not.toContain('github_pat_11');
+      expect(JSON.stringify(result)).not.toContain('ghp_123');
+      expect(JSON.stringify(result)).not.toContain('xoxb-123');
+      expect(JSON.stringify(result)).not.toContain('stripe_sk_test');
+      expect(JSON.stringify(result)).not.toContain('abcdef123456');
       expect(JSON.stringify(result)).toContain('DATABASE_URL=***');
+      expect(JSON.stringify(result)).toContain('Bearer ***');
+      expect(JSON.stringify(result)).toContain('API_KEY=***');
+      const deployment = result.recentDeployment as {
+        latest?: { buildLogTailSanitized?: boolean; fullBuildLogHint?: string };
+      };
+      expect(deployment.latest).toMatchObject({
+        buildLogTailSanitized: true,
+        fullBuildLogHint: expect.stringContaining('get_build_log'),
+      });
       expect(result._agent_guidance).toBeDefined();
     } finally {
       globalThis.fetch = originalFetch;

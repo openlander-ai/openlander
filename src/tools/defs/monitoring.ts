@@ -485,12 +485,24 @@ function sanitizeRepoUrl(repoUrl: string | null): string | null {
 }
 
 const SECRET_ASSIGNMENT_RE =
-  /\b([A-Z0-9_]*(?:DATABASE_URL|REDIS_URL|POSTGRES_URL|MYSQL_URL|MONGO_URL|MONGODB_URI|TOKEN|SECRET|PASSWORD|PASS|PWD|KEY|DSN|URI)[A-Z0-9_]*)=(["']?)[^\s"']+\2/gi;
+  /\b([A-Z0-9_]*(?:DATABASE_URL|REDIS_URL|POSTGRES_URL|MYSQL_URL|MONGO_URL|MONGODB_URI|TOKEN|SECRET|PASSWORD|PASS|PWD|KEY|DSN|URI)[A-Z0-9_]*)\s*=\s*(["']?)[^\s"']+\2/gi;
+
+const FREE_TEXT_SECRET_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer ***'],
+  [/\bgithub_pat_[A-Za-z0-9_]+\b/g, 'github_pat_***'],
+  [/\bgh([pousr])_[A-Za-z0-9_]{8,}\b/g, 'gh$1_***'],
+  [/\bxox([baprs])-[A-Za-z0-9-]+\b/g, 'xox$1-***'],
+  [/\b(?:stripe_)?sk_(live|test)_[A-Za-z0-9]+\b/g, 'sk_$1_***'],
+  [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, 'jwt_***'],
+];
 
 function sanitizeDiagnosticText(value: string | null | undefined): string | null {
   if (!value) return null;
   const sanitizedUrl = sanitizeRepoUrl(value) ?? value;
-  return sanitizedUrl.replace(SECRET_ASSIGNMENT_RE, '$1=***');
+  return FREE_TEXT_SECRET_PATTERNS.reduce(
+    (text, [pattern, replacement]) => text.replace(pattern, replacement),
+    sanitizedUrl.replace(SECRET_ASSIGNMENT_RE, '$1=***'),
+  );
 }
 
 function sortedKeys(record: Record<string, string>): string[] {
