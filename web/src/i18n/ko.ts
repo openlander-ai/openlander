@@ -700,36 +700,42 @@ export const translations = {
       options: 'AI 복구 옵션',
     },
     errorAnalysis: {
-      title: '오류 분석',
-      viewDetails: '원본 세부 정보 보기 ▾',
-      rootCause: '근본 원인',
-      suggestedFixes: '제안된 해결책',
-      confidence: '신뢰도',
-      viewLogs: '로그 보기',
-      hideLogs: '로그 숨기기',
+      // Chrome — section title + section labels + action buttons.
+      title: 'Build Error Analysis',
+      viewDetails: 'View raw details ▾',
+      rootCause: 'Root Cause',
+      suggestedFixes: 'Suggested Fixes',
+      confidence: 'Confidence',
+      viewLogs: 'View Logs',
+      hideLogs: 'Hide Logs',
+      applyFix: 'Apply Fix',
+      applying: 'Applying...',
+      // Content — empty state + error toast.
       noFixes: '구체적인 해결책이 반환되지 않았습니다.',
-      applyFix: '수정 적용',
-      applying: '적용 중...',
       fixFailed: 'AI로 수정 실패',
     },
     fixProposal: {
-      title: '수정 제안',
-      changes: '변경 사항',
-      diff: '제안된 변경 사항',
-      approve: '승인 및 적용',
-      reject: '거절',
-      showAlternatives: '대안 보기',
+      // Chrome — section title + diff labels + action buttons.
+      title: 'Fix Proposal',
+      changes: 'Changes',
+      diff: 'Proposed Changes',
+      approve: 'Approve & Apply',
+      reject: 'Reject',
+      showAlternatives: 'Show Alternatives',
+      before: 'Before',
+      after: 'After',
+      skip: 'Skip',
+      // Content — status toast.
       answered: '수정 제안에 답변함',
-      before: '이전',
-      after: '이후',
-      skip: '건너뛰기',
     },
     composeError: {
-      title: 'Compose 오류 감지됨',
-      selectPattern: '적용할 패턴을 선택하세요',
+      // Chrome — section title + form label + badge + selection label.
+      title: 'Compose Error Detected',
+      selectPattern: 'Select a pattern to apply',
+      envVarsOptional: 'Environment Variables (Optional)',
+      recommended: 'Recommended',
+      // Content — status toast.
       answered: 'Compose 수정에 답변함',
-      envVarsOptional: '환경 변수 (선택 사항)',
-      recommended: '권장됨',
     },
   },
   share: {
@@ -769,15 +775,17 @@ export const translations = {
       '실시간 업데이트가 중단되었습니다. 다시 연결하여 최신 출력을 계속 따라가세요.',
     noMatchingTitle: '일치하는 줄이 없습니다',
     noMatchingBody: '검색어나 레벨 필터를 조정하면 로그 줄을 다시 볼 수 있습니다.',
-    retryStream: '스트림 다시 연결',
-    clearFilters: '필터 지우기',
-    terminalReadyBadge: '준비됨',
+    // Chrome — action buttons + status badges.
+    retryStream: 'Reconnect stream',
+    clearFilters: 'Clear filters',
+    terminalReadyBadge: 'Ready',
+    // Content — terminal state titles + bodies.
     terminalReadyTitle: '터미널 준비 완료',
     terminalReadyBody: '셸이 열려 있어도 로그는 계속 실시간으로 표시됩니다.',
-    terminalStandbyBadge: '대기 중',
+    terminalStandbyBadge: 'Standby',
     terminalStandbyTitle: '터미널 대기 중',
     terminalStandbyBody: '로그는 계속 스트리밍됩니다. 셸을 다시 연결하려면 Console 탭을 여세요.',
-    terminalUnavailableBadge: '사용 불가',
+    terminalUnavailableBadge: 'Unavailable',
     terminalBuildingTitle: '빌드 중에는 터미널을 사용할 수 없습니다',
     terminalBuildingBody: '다음 실행 가능한 컨테이너가 준비되는 동안에는 실시간 로그를 확인하세요.',
     terminalProjectErrorTitle: '프로젝트 오류 중에는 터미널을 사용할 수 없습니다',
@@ -792,7 +800,7 @@ export const translations = {
     terminalErrorBody: '셸 세션 시작에 실패했습니다. 다시 연결하여 재시도하세요.',
     terminalDisconnected: '셸 연결 끊김',
     terminalDisconnectedBody: '셸 세션이 종료되었습니다. 다시 연결하여 새 셸을 여세요.',
-    terminalReconnect: '셸 다시 연결',
+    terminalReconnect: 'Reconnect shell',
   },
   command: {
     // Chrome — command palette entries (action labels).
@@ -804,20 +812,27 @@ export const translations = {
     searchPlaceholder: '명령어 입력 또는 검색...',
   },
   oauth: {
+    // Content — error toast.
     startFailed: '인증 시작 실패',
-    signInWith: '다음으로 로그인:',
+    // Chrome — label preceding provider name.
+    signInWith: 'Sign in with',
+    // Content — notice.
     personalDevOnly: '⚠ 개인 개발 목적으로만 구독을 사용하세요.',
   },
   providerHelp: {
     anthropic: {
+      // Content — conversational heading + instruction.
       usingClaudeCode: 'Claude Code를 사용 중이신가요?',
       inTerminal: '명령어를 실행하여 토큰을 얻은 다음 아래에 붙여넣으세요.',
-      learnMore: 'Anthropic API에 대해 더 알아보기',
+      // Chrome — link label.
+      learnMore: 'Learn more about Anthropic API',
     },
     gemini: {
+      // Content — conversational heading + description.
       needKey: 'Gemini API 키가 필요하신가요?',
       freeTier: 'Google은 Gemini 모델에 대해 넉넉한 무료 티어를 제공합니다.',
-      getFreeKey: 'Google AI Studio에서 무료 API 키 받기',
+      // Chrome — link label.
+      getFreeKey: 'Get a free API key from Google AI Studio',
     },
   },
   project: {
@@ -1172,53 +1187,70 @@ export const translations = {
     },
   },
   gitProviders: {
-    title: 'Git 제공자',
+    // Chrome — page title.
+    title: 'Git Providers',
+    // Content — descriptive subtitle.
     subtitle: 'v0.1에서는 GitHub만 지원합니다.',
     github: {
+      // Chrome — card title (brand name stays English everywhere).
       cardTitle: 'GitHub',
-      manageOnGithub: 'GitHub에서 관리',
-      moreActionsLabel: '추가 작업',
-      reauthorize: '재인증',
-      refreshRepoList: '저장소 목록 새로고침',
-      disconnect: '연결 해제',
+      // Chrome — action buttons + menu labels.
+      manageOnGithub: 'Manage on GitHub',
+      moreActionsLabel: 'More actions',
+      reauthorize: 'Re-authorize',
+      refreshRepoList: 'Refresh repo list',
+      disconnect: 'Disconnect',
+      // Content — confirmation prose.
       disconnectConfirm: 'OpenLander에서 GitHub 연결을 해제할까요?',
       authMethod: {
+        // Chrome — method labels.
         oauth: 'OAuth',
-        pat: '개인용 액세스 토큰',
-        unknown: '알 수 없음',
+        pat: 'Personal access token',
+        unknown: 'Unknown',
       },
       pip: {
-        connected: '연결됨',
-        invalid: '토큰 거부됨',
-        unknown: '상태 확인 불가',
-        disconnected: '연결되지 않음',
+        // Chrome — status pills.
+        connected: 'Connected',
+        invalid: 'Token rejected',
+        unknown: 'Status unavailable',
+        disconnected: 'Not connected',
       },
       stats: {
-        reposLinked: '연결된 저장소',
-        lastSync: '마지막 동기화',
-        connectedOn: '연결 일시',
-        scopes: 'OAuth 권한',
+        // Chrome — KPI labels.
+        reposLinked: 'Repos linked',
+        lastSync: 'Last sync',
+        connectedOn: 'Connected on',
+        scopes: 'OAuth scopes',
       },
+      // Content — descriptive notices.
       scopesEmpty: '보고된 권한 없음',
       scopesUnavailableForPat: '권한 정보는 GitHub OAuth에서만 제공됩니다',
-      pendingFirstSync: '첫 동기화 대기 중',
+      // Chrome — status indicator.
+      pendingFirstSync: 'pending first sync',
       empty: {
-        title: 'GitHub 연결',
+        // Chrome — empty state CTA button + heading.
+        title: 'Connect GitHub',
+        // Content — empty state body.
         body: 'OpenLander가 저장소를 읽을 수 있도록 인증하세요. 배포·웹훅·서비스 추가에서 저장소를 찾을 수 있게 됩니다.',
-        cta: 'GitHub 연결',
+        // Chrome — CTA button.
+        cta: 'Connect GitHub',
       },
+      // Content — error messages with context.
       validationError: 'GitHub가 이 토큰을 거부했습니다: {message}',
       validationUnreachable: '토큰 검증을 위해 GitHub에 연결할 수 없습니다: {message}',
       loading: 'GitHub 상태를 불러오는 중…',
       loadFailed: 'GitHub 상태를 불러오지 못했습니다.',
-      retry: '다시 시도',
+      // Chrome — retry button.
+      retry: 'Retry',
     },
     others: {
-      title: '다른 제공자',
+      // Chrome — section title + provider names + version badge.
+      title: 'Other providers',
       v02Badge: 'v0.2',
       gitlab: 'GitLab',
       bitbucket: 'Bitbucket',
-      comingInV02: 'v0.2에서 지원 예정',
+      // Chrome — badge label.
+      comingInV02: 'Coming in v0.2',
     },
   },
 } as const;
