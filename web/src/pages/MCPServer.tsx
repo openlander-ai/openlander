@@ -32,6 +32,7 @@ import { toast } from 'sonner';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useActivityFeed } from '@/hooks/use-activity-feed';
 import { useMcpStatus } from '@/hooks/use-mcp-status';
@@ -73,6 +74,7 @@ export function MCPServer() {
   const [newTokenPlain, setNewTokenPlain] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [working, setWorking] = useState(false);
+  const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
   const [endpointCopied, setEndpointCopied] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
   const [configCopied, setConfigCopied] = useState(false);
@@ -140,9 +142,6 @@ export function MCPServer() {
 
   async function handleRegenerate() {
     if (working) return;
-    if (typeof window !== 'undefined' && !window.confirm(t('mcpServer.tokens.regenerateConfirm'))) {
-      return;
-    }
     setWorking(true);
     setNewTokenPlain(null);
     try {
@@ -339,7 +338,7 @@ export function MCPServer() {
                   )}
                   <button
                     type="button"
-                    onClick={() => void handleRegenerate()}
+                    onClick={() => setRegenerateConfirmOpen(true)}
                     disabled={working}
                     className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)] disabled:cursor-progress disabled:opacity-60"
                   >
@@ -445,6 +444,16 @@ export function MCPServer() {
           onOpenService={(project, service) => navigate(`/services/${service}?project=${project}`)}
         />
       </OuterCard>
+
+      <ConfirmDialog
+        open={regenerateConfirmOpen}
+        onOpenChange={setRegenerateConfirmOpen}
+        title={t('mcpServer.tokens.regenerateConfirm.title')}
+        description={t('mcpServer.tokens.regenerateConfirm.description')}
+        confirmLabel={t('mcpServer.tokens.regenerateAction')}
+        variant="destructive"
+        onConfirm={() => void handleRegenerate()}
+      />
     </div>
   );
 }

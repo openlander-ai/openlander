@@ -136,7 +136,13 @@ export function DeploymentDetail() {
         </div>
         <div className="flex-1 overflow-auto p-6">
           <div className="flex flex-col h-[640px] min-h-[400px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
-            <LogViewer deploymentId={deployId} confirmKillMessage={t('deploy.killConfirm')} />
+            <LogViewer
+              deploymentId={deployId}
+              confirmKillCopy={{
+                title: t('deploy.killConfirm.title'),
+                description: t('deploy.killConfirm.description'),
+              }}
+            />
           </div>
         </div>
       </div>
@@ -222,7 +228,10 @@ export function DeploymentDetail() {
                 <LogViewer
                   deploymentId={deployId}
                   onDownload={deployment.buildLog ? handleDownload : undefined}
-                  confirmKillMessage={t('deploy.killConfirm')}
+                  confirmKillCopy={{
+                    title: t('deploy.killConfirm.title'),
+                    description: t('deploy.killConfirm.description'),
+                  }}
                 />
               ) : (
                 <StaticLogViewer content={deployment.buildLog} />

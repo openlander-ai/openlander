@@ -43,6 +43,7 @@ import {
   StopCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { cancelDeployment } from '@/lib/api';
 import { LOG_SCRIPT_BASE, LOG_SCRIPT_FAIL, type LogEntry } from '@/lib/logScripts';
 import { LogPayload } from '@/lib/logAnsi';
@@ -114,13 +115,22 @@ export interface LogViewerProps {
    */
   onDownload?: () => void;
   /**
-   * Translated copy for the destructive-action `window.confirm` prompt
-   * before firing the cancel POST. Defaults to English. Production
-   * (DeploymentDetail) passes the i18n value (`t('deploy.killConfirm')`)
-   * — Codex round-3 P3 flagged the hard-coded string as an i18n debt.
+   * Translated title + description for the destructive-action
+   * ConfirmDialog shown before firing the cancel POST. Production
+   * (DeploymentDetail) passes the i18n values from `deploy.killConfirm`.
    */
-  confirmKillMessage?: string;
+  confirmKillCopy?: { title: string; description: string };
+  /** Confirm-button label for the kill dialog (Chrome). */
+  confirmKillAction?: string;
+  /** Cancel-button label for the kill dialog (Chrome). */
+  confirmKillCancel?: string;
 }
+
+const DEFAULT_KILL_CONFIRM_COPY = {
+  title: 'Stop this deploy?',
+  description:
+    'The build will be cancelled and no new container will be started. You can deploy again once the issue is resolved.',
+} as const;
 
 export function LogViewer({
   variant = 'deploy',
@@ -138,7 +148,9 @@ export function LogViewer({
   headerTitle,
   headerSubtitle,
   onDownload,
-  confirmKillMessage = 'Stop this deploy?',
+  confirmKillCopy = DEFAULT_KILL_CONFIRM_COPY,
+  confirmKillAction = 'Stop deploy',
+  confirmKillCancel = 'Keep building',
 }: LogViewerProps) {
   const isRuntime = variant === 'runtime';
   const baseScript = useMemo<LogEntry[]>(() => {
@@ -282,39 +294,34 @@ export function LogViewer({
   // is the right vehicle here.
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
-  const onKill = useCallback(async () => {
+  const [killConfirmOpen, setKillConfirmOpen] = useState(false);
+  const onKill = useCallback(() => {
     if (isCancelling) return;
     if (!useReal || deploymentId == null) {
       // Mock path — stream.kill() drives the simulator's CANCELLED branch.
+      // No confirmation in mock mode, matching prior behavior.
       stream.kill();
       return;
     }
-    // Destructive action — confirm with the operator before firing the
-    // cancel POST. `window.confirm` is synchronous so it cannot interleave
-    // with later state writes. Per Gemini round-2 P1: a one-click Kill
-    // on a 10-minute build is the kind of foot-gun we need a guardrail
-    // around even at v0.1.
-    if (typeof window !== 'undefined' && !window.confirm(confirmKillMessage)) {
-      return;
-    }
+    setKillConfirmOpen(true);
+  }, [deploymentId, isCancelling, stream, useReal]);
+  const performCancel = useCallback(async () => {
+    if (isCancelling || deploymentId == null) return;
     setIsCancelling(true);
     setCancelError(null);
     try {
       await cancelDeployment(String(deploymentId));
       // Don't reset `isCancelling` on the success path — the backend
       // confirms the kill _later_ via the SSE `end` frame (connState →
-      // CANCELLED), which is what the Kill-button visibility guard
-      // already keys off (the connState !== LIVE / CONNECTING / ...
-      // branch hides the button on terminal frames). Resetting here
-      // would briefly re-enable the button between the POST 200 and
-      // the SSE terminal — Codex round-2 P2 carryover.
+      // CANCELLED). Resetting here would briefly re-enable the button
+      // between the POST 200 and the SSE terminal frame.
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to cancel deployment';
       setCancelError(message);
       setIsCancelling(false);
       console.warn('[LogViewer] cancelDeployment failed:', message);
     }
-  }, [confirmKillMessage, deploymentId, isCancelling, stream, useReal]);
+  }, [deploymentId, isCancelling]);
 
   return (
     <div className="ol-log-pane relative flex h-full flex-col">
@@ -475,6 +482,17 @@ export function LogViewer({
         publicUrl={publicUrl}
         internalPort={internalPort}
         duration={liveDur}
+      />
+
+      <ConfirmDialog
+        open={killConfirmOpen}
+        onOpenChange={setKillConfirmOpen}
+        title={confirmKillCopy.title}
+        description={confirmKillCopy.description}
+        confirmLabel={confirmKillAction}
+        cancelLabel={confirmKillCancel}
+        variant="destructive"
+        onConfirm={() => void performCancel()}
       />
     </div>
   );

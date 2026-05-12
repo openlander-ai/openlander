@@ -525,7 +525,11 @@ export const translations = {
     buildFailureDetected:
       '빌드 실패가 감지되었습니다. 아래 빌드 로그를 확인하거나 외부 에이전트에서 MCP 로그 도구를 사용하세요.',
     noBuildLog: '빌드 로그가 없습니다',
-    killConfirm: '이 배포를 중지하시겠습니까?',
+    killConfirm: {
+      title: '이 배포를 중지할까요?',
+      description:
+        '진행 중인 빌드가 취소되고 새 컨테이너는 생성되지 않습니다. 문제를 해결한 뒤 다시 배포할 수 있습니다.',
+    },
     dialog: {
       // Chrome — modal title + form label + action buttons + status pills.
       title: 'Deploy New Project',
@@ -1050,7 +1054,11 @@ export const translations = {
       hide: 'Hide',
       // Content — confirmation prompts, success/error notices, hints.
       issueFailed: '토큰 발급에 실패했습니다',
-      regenerateConfirm: '토큰을 재발급할까요? 기존 토큰을 쓰는 MCP 클라이언트는 즉시 끊깁니다.',
+      regenerateConfirm: {
+        title: 'MCP 토큰을 재발급할까요?',
+        description:
+          '기존 토큰은 무효화됩니다. 그 토큰을 사용하는 MCP 클라이언트는 다음 요청부터 401 오류로 거부되며, 새 토큰을 설정에 적용해야 다시 연결됩니다.',
+      },
       regenerateSuccess: '토큰이 재발급되었습니다. 클라이언트 설정을 새 토큰으로 업데이트하세요.',
       regenerateFailed: '토큰 재발급에 실패했습니다',
       legacyTokenRotated:
@@ -1214,7 +1222,11 @@ export const translations = {
       refreshRepoList: 'Refresh repo list',
       disconnect: 'Disconnect',
       // Content — confirmation prose.
-      disconnectConfirm: 'OpenLander에서 GitHub 연결을 해제할까요?',
+      disconnectConfirm: {
+        title: 'GitHub 연결을 해제할까요?',
+        description:
+          'OpenLander가 GitHub 저장소에 접근할 수 없게 됩니다. 이미 배포된 서비스는 계속 동작하지만, 비공개 저장소에서 새 배포는 다시 연결할 때까지 실패합니다.',
+      },
       authMethod: {
         // Chrome — method labels.
         oauth: 'OAuth',
