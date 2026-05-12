@@ -55,7 +55,14 @@ describe('Your Agent (MCP) v0.1 surface', () => {
     expect(source).toMatch(/await regenerateOrgMcpToken\(/);
     expect(source).not.toMatch(/revokeMcpPatToken/);
     expect(source).not.toMatch(/for \(const tok of toRevoke\)/);
-    expect(source).toContain("t('mcpServer.tokens.regenerateConfirm')");
+    // Confirmation is a styled <ConfirmDialog>, not the browser-native
+    // window.confirm() — the prompt must surface the structured
+    // title/description copy, and the alert-shaped primitive must not
+    // creep back in.
+    expect(source).toMatch(/<ConfirmDialog/);
+    expect(source).toContain("t('mcpServer.tokens.regenerateConfirm.title')");
+    expect(source).toContain("t('mcpServer.tokens.regenerateConfirm.description')");
+    expect(source).not.toMatch(/window\.confirm\(/);
   });
 
   it('renders multi-client config tabs with placeholder when token is not revealed', () => {

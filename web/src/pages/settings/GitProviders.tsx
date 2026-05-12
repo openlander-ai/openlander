@@ -29,6 +29,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronUp, ExternalLink, Github, MoreHorizontal, RefreshCw } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useLanguage } from '@/i18n/context';
 import { getGitHubProviderStatus, type GitHubProviderStatus } from '@/lib/api/git-providers';
 import { disconnectGithub } from '@/lib/api/system';
@@ -240,6 +241,7 @@ function GitHubCard({ data, onReload }: GitHubCardProps) {
   const { t } = useLanguage();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [disconnectConfirmOpen, setDisconnectConfirmOpen] = useState(false);
 
   const pip = pipKindFor(data);
   const handleManageOnGithub = () => {
@@ -262,9 +264,10 @@ function GitHubCard({ data, onReload }: GitHubCardProps) {
     onReload();
   };
 
-  const handleDisconnect = async () => {
-    if (typeof window === 'undefined') return;
-    if (!window.confirm(t('gitProviders.github.disconnectConfirm'))) return;
+  const handleDisconnect = () => {
+    setDisconnectConfirmOpen(true);
+  };
+  const confirmDisconnect = async () => {
     setBusy(true);
     setActionError(null);
     try {
@@ -301,6 +304,7 @@ function GitHubCard({ data, onReload }: GitHubCardProps) {
   const connectedOnDisplay = data.connectedAt ? formatDateTime(data.connectedAt) || '—' : '—';
 
   return (
+    <>
     <OuterCard
       title={
         <span className="flex items-center gap-2">
@@ -322,9 +326,7 @@ function GitHubCard({ data, onReload }: GitHubCardProps) {
             data={data}
             onReauthorize={handleReauthorize}
             onRefresh={handleRefresh}
-            onDisconnect={() => {
-              void handleDisconnect();
-            }}
+            onDisconnect={handleDisconnect}
             busy={busy}
           />
         </div>
@@ -412,6 +414,16 @@ function GitHubCard({ data, onReload }: GitHubCardProps) {
         </div>
       </div>
     </OuterCard>
+    <ConfirmDialog
+      open={disconnectConfirmOpen}
+      onOpenChange={setDisconnectConfirmOpen}
+      title={t('gitProviders.github.disconnectConfirm.title')}
+      description={t('gitProviders.github.disconnectConfirm.description')}
+      confirmLabel={t('gitProviders.github.disconnectConfirm.confirmLabel')}
+      variant="destructive"
+      onConfirm={() => void confirmDisconnect()}
+    />
+    </>
   );
 }
 

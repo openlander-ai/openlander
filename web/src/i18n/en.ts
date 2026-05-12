@@ -452,7 +452,11 @@ export const translations = {
     buildFailureDetected:
       'Build failure detected. Review the build log below or use MCP log tools from an external agent.',
     noBuildLog: 'No build log available',
-    killConfirm: 'Stop this deploy?',
+    killConfirm: {
+      title: 'Stop this deploy?',
+      description:
+        'The build will be cancelled and no new container will be started. You can deploy again once the issue is resolved.',
+    },
     dialog: {
       title: 'Deploy New Project',
       description: 'Enter the repository URL to deploy. OpenLander will clone, build, and run it.',
@@ -898,8 +902,12 @@ export const translations = {
       issueFailed: 'Failed to issue token',
       regenerateAction: 'Regenerate',
       regenerating: 'Regenerating…',
-      regenerateConfirm:
-        'Regenerate this token? Existing MCP clients using the old token will be disconnected.',
+      regenerateConfirm: {
+        title: 'Regenerate MCP token?',
+        description:
+          'The current token will be revoked. Any MCP client still using it will start getting 401 errors on its next request — paste the new token into your client config to reconnect.',
+        confirmLabel: 'Regenerate token',
+      },
       regenerateSuccess: 'Token regenerated. Update your MCP client config with the new value.',
       regenerateFailed: 'Failed to regenerate token',
       legacyTokenRotated:
@@ -1047,7 +1055,12 @@ export const translations = {
       reauthorize: 'Re-authorize',
       refreshRepoList: 'Refresh repo list',
       disconnect: 'Disconnect',
-      disconnectConfirm: 'Disconnect GitHub from OpenLander?',
+      disconnectConfirm: {
+        title: 'Disconnect GitHub?',
+        description:
+          'OpenLander will lose access to your GitHub repositories. Existing deployments keep running, but new deploys from private repos will fail until you reconnect.',
+        confirmLabel: 'Disconnect GitHub',
+      },
       authMethod: {
         oauth: 'OAuth',
         pat: 'Personal access token',

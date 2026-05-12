@@ -86,8 +86,15 @@ describe('Git Providers page v0.1', () => {
     expect(pageSource).toContain("t('gitProviders.github.reauthorize')");
     expect(pageSource).toContain("t('gitProviders.github.refreshRepoList')");
     expect(pageSource).toContain("t('gitProviders.github.disconnect')");
-    // Disconnect requires a confirm prompt — destructive action.
-    expect(pageSource).toMatch(/window\.confirm\(t\('gitProviders\.github\.disconnectConfirm'\)\)/);
+    // Disconnect requires a confirm prompt — destructive action. The
+    // prompt is a styled <ConfirmDialog>, not the browser-native
+    // window.confirm() — the dialog surfaces structured title +
+    // description copy and the alert-shaped primitive must not creep
+    // back in.
+    expect(pageSource).toMatch(/<ConfirmDialog/);
+    expect(pageSource).toContain("t('gitProviders.github.disconnectConfirm.title')");
+    expect(pageSource).toContain("t('gitProviders.github.disconnectConfirm.description')");
+    expect(pageSource).not.toMatch(/window\.confirm\(/);
   });
 
   it('renders the spec empty state with a single Connect GitHub CTA', () => {

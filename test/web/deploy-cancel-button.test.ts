@@ -76,25 +76,27 @@ describe('Deploy Kill build button → backend cancel route (PR #259 wire-up)', 
 
   it('confirms with the operator before firing the cancel POST (Gemini round 2 P1)', () => {
     // Gemini round-2 P1: a one-click Kill on a 10-minute build is a
-    // foot-gun. Pin the `window.confirm` guard so a future refactor
-    // can't silently strip it.
-    expect(logViewerSource).toMatch(/window\.confirm\(/);
+    // foot-gun. Pin the destructive ConfirmDialog so a future refactor
+    // can't silently strip the guard — and the cheap alert-shaped
+    // window.confirm primitive must not creep back in.
+    expect(logViewerSource).toMatch(/<ConfirmDialog/);
+    expect(logViewerSource).not.toMatch(/window\.confirm\(/);
   });
 
   it('routes the confirm copy through i18n (Codex round 3 P3)', () => {
     // Codex round-3 P3: the destructive-action prompt was hard-coded
-    // English. Round-4 threads it via a `confirmKillMessage` prop and
-    // the production caller wires `t('deploy.killConfirm')`. Both
-    // language bundles must define the key per the project's
-    // both-files-in-one-PR i18n rule.
-    expect(logViewerSource).toMatch(/confirmKillMessage/);
-    expect(deploymentDetailSource).toMatch(
-      /confirmKillMessage=\{t\('deploy\.killConfirm'\)\}/,
-    );
+    // English. The dialog now reads structured title + description from
+    // `deploy.killConfirm` in both bundles; the LogViewer prop is a
+    // `{ title, description }` object that DeploymentDetail wires from
+    // `t('deploy.killConfirm.title')` and `t('deploy.killConfirm.description')`.
+    expect(logViewerSource).toMatch(/confirmKillCopy/);
+    expect(deploymentDetailSource).toMatch(/confirmKillCopy=\{/);
+    expect(deploymentDetailSource).toMatch(/t\('deploy\.killConfirm\.title'\)/);
+    expect(deploymentDetailSource).toMatch(/t\('deploy\.killConfirm\.description'\)/);
     const enSource = readRepoFile('web/src/i18n/en.ts');
     const koSource = readRepoFile('web/src/i18n/ko.ts');
-    expect(enSource).toMatch(/killConfirm:\s*'Stop this deploy\?'/);
-    expect(koSource).toMatch(/killConfirm:\s*'이 배포를 중지하시겠습니까\?'/);
+    expect(enSource).toMatch(/title:\s*'Stop this deploy\?'/);
+    expect(koSource).toMatch(/title:\s*'이 배포를 중지할까요\?'/);
   });
 
   it('narrows in-flight fallback to 404 only (Codex round 3 P3)', () => {
