@@ -408,7 +408,8 @@ describe('diagnose_service tool', () => {
             trigger_detail: null,
             commit_sha: 'abc123',
             commit_message: 'test',
-            build_log: 'Collecting page data\nError: DATABASE_URL is not set',
+            build_log:
+              'Collecting page data\nDATABASE_URL=postgresql://postgres:secret@ol-db:5432/app\nError: DATABASE_URL is not set',
             runtime_log: null,
             duration_ms: 12000,
             created_at: '2026-05-12T00:01:00.000Z',
@@ -416,7 +417,7 @@ describe('diagnose_service tool', () => {
         ]),
       },
       pipeline: {
-        getLogs: vi.fn(async () => 'runtime log line'),
+        getLogs: vi.fn(async () => 'runtime log line\nREDIS_URL=redis://:secret@redis:6379/0'),
       },
       docker: {
         inspectContainer: vi.fn(async () => ({
@@ -426,11 +427,11 @@ describe('diagnose_service tool', () => {
             Running: false,
             Status: 'exited',
             ExitCode: 1,
-            Error: '',
+            Error: 'pull failed https://robot:secret@registry.example.com/image',
             StartedAt: '2026-05-12T00:00:00.000Z',
             FinishedAt: '2026-05-12T00:02:00.000Z',
           },
-          Config: { Image: 'app:failed' },
+          Config: { Image: 'registry.example.com/app:failed' },
         })),
         listManagedContainers: vi.fn(async () => [{ id: 'container-1', status: 'running' }]),
         execSimple: vi.fn(async () => ({ exitCode: 1, stdout: '', stderr: 'connection refused' })),
@@ -454,6 +455,9 @@ describe('diagnose_service tool', () => {
         suspectedMissingBuildTimeKeys: ['DATABASE_URL'],
       });
       expect(JSON.stringify(result)).not.toContain('postgres:secret');
+      expect(JSON.stringify(result)).not.toContain('robot:secret');
+      expect(JSON.stringify(result)).not.toContain('redis://:secret');
+      expect(JSON.stringify(result)).toContain('DATABASE_URL=***');
       expect(result._agent_guidance).toBeDefined();
     } finally {
       globalThis.fetch = originalFetch;

@@ -204,9 +204,9 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'diagnose_service',
     riskLevel: 'low',
     description:
-      'Diagnose a deployable app/worker service in one MCP call. Returns service/source summary, masked env key inventory, build-time env warnings, recent deployment status/log tail, container status, service logs, local HTTP probe, dependency probes, and recommended next actions. Use this after deploy_service or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior.',
+      'Diagnose a deployable app/worker service in one MCP call. Returns service/source summary, masked env key inventory, build-time env warnings, sanitized recent deployment status/log tail, container status, sanitized service logs, local HTTP probe, dependency probes, and recommended next actions. Use this after deploy_service or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior. For raw container logs only use get_logs; for full untruncated build output use get_build_log.',
     mcpDescription:
-      'One-shot service diagnostics: env keys (masked), build/runtime mismatch warnings, container status, logs, HTTP probe, dependency checks, recent deploy result, and next action guidance.',
+      'One-shot service diagnostics after deploy/runtime failures. For raw logs use get_logs; for full build output use get_build_log.',
     inputSchema: diagnoseServiceSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -484,6 +484,15 @@ function sanitizeRepoUrl(repoUrl: string | null): string | null {
   }
 }
 
+const SECRET_ASSIGNMENT_RE =
+  /\b([A-Z0-9_]*(?:DATABASE_URL|REDIS_URL|POSTGRES_URL|MYSQL_URL|MONGO_URL|MONGODB_URI|TOKEN|SECRET|PASSWORD|PASS|PWD|KEY|DSN|URI)[A-Z0-9_]*)=(["']?)[^\s"']+\2/gi;
+
+function sanitizeDiagnosticText(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const sanitizedUrl = sanitizeRepoUrl(value) ?? value;
+  return sanitizedUrl.replace(SECRET_ASSIGNMENT_RE, '$1=***');
+}
+
 function sortedKeys(record: Record<string, string>): string[] {
   return Object.keys(record).sort((a, b) => a.localeCompare(b));
 }
@@ -514,6 +523,10 @@ function tailLines(text: string | null | undefined, lines: number): string | nul
   return text.split(/\r?\n/).slice(-lines).join('\n');
 }
 
+function sanitizedTailLines(text: string | null | undefined, lines: number): string | null {
+  return tailLines(sanitizeDiagnosticText(text), lines);
+}
+
 function summarizeRecentDeployments(logs: DeployLogRow[]) {
   const latest = logs[0];
   return {
@@ -527,7 +540,9 @@ function summarizeRecentDeployments(logs: DeployLogRow[]) {
           commitMessage: latest.commit_message,
           durationMs: latest.duration_ms,
           createdAt: latest.created_at,
-          buildLogTail: tailLines(latest.build_log, 30),
+          buildLogTail: sanitizedTailLines(latest.build_log, 30),
+          buildLogTailSanitized: true,
+          fullBuildLogHint: 'Call get_build_log for full raw build output.',
         }
       : null,
     history: logs.slice(0, 5).map((entry) => ({
@@ -619,11 +634,13 @@ async function summarizeContainer(
       running: state['Running'] === true,
       status: getString(state, 'Status'),
       exitCode: getNumber(state, 'ExitCode'),
-      error: getString(state, 'Error'),
+      error: sanitizeDiagnosticText(getString(state, 'Error')),
       startedAt: getString(state, 'StartedAt'),
       finishedAt: getString(state, 'FinishedAt'),
       restartCount: getNumber(rawInspect, 'RestartCount'),
-      image: getString(config, 'Image') ?? service.image_tag ?? service.image_url,
+      image: sanitizeDiagnosticText(
+        getString(config, 'Image') ?? service.image_tag ?? service.image_url,
+      ),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -631,7 +648,7 @@ async function summarizeContainer(
       present: false,
       running: false,
       id: service.container_id,
-      error: message,
+      error: sanitizeDiagnosticText(message),
       _agent_guidance: {
         next_steps: ['Container inspect failed. Verify the container still exists on the host.'],
       },
@@ -647,12 +664,13 @@ async function readServiceLogs(
   try {
     return {
       available: true,
-      tail: await appCtx.pipeline.getLogs(runtimeProjectId, lines),
+      tail: sanitizeDiagnosticText(await appCtx.pipeline.getLogs(runtimeProjectId, lines)),
+      sanitized: true,
     };
   } catch (err) {
     return {
       available: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: sanitizeDiagnosticText(err instanceof Error ? err.message : String(err)),
     };
   }
 }
@@ -769,7 +787,7 @@ async function probeEnvDependencies(
         host: target.host,
         port: target.port,
         reachable: result['reachable'] === true,
-        error: result['error'] ?? null,
+        error: typeof result['error'] === 'string' ? sanitizeDiagnosticText(result['error']) : null,
       };
     }),
   );
