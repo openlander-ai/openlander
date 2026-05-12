@@ -12,7 +12,7 @@ The supported 0.1 workflow is MCP-first:
 2. An external MCP-capable agent reads `get_build_log`, `get_logs`, and
    `get_deploy_status`.
 3. The external agent decides what to change in the repo or configuration.
-4. The external agent explicitly calls `deploy_service` / `rollback_service` /
+4. The external agent explicitly calls `redeploy_app` / `rollback_service` /
    other MCP actions.
 
 Future releases may reintroduce internal AI Ops behind an explicit product

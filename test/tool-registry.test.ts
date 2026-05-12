@@ -15,6 +15,7 @@ const EXPECTED_TOOL_NAMES = [
   'create_deploy_plan',
   'update_deploy_plan',
   'execute_deploy_plan',
+  'deploy_app',
   'get_logs',
   'list_projects',
   'list_env_vars',
@@ -22,7 +23,7 @@ const EXPECTED_TOOL_NAMES = [
   'expose_public',
   'unexpose_public',
   'get_system_stats',
-  'deploy_service',
+  'redeploy_app',
   'restart_service',
   'archive_service',
   'unarchive_service',
@@ -337,7 +338,7 @@ describe('Tool Registry', () => {
       needs_redeploy: true,
       _agent_guidance: {
         next_steps: [
-          'Redeploy required: call deploy_service to apply env changes.',
+          'Redeploy required: call redeploy_app to apply env changes.',
         ],
       },
     });

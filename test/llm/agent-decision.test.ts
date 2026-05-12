@@ -83,7 +83,7 @@ function createAgentWithTools(
   const toolExecuteMock = vi.fn(async () => ({ ok: true }));
   const tools = {
     list_projects: { execute: toolExecuteMock },
-    deploy: { execute: toolExecuteMock },
+    deploy_app: { execute: toolExecuteMock },
     rollback_service: { execute: toolExecuteMock },
   } as unknown as ToolSet;
 
@@ -119,7 +119,7 @@ describe('Agent DecisionEngine integration', () => {
   });
 
   it('emits notification and executes for medium-risk tool', async () => {
-    scenario.toolName = 'deploy';
+    scenario.toolName = 'deploy_app';
     scenario.args = { project_id: 'proj-1' };
 
     const db = createMockDb();
@@ -139,8 +139,8 @@ describe('Agent DecisionEngine integration', () => {
       events.some(
         (event) =>
           event.type === 'notification' &&
-          event.toolName === 'deploy' &&
-          event.message.includes('Executing deploy'),
+          event.toolName === 'deploy_app' &&
+          event.message.includes('Executing deploy_app'),
       ),
     ).toBe(true);
   });

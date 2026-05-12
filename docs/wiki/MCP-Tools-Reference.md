@@ -6,7 +6,7 @@ OpenLander exposes its functionality to AI coding agents through a **composite-t
 - **64 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
-Each composite takes `{ action, params }` — e.g. `openlander_deploy({ action: "deploy", params: { repo_url: "..." } })`. Run `{ action: "help" }` on any composite to list its action catalog.
+Each composite takes `{ action, params }` — e.g. `openlander_deploy({ action: "deploy_app", params: { repo_url: "..." } })`. Run `{ action: "help" }` on any composite to list its action catalog.
 
 Model note: **Project = workspace/group** and **Service = deployable unit**. Repository, image,
 branch, Dockerfile, and build context belong to services. Project-level runtime actions have been
@@ -89,7 +89,7 @@ Execute a deployment plan (non-blocking).
 | `plan_id`     | string   | Yes      | Plan ID                            |
 | `deploy_only` | string[] | No       | Service names for compose projects |
 
-### `deploy`
+### `deploy_app`
 
 One-call deploy: analyze, plan, execute, optionally wait.
 
@@ -178,7 +178,7 @@ List active preview deployments. No parameters.
 
 List all projects with status, ports, URLs. No parameters.
 
-### `deploy_service` / `restart_service`
+### `redeploy_app` / `restart_service`
 
 Deploy or restart a deployable app/worker service. Project-level runtime actions have been removed.
 
@@ -257,7 +257,7 @@ are not masked. Empty strings render as `""`; missing single-key lookups throw `
 `set_env_vars` is an upsert keyed by `(service_id, key)`. It saves only by default and returns
 `changed: [{ key, op }]`, where `op` is `insert`, `update`, or `noop`. `null` values are rejected
 with `BAD_REQUEST`; `""` stores an explicit empty value. To apply saved changes to a running
-container, call `deploy_service`, or pass `defer_redeploy=false`.
+container, call `redeploy_app`, or pass `defer_redeploy=false`.
 
 ### `export_env_vars`
 
@@ -465,7 +465,7 @@ Host CPU, memory, disk usage. No parameters.
 
 OpenLander 0.1 does not expose built-in AI diagnosis. External MCP agents should
 read `get_build_log` / `get_logs`, inspect the failure in their own context, then
-apply config/repo changes and call `deploy_service`.
+apply config/repo changes and call `redeploy_app`.
 
 ---
 

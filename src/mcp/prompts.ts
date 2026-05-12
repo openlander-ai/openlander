@@ -101,7 +101,7 @@ Variables with these prefixes are automatically injected as Docker build args:
 - PUBLIC_* (SvelteKit/general)
 - GATSBY_* (Gatsby)
 
-No special configuration needed — pass them via env_vars in create_deploy_plan or save them with set_env_vars. MCP env changes are saved only by default; call deploy_service or pass defer_redeploy=false when you want to apply them to a running container.
+No special configuration needed — pass them via env_vars in create_deploy_plan or save them with set_env_vars. MCP env changes are saved only by default; call redeploy_app or pass defer_redeploy=false when you want to apply them to a running container.
 
 ## Deploy Triggering
 

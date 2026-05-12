@@ -211,7 +211,7 @@ function serviceSummary(service: NonNullable<ServiceRow>, project: NonNullable<P
 async function runRedeploy(
   args: Record<string, unknown>,
   context: ToolContext,
-  action: 'deploy_service' | 'restart_service',
+  action: 'redeploy_app' | 'restart_service',
 ) {
   const { service, project, runtimeProject } = await resolveDeployableService(
     args,
@@ -316,14 +316,14 @@ async function runRedeploy(
 
 export const deployableServiceToolDefs: ToolDef[] = [
   {
-    name: 'deploy_service',
+    name: 'redeploy_app',
     riskLevel: 'medium',
     description:
       'Deploy or redeploy a deployable app/worker service. Provide service_id or service_name. Runs in background; poll get_deploy_status for progress.',
     mcpDescription:
       'Deploy/redeploy a deployable app/worker service. Provide service_id or service_name.',
     inputSchema: deployServiceSchema,
-    execute: (args, context) => runRedeploy(args, context, 'deploy_service'),
+    execute: (args, context) => runRedeploy(args, context, 'redeploy_app'),
   },
   {
     name: 'restart_service',
@@ -436,7 +436,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
     description:
       'Restore an archived deployable app/worker service. Provide service_id or service_name. Does not deploy automatically.',
     mcpDescription:
-      'Restore an archived deployable app/worker service. Call deploy_service to run it.',
+      'Restore an archived deployable app/worker service. Call redeploy_app to run it.',
     inputSchema: serviceTargetSchema,
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(
@@ -452,8 +452,8 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'update_service_config',
     riskLevel: 'medium',
     description:
-      'Update deployable service build config (dockerfile_path, docker_target, build_context). Takes effect on next deploy_service.',
-    mcpDescription: 'Update deployable service build config. Takes effect on next deploy_service.',
+      'Update deployable service build config (dockerfile_path, docker_target, build_context). Takes effect on next redeploy_app.',
+    mcpDescription: 'Update deployable service build config. Takes effect on next redeploy_app.',
     inputSchema: updateServiceConfigSchema,
     execute: async (args, context) => {
       const { service, project } = await resolveDeployableService(
@@ -498,7 +498,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
           docker_target: updated?.docker_target ?? service.docker_target,
           build_context: updated?.build_context ?? service.build_context,
         },
-        _agent_guidance: { next_steps: ['Call deploy_service to apply the new configuration.'] },
+        _agent_guidance: { next_steps: ['Call redeploy_app to apply the new configuration.'] },
       };
     },
   },

@@ -14,7 +14,7 @@ create_deploy_plan  →  execute_deploy_plan  →  get_deploy_status
   Check env vars        Traefik routing
 ```
 
-There's also a convenience `deploy` tool that combines all 3 steps.
+There's also a convenience `deploy_app` tool that combines all 3 steps.
 
 ---
 
@@ -57,7 +57,7 @@ After a service deploy succeeds, the service gets a URL:
 ### Quick Deploy (One Call)
 
 ```
-deploy(
+deploy_app(
   repo_url: "https://github.com/user/my-app",
   branch: "main",
   wait: true
@@ -199,19 +199,19 @@ deploy_compose(
 ### Redeploy (Same Config)
 
 ```
-deploy_service(service_name: "my-app")
+redeploy_app(service_name: "my-app")
 ```
 
 ### Redeploy with Fresh Build
 
 ```
-deploy_service(service_name: "my-app", no_cache: true)
+redeploy_app(service_name: "my-app", no_cache: true)
 ```
 
 ### Blue-Green Deploy (Zero Downtime)
 
 ```
-deploy_service(
+redeploy_app(
   service_name: "my-app",
   strategy: "blue-green",
   health_check_path: "/health"

@@ -126,10 +126,10 @@ describe('MCP service runtime mutation policy rejections', () => {
     });
   });
 
-  describe('deploy_service', () => {
+  describe('redeploy_app', () => {
     it('rejects archived project up-front instead of returning fake deploying', async () => {
       const ctx = createPolicyContext({ archived: true });
-      const result = await getTool(ctx, 'deploy_service').execute(serviceArgs, { target: 'mcp' });
+      const result = await getTool(ctx, 'redeploy_app').execute(serviceArgs, { target: 'mcp' });
       expectPolicyRejection(result, 'PROJECT_ARCHIVED');
       expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
       expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
@@ -137,23 +137,23 @@ describe('MCP service runtime mutation policy rejections', () => {
 
     it('rejects recovering project up-front', async () => {
       const ctx = createPolicyContext({ status: 'recovering' });
-      const result = await getTool(ctx, 'deploy_service').execute(serviceArgs, { target: 'mcp' });
+      const result = await getTool(ctx, 'redeploy_app').execute(serviceArgs, { target: 'mcp' });
       expectPolicyRejection(result, 'PROJECT_RECOVERING');
       expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
     });
 
     it('rejects circuit-breaker open up-front', async () => {
       const ctx = createPolicyContext({ circuitBreakerOpen: true });
-      const result = await getTool(ctx, 'deploy_service').execute(serviceArgs, { target: 'mcp' });
+      const result = await getTool(ctx, 'redeploy_app').execute(serviceArgs, { target: 'mcp' });
       expectPolicyRejection(result, 'CIRCUIT_BREAKER_OPEN');
       expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
     });
   });
 
   describe('healthy service regression', () => {
-    it('deploy_service returns deploying for a healthy service', async () => {
+    it('redeploy_app returns deploying for a healthy service', async () => {
       const ctx = createPolicyContext();
-      const result = await getTool(ctx, 'deploy_service').execute(serviceArgs, { target: 'mcp' });
+      const result = await getTool(ctx, 'redeploy_app').execute(serviceArgs, { target: 'mcp' });
       expect(result).toMatchObject({ status: 'deploying', service: { name: 'rejected-api' } });
     });
 

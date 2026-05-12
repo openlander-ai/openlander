@@ -172,5 +172,5 @@ set_env_vars(
 
 MCP env changes target deployable services and save only by default. Use `service_id` or
 `service_name`; `project_name` works only for groups with exactly one deployable service.
-Redeploy the app with `deploy_service`, or pass `defer_redeploy=false` to `set_env_vars`,
+Redeploy the app with `redeploy_app`, or pass `defer_redeploy=false` to `set_env_vars`,
 for the new value to reach a running container.

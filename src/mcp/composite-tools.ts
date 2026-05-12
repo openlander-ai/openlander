@@ -28,7 +28,7 @@ export const DEPLOY_ACTIONS = [
   'update_deploy_plan',
   'execute_deploy_plan',
   'validate_deploy_plan',
-  'deploy',
+  'deploy_app',
   'get_deploy_status',
   'get_deploy_history',
   'preview_deploy',
@@ -113,7 +113,7 @@ export const MANAGED_SERVICE_ACTIONS = [
  */
 export const SERVICE_ACTIONS = [
   'restart_service',
-  'deploy_service',
+  'redeploy_app',
   'rollback_service',
   'archive_service',
   'unarchive_service',
@@ -334,7 +334,7 @@ export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): Compo
 export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_service',
-    'Deployable services (apps + workers): deploy, restart, rollback, config, env vars, secrets, and public exposure.',
+    'Deployable services (apps + workers): redeploy, restart, rollback, config, env vars, secrets, and public exposure.',
     toolDefs,
   );
 }

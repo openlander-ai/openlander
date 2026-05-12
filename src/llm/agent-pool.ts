@@ -14,9 +14,9 @@ export const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
  * Only one session can execute these tools per project at a time.
  */
 export const STATE_CHANGING_TOOLS = new Set([
-  'deploy',
+  'deploy_app',
   'execute_plan',
-  'deploy_service',
+  'redeploy_app',
   'rollback_service',
   'stop_service',
   'archive_service',

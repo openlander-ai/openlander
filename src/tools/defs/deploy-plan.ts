@@ -63,7 +63,7 @@ async function buildExistingServiceGuidance(
     suggested_call: primary
       ? {
           tool: 'openlander_service',
-          action: 'deploy_service',
+          action: 'redeploy_app',
           params: { service_id: primary.service_id },
         }
       : undefined,
@@ -267,12 +267,12 @@ export const deployPlanToolDefs: ToolDef[] = [
     },
   },
   {
-    name: 'deploy',
+    name: 'deploy_app',
     riskLevel: 'medium',
     description:
-      'One-call deploy for creating a new app from a repo or image. For an existing deployable service, prefer openlander_service.deploy_service with service_id/service_name. Analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and on failure auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
+      'One-call deploy for creating a new app from a repo or image. For an existing deployable service, prefer openlander_service.redeploy_app with service_id/service_name. Analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and on failure auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
     mcpDescription:
-      'One-call deploy for new apps. Existing services should use openlander_service.deploy_service. Repo analysis → build → deploy → result. Poll get_deploy_status to track progress. Returns URL on success, error + diagnosis guidance on failure.',
+      'One-call app deploy for new apps. Existing services should use openlander_service.redeploy_app. Repo analysis → build → deploy → result. Poll get_deploy_status to track progress. Returns URL on success, error + diagnosis guidance on failure.',
     inputSchema: deploySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -334,7 +334,7 @@ export const deployPlanToolDefs: ToolDef[] = [
             next_steps: [
               `Provide missing values: ${plan.missing.join(', ')}`,
               'Call update_deploy_plan with the values, then execute_deploy_plan',
-              'Or call deploy again with env_vars including the missing keys',
+              'Or call deploy_app again with env_vars including the missing keys',
             ],
           },
         };
@@ -382,12 +382,12 @@ export const deployPlanToolDefs: ToolDef[] = [
             next_steps: [
               ...(existingGuidance['suggested_call']
                 ? [
-                    'This project already has a deployable service. Use openlander_service.deploy_service with the suggested service_id to redeploy it.',
+                    'This project already has a deployable service. Use openlander_service.redeploy_app with the suggested service_id to redeploy it.',
                   ]
                 : []),
               'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
               'If this is a new app failure, call get_build_log for raw output and analyze it in your external agent',
-              'Fix the issue, then retry with deploy_service for existing services or deploy for new apps',
+              'Fix the issue, then retry with redeploy_app for existing services or deploy_app for new apps',
             ],
           },
         };
@@ -561,14 +561,14 @@ export const deployPlanToolDefs: ToolDef[] = [
                   next_steps: [
                     ...(existingGuidance['suggested_call']
                       ? [
-                          'This project already has a deployable service. Use openlander_service.deploy_service with the suggested service_id to redeploy it.',
+                          'This project already has a deployable service. Use openlander_service.redeploy_app with the suggested service_id to redeploy it.',
                         ]
                       : []),
                     'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
                     ...(!job?.autoDiagnosis
                       ? ['Call get_build_log for raw output and analyze it in your external agent']
                       : []),
-                    'Fix the issue, then retry with deploy_service for existing services or deploy for new apps',
+                    'Fix the issue, then retry with redeploy_app for existing services or deploy_app for new apps',
                   ],
                 },
               });

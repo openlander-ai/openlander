@@ -120,7 +120,7 @@ function getTool(ctx: AppContext, name: string) {
 describe('deployable service target resolution', () => {
   it('scopes service_name lookup by project_name', async () => {
     const ctx = createDuplicateServiceContext();
-    const result = await getTool(ctx, 'deploy_service').execute(
+    const result = await getTool(ctx, 'redeploy_app').execute(
       { service_name: 'api', project_name: 'beta' },
       { target: 'mcp' },
     );
@@ -145,14 +145,14 @@ describe('deployable service target resolution', () => {
     const ctx = createDuplicateServiceContext();
 
     await expect(
-      getTool(ctx, 'deploy_service').execute({ service_name: 'api' }, { target: 'mcp' }),
+      getTool(ctx, 'redeploy_app').execute({ service_name: 'api' }, { target: 'mcp' }),
     ).rejects.toMatchObject({
       code: 'SERVICE_SELECTION_REQUIRED',
       statusCode: 400,
     });
 
     try {
-      await getTool(ctx, 'deploy_service').execute({ service_name: 'api' }, { target: 'mcp' });
+      await getTool(ctx, 'redeploy_app').execute({ service_name: 'api' }, { target: 'mcp' });
     } catch (err) {
       expect(err).toBeInstanceOf(OpenLanderError);
       if (err instanceof OpenLanderError) {

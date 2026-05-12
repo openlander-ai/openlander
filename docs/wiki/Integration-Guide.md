@@ -202,7 +202,7 @@ MCP env changes target deployable services. Use `service_id` or `service_name`;
 MCP env changes are service-scoped and conservative by default: `set_env_vars`,
 `delete_env_var`, and `bulk_delete_env_vars` save changes without redeploying unless
 `defer_redeploy=false` is passed. To apply saved changes to a running container, call
-`deploy_service`.
+`redeploy_app`.
 
 Run `{ action: "help" }` on any composite for the full action list.
 
@@ -228,13 +228,13 @@ Agent will: `get_deploy_status(project_name: "my-app")`
 
 > "my-app deployment failed, can you check?"
 
-Agent will: `get_build_log` / `get_logs` → inspect the error itself → fix → `deploy_service`
+Agent will: `get_build_log` / `get_logs` → inspect the error itself → fix → `redeploy_app`
 
 ### Create a database
 
 > "Create a PostgreSQL database for my-app"
 
-Agent will: `create_service` → `create_database` → `get_service_credentials` → `set_env_vars` → `deploy_service`
+Agent will: `create_service` → `create_database` → `get_service_credentials` → `set_env_vars` → `redeploy_app`
 
 ---
 

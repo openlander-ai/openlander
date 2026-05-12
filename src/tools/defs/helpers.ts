@@ -92,7 +92,7 @@ export function buildPolicyRejectionResponse(
  * the project; returns `null` otherwise so the caller can proceed.
  *
  * Without this guard, fire-and-forget tools (restart_service,
- * deploy_service) would tell the user "deploying" while
+ * redeploy_app) would tell the user "deploying" while
  * the pipeline silently rejects in the background catch handler.
  */
 export async function tryRejectIfNotMutable(
