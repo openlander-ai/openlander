@@ -906,6 +906,7 @@ export const translations = {
         title: 'Regenerate MCP token?',
         description:
           'The current token will be revoked. Any MCP client still using it will start getting 401 errors on its next request — paste the new token into your client config to reconnect.',
+        confirmLabel: 'Regenerate token',
       },
       regenerateSuccess: 'Token regenerated. Update your MCP client config with the new value.',
       regenerateFailed: 'Failed to regenerate token',
@@ -1058,6 +1059,7 @@ export const translations = {
         title: 'Disconnect GitHub?',
         description:
           'OpenLander will lose access to your GitHub repositories. Existing deployments keep running, but new deploys from private repos will fail until you reconnect.',
+        confirmLabel: 'Disconnect GitHub',
       },
       authMethod: {
         oauth: 'OAuth',

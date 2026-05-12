@@ -122,8 +122,6 @@ export interface LogViewerProps {
   confirmKillCopy?: { title: string; description: string };
   /** Confirm-button label for the kill dialog (Chrome). */
   confirmKillAction?: string;
-  /** Cancel-button label for the kill dialog (Chrome). */
-  confirmKillCancel?: string;
 }
 
 const DEFAULT_KILL_CONFIRM_COPY = {
@@ -150,7 +148,6 @@ export function LogViewer({
   onDownload,
   confirmKillCopy = DEFAULT_KILL_CONFIRM_COPY,
   confirmKillAction = 'Stop deploy',
-  confirmKillCancel = 'Keep building',
 }: LogViewerProps) {
   const isRuntime = variant === 'runtime';
   const baseScript = useMemo<LogEntry[]>(() => {
@@ -490,7 +487,6 @@ export function LogViewer({
         title={confirmKillCopy.title}
         description={confirmKillCopy.description}
         confirmLabel={confirmKillAction}
-        cancelLabel={confirmKillCancel}
         variant="destructive"
         onConfirm={() => void performCancel()}
       />

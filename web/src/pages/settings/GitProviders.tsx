@@ -419,7 +419,7 @@ function GitHubCard({ data, onReload }: GitHubCardProps) {
       onOpenChange={setDisconnectConfirmOpen}
       title={t('gitProviders.github.disconnectConfirm.title')}
       description={t('gitProviders.github.disconnectConfirm.description')}
-      confirmLabel={t('gitProviders.github.disconnect')}
+      confirmLabel={t('gitProviders.github.disconnectConfirm.confirmLabel')}
       variant="destructive"
       onConfirm={() => void confirmDisconnect()}
     />

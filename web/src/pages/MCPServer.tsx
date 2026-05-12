@@ -450,7 +450,7 @@ export function MCPServer() {
         onOpenChange={setRegenerateConfirmOpen}
         title={t('mcpServer.tokens.regenerateConfirm.title')}
         description={t('mcpServer.tokens.regenerateConfirm.description')}
-        confirmLabel={t('mcpServer.tokens.regenerateAction')}
+        confirmLabel={t('mcpServer.tokens.regenerateConfirm.confirmLabel')}
         variant="destructive"
         onConfirm={() => void handleRegenerate()}
       />

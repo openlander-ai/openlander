@@ -1058,6 +1058,7 @@ export const translations = {
         title: 'MCP 토큰을 재발급할까요?',
         description:
           '기존 토큰은 무효화됩니다. 그 토큰을 사용하는 MCP 클라이언트는 다음 요청부터 401 오류로 거부되며, 새 토큰을 설정에 적용해야 다시 연결됩니다.',
+        confirmLabel: 'Regenerate token',
       },
       regenerateSuccess: '토큰이 재발급되었습니다. 클라이언트 설정을 새 토큰으로 업데이트하세요.',
       regenerateFailed: '토큰 재발급에 실패했습니다',
@@ -1226,6 +1227,7 @@ export const translations = {
         title: 'GitHub 연결을 해제할까요?',
         description:
           'OpenLander가 GitHub 저장소에 접근할 수 없게 됩니다. 이미 배포된 서비스는 계속 동작하지만, 비공개 저장소에서 새 배포는 다시 연결할 때까지 실패합니다.',
+        confirmLabel: 'Disconnect GitHub',
       },
       authMethod: {
         // Chrome — method labels.
