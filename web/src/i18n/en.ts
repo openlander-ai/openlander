@@ -49,10 +49,9 @@ export const translations = {
   },
   account: {
     popover: {
-      openLabel: 'Open account menu',
-      menuLabel: 'Account menu',
-      adminLabel: 'admin',
-      subtitle: 'Account',
+      openLabel: 'Open settings menu',
+      menuLabel: 'Settings menu',
+      triggerLabel: 'Settings',
       changePassword: 'Change password',
       switchLanguage: 'Switch language',
       signOut: 'Sign out',
