@@ -195,6 +195,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
             startingTraefik={startingTraefik}
             onStartTraefik={handleStartTraefik}
             onNext={goNext}
+            onBack={goBack}
           />
         )}
 

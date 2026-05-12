@@ -7,10 +7,9 @@
  * Escape closes it. Change password opens a separate modal.
  */
 import { useEffect, useRef, useState } from 'react';
-import { ChevronUp, Globe, KeyRound, LogOut } from 'lucide-react';
+import { ChevronUp, Globe, KeyRound, LogOut, Settings } from 'lucide-react';
 import { logout } from '@/lib/api/auth';
 import { useLanguage } from '@/i18n/context';
-import { BRAND } from '@/lib/brand';
 import { cn } from '@/lib/utils';
 import { ChangePasswordModal } from './ChangePasswordModal';
 
@@ -89,21 +88,14 @@ export function AccountPopover({ collapsed = false }: AccountPopoverProps) {
           open && 'bg-[color:var(--ol-panel-2)]',
         )}
       >
-        <span
+        <Settings
           aria-hidden
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[color:var(--ol-primary-soft)] text-[12px] font-semibold text-[color:var(--ol-primary)]"
-        >
-          {BRAND.glyph}
-        </span>
+          className="h-4 w-4 shrink-0 text-[color:var(--ol-fg-muted)]"
+        />
         {!collapsed && (
           <>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium">
-                {t('account.popover.adminLabel')}
-              </span>
-              <span className="block truncate text-[11px] text-[color:var(--ol-fg-muted)]">
-                {t('account.popover.subtitle')}
-              </span>
+            <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+              {t('account.popover.triggerLabel')}
             </span>
             <ChevronUp
               className={cn(

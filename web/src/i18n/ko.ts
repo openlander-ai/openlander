@@ -57,12 +57,11 @@ export const translations = {
       // aria-label / title attribute — kept in Korean so Korean screen
       // readers and on-hover tooltips read naturally to ko users
       // (Content register override on the form-label Chrome default).
-      openLabel: '계정 메뉴 열기',
-      menuLabel: '계정 메뉴',
+      openLabel: '설정 메뉴 열기',
+      menuLabel: '설정 메뉴',
       // Visible chrome — same English string as en.ts (Chrome register
       // per docs/i18n-policy.md).
-      adminLabel: 'admin',
-      subtitle: 'Account',
+      triggerLabel: 'Settings',
       changePassword: 'Change password',
       switchLanguage: 'Switch language',
       signOut: 'Sign out',
