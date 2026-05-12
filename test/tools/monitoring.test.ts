@@ -359,6 +359,17 @@ describe('diagnose_service tool', () => {
     const stripeSecretFixture = ['stripe_', 'sk_test_', '4eC39HqLyjWDarjtT1zdp7dc'].join('');
     const stripeRestrictedFixture = ['stripe_', 'rk_live_', 'rk_51RestrictedKey'].join('');
     const apiKeyFixture = ['abcdef', '123456'].join('');
+    const awsAccessKeyFixture = ['AKIA', 'IOSFODNN7EXAMPLE'].join(''); // AKIA + 16
+    const awsSessionKeyFixture = ['ASIA', 'A1B2C3D4E5F6G7H8'].join(''); // ASIA + 16
+    const googleApiKeyFixture = ['AIza', 'SyA-GoogleExample123456789_ABCDE-ky'].join(''); // AIza + 35
+    const openaiTokenFixture = ['sk-', 'proj-AbcDefGhIjKlMnOpQrStUv'].join(''); // sk- + 26
+    const anthropicTokenFixture = ['sk-ant-', 'api03-AbcDefGhIjKlMnOpQrStUvWx'].join(''); // sk-ant- + 28
+    const sendgridTokenFixture = [
+      'SG.',
+      'AbCdEfGhIjKlMnOpQrStUv', // 22
+      '.',
+      'AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQ', // 43
+    ].join('');
     const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
     const service = {
       id: 'app__svc',
@@ -421,7 +432,7 @@ describe('diagnose_service tool', () => {
             commit_sha: 'abc123',
             commit_message: 'test',
             build_log:
-              `Collecting page data\nDATABASE_URL=postgresql://postgres:secret@ol-db:5432/app\nAuthorization: Bearer ${jwtFixture}\nAuthorization: Basic ${basicAuthFixture}\nplain ${githubPatFixture}\nError: DATABASE_URL is not set`,
+              `Collecting page data\nDATABASE_URL=postgresql://postgres:secret@ol-db:5432/app\nAuthorization: Bearer ${jwtFixture}\nAuthorization: Basic ${basicAuthFixture}\nplain ${githubPatFixture}\nAWS creds ${awsAccessKeyFixture} ${awsSessionKeyFixture}\nGoogle ${googleApiKeyFixture}\nOpenAI ${openaiTokenFixture}\nAnthropic ${anthropicTokenFixture}\nSendGrid ${sendgridTokenFixture}\nError: DATABASE_URL is not set`,
             runtime_log: null,
             duration_ms: 12000,
             created_at: '2026-05-12T00:01:00.000Z',
@@ -482,10 +493,21 @@ describe('diagnose_service tool', () => {
       expect(JSON.stringify(result)).not.toContain('stripe_sk_test');
       expect(JSON.stringify(result)).not.toContain('stripe_rk_live');
       expect(JSON.stringify(result)).not.toContain('abcdef123456');
+      expect(JSON.stringify(result)).not.toContain('IOSFODNN7EXAMPLE');
+      expect(JSON.stringify(result)).not.toContain('A1B2C3D4E5F6G7H8');
+      expect(JSON.stringify(result)).not.toContain('SyA-GoogleExample');
+      expect(JSON.stringify(result)).not.toContain('proj-AbcDef');
+      expect(JSON.stringify(result)).not.toContain('api03-AbcDef');
+      expect(JSON.stringify(result)).not.toContain('AbCdEfGhIjKlMnOpQrStUv');
       expect(JSON.stringify(result)).toContain('DATABASE_URL=***');
       expect(JSON.stringify(result)).toContain('Bearer ***');
       expect(JSON.stringify(result)).toContain('Basic ***');
       expect(JSON.stringify(result)).toContain('API_KEY=***');
+      expect(JSON.stringify(result)).toContain('aws_***');
+      expect(JSON.stringify(result)).toContain('google_***');
+      expect(JSON.stringify(result)).toContain('openai_***');
+      expect(JSON.stringify(result)).toContain('anthropic_***');
+      expect(JSON.stringify(result)).toContain('sendgrid_***');
       const deployment = result.recentDeployment as {
         latest?: { buildLogTailSanitized?: boolean; fullBuildLogHint?: string };
       };
