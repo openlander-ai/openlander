@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1-rc.4] — 2026-05-13
+
+Release candidate with MCP diagnostic sanitization hardening and follow-up UI
+polish for confirmation/setup surfaces.
+
+### Fixed
+
+- Hardened `openlander_monitor.diagnose_service` sanitization for additional
+  secret-like tokens, including cloud-provider credentials in log tails and
+  diagnostic errors.
+- Aligned `ConfirmDialog` styling with the OpenLander dashboard visual system.
+- Fixed the invisible Connect GitHub label in setup infrastructure chrome.
+
 ## [0.1.1-rc.3] — 2026-05-12
 
 Release candidate with MCP deploy action vocabulary cleanup and token
