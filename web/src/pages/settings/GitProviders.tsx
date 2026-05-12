@@ -455,7 +455,7 @@ function GitHubEmptyCard() {
         <button
           type="button"
           onClick={handleConnect}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-4 text-[13px] font-medium text-[color:var(--ol-on-primary)] transition-opacity hover:opacity-90"
+          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-4 text-[13px] font-medium text-[color:var(--ol-primary-fg)] transition-opacity hover:opacity-90"
         >
           <Github className="h-3.5 w-3.5" />
           {t('gitProviders.github.empty.cta')}
