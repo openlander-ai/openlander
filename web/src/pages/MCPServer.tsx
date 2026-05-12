@@ -369,7 +369,12 @@ export function MCPServer() {
 
       {/* Setup card — one tab per supported MCP client, all driven by
           the shared snippet module so this page and the setup wizard
-          can't drift. */}
+          can't drift. Mounted only after Generate/Regenerate so the
+          snippet appears with the actual token baked in; before the
+          one-shot reveal there is nothing useful to paste, so the
+          preview is hidden rather than showing a `<your-token>`
+          placeholder the user can't act on. */}
+      {newTokenPlain && (
       <OuterCard title={t('mcpServer.setup.title')} subtitle={t('mcpServer.setup.subtitle')}>
         <Tabs
           value={activeConfig.id}
@@ -411,6 +416,7 @@ export function MCPServer() {
           </div>
         </Tabs>
       </OuterCard>
+      )}
 
       {/* Recent agent calls */}
       <OuterCard

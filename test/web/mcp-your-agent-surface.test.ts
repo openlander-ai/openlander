@@ -65,7 +65,7 @@ describe('Your Agent (MCP) v0.1 surface', () => {
     expect(source).not.toMatch(/window\.confirm\(/);
   });
 
-  it('renders multi-client config tabs with placeholder when token is not revealed', () => {
+  it('renders multi-client config tabs gated on the one-shot plaintext reveal', () => {
     // The Setup card no longer hardcodes a single Claude Desktop snippet;
     // it walks the shared snippet module (web/src/lib/mcp-config-snippets.ts)
     // for one tab per supported MCP client. Both the page and the setup
@@ -74,8 +74,12 @@ describe('Your Agent (MCP) v0.1 surface', () => {
     expect(source).toMatch(/<TabsTrigger /);
     expect(source).toMatch(/<TabsContent /);
     expect(snippetSource).toContain('mcpServers');
-    // Hide must redact the snippet too — embed the plaintext only
-    // when the token row is currently revealed.
+    // Setup card is mounted only after Generate/Regenerate so the snippet
+    // appears with the actual token baked in — no `<your-token>` preview
+    // before the one-shot reveal.
+    expect(source).toMatch(/\{newTokenPlain && \(\s*<OuterCard title=\{t\('mcpServer\.setup\.title'\)\}/);
+    // Hide still redacts the snippet within the same card by swapping in
+    // the placeholder, so the ternary contract must stay.
     expect(source).toContain("'<your-token>'");
     expect(source).toMatch(/revealed && newTokenPlain \? newTokenPlain : ['"]<your-token>['"]/);
     // The shared module is the only place that owns per-client config

@@ -1,4 +1,4 @@
-import { Terminal, Network, Loader2, ArrowRight } from 'lucide-react';
+import { Terminal, Network, Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusRow, DockerFixGuide } from './shared';
 import { useLanguage } from '@/i18n/context';
@@ -28,6 +28,7 @@ interface InfraStepProps {
   startingTraefik: boolean;
   onStartTraefik: () => Promise<void>;
   onNext: () => void;
+  onBack: () => void;
 }
 
 export function InfraStep({
@@ -36,6 +37,7 @@ export function InfraStep({
   startingTraefik,
   onStartTraefik,
   onNext,
+  onBack,
 }: InfraStepProps) {
   const { t } = useLanguage();
 
@@ -90,15 +92,21 @@ export function InfraStep({
           )}
         </div>
 
-        <Button
-          onClick={onNext}
-          disabled={!status.docker.ok}
-          size="lg"
-          className="w-full bg-agent text-white hover:bg-agent/90 font-body gap-2"
-        >
-          {t('setup.common.getStarted')}
-          <ArrowRight className="h-4 w-4" />
-        </Button>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={onBack} className="gap-1.5 font-body">
+            <ArrowLeft className="h-3.5 w-3.5" />
+            {t('setup.common.back')}
+          </Button>
+          <Button
+            onClick={onNext}
+            disabled={!status.docker.ok}
+            size="lg"
+            className="flex-1 bg-agent text-white hover:bg-agent/90 font-body gap-2"
+          >
+            {t('setup.common.getStarted')}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
 
         {!status.docker.ok && (
           <p className="text-sm font-body text-muted-foreground">
