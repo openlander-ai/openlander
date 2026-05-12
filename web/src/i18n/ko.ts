@@ -1,27 +1,29 @@
 export const translations = {
   resources: {
-    title: '리소스 제한',
-    description:
-      '메모리 및 CPU 제한을 설정하여 cascade failure를 방지합니다. 변경사항은 다음 배포 시 적용됩니다.',
-    profile: '메모리 프로필',
+    // Chrome — section title + form labels + dropdown options + buttons + status.
+    title: 'Resource Limits',
+    profile: 'Memory Profile',
     profiles: {
       micro: 'Micro (256 MB)',
       small: 'Small (512 MB)',
       medium: 'Medium (1 GB)',
       large: 'Large (2 GB)',
-      custom: '직접 입력',
+      custom: 'Custom',
     },
-    customMemory: '커스텀 메모리 (MB)',
+    customMemory: 'Custom Memory (MB)',
+    save: 'Save',
+    saving: 'Saving...',
+    saved: 'Saved',
+    loading: 'Loading...',
+    // Content — descriptive copy + hints + notices + errors.
+    description:
+      '메모리 및 CPU 제한을 설정하여 cascade failure를 방지합니다. 변경사항은 다음 배포 시 적용됩니다.',
     customMemoryHint: '최소 64 MB',
-    save: '저장',
-    saving: '저장 중...',
-    saved: '저장됨',
     appliesOnRedeploy: '변경사항은 다음 배포 시 적용됩니다',
     noLimit: '메모리 제한이 설정되지 않았습니다',
     noLimitWarning: '메모리 제한을 설정하면 cascade failure를 방지할 수 있습니다.',
     loadFailed: '리소스 제한을 불러오지 못했습니다',
     saveFailed: '리소스 제한 저장에 실패했습니다',
-    loading: '로딩 중...',
     composeNotSupported:
       'docker-compose 프로젝트에는 아직 리소스 제한이 적용되지 않습니다. v1.1.0에서 지원 예정입니다.',
     warning: {
@@ -252,13 +254,13 @@ export const translations = {
     commandPlaceholder: '예: --model-id BAAI/bge-m3',
   },
   projects: {
-    // Chrome — page title + primary action + filter toggle.
+    // Chrome — page title + primary action + CTA button.
     title: 'Projects overview',
     newProject: 'New project',
+    deployFirstApp: 'Deploy your first app',
     // Content — empty state + descriptive copy + error.
     monitored: '프로젝트 {count}개 모니터링 중',
     noProjects: '프로젝트가 없습니다',
-    deployFirstApp: '첫 번째 앱 배포하기',
     connectGithub: 'GitHub 레포지토리를 연결하면 에이전트가 나머지를 처리합니다.',
     error: {
       invalidName:
@@ -324,16 +326,16 @@ export const translations = {
     // Chrome — back button.
     goBack: 'Back',
     danger: {
-      // Chrome — nav label.
+      // Chrome — nav label + section headings.
       nav: 'Danger',
-      // Content — section titles + descriptive copy.
-      title: '위험 구역',
+      title: 'Danger zone',
+      archiveTitle: 'Archive project',
+      restoreTitle: 'Restore project',
+      deleteTitle: 'Permanently delete project',
+      // Content — descriptive copy + error.
       description: '프로젝트 그룹을 보관하거나 영구 삭제합니다.',
-      archiveTitle: '프로젝트 보관',
       archiveBody: '컨테이너를 중지하고 기본 목록에서 숨기되 설정은 보존합니다.',
-      restoreTitle: '프로젝트 복원',
       restoreBody: '보관된 프로젝트를 기본 프로젝트 목록으로 되돌립니다.',
-      deleteTitle: '프로젝트 영구 삭제',
       deleteBody: '프로젝트 그룹, 서비스, 컨테이너, 설정, 기록을 삭제합니다.',
       purgeDescription:
         '프로젝트 그룹과 관련 런타임 리소스를 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
@@ -371,33 +373,35 @@ export const translations = {
         '잘못된 환경 변수 키: {key}. 키는 영문자나 밑줄(_)로 시작해야 하며 영문자·숫자·밑줄만 사용할 수 있습니다.',
     },
     addService: {
-      title: '서비스 추가',
-      descriptionPrefix: '프로젝트',
+      // Chrome — modal title + source option labels + form labels + buttons.
+      title: 'Add a service',
+      descriptionPrefix: 'Project',
+      git: 'From GitHub',
+      image: 'From image',
+      template: 'From template',
+      templateDescription: 'Curated stacks',
+      soon: 'Soon',
+      serviceName: 'Service name',
+      repo: 'GitHub repository',
+      branch: 'Branch',
+      dockerfilePath: 'Dockerfile path',
+      dockerTarget: 'Docker target',
+      buildContext: 'Build context',
+      imageReference: 'Image reference',
+      containerPort: 'Container port',
+      cancel: 'Cancel',
+      create: 'Create service',
+      creating: 'Creating…',
+      // Content — descriptive copy + hints + error messages + success toast.
       descriptionSuffix: '· 소스를 고르고 배포 서비스 이름을 지정하세요.',
-      git: 'GitHub에서',
       gitDescription: '레포지토리에서 빌드',
-      image: '이미지에서',
       imageDescription: 'OCI 이미지 pull',
-      template: '템플릿에서',
-      templateDescription: '큐레이션된 스택',
-      soon: '곧 출시',
       templateSoon: '템플릿은 곧 제공됩니다.',
       templateBody:
         '큐레이션된 스택(Postgres, Redis, n8n, Plausible, Umami)은 v0.2에서 제공될 예정입니다. 지금은 GitHub 또는 이미지 소스를 사용하세요.',
-      serviceName: '서비스 이름',
       serviceNameHint: '{path} 경로에 사용됩니다.',
-      repo: 'GitHub 레포지토리',
-      branch: '브랜치',
-      dockerfilePath: 'Dockerfile 경로',
-      dockerTarget: 'Docker target',
-      buildContext: 'Build context',
-      imageReference: '이미지 레퍼런스',
       imageReferenceHint:
         'Docker Hub, GHCR 또는 OCI 레지스트리. 태그를 고정하세요 — :latest는 배포마다 달라질 수 있습니다.',
-      containerPort: '컨테이너 포트',
-      cancel: '취소',
-      create: '서비스 생성',
-      creating: '생성 중…',
       success: '{name} 서비스를 배포 중입니다.',
       errorName: '서비스 이름을 입력하거나 OpenLander가 이름을 추론할 수 있는 소스를 입력하세요.',
       errorRepo: 'GitHub 레포지토리 URL을 입력하세요.',
@@ -406,15 +410,17 @@ export const translations = {
       errorCreate: '서비스 생성에 실패했습니다',
     },
     serviceDelete: {
-      title: '이 서비스 삭제',
+      // Chrome — card title + modal title + form label + buttons.
+      title: 'Delete this service',
+      confirmTitle: 'Delete deployable service',
+      confirmLabel: 'Type',
+      deleting: 'Deleting…',
+      confirmButton: 'Delete service',
+      // Content — descriptive body + confirmation prose + error + checkbox label.
       body: '컨테이너와 서비스 소유 설정을 제거합니다. 관리 볼륨은 명시적으로 선택하지 않으면 보존됩니다.',
-      confirmTitle: '배포 서비스 삭제',
       confirmDescription:
         '실행 중인 컨테이너를 중지/제거하고 서비스 소유 환경 변수, 도메인, 리소스 설정을 삭제합니다. 프로젝트 볼륨은 기본 보존됩니다.',
-      confirmLabel: '입력',
       deleteVolumes: '이 그룹의 마지막 배포 서비스일 때 관리 프로젝트 볼륨도 삭제합니다.',
-      deleting: '삭제 중…',
-      confirmButton: '서비스 삭제',
       error: '서비스 삭제에 실패했습니다',
     },
     domains: {
@@ -512,9 +518,10 @@ export const translations = {
     healthCheckPlaceholder: '/health 또는 /api/health',
   },
   deploy: {
-    // Content — empty + descriptive copy + confirm prompt.
+    // Chrome — back link.
+    backToDeployments: 'Back to deployments',
+    // Content — empty state + descriptive copy + confirm prompt.
     notFound: '배포를 찾을 수 없습니다',
-    backToDeployments: '배포 목록으로 돌아가기',
     buildFailureDetected:
       '빌드 실패가 감지되었습니다. 아래 빌드 로그를 확인하거나 외부 에이전트에서 MCP 로그 도구를 사용하세요.',
     noBuildLog: '빌드 로그가 없습니다',
@@ -534,7 +541,8 @@ export const translations = {
         '배포할 레포지토리 URL을 입력하세요. OpenLander가 클론, 빌드 및 실행을 처리합니다.',
       autoDetected: '레포지토리에서 자동 감지됨',
       failed: '프로젝트 배포 실패',
-      pasteEnvTitle: '환경 변수 붙여넣기',
+      // Chrome — dialog title.
+      pasteEnvTitle: 'Paste Environment Variables',
       pasteEnvDescription:
         '.env 파일 내용을 아래에 붙여넣으세요. 프로젝트에 필요한 변수와 자동으로 매핑됩니다.',
       pasteEnvPlaceholder: 'DATABASE_URL=postgresql://...\nAPI_KEY=sk-...\n# 주석은 무시됩니다',
@@ -580,12 +588,14 @@ export const translations = {
       saveFailed: '프로젝트 정보를 저장하지 못했습니다.',
     },
     github: {
+      // Chrome — instruction label + status + CTA button + form label + link.
+      enterCode: 'Enter this code on GitHub:',
+      waiting: 'Waiting for authorization...',
+      connectWithGithub: 'Connect with GitHub',
+      enterToken: 'Enter a Personal Access Token:',
+      generateToken: 'Generate a token →',
+      // Content — description.
       description: '비공개 레포지토리를 배포하려면 GitHub 계정을 연결하세요.',
-      enterCode: 'GitHub에 이 코드를 입력하세요:',
-      waiting: '인증 대기 중...',
-      connectWithGithub: 'GitHub로 연결',
-      enterToken: '개인 액세스 토큰 입력:',
-      generateToken: '토큰 생성 →',
     },
   },
   services: {
@@ -656,8 +666,10 @@ export const translations = {
       serviceStoppedHint: '로그를 보려면 서비스를 시작하세요.',
       showingLast: '최근',
       noProjectsUsing: '이 서비스를 사용하는 프로젝트가 없습니다',
-      selectDatabase: '데이터베이스 선택',
-      selectVersion: '버전 선택',
+      // Chrome — dropdown labels.
+      selectDatabase: 'Select a database',
+      selectVersion: 'Select a version',
+      // Content — loading / empty.
       loadingLogs: '로그 로딩 중...',
       noLogsAvailable: '표시할 로그가 없습니다',
       linesCount: '{count}줄',
@@ -846,12 +858,13 @@ export const translations = {
     },
     confirm: {
       // Chrome — modal buttons.
+      // Chrome — modal buttons + titles.
       confirm: 'Confirm',
       cancel: 'Cancel',
+      stopTitle: 'Stop Project',
+      deleteTitle: 'Delete Project',
       // Content — confirmation prose.
-      stopTitle: '프로젝트 중지',
       stopDescription: '이 프로젝트를 중지하시겠습니까?',
-      deleteTitle: '프로젝트 삭제',
       deleteDescription: '이 프로젝트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
     },
     header: {
