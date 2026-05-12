@@ -1,27 +1,29 @@
 export const translations = {
   resources: {
-    title: '리소스 제한',
-    description:
-      '메모리 및 CPU 제한을 설정하여 cascade failure를 방지합니다. 변경사항은 다음 배포 시 적용됩니다.',
-    profile: '메모리 프로필',
+    // Chrome — section title + form labels + dropdown options + buttons + status.
+    title: 'Resource Limits',
+    profile: 'Memory Profile',
     profiles: {
       micro: 'Micro (256 MB)',
       small: 'Small (512 MB)',
       medium: 'Medium (1 GB)',
       large: 'Large (2 GB)',
-      custom: '직접 입력',
+      custom: 'Custom',
     },
-    customMemory: '커스텀 메모리 (MB)',
+    customMemory: 'Custom Memory (MB)',
+    save: 'Save',
+    saving: 'Saving...',
+    saved: 'Saved',
+    loading: 'Loading...',
+    // Content — descriptive copy + hints + notices + errors.
+    description:
+      '메모리 및 CPU 제한을 설정하여 cascade failure를 방지합니다. 변경사항은 다음 배포 시 적용됩니다.',
     customMemoryHint: '최소 64 MB',
-    save: '저장',
-    saving: '저장 중...',
-    saved: '저장됨',
     appliesOnRedeploy: '변경사항은 다음 배포 시 적용됩니다',
     noLimit: '메모리 제한이 설정되지 않았습니다',
     noLimitWarning: '메모리 제한을 설정하면 cascade failure를 방지할 수 있습니다.',
     loadFailed: '리소스 제한을 불러오지 못했습니다',
     saveFailed: '리소스 제한 저장에 실패했습니다',
-    loading: '로딩 중...',
     composeNotSupported:
       'docker-compose 프로젝트에는 아직 리소스 제한이 적용되지 않습니다. v1.1.0에서 지원 예정입니다.',
     warning: {
@@ -252,13 +254,13 @@ export const translations = {
     commandPlaceholder: '예: --model-id BAAI/bge-m3',
   },
   projects: {
-    // Chrome — page title + primary action + filter toggle.
+    // Chrome — page title + primary action + CTA button.
     title: 'Projects overview',
     newProject: 'New project',
+    deployFirstApp: 'Deploy your first app',
     // Content — empty state + descriptive copy + error.
     monitored: '프로젝트 {count}개 모니터링 중',
     noProjects: '프로젝트가 없습니다',
-    deployFirstApp: '첫 번째 앱 배포하기',
     connectGithub: 'GitHub 레포지토리를 연결하면 에이전트가 나머지를 처리합니다.',
     error: {
       invalidName:
@@ -324,16 +326,16 @@ export const translations = {
     // Chrome — back button.
     goBack: 'Back',
     danger: {
-      // Chrome — nav label.
+      // Chrome — nav label + section headings.
       nav: 'Danger',
-      // Content — section titles + descriptive copy.
-      title: '위험 구역',
+      title: 'Danger zone',
+      archiveTitle: 'Archive project',
+      restoreTitle: 'Restore project',
+      deleteTitle: 'Permanently delete project',
+      // Content — descriptive copy + error.
       description: '프로젝트 그룹을 보관하거나 영구 삭제합니다.',
-      archiveTitle: '프로젝트 보관',
       archiveBody: '컨테이너를 중지하고 기본 목록에서 숨기되 설정은 보존합니다.',
-      restoreTitle: '프로젝트 복원',
       restoreBody: '보관된 프로젝트를 기본 프로젝트 목록으로 되돌립니다.',
-      deleteTitle: '프로젝트 영구 삭제',
       deleteBody: '프로젝트 그룹, 서비스, 컨테이너, 설정, 기록을 삭제합니다.',
       purgeDescription:
         '프로젝트 그룹과 관련 런타임 리소스를 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
@@ -371,33 +373,35 @@ export const translations = {
         '잘못된 환경 변수 키: {key}. 키는 영문자나 밑줄(_)로 시작해야 하며 영문자·숫자·밑줄만 사용할 수 있습니다.',
     },
     addService: {
-      title: '서비스 추가',
-      descriptionPrefix: '프로젝트',
+      // Chrome — modal title + source option labels + form labels + buttons.
+      title: 'Add a service',
+      descriptionPrefix: 'Project',
+      git: 'From GitHub',
+      image: 'From image',
+      template: 'From template',
+      templateDescription: 'Curated stacks',
+      soon: 'Soon',
+      serviceName: 'Service name',
+      repo: 'GitHub repository',
+      branch: 'Branch',
+      dockerfilePath: 'Dockerfile path',
+      dockerTarget: 'Docker target',
+      buildContext: 'Build context',
+      imageReference: 'Image reference',
+      containerPort: 'Container port',
+      cancel: 'Cancel',
+      create: 'Create service',
+      creating: 'Creating…',
+      // Content — descriptive copy + hints + error messages + success toast.
       descriptionSuffix: '· 소스를 고르고 배포 서비스 이름을 지정하세요.',
-      git: 'GitHub에서',
       gitDescription: '레포지토리에서 빌드',
-      image: '이미지에서',
       imageDescription: 'OCI 이미지 pull',
-      template: '템플릿에서',
-      templateDescription: '큐레이션된 스택',
-      soon: '곧 출시',
       templateSoon: '템플릿은 곧 제공됩니다.',
       templateBody:
         '큐레이션된 스택(Postgres, Redis, n8n, Plausible, Umami)은 v0.2에서 제공될 예정입니다. 지금은 GitHub 또는 이미지 소스를 사용하세요.',
-      serviceName: '서비스 이름',
       serviceNameHint: '{path} 경로에 사용됩니다.',
-      repo: 'GitHub 레포지토리',
-      branch: '브랜치',
-      dockerfilePath: 'Dockerfile 경로',
-      dockerTarget: 'Docker target',
-      buildContext: 'Build context',
-      imageReference: '이미지 레퍼런스',
       imageReferenceHint:
         'Docker Hub, GHCR 또는 OCI 레지스트리. 태그를 고정하세요 — :latest는 배포마다 달라질 수 있습니다.',
-      containerPort: '컨테이너 포트',
-      cancel: '취소',
-      create: '서비스 생성',
-      creating: '생성 중…',
       success: '{name} 서비스를 배포 중입니다.',
       errorName: '서비스 이름을 입력하거나 OpenLander가 이름을 추론할 수 있는 소스를 입력하세요.',
       errorRepo: 'GitHub 레포지토리 URL을 입력하세요.',
@@ -406,15 +410,17 @@ export const translations = {
       errorCreate: '서비스 생성에 실패했습니다',
     },
     serviceDelete: {
-      title: '이 서비스 삭제',
+      // Chrome — card title + modal title + form label + buttons.
+      title: 'Delete this service',
+      confirmTitle: 'Delete deployable service',
+      confirmLabel: 'Type',
+      deleting: 'Deleting…',
+      confirmButton: 'Delete service',
+      // Content — descriptive body + confirmation prose + error + checkbox label.
       body: '컨테이너와 서비스 소유 설정을 제거합니다. 관리 볼륨은 명시적으로 선택하지 않으면 보존됩니다.',
-      confirmTitle: '배포 서비스 삭제',
       confirmDescription:
         '실행 중인 컨테이너를 중지/제거하고 서비스 소유 환경 변수, 도메인, 리소스 설정을 삭제합니다. 프로젝트 볼륨은 기본 보존됩니다.',
-      confirmLabel: '입력',
       deleteVolumes: '이 그룹의 마지막 배포 서비스일 때 관리 프로젝트 볼륨도 삭제합니다.',
-      deleting: '삭제 중…',
-      confirmButton: '서비스 삭제',
       error: '서비스 삭제에 실패했습니다',
     },
     domains: {
@@ -512,9 +518,10 @@ export const translations = {
     healthCheckPlaceholder: '/health 또는 /api/health',
   },
   deploy: {
-    // Content — empty + descriptive copy + confirm prompt.
+    // Chrome — back link.
+    backToDeployments: 'Back to deployments',
+    // Content — empty state + descriptive copy + confirm prompt.
     notFound: '배포를 찾을 수 없습니다',
-    backToDeployments: '배포 목록으로 돌아가기',
     buildFailureDetected:
       '빌드 실패가 감지되었습니다. 아래 빌드 로그를 확인하거나 외부 에이전트에서 MCP 로그 도구를 사용하세요.',
     noBuildLog: '빌드 로그가 없습니다',
@@ -534,7 +541,8 @@ export const translations = {
         '배포할 레포지토리 URL을 입력하세요. OpenLander가 클론, 빌드 및 실행을 처리합니다.',
       autoDetected: '레포지토리에서 자동 감지됨',
       failed: '프로젝트 배포 실패',
-      pasteEnvTitle: '환경 변수 붙여넣기',
+      // Chrome — dialog title.
+      pasteEnvTitle: 'Paste Environment Variables',
       pasteEnvDescription:
         '.env 파일 내용을 아래에 붙여넣으세요. 프로젝트에 필요한 변수와 자동으로 매핑됩니다.',
       pasteEnvPlaceholder: 'DATABASE_URL=postgresql://...\nAPI_KEY=sk-...\n# 주석은 무시됩니다',
@@ -580,17 +588,21 @@ export const translations = {
       saveFailed: '프로젝트 정보를 저장하지 못했습니다.',
     },
     github: {
+      // Chrome — instruction label + status + CTA button + form label + link.
+      enterCode: 'Enter this code on GitHub:',
+      waiting: 'Waiting for authorization...',
+      connectWithGithub: 'Connect with GitHub',
+      enterToken: 'Enter a Personal Access Token:',
+      generateToken: 'Generate a token →',
+      // Content — description.
       description: '비공개 레포지토리를 배포하려면 GitHub 계정을 연결하세요.',
-      enterCode: 'GitHub에 이 코드를 입력하세요:',
-      waiting: '인증 대기 중...',
-      connectWithGithub: 'GitHub로 연결',
-      enterToken: '개인 액세스 토큰 입력:',
-      generateToken: '토큰 생성 →',
     },
   },
   services: {
-    title: '서비스',
-    createService: '서비스 생성',
+    // Chrome — page title + primary action.
+    title: 'Services',
+    createService: 'Create service',
+    // Content — descriptive copy + empty states + format strings.
     subtitle:
       'Docker 이미지를 공유 인프라로 실행합니다. 여러 프로젝트가 이 서비스에 연결할 수 있습니다.',
     noServices: '실행 중인 서비스 없음',
@@ -602,30 +614,36 @@ export const translations = {
     createdAgo: '{time} 전',
     updatedAgo: '{time} 전에 업데이트',
     metrics: {
-      health: '상태',
-      uptime: '가동 시간',
-      restarts: '재시작',
+      // Chrome — KPI labels.
+      health: 'Health',
+      uptime: 'Uptime',
+      restarts: 'Restarts',
     },
     health: {
-      healthy: '정상',
-      unhealthy: '비정상',
-      starting: '시작 중',
+      // Chrome — status pills.
+      healthy: 'healthy',
+      unhealthy: 'unhealthy',
+      starting: 'starting',
     },
     status: {
-      running: '실행 중',
-      stopped: '중지됨',
-      error: '오류',
+      // Chrome — status pills.
+      running: 'running',
+      stopped: 'stopped',
+      error: 'error',
     },
     detail: {
+      // Content — empty state.
       notFound: '서비스를 찾을 수 없습니다',
       tabs: {
-        overview: '개요',
-        connection: '연결',
-        databases: '데이터베이스',
-        logs: '로그',
-        settings: '설정',
+        // Chrome — nav tabs.
+        overview: 'Overview',
+        connection: 'Connection',
+        databases: 'Databases',
+        logs: 'Logs',
+        settings: 'Settings',
       },
       toasts: {
+        // Content — toast prose.
         started: '서비스가 시작되었습니다',
         stopped: '서비스가 중지되었습니다',
         deleted: '서비스가 삭제되었습니다',
@@ -634,31 +652,38 @@ export const translations = {
         deleteFailed: '서비스 삭제에 실패했습니다',
       },
       header: {
-        backToServices: '서비스 목록으로',
-        start: '시작',
-        stop: '중지',
-        delete: '삭제',
+        // Chrome — back link + action buttons.
+        backToServices: 'Back to services',
+        start: 'Start',
+        stop: 'Stop',
+        delete: 'Delete',
       },
+      // Chrome — refresh button.
+      refresh: 'Refresh',
+      // Content — loading / empty / format strings.
       loadingDatabases: '데이터베이스 로딩 중...',
       serviceIsStopped: '서비스가 중지되었습니다',
       serviceStoppedHint: '로그를 보려면 서비스를 시작하세요.',
       showingLast: '최근',
       noProjectsUsing: '이 서비스를 사용하는 프로젝트가 없습니다',
-      selectDatabase: '데이터베이스 선택',
-      selectVersion: '버전 선택',
+      // Chrome — dropdown labels.
+      selectDatabase: 'Select a database',
+      selectVersion: 'Select a version',
+      // Content — loading / empty.
       loadingLogs: '로그 로딩 중...',
       noLogsAvailable: '표시할 로그가 없습니다',
-      refresh: '새로고침',
       linesCount: '{count}줄',
       overview: {
-        status: '상태',
-        container: '컨테이너',
+        // Chrome — KPI tile labels.
+        status: 'Status',
+        container: 'Container',
         cpu: 'CPU',
-        memory: '메모리',
-        network: '네트워크',
-        volume: '볼륨',
-        connections: '연결',
-        connectedProjects: '연결된 프로젝트',
+        memory: 'Memory',
+        network: 'Network',
+        volume: 'Volume',
+        connections: 'Connections',
+        connectedProjects: 'Connected projects',
+        // Content — loading + format strings.
         loading: '로딩 중...',
         na: '없음',
         portLabel: '포트 {port}',
@@ -666,6 +691,7 @@ export const translations = {
       },
     },
     empty: {
+      // Content — empty state.
       title: '서비스가 없습니다',
       description: '데이터베이스, 캐시 또는 기타 인프라 서비스를 생성하세요',
     },
@@ -686,47 +712,55 @@ export const translations = {
       options: 'AI 복구 옵션',
     },
     errorAnalysis: {
-      title: '오류 분석',
-      viewDetails: '원본 세부 정보 보기 ▾',
-      rootCause: '근본 원인',
-      suggestedFixes: '제안된 해결책',
-      confidence: '신뢰도',
-      viewLogs: '로그 보기',
-      hideLogs: '로그 숨기기',
+      // Chrome — section title + section labels + action buttons.
+      title: 'Build Error Analysis',
+      viewDetails: 'View raw details ▾',
+      rootCause: 'Root Cause',
+      suggestedFixes: 'Suggested Fixes',
+      confidence: 'Confidence',
+      viewLogs: 'View Logs',
+      hideLogs: 'Hide Logs',
+      applyFix: 'Apply Fix',
+      applying: 'Applying...',
+      // Content — empty state + error toast.
       noFixes: '구체적인 해결책이 반환되지 않았습니다.',
-      applyFix: '수정 적용',
-      applying: '적용 중...',
       fixFailed: 'AI로 수정 실패',
     },
     fixProposal: {
-      title: '수정 제안',
-      changes: '변경 사항',
-      diff: '제안된 변경 사항',
-      approve: '승인 및 적용',
-      reject: '거절',
-      showAlternatives: '대안 보기',
+      // Chrome — section title + diff labels + action buttons.
+      title: 'Fix Proposal',
+      changes: 'Changes',
+      diff: 'Proposed Changes',
+      approve: 'Approve & Apply',
+      reject: 'Reject',
+      showAlternatives: 'Show Alternatives',
+      before: 'Before',
+      after: 'After',
+      skip: 'Skip',
+      // Content — status toast.
       answered: '수정 제안에 답변함',
-      before: '이전',
-      after: '이후',
-      skip: '건너뛰기',
     },
     composeError: {
-      title: 'Compose 오류 감지됨',
-      selectPattern: '적용할 패턴을 선택하세요',
+      // Chrome — section title + form label + badge + selection label.
+      title: 'Compose Error Detected',
+      selectPattern: 'Select a pattern to apply',
+      envVarsOptional: 'Environment Variables (Optional)',
+      recommended: 'Recommended',
+      // Content — status toast.
       answered: 'Compose 수정에 답변함',
-      envVarsOptional: '환경 변수 (선택 사항)',
-      recommended: '권장됨',
     },
   },
   share: {
-    title: '프로젝트 공유',
-    accessCode: '접근 코드',
+    // Chrome — modal title + form label + buttons.
+    title: 'Share project',
+    accessCode: 'Access code',
+    generate: 'Generate',
+    shareButton: 'Share via access code',
+    stopSharing: 'Stop sharing',
+    copyInvitation: 'Copy invitation',
+    copied: 'Copied!',
+    // Content — hints and notices.
     accessCodeHint: '최소 4자. 이 코드가 있으면 누구나 프로젝트에 접근할 수 있습니다.',
-    generate: '생성',
-    shareButton: '접근 코드로 공유',
-    stopSharing: '공유 중지',
-    copyInvitation: '초대 복사',
-    copied: '복사됨!',
     alreadyShared: '이 프로젝트는 현재 공유 중입니다.',
     notRunning: '공유하려면 프로젝트가 실행 중이어야 합니다.',
   },
@@ -753,15 +787,17 @@ export const translations = {
       '실시간 업데이트가 중단되었습니다. 다시 연결하여 최신 출력을 계속 따라가세요.',
     noMatchingTitle: '일치하는 줄이 없습니다',
     noMatchingBody: '검색어나 레벨 필터를 조정하면 로그 줄을 다시 볼 수 있습니다.',
-    retryStream: '스트림 다시 연결',
-    clearFilters: '필터 지우기',
-    terminalReadyBadge: '준비됨',
+    // Chrome — action buttons + status badges.
+    retryStream: 'Reconnect stream',
+    clearFilters: 'Clear filters',
+    terminalReadyBadge: 'Ready',
+    // Content — terminal state titles + bodies.
     terminalReadyTitle: '터미널 준비 완료',
     terminalReadyBody: '셸이 열려 있어도 로그는 계속 실시간으로 표시됩니다.',
-    terminalStandbyBadge: '대기 중',
+    terminalStandbyBadge: 'Standby',
     terminalStandbyTitle: '터미널 대기 중',
     terminalStandbyBody: '로그는 계속 스트리밍됩니다. 셸을 다시 연결하려면 Console 탭을 여세요.',
-    terminalUnavailableBadge: '사용 불가',
+    terminalUnavailableBadge: 'Unavailable',
     terminalBuildingTitle: '빌드 중에는 터미널을 사용할 수 없습니다',
     terminalBuildingBody: '다음 실행 가능한 컨테이너가 준비되는 동안에는 실시간 로그를 확인하세요.',
     terminalProjectErrorTitle: '프로젝트 오류 중에는 터미널을 사용할 수 없습니다',
@@ -776,103 +812,125 @@ export const translations = {
     terminalErrorBody: '셸 세션 시작에 실패했습니다. 다시 연결하여 재시도하세요.',
     terminalDisconnected: '셸 연결 끊김',
     terminalDisconnectedBody: '셸 세션이 종료되었습니다. 다시 연결하여 새 셸을 여세요.',
-    terminalReconnect: '셸 다시 연결',
+    terminalReconnect: 'Reconnect shell',
   },
   command: {
+    // Chrome — command palette entries (action labels).
+    noResults: 'No results',
+    deployNewRepo: 'Deploy new repo',
+    triggerFreshDeploy: 'Trigger fresh deploy',
+    stopContainer: 'Stop running container',
+    // Content — placeholder hint.
     searchPlaceholder: '명령어 입력 또는 검색...',
-    noResults: '결과가 없습니다',
-    deployNewRepo: '새 레포지토리 배포',
-    triggerFreshDeploy: '새 배포 트리거',
-    stopContainer: '실행 중인 컨테이너 중지',
   },
   oauth: {
+    // Content — error toast.
     startFailed: '인증 시작 실패',
-    signInWith: '다음으로 로그인:',
+    // Chrome — label preceding provider name.
+    signInWith: 'Sign in with',
+    // Content — notice.
     personalDevOnly: '⚠ 개인 개발 목적으로만 구독을 사용하세요.',
   },
   providerHelp: {
     anthropic: {
+      // Content — conversational heading + instruction.
       usingClaudeCode: 'Claude Code를 사용 중이신가요?',
       inTerminal: '명령어를 실행하여 토큰을 얻은 다음 아래에 붙여넣으세요.',
-      learnMore: 'Anthropic API에 대해 더 알아보기',
+      // Chrome — link label.
+      learnMore: 'Learn more about Anthropic API',
     },
     gemini: {
+      // Content — conversational heading + description.
       needKey: 'Gemini API 키가 필요하신가요?',
       freeTier: 'Google은 Gemini 모델에 대해 넉넉한 무료 티어를 제공합니다.',
-      getFreeKey: 'Google AI Studio에서 무료 API 키 받기',
+      // Chrome — link label.
+      getFreeKey: 'Get a free API key from Google AI Studio',
     },
   },
   project: {
     tabs: {
-      overview: '개요',
-      deployments: '배포',
-      recovery: '복구',
-      runtime: '런타임',
-      settings: '설정',
+      // Chrome — primary nav tabs.
+      overview: 'Overview',
+      deployments: 'Deployments',
+      recovery: 'Recovery',
+      runtime: 'Runtime',
+      settings: 'Settings',
     },
     confirm: {
-      stopTitle: '프로젝트 중지',
+      // Chrome — modal buttons.
+      // Chrome — modal buttons + titles.
+      confirm: 'Confirm',
+      cancel: 'Cancel',
+      stopTitle: 'Stop Project',
+      deleteTitle: 'Delete Project',
+      // Content — confirmation prose.
       stopDescription: '이 프로젝트를 중지하시겠습니까?',
-      deleteTitle: '프로젝트 삭제',
       deleteDescription: '이 프로젝트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
-      confirm: '확인',
-      cancel: '취소',
     },
     header: {
       status: {
-        live: '실행 중',
-        stopped: '중지됨',
-        deploying: '배포 중',
-        pulling: '이미지 받는 중',
-        failed: '실패',
-        idle: '대기',
+        // Chrome — status pills.
+        live: 'Live',
+        stopped: 'Stopped',
+        deploying: 'Deploying',
+        pulling: 'Pulling image',
+        failed: 'Failed',
+        idle: 'Idle',
       },
       action: {
-        deploy: '배포',
-        deploying: '배포 중...',
-        pulling: '이미지 받는 중...',
-        start: '시작',
-        redeploy: '재배포',
-        pullRestart: '이미지 갱신 및 재시작',
-        stop: '중지',
-        rollback: '롤백',
-        blueGreen: '블루-그린 배포',
-        more: '더 많은 작업',
+        // Chrome — action buttons.
+        deploy: 'Deploy',
+        deploying: 'Deploying...',
+        pulling: 'Pulling image...',
+        start: 'Start',
+        redeploy: 'Redeploy',
+        pullRestart: 'Pull & restart',
+        stop: 'Stop',
+        rollback: 'Rollback',
+        blueGreen: 'Blue-green deploy',
+        more: 'More actions',
+        // Content — tooltip prose (hover, descriptive).
         aiPipelineTooltip: 'OpenLander가 배포 파이프라인을 처리합니다',
         pipelineTooltip: 'OpenLander가 배포 파이프라인을 처리합니다',
       },
       share: {
-        share: '공유',
-        shared: '공유됨',
-        exposed: '공개됨',
+        // Chrome — buttons + status.
+        share: 'Share',
+        shared: 'Shared',
+        exposed: 'Exposed',
       },
     },
-    disconnectService: '서비스 연결 해제',
-    copyUrl: 'URL 복사',
+    // Chrome — action labels.
+    disconnectService: 'Disconnect service',
+    copyUrl: 'Copy URL',
   },
   approval: {
     banner: {
+      // Chrome — field labels + buttons.
+      project: 'Project',
+      tool: 'Tool',
+      attempt: 'Attempt',
+      approve: 'Approve',
+      reject: 'Reject',
+      // Content — banner title + result + error text.
       title: '복구 승인 필요',
-      project: '프로젝트',
-      tool: '작업',
-      attempt: '시도',
-      approve: '승인',
-      reject: '거부',
       approved: '복구가 승인되었습니다',
       rejected: '복구가 거부되었습니다',
       error: '승인 처리에 실패했습니다',
       timedOut: '승인 시간 초과',
     },
     pendingStrip: {
+      // Chrome — source labels + buttons.
+      mcpSource: 'MCP',
+      recoverySource: 'Recovery',
+      details: 'Details:',
+      actor: 'Requested by:',
+      approve: 'Approve',
+      reject: 'Reject',
+      // Content — strip title + body + result + error + format.
       title: '에이전트 작업이 승인을 기다리고 있습니다',
       body: 'OpenLander가 실행하기 전에 위험 MCP 작업을 검토하세요.',
       loadWarning: '승인 대기 목록을 새로고침하지 못했습니다. 마지막으로 확인된 요청을 표시합니다.',
-      mcpSource: 'MCP',
-      recoverySource: '복구',
-      details: '대상:',
-      actor: '요청 주체:',
-      approve: '승인',
-      reject: '거부',
       approved: '승인을 보냈습니다',
       rejected: '거부를 보냈습니다',
       error: '승인 처리에 실패했습니다',
@@ -886,63 +944,74 @@ export const translations = {
   'ai-completed': '자동화 완료',
 
   recovery: {
-    incidentHistory: '장애/복구 기록',
+    // Chrome — section titles.
+    incidentHistory: 'Incident history',
+    postmortems: 'Postmortems',
+    pendingApprovals: 'Pending approvals',
+    activeRecovery: 'Active recovery',
+    // Content — empty states + format strings.
     noIncidents: '기록된 장애가 없습니다.',
-    postmortems: '장애 분석',
     noPostmortems:
       '성공적인 복구 후 보고서가 자동 생성됩니다. 메모리에 보관되며 서버 재시작 시 초기화됩니다.',
-    pendingApprovals: '대기 중인 승인',
     noApprovals: '대기 중인 승인 요청이 없습니다.',
-    activeRecovery: '진행 중인 복구',
     agentStep: '단계 {current}/{total}: {description}',
     agentStarted: '{time}에 시작됨',
     agentAnalyzing: '분석 중...',
   },
   recoveryTab: {
-    retry: '다시 시도',
-    approve: '승인',
-    reject: '거부',
-    postmortemReport: '장애 분석 보고서',
-    attempt: '시도',
+    // Chrome — buttons + labels.
+    retry: 'Retry',
+    approve: 'Approve',
+    reject: 'Reject',
+    postmortemReport: 'Postmortem report',
+    attempt: 'Attempt',
   },
   approvalsTab: {
+    // Chrome — labels + buttons.
+    requested: 'Requested',
+    approve: 'Approve',
+    reject: 'Reject',
+    // Content — empty state.
     noPendingApprovals: '대기 중인 승인이 없습니다',
     emptyMessage: '승인 요청이 검토가 필요할 때 여기에 표시됩니다.',
-    requested: '요청됨',
-    approve: '승인',
-    reject: '거부',
   },
   postmortemsTab: {
+    // Chrome — entry labels.
+    postmortem: 'Postmortem',
+    generated: 'Generated',
+    // Content — empty state.
     noPostmortems: '아직 장애 분석이 없습니다',
     emptyMessage:
       '성공적인 복구 후 보고서가 자동 생성됩니다. 메모리에 보관되며 서버 재시작 시 초기화됩니다.',
-    postmortem: '장애 분석',
-    generated: '생성됨',
   },
   patternsTab: {
+    // Chrome — table column labels.
+    patternType: 'Pattern type',
+    errorSignature: 'Error signature',
+    fixAction: 'Fix action',
+    successFailure: 'Success / failure',
+    lastSeen: 'Last seen',
+    unknown: 'Unknown',
+    // Content — empty state.
     noPatterns: '아직 학습된 패턴이 없습니다',
     emptyMessage: '플랫폼이 오류를 만나고 해결할 때마다 패턴이 누적됩니다.',
-    patternType: '패턴 유형',
-    errorSignature: '오류 서명',
-    fixAction: '수정 작업',
-    successFailure: '성공 / 실패',
-    lastSeen: '마지막 확인',
-    unknown: '알 수 없음',
   },
   usageTab: {
+    // Chrome — KPI + table column labels.
+    totalCost: 'Total cost',
+    totalTokens: 'Total tokens',
+    in: 'In',
+    out: 'Out',
+    totalCalls: 'Total calls',
+    recentActivity: 'Recent activity',
+    time: 'Time',
+    action: 'Action',
+    model: 'Model',
+    tokens: 'Tokens',
+    cost: 'Cost',
+    // Content — empty states.
     noUsage: '내장 사용 기록이 없습니다',
     emptyMessage: '이 기능이 활성화되면 사용 데이터가 표시됩니다.',
-    totalCost: '총 비용',
-    totalTokens: '총 토큰',
-    in: '입력',
-    out: '출력',
-    totalCalls: '총 호출',
-    recentActivity: '최근 활동',
-    time: '시간',
-    action: '작업',
-    model: '모델',
-    tokens: '토큰',
-    cost: '비용',
     noRecentActivity: '최근 활동이 없습니다',
   },
   mcpServer: {
@@ -1131,53 +1200,70 @@ export const translations = {
     },
   },
   gitProviders: {
-    title: 'Git 제공자',
+    // Chrome — page title.
+    title: 'Git Providers',
+    // Content — descriptive subtitle.
     subtitle: 'v0.1에서는 GitHub만 지원합니다.',
     github: {
+      // Chrome — card title (brand name stays English everywhere).
       cardTitle: 'GitHub',
-      manageOnGithub: 'GitHub에서 관리',
-      moreActionsLabel: '추가 작업',
-      reauthorize: '재인증',
-      refreshRepoList: '저장소 목록 새로고침',
-      disconnect: '연결 해제',
+      // Chrome — action buttons + menu labels.
+      manageOnGithub: 'Manage on GitHub',
+      moreActionsLabel: 'More actions',
+      reauthorize: 'Re-authorize',
+      refreshRepoList: 'Refresh repo list',
+      disconnect: 'Disconnect',
+      // Content — confirmation prose.
       disconnectConfirm: 'OpenLander에서 GitHub 연결을 해제할까요?',
       authMethod: {
+        // Chrome — method labels.
         oauth: 'OAuth',
-        pat: '개인용 액세스 토큰',
-        unknown: '알 수 없음',
+        pat: 'Personal access token',
+        unknown: 'Unknown',
       },
       pip: {
-        connected: '연결됨',
-        invalid: '토큰 거부됨',
-        unknown: '상태 확인 불가',
-        disconnected: '연결되지 않음',
+        // Chrome — status pills.
+        connected: 'Connected',
+        invalid: 'Token rejected',
+        unknown: 'Status unavailable',
+        disconnected: 'Not connected',
       },
       stats: {
-        reposLinked: '연결된 저장소',
-        lastSync: '마지막 동기화',
-        connectedOn: '연결 일시',
-        scopes: 'OAuth 권한',
+        // Chrome — KPI labels.
+        reposLinked: 'Repos linked',
+        lastSync: 'Last sync',
+        connectedOn: 'Connected on',
+        scopes: 'OAuth scopes',
       },
+      // Content — descriptive notices.
       scopesEmpty: '보고된 권한 없음',
       scopesUnavailableForPat: '권한 정보는 GitHub OAuth에서만 제공됩니다',
-      pendingFirstSync: '첫 동기화 대기 중',
+      // Chrome — status indicator.
+      pendingFirstSync: 'pending first sync',
       empty: {
-        title: 'GitHub 연결',
+        // Chrome — empty state CTA button + heading.
+        title: 'Connect GitHub',
+        // Content — empty state body.
         body: 'OpenLander가 저장소를 읽을 수 있도록 인증하세요. 배포·웹훅·서비스 추가에서 저장소를 찾을 수 있게 됩니다.',
-        cta: 'GitHub 연결',
+        // Chrome — CTA button.
+        cta: 'Connect GitHub',
       },
+      // Content — error messages with context.
       validationError: 'GitHub가 이 토큰을 거부했습니다: {message}',
       validationUnreachable: '토큰 검증을 위해 GitHub에 연결할 수 없습니다: {message}',
       loading: 'GitHub 상태를 불러오는 중…',
       loadFailed: 'GitHub 상태를 불러오지 못했습니다.',
-      retry: '다시 시도',
+      // Chrome — retry button.
+      retry: 'Retry',
     },
     others: {
-      title: '다른 제공자',
+      // Chrome — section title + provider names + version badge.
+      title: 'Other providers',
       v02Badge: 'v0.2',
       gitlab: 'GitLab',
       bitbucket: 'Bitbucket',
-      comingInV02: 'v0.2에서 지원 예정',
+      // Chrome — badge label.
+      comingInV02: 'Coming in v0.2',
     },
   },
 } as const;
