@@ -352,10 +352,12 @@ describe('diagnose_service tool', () => {
       'eyJzdWIiOiIxMjM0NTY3ODkwIn0',
       'sflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
     ].join('.');
-    const githubPatFixture = ['github', '_pat_', '11ABCDE1234567890abcdefTOKEN'].join('');
+    const basicAuthFixture = ['dXNl', 'cjpwYXNz'].join('');
+    const githubPatFixture = ['github', '_pat_', '11ABCDE1234567890abcdefTOKEN-from-CI'].join('');
     const ghpFixture = ['gh', 'p_', '1234567890abcdef1234567890abcdef1234'].join('');
     const slackBotFixture = ['xox', 'b-', '1234567890-abcdefSECRET'].join('');
-    const stripeFixture = ['stripe_', 'sk_test_', '4eC39HqLyjWDarjtT1zdp7dc'].join('');
+    const stripeSecretFixture = ['stripe_', 'sk_test_', '4eC39HqLyjWDarjtT1zdp7dc'].join('');
+    const stripeRestrictedFixture = ['stripe_', 'rk_live_', 'rk_51RestrictedKey'].join('');
     const apiKeyFixture = ['abcdef', '123456'].join('');
     const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
     const service = {
@@ -419,7 +421,7 @@ describe('diagnose_service tool', () => {
             commit_sha: 'abc123',
             commit_message: 'test',
             build_log:
-              `Collecting page data\nDATABASE_URL=postgresql://postgres:secret@ol-db:5432/app\nAuthorization: Bearer ${jwtFixture}\nplain ${githubPatFixture}\nError: DATABASE_URL is not set`,
+              `Collecting page data\nDATABASE_URL=postgresql://postgres:secret@ol-db:5432/app\nAuthorization: Bearer ${jwtFixture}\nAuthorization: Basic ${basicAuthFixture}\nplain ${githubPatFixture}\nError: DATABASE_URL is not set`,
             runtime_log: null,
             duration_ms: 12000,
             created_at: '2026-05-12T00:01:00.000Z',
@@ -441,7 +443,7 @@ describe('diagnose_service tool', () => {
             Status: 'exited',
             ExitCode: 1,
             Error:
-              `pull failed https://robot:secret@registry.example.com/image with ${ghpFixture} and ${stripeFixture}`,
+              `pull failed https://robot:secret@registry.example.com/image with ${ghpFixture}, ${stripeSecretFixture}, and ${stripeRestrictedFixture}`,
             StartedAt: '2026-05-12T00:00:00.000Z',
             FinishedAt: '2026-05-12T00:02:00.000Z',
           },
@@ -472,13 +474,17 @@ describe('diagnose_service tool', () => {
       expect(JSON.stringify(result)).not.toContain('robot:secret');
       expect(JSON.stringify(result)).not.toContain('redis://:secret');
       expect(JSON.stringify(result)).not.toContain('eyJhbGci');
+      expect(JSON.stringify(result)).not.toContain('dXNl');
       expect(JSON.stringify(result)).not.toContain('github_pat_11');
+      expect(JSON.stringify(result)).not.toContain('from-CI');
       expect(JSON.stringify(result)).not.toContain('ghp_123');
       expect(JSON.stringify(result)).not.toContain('xoxb-123');
       expect(JSON.stringify(result)).not.toContain('stripe_sk_test');
+      expect(JSON.stringify(result)).not.toContain('stripe_rk_live');
       expect(JSON.stringify(result)).not.toContain('abcdef123456');
       expect(JSON.stringify(result)).toContain('DATABASE_URL=***');
       expect(JSON.stringify(result)).toContain('Bearer ***');
+      expect(JSON.stringify(result)).toContain('Basic ***');
       expect(JSON.stringify(result)).toContain('API_KEY=***');
       const deployment = result.recentDeployment as {
         latest?: { buildLogTailSanitized?: boolean; fullBuildLogHint?: string };

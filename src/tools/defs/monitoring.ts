@@ -489,10 +489,11 @@ const SECRET_ASSIGNMENT_RE =
 
 const FREE_TEXT_SECRET_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer ***'],
-  [/\bgithub_pat_[A-Za-z0-9_]+\b/g, 'github_pat_***'],
+  [/\bBasic\s+[A-Za-z0-9._~+/-]+=*/gi, 'Basic ***'],
+  [/\bgithub_pat_[A-Za-z0-9_-]+\b/g, 'github_pat_***'],
   [/\bgh([pousr])_[A-Za-z0-9_]{8,}\b/g, 'gh$1_***'],
   [/\bxox([baprs])-[A-Za-z0-9-]+\b/g, 'xox$1-***'],
-  [/\b(?:stripe_)?sk_(live|test)_[A-Za-z0-9]+\b/g, 'sk_$1_***'],
+  [/\b(?:stripe_)?(sk|rk)_(live|test)_[A-Za-z0-9_]+\b/g, '$1_$2_***'],
   [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, 'jwt_***'],
 ];
 
