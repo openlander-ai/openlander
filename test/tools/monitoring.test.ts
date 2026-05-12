@@ -12,6 +12,14 @@ function getProbeHostTool(ctx: AppContext) {
   return tool!;
 }
 
+function getMonitoringTool(ctx: AppContext, name: string) {
+  const tool = createSharedToolRegistry(ctx, { target: 'mcp' }).find(
+    (entry) => entry.name === name,
+  );
+  expect(tool).toBeDefined();
+  return tool!;
+}
+
 function createMockContext(overrides?: {
   containers?: { id: string; status: string }[];
   execResult?: { exitCode: number; stdout: string; stderr: string };
@@ -334,5 +342,121 @@ describe('probe_host tool', () => {
       const result = tool.inputSchema.safeParse({ target: 'localhost', port: 70000 });
       expect(result.success).toBe(false);
     });
+  });
+});
+
+describe('diagnose_service tool', () => {
+  it('summarizes masked env keys and flags runtime-only build-time errors', async () => {
+    const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
+    const service = {
+      id: 'app__svc',
+      project_id: 'app',
+      name: 'web',
+      kind: 'git',
+      source: 'git',
+      status: 'error',
+      visibility: 'internal',
+      assigned_port: 10001,
+      container_id: 'container-1',
+      container_name: 'ol-app',
+      container_port: 3000,
+      image_tag: 'app:failed',
+      previous_image_tag: null,
+      public_url: null,
+      dockerfile_path: 'Dockerfile',
+      docker_target: null,
+      build_context: null,
+      build_method: 'dockerfile',
+      repo_url: 'https://github.com/acme/app.git',
+      branch: 'main',
+      image_url: null,
+      image_cmd: null,
+      pending_fix: null,
+      access_code: null,
+      access_code_iv: null,
+      is_preview: 0,
+      pr_number: null,
+      project_type: 'web',
+      health_check_strategy: 'http',
+      health_check_path: '/health',
+      recovering_started_at: null,
+      credentials: null,
+      created_at: '2026-05-12T00:00:00.000Z',
+      updated_at: '2026-05-12T00:00:00.000Z',
+      archived_at: null,
+      server_id: 'local',
+    };
+    const ctx = {
+      db: {
+        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getService: vi.fn((id: string) => (id === service.id ? service : undefined)),
+        getDeployablesByGroup: vi.fn(async () => [service]),
+        listServices: vi.fn(async () => [service]),
+        getEnvVars: vi.fn(async () => ({})),
+        getEnvVarsForService: vi.fn(async () => ({
+          DATABASE_URL: 'postgresql://postgres:secret@ol-db:5432/app',
+          NEXT_PUBLIC_BASE_PATH: '/admin',
+        })),
+        getDeployLogs: vi.fn(async () => [
+          {
+            id: 'deploy-1',
+            service_id: 'app__svc',
+            environment_id: null,
+            status: 'failed',
+            trigger: 'api',
+            trigger_detail: null,
+            commit_sha: 'abc123',
+            commit_message: 'test',
+            build_log: 'Collecting page data\nError: DATABASE_URL is not set',
+            runtime_log: null,
+            duration_ms: 12000,
+            created_at: '2026-05-12T00:01:00.000Z',
+          },
+        ]),
+      },
+      pipeline: {
+        getLogs: vi.fn(async () => 'runtime log line'),
+      },
+      docker: {
+        inspectContainer: vi.fn(async () => ({
+          Name: '/ol-app',
+          RestartCount: 0,
+          State: {
+            Running: false,
+            Status: 'exited',
+            ExitCode: 1,
+            Error: '',
+            StartedAt: '2026-05-12T00:00:00.000Z',
+            FinishedAt: '2026-05-12T00:02:00.000Z',
+          },
+          Config: { Image: 'app:failed' },
+        })),
+        listManagedContainers: vi.fn(async () => [{ id: 'container-1', status: 'running' }]),
+        execSimple: vi.fn(async () => ({ exitCode: 1, stdout: '', stderr: 'connection refused' })),
+      },
+    } as unknown as AppContext;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => new Response('error', { status: 500 }));
+
+    try {
+      const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+        { service_id: 'app__svc', lines: 10 },
+        { target: 'mcp' },
+      )) as Record<string, unknown>;
+
+      expect(result.service).toMatchObject({ id: 'app__svc', source: 'git' });
+      expect(result.env).toMatchObject({
+        keys: ['DATABASE_URL', 'NEXT_PUBLIC_BASE_PATH'],
+        masked: true,
+      });
+      expect(result.buildTimeEnv).toMatchObject({
+        suspectedMissingBuildTimeKeys: ['DATABASE_URL'],
+      });
+      expect(JSON.stringify(result)).not.toContain('postgres:secret');
+      expect(result._agent_guidance).toBeDefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

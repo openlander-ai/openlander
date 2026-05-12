@@ -56,6 +56,40 @@ export const getProjectStatsSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
 });
 
+export const diagnoseServiceSchema = z
+  .object({
+    service_id: z.string().min(1).optional().describe('Deployable service id'),
+    service_name: z.string().min(1).optional().describe('Deployable service name'),
+    project_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Project group name/id. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+      ),
+    lines: z
+      .number()
+      .int()
+      .positive()
+      .max(300)
+      .optional()
+      .describe('Recent container log lines to include (default: 80, max: 300).'),
+    path: z
+      .string()
+      .optional()
+      .describe('HTTP path to probe on the service assigned port (default: health path or "/").'),
+    timeout_ms: z
+      .number()
+      .int()
+      .positive()
+      .max(30000)
+      .optional()
+      .describe('Probe timeout in milliseconds (default: 5000).'),
+  })
+  .refine((value) => Boolean(value.service_id || value.service_name || value.project_name), {
+    message: 'service_id, service_name, or project_name is required',
+  });
+
 export const mcpActionStatusSchema = z.object({
   action_run_id: z.string().min(1).describe('Action run id returned by a pending MCP action'),
 });

@@ -139,10 +139,12 @@ export const SERVICE_ACTIONS = [
  * - Health alerts & dismissal
  * - Project statistics
  * - Host/endpoint connectivity probing
- * Total: 7 tools
+ * - One-shot service diagnostics
+ * Total: 8 tools
  */
 export const MONITOR_ACTIONS = [
   'get_logs',
+  'diagnose_service',
   'get_system_stats',
   'get_alerts',
   'dismiss_alert',
@@ -183,7 +185,7 @@ export const PLATFORM_ACTIONS = [
  * - PROJECT_ACTIONS: 14 tools
  * - MANAGED_SERVICE_ACTIONS: 21 tools
  * - SERVICE_ACTIONS: 19 tools
- * - MONITOR_ACTIONS: 7 tools
+ * - MONITOR_ACTIONS: 8 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
  * - Platform tools: 13 direct tools (gated separately)
  */

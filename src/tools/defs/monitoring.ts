@@ -1,8 +1,17 @@
 import net from 'node:net';
 import { createModuleLogger } from '../../lib/logger.js';
-import { ProjectNotFoundError } from '../../errors.js';
-import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
 import {
+  OpenLanderError,
+  ProjectNotFoundError,
+  ServiceNotFoundError,
+  ServiceOperationUnsupportedError,
+} from '../../errors.js';
+import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
+import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
+import { BUILD_TIME_PREFIXES } from '../../pipeline/build-args.js';
+import {
+  diagnoseServiceSchema,
   dismissAlertSchema,
   getAlertsSchema,
   getLogsSchema,
@@ -12,8 +21,20 @@ import {
   probeHostSchema,
 } from './schemas.js';
 import type { ToolDef } from './types.js';
+import type { ToolContext } from './types.js';
 
 const log = createModuleLogger('monitoring-tools');
+
+type AppCtx = ToolContext['appCtx'];
+type ServiceRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getService']>>>;
+type ProjectRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getProject']>>>;
+type DeployLogRow = Awaited<ReturnType<AppCtx['db']['getDeployLogs']>>[number];
+
+interface ResolvedDeployableService {
+  service: ServiceRow;
+  project: ProjectRow;
+  runtimeProject: ProjectRow;
+}
 
 export const monitoringToolDefs: ToolDef[] = [
   {
@@ -180,6 +201,81 @@ export const monitoringToolDefs: ToolDef[] = [
     },
   },
   {
+    name: 'diagnose_service',
+    riskLevel: 'low',
+    description:
+      'Diagnose a deployable app/worker service in one MCP call. Returns service/source summary, masked env key inventory, build-time env warnings, recent deployment status/log tail, container status, service logs, local HTTP probe, dependency probes, and recommended next actions. Use this after deploy_service or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior.',
+    mcpDescription:
+      'One-shot service diagnostics: env keys (masked), build/runtime mismatch warnings, container status, logs, HTTP probe, dependency checks, recent deploy result, and next action guidance.',
+    inputSchema: diagnoseServiceSchema,
+    execute: async (args, context) => {
+      const appCtx = context.appCtx;
+      const { service, project, runtimeProject } = await resolveDeployableServiceForDiagnosis(
+        args,
+        context,
+      );
+      const lines = (args['lines'] as number | undefined) ?? 80;
+      const timeoutMs = (args['timeout_ms'] as number | undefined) ?? 5000;
+      const pathArg = (args['path'] as string | undefined)?.trim();
+      const probePathSource = pathArg || service.health_check_path || '/';
+      const probePath = probePathSource.startsWith('/') ? probePathSource : `/${probePathSource}`;
+
+      const [groupEnv, serviceEnv, deployLogs] = await Promise.all([
+        appCtx.db.getEnvVars(project.id),
+        appCtx.db.getEnvVarsForService(project.id, service.id),
+        appCtx.db.getDeployLogs(runtimeProject.id, 5),
+      ]);
+      const effectiveEnv = { ...groupEnv, ...serviceEnv };
+
+      const container = await summarizeContainer(appCtx, service);
+      const runtimeLogs = await readServiceLogs(appCtx, runtimeProject.id, lines);
+      const recentDeployment = summarizeRecentDeployments(deployLogs);
+      const buildDiagnostics = diagnoseBuildTimeEnv(effectiveEnv, deployLogs);
+      const httpCheck = await probeServiceHttp(service, probePath, timeoutMs);
+      const dependencies = await probeEnvDependencies(appCtx, effectiveEnv, timeoutMs);
+      const nextSteps = buildDiagnoseNextSteps({
+        service,
+        recentDeployment,
+        buildDiagnostics,
+        container,
+        httpCheck,
+        dependencies,
+      });
+
+      return {
+        project: {
+          id: project.id,
+          name: project.name,
+          runtimeProjectId: runtimeProject.id,
+        },
+        service: {
+          id: service.id,
+          name: service.name,
+          kind: service.kind,
+          source: service.source,
+          status: service.status,
+          repoUrl: sanitizeRepoUrl(service.repo_url),
+          image: service.image_url ?? service.image_tag ?? null,
+          dockerfilePath: service.dockerfile_path,
+          dockerTarget: service.docker_target,
+          buildContext: service.build_context,
+          assignedPort: service.assigned_port,
+          containerPort: service.container_port,
+        },
+        env: summarizeEnvKeys(groupEnv, serviceEnv),
+        buildTimeEnv: buildDiagnostics,
+        recentDeployment,
+        container,
+        logs: runtimeLogs,
+        httpCheck,
+        dependencies,
+        _agent_guidance: {
+          next_steps: nextSteps,
+        },
+      };
+    },
+  },
+  {
     name: 'probe_host',
     riskLevel: 'low',
     description:
@@ -256,6 +352,477 @@ export const monitoringToolDefs: ToolDef[] = [
     },
   },
 ];
+
+function isManagedService(kind: string): boolean {
+  return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
+}
+
+async function resolveProjectScope(
+  projectName: string,
+  context: ToolContext,
+): Promise<ProjectRow | undefined> {
+  if (!projectName) return undefined;
+  return (
+    (await context.appCtx.db.getProject(projectName)) ??
+    (await context.appCtx.db.getProjectByName(projectName))
+  );
+}
+
+async function serviceSelectionCandidates(
+  services: ServiceRow[],
+  context: ToolContext,
+): Promise<Array<Record<string, unknown>>> {
+  return Promise.all(
+    services.map(async (service) => {
+      const project = await context.appCtx.db.getProject(service.project_id);
+      return {
+        serviceId: service.id,
+        serviceName: service.name,
+        projectId: service.project_id,
+        projectName: project?.name ?? service.project_id,
+        kind: service.kind,
+        source: service.source,
+      };
+    }),
+  );
+}
+
+async function resolveDeployableServiceForDiagnosis(
+  args: Record<string, unknown>,
+  context: ToolContext,
+): Promise<ResolvedDeployableService> {
+  const serviceId = typeof args.service_id === 'string' ? args.service_id.trim() : '';
+  const serviceName = typeof args.service_name === 'string' ? args.service_name.trim() : '';
+  const projectName = typeof args.project_name === 'string' ? args.project_name.trim() : '';
+
+  let service: ServiceRow | undefined;
+  let projectScope: ProjectRow | undefined;
+
+  if (serviceId) {
+    service = await context.appCtx.db.getService(serviceId);
+  } else if (serviceName) {
+    projectScope = await resolveProjectScope(projectName, context);
+    if (projectName && !projectScope) {
+      throw new ProjectNotFoundError(projectName);
+    }
+    const services = await context.appCtx.db.listServices();
+    const named = services.filter((item) => item.name === serviceName);
+    const projectScopeId = projectScope?.id;
+    const scoped = projectScopeId
+      ? named.filter((item) => item.project_id === projectScopeId)
+      : named;
+    const deployable = scoped.filter((item) => !isManagedService(item.kind));
+    if (deployable.length > 1) {
+      throw new OpenLanderError(
+        `Multiple deployable services named '${serviceName}' found. Specify project_name or service_id.`,
+        'SERVICE_SELECTION_REQUIRED',
+        400,
+        {
+          serviceName,
+          candidates: await serviceSelectionCandidates(deployable, context),
+        },
+      );
+    }
+    service = deployable[0] ?? scoped[0];
+  } else if (projectName) {
+    projectScope = await resolveProjectScope(projectName, context);
+    if (!projectScope) {
+      throw new ProjectNotFoundError(projectName);
+    }
+    const deployables =
+      typeof context.appCtx.db.getDeployablesByGroup === 'function'
+        ? await context.appCtx.db.getDeployablesByGroup(projectScope.id)
+        : (await context.appCtx.db.listServices()).filter(
+            (item) => item.project_id === projectScope?.id,
+          );
+    const filtered = deployables.filter((item) => !isManagedService(item.kind));
+    if (filtered.length > 1) {
+      throw new OpenLanderError(
+        `Project '${projectName}' has multiple deployable services. Specify service_id or service_name.`,
+        'SERVICE_SELECTION_REQUIRED',
+        400,
+        {
+          projectName,
+          candidates: await serviceSelectionCandidates(filtered, context),
+        },
+      );
+    }
+    service = filtered[0];
+  }
+
+  if (!service) {
+    throw new ServiceNotFoundError(serviceId || serviceName || projectName || 'unknown');
+  }
+  if (isManagedService(service.kind)) {
+    throw new ServiceOperationUnsupportedError('diagnose_service', service.kind);
+  }
+
+  const project = await context.appCtx.db.getProject(service.project_id);
+  if (!project) {
+    throw new ProjectNotFoundError(service.project_id);
+  }
+  if (projectName && projectName !== project.id && projectName !== project.name) {
+    throw new ServiceNotFoundError(`${service.name} in ${projectName}`);
+  }
+
+  const runtimeProjectId = deployableServiceIdToProjectId(service.id);
+  const runtimeProject = (await context.appCtx.db.getProject(runtimeProjectId)) ?? project;
+  return { service, project, runtimeProject };
+}
+
+function sanitizeRepoUrl(repoUrl: string | null): string | null {
+  if (!repoUrl) return null;
+  try {
+    const parsed = new URL(repoUrl);
+    if (parsed.username || parsed.password) {
+      parsed.username = parsed.username ? '***' : '';
+      parsed.password = parsed.password ? '***' : '';
+    }
+    return parsed.toString();
+  } catch {
+    return repoUrl.replace(/:\/\/[^/@]+@/, '://***@');
+  }
+}
+
+function sortedKeys(record: Record<string, string>): string[] {
+  return Object.keys(record).sort((a, b) => a.localeCompare(b));
+}
+
+function isBuildTimeEnvKey(key: string): boolean {
+  return BUILD_TIME_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+function summarizeEnvKeys(groupEnv: Record<string, string>, serviceEnv: Record<string, string>) {
+  const groupKeys = sortedKeys(groupEnv);
+  const serviceKeys = sortedKeys(serviceEnv);
+  const effectiveKeys = sortedKeys({ ...groupEnv, ...serviceEnv });
+  const buildTimeKeys = effectiveKeys.filter(isBuildTimeEnvKey);
+  return {
+    count: effectiveKeys.length,
+    keys: effectiveKeys,
+    groupKeys,
+    serviceKeys,
+    buildTimeKeys,
+    runtimeOnlyKeys: effectiveKeys.filter((key) => !isBuildTimeEnvKey(key)),
+    masked: true,
+    note: 'Only environment variable keys are returned. Values are intentionally not exposed.',
+  };
+}
+
+function tailLines(text: string | null | undefined, lines: number): string | null {
+  if (!text) return null;
+  return text.split(/\r?\n/).slice(-lines).join('\n');
+}
+
+function summarizeRecentDeployments(logs: DeployLogRow[]) {
+  const latest = logs[0];
+  return {
+    count: logs.length,
+    latest: latest
+      ? {
+          id: latest.id,
+          status: latest.status,
+          trigger: latest.trigger,
+          commitSha: latest.commit_sha,
+          commitMessage: latest.commit_message,
+          durationMs: latest.duration_ms,
+          createdAt: latest.created_at,
+          buildLogTail: tailLines(latest.build_log, 30),
+        }
+      : null,
+    history: logs.slice(0, 5).map((entry) => ({
+      id: entry.id,
+      status: entry.status,
+      trigger: entry.trigger,
+      commitSha: entry.commit_sha,
+      createdAt: entry.created_at,
+    })),
+  };
+}
+
+function diagnoseBuildTimeEnv(env: Record<string, string>, logs: DeployLogRow[]) {
+  const text = logs
+    .map((entry) =>
+      [entry.build_log, entry.runtime_log, entry.trigger_detail].filter(Boolean).join('\n'),
+    )
+    .join('\n');
+  const effectiveKeys = sortedKeys(env);
+  const referencedRuntimeOnly = effectiveKeys.filter(
+    (key) => !isBuildTimeEnvKey(key) && new RegExp(`\\b${escapeRegExp(key)}\\b`).test(text),
+  );
+  const missingAtBuild = referencedRuntimeOnly.filter((key) =>
+    new RegExp(
+      `${escapeRegExp(key)}[^\\n]{0,80}(is not set|missing|required)|(?:is not set|missing|required)[^\\n]{0,80}${escapeRegExp(key)}`,
+      'i',
+    ).test(text),
+  );
+
+  const warnings: string[] = [];
+  if (missingAtBuild.length > 0) {
+    warnings.push(
+      `${missingAtBuild.join(', ')} exists in runtime env but is not passed to Docker build because it does not use an allowed public build-time prefix.`,
+    );
+  }
+
+  return {
+    allowedPrefixes: BUILD_TIME_PREFIXES,
+    buildTimeKeys: effectiveKeys.filter(isBuildTimeEnvKey),
+    referencedRuntimeOnlyKeys: referencedRuntimeOnly,
+    suspectedMissingBuildTimeKeys: missingAtBuild,
+    warnings,
+  };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+}
+
+function getNestedRecord(record: Record<string, unknown>, key: string): Record<string, unknown> {
+  return asRecord(record[key]) ?? {};
+}
+
+function getString(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === 'string' ? value : null;
+}
+
+function getNumber(record: Record<string, unknown>, key: string): number | null {
+  const value = record[key];
+  return typeof value === 'number' ? value : null;
+}
+
+async function summarizeContainer(
+  appCtx: AppCtx,
+  service: ServiceRow,
+): Promise<Record<string, unknown>> {
+  if (!service.container_id) {
+    return {
+      present: false,
+      running: false,
+      serviceStatus: service.status,
+      reason: 'service has no container_id',
+    };
+  }
+
+  try {
+    const rawInspect = asRecord(await appCtx.docker.inspectContainer(service.container_id)) ?? {};
+    const state = getNestedRecord(rawInspect, 'State');
+    const config = getNestedRecord(rawInspect, 'Config');
+    return {
+      present: true,
+      id: service.container_id,
+      name: service.container_name ?? getString(rawInspect, 'Name')?.replace(/^\//, '') ?? null,
+      running: state['Running'] === true,
+      status: getString(state, 'Status'),
+      exitCode: getNumber(state, 'ExitCode'),
+      error: getString(state, 'Error'),
+      startedAt: getString(state, 'StartedAt'),
+      finishedAt: getString(state, 'FinishedAt'),
+      restartCount: getNumber(rawInspect, 'RestartCount'),
+      image: getString(config, 'Image') ?? service.image_tag ?? service.image_url,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      present: false,
+      running: false,
+      id: service.container_id,
+      error: message,
+      _agent_guidance: {
+        next_steps: ['Container inspect failed. Verify the container still exists on the host.'],
+      },
+    };
+  }
+}
+
+async function readServiceLogs(
+  appCtx: AppCtx,
+  runtimeProjectId: string,
+  lines: number,
+): Promise<Record<string, unknown>> {
+  try {
+    return {
+      available: true,
+      tail: await appCtx.pipeline.getLogs(runtimeProjectId, lines),
+    };
+  } catch (err) {
+    return {
+      available: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+async function probeServiceHttp(
+  service: ServiceRow,
+  path: string,
+  timeoutMs: number,
+): Promise<Record<string, unknown>> {
+  if (!service.assigned_port) {
+    return {
+      skipped: true,
+      reason: 'service has no assigned host port',
+    };
+  }
+  return probeHttp(
+    `http://127.0.0.1:${String(service.assigned_port)}${path}`,
+    timeoutMs,
+    'http',
+    `http://127.0.0.1:${String(service.assigned_port)}${path}`,
+    Date.now(),
+  );
+}
+
+interface DependencyTarget {
+  key: string;
+  protocol: 'tcp' | 'http' | 'https';
+  host: string;
+  port: number;
+  display: string;
+}
+
+function defaultPortForProtocol(protocol: string): number | undefined {
+  switch (protocol) {
+    case 'postgres:':
+    case 'postgresql:':
+      return 5432;
+    case 'mysql:':
+      return 3306;
+    case 'redis:':
+      return 6379;
+    case 'mongodb:':
+    case 'mongo:':
+      return 27017;
+    case 'http:':
+      return 80;
+    case 'https:':
+      return 443;
+    default:
+      return undefined;
+  }
+}
+
+function envDependencyTargets(env: Record<string, string>): DependencyTarget[] {
+  const targets: DependencyTarget[] = [];
+  for (const [key, value] of Object.entries(env)) {
+    if (!/(URL|URI|DSN|DATABASE|REDIS|POSTGRES|MYSQL|MONGO)/i.test(key)) continue;
+    try {
+      const parsed = new URL(value);
+      const port = parsed.port ? Number(parsed.port) : defaultPortForProtocol(parsed.protocol);
+      if (!parsed.hostname || !port || port < 1 || port > 65535) continue;
+      const probeProtocol =
+        parsed.protocol === 'http:' || parsed.protocol === 'https:'
+          ? parsed.protocol.slice(0, -1)
+          : 'tcp';
+      targets.push({
+        key,
+        protocol: probeProtocol as 'tcp' | 'http' | 'https',
+        host: parsed.hostname,
+        port,
+        display: `${parsed.protocol}//${parsed.hostname}:${String(port)}`,
+      });
+    } catch {
+      continue;
+    }
+  }
+  return targets.slice(0, 8);
+}
+
+async function probeEnvDependencies(
+  appCtx: AppCtx,
+  env: Record<string, string>,
+  timeoutMs: number,
+): Promise<Record<string, unknown>> {
+  const targets = envDependencyTargets(env);
+  if (targets.length === 0) {
+    return { count: 0, checks: [] };
+  }
+
+  const checks = await Promise.all(
+    targets.map(async (target) => {
+      const result =
+        target.protocol === 'tcp'
+          ? await probeInternal(
+              appCtx,
+              'tcp',
+              target.host,
+              target.port,
+              '/',
+              timeoutMs,
+              target.display,
+            )
+          : await probeHttp(
+              `${target.protocol}://${target.host}:${String(target.port)}/`,
+              timeoutMs,
+              target.protocol,
+              target.display,
+              Date.now(),
+            );
+      return {
+        key: target.key,
+        target: target.display,
+        protocol: target.protocol,
+        host: target.host,
+        port: target.port,
+        reachable: result['reachable'] === true,
+        error: result['error'] ?? null,
+      };
+    }),
+  );
+
+  return { count: checks.length, checks };
+}
+
+function buildDiagnoseNextSteps(input: {
+  service: ServiceRow;
+  recentDeployment: Record<string, unknown>;
+  buildDiagnostics: Record<string, unknown>;
+  container: Record<string, unknown>;
+  httpCheck: Record<string, unknown>;
+  dependencies: Record<string, unknown>;
+}): string[] {
+  const nextSteps: string[] = [];
+  const suspected = input.buildDiagnostics['suspectedMissingBuildTimeKeys'];
+  if (Array.isArray(suspected) && suspected.length > 0) {
+    nextSteps.push(
+      `${suspected.join(', ')} is currently runtime-only. If the app reads it during Docker/Next build, change the app so build does not require the secret, or add an explicit safe build-time variable path before retrying deploy_service.`,
+    );
+  }
+
+  if (input.container['running'] !== true) {
+    nextSteps.push(
+      'Container is not running. Check recentDeployment.buildLogTail, then call deploy_service after fixing the cause.',
+    );
+  } else if (input.httpCheck['reachable'] === false) {
+    nextSteps.push(
+      'Container is running but HTTP probe failed. Check logs.tail and verify the service listens on the configured container port/path.',
+    );
+  }
+
+  const depChecks = asRecord(input.dependencies)?.['checks'];
+  if (
+    Array.isArray(depChecks) &&
+    depChecks.some((item) => asRecord(item)?.['reachable'] === false)
+  ) {
+    nextSteps.push(
+      'One or more declared dependency endpoints are unreachable from Docker. Fix service host/port/env values, then call deploy_service.',
+    );
+  }
+
+  if (nextSteps.length === 0) {
+    nextSteps.push(
+      'No obvious backend issue detected. If behavior is still wrong, inspect logs.tail and recentDeployment.latest.buildLogTail for app-level errors.',
+    );
+  }
+  nextSteps.push(
+    'For existing services, use openlander_service.deploy_service. Use openlander_deploy.deploy only for creating a new app.',
+  );
+  return nextSteps;
+}
 
 function resolveTarget(
   target: string,
