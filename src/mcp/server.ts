@@ -94,8 +94,8 @@ Key actions: create_service, list_services, get_service_credentials, backup_serv
 All actions: action="help"
 
 ## openlander_monitor
-Monitoring & operations: logs, alerts, system stats, and connectivity checks.
-Key actions: get_logs, get_alerts, get_system_stats, get_project_stats, dismiss_alert
+Monitoring & operations: diagnostics, logs, alerts, system stats, and connectivity checks.
+Key actions: diagnose_service, get_logs, get_alerts, get_system_stats, get_project_stats, dismiss_alert
 All actions: action="help"
 
 ## Usage

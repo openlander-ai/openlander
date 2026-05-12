@@ -60,7 +60,7 @@ describe('Platform Tool Registration', () => {
     const nonPlatformWithout = toolsWithoutPlatform.filter((t) => !isPlatformTool(t.name));
     const nonPlatformWith = toolsWithPlatform.filter((t) => !isPlatformTool(t.name));
 
-    expect(nonPlatformWithout).toHaveLength(68);
+    expect(nonPlatformWithout).toHaveLength(69);
     expect(nonPlatformWithout).toHaveLength(nonPlatformWith.length);
   });
 

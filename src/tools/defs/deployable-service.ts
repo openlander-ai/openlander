@@ -95,10 +95,7 @@ async function resolveProjectScope(
   );
 }
 
-async function serviceSelectionCandidates(
-  services: ResolvedServiceRow[],
-  context: ToolContext,
-) {
+async function serviceSelectionCandidates(services: ResolvedServiceRow[], context: ToolContext) {
   return Promise.all(
     services.map(async (service) => {
       const project = await context.appCtx.db.getProject(service.project_id);
@@ -303,6 +300,17 @@ async function runRedeploy(
     message: noCache
       ? 'Deployment started (no_cache). Poll get_deploy_status to track progress.'
       : 'Deployment started. Poll get_deploy_status to track progress.',
+    diagnostic_call: {
+      tool: 'openlander_monitor',
+      action: 'diagnose_service',
+      params: { service_id: service.id },
+    },
+    _agent_guidance: {
+      next_steps: [
+        'Poll openlander_deploy.get_deploy_status to track progress.',
+        `If deployment fails or times out, call openlander_monitor.diagnose_service with service_id="${service.id}".`,
+      ],
+    },
   };
 }
 
@@ -362,7 +370,12 @@ export const deployableServiceToolDefs: ToolDef[] = [
       const releaseDbLock = () =>
         context.appCtx.db.releaseDeployLock(runtimeProject.id, sessionId).catch((err: unknown) => {
           log.warn(
-            { err, projectId: runtimeProject.id, groupProjectId: project.id, serviceId: service.id },
+            {
+              err,
+              projectId: runtimeProject.id,
+              groupProjectId: project.id,
+              serviceId: service.id,
+            },
             'Failed to release deploy lock',
           );
         });

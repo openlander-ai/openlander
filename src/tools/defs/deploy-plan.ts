@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import { DeployLockedError } from '../../errors.js';
-import type { ToolDef } from './types.js';
+import type { ToolContext, ToolDef } from './types.js';
 import type { DeployPlan } from '../../pipeline/deploy-plan/types.js';
 import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/engine.js';
 import { eventBus } from '../../events/index.js';
@@ -9,6 +9,7 @@ import { containerName as projectContainerName } from '../../pipeline/helpers.js
 import { getProjectUrls } from '../../pipeline/traefik.js';
 import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
+import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { buildDeployLockedResponse, tryAcquireDeployLockOrResponse } from './helpers.js';
 
 import {
@@ -18,6 +19,56 @@ import {
   deploySchema,
   validateDeployPlanSchema,
 } from './schemas.js';
+
+type AppCtx = ToolContext['appCtx'];
+type ServiceRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getService']>>>;
+
+function isManagedService(kind: string): boolean {
+  return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
+}
+
+async function buildExistingServiceGuidance(
+  projectName: string | undefined,
+  context: ToolContext,
+): Promise<Record<string, unknown>> {
+  if (!projectName) return {};
+  const project =
+    (await context.appCtx.db.getProjectByName(projectName)) ??
+    (await context.appCtx.db.getProject(projectName));
+  if (!project) return {};
+
+  const services =
+    typeof context.appCtx.db.getDeployablesByGroup === 'function'
+      ? await context.appCtx.db.getDeployablesByGroup(project.id)
+      : (await context.appCtx.db.listServices()).filter(
+          (service) => service.project_id === project.id,
+        );
+  const deployables = services.filter((service) => !isManagedService(service.kind));
+  if (deployables.length === 0) return {};
+
+  const candidates = deployables.map((service: ServiceRow) => ({
+    service_id: service.id,
+    service_name: service.name,
+    project_id: project.id,
+    project_name: project.name,
+    kind: service.kind,
+    source: service.source,
+    status: service.status,
+  }));
+  const primary = candidates[0];
+
+  return {
+    existing_service: primary,
+    candidate_services: candidates,
+    suggested_call: primary
+      ? {
+          tool: 'openlander_service',
+          action: 'deploy_service',
+          params: { service_id: primary.service_id },
+        }
+      : undefined,
+  };
+}
 
 export const deployPlanToolDefs: ToolDef[] = [
   {
@@ -219,9 +270,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'deploy',
     riskLevel: 'medium',
     description:
-      'One-call deploy: analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and on failure auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
+      'One-call deploy for creating a new app from a repo or image. For an existing deployable service, prefer openlander_service.deploy_service with service_id/service_name. Analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and on failure auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
     mcpDescription:
-      'One-call deploy: repo analysis → build → deploy → result. Returns immediately with status. Poll get_deploy_status to track progress. Returns URL on success, error + diagnosis guidance on failure. Use the 3-step flow (create/execute/status) for finer control.',
+      'One-call deploy for new apps. Existing services should use openlander_service.deploy_service. Repo analysis → build → deploy → result. Poll get_deploy_status to track progress. Returns URL on success, error + diagnosis guidance on failure.',
     inputSchema: deploySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -320,15 +371,23 @@ export const deployPlanToolDefs: ToolDef[] = [
       }
 
       if (result.status === 'failed') {
+        const existingGuidance = await buildExistingServiceGuidance(result.project_name, context);
         return {
           plan_id: plan.plan_id,
           status: 'failed',
           project_name: result.project_name,
           error: result.error,
+          ...existingGuidance,
           _agent_guidance: {
             next_steps: [
-              'Call get_build_log for raw output and analyze it in your external agent',
-              'Fix the issue, then call deploy again to retry',
+              ...(existingGuidance['suggested_call']
+                ? [
+                    'This project already has a deployable service. Use openlander_service.deploy_service with the suggested service_id to redeploy it.',
+                  ]
+                : []),
+              'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
+              'If this is a new app failure, call get_build_log for raw output and analyze it in your external agent',
+              'Fix the issue, then retry with deploy_service for existing services or deploy for new apps',
             ],
           },
         };
@@ -469,37 +528,61 @@ export const deployPlanToolDefs: ToolDef[] = [
           if (settled) return;
           settled = true;
           cleanup();
-          const job = appCtx.jobManager.getStatus(projectId);
-          resolve({
-            plan_id: plan.plan_id,
-            status: 'failed',
-            project_name: result.project_name,
-            error: payload.error ?? job?.errorSummary,
-            ...(job?.buildLogTail ? { build_log_tail: job.buildLogTail } : {}),
-            ...(job?.autoDiagnosis
-              ? {
-                  auto_diagnosis: {
-                    category: job.autoDiagnosis.category,
-                    tier: job.autoDiagnosis.tier,
-                    cause: job.autoDiagnosis.cause,
-                    auto_fixable: job.autoDiagnosis.autoFixable,
-                    ...(job.autoDiagnosis.suggestedAction
-                      ? { suggested_action: job.autoDiagnosis.suggestedAction }
-                      : {}),
-                  },
-                }
-              : {}),
-            docker_host: getDockerHostType(),
-            ...(timedOut ? { timeout: true } : {}),
-            _agent_guidance: {
-              next_steps: [
-                ...(!job?.autoDiagnosis
-                  ? ['Call get_build_log for raw output and analyze it in your external agent']
-                  : []),
-                'Fix the issue, then call deploy again to retry',
-              ],
-            },
-          });
+          void Promise.resolve()
+            .then(async () => {
+              const job = appCtx.jobManager.getStatus(projectId);
+              const existingGuidance = await buildExistingServiceGuidance(
+                result.project_name,
+                context,
+              );
+              resolve({
+                plan_id: plan.plan_id,
+                status: 'failed',
+                project_name: result.project_name,
+                error: payload.error ?? job?.errorSummary,
+                ...(job?.buildLogTail ? { build_log_tail: job.buildLogTail } : {}),
+                ...(job?.autoDiagnosis
+                  ? {
+                      auto_diagnosis: {
+                        category: job.autoDiagnosis.category,
+                        tier: job.autoDiagnosis.tier,
+                        cause: job.autoDiagnosis.cause,
+                        auto_fixable: job.autoDiagnosis.autoFixable,
+                        ...(job.autoDiagnosis.suggestedAction
+                          ? { suggested_action: job.autoDiagnosis.suggestedAction }
+                          : {}),
+                      },
+                    }
+                  : {}),
+                docker_host: getDockerHostType(),
+                ...(timedOut ? { timeout: true } : {}),
+                ...existingGuidance,
+                _agent_guidance: {
+                  next_steps: [
+                    ...(existingGuidance['suggested_call']
+                      ? [
+                          'This project already has a deployable service. Use openlander_service.deploy_service with the suggested service_id to redeploy it.',
+                        ]
+                      : []),
+                    'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
+                    ...(!job?.autoDiagnosis
+                      ? ['Call get_build_log for raw output and analyze it in your external agent']
+                      : []),
+                    'Fix the issue, then retry with deploy_service for existing services or deploy for new apps',
+                  ],
+                },
+              });
+            })
+            .catch((err: unknown) => {
+              resolve({
+                plan_id: plan.plan_id,
+                status: 'failed',
+                project_name: result.project_name,
+                error: err instanceof Error ? err.message : String(err),
+                docker_host: getDockerHostType(),
+                ...(timedOut ? { timeout: true } : {}),
+              });
+            });
         };
 
         const resolveTimeout = (): void => {

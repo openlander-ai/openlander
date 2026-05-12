@@ -29,6 +29,7 @@ const EXPECTED_TOOLS = [
   'delete_env_var',
   'deploy',
   'deploy_service',
+  'diagnose_service',
   'dismiss_alert',
   'exec_service_container',
   'execute_deploy_plan',
@@ -125,8 +126,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 65 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(65);
+  it('maintains exactly 66 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(66);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

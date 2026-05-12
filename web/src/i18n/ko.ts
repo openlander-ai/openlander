@@ -380,7 +380,7 @@ export const translations = {
       image: 'From image',
       template: 'From template',
       templateDescription: 'Curated stacks',
-      soon: 'Soon',
+      soon: '곧 출시',
       serviceName: 'Service name',
       repo: 'GitHub repository',
       branch: 'Branch',

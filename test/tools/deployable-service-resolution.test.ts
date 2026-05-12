@@ -128,6 +128,16 @@ describe('deployable service target resolution', () => {
     expect(result).toMatchObject({
       status: 'deploying',
       service: { id: 'beta__svc', name: 'api', projectId: 'beta', projectName: 'beta' },
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'beta__svc' },
+      },
+    });
+    expect(result).toMatchObject({
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([expect.stringContaining('diagnose_service')]),
+      },
     });
   });
 
