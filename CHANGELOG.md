@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.1-rc.2] — 2026-05-12
+
+Release candidate with MCP diagnostics and post-rc.1 UI copy hardening.
+
+### Added
+
+- `openlander_monitor.diagnose_service`, a read-only MCP diagnostic action for
+  deployable services. It returns masked env key inventory, build-time env
+  warnings, sanitized recent deploy/build log tails, sanitized runtime logs,
+  container status, HTTP probe results, dependency probes, and suggested next
+  actions.
+- `deploy_service` now returns a concrete `diagnostic_call` pointing to
+  `openlander_monitor.diagnose_service` for agents to use when an async redeploy
+  fails or times out.
+
+### Changed
+
+- `openlander_deploy.deploy` guidance now more clearly distinguishes new app
+  creation from existing service redeploys and points agents to
+  `openlander_service.deploy_service` with a concrete service id when possible.
+- Korean/English UI copy sweeps were completed across remaining navigation,
+  timeline/logs, Git provider/OAuth, resources, add-service, service-delete, and
+  project chrome surfaces.
+
+### Fixed
+
+- MCP service diagnostics scrub credentialed URLs and common secret-like
+  assignments from diagnostic log tails and probe errors.
+- The add-service template `Soon` label is localized in Korean.
+
 ## [0.1.1-rc.1] — 2026-05-12
 
 Release candidate for the first 0.1 patch line. This RC focuses on custom
