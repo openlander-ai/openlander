@@ -169,6 +169,7 @@ export const translations = {
       traefikProxy: 'Traefik Proxy',
       running: 'Running',
       stopped: 'Stopped',
+      dockerReturned: 'Docker is not running — returned to the Infrastructure step.',
     },
   },
   notifications: {

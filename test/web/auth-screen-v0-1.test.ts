@@ -51,16 +51,23 @@ describe('AuthScreen v0.1 — single page, two modes', () => {
     expect(source).toContain("t('setup.password.mismatch')");
   });
 
-  it('hard-reloads to /projects via replace() after setupPassword instead of double-login', () => {
+  it('hard-reloads to /setup via replace() after setupPassword instead of double-login', () => {
+    // R2 (2026-05-13): redirect lands on /setup directly. The earlier
+    // /projects path bounced through SetupGuard on every first boot
+    // (no docker/traefik yet ⇒ ready=false ⇒ redirect to /setup),
+    // adding a flicker and a brittle "what if ready=true already"
+    // edge case. /setup owns the post-password handoff now.
     expect(source).toMatch(
-      /await setupPassword\([\s\S]*?\);[\s\S]*?window\.location\.replace\(['"]\/projects['"]\)/,
+      /await setupPassword\([\s\S]*?\);[\s\S]*?window\.location\.replace\(['"]\/setup['"]\)/,
     );
     // The follow-up `await login(password)` from the original PR #200
     // shape is now removed — backend cookie is enough.
     expect(source).not.toMatch(/await setupPassword\([\s\S]*?\);[\s\S]*?await login\(password\)/);
     // assign() would push /login onto the back-stack — keep replace()
     // so the back button doesn't return the user to the auth screen.
-    expect(source).not.toContain("window.location.assign('/projects')");
+    expect(source).not.toContain("window.location.assign('/setup')");
+    // Old /projects redirect must stay gone (R2 contract).
+    expect(source).not.toContain("window.location.replace('/projects')");
   });
 
   it('disables native HTML5 minLength so JS handler can show tooShort inline', () => {
@@ -154,5 +161,42 @@ describe('SetupScreen — PasswordStep + LanguageStep removed', () => {
     // one earlier to GitHub(1) / MCP(2).
     expect(setupSource).toMatch(/if \(parsed <= 1\) return 0/);
     expect(setupSource).toMatch(/return Math\.min\(parsed - 1, MAX_STEP\)/);
+  });
+
+  // Onboarding R2 (2026-05-13): localStorage-restored step must be
+  // clamped against the live status. If docker is not OK, the user has
+  // no way to be meaningfully past Infra, so snap back to step 0.
+  // Guards against the "restart Docker, wizard drops me on MCP" footgun.
+  // Optional chaining on docker.ok defends against the anonymous-payload
+  // shape that omits the `docker` key entirely.
+  it('clamps step back to Infra when docker.ok is false', () => {
+    expect(setupSource).toMatch(/status\.docker\?\.ok === false && step > 0/);
+    expect(setupSource).toMatch(/setStep\(0\)/);
+  });
+
+  // CCG Gemini feedback: silent step jump confuses the user. Surface
+  // a toast so the strict step regression has a visible reason.
+  it('emits a toast (deduped) when clamping back to Infra', () => {
+    expect(setupSource).toContain("toast.warning(t('setup.infra.dockerReturned'))");
+    expect(setupSource).toMatch(/dockerClampToastShownRef/);
+  });
+});
+
+describe('App SetupAccessGuard — R2 guards /setup route', () => {
+  const appSource = readRepoFile('web/src/App.tsx');
+
+  it('wires /setup through SetupAccessGuard instead of mounting SetupScreen directly', () => {
+    expect(appSource).toMatch(/<Route path="\/setup" element=\{<SetupAccessGuard \/>\} \/>/);
+  });
+
+  // The guard must let first-boot users (hasPassword=false) AND
+  // authenticated sessions through, and bounce everyone else to /login.
+  // Codex CCG flagged that the previous shape exposed /setup to any
+  // drive-by visitor and called `status.docker.ok` against an anonymous
+  // payload that intentionally omits the field.
+  it('allows first boot or authenticated session through, bounces the rest to /login', () => {
+    expect(appSource).toMatch(/function SetupAccessGuard\(\)/);
+    expect(appSource).toMatch(/!setupStatus\.hasPassword \|\| isAuthenticated/);
+    expect(appSource).toMatch(/<Navigate to="\/login" replace \/>/);
   });
 });

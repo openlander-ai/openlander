@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { useSetup } from '@/hooks/use-setup';
+import { useLanguage } from '@/i18n/context';
 import { startTraefik, completeSetup, connectGithub, disconnectGithub } from '@/lib/api';
 import { Loader2, Check } from 'lucide-react';
 import { useCopy } from '@/hooks/use-copy';
@@ -49,9 +51,13 @@ function clearStoredStep(): void {
 
 export function SetupScreen({ onComplete }: { onComplete: () => void }) {
   const { status, loading, refetch } = useSetup();
+  const { t } = useLanguage();
   const { copy, isCopied } = useCopy();
   const [step, setStep] = useState(getStoredStep);
   const [startingTraefik, setStartingTraefik] = useState(false);
+  // Toast dedup — surface the docker-clamp warning once per mount,
+  // not on every status refetch that keeps reporting docker.ok=false.
+  const dockerClampToastShownRef = useRef(false);
 
   // GitHub Form State
   const [githubToken, setGithubToken] = useState('');
@@ -70,6 +76,30 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
   useEffect(() => {
     storeStep(step);
   }, [step]);
+
+  // R2 (2026-05-13): clamp localStorage-restored step against the live
+  // setup status. Docker not OK ⇒ the user can't meaningfully be past
+  // Infra (the GitHub/MCP screens assume a running engine + Traefik),
+  // so snap back to Infra. Prevents the "I restarted Docker and the
+  // wizard dropped me on MCP with no running infra" footgun reported
+  // as item #6 of the onboarding punch list. Clamp DOWN only — never
+  // silently advance the user past a step they haven't visited.
+  //
+  // Anonymous /api/setup/status (hasPassword=true && unauthenticated)
+  // strips `docker` from the payload entirely, so guard with optional
+  // chaining — `docker?.ok === false` matches only the "docker exists
+  // and reports not OK" case, not the "docker key is absent" case.
+  // SetupAccessGuard already redirects anonymous-with-password to
+  // /login, but the optional chain is a cheap belt-and-braces.
+  useEffect(() => {
+    if (status && status.docker?.ok === false && step > 0) {
+      setStep(0);
+      if (!dockerClampToastShownRef.current) {
+        toast.warning(t('setup.infra.dockerReturned'));
+        dockerClampToastShownRef.current = true;
+      }
+    }
+  }, [status, step, t]);
 
   const goNext = () => setStep((s) => Math.min(s + 1, MAX_STEP));
   const goBack = () => setStep((s) => Math.max(s - 1, 0));
