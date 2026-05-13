@@ -86,6 +86,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import type { DeployLogSummary } from '@/types';
 import { cn } from '@/lib/utils';
 import { isValidEnvKey } from '@/lib/env-key';
@@ -1024,11 +1028,11 @@ function DomainsTab({
       </div>
 
       <div className="mt-3 flex items-center gap-2">
-        <button
+        <Button
           type="button"
+          size="sm"
           onClick={() => setShowAdd(true)}
           disabled={externalMode || busy || !projectId || loadError !== null}
-          className="inline-flex items-center gap-2 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--ol-primary-fg)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           title={
             externalMode
               ? t('projectDetail.domains.emptyExternal')
@@ -1036,10 +1040,11 @@ function DomainsTab({
                 ? t('projectDetail.domains.loadError')
                 : undefined
           }
+          className="gap-1.5"
         >
           <Plus className="h-3 w-3" />
           {t('projectDetail.domains.add')}
-        </button>
+        </Button>
         {feedback && (
           <span
             className={cn(
@@ -1107,7 +1112,9 @@ function DomainRow({
     | 'projectDetail.domains.status.active'
     | 'projectDetail.domains.status.pending'
     | 'projectDetail.domains.status.error';
-  const statusColor =
+  const statusVariant =
+    domain.status === 'active' ? 'green' : domain.status === 'error' ? 'red' : 'yellow';
+  const iconColor =
     domain.status === 'active'
       ? 'var(--ol-success)'
       : domain.status === 'error'
@@ -1116,33 +1123,33 @@ function DomainRow({
   return (
     <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3">
       <div className="flex items-center gap-2">
-        <Globe className="h-3.5 w-3.5 shrink-0" style={{ color: statusColor }} />
+        <Globe className="h-3.5 w-3.5 shrink-0" style={{ color: iconColor }} />
         <span className="ol-mono min-w-0 flex-1 truncate text-[12px] text-[color:var(--ol-fg)]">
           {displayUrl}
         </span>
         {domain.legacyWarning && (
-          <span
-            className="shrink-0 rounded-full bg-[color:var(--ol-warning-soft)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[color:var(--ol-warning)]"
+          <Badge
+            variant="yellow"
             title={t('projectDetail.domains.legacyTooltip')}
+            className="shrink-0 uppercase tracking-wide"
           >
             {t('projectDetail.domains.legacyBadge')}
-          </span>
+          </Badge>
         )}
-        <span
-          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
-          style={{ color: statusColor, backgroundColor: 'var(--ol-panel)' }}
-        >
+        <Badge variant={statusVariant} className="shrink-0 uppercase tracking-wide">
           {t(statusKey)}
-        </span>
-        <button
+        </Badge>
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={onDelete}
           disabled={disabled}
           aria-label={t('projectDetail.domains.removeAria')}
-          className="shrink-0 rounded-md p-1 text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-danger)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="shrink-0 h-7 w-7 text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-danger)]"
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -1297,41 +1304,35 @@ function AddDomainDialog({
           <DialogTitle>{t('projectDetail.domains.dialog.title')}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 pt-2">
-          <label className="flex flex-col gap-1 text-[12px]">
-            <span className="text-[color:var(--ol-fg-muted)]">
-              {t('projectDetail.domains.dialog.domain')}
-            </span>
-            <input
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="add-domain-domain">{t('projectDetail.domains.dialog.domain')}</Label>
+            <Input
+              id="add-domain-domain"
               type="text"
               value={domainValue}
               onChange={(e) => setDomainValue(e.target.value)}
               placeholder={t('projectDetail.domains.dialog.domainPlaceholder')}
               className={cn(
-                'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
-                fieldError?.field === 'domain'
-                  ? 'border-[color:var(--ol-danger)]'
-                  : 'border-[color:var(--ol-border-subtle)]',
+                'ol-mono',
+                fieldError?.field === 'domain' && 'border-[color:var(--ol-danger)]',
               )}
               autoFocus
             />
-          </label>
-          <label className="flex flex-col gap-1 text-[12px]">
-            <span className="text-[color:var(--ol-fg-muted)]">
-              {t('projectDetail.domains.dialog.path')}
-            </span>
-            <input
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="add-domain-path">{t('projectDetail.domains.dialog.path')}</Label>
+            <Input
+              id="add-domain-path"
               type="text"
               value={pathValue}
               onChange={(e) => handlePathChange(e.target.value)}
               placeholder="/"
               className={cn(
-                'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
-                fieldError?.field === 'path'
-                  ? 'border-[color:var(--ol-danger)]'
-                  : 'border-[color:var(--ol-border-subtle)]',
+                'ol-mono',
+                fieldError?.field === 'path' && 'border-[color:var(--ol-danger)]',
               )}
             />
-          </label>
+          </div>
 
           {pathValue !== '/' && pathValue !== '' && (
             <label className="flex items-start gap-2 text-[12px]">
@@ -1359,29 +1360,29 @@ function AddDomainDialog({
           </button>
 
           {advanced && (
-            <div className="flex flex-col gap-3 border-l-2 border-[color:var(--ol-border-subtle)] pl-3">
-              <label className="flex flex-col gap-1 text-[12px]">
-                <span className="text-[color:var(--ol-fg-muted)]">
+            <div className="flex flex-col gap-3 border-l border-[color:var(--ol-border-subtle)] pl-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="add-domain-upstream">
                   {t('projectDetail.domains.dialog.upstreamPathPrefix')}
-                </span>
-                <input
+                </Label>
+                <Input
+                  id="add-domain-upstream"
                   type="text"
                   value={upstreamPath}
                   onChange={(e) => setUpstreamPath(e.target.value)}
                   placeholder={t('projectDetail.domains.dialog.upstreamPathPlaceholder')}
                   className={cn(
-                    'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
-                    fieldError?.field === 'upstream'
-                      ? 'border-[color:var(--ol-danger)]'
-                      : 'border-[color:var(--ol-border-subtle)]',
+                    'ol-mono',
+                    fieldError?.field === 'upstream' && 'border-[color:var(--ol-danger)]',
                   )}
                 />
-              </label>
-              <label className="flex flex-col gap-1 text-[12px]">
-                <span className="text-[color:var(--ol-fg-muted)]">
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="add-domain-port">
                   {t('projectDetail.domains.dialog.targetPort')}
-                </span>
-                <input
+                </Label>
+                <Input
+                  id="add-domain-port"
                   type="number"
                   min={1}
                   max={65535}
@@ -1389,13 +1390,11 @@ function AddDomainDialog({
                   onChange={(e) => setTargetPort(e.target.value)}
                   placeholder={portPlaceholder}
                   className={cn(
-                    'ol-mono rounded-md border bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] outline-none focus:ring-2 focus:ring-[color:var(--ol-primary)]',
-                    fieldError?.field === 'port'
-                      ? 'border-[color:var(--ol-danger)]'
-                      : 'border-[color:var(--ol-border-subtle)]',
+                    'ol-mono',
+                    fieldError?.field === 'port' && 'border-[color:var(--ol-danger)]',
                   )}
                 />
-              </label>
+              </div>
             </div>
           )}
 
@@ -1404,23 +1403,15 @@ function AddDomainDialog({
           )}
 
           <DialogFooter>
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="rounded-md border border-[color:var(--ol-border-subtle)] px-3 py-1.5 text-[12px]"
-            >
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               {t('projectDetail.domains.dialog.cancel')}
-            </button>
-            <button
-              type="submit"
-              disabled={busy}
-              className="inline-flex items-center gap-2 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--ol-primary-fg)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
+            </Button>
+            <Button type="submit" disabled={busy} className="gap-1.5">
               {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
               {busy
                 ? t('projectDetail.domains.dialog.submitting')
                 : t('projectDetail.domains.dialog.submit')}
-            </button>
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
