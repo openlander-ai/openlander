@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1-rc.6] — 2026-05-13
+
 ### Fixed
 
 - Preserved explicit MCP-provided database/cache env vars during deploy planning
