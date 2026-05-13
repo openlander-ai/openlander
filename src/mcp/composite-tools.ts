@@ -109,14 +109,12 @@ export const MANAGED_SERVICE_ACTIONS = [
 
 /**
  * openlander_service: Deployable services (apps + workers).
- * Total: 19 tools
+ * Total: 17 tools
  */
 export const SERVICE_ACTIONS = [
   'restart_service',
   'redeploy_app',
   'rollback_service',
-  'archive_service',
-  'unarchive_service',
   'update_service_config',
   'list_env_vars',
   'get_env_var',
@@ -184,7 +182,7 @@ export const PLATFORM_ACTIONS = [
  * - DEPLOY_ACTIONS: 18 tools
  * - PROJECT_ACTIONS: 14 tools
  * - MANAGED_SERVICE_ACTIONS: 21 tools
- * - SERVICE_ACTIONS: 19 tools
+ * - SERVICE_ACTIONS: 17 tools
  * - MONITOR_ACTIONS: 8 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
  * - Platform tools: 13 direct tools (gated separately)
@@ -243,10 +241,14 @@ const compositeToolInputSchema = z.object({
     .describe('Parameters for the operation. See action="help" for parameter details.'),
 });
 
+function isMcpTargeted(def: ToolDef): boolean {
+  return !def.targets || def.targets.includes('mcp');
+}
+
 function buildCompositeToolDefs(allToolDefs: ToolDef[], actions: readonly string[]): ToolDef[] {
   return actions
     .map((name) => allToolDefs.find((def) => def.name === name))
-    .filter((def): def is ToolDef => def !== undefined);
+    .filter((def): def is ToolDef => def !== undefined && isMcpTargeted(def));
 }
 
 function createCompositeTool(

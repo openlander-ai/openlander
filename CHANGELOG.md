@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   container-private bridge IPs in Docker installs.
 - Added `preferred_url` to project/deploy responses so agents can use the
   canonical app URL without interpreting the full `urls` array.
+- Made `deploy_app` the MCP app-deploy front door: it creates new apps when
+  `repo_url`/`image` is provided, and routes existing app targets to redeploy
+  when `service_id`, `service_name`, or a single-service project `name` is
+  provided.
+- Removed `archive_service` and `unarchive_service` from the default MCP
+  composite surface; archive/restore remains available through the web/API
+  lifecycle.
 
 ### Fixed
 

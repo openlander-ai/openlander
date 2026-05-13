@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **66 unique default operations** surfaced through those composites
+- **64 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g. `openlander_deploy({ action: "deploy_app", params: { repo_url: "..." } })`. Run `{ action: "help" }` on any composite to list its action catalog.
@@ -26,7 +26,7 @@ Composite catalog:
 | ---------------------------- | ------------ | ---------------------------------------------------------------------------- |
 | `openlander_deploy`          | 18           | Deploy plans, execution, previews, rollbacks, build logs, Git, domains       |
 | `openlander_project`         | 14           | Project groups, secrets, temporary share URLs; env actions route to services |
-| `openlander_service`         | 19           | Deployable app/worker lifecycle, config, and service env vocabulary          |
+| `openlander_service`         | 17           | Deployable app/worker lifecycle, config, and service env vocabulary          |
 | `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage   |
 | `openlander_monitor`         | 8            | Logs, alerts, system stats, project stats, probes                            |
 
@@ -209,16 +209,6 @@ Deploy or restart a deployable app/worker service. Project-level runtime actions
 | `health_check_path` | string  | No       | Health check path                     |
 
 Provide either `service_id` or `service_name`.
-
-### `archive_service` / `unarchive_service`
-
-Archive or restore a deployable service while preserving configuration, environment variables, and history.
-
-| Parameter      | Type   | Required | Description                           |
-| -------------- | ------ | -------- | ------------------------------------- |
-| `service_id`   | string | No       | Deployable service id                 |
-| `service_name` | string | No       | Deployable service name               |
-| `project_name` | string | No       | Optional group scope for name lookups |
 
 ### `expose_public` / `unexpose_public`
 

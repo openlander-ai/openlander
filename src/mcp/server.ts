@@ -85,7 +85,7 @@ All actions: action="help"
 
 ## openlander_service
 Deployable services (apps + workers): lifecycle, config, env vars, secrets, and temporary public share URLs.
-Key actions: redeploy_app, restart_service, set_env_vars, list_env_vars, archive_service, expose_public
+Key actions: redeploy_app, restart_service, set_env_vars, list_env_vars, update_service_config, expose_public
 All actions: action="help"
 
 ## openlander_managed_service

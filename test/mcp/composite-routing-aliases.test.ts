@@ -105,8 +105,6 @@ describe('openlander_service direct deployable runtime actions', () => {
     expect(byName.get('restart_service')).toContain('deployable app/worker service');
     expect(byName.get('redeploy_app')).toContain('deployable app/worker service');
     expect(byName.get('rollback_service')).toContain('deployable app/worker service');
-    expect(byName.get('archive_service')).toContain('deployable app/worker service');
-    expect(byName.get('unarchive_service')).toContain('deployable app/worker service');
     expect(byName.get('update_service_config')).toContain('deployable service build config');
   });
 
@@ -135,7 +133,13 @@ describe('openlander_service direct deployable runtime actions', () => {
   });
 
   it('does not expose managed start/stop actions on openlander_service', async () => {
-    for (const action of ['start_service', 'stop_service', 'remove_service'] as const) {
+    for (const action of [
+      'start_service',
+      'stop_service',
+      'remove_service',
+      'archive_service',
+      'unarchive_service',
+    ] as const) {
       const result = (await tool.execute({ action, params: {} }, mockContext)) as Record<
         string,
         unknown

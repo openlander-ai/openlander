@@ -173,13 +173,13 @@ Local stdio connections (Claude Desktop, Cursor, Windsurf) don't need tokens —
 
 ## Available Tools
 
-Once connected, AI agents see **5 composite MCP tools** covering **66 unique default operations** (80 routed composite actions, plus 13 optional platform tools with `config.mcp.platformTools: true`; the default is `false`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** covering **64 unique default operations** (78 routed composite actions, plus 13 optional platform tools with `config.mcp.platformTools: true`; the default is `false`). Each composite takes `{ action, params }`:
 
 | Composite                    | Actions | Purpose                                               |
 | ---------------------------- | ------- | ----------------------------------------------------- |
 | `openlander_deploy`          | 18      | Deploy lifecycle: plans, execution, rollback, build   |
 | `openlander_project`         | 14      | Project groups: metadata, secrets, exposure           |
-| `openlander_service`         | 19      | Deployable app/worker lifecycle and config vocabulary |
+| `openlander_service`         | 17      | Deployable app/worker lifecycle and config vocabulary |
 | `openlander_managed_service` | 21      | Databases, caches, credentials, backups, volumes      |
 | `openlander_monitor`         | 8       | Monitoring & ops: logs, alerts, stats, host probing   |
 
