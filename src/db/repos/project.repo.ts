@@ -29,7 +29,11 @@ import {
   timelineEvents,
   webhookConfigs,
 } from '../schema.drizzle.js';
-import { deployableServiceIdToProjectId, projectIdToDeployableServiceId } from '../service-ids.js';
+import {
+  ORPHAN_MANAGED_GROUP_ID,
+  deployableServiceIdToProjectId,
+  projectIdToDeployableServiceId,
+} from '../service-ids.js';
 import type { EnvironmentRow, PendingFixRow, ProjectRow, ServiceRow } from '../types.js';
 
 /**
@@ -47,13 +51,6 @@ export interface ProjectWithMetadata {
 }
 
 const log = createModuleLogger('project-repo');
-
-/**
- * Synthesized group hosting all managed services post-0009 split. Never
- * user-facing; filtered out of listProjects/getProjectByName results.
- * Plan §6.3 Phase C.
- */
-const ORPHAN_MANAGED_GROUP_ID = '__orphan_managed';
 
 type ProjectSelectRow = typeof projects.$inferSelect;
 type ServiceSelectRow = typeof services.$inferSelect;

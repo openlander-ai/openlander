@@ -31,6 +31,56 @@ function getListProjectsTool(ctx: AppContext) {
 }
 
 describe('project-ops list_projects reconciliation', () => {
+  it('includes deployable service identifiers for MCP follow-up calls', async () => {
+    const project = createProject();
+    const deployable = {
+      id: 'project-1__svc',
+      name: 'demo-web',
+      kind: 'git',
+      source: 'git',
+      status: 'running',
+      assigned_port: 10001,
+      container_id: 'container-1',
+      container_name: 'ol-demo-app',
+      public_url: null,
+    };
+
+    const ctx = {
+      db: {
+        listProjects: vi.fn(() => [project]),
+        updateProject: vi.fn(),
+        getDeployableForProject: vi.fn().mockReturnValue(deployable),
+      },
+      docker: {
+        inspectContainer: vi.fn(async () => ({ Id: 'container-1', State: { Running: true } })),
+      },
+    } as unknown as AppContext;
+
+    const result = await getListProjectsTool(ctx).execute({}, { target: 'mcp' });
+
+    expect(result).toMatchObject({
+      projects: [
+        {
+          id: 'project-1',
+          name: 'demo-app',
+          deployable_service: {
+            service_id: 'project-1__svc',
+            service_name: 'demo-web',
+            kind: 'git',
+            source: 'git',
+          },
+        },
+      ],
+      _agent_guidance: {
+        networking: [
+          expect.any(String),
+          expect.any(String),
+          expect.stringContaining('deployable_service.service_id'),
+        ],
+      },
+    });
+  });
+
   it('returns running status when container actually exists', async () => {
     const inspectContainer = vi.fn(async () => ({ Id: 'container-1', State: { Running: true } }));
     const project = createProject();

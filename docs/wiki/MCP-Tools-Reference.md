@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **64 unique default operations** surfaced through those composites
+- **66 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g. `openlander_deploy({ action: "deploy_app", params: { repo_url: "..." } })`. Run `{ action: "help" }` on any composite to list its action catalog.
@@ -28,7 +28,7 @@ Composite catalog:
 | `openlander_project`         | 14           | Project groups, secrets, public exposure; env actions route to services    |
 | `openlander_service`         | 19           | Deployable app/worker lifecycle, config, and service env vocabulary        |
 | `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage |
-| `openlander_monitor`         | 6            | Logs, alerts, system stats, project stats, probes                          |
+| `openlander_monitor`         | 8            | Logs, alerts, system stats, project stats, probes                          |
 
 `openlander_project` owns group/config actions. `openlander_service` owns deployable runtime actions.
 

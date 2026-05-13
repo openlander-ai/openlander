@@ -65,6 +65,17 @@ export const projectOpsToolDefs: ToolDef[] = [
             const port = deployable?.assigned_port ?? project.assigned_port;
             const containerId = deployable?.container_id ?? project.container_id;
             const publicUrl = deployable?.public_url ?? project.public_url;
+            const deployableService = deployable
+              ? {
+                  service_id: deployable.id,
+                  service_name: deployable.name,
+                  kind: deployable.kind,
+                  source: deployable.source,
+                  status: deployable.status,
+                  port: deployable.assigned_port,
+                  container_name: deployable.container_name,
+                }
+              : null;
             return {
               id: project.id,
               name: project.name,
@@ -77,6 +88,7 @@ export const projectOpsToolDefs: ToolDef[] = [
               url: port ? getProjectUrl(project.name) : null,
               urls: port ? getProjectUrls(project.name) : [],
               publicUrl,
+              deployable_service: deployableService,
               createdAt: project.created_at,
               updatedAt: project.updated_at,
             };
@@ -85,7 +97,7 @@ export const projectOpsToolDefs: ToolDef[] = [
             networking: [
               `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
               'For deployable app containers, use http://ol-{project-name}:{port}. Managed service containers use http://ol-svc-{service-name}:{port}.',
-              'Use openlander_service actions for deploy/restart/rollback of deployable services.',
+              'Use projects[].deployable_service.service_id with openlander_service actions for redeploy/restart/rollback of deployable services.',
             ],
           },
         };
