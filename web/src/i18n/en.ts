@@ -130,10 +130,6 @@ export const translations = {
       connectedAs: 'Connected as {username}',
       switchAccount: 'Switch account',
     },
-    language: {
-      title: 'Language',
-      subtitle: 'Choose your preferred language.',
-    },
     password: {
       title: 'Set Password',
       subtitle: 'Protect your dashboard with a password.',

@@ -153,12 +153,6 @@ export const translations = {
       description: '비공개 레포지토리 배포용입니다. 공개 레포는 없어도 됩니다.',
       connectedAs: '{username} 계정으로 연결됨',
     },
-    language: {
-      // Chrome.
-      title: 'Language',
-      // Content.
-      subtitle: '사용할 언어를 선택하세요.',
-    },
     password: {
       // Chrome.
       title: 'Set Password',

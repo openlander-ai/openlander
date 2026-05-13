@@ -23,6 +23,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth';
 import { useLanguage } from '@/i18n/context';
+import { LanguageToggle } from '@/components/LanguageToggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getSetupStatus } from '@/lib/api';
@@ -134,7 +135,10 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex h-screen items-center justify-center bg-bg-app">
+    <div className="relative flex h-screen items-center justify-center bg-bg-app">
+      <div className="absolute right-4 top-4">
+        <LanguageToggle />
+      </div>
       <div className="w-full max-w-sm space-y-6 px-4">
         <div className="text-center space-y-2">
           <h1 className="font-display text-3xl font-bold text-foreground tracking-tight">
