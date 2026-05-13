@@ -376,6 +376,40 @@ export class PlanEngine {
     return autoEnvVars;
   }
 
+  private hasExplicitEnvValue(envVars: Record<string, string>, key: string): boolean {
+    return typeof envVars[key] === 'string' && envVars[key].trim().length > 0;
+  }
+
+  private filterServicesWithExplicitEnv(params: {
+    services: PlanService[];
+    providedEnv: Record<string, string>;
+    warnings?: string[];
+  }): PlanService[] {
+    const skipped: string[] = [];
+    const filtered = params.services.filter((service) => {
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not services.type DB row access.
+      const envVarName = SERVICE_ENV_VARS[service.type];
+      if (!envVarName || !this.hasExplicitEnvValue(params.providedEnv, envVarName)) {
+        return true;
+      }
+
+      // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not services.type DB row access.
+      skipped.push(`${service.type} (${envVarName})`);
+      return false;
+    });
+
+    if (skipped.length > 0 && params.warnings) {
+      const warning =
+        `Explicit env var(s) provided for ${skipped.join(', ')}; ` +
+        'skipping automatic managed service provisioning for those dependencies.';
+      if (!params.warnings.includes(warning)) {
+        params.warnings.push(warning);
+      }
+    }
+
+    return filtered;
+  }
+
   private assemblePlan(params: {
     planId: string;
     status: DeployPlan['status'];
@@ -609,10 +643,15 @@ export class PlanEngine {
       relativeDockerfiles,
     } = this.resolveBuildConfig(clonePath, opts, warnings, detectedEnv);
 
-    const services = await this.detectPlanServices(clonePath);
+    const detectedServices = await this.detectPlanServices(clonePath);
     this.detectEnvVars(clonePath, userDockerfile, detectedEnv);
     this.detectPersistenceWarnings(clonePath, warnings);
     this.detectServiceDependencies(envVars, warnings);
+    const services = this.filterServicesWithExplicitEnv({
+      services: detectedServices,
+      providedEnv: envVars,
+      warnings,
+    });
 
     const requiredEnvVars = Array.from(
       new Set(detectedEnv.filter((e) => e.required).map((e) => e.key)),
@@ -724,6 +763,14 @@ export class PlanEngine {
 
     if (updates.services) {
       merged.services = updates.services;
+      merged.env.auto = this.buildAutoEnvVars(merged.services);
+    } else {
+      merged.services = this.filterServicesWithExplicitEnv({
+        services: merged.services,
+        providedEnv: merged.env.provided,
+        warnings: merged.warnings,
+      });
+      merged.env.auto = this.buildAutoEnvVars(merged.services);
     }
     if (updates.health) {
       merged.health = { ...plan.health, ...updates.health };
@@ -832,6 +879,17 @@ export class PlanEngine {
 
       for (const service of plan.services) {
         if (service.action === 'create') {
+          // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not services.type DB row access.
+          const envVarName = SERVICE_ENV_VARS[service.type];
+          if (envVarName && this.hasExplicitEnvValue(plan.env.provided, envVarName)) {
+            log.info(
+              // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not services.type DB row access.
+              { serviceType: service.type, envVarName },
+              'Skipping managed service create because explicit env var was provided',
+            );
+            continue;
+          }
+
           // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           log.info({ serviceType: service.type }, 'Creating service');
           // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
@@ -844,8 +902,7 @@ export class PlanEngine {
           // Use created service's credentials for env injection
           if (created.credentials) {
             const creds = JSON.parse(created.credentials) as { connectionString?: string };
-            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-            const envVarName = SERVICE_ENV_VARS[service.type];
+
             if (envVarName && creds.connectionString) {
               mergedEnv[envVarName] = creds.connectionString;
             }

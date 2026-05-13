@@ -58,6 +58,7 @@ export default defineConfig({
       'test/pipeline/readiness-gate.test.ts',
       'test/tools/deploy-lock-mcp-tools.test.ts',
       'test/tools/image-schema.test.ts',
+      'test/tools/mcp-agent-ux-rc6.test.ts',
       'test/tools/monitoring.test.ts',
       'test/tools/platform-actions.test.ts',
       'test/tools/platform-integration.test.ts',

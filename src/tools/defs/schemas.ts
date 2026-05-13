@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const envVarsInputSchema = z.union([z.string().min(1), z.record(z.string(), z.string())]);
+
 // Core project/deployment schemas
 export const deployProjectSchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL (e.g., github.com/user/repo)'),
@@ -13,11 +15,10 @@ export const deployProjectSchema = z.object({
     .string()
     .optional()
     .describe('Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)'),
-  env_vars: z
-    .string()
+  env_vars: envVarsInputSchema
     .optional()
     .describe(
-      'JSON object of environment variables to set before deploy (e.g., {"DATABASE_URL": "...", "REDIS_URL": "..."})',
+      'Environment variables as an object or JSON-stringified object (e.g., {"DATABASE_URL": "...", "REDIS_URL": "..."})',
     ),
   prefer_dockerfile: z
     .boolean()
@@ -208,10 +209,9 @@ function envTargetSchema<T extends z.ZodRawShape>(shape: T) {
 
 // Environment & configuration schemas
 export const setEnvVarsSchema = envTargetSchema({
-  variables: z
-    .string()
-    .min(1)
-    .describe('JSON object of key-value pairs (e.g., {"DATABASE_URL": "..."})'),
+  variables: envVarsInputSchema.describe(
+    'Environment variables as an object or JSON-stringified object (e.g., {"DATABASE_URL": "..."})',
+  ),
   defer_redeploy: z
     .boolean()
     .optional()
@@ -585,11 +585,10 @@ export const createDeployPlanSchema = z
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
     port: z.number().int().positive().max(65535).optional().describe('Container port'),
-    env_vars: z
-      .string()
+    env_vars: envVarsInputSchema
       .optional()
       .describe(
-        'JSON object of environment variables to include in the plan (e.g., {"DATABASE_URL": "...", "API_KEY": "..."})',
+        'Environment variables as an object or JSON-stringified object (e.g., {"DATABASE_URL": "...", "API_KEY": "..."})',
       ),
     prefer_dockerfile: z
       .boolean()
@@ -651,11 +650,10 @@ export const deploySchema = z
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
     port: z.number().int().positive().max(65535).optional().describe('Container port'),
-    env_vars: z
-      .string()
+    env_vars: envVarsInputSchema
       .optional()
       .describe(
-        'JSON object of environment variables (e.g., {"DATABASE_URL": "...", "API_KEY": "..."})',
+        'Environment variables as an object or JSON-stringified object (e.g., {"DATABASE_URL": "...", "API_KEY": "..."})',
       ),
     prefer_dockerfile: z
       .boolean()

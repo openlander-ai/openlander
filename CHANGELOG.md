@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Preserved explicit MCP-provided database/cache env vars during deploy planning
+  so external `DATABASE_URL`/`REDIS_URL`-style values do not trigger managed
+  service provisioning or credential overwrite.
+- Accepted MCP env var inputs as either objects or JSON-stringified objects for
+  deploy planning and `set_env_vars`.
 - Fixed managed service creation on fresh Postgres installs by ensuring the
   synthetic managed-service group exists before inserting service rows.
 - Rolled back managed service containers and volumes if service persistence
