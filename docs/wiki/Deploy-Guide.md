@@ -48,7 +48,7 @@ After a service deploy succeeds, the service gets a URL:
 
 - **Internal**: `http://your-server:assigned-port`
 - **Traefik**: `http://service-name.your-server`
-- **Public**: Quick Share via TryCloudflare (temporary URL)
+- **Public**: optional temporary share URL or a custom domain mapping
 
 ---
 
@@ -64,8 +64,9 @@ deploy_app(
 )
 ```
 
-This clones, builds, runs, and waits for completion. It creates or selects a project group, then
-creates a deployable service that owns the repo/branch/build source.
+This is the app deploy front door. If `name`, `service_id`, or `service_name` matches an existing
+app, it redeploys that app. Otherwise it clones, builds, runs, and waits for completion for a new
+app.
 
 ### Step-by-Step Deploy
 

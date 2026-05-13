@@ -244,7 +244,7 @@ function serviceSummary(service: NonNullable<ServiceRow>, project: NonNullable<P
   };
 }
 
-async function runRedeploy(
+export async function runDeployableServiceAction(
   args: Record<string, unknown>,
   context: ToolContext,
   action: 'redeploy_app' | 'restart_service',
@@ -359,7 +359,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
     mcpDescription:
       'Deploy/redeploy a deployable app/worker service. Provide service_id or service_name.',
     inputSchema: deployServiceSchema,
-    execute: (args, context) => runRedeploy(args, context, 'redeploy_app'),
+    execute: (args, context) => runDeployableServiceAction(args, context, 'redeploy_app'),
   },
   {
     name: 'restart_service',
@@ -368,7 +368,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
       'Restart a deployable app/worker service by stopping and redeploying it. Provide service_id or service_name.',
     mcpDescription: 'Restart a deployable app/worker service by stopping and redeploying it.',
     inputSchema: restartServiceSchema,
-    execute: (args, context) => runRedeploy(args, context, 'restart_service'),
+    execute: (args, context) => runDeployableServiceAction(args, context, 'restart_service'),
   },
   {
     name: 'rollback_service',

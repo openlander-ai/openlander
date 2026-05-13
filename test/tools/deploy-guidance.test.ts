@@ -18,7 +18,7 @@ describe('deploy MCP guidance', () => {
     eventBus.clear('deploy:failed');
   });
 
-  it('points existing project failures at redeploy_app with a concrete service id', async () => {
+  it('routes deploy_app to redeploy_app when name matches one existing deployable service', async () => {
     const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
     const service = {
       id: 'app__svc',
@@ -30,27 +30,23 @@ describe('deploy MCP guidance', () => {
     };
     const ctx = {
       db: {
+        getService: vi.fn((id: string) => (id === service.id ? service : undefined)),
         getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
         getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
         getDeployablesByGroup: vi.fn(async () => [service]),
         listServices: vi.fn(async () => [service]),
+        getDeployableForProject: vi.fn(async (id: string) => (id === project.id ? service : null)),
+        isCircuitBreakerOpen: vi.fn(async () => false),
         acquireDeployLock: vi.fn(async () => true),
         getDeployLockInfo: vi.fn(async () => null),
+        releaseDeployLock: vi.fn(async () => undefined),
+      },
+      pipeline: {
+        redeploy: vi.fn(async () => undefined),
       },
       planEngine: {
-        createPlan: vi.fn(async () => ({
-          plan_id: 'plan-1',
-          status: 'ready',
-          app: { name: 'app' },
-          missing: [],
-          warnings: [],
-        })),
-        executePlan: vi.fn(async () => ({
-          plan_id: 'plan-1',
-          status: 'failed',
-          project_name: 'app',
-          error: 'Container "ol-app" already exists',
-        })),
+        createPlan: vi.fn(),
+        executePlan: vi.fn(),
       },
     } as unknown as AppContext;
 
@@ -60,22 +56,65 @@ describe('deploy MCP guidance', () => {
     )) as Record<string, unknown>;
 
     expect(result).toMatchObject({
-      status: 'failed',
+      status: 'deploying',
+      mode: 'redeploy_existing_project',
       existing_service: {
         service_id: 'app__svc',
         service_name: 'web',
       },
-      suggested_call: {
-        tool: 'openlander_service',
-        action: 'redeploy_app',
-        params: { service_id: 'app__svc' },
+    });
+    expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(ctx.pipeline.redeploy).toHaveBeenCalledWith('app', expect.anything()),
+    );
+  });
+
+  it('asks for service selection when deploy_app name matches multiple deployables', async () => {
+    const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
+    const services = [
+      {
+        id: 'app__web',
+        name: 'web',
+        project_id: 'app',
+        kind: 'git',
+        source: 'git',
+        status: 'running',
       },
+      {
+        id: 'app__api',
+        name: 'api',
+        project_id: 'app',
+        kind: 'git',
+        source: 'git',
+        status: 'running',
+      },
+    ];
+    const ctx = {
+      db: {
+        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getDeployablesByGroup: vi.fn(async () => services),
+        listServices: vi.fn(async () => services),
+      },
+      planEngine: {
+        createPlan: vi.fn(),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      { repo_url: 'https://github.com/acme/app', name: 'app' },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      status: 'needs_selection',
+      code: 'SERVICE_SELECTION_REQUIRED',
+      candidate_services: [
+        { service_id: 'app__web', service_name: 'web' },
+        { service_id: 'app__api', service_name: 'api' },
+      ],
     });
-    expect(result._agent_guidance).toMatchObject({
-      next_steps: expect.arrayContaining([
-        expect.stringContaining('openlander_service.redeploy_app'),
-      ]),
-    });
+    expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
   });
 
   it('reports unhealthy readiness instead of claiming deploy success', async () => {
@@ -97,8 +136,8 @@ describe('deploy MCP guidance', () => {
     };
     const ctx = {
       db: {
-        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
-        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getProject: vi.fn(() => undefined),
+        getProjectByName: vi.fn(() => undefined),
         getDeployableForProject: vi.fn(async (id: string) => (id === project.id ? service : null)),
         acquireDeployLock: vi.fn(async () => true),
         getDeployLockInfo: vi.fn(async () => null),

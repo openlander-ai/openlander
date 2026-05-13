@@ -718,6 +718,25 @@ export const executeDeployPlanSchema = z.object({
 // One-call deploy schema (create plan + execute + optionally wait)
 export const deploySchema = z
   .object({
+    service_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Existing deployable service id. When provided, deploy_app acts as a redeploy front door.',
+      ),
+    service_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Existing deployable service row name. Project group name is accepted only when that group has exactly one deployable service.',
+      ),
+    project_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Optional project group name to scope service_name lookups'),
     repo_url: z
       .string()
       .min(1)
@@ -729,6 +748,18 @@ export const deploySchema = z
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
     port: z.number().int().positive().max(65535).optional().describe('Container port'),
+    no_cache: z
+      .boolean()
+      .optional()
+      .describe('When deploy_app resolves an existing service, force a fresh Docker build.'),
+    strategy: z
+      .enum(['blue-green', 'force'])
+      .optional()
+      .describe('When deploy_app resolves an existing service, redeploy strategy.'),
+    health_check_path: z
+      .string()
+      .optional()
+      .describe('Health check path for the deployed or redeployed service.'),
     env_vars: envVarsInputSchema
       .optional()
       .describe(
@@ -766,13 +797,13 @@ export const deploySchema = z
       .boolean()
       .optional()
       .describe(
-        'Create a temporary public URL via TryCloudflare after deploy succeeds (default: false). Requires wait=true.',
+        'After deploy succeeds, create a temporary tunnel URL using the configured tunnel backend (default: false). Requires wait=true.',
       ),
     domain: z
       .string()
       .optional()
       .describe(
-        'Map a custom domain after deploy succeeds (requires Cloudflare config). Example: api.myapp.com. Requires wait=true.',
+        'Map a custom domain after deploy succeeds using the configured domain routing backend. Example: api.myapp.com. Requires wait=true.',
       ),
     target_project_id: z
       .string()
@@ -783,6 +814,12 @@ export const deploySchema = z
   })
   .refine(
     (data) => {
+      if (data.service_id || data.service_name) {
+        return true;
+      }
+      if (data.name && !data.repo_url && !data.image) {
+        return true;
+      }
       if (data.source === 'image') {
         return !!data.image && data.image.length > 0;
       }

@@ -79,12 +79,12 @@ Key actions: deploy_app, create_deploy_plan, execute_deploy_plan, get_deploy_sta
 All actions: action="help"
 
 ## openlander_project
-Project group config: secrets and public URLs. Env actions route to deployable services.
+Project group config: secrets, env vars, and temporary public share URLs. Env actions route to deployable services.
 Key actions: list_projects, set_global_secret, upload_secret_file, expose_public
 All actions: action="help"
 
 ## openlander_service
-Deployable services (apps + workers): lifecycle, config, env vars, secrets, public exposure.
+Deployable services (apps + workers): lifecycle, config, env vars, secrets, and temporary public share URLs.
 Key actions: redeploy_app, restart_service, set_env_vars, list_env_vars, archive_service, expose_public
 All actions: action="help"
 
@@ -110,10 +110,10 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - list_env_vars masks values by default; pass reveal=true only when the user explicitly needs raw values for audit or migration.
 - export_env_vars returns raw .env text and should be used sparingly.
 
-## Deploy Flow (ALWAYS follow for new projects)
-1. openlander_deploy({ action: "deploy_app", params: { repo_url: "...", name: "..." } })
-2. openlander_deploy({ action: "get_deploy_status", params: { project_name: "..." } })  ← poll until done
-3. openlander_project({ action: "list_projects" })  ← confirm running
+## Deploy Flow
+1. For "deploy this app", call openlander_deploy.deploy_app first. It creates a new app when repo_url/image is provided, or redeploys an existing app when service_id/service_name/name matches one.
+2. openlander_deploy({ action: "get_deploy_status", params: { project_name: "..." } })  ← poll until done when deploy_app returns building/deploying
+3. openlander_project({ action: "list_projects" })  ← confirm running and use returned service_id for later service-level actions
 
 ## Networking
 - All containers share the "openlander" Docker network

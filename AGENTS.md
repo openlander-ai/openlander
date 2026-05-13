@@ -388,7 +388,8 @@ createPlan(opts)  →  updatePlan(planId, updates)  →  executePlan(planId)
 
 Plan statuses: `created` → `needs_input` / `ready` → `executing` → `completed` / `failed`
 
-Convenience tool `deploy_app` combines all 3 steps into one call.
+Convenience tool `deploy_app` is the app deploy front door: it combines all 3
+steps for new apps and routes existing app targets to redeploy.
 
 ## Frontend Conventions
 

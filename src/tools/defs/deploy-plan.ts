@@ -11,6 +11,7 @@ import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { buildDeployLockedResponse, tryAcquireDeployLockOrResponse } from './helpers.js';
+import { runDeployableServiceAction } from './deployable-service.js';
 
 import {
   createDeployPlanSchema,
@@ -177,9 +178,11 @@ async function buildExistingServiceGuidance(
   const services =
     typeof context.appCtx.db.getDeployablesByGroup === 'function'
       ? await context.appCtx.db.getDeployablesByGroup(project.id)
-      : (await context.appCtx.db.listServices()).filter(
-          (service) => service.project_id === project.id,
-        );
+      : typeof context.appCtx.db.listServices === 'function'
+        ? (await context.appCtx.db.listServices()).filter(
+            (service) => service.project_id === project.id,
+          )
+        : [];
   const deployables = services.filter((service) => !isManagedService(service.kind));
   if (deployables.length === 0) return {};
 
@@ -205,6 +208,117 @@ async function buildExistingServiceGuidance(
         }
       : undefined,
   };
+}
+
+async function resolveExistingDeployAppTarget(
+  args: Record<string, unknown>,
+  context: ToolContext,
+): Promise<
+  | {
+      kind: 'service_target';
+      params: Record<string, unknown>;
+    }
+  | {
+      kind: 'existing_project';
+      params: Record<string, unknown>;
+      existingService: Record<string, unknown>;
+    }
+  | {
+      kind: 'needs_selection';
+      response: Record<string, unknown>;
+    }
+  | undefined
+> {
+  const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
+  const serviceName = typeof args['service_name'] === 'string' ? args['service_name'].trim() : '';
+  const projectName =
+    typeof args['project_name'] === 'string'
+      ? args['project_name'].trim()
+      : typeof args['name'] === 'string'
+        ? args['name'].trim()
+        : '';
+
+  if (serviceId || serviceName) {
+    return {
+      kind: 'service_target',
+      params: {
+        ...args,
+        ...(serviceId ? { service_id: serviceId } : {}),
+        ...(serviceName ? { service_name: serviceName } : {}),
+        ...(projectName ? { project_name: projectName } : {}),
+      },
+    };
+  }
+
+  if (!projectName || args['target_project_id']) {
+    return undefined;
+  }
+
+  const project =
+    (await context.appCtx.db.getProjectByName(projectName)) ??
+    (await context.appCtx.db.getProject(projectName));
+  if (!project) {
+    return undefined;
+  }
+
+  const services =
+    typeof context.appCtx.db.getDeployablesByGroup === 'function'
+      ? await context.appCtx.db.getDeployablesByGroup(project.id)
+      : typeof context.appCtx.db.listServices === 'function'
+        ? (await context.appCtx.db.listServices()).filter(
+            (service) => service.project_id === project.id,
+          )
+        : [];
+  const deployables = services.filter((service) => !isManagedService(service.kind));
+  const candidates = deployables.map((service: ServiceRow) => ({
+    service_id: service.id,
+    service_name: service.name,
+    project_id: project.id,
+    project_name: project.name,
+    kind: service.kind,
+    source: service.source,
+    status: service.status,
+  }));
+
+  if (candidates.length === 1) {
+    const existingService = candidates[0];
+    if (!existingService) {
+      return undefined;
+    }
+    return {
+      kind: 'existing_project',
+      existingService,
+      params: {
+        service_id: existingService.service_id,
+        no_cache: args['no_cache'],
+        strategy: args['strategy'],
+        health_check_path: args['health_check_path'],
+        cmd: args['cmd'],
+      },
+    };
+  }
+
+  if (candidates.length > 1) {
+    return {
+      kind: 'needs_selection',
+      response: {
+        status: 'needs_selection',
+        code: 'SERVICE_SELECTION_REQUIRED',
+        project: { id: project.id, name: project.name },
+        candidate_services: candidates,
+        _agent_guidance: {
+          message:
+            'This project already has multiple deployable services. Pick the intended service_id and call deploy_app or openlander_service.redeploy_app with that service_id.',
+          next_steps: [
+            'Choose one candidate_services[].service_id.',
+            'Call openlander_deploy.deploy_app with service_id for a front-door redeploy, or openlander_service.redeploy_app with service_id.',
+          ],
+        },
+      },
+    };
+  }
+
+  return undefined;
 }
 
 export const deployPlanToolDefs: ToolDef[] = [
@@ -406,9 +520,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'deploy_app',
     riskLevel: 'medium',
     description:
-      'One-call deploy for creating a new app from a repo or image. For an existing deployable service, prefer openlander_service.redeploy_app with service_id/service_name. Analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
+      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing project with exactly one deployable service, this redeploys that service. Otherwise it creates a new app from repo_url or image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. If the plan needs missing env vars, returns status "needs_input" with the missing list.',
     mcpDescription:
-      'One-call app deploy for new apps. Existing services should use openlander_service.redeploy_app. Repo analysis → build → deploy → result. Poll get_deploy_status to track progress. Returns URL on success, error + diagnosis guidance on failure.',
+      'App deploy front door. Existing app: pass service_id/service_name or project name to redeploy. New app: pass repo_url or image. Poll get_deploy_status to track progress.',
     inputSchema: deploySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -420,6 +534,53 @@ export const deployPlanToolDefs: ToolDef[] = [
       const expose = (args['expose'] as boolean | undefined) ?? false;
       const domain = (args['domain'] as string | undefined) ?? undefined;
       const targetProjectId = (args['target_project_id'] as string | undefined) ?? undefined;
+      const source = (args['source'] as 'git' | 'image' | undefined) ?? undefined;
+      const image = (args['image'] as string | undefined) ?? undefined;
+      const repoUrl = (args['repo_url'] as string | undefined) ?? undefined;
+      const projectName = (args['name'] as string | undefined) ?? undefined;
+
+      const frontDoorTarget = await resolveExistingDeployAppTarget(args, context);
+      if (frontDoorTarget?.kind === 'needs_selection') {
+        return frontDoorTarget.response;
+      }
+      if (
+        frontDoorTarget?.kind === 'service_target' ||
+        frontDoorTarget?.kind === 'existing_project'
+      ) {
+        const redeployResult = await runDeployableServiceAction(
+          frontDoorTarget.params,
+          context,
+          'redeploy_app',
+        );
+        const redeployPayload = redeployResult as Record<string, unknown>;
+        return {
+          ...redeployPayload,
+          mode:
+            frontDoorTarget.kind === 'service_target'
+              ? 'redeploy_service_target'
+              : 'redeploy_existing_project',
+          ...(frontDoorTarget.kind === 'existing_project'
+            ? { existing_service: frontDoorTarget.existingService }
+            : {}),
+        };
+      }
+
+      if (!repoUrl && !image) {
+        return {
+          status: 'needs_input',
+          missing: source === 'image' ? ['image'] : ['repo_url'],
+          project_name: projectName,
+          _agent_guidance: {
+            message: projectName
+              ? 'No existing deployable service matched this name, and no repo_url/image was provided for a new app.'
+              : 'deploy_app needs repo_url/image for a new app, or service_id/service_name/name for an existing app.',
+            next_steps: [
+              'For a new app, call deploy_app with repo_url or source="image" plus image.',
+              'For an existing app, call deploy_app with service_id, service_name, or the project name.',
+            ],
+          },
+        };
+      }
 
       // Pre-flight target_project_id checks (CCG findings #1, #2):
       //   #1 (1.0 blocker): wait=false bypasses runPostDeploy, so the
@@ -450,8 +611,8 @@ export const deployPlanToolDefs: ToolDef[] = [
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
         branch: (args['branch'] as string | undefined) ?? undefined,
         name: (args['name'] as string | undefined) ?? undefined,
-        source: (args['source'] as 'git' | 'image' | undefined) ?? undefined,
-        imageUrl: (args['image'] as string | undefined) ?? undefined,
+        source,
+        imageUrl: image,
         imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
         containerPort: (args['port'] as number | undefined) ?? undefined,
         envVars,

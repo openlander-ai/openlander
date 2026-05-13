@@ -110,6 +110,18 @@ describe('openlander_service direct deployable runtime actions', () => {
     expect(byName.get('update_service_config')).toContain('deployable service build config');
   });
 
+  it('help does not advertise TryCloudflare-specific public access wording', async () => {
+    const result = (await tool.execute({ action: 'help' }, mockContext)) as {
+      actions: Array<{ name: string; description: string }>;
+    };
+    const exposeDescription = result.actions.find(
+      (action) => action.name === 'expose_public',
+    )?.description;
+
+    expect(exposeDescription).toContain('temporary public share URL');
+    expect(exposeDescription).not.toMatch(/TryCloudflare|Cloudflare/i);
+  });
+
   it('routes deployable service actions directly and validates service target params', async () => {
     for (const action of ['redeploy_app', 'restart_service', 'rollback_service'] as const) {
       const result = (await tool.execute({ action, params: {} }, mockContext)) as Record<

@@ -2,11 +2,11 @@
 
 ## Access Modes
 
-| Mode            | Use Case      | How                      | Domain Required |
-| --------------- | ------------- | ------------------------ | --------------- |
-| **Internal**    | Same network  | Local IP + Traefik       | No              |
-| **Quick Share** | Demo / review | TryCloudflare (temp URL) | No              |
-| **Production**  | Always-on     | Manual DNS + Traefik     | Yes             |
+| Mode            | Use Case      | How                  | Domain Required |
+| --------------- | ------------- | -------------------- | --------------- |
+| **Internal**    | Same network  | Local IP + Traefik   | No              |
+| **Quick Share** | Demo / review | Temporary share URL  | No              |
+| **Production**  | Always-on     | Manual DNS + Traefik | Yes             |
 
 Default is **Internal** (safe).
 
@@ -30,9 +30,9 @@ Port range: `10001-10999` (production).
 
 ---
 
-## Quick Share (TryCloudflare)
+## Quick Share
 
-Generate a temporary public URL — no domain or Cloudflare account needed.
+Generate a temporary public URL without changing DNS or app source code.
 
 ### Via Web Dashboard
 
@@ -44,7 +44,7 @@ Project Detail → **Share** button
 expose_public(project_name: "my-app")
 ```
 
-Returns a URL like `https://random-words.trycloudflare.com`
+Returns a temporary public URL.
 
 ### Stop Sharing
 
@@ -52,7 +52,7 @@ Returns a URL like `https://random-words.trycloudflare.com`
 unexpose_public(project_name: "my-app")
 ```
 
-> **Note**: TryCloudflare URLs are temporary and change on restart.
+> **Note**: temporary share URLs may change on restart.
 
 ---
 

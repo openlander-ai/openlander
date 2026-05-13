@@ -173,9 +173,9 @@ Choose the right tool based on user intent:
 | Archive a service             | archive_service      | Confirm first. Preserves config/history. |
 | Restart a service             | restart_service      | Stops then starts same container.        |
 | View logs                     | get_logs             | Default 20 lines. User can request more. |
-| Make project public           | expose_public        | Creates temporary TryCloudflare URL.     |
+| Make project public           | expose_public        | Creates temporary share URL.             |
 | Remove public access          | unexpose_public      | Reverts to internal-only.                |
-| Connect a custom domain       | map_domain           | Requires Cloudflare setup.               |
+| Connect a custom domain       | map_domain           | Uses configured domain routing backend.  |
 | List domain mappings          | list_domains         | Shows all custom domain connections.     |
 | Set/update env variables      | set_env_vars         | Saves by default; redeploy/deploy to apply, or pass defer_redeploy=false. |
 | Set a global secret (all projects) | set_global_secret    | Encrypted. For shared API keys, DB creds.  |

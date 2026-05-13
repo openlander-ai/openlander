@@ -48,7 +48,7 @@ export const DEPLOY_ACTIONS = [
  * openlander_project: Project groups & configuration
  * - Global secrets (shared across all projects)
  * - Secret files (encrypted credential files)
- * - Public URL exposure (Cloudflare tunnel)
+ * - Temporary public share URLs
  * Total: 14 tools
  */
 export const PROJECT_ACTIONS = [
@@ -326,7 +326,7 @@ export function createOpenLanderDeployCompositeTool(toolDefs: ToolDef[]): Compos
 export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_project',
-    'Project groups, secrets, and public exposure. Env actions route to deployable services.',
+    'Project groups, secrets, env vars, and temporary public share URLs. Env actions route to deployable services.',
     toolDefs,
   );
 }
@@ -334,7 +334,7 @@ export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): Compo
 export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_service',
-    'Deployable services (apps + workers): redeploy, restart, rollback, config, env vars, secrets, and public exposure.',
+    'Deployable services (apps + workers): redeploy, restart, rollback, config, env vars, secrets, and temporary public share URLs.',
     toolDefs,
   );
 }

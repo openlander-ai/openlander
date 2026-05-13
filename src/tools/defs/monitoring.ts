@@ -1025,7 +1025,7 @@ function buildDiagnoseNextSteps(input: {
     );
   }
   nextSteps.push(
-    'For existing services, use openlander_service.redeploy_app. Use openlander_deploy.deploy_app only for creating a new app.',
+    'For existing services, call openlander_deploy.deploy_app with service_id/service_name/name, or call openlander_service.redeploy_app directly with service_id.',
   );
   return nextSteps;
 }

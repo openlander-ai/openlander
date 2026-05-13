@@ -607,8 +607,8 @@ export const envToolDefs: ToolDef[] = [
     name: 'expose_public',
     riskLevel: 'medium',
     description:
-      'Create a temporary public URL for a project via TryCloudflare tunnel. Use when user wants to share their app externally or test from another device. Returns { status, project, publicUrl }. The URL is temporary and changes on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For permanent custom domains, use map_domain instead.',
-    mcpDescription: 'Generate a temporary public URL for a project via TryCloudflare.',
+      'Create a temporary public URL for a project using the configured tunnel backend. Use when the user wants a quick external share URL without changing app source code. Returns { status, project, publicUrl }. The URL is temporary and may change on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For stable domains, use domain routing instead.',
+    mcpDescription: 'Generate a temporary public share URL for a project.',
     inputSchema: projectNameSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
@@ -635,8 +635,8 @@ export const envToolDefs: ToolDef[] = [
     name: 'unexpose_public',
     riskLevel: 'medium',
     description:
-      'Remove the public TryCloudflare tunnel URL for a project. Use when user wants to make a project private again. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
-    mcpDescription: 'Remove a public URL and stop the TryCloudflare tunnel.',
+      'Remove the temporary public share URL for a project. Use when the user wants to make a project private again. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
+    mcpDescription: 'Remove a temporary public share URL.',
     inputSchema: projectNameSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
