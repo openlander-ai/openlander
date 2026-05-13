@@ -41,20 +41,49 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'get_logs',
     riskLevel: 'low',
     description:
-      'Get recent container stdout/stderr logs for a deployable project/app container. Use when user asks about errors, crashes, or app behavior. Returns { project, logs } where logs is a string of recent lines (agent default: 20, MCP default: 50). Errors: PROJECT_NOT_FOUND. If logs show a build error, call get_build_log for the raw build output. For deployment history (past deploys, triggers, durations), use get_deploy_history instead.',
-    mcpDescription: 'Get recent deployable project logs. MCP default is 50 lines.',
+      'Get recent container stdout/stderr logs for a deployable service or project. Prefer service_id from list_projects.deployable_service when available. Use when user asks about errors, crashes, or app behavior. Returns { project, service, logs } where logs is a string of recent lines (agent default: 20, MCP default: 50). Errors: PROJECT_NOT_FOUND, SERVICE_NOT_FOUND. If logs show a build error, call get_build_log for the raw build output. For deployment history (past deploys, triggers, durations), use get_deploy_history instead.',
+    mcpDescription:
+      'Get recent deployable service/project logs. Prefer service_id. MCP default is 50 lines.',
     inputSchema: getLogsSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
+      const lines = (args['lines'] as number | undefined) ?? (context.target === 'agent' ? 20 : 50);
+      const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
+      const serviceName =
+        typeof args['service_name'] === 'string' ? args['service_name'].trim() : '';
+
+      if (serviceId || serviceName) {
+        const { service, project, runtimeProject } = await resolveDeployableServiceForMonitoring(
+          args,
+          context,
+        );
+        const logs = await appCtx.pipeline.getLogs(runtimeProject.id, lines);
+        return {
+          project: project.name,
+          service: {
+            id: service.id,
+            name: service.name,
+          },
+          logs,
+        };
+      }
+
       const projectName = args['project_name'] as string;
       const project = await appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
-      const lines = (args['lines'] as number | undefined) ?? (context.target === 'agent' ? 20 : 50);
+      const deployable =
+        typeof appCtx.db.getDeployableForProject === 'function'
+          ? await appCtx.db.getDeployableForProject(project.id)
+          : undefined;
       const logs = await appCtx.pipeline.getLogs(project.id, lines);
-      return { project: projectName, logs };
+      return {
+        project: project.name,
+        service: deployable ? { id: deployable.id, name: deployable.name } : null,
+        logs,
+      };
     },
   },
   {
@@ -111,26 +140,44 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'get_project_stats',
     riskLevel: 'low',
     description:
-      'Get CPU, memory, restarts, and uptime for a specific project container. Use when user asks about resource usage, container health, or performance metrics. Returns { cpu_percent, memory_usage_mb, memory_limit_mb, restarts, uptime_seconds, status }. Errors: PROJECT_NOT_FOUND.',
-    mcpDescription: 'Get per-container CPU, memory, restarts, and uptime for a project.',
+      'Get CPU, memory, restarts, and uptime for a deployable service or project container. Prefer service_id from list_projects.deployable_service when available. Use when user asks about resource usage, container health, or performance metrics. Returns { cpu_percent, memory_usage_mb, memory_limit_mb, restarts, uptime_seconds, status }. Errors: PROJECT_NOT_FOUND, SERVICE_NOT_FOUND.',
+    mcpDescription: 'Get per-container CPU, memory, restarts, and uptime for a service/project.',
     inputSchema: getProjectStatsSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
-      const projectName = args['project_name'] as string;
-      const project = await appCtx.db.getProjectByName(projectName);
-      if (!project) {
-        throw new ProjectNotFoundError(projectName);
-      }
+      const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
+      const serviceName =
+        typeof args['service_name'] === 'string' ? args['service_name'].trim() : '';
 
-      // PR 4.5: canonical-first read of runtime fields with `??` fallback to
-      // legacy `projects` columns through migration 0012.
-      const deployable = await appCtx.db.getDeployableForProject(project.id);
-      const status = deployable?.status ?? project.status;
-      const containerId = deployable?.container_id ?? project.container_id;
+      let project: ProjectRow;
+      let service: ServiceRow | undefined;
+      let status: string | null | undefined;
+      let containerId: string | null | undefined;
+
+      if (serviceId || serviceName) {
+        const resolved = await resolveDeployableServiceForMonitoring(args, context);
+        project = resolved.project;
+        service = resolved.service;
+        status = service.status;
+        containerId = service.container_id ?? resolved.runtimeProject.container_id;
+      } else {
+        const projectName = args['project_name'] as string;
+        const resolvedProject = await appCtx.db.getProjectByName(projectName);
+        if (!resolvedProject) {
+          throw new ProjectNotFoundError(projectName);
+        }
+        project = resolvedProject;
+        // PR 4.5: canonical-first read of runtime fields with `??` fallback to
+        // legacy `projects` columns through migration 0012.
+        service = await appCtx.db.getDeployableForProject(project.id);
+        status = service?.status ?? project.status;
+        containerId = service?.container_id ?? project.container_id;
+      }
 
       if (!containerId || status !== 'running') {
         return {
-          project: projectName,
+          project: project.name,
+          service: service ? { id: service.id, name: service.name } : null,
           status,
           cpu_percent: 0,
           memory_usage_mb: 0,
@@ -169,7 +216,8 @@ export const monitoringToolDefs: ToolDef[] = [
         const uptimeSeconds = Math.floor((Date.now() - startedAt) / 1000);
 
         return {
-          project: projectName,
+          project: project.name,
+          service: service ? { id: service.id, name: service.name } : null,
           status,
           cpu_percent: Math.round(cpuPercent * 10) / 10,
           memory_usage_mb: memoryUsageMb,
@@ -179,9 +227,13 @@ export const monitoringToolDefs: ToolDef[] = [
         };
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        log.warn({ err, projectName, containerId }, 'Failed to fetch container stats');
+        log.warn(
+          { err, projectName: project.name, containerId },
+          'Failed to fetch container stats',
+        );
         return {
-          project: projectName,
+          project: project.name,
+          service: service ? { id: service.id, name: service.name } : null,
           status,
           cpu_percent: 0,
           memory_usage_mb: 0,
@@ -210,7 +262,7 @@ export const monitoringToolDefs: ToolDef[] = [
     inputSchema: diagnoseServiceSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
-      const { service, project, runtimeProject } = await resolveDeployableServiceForDiagnosis(
+      const { service, project, runtimeProject } = await resolveDeployableServiceForMonitoring(
         args,
         context,
       );
@@ -387,7 +439,7 @@ async function serviceSelectionCandidates(
   );
 }
 
-async function resolveDeployableServiceForDiagnosis(
+async function resolveDeployableServiceForMonitoring(
   args: Record<string, unknown>,
   context: ToolContext,
 ): Promise<ResolvedDeployableService> {

@@ -521,3 +521,110 @@ describe('diagnose_service tool', () => {
     }
   });
 });
+
+describe('service-targeted monitoring tools', () => {
+  function createServiceTargetContext() {
+    const project = { id: 'app', name: 'app', status: 'running', container_id: 'legacy-container' };
+    const service = {
+      id: 'app__svc',
+      project_id: 'app',
+      name: 'web',
+      kind: 'git',
+      source: 'git',
+      status: 'running',
+      container_id: 'service-container',
+      container_name: 'ol-app',
+    };
+    const ctx = {
+      db: {
+        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getService: vi.fn((id: string) => (id === service.id ? service : undefined)),
+        getDeployableForProject: vi.fn(async (id: string) =>
+          id === project.id ? service : undefined,
+        ),
+        getDeployablesByGroup: vi.fn(async () => [service]),
+        listServices: vi.fn(async () => [service]),
+      },
+      pipeline: {
+        getLogs: vi.fn(async () => 'service logs'),
+      },
+      docker: {
+        getContainerStats: vi.fn(async () => ({
+          cpu_stats: {
+            cpu_usage: { total_usage: 300, percpu_usage: [1, 2] },
+            system_cpu_usage: 1000,
+          },
+          precpu_stats: {
+            cpu_usage: { total_usage: 100 },
+            system_cpu_usage: 500,
+          },
+          memory_stats: { usage: 104857600, limit: 536870912 },
+        })),
+        inspectContainer: vi.fn(async () => ({
+          RestartCount: 2,
+          State: { StartedAt: new Date(Date.now() - 10_000).toISOString() },
+        })),
+      },
+    } as unknown as AppContext;
+    return { ctx, project, service };
+  }
+
+  it('get_logs accepts deployable service_id from list_projects output', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    const result = (await getMonitoringTool(ctx, 'get_logs').execute(
+      { service_id: service.id, lines: 7 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.pipeline.getLogs).toHaveBeenCalledWith('app', 7);
+    expect(result).toMatchObject({
+      project: 'app',
+      service: {
+        id: service.id,
+        name: service.name,
+      },
+      logs: 'service logs',
+    });
+  });
+
+  it('get_logs returns a stable service field for project_name targets', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    const result = (await getMonitoringTool(ctx, 'get_logs').execute(
+      { project_name: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.db.getDeployableForProject).toHaveBeenCalledWith('app');
+    expect(ctx.pipeline.getLogs).toHaveBeenCalledWith('app', 5);
+    expect(result).toMatchObject({
+      project: 'app',
+      service: {
+        id: service.id,
+        name: service.name,
+      },
+      logs: 'service logs',
+    });
+  });
+
+  it('get_project_stats accepts deployable service_id from list_projects output', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    const result = (await getMonitoringTool(ctx, 'get_project_stats').execute(
+      { service_id: service.id },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.docker.getContainerStats).toHaveBeenCalledWith('service-container');
+    expect(result).toMatchObject({
+      project: 'app',
+      service: {
+        id: service.id,
+        name: service.name,
+      },
+      status: 'running',
+      memory_usage_mb: 100,
+      memory_limit_mb: 512,
+      restarts: 2,
+    });
+  });
+});

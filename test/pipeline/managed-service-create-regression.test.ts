@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Database, ServiceRow } from '../../src/db/index.js';
-import { ManagedServicePersistenceCleanedError } from '../../src/errors.js';
+import {
+  ManagedServiceNameConflictError,
+  ManagedServicePersistenceCleanedError,
+} from '../../src/errors.js';
 import { clearPortReservations, clearPortScanCache } from '../../src/pipeline/port.js';
 import { ServiceManager } from '../../src/pipeline/service-manager.js';
 import { createMockDockerHarness } from '../helpers/docker-mocks.js';
@@ -158,5 +161,41 @@ describe('ServiceManager.create regressions', () => {
     expect(dockerHarness.docker.safeRemoveContainer).toHaveBeenCalledWith('ol-svc-broken-pg-id');
     expect(dockerHarness.docker.removeVolume).toHaveBeenCalledWith('ol-svc-data-broken-pg');
     expect(db.deleteService).toHaveBeenCalled();
+  });
+
+  it('wraps Docker name conflicts in a sanitized managed-service error', async () => {
+    const db = createDbMock();
+    const dockerHarness = createMockDockerHarness();
+    const conflict = new Error(
+      '(HTTP code 409) unexpected - Conflict. The container name "/ol-svc-conflict-redis" is already in use by container "abcdef1234567890". You have to remove (or rename) that container to be able to reuse that name.',
+    );
+    (conflict as { statusCode?: number }).statusCode = 409;
+    (dockerHarness.docker.runServiceContainer as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      conflict,
+    );
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    let caught: unknown;
+    try {
+      await manager.create({
+        name: 'conflict-redis',
+        template: 'redis',
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(ManagedServiceNameConflictError);
+    expect(caught).toMatchObject({
+      code: 'MANAGED_SERVICE_NAME_CONFLICT',
+      details: {
+        containerName: 'ol-svc-conflict-redis',
+        volumeRolledBack: true,
+      },
+    });
+    expect(caught instanceof Error ? caught.message : String(caught)).not.toContain(
+      'abcdef1234567890',
+    );
+    expect(dockerHarness.docker.removeVolume).toHaveBeenCalledWith('ol-svc-data-conflict-redis');
   });
 });

@@ -198,6 +198,9 @@ Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 
 MCP env changes target deployable services. Use `service_id` or `service_name`;
 `project_name` works only for groups with exactly one deployable service.
+Monitoring actions such as `get_logs` and `get_project_stats` follow the same
+targeting rule; prefer the `deployable_service.service_id` returned by
+`list_projects`.
 
 MCP env changes are service-scoped and conservative by default: `set_env_vars`,
 `delete_env_var`, and `bulk_delete_env_vars` save changes without redeploying unless

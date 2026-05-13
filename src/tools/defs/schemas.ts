@@ -47,14 +47,35 @@ export const projectNameSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
 });
 
-export const getLogsSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
+const monitoringTargetFields = {
+  service_id: z.string().min(1).optional().describe('Deployable service id'),
+  service_name: z.string().min(1).optional().describe('Deployable service name'),
+  project_name: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Project group name/id. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+    ),
+} as const;
+
+function monitoringTargetSchema<T extends z.ZodRawShape>(shape: T) {
+  return z
+    .object({ ...monitoringTargetFields, ...shape })
+    .refine(
+      (value: { service_id?: unknown; service_name?: unknown; project_name?: unknown }) =>
+        Boolean(value.service_id || value.service_name || value.project_name),
+      {
+        message: 'service_id, service_name, or project_name is required',
+      },
+    );
+}
+
+export const getLogsSchema = monitoringTargetSchema({
   lines: z.number().int().positive().optional().describe('Number of log lines to retrieve'),
 });
 
-export const getProjectStatsSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
-});
+export const getProjectStatsSchema = monitoringTargetSchema({});
 
 export const diagnoseServiceSchema = z
   .object({

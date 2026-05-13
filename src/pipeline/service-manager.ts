@@ -28,7 +28,9 @@ import type { ContainerExecResult } from './service-adapters/types.js';
 import type { Docker } from './docker.js';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
 import {
+  isDockerContainerNameConflictError,
   isDockerNotFoundError,
+  ManagedServiceNameConflictError,
   ManagedServicePersistenceCleanedError,
   RepoPersistenceError,
   ServiceConfigError,
@@ -555,6 +557,13 @@ export class ServiceManager {
           rollbackClean = false;
           log.warn({ err: cleanupErr, volumeName }, 'Failed to roll back managed service volume');
         }
+      }
+      if (!persistenceStarted && isDockerContainerNameConflictError(err)) {
+        throw new ManagedServiceNameConflictError(opts.name, {
+          containerName,
+          volumeName,
+          volumeRolledBack: volumeCreated ? rollbackClean : true,
+        });
       }
       if (persistenceStarted && containerId && volumeCreated && rollbackClean) {
         throw new ManagedServicePersistenceCleanedError(opts.name, {

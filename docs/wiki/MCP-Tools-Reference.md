@@ -431,10 +431,15 @@ No parameters.
 
 ### `get_logs`
 
-| Parameter      | Type   | Required | Description     |
-| -------------- | ------ | -------- | --------------- |
-| `project_name` | string | Yes      | Project name    |
-| `lines`        | number | No       | Number of lines |
+| Parameter      | Type   | Required | Description                                           |
+| -------------- | ------ | -------- | ----------------------------------------------------- |
+| `service_id`   | string | No       | Deployable service id; preferred from `list_projects` |
+| `service_name` | string | No       | Deployable service name                               |
+| `project_name` | string | No       | Convenience target for single-service groups          |
+| `lines`        | number | No       | Number of lines                                       |
+
+Provide one of `service_id`, `service_name`, or `project_name`. Prefer
+`service_id` when chaining from `list_projects`.
 
 ### `get_system_stats`
 
@@ -442,9 +447,11 @@ Host CPU, memory, disk usage. No parameters.
 
 ### `get_project_stats`
 
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `project_name` | string | Yes      | Project name |
+| Parameter      | Type   | Required | Description                                  |
+| -------------- | ------ | -------- | -------------------------------------------- |
+| `service_id`   | string | No       | Deployable service id; preferred             |
+| `service_name` | string | No       | Deployable service name                      |
+| `project_name` | string | No       | Convenience target for single-service groups |
 
 ### `get_alerts` / `dismiss_alert`
 
