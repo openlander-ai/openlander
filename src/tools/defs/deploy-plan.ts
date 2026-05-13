@@ -6,7 +6,7 @@ import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/
 import { eventBus } from '../../events/index.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
-import { getProjectUrls } from '../../pipeline/traefik.js';
+import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
@@ -22,6 +22,101 @@ import {
 
 type AppCtx = ToolContext['appCtx'];
 type ServiceRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getService']>>>;
+type DeploymentReadiness = 'healthy' | 'starting' | 'unhealthy' | 'no_healthcheck';
+
+interface ReadinessResult {
+  readiness: DeploymentReadiness;
+  ready: boolean;
+  message?: string;
+}
+
+type ContainerState = {
+  Running?: boolean;
+  Restarting?: boolean;
+  ExitCode?: number;
+  Health?: { Status?: string };
+};
+
+function readinessGuidance(readiness: DeploymentReadiness): string | undefined {
+  if (readiness === 'unhealthy') {
+    return 'Container is running but healthcheck is failing. Call openlander_monitor.diagnose_service for logs, env, dependency checks, and probe output before reporting success.';
+  }
+  if (readiness === 'starting') {
+    return 'Container is running but still warming up. Poll openlander_monitor.diagnose_service or get_deploy_status before reporting success.';
+  }
+  if (readiness === 'no_healthcheck') {
+    return 'Container has no Docker HEALTHCHECK. Treat the deploy as running, but verify the app with openlander_monitor.diagnose_service or an HTTP probe if correctness matters.';
+  }
+  return undefined;
+}
+
+async function inspectProjectReadiness(
+  appCtx: AppCtx,
+  projectId: string,
+): Promise<ReadinessResult> {
+  const deployable = await appCtx.db.getDeployableForProject(projectId);
+  const containerId = deployable?.container_id ?? null;
+  if (!containerId) {
+    return { readiness: 'starting', ready: false, message: 'No container_id recorded yet.' };
+  }
+
+  try {
+    const info = (await appCtx.docker.inspectContainer(containerId)) as { State?: ContainerState };
+    const state = info.State ?? {};
+    if (state.Restarting || state.Running === false) {
+      return {
+        readiness: 'unhealthy',
+        ready: false,
+        message:
+          state.ExitCode === undefined
+            ? 'Container is not running.'
+            : `Container is not running (exit code ${String(state.ExitCode)}).`,
+      };
+    }
+
+    if (!state.Health) {
+      return { readiness: 'no_healthcheck', ready: true };
+    }
+
+    if (state.Health.Status === 'healthy') {
+      return { readiness: 'healthy', ready: true };
+    }
+
+    if (state.Health.Status === 'unhealthy') {
+      return {
+        readiness: 'unhealthy',
+        ready: false,
+        message: 'Container healthcheck is unhealthy.',
+      };
+    }
+
+    return {
+      readiness: 'starting',
+      ready: false,
+      message: `Container healthcheck is ${state.Health.Status ?? 'starting'}.`,
+    };
+  } catch (error) {
+    return {
+      readiness: 'starting',
+      ready: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function waitForProjectReadiness(
+  appCtx: AppCtx,
+  projectId: string,
+  timeoutMs: number,
+): Promise<ReadinessResult> {
+  const started = Date.now();
+  let last = await inspectProjectReadiness(appCtx, projectId);
+  while (last.readiness === 'starting' && Date.now() - started < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    last = await inspectProjectReadiness(appCtx, projectId);
+  }
+  return last;
+}
 
 function parseEnvVarsInput(
   raw: unknown,
@@ -311,7 +406,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'deploy_app',
     riskLevel: 'medium',
     description:
-      'One-call deploy for creating a new app from a repo or image. For an existing deployable service, prefer openlander_service.redeploy_app with service_id/service_name. Analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and on failure auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
+      'One-call deploy for creating a new app from a repo or image. For an existing deployable service, prefer openlander_service.redeploy_app with service_id/service_name. Analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
     mcpDescription:
       'One-call app deploy for new apps. Existing services should use openlander_service.redeploy_app. Repo analysis → build → deploy → result. Poll get_deploy_status to track progress. Returns URL on success, error + diagnosis guidance on failure.',
     inputSchema: deploySchema,
@@ -320,6 +415,7 @@ export const deployPlanToolDefs: ToolDef[] = [
       const toolSessionId = `mcp-deploy-${nanoid(12)}`;
       const envVars = parseEnvVarsInput(args['env_vars']);
       const wait = (args['wait'] as boolean | undefined) ?? true;
+      const waitHealthy = (args['wait_healthy'] as boolean | undefined) ?? true;
       const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
       const expose = (args['expose'] as boolean | undefined) ?? false;
       const domain = (args['domain'] as string | undefined) ?? undefined;
@@ -542,23 +638,76 @@ export const deployPlanToolDefs: ToolDef[] = [
           if (settled) return;
           settled = true;
           cleanup();
-          resolve({
-            plan_id: plan.plan_id,
-            status: 'done',
-            project_name: result.project_name,
-            project_id: projectIdOverride ?? projectId,
-            urls: payload.url ? [payload.url] : getProjectUrls(result.project_name),
-            internal_host: projectContainerName(result.project_name),
-            docker_host: getDockerHostType(),
-            ...(payload.totalDurationMs
-              ? { elapsed: `${String(Math.round(payload.totalDurationMs / 1000))}s` }
-              : {}),
-            ...(timedOut ? { timeout: true } : {}),
-            ...postDeploy,
-            ...(postDeployWarnings && postDeployWarnings.length > 0
-              ? { warnings: postDeployWarnings }
-              : {}),
-          });
+          void Promise.resolve()
+            .then(async () => {
+              const readiness = waitHealthy
+                ? await waitForProjectReadiness(appCtx, projectIdOverride ?? projectId, 30_000)
+                : await inspectProjectReadiness(appCtx, projectIdOverride ?? projectId);
+              const readinessMessage = readiness.message ?? readinessGuidance(readiness.readiness);
+              const readinessWarnings =
+                readiness.readiness === 'healthy'
+                  ? []
+                  : [readinessMessage ?? `readiness=${readiness.readiness}`];
+              const completionStatus = readiness.ready
+                ? 'done'
+                : readiness.readiness === 'unhealthy'
+                  ? 'unhealthy'
+                  : 'timeout';
+              resolve({
+                plan_id: plan.plan_id,
+                status: completionStatus,
+                project_name: result.project_name,
+                project_id: projectIdOverride ?? projectId,
+                preferred_url: payload.url ?? getPreferredProjectUrl(result.project_name),
+                urls: payload.url ? [payload.url] : getProjectUrls(result.project_name),
+                internal_host: projectContainerName(result.project_name),
+                docker_host: getDockerHostType(),
+                readiness: readiness.readiness,
+                ...(readinessMessage ? { readiness_message: readinessMessage } : {}),
+                ...(payload.totalDurationMs
+                  ? { elapsed: `${String(Math.round(payload.totalDurationMs / 1000))}s` }
+                  : {}),
+                ...(timedOut || completionStatus === 'timeout' ? { timeout: true } : {}),
+                ...postDeploy,
+                ...([...readinessWarnings, ...(postDeployWarnings ?? [])].length > 0
+                  ? { warnings: [...readinessWarnings, ...(postDeployWarnings ?? [])] }
+                  : {}),
+                ...(readiness.ready && readiness.readiness === 'healthy'
+                  ? {}
+                  : {
+                      _agent_guidance: {
+                        message:
+                          readinessMessage ??
+                          'Deployment container is running, but readiness is not confirmed.',
+                        next_steps: [
+                          'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
+                          ...(readiness.readiness === 'no_healthcheck'
+                            ? ['Probe the service URL before reporting end-user success']
+                            : ['Wait and poll again, or inspect logs before reporting success']),
+                        ],
+                      },
+                    }),
+              });
+            })
+            .catch((err: unknown) => {
+              resolve({
+                plan_id: plan.plan_id,
+                status: 'done',
+                project_name: result.project_name,
+                project_id: projectIdOverride ?? projectId,
+                preferred_url: payload.url ?? getPreferredProjectUrl(result.project_name),
+                urls: payload.url ? [payload.url] : getProjectUrls(result.project_name),
+                internal_host: projectContainerName(result.project_name),
+                docker_host: getDockerHostType(),
+                readiness: 'starting',
+                readiness_message: err instanceof Error ? err.message : String(err),
+                ...(timedOut ? { timeout: true } : {}),
+                ...postDeploy,
+                ...(postDeployWarnings && postDeployWarnings.length > 0
+                  ? { warnings: postDeployWarnings }
+                  : {}),
+              });
+            });
         };
 
         const resolveFailed = (
@@ -643,6 +792,7 @@ export const deployPlanToolDefs: ToolDef[] = [
             status: job?.phase ?? 'unknown',
             project_name: result.project_name,
             timeout: true,
+            readiness: 'starting',
             _agent_guidance: {
               next_steps: ['Poll get_deploy_status to check current progress'],
             },

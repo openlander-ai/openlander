@@ -597,6 +597,13 @@ describeDocker('Docker core operations', () => {
     const finalRestarting = createDockerContainerHandle({
       inspectResponses: [{ State: { Running: false, Restarting: true, ExitCode: 125 } }],
     });
+    const finalUnhealthy = createDockerContainerHandle({
+      inspectResponses: [
+        {
+          State: { Running: true, Restarting: false, ExitCode: 0, Health: { Status: 'unhealthy' } },
+        },
+      ],
+    });
     const finalError = {
       inspect: vi.fn(async () => {
         throw new Error('timeout inspect error');
@@ -606,6 +613,7 @@ describeDocker('Docker core operations', () => {
     mockGetContainer
       .mockReturnValueOnce(finalExiting)
       .mockReturnValueOnce(finalRestarting)
+      .mockReturnValueOnce(finalUnhealthy)
       .mockReturnValueOnce(finalError);
 
     const docker = new Docker();
@@ -619,6 +627,11 @@ describeDocker('Docker core operations', () => {
       healthy: false,
       exitCode: 125,
       error: expect.stringContaining('entered restart loop'),
+    });
+    await expect(docker.waitForHealthy('timeout-unhealthy', 0)).resolves.toEqual({
+      healthy: false,
+      exitCode: 0,
+      error: 'Container healthcheck is unhealthy',
     });
     await expect(docker.waitForHealthy('timeout-error', 0)).resolves.toEqual({
       healthy: false,

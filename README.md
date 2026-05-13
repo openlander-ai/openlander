@@ -21,6 +21,14 @@ The installer sets up Docker/Compose if needed, starts the published
 dashboard URL. Open it, create the admin password, then copy the MCP token into
 your coding agent.
 
+If your server has a public domain or a preferred LAN IP, set it before
+installing so OpenLander advertises reachable app URLs:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh \
+  | sudo env OPENLANDER_PUBLIC_HOST=apps.example.com bash
+```
+
 OpenLander `0.1.0` uses a fresh public Postgres baseline. If you ran a
 pre-public dogfood build, start from a new Postgres volume or export/import data
 manually before upgrading.

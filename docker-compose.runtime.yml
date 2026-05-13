@@ -25,6 +25,7 @@ services:
     environment:
       OPENLANDER_DATABASE_URL: postgres://openlander:${OPENLANDER_POSTGRES_PASSWORD:-openlander}@openlander-db:5432/openlander
       OPENLANDER_CONTAINERIZED: 'true'
+      OPENLANDER_PUBLIC_HOST: ${OPENLANDER_PUBLIC_HOST:-}
     ports:
       - '${OPENLANDER_PORT:-10114}:10114'
     volumes:

@@ -36,7 +36,9 @@ describe('public release tree hygiene', () => {
     expect(workflow).toContain('prerelease_channel="${prerelease%%.*}"');
     expect(workflow).not.toContain('console.log(`${major}.${minor}`)');
     expect(workflow).toContain('--tag "${IMAGE_NAME}:${{ steps.version.outputs.major_minor }}"');
-    expect(workflow).toContain('--tag "${IMAGE_NAME}:${{ steps.version.outputs.prerelease_channel }}"');
+    expect(workflow).toContain(
+      '--tag "${IMAGE_NAME}:${{ steps.version.outputs.prerelease_channel }}"',
+    );
     expect(workflow).toContain('echo "Tag $GITHUB_REF_NAME is not a SemVer release tag"');
     expect(pkg.scripts['release:rc']).toBe('release-it --preRelease=rc');
     expect(pkg.scripts['release:final']).toBe('release-it');
@@ -92,7 +94,10 @@ describe('public release tree hygiene', () => {
     expect(compose).toContain('OPENLANDER_POSTGRES_PASSWORD:-openlander');
     expect(compose).toContain('OPENLANDER_IMAGE:-ghcr.io/openlander-ai/openlander:latest');
     expect(compose).toContain('${OPENLANDER_PORT:-10114}:10114');
-    expect(readme).toContain('https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh');
+    expect(compose).toContain('OPENLANDER_PUBLIC_HOST: ${OPENLANDER_PUBLIC_HOST:-}');
+    expect(readme).toContain(
+      'https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh',
+    );
     expect(readme).toContain('sudo bash -s update');
     expect(readme).toContain('Want to inspect it first?');
     expect(readme).not.toContain('OPENLANDER_POSTGRES_PASSWORD=change-me');
@@ -103,8 +108,13 @@ describe('public release tree hygiene', () => {
     expect(readme).toContain('published');
     expect(installScript).toContain('OPENLANDER_POSTGRES_PASSWORD=');
     expect(installScript).toContain('OPENLANDER_PORT=${OPENLANDER_PORT}');
+    expect(installScript).toContain('OPENLANDER_PUBLIC_HOST=${public_host}');
+    expect(installScript).toContain('COMPOSE_PROJECT_NAME=openlander');
     expect(installScript).toContain('docker compose -f docker-compose.runtime.yml up -d');
-    expect(installScript).toContain('https://api.github.com/repos/${OPENLANDER_REPO}/releases/latest');
+    expect(installScript).toContain('up -d --no-deps openlander');
+    expect(installScript).toContain(
+      'https://api.github.com/repos/${OPENLANDER_REPO}/releases/latest',
+    );
     expect(installScript).not.toContain("printf 'main'");
     expect(installScript).toContain('.bak.$(date +%Y%m%d%H%M%S)');
     expect(installScript).toContain('OPENLANDER_VERSION must be');
