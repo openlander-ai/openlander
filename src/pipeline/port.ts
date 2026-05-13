@@ -1,4 +1,5 @@
 import { exec } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 
 import type { Database } from '../db/index.js';
@@ -45,8 +46,7 @@ async function scanOSPorts(): Promise<number[]> {
   const platform = process.platform;
   try {
     if (platform === 'linux') {
-      const { stdout } = await execAsync('ss -tln');
-      return parseSSOutput(stdout);
+      return await scanLinuxPorts();
     } else if (platform === 'darwin') {
       const { stdout } = await execAsync('lsof -iTCP -sTCP:LISTEN');
       return parseLsofOutput(stdout);
@@ -58,6 +58,35 @@ async function scanOSPorts(): Promise<number[]> {
     log.warn({ error, platform }, 'Failed to scan OS ports, returning empty array');
     return [];
   }
+}
+
+async function scanLinuxPorts(): Promise<number[]> {
+  try {
+    const { stdout } = await execAsync('ss -tln');
+    return parseSSOutput(stdout);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('not found') || msg.includes('ENOENT') || msg.includes('127')) {
+      try {
+        return await scanProcNetTcpPorts();
+      } catch (fallbackError) {
+        log.warn(
+          { error: fallbackError },
+          'Failed to scan Linux /proc ports after ss was unavailable',
+        );
+        return [];
+      }
+    }
+    throw error;
+  }
+}
+
+async function scanProcNetTcpPorts(): Promise<number[]> {
+  const [tcp4, tcp6] = await Promise.all([
+    readFile('/proc/net/tcp', 'utf8').catch(() => ''),
+    readFile('/proc/net/tcp6', 'utf8').catch(() => ''),
+  ]);
+  return [...new Set([...parseProcNetTcpOutput(tcp4), ...parseProcNetTcpOutput(tcp6)])];
 }
 
 /** Parse ss -tln output and extract port numbers. */
@@ -73,6 +102,24 @@ function parseSSOutput(output: string): number[] {
       if (!isNaN(port) && port > 0 && port <= 65535) {
         ports.push(port);
       }
+    }
+  }
+  return ports;
+}
+
+/** Parse /proc/net/tcp{,6}; state 0A means LISTEN. */
+export function parseProcNetTcpOutput(output: string): number[] {
+  const ports: number[] = [];
+  for (const line of output.split('\n').slice(1)) {
+    const fields = line.trim().split(/\s+/);
+    const localAddress = fields[1];
+    const state = fields[3];
+    if (!localAddress || state !== '0A') continue;
+    const portHex = localAddress.split(':')[1];
+    if (!portHex) continue;
+    const port = parseInt(portHex, 16);
+    if (!isNaN(port) && port > 0 && port <= 65535) {
+      ports.push(port);
     }
   }
   return ports;

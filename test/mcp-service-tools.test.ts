@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../src/app.js';
 import type { ServiceRow } from '../src/db/index.js';
+import { ManagedServicePersistenceCleanedError } from '../src/errors.js';
 import * as gitPipeline from '../src/pipeline/git.js';
 import * as traefikPipeline from '../src/pipeline/traefik.js';
 import * as infraAnalyzer from '../src/lib/infra-analyzer.js';
@@ -192,6 +193,38 @@ describe('MCP service tools (Task 8)', () => {
     await expect(tool.execute({ name: 'bad', template: 'bad' }, { target: 'mcp' })).rejects.toThrow(
       'Unsupported service template: bad',
     );
+  });
+
+  it('create_service returns retry-safe guidance after managed service rollback', async () => {
+    const { ctx, serviceManager } = createMockContext();
+    const tool = getTool(ctx, 'create_service');
+
+    serviceManager.create.mockRejectedValueOnce(
+      new ManagedServicePersistenceCleanedError('broken-redis', {
+        serviceId: 'svc-broken',
+        containerName: 'ol-svc-broken-redis',
+        volumeName: 'ol-svc-data-broken-redis',
+        hostPort: 10001,
+        originalError: new Error('insert failed'),
+      }),
+    );
+
+    await expect(
+      tool.execute({ name: 'broken-redis', template: 'redis' }, { target: 'mcp' }),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      error: 'MANAGED_SERVICE_PERSIST_FAILED_CLEANED',
+      details: {
+        retrySafe: true,
+        rollback: {
+          containerRemoved: true,
+          volumeRemoved: true,
+        },
+      },
+      _agent_guidance: {
+        message: expect.stringContaining('safe to retry'),
+      },
+    });
   });
 
   it('create_service works for mysql template', async () => {

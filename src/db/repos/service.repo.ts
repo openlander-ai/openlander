@@ -1,7 +1,8 @@
 import { and, desc, eq, inArray, notInArray, sql, type SQL } from 'drizzle-orm';
 
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
-import { services, type ServiceKind } from '../schema.drizzle.js';
+import { projects, services, type ServiceKind } from '../schema.drizzle.js';
+import { ORPHAN_MANAGED_GROUP_ID } from '../service-ids.js';
 import type { ServiceRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
 
@@ -68,6 +69,35 @@ export class ServiceRepo {
     void this.client;
   }
 
+  private async ensureOrphanManagedGroup(): Promise<void> {
+    const [existing] = await this.db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.id, ORPHAN_MANAGED_GROUP_ID))
+      .limit(1);
+    if (existing) return;
+
+    await this.db
+      .insert(projects)
+      .values({
+        id: ORPHAN_MANAGED_GROUP_ID,
+        name: ORPHAN_MANAGED_GROUP_ID,
+        display_name: 'Managed services',
+        description: 'Synthetic internal group for unattached managed services.',
+        tags: null,
+      })
+      .onConflictDoNothing();
+
+    const [created] = await this.db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.id, ORPHAN_MANAGED_GROUP_ID))
+      .limit(1);
+    if (!created) {
+      throw new RepoPersistenceError('project', ORPHAN_MANAGED_GROUP_ID);
+    }
+  }
+
   /**
    * Create a managed service row under the synthesized __orphan_managed
    * group. Post-0012: legacy type/image/port/env_vars columns are gone;
@@ -84,13 +114,16 @@ export class ServiceRepo {
     /** @deprecated 1.1 — credentials column removal pairs with secret refactor. */
     credentials?: string;
   }): Promise<ServiceRow> {
+    await this.ensureOrphanManagedGroup();
+
     const [created] = await this.db
       .insert(services)
       .values({
         id: service.id,
-        project_id: '__orphan_managed',
+        project_id: ORPHAN_MANAGED_GROUP_ID,
         name: service.name,
         kind: normalizeKind(service.type),
+        source: 'image',
         image_url: service.image,
         assigned_port: service.port,
         container_name: service.containerName,
@@ -112,11 +145,13 @@ export class ServiceRepo {
     containerName: string;
     assignedPort?: number | null;
   }): Promise<ServiceRow> {
+    await this.ensureOrphanManagedGroup();
+
     const [created] = await this.db
       .insert(services)
       .values({
         id: service.id,
-        project_id: '__orphan_managed',
+        project_id: ORPHAN_MANAGED_GROUP_ID,
         name: service.name,
         kind: normalizeKind(service.kind),
         image_url: service.imageUrl,

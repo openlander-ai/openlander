@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed managed service creation on fresh Postgres installs by ensuring the
+  synthetic managed-service group exists before inserting service rows.
+- Rolled back managed service containers and volumes if service persistence
+  fails after Docker resources have already been created.
+- Added a Linux `/proc/net/tcp{,6}` fallback for port scanning when `ss` is not
+  installed.
+- Surfaced deployable service identifiers in MCP `list_projects` output so
+  agents can chain directly into `openlander_service` actions.
+- Stored freshly created managed services with canonical `source='image'`.
+
 ## [0.1.1-rc.5] — 2026-05-13
 
 Release candidate with onboarding and MCP token setup polish, plus the

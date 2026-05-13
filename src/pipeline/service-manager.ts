@@ -26,9 +26,10 @@ import {
 } from './service-adapters/shared.js';
 import type { ContainerExecResult } from './service-adapters/types.js';
 import type { Docker } from './docker.js';
-import { allocatePort } from './port.js';
+import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
 import {
   isDockerNotFoundError,
+  ManagedServicePersistenceCleanedError,
   RepoPersistenceError,
   ServiceConfigError,
   ServiceContainerStateError,
@@ -452,76 +453,123 @@ export class ServiceManager {
     const containerName = this.getContainerName(opts.name);
     const volumeName = this.getVolumeName(opts.name);
 
-    await this.docker.pullImage(image);
+    let containerId: string | undefined;
+    let volumeCreated = false;
+    let persistenceStarted = false;
+    let rollbackClean = true;
+    try {
+      await this.docker.pullImage(image);
 
-    await this.docker.createVolume({
-      name: volumeName,
-      labels: {
-        [DOCKER_LABELS.ROLE]: 'service',
-        [DOCKER_LABELS.SERVICE]: opts.name,
-      },
-    });
+      await this.docker.createVolume({
+        name: volumeName,
+        labels: {
+          [DOCKER_LABELS.ROLE]: 'service',
+          [DOCKER_LABELS.SERVICE]: opts.name,
+        },
+      });
+      volumeCreated = true;
 
-    const envRecord: Record<string, string> = {};
-    for (const entry of env) {
-      const eqIdx = entry.indexOf('=');
-      if (eqIdx > 0) {
-        envRecord[entry.slice(0, eqIdx)] = entry.slice(eqIdx + 1);
+      const envRecord: Record<string, string> = {};
+      for (const entry of env) {
+        const eqIdx = entry.indexOf('=');
+        if (eqIdx > 0) {
+          envRecord[entry.slice(0, eqIdx)] = entry.slice(eqIdx + 1);
+        }
       }
-    }
 
-    const memLimits = SERVICE_MEMORY_LIMITS[type] ?? {
-      memoryLimitBytes: 536870912,
-      cpuShares: 512,
-    };
+      const memLimits = SERVICE_MEMORY_LIMITS[type] ?? {
+        memoryLimitBytes: 536870912,
+        cpuShares: 512,
+      };
 
-    const containerId = await this.docker.runServiceContainer({
-      imageTag: image,
-      name: containerName,
-      port: containerPort,
-      hostPort,
-      envVars: envRecord,
-      serviceName: opts.name,
-      volumeBinds: [`${volumeName}:${dataMountPath}`],
-      memoryLimitBytes: memLimits.memoryLimitBytes,
-      cpuShares: memLimits.cpuShares,
-      ...(containerHealthcheck ? { healthcheck: containerHealthcheck } : {}),
-      ...(containerCmd ? { cmd: containerCmd } : {}),
-    });
+      containerId = await this.docker.runServiceContainer({
+        imageTag: image,
+        name: containerName,
+        port: containerPort,
+        hostPort,
+        envVars: envRecord,
+        serviceName: opts.name,
+        volumeBinds: [`${volumeName}:${dataMountPath}`],
+        memoryLimitBytes: memLimits.memoryLimitBytes,
+        cpuShares: memLimits.cpuShares,
+        ...(containerHealthcheck ? { healthcheck: containerHealthcheck } : {}),
+        ...(containerCmd ? { cmd: containerCmd } : {}),
+      });
 
-    const primaryNetwork = this.docker.getNetworkName();
-    const additionalNetworks = [SHARED_NETWORK_NAME].filter(
-      (networkName) => networkName !== primaryNetwork,
-    );
+      const primaryNetwork = this.docker.getNetworkName();
+      const additionalNetworks = [SHARED_NETWORK_NAME].filter(
+        (networkName) => networkName !== primaryNetwork,
+      );
 
-    for (const networkName of additionalNetworks) {
+      for (const networkName of additionalNetworks) {
+        try {
+          await this.docker.connectContainerToNetwork(containerId, networkName, [opts.name]);
+        } catch (err) {
+          log.warn(
+            { err, networkName, containerName },
+            'Failed to connect service to additional network',
+          );
+        }
+      }
+
+      persistenceStarted = true;
+      await this.db.createService({
+        id,
+        name: opts.name,
+        type,
+        image,
+        containerName,
+        port: hostPort,
+        credentials: credentialsJson,
+      });
+
+      await this.db.updateService(id, { status: 'running', containerId });
+      this.invalidateServiceCardSummaryCache();
+      const created = await this.db.getService(id);
+      if (!created) {
+        throw new RepoPersistenceError('service', id);
+      }
+      return created;
+    } catch (err) {
       try {
-        await this.docker.connectContainerToNetwork(containerId, networkName, [opts.name]);
-      } catch (err) {
-        log.warn(
-          { err, networkName, containerName },
-          'Failed to connect service to additional network',
-        );
+        await this.db.deleteService(id);
+      } catch (cleanupErr) {
+        rollbackClean = false;
+        log.warn({ err: cleanupErr, serviceId: id }, 'Failed to roll back managed service row');
       }
+      if (containerId) {
+        try {
+          await this.docker.safeRemoveContainer(containerId);
+        } catch (cleanupErr) {
+          rollbackClean = false;
+          log.warn(
+            { err: cleanupErr, containerId, containerName },
+            'Failed to roll back managed service container',
+          );
+        }
+      }
+      if (volumeCreated) {
+        try {
+          await this.docker.removeVolume(volumeName);
+        } catch (cleanupErr) {
+          rollbackClean = false;
+          log.warn({ err: cleanupErr, volumeName }, 'Failed to roll back managed service volume');
+        }
+      }
+      if (persistenceStarted && containerId && volumeCreated && rollbackClean) {
+        throw new ManagedServicePersistenceCleanedError(opts.name, {
+          serviceId: id,
+          containerName,
+          volumeName,
+          hostPort,
+          originalError: err,
+        });
+      }
+      throw err;
+    } finally {
+      clearPortScanCache();
+      releasePortReservation(hostPort);
     }
-
-    await this.db.createService({
-      id,
-      name: opts.name,
-      type,
-      image,
-      containerName,
-      port: hostPort,
-      credentials: credentialsJson,
-    });
-
-    await this.db.updateService(id, { status: 'running', containerId });
-    this.invalidateServiceCardSummaryCache();
-    const created = await this.db.getService(id);
-    if (!created) {
-      throw new RepoPersistenceError('service', id);
-    }
-    return created;
   }
 
   async start(id: string): Promise<void> {
