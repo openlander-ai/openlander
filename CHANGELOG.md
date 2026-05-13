@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Made `deploy_app` report `readiness` and return `status: "unhealthy"` when a
   running container's Docker healthcheck is failing instead of treating it as a
   successful deploy.
+- `openlander_monitor.diagnose_service` now accepts `internal: true` and routes
+  the HTTP probe through `docker exec` against the service container's own
+  network namespace (using `container_port`). Previously the flag was silently
+  dropped at the schema layer and the probe always hit the backend container's
+  loopback, making the result useless for "is the app actually listening?"
+  diagnostics.
+- Clarified `openlander_monitor.probe_host` description so agents know
+  `ol-svc-*` / `ol-{project}` internal Docker DNS names require `internal: true`
+  to resolve — the backend cannot reach those from its own network namespace.
 
 ## [0.1.1-rc.6] — 2026-05-13
 

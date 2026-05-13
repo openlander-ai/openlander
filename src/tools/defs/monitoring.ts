@@ -268,6 +268,7 @@ export const monitoringToolDefs: ToolDef[] = [
       );
       const lines = (args['lines'] as number | undefined) ?? 80;
       const timeoutMs = (args['timeout_ms'] as number | undefined) ?? 5000;
+      const internal = (args['internal'] as boolean | undefined) ?? false;
       const pathArg = (args['path'] as string | undefined)?.trim();
       const probePathSource = pathArg || service.health_check_path || '/';
       const probePath = probePathSource.startsWith('/') ? probePathSource : `/${probePathSource}`;
@@ -283,7 +284,9 @@ export const monitoringToolDefs: ToolDef[] = [
       const runtimeLogs = await readServiceLogs(appCtx, runtimeProject.id, lines);
       const recentDeployment = summarizeRecentDeployments(deployLogs);
       const buildDiagnostics = diagnoseBuildTimeEnv(effectiveEnv, deployLogs);
-      const httpCheck = await probeServiceHttp(service, probePath, timeoutMs);
+      const httpCheck = await probeServiceHttp(appCtx, service, probePath, timeoutMs, {
+        internal,
+      });
       const dependencies = await probeEnvDependencies(appCtx, effectiveEnv, timeoutMs);
       const nextSteps = buildDiagnoseNextSteps({
         service,
@@ -331,8 +334,9 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'probe_host',
     riskLevel: 'low',
     description:
-      'Check if a host, URL, or container endpoint is reachable. Use internal=true to probe from inside the Docker network (container-to-container DNS).',
-    mcpDescription: 'Check connectivity to a host, URL, or container endpoint.',
+      'Check if a host, URL, or container endpoint is reachable. Targets like `ol-svc-*` / `ol-{project}` are internal Docker DNS names and only resolve with internal=true (the backend cannot resolve them from its own network namespace). External hosts probe from the OpenLander host by default.',
+    mcpDescription:
+      'Check connectivity to a host, URL, or container endpoint. Internal Docker DNS names (ol-svc-*, ol-{project}) require internal=true.',
     inputSchema: probeHostSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -749,10 +753,75 @@ async function readServiceLogs(
 }
 
 async function probeServiceHttp(
+  appCtx: ToolContext['appCtx'],
   service: ServiceRow,
   path: string,
   timeoutMs: number,
+  options: { internal?: boolean } = {},
 ): Promise<Record<string, unknown>> {
+  // R3 (2026-05-13): when internal=true, probe from inside the service's
+  // own container against the container's localhost. Backend container's
+  // 127.0.0.1 is meaningless for "is the app actually serving?" — the app
+  // listens inside the service container's network namespace, not the
+  // backend's. Previously this flag was silently accepted at the agent
+  // layer (no schema entry) and ignored, producing a self-referential
+  // _agent_guidance loop where the response told the agent to "Try with
+  // internal=true" while internal=true did nothing.
+  if (options.internal) {
+    if (!service.container_id) {
+      return {
+        skipped: true,
+        reason: 'service has no container_id yet — wait for deploy to start the container',
+      };
+    }
+    const containerPort = service.container_port ?? service.assigned_port;
+    if (!containerPort) {
+      return {
+        skipped: true,
+        reason: 'service has no container_port or assigned_port',
+      };
+    }
+    const startedAt = Date.now();
+    const targetUrl = `http://127.0.0.1:${String(containerPort)}${path}`;
+    const timeoutSec = Math.max(1, Math.ceil(timeoutMs / 1000));
+    const cmd = [
+      'sh',
+      '-c',
+      // wget first (BusyBox/Alpine default); fall back to curl for Debian-ish
+      // distros. Both run with a TCP-only timeout so the exec returns within
+      // timeoutSec even on a hung socket. `2>&1` so we get useful stderr in
+      // the response on failure.
+      `wget -qO- --timeout=${String(timeoutSec)} ${targetUrl} 2>&1 || curl -sf --max-time ${String(timeoutSec)} ${targetUrl} 2>&1`,
+    ];
+    try {
+      const result = await appCtx.docker.execSimple(service.container_id, cmd);
+      const latencyMs = Date.now() - startedAt;
+      const reachable = result.exitCode === 0;
+      const probeToolUnavailable = result.exitCode === 127;
+      const output = result.stderr.trim() || result.stdout.trim();
+      return {
+        reachable,
+        latency_ms: latencyMs,
+        protocol_used: 'http',
+        target_resolved: `${service.container_id.slice(0, 12)}:${String(containerPort)}${path}`,
+        probed_from: 'service-container',
+        ...(reachable ? {} : { error: output || `exit code ${String(result.exitCode)}` }),
+        ...(probeToolUnavailable ? { probe_tool_unavailable: true } : {}),
+      };
+    } catch (err) {
+      const latencyMs = Date.now() - startedAt;
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      return {
+        reachable: false,
+        latency_ms: latencyMs,
+        error: errorMsg,
+        protocol_used: 'http',
+        target_resolved: `${service.container_id.slice(0, 12)}:${String(containerPort)}${path}`,
+        probed_from: 'service-container',
+      };
+    }
+  }
+
   if (!service.assigned_port) {
     return {
       skipped: true,
