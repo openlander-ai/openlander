@@ -1,9 +1,11 @@
 import { ProjectNotFoundError } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { parseDBTimestamp } from '../../lib/parse-db-timestamp.js';
+import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
+import type { DeployLogRow } from '../../db/types.js';
 import type { ToolDef } from './types.js';
 import {
   cleanupPreviewSchema,
@@ -77,13 +79,16 @@ export const deployToolDefs: ToolDef[] = [
     name: 'get_deploy_status',
     riskLevel: 'low',
     description:
-      'Get real-time deployment status for one or all projects currently being built. Shows phase (queued/cloning/building/starting/done/failed), timing, and progress details. jobs[] may include urls, internal_host, docker_host, completed_at, health (done), build_step/build_step_total/build_step_desc (building), auto_diagnosis (failed), build_log_tail, and timeout. Use when user asks "is it done yet?" or "what is building?" during a deploy. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }. With wait=true: blocks until completion. Without project_name, waits for ALL active deploys to finish.',
+      'Get deployment status. Use project_id/project_name for current in-flight deploys, or deploy_id/job_id to look up a completed deploy log. Shows phase (queued/cloning/building/starting/done/failed/cancelled), timing, and progress details. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }. With wait=true: blocks until current deploy completion. Without a target, waits for ALL active deploys to finish.',
     mcpDescription:
-      'Get real-time deployment status. During build phase, includes build_step, build_step_total, build_step_desc for progress tracking. Done jobs include urls/internal_host/docker_host/health/completed_at. Failed jobs may include auto_diagnosis and build_log_tail. Wait mode may return timeout=true. IMPORTANT: MCP transport timeout (~30s) overrides the timeout parameter. Prefer polling without wait=true over long waits.',
+      'Get current deploy progress by project_id/project_name, or completed history by deploy_id/job_id. In-flight jobs include build progress; completed jobs from deploy logs include status/duration/build_log_tail. Wait mode may return timeout=true. IMPORTANT: MCP transport timeout (~30s) overrides the timeout parameter. Prefer polling without wait=true over long waits.',
     inputSchema: deployStatusSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
+      const projectId = args['project_id'] as string | undefined;
       const projectName = args['project_name'] as string | undefined;
+      const deployLookupId =
+        (args['deploy_id'] as string | undefined) ?? (args['job_id'] as string | undefined);
       const wait = args['wait'] as boolean | undefined;
       const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
 
@@ -106,6 +111,7 @@ export const deployToolDefs: ToolDef[] = [
         buildStepTotal?: number;
         buildStepDesc?: string;
       }) => ({
+        project_id: job.projectId,
         name: job.projectName,
         phase: job.phase,
         elapsed: `${String(Math.round((Date.now() - job.startedAt.getTime()) / 1000))}s`,
@@ -178,10 +184,94 @@ export const deployToolDefs: ToolDef[] = [
           : {}),
       });
 
-      if (projectName) {
-        const project = await appCtx.db.getProjectByName(projectName);
+      const tailLines = (value: string | null | undefined, lines: number): string | null => {
+        if (!value) return null;
+        return value.split(/\r?\n/).slice(-lines).join('\n');
+      };
+
+      const formatDeployLogJob = async (log: DeployLogRow) => {
+        const inferredProjectId = log.project_id ?? deployableServiceIdToProjectId(log.service_id);
+        const project = await appCtx.db.getProject(inferredProjectId);
+        const phase =
+          log.status === 'success' ? 'done' : log.status === 'failed' ? 'failed' : 'cancelled';
+        return {
+          id: log.id,
+          deploy_id: log.id,
+          project_id: inferredProjectId,
+          service_id: log.service_id,
+          name: project?.name ?? inferredProjectId,
+          phase,
+          status: log.status,
+          trigger: log.trigger,
+          commit_sha: log.commit_sha,
+          commit_message: log.commit_message,
+          duration_ms: log.duration_ms,
+          duration:
+            typeof log.duration_ms === 'number'
+              ? `${String(Math.round(log.duration_ms / 1000))}s`
+              : null,
+          created_at: log.created_at,
+          completed_at: log.created_at,
+          ...(log.status === 'failed' && log.build_log
+            ? { build_log_tail: tailLines(log.build_log, 30) }
+            : {}),
+          _agent_guidance: {
+            next_steps:
+              log.status === 'failed'
+                ? [
+                    'Call get_build_log with this deploy_id for full raw build output.',
+                    'Fix the issue, then redeploy the service.',
+                  ]
+                : ['Use get_deploy_history for nearby deploys if you need broader context.'],
+          },
+        };
+      };
+
+      if (deployLookupId) {
+        const activeStatus = appCtx.jobManager.getStatus(deployLookupId);
+        if (activeStatus) {
+          const job = formatJob(activeStatus);
+          return {
+            active: activeStatus.phase === 'done' || activeStatus.phase === 'failed' ? 0 : 1,
+            jobs: [job],
+            status: 'found',
+          };
+        }
+
+        const deployLog = await appCtx.db.getDeployLog(deployLookupId);
+        if (deployLog) {
+          return {
+            active: 0,
+            jobs: [await formatDeployLogJob(deployLog)],
+            status: 'found',
+          };
+        }
+
+        return {
+          active: 0,
+          jobs: [],
+          status: 'not_found',
+          code: 'DEPLOY_STATUS_NOT_FOUND',
+          deploy_id: deployLookupId,
+          _agent_guidance: {
+            next_steps: [
+              'If you only have a project name, call get_deploy_history to list recent deploy ids.',
+              'If a deploy is currently running, call get_deploy_status with project_id or project_name.',
+            ],
+          },
+        };
+      }
+
+      if (projectId || projectName) {
+        const project = projectId
+          ? await appCtx.db.getProject(projectId)
+          : await appCtx.db.getProjectByName(projectName ?? '');
         if (!project) {
-          const plans = await appCtx.db.listDeployPlans(projectName);
+          if (projectId) {
+            throw new ProjectNotFoundError(projectId);
+          }
+          const missingProjectName = projectName ?? 'unknown';
+          const plans = await appCtx.db.listDeployPlans(missingProjectName);
           const activePlan = plans.find((p) => {
             // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             return p.status === 'executing' || p.status === 'ready' || p.status === 'draft';
@@ -191,7 +281,7 @@ export const deployToolDefs: ToolDef[] = [
               active: 1,
               jobs: [
                 {
-                  project: projectName,
+                  project: missingProjectName,
                   phase: 'initializing',
                   status: activePlan.status,
                   plan_id: activePlan.id,
@@ -199,7 +289,7 @@ export const deployToolDefs: ToolDef[] = [
               ],
             };
           }
-          throw new ProjectNotFoundError(projectName);
+          throw new ProjectNotFoundError(missingProjectName);
         }
 
         const buildProjectResult = (status?: {
@@ -287,7 +377,7 @@ export const deployToolDefs: ToolDef[] = [
             settled = true;
             cleanup();
 
-            const dbProject = await appCtx.db.getProjectByName(projectName);
+            const dbProject = await appCtx.db.getProjectByName(project.name);
             resolve({
               active: 0,
               jobs: [
@@ -324,7 +414,7 @@ export const deployToolDefs: ToolDef[] = [
                 lastLog.status === 'success' &&
                 (current.phase === 'failed' || current.phase === 'done')
               ) {
-                const freshProject = await appCtx.db.getProjectByName(projectName);
+                const freshProject = await appCtx.db.getProjectByName(project.name);
                 resolve({
                   active: 0,
                   jobs: [
@@ -354,9 +444,9 @@ export const deployToolDefs: ToolDef[] = [
               return;
             }
 
-            const dbProject = await appCtx.db.getProjectByName(projectName);
+            const dbProject = await appCtx.db.getProjectByName(project.name);
             resolve({
-              project: projectName,
+              project: project.name,
               status: dbProject?.status ?? 'unknown',
               phase: 'none',
               ...(timedOut ? { timeout: true } : {}),
@@ -402,7 +492,7 @@ export const deployToolDefs: ToolDef[] = [
               if (lastLog.status === 'failed') {
                 settled = true;
                 cleanup();
-                const dbProject = await appCtx.db.getProjectByName(projectName);
+                const dbProject = await appCtx.db.getProjectByName(project.name);
                 resolve({
                   active: 0,
                   jobs: [

@@ -528,7 +528,7 @@ describe('diagnose_service tool', () => {
       expect(JSON.stringify(result)).toContain('sendgrid_***');
       expect(result.httpCheck).toMatchObject({
         probe_mode: 'internal_docker_dns',
-        target_resolved: 'http://ol-app:3000/health',
+        target_resolved: 'http://ol-app:3000/admin',
       });
       expect(JSON.stringify(result.httpCheck)).not.toContain('127.0.0.1');
       const deployment = result.recentDeployment as {
@@ -665,6 +665,21 @@ describe('service-targeted monitoring tools', () => {
     });
   });
 
+  it('get_logs accepts a project group name through service_name when unambiguous', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    const result = (await getMonitoringTool(ctx, 'get_logs').execute(
+      { service_name: 'app', lines: 4 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.pipeline.getLogs).toHaveBeenCalledWith('app', 4);
+    expect(result).toMatchObject({
+      project: 'app',
+      service: { id: service.id, name: service.name },
+      logs: 'service logs',
+    });
+  });
+
   it('get_project_stats accepts deployable service_id from list_projects output', async () => {
     const { ctx, service } = createServiceTargetContext();
     const result = (await getMonitoringTool(ctx, 'get_project_stats').execute(
@@ -708,6 +723,22 @@ describe('service-targeted monitoring tools', () => {
     )) as Record<string, unknown>;
 
     expect(ctx.db.getProject).toHaveBeenCalledWith('app');
+    expect(result).toMatchObject({
+      service: { id: service.id },
+      httpCheck: {
+        probe_mode: 'internal_docker_dns',
+        target_resolved: 'http://ol-app:3000/health',
+      },
+    });
+  });
+
+  it('diagnose_service accepts a project group name through service_name when unambiguous', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { service_name: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
     expect(result).toMatchObject({
       service: { id: service.id },
       httpCheck: {

@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   strings at execution time.
 - Normalized MCP targeting for logs, stats, diagnostics, deploy history, build
   logs, host probes, action status, and managed-service status/credentials.
+- Allowed deployable-service MCP actions to resolve `service_name` as the
+  project group name when that group has exactly one deployable service.
+- Added `deploy_id`/`job_id` lookup to `get_deploy_status` so completed deploys
+  and unknown ids are distinguishable.
+- Improved `diagnose_service` HTTP probes for apps mounted under a base path
+  such as `NEXT_PUBLIC_BASE_PATH=/admin`.
 - Kept deployable app/worker services out of managed-service MCP responses and
   return explicit guidance when a managed-service action receives one.
 - Increased Docker disk-usage timeout to avoid false cleanup preflight failures

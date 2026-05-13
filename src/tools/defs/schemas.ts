@@ -322,7 +322,16 @@ export const previewIdSchema = z.object({
 
 // Status & monitoring schemas
 export const deployStatusSchema = z.object({
-  project_name: z.string().optional().describe('Project name (optional, returns all if omitted)'),
+  project_id: z
+    .string()
+    .optional()
+    .describe('Project group id for current in-flight status lookup'),
+  project_name: z
+    .string()
+    .optional()
+    .describe('Project group name for current in-flight status lookup'),
+  deploy_id: z.string().optional().describe('Completed deploy log id to look up'),
+  job_id: z.string().optional().describe('Alias for deploy_id; also checks active in-memory jobs'),
   wait: z
     .boolean()
     .optional()

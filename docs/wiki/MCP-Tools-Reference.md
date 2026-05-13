@@ -122,11 +122,18 @@ Validate a plan before executing.
 
 Get real-time deployment status.
 
-| Parameter      | Type    | Required | Description                 |
-| -------------- | ------- | -------- | --------------------------- |
-| `project_name` | string  | No       | Project name (omit for all) |
-| `wait`         | boolean | No       | Block until complete        |
-| `timeout`      | number  | No       | Max wait seconds            |
+| Parameter      | Type    | Required | Description             |
+| -------------- | ------- | -------- | ----------------------- |
+| `project_id`   | string  | No       | Project group id        |
+| `project_name` | string  | No       | Project group name      |
+| `deploy_id`    | string  | No       | Completed deploy log id |
+| `job_id`       | string  | No       | Alias for `deploy_id`   |
+| `wait`         | boolean | No       | Block until complete    |
+| `timeout`      | number  | No       | Max wait seconds        |
+
+Use `project_id`/`project_name` for current in-flight deploys. Use `deploy_id`
+or `job_id` to distinguish a completed deploy from an unknown id; unknown ids
+return `status: "not_found"` instead of the same empty list as "no active jobs".
 
 ### `get_deploy_history`
 
@@ -347,6 +354,17 @@ Provide either `service_id` or `service_name`. Deployable app/worker services ar
 | -------------- | ------ | -------- | ----------------------------------- |
 | `service_name` | string | Yes      | Managed/infrastructure service name |
 
+### `exec_service_container`
+
+| Parameter         | Type     | Required | Description                         |
+| ----------------- | -------- | -------- | ----------------------------------- |
+| `service_name`    | string   | Yes      | Managed/infrastructure service name |
+| `command`         | string[] | Yes      | Command argv array                  |
+| `timeout_seconds` | number   | No       | Max execution time                  |
+
+`command` must be an argv array such as `["psql", "-U", "openlander", "-c", "SELECT 1"]`.
+Shell strings like `"psql -U openlander"` are intentionally rejected.
+
 `remove_service` is human-only in OpenLander 0.1 and returns
 `OPERATION_REQUIRES_HUMAN_UI` from MCP. Use the service page delete action for
 typed-confirm deletion with the managed-volume opt-in checkbox.
@@ -471,6 +489,43 @@ Host CPU, memory, disk usage. No parameters.
 | `service_name` | string | No       | Deployable service name                      |
 | `project_id`   | string | No       | Convenience target for single-service groups |
 | `project_name` | string | No       | Convenience target for single-service groups |
+
+### `diagnose_service`
+
+| Parameter      | Type   | Required | Description                                  |
+| -------------- | ------ | -------- | -------------------------------------------- |
+| `service_id`   | string | No       | Deployable service id; preferred             |
+| `service_name` | string | No       | Deployable service name                      |
+| `project_id`   | string | No       | Convenience target for single-service groups |
+| `project_name` | string | No       | Convenience target for single-service groups |
+| `path`         | string | No       | HTTP path to probe                           |
+| `lines`        | number | No       | Log lines to include                         |
+
+If `path` is omitted, OpenLander uses a configured base path env such as
+`NEXT_PUBLIC_BASE_PATH` before falling back to the service health path.
+
+### `probe_host`
+
+| Parameter    | Type    | Required | Description                                    |
+| ------------ | ------- | -------- | ---------------------------------------------- |
+| `target`     | string  | No       | Hostname, URL, IP, or `container-name:port`    |
+| `host`       | string  | No       | Alias for `target`                             |
+| `port`       | number  | No       | Port for TCP or host-only probes               |
+| `protocol`   | string  | No       | `http`, `https`, or `tcp`; default auto-detect |
+| `path`       | string  | No       | HTTP path                                      |
+| `internal`   | boolean | No       | Probe from inside Docker network when `true`   |
+| `timeout_ms` | number  | No       | Probe timeout                                  |
+
+Provide either `target` or `host`.
+
+### `mcp_action_status`
+
+| Parameter       | Type   | Required | Description                               |
+| --------------- | ------ | -------- | ----------------------------------------- |
+| `action_run_id` | string | No       | Action run id returned by a held MCP call |
+| `action_id`     | string | No       | Alias for `action_run_id`                 |
+
+Provide either `action_run_id` or `action_id`.
 
 ### `get_alerts` / `dismiss_alert`
 

@@ -694,9 +694,9 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'exec_service_container',
     riskLevel: 'high',
     description:
-      'Execute a command inside a running service container (like docker exec). Use for installing extensions (e.g., pgvector), running SQL, debugging, or any ad-hoc command. Returns { service, command, exitCode, stdout, stderr }. Non-zero exit codes are returned (not thrown) so you can inspect the output. Errors: SERVICE_NOT_FOUND, container not running.',
+      'Execute a command inside a running service container (like docker exec). command must be an argv array, not a shell string (for example ["psql", "-U", "openlander", "-c", "SELECT 1"]). Use for installing extensions (e.g., pgvector), running SQL, debugging, or any ad-hoc command. Returns { service, command, exitCode, stdout, stderr }. Non-zero exit codes are returned (not thrown) so you can inspect the output. Errors: SERVICE_NOT_FOUND, container not running.',
     mcpDescription:
-      'Run a command inside a service container. Returns stdout, stderr, and exit code.',
+      'Run an argv-array command inside a service container. command must be string[]. Returns stdout, stderr, and exit code.',
     inputSchema: execServiceContainerSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;

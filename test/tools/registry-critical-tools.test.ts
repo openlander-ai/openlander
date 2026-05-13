@@ -60,6 +60,7 @@ function createMockContext() {
       getDeployLogs: vi.fn().mockReturnValue([
         {
           id: 'deploy-1',
+          service_id: 'p1__svc',
           status: 'failed',
           trigger: 'api',
           commit_sha: 'abc123',
@@ -72,6 +73,7 @@ function createMockContext() {
         id === 'deploy-1'
           ? {
               id: 'deploy-1',
+              service_id: 'p1__svc',
               status: 'failed',
               trigger: 'api',
               commit_sha: 'abc123',
@@ -206,6 +208,45 @@ describe('registry critical tool behaviors', () => {
           elapsed: expect.any(String),
         }),
       ],
+    });
+  });
+
+  it('get_deploy_status resolves completed deploy logs by deploy_id', async () => {
+    const { ctx } = createMockContext();
+    const tool = getTool(ctx, 'get_deploy_status');
+
+    const result = await tool.execute({ deploy_id: 'deploy-1' }, { target: 'mcp' });
+
+    expect(ctx.db.getDeployLog).toHaveBeenCalledWith('deploy-1');
+    expect(result).toMatchObject({
+      active: 0,
+      status: 'found',
+      jobs: [
+        {
+          deploy_id: 'deploy-1',
+          service_id: 'p1__svc',
+          project_id: 'p1',
+          name: 'critical-app',
+          phase: 'failed',
+          build_log_tail: 'line 1\nline 2',
+        },
+      ],
+    });
+  });
+
+  it('get_deploy_status distinguishes unknown deploy ids from completed jobs', async () => {
+    const { ctx } = createMockContext();
+    const tool = getTool(ctx, 'get_deploy_status');
+
+    const result = await tool.execute({ job_id: 'missing-deploy' }, { target: 'mcp' });
+
+    expect(ctx.db.getDeployLog).toHaveBeenCalledWith('missing-deploy');
+    expect(result).toMatchObject({
+      active: 0,
+      jobs: [],
+      status: 'not_found',
+      code: 'DEPLOY_STATUS_NOT_FOUND',
+      deploy_id: 'missing-deploy',
     });
   });
 

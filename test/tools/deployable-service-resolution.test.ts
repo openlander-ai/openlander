@@ -141,6 +141,35 @@ describe('deployable service target resolution', () => {
     });
   });
 
+  it('accepts a project group name as service_name when it has one deployable', async () => {
+    const ctx = createDuplicateServiceContext();
+    const result = await getTool(ctx, 'redeploy_app').execute(
+      { service_name: 'alpha' },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'deploying',
+      service: { id: 'alpha__svc', name: 'api', projectId: 'alpha', projectName: 'alpha' },
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'alpha__svc' },
+      },
+    });
+  });
+
+  it('requires service_id when service_name matches a multi-deployable project group', async () => {
+    const ctx = createMultiDeployableProjectContext();
+
+    await expect(
+      getTool(ctx, 'redeploy_app').execute({ service_name: 'alpha' }, { target: 'mcp' }),
+    ).rejects.toMatchObject({
+      code: 'SERVICE_SELECTION_REQUIRED',
+      statusCode: 400,
+    });
+  });
+
   it('requires disambiguation for duplicate deployable service names', async () => {
     const ctx = createDuplicateServiceContext();
 

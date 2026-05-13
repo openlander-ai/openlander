@@ -278,8 +278,6 @@ export const monitoringToolDefs: ToolDef[] = [
       const lines = (args['lines'] as number | undefined) ?? 80;
       const timeoutMs = (args['timeout_ms'] as number | undefined) ?? 5000;
       const pathArg = (args['path'] as string | undefined)?.trim();
-      const probePathSource = pathArg || service.health_check_path || '/';
-      const probePath = probePathSource.startsWith('/') ? probePathSource : `/${probePathSource}`;
 
       const [groupEnv, serviceEnv, deployLogs] = await Promise.all([
         appCtx.db.getEnvVars(project.id),
@@ -287,6 +285,11 @@ export const monitoringToolDefs: ToolDef[] = [
         appCtx.db.getDeployLogs(runtimeProject.id, 5),
       ]);
       const effectiveEnv = { ...groupEnv, ...serviceEnv };
+      const probePath = selectServiceProbePath({
+        requestedPath: pathArg,
+        healthCheckPath: service.health_check_path,
+        env: effectiveEnv,
+      });
 
       const container = await summarizeContainer(appCtx, service);
       const runtimeLogs = await readServiceLogs(appCtx, runtimeProject.id, lines);
@@ -340,8 +343,9 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'probe_host',
     riskLevel: 'low',
     description:
-      'Check if a host, URL, or container endpoint is reachable. Use internal=true to probe from inside the Docker network (container-to-container DNS).',
-    mcpDescription: 'Check connectivity to a host, URL, or container endpoint.',
+      'Check if a host, URL, or container endpoint is reachable. Pass target, or host as an alias for target. Use internal=true to probe from inside the Docker network (container-to-container DNS).',
+    mcpDescription:
+      'Check connectivity to a host, URL, or container endpoint. Accepts target or host.',
     inputSchema: probeHostSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -376,8 +380,10 @@ export const monitoringToolDefs: ToolDef[] = [
   {
     name: 'mcp_action_status',
     riskLevel: 'low',
-    description: 'Check the status of a destructive MCP action that was routed to human approval.',
-    mcpDescription: 'Check pending/approved/rejected/failed status for a held MCP action.',
+    description:
+      'Check the status of a destructive MCP action that was routed to human approval. Pass action_run_id, or action_id as an alias.',
+    mcpDescription:
+      'Check pending/approved/rejected/failed status for a held MCP action. Accepts action_run_id or action_id.',
     inputSchema: mcpActionStatusSchema,
     execute: async (args, context) => {
       const actionRunId =
@@ -449,6 +455,33 @@ async function serviceSelectionCandidates(
   );
 }
 
+async function resolveSingleDeployableProjectAlias(
+  projectName: string,
+  context: ToolContext,
+): Promise<ServiceRow | undefined> {
+  const project = await resolveProjectScope(projectName, context);
+  if (!project) return undefined;
+
+  const deployables =
+    typeof context.appCtx.db.getDeployablesByGroup === 'function'
+      ? await context.appCtx.db.getDeployablesByGroup(project.id)
+      : (await context.appCtx.db.listServices()).filter((item) => item.project_id === project.id);
+  const filtered = deployables.filter((item) => !isManagedService(item.kind));
+  if (filtered.length > 1) {
+    throw new OpenLanderError(
+      `Project '${projectName}' has multiple deployable services. Specify service_id or the service row name.`,
+      'SERVICE_SELECTION_REQUIRED',
+      400,
+      {
+        projectId: project.id,
+        projectName: project.name,
+        candidates: await serviceSelectionCandidates(filtered, context),
+      },
+    );
+  }
+  return filtered[0];
+}
+
 async function resolveDeployableServiceForMonitoring(
   args: Record<string, unknown>,
   context: ToolContext,
@@ -488,6 +521,9 @@ async function resolveDeployableServiceForMonitoring(
       );
     }
     service = deployable[0] ?? scoped[0];
+    if (!service && !projectIdentifier) {
+      service = await resolveSingleDeployableProjectAlias(serviceName, context);
+    }
   } else if (projectIdentifier) {
     projectScope = await resolveProjectScope(projectIdentifier, context);
     if (!projectScope) {
@@ -758,6 +794,49 @@ async function readServiceLogs(
       error: sanitizeDiagnosticText(err instanceof Error ? err.message : String(err)),
     };
   }
+}
+
+function normalizeProbePath(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    const pathname = parsed.pathname || '/';
+    return pathname.startsWith('/') ? pathname : `/${pathname}`;
+  } catch {
+    return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  }
+}
+
+function inferBasePathFromEnv(env: Record<string, string>): string | null {
+  const candidateKeys = [
+    'NEXT_PUBLIC_BASE_PATH',
+    'PUBLIC_BASE_PATH',
+    'VITE_BASE_PATH',
+    'REACT_APP_BASE_PATH',
+    'APP_BASE_PATH',
+    'BASE_PATH',
+    'PUBLIC_URL',
+    'NEXTAUTH_URL',
+  ];
+  for (const key of candidateKeys) {
+    const path = normalizeProbePath(env[key]);
+    if (path && path !== '/') return path;
+  }
+  return null;
+}
+
+function selectServiceProbePath(input: {
+  requestedPath?: string;
+  healthCheckPath?: string | null;
+  env: Record<string, string>;
+}): string {
+  return (
+    normalizeProbePath(input.requestedPath) ??
+    inferBasePathFromEnv(input.env) ??
+    normalizeProbePath(input.healthCheckPath) ??
+    '/'
+  );
 }
 
 async function probeServiceHttp(
