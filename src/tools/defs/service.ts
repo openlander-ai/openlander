@@ -1,7 +1,11 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { getAllIps } from '../../pipeline/traefik.js';
 import { DOCKER_LABELS, SHARED_NETWORK_NAME } from '../../config/index.js';
-import { isDockerNotFoundError, ServiceNotFoundError } from '../../errors.js';
+import {
+  isDockerNotFoundError,
+  ManagedServicePersistenceCleanedError,
+  ServiceNotFoundError,
+} from '../../errors.js';
 import { kindToLegacyType } from '../../db/repos/service.repo.js';
 import type { ToolDef } from './types.js';
 import {
@@ -104,12 +108,30 @@ export const serviceToolDefs: ToolDef[] = [
         };
       }
 
-      const result = await appCtx.serviceManager.create({
-        name: args['name'] as string,
-        template: args['template'] as string | undefined,
-        image: args['image'] as string | undefined,
-        port: args['port'] as number | undefined,
-      });
+      let result: Awaited<ReturnType<typeof appCtx.serviceManager.create>>;
+      try {
+        result = await appCtx.serviceManager.create({
+          name: args['name'] as string,
+          template: args['template'] as string | undefined,
+          image: args['image'] as string | undefined,
+          port: args['port'] as number | undefined,
+        });
+      } catch (err) {
+        if (err instanceof ManagedServicePersistenceCleanedError) {
+          return {
+            status: 'failed',
+            error: err.code,
+            code: err.code,
+            message: err.message,
+            details: err.details,
+            _agent_guidance: {
+              message:
+                'The failed create_service attempt was rolled back at the Docker layer. It is safe to retry after fixing the database issue.',
+            },
+          };
+        }
+        throw err;
+      }
 
       let attachWarning: string | undefined;
       let resolvedProjectId: string | undefined;

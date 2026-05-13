@@ -762,6 +762,48 @@ export class ServiceOperationError extends OpenLanderError {
   }
 }
 
+/** Managed service DB persistence failed after Docker resources were created and cleaned up. */
+export class ManagedServicePersistenceCleanedError extends OpenLanderError {
+  constructor(
+    serviceName: string,
+    details: {
+      serviceId: string;
+      containerName: string;
+      volumeName: string;
+      hostPort: number;
+      originalError: unknown;
+    },
+  ) {
+    super(
+      `Managed service "${serviceName}" could not be saved. Created Docker resources were rolled back; it is safe to retry after fixing the database error.`,
+      'MANAGED_SERVICE_PERSIST_FAILED_CLEANED',
+      500,
+      {
+        serviceName,
+        serviceId: details.serviceId,
+        containerName: details.containerName,
+        volumeName: details.volumeName,
+        hostPort: details.hostPort,
+        retrySafe: true,
+        rollback: {
+          serviceRowDeleted: true,
+          containerRemoved: true,
+          volumeRemoved: true,
+        },
+        originalErrorCode:
+          details.originalError instanceof OpenLanderError
+            ? details.originalError.code
+            : 'UNKNOWN_ERROR',
+        _agent_guidance: {
+          message:
+            'OpenLander removed the Docker container and volume created during this failed create_service attempt. You can retry create_service after the database issue is fixed.',
+        },
+      },
+    );
+    this.name = 'ManagedServicePersistenceCleanedError';
+  }
+}
+
 /** Operation isn't supported for the given service type (e.g. createDatabase on redis). */
 export class ServiceOperationUnsupportedError extends OpenLanderError {
   constructor(operation: string, serviceType: string) {

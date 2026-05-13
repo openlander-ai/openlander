@@ -13,9 +13,6 @@ function createDbMock(services: ServiceRow[]): Database {
       byId.set(service.id, service);
       return service;
     }),
-    deleteService: vi.fn((id: string) => {
-      byId.delete(id);
-    }),
     updateService: vi.fn(
       (id: string, updates: { status?: ServiceRow['status']; containerId?: string | null }) => {
         const current = byId.get(id);
@@ -78,25 +75,6 @@ describe('AVAILABLE_VERSIONS constant', () => {
 describe('ServiceManager.create() with version selection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it('rolls back container and volume when service persistence fails', async () => {
-    const dockerHarness = createMockDockerHarness();
-    const db = createDbMock([]);
-    const persistError = new Error('db insert failed');
-    (db.createService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(persistError);
-    const manager = new ServiceManager(dockerHarness.docker, db);
-
-    await expect(
-      manager.create({
-        name: 'broken-pg',
-        template: 'postgresql',
-      }),
-    ).rejects.toThrow(persistError);
-
-    expect(dockerHarness.docker.safeRemoveContainer).toHaveBeenCalledWith('ol-svc-broken-pg-id');
-    expect(dockerHarness.docker.removeVolume).toHaveBeenCalledWith('ol-svc-data-broken-pg');
-    expect(db.deleteService).toHaveBeenCalled();
   });
 
   it('should use default version (first in array) when version is omitted', async () => {

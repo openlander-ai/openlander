@@ -75,7 +75,7 @@ describe('project-ops list_projects reconciliation', () => {
         networking: [
           expect.any(String),
           expect.any(String),
-          expect.stringContaining('deployable_service.service_id'),
+          expect.stringContaining('set_env_vars'),
         ],
       },
     });

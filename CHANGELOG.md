@@ -15,8 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   fails after Docker resources have already been created.
 - Added a Linux `/proc/net/tcp{,6}` fallback for port scanning when `ss` is not
   installed.
-- Included deployable service identifiers in MCP `list_projects` output so
+- Surfaced deployable service identifiers in MCP `list_projects` output so
   agents can chain directly into `openlander_service` actions.
+- Stored freshly created managed services with canonical `source='image'`.
 
 ## [0.1.1-rc.5] — 2026-05-13
 

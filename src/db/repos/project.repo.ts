@@ -289,6 +289,8 @@ export class ProjectRepo {
   }
 
   async getProjectByName(name: string): Promise<ProjectRow | undefined> {
+    if (name === ORPHAN_MANAGED_GROUP_ID) return undefined;
+
     const [row] = await this.db.select().from(projects).where(eq(projects.name, name)).limit(1);
     if (!row) return undefined;
     return await this.hydrateDeployable(toProjectRow(row));

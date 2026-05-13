@@ -26,9 +26,10 @@ import {
 } from './service-adapters/shared.js';
 import type { ContainerExecResult } from './service-adapters/types.js';
 import type { Docker } from './docker.js';
-import { allocatePort, releasePortReservation } from './port.js';
+import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
 import {
   isDockerNotFoundError,
+  ManagedServicePersistenceCleanedError,
   RepoPersistenceError,
   ServiceConfigError,
   ServiceContainerStateError,
@@ -454,6 +455,8 @@ export class ServiceManager {
 
     let containerId: string | undefined;
     let volumeCreated = false;
+    let persistenceStarted = false;
+    let rollbackClean = true;
     try {
       await this.docker.pullImage(image);
 
@@ -509,6 +512,7 @@ export class ServiceManager {
         }
       }
 
+      persistenceStarted = true;
       await this.db.createService({
         id,
         name: opts.name,
@@ -530,12 +534,14 @@ export class ServiceManager {
       try {
         await this.db.deleteService(id);
       } catch (cleanupErr) {
+        rollbackClean = false;
         log.warn({ err: cleanupErr, serviceId: id }, 'Failed to roll back managed service row');
       }
       if (containerId) {
         try {
           await this.docker.safeRemoveContainer(containerId);
         } catch (cleanupErr) {
+          rollbackClean = false;
           log.warn(
             { err: cleanupErr, containerId, containerName },
             'Failed to roll back managed service container',
@@ -546,11 +552,22 @@ export class ServiceManager {
         try {
           await this.docker.removeVolume(volumeName);
         } catch (cleanupErr) {
+          rollbackClean = false;
           log.warn({ err: cleanupErr, volumeName }, 'Failed to roll back managed service volume');
         }
       }
+      if (persistenceStarted && containerId && volumeCreated && rollbackClean) {
+        throw new ManagedServicePersistenceCleanedError(opts.name, {
+          serviceId: id,
+          containerName,
+          volumeName,
+          hostPort,
+          originalError: err,
+        });
+      }
       throw err;
     } finally {
+      clearPortScanCache();
       releasePortReservation(hostPort);
     }
   }
