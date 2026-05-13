@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1-rc.5] — 2026-05-13
+
+Release candidate with onboarding and MCP token setup polish, plus the
+post-rc.4 UI and CI follow-ups that were missed in the previous cut.
+
+### Changed
+
+- Moved language selection out of the setup wizard and into the login/account
+  chrome so first boot focuses on account and MCP setup.
+- Made MCP token issuance explicit during setup so users understand when a
+  token is created and where to copy it.
+- Tightened GitHub Actions concurrency and trigger scopes to reduce duplicate
+  workflow runs.
+
+### Fixed
+
+- Straightened the `/login` to `/setup` handoff and clamped setup wizard steps
+  to the live setup status.
+- Added a development-loud SetupGuard fail-open path for easier local QA when
+  setup state and route state drift.
+- Aligned the Service Detail Domains tab with shared form and card primitives.
+
 ## [0.1.1-rc.4] — 2026-05-13
 
 Release candidate with MCP diagnostic sanitization hardening and follow-up UI
