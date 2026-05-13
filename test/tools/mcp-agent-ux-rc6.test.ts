@@ -13,6 +13,8 @@ import { cloneRepo } from '../../src/pipeline/git.js';
 import { createMockDeployPlan } from '../helpers/deploy-plan-mocks.js';
 import * as infraAnalyzer from '../../src/lib/infra-analyzer.js';
 import { createDeployPlanSchema, deploySchema, setEnvVarsSchema } from '../../src/tools/defs/schemas.js';
+import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
+import { envToolDefs } from '../../src/tools/defs/env.js';
 
 const mockCloneRepo = cloneRepo as unknown as ReturnType<typeof vi.fn>;
 
@@ -54,6 +56,41 @@ function createEngine() {
   } as unknown as PlanEngineDeps);
 
   return { engine, mockDb, mockPipeline, mockServiceManager };
+}
+
+function getDeployPlanTool(name: string) {
+  const tool = deployPlanToolDefs.find((entry) => entry.name === name);
+  expect(tool).toBeDefined();
+  return tool!;
+}
+
+function getEnvTool(name: string) {
+  const tool = envToolDefs.find((entry) => entry.name === name);
+  expect(tool).toBeDefined();
+  return tool!;
+}
+
+function createEnvToolContext() {
+  const project = { id: 'p1', name: 'my-app', status: 'running' };
+  const service = {
+    id: 'my-app__svc',
+    name: 'web',
+    project_id: 'p1',
+    kind: 'git',
+    source: 'git',
+    status: 'running',
+  };
+  const db = {
+    getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+    getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+    getDeployablesByGroup: vi.fn().mockResolvedValue([service]),
+    assertEnvToolSchemaReady: vi.fn().mockResolvedValue(undefined),
+  };
+  const env = {
+    setBulkForServiceDetailed: vi.fn().mockResolvedValue([]),
+    verifyRoundTripForService: vi.fn().mockResolvedValue([]),
+  };
+  return { db, env, pipeline: { redeploy: vi.fn() } };
 }
 
 describe('MCP agent UX rc6 regressions', () => {
@@ -164,5 +201,39 @@ describe('MCP agent UX rc6 regressions', () => {
         variables: { API_KEY: 'secret' },
       }).success,
     ).toBe(true);
+  });
+
+  it('rejects malformed JSON env var strings with BAD_REQUEST', async () => {
+    const { engine } = createEngine();
+    await expect(
+      getDeployPlanTool('create_deploy_plan').execute(
+        { repo_url: 'https://github.com/example/app', env_vars: '{bad json' },
+        { appCtx: { planEngine: engine }, target: 'mcp' },
+      ),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', statusCode: 400 });
+  });
+
+  it('rejects non-object env var inputs with BAD_REQUEST', async () => {
+    const { db, env, pipeline } = createEnvToolContext();
+    await expect(
+      getEnvTool('set_env_vars').execute(
+        { project_name: 'my-app', variables: 'false' },
+        { appCtx: { db, env, pipeline }, target: 'mcp' },
+      ),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', statusCode: 400 });
+  });
+
+  it('rejects non-string env var object values with BAD_REQUEST details', async () => {
+    const { engine } = createEngine();
+    await expect(
+      getDeployPlanTool('deploy_app').execute(
+        { repo_url: 'https://github.com/example/app', env_vars: { DATABASE_URL: 123 } },
+        { appCtx: { planEngine: engine }, target: 'mcp' },
+      ),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      statusCode: 400,
+      details: { key: 'DATABASE_URL' },
+    });
   });
 });
