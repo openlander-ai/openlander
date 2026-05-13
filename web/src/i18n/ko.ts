@@ -198,6 +198,9 @@ export const translations = {
       traefikProxy: 'Traefik Proxy',
       running: 'Running',
       stopped: 'Stopped',
+      // Content — surfaced as a toast when SetupScreen clamps step back
+      // to Infrastructure because Docker stopped responding.
+      dockerReturned: 'Docker가 실행되고 있지 않아 Infrastructure 단계로 되돌아갔습니다.',
     },
   },
   notifications: {

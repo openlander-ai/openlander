@@ -142,6 +142,51 @@ function SetupGuard() {
   return <Outlet />;
 }
 
+/**
+ * Route guard for /setup. Onboarding R2 (2026-05-13) made first boot
+ * land here directly from /login after setupPassword. Without a guard,
+ * /setup is publicly mountable — and the wizard reads `status.docker.ok`
+ * which the anonymous `/api/setup/status` response intentionally omits
+ * (it strips the bag down to `{ ok, hasPassword }` once a password
+ * exists to avoid leaking system shape to drive-by visitors).
+ *
+ * Allow:
+ *   - first boot, no password yet (`hasPassword=false`)
+ *   - logged-in users with a session
+ *
+ * Otherwise: bounce to /login so the user can sign in first.
+ */
+function SetupAccessGuard() {
+  const [setupStatus, setSetupStatus] = useState<{
+    loading: boolean;
+    hasPassword: boolean;
+  }>({ loading: true, hasPassword: false });
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+
+  useEffect(() => {
+    getSetupStatus()
+      .then((s) => setSetupStatus({ loading: false, hasPassword: s.hasPassword ?? false }))
+      // On status error, pessimistically assume password is already set —
+      // failing closed avoids leaking the wizard to drive-by visitors
+      // when the backend is briefly unreachable.
+      .catch(() => setSetupStatus({ loading: false, hasPassword: true }));
+  }, []);
+
+  if (setupStatus.loading || authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-bg-app">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-agent border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!setupStatus.hasPassword || isAuthenticated) {
+    return <SetupScreen onComplete={() => (window.location.href = '/home')} />;
+  }
+
+  return <Navigate to="/login" replace />;
+}
+
 function App() {
   return (
     <LanguageProvider>
@@ -156,10 +201,7 @@ function App() {
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
-              <Route
-                path="/setup"
-                element={<SetupScreen onComplete={() => (window.location.href = '/home')} />}
-              />
+              <Route path="/setup" element={<SetupAccessGuard />} />
               <Route element={<SetupGuard />}>
                 {/* Single shell for all authenticated routes (Round 4 PR4
                     takeover). Legacy AppLayout was deleted; AppShell now

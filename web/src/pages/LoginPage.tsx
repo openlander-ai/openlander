@@ -9,10 +9,12 @@
  *     confirm, 8-char minimum
  *
  * The setup branch wires to /api/auth/setup-password, which on success
- * already sets the session cookie. We hard-reload into /projects so
- * AuthProvider re-runs verifySession() against that cookie — that
- * sidesteps the brittle "setupPassword OK but a follow-up login() fails"
- * recovery path that earlier shapes of this page had.
+ * already sets the session cookie. Onboarding R2 (2026-05-13) directs
+ * the post-setup redirect at `/setup` rather than `/projects` — there
+ * is no docker/traefik readiness yet on first boot, so SetupGuard
+ * would have ricocheted `/projects` → `/setup` anyway. Going directly
+ * to /setup removes the double redirect and lets the wizard own the
+ * first-boot flow start-to-finish.
  *
  * While the status check is in flight we render a small skeleton with
  * descriptive copy; on failure we fall back to signin (preserves the
@@ -104,12 +106,12 @@ export function LoginPage() {
     try {
       await setupPassword(password);
       // Backend created a session cookie on success. Hard-reload into
-      // /projects so AuthProvider re-runs verifySession() and picks up
-      // the cookie — avoids a follow-up /api/auth/login round-trip and
-      // removes the "setupPassword OK but login() fails" recovery hole.
-      // Use replace() so
-      // the back button doesn't return the user to /login.
-      window.location.replace('/projects');
+      // /setup so AuthProvider re-runs verifySession() against the new
+      // cookie AND lands on the wizard directly — first boot has no
+      // docker/traefik yet, so SetupGuard would have bounced /projects
+      // → /setup anyway. Going there straight removes that ricochet.
+      // Use replace() so the back button doesn't return the user to /login.
+      window.location.replace('/setup');
     } catch (err) {
       if (mountedRef.current) {
         setError(err instanceof Error ? err.message : t('setup.password.errorGeneric'));
