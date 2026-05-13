@@ -190,4 +190,66 @@ describe('ServiceManager backup Redis BGSAVE', () => {
     expect(result.size).toBe(12345);
     expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Redis BGSAVE failed'));
   });
+
+  it('writes backups through the OpenLander data volume when running in a container', async () => {
+    const originalContainerized = process.env.OPENLANDER_CONTAINERIZED;
+    const originalDataVolume = process.env.OPENLANDER_DATA_VOLUME;
+    process.env.OPENLANDER_CONTAINERIZED = 'true';
+    process.env.OPENLANDER_DATA_VOLUME = 'openlander-test-data';
+
+    try {
+      const redis = createService({
+        id: 'svc-redis',
+        name: 'shared-redis',
+        type: 'redis',
+        image: 'redis:7-alpine',
+        container_id: 'svc-redis-container',
+        container_name: 'ol-svc-shared-redis',
+        port: 6379,
+        credentials: null,
+      });
+
+      const dockerHarness = createMockDockerHarness();
+      dockerHarness.setContainerRunning('svc-redis-container', true);
+      dockerHarness.queueExecResult('svc-redis-container', { exitCode: 0, stdout: '1000' });
+      dockerHarness.queueExecResult('svc-redis-container', {
+        exitCode: 0,
+        stdout: 'Background saving started',
+      });
+      dockerHarness.queueExecResult('svc-redis-container', { exitCode: 0, stdout: '1001' });
+
+      const manager = new ServiceManager(dockerHarness.docker, createDbMock([redis]));
+      await manager.backup('svc-redis');
+
+      const backupContainer = dockerHarness.createdContainers[0];
+      expect(backupContainer).toMatchObject({
+        Image: 'alpine',
+        HostConfig: {
+          Binds: expect.arrayContaining([
+            'ol-svc-data-shared-redis:/data:ro',
+            'openlander-test-data:/openlander-data',
+          ]),
+        },
+      });
+      expect(backupContainer?.['Cmd']).toEqual([
+        'tar',
+        'czf',
+        expect.stringMatching(/^\/openlander-data\/backups\/shared-redis-\d+\.tar\.gz$/),
+        '-C',
+        '/data',
+        '.',
+      ]);
+    } finally {
+      if (originalContainerized === undefined) {
+        delete process.env.OPENLANDER_CONTAINERIZED;
+      } else {
+        process.env.OPENLANDER_CONTAINERIZED = originalContainerized;
+      }
+      if (originalDataVolume === undefined) {
+        delete process.env.OPENLANDER_DATA_VOLUME;
+      } else {
+        process.env.OPENLANDER_DATA_VOLUME = originalDataVolume;
+      }
+    }
+  });
 });

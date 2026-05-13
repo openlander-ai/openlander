@@ -660,6 +660,14 @@ export const createDeployPlanSchema = z
       )
       .optional()
       .describe('Project name (auto-generated from repo if not provided)'),
+    project_name: z
+      .string()
+      .regex(
+        /^[a-z0-9][a-z0-9-]*$/,
+        'Project name must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens',
+      )
+      .optional()
+      .describe('Alias for name. Use this when the user says project_name.'),
     source: z.enum(['git', 'image']).optional().describe('Deployment source type'),
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
@@ -736,7 +744,9 @@ export const deploySchema = z
       .string()
       .min(1)
       .optional()
-      .describe('Optional project group name to scope service_name lookups'),
+      .describe(
+        'Project group name. For existing apps this scopes service_name lookups; for new apps this is accepted as an alias for name.',
+      ),
     repo_url: z
       .string()
       .min(1)
@@ -817,7 +827,7 @@ export const deploySchema = z
       if (data.service_id || data.service_name) {
         return true;
       }
-      if (data.name && !data.repo_url && !data.image) {
+      if ((data.name || data.project_name) && !data.repo_url && !data.image) {
         return true;
       }
       if (data.source === 'image') {

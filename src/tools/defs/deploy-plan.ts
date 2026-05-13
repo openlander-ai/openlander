@@ -337,7 +337,10 @@ export const deployPlanToolDefs: ToolDef[] = [
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
         branch: (args['branch'] as string | undefined) ?? undefined,
-        name: (args['name'] as string | undefined) ?? undefined,
+        name:
+          (args['name'] as string | undefined) ??
+          (args['project_name'] as string | undefined) ??
+          undefined,
         source: (args['source'] as 'git' | 'image' | undefined) ?? undefined,
         imageUrl: (args['image'] as string | undefined) ?? undefined,
         imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
@@ -537,7 +540,10 @@ export const deployPlanToolDefs: ToolDef[] = [
       const source = (args['source'] as 'git' | 'image' | undefined) ?? undefined;
       const image = (args['image'] as string | undefined) ?? undefined;
       const repoUrl = (args['repo_url'] as string | undefined) ?? undefined;
-      const projectName = (args['name'] as string | undefined) ?? undefined;
+      const projectName =
+        (args['name'] as string | undefined) ??
+        (args['project_name'] as string | undefined) ??
+        undefined;
 
       const frontDoorTarget = await resolveExistingDeployAppTarget(args, context);
       if (frontDoorTarget?.kind === 'needs_selection') {
@@ -610,7 +616,7 @@ export const deployPlanToolDefs: ToolDef[] = [
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
         branch: (args['branch'] as string | undefined) ?? undefined,
-        name: (args['name'] as string | undefined) ?? undefined,
+        name: projectName,
         source,
         imageUrl: image,
         imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,

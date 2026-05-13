@@ -43,6 +43,8 @@ import {
 
 const log = createModuleLogger('service-manager');
 const SERVICE_CARD_SUMMARY_CACHE_TTL_MS = 15_000;
+const DEFAULT_CONTAINERIZED_DATA_VOLUME = 'openlander-data';
+const CONTAINERIZED_DATA_MOUNT = '/openlander-data';
 
 type ServiceCardSummary = ServiceRow & {
   summary: {
@@ -51,6 +53,20 @@ type ServiceCardSummary = ServiceRow & {
     restartCount: number | null;
   };
 };
+
+type BackupStorageMount = {
+  bind: string;
+  containerDir: string;
+};
+
+function isTruthyEnv(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
 
 export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   postgresql: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
@@ -659,7 +675,9 @@ export class ServiceManager {
     const volumeName = this.getVolumeName(service.name);
     const backupDir = this.getBackupDir();
     const backupId = `${service.name}-${String(Date.now())}`;
-    const backupPath = join(backupDir, `${backupId}.tar.gz`);
+    const backupFilename = `${backupId}.tar.gz`;
+    const backupPath = join(backupDir, backupFilename);
+    const backupMount = this.getBackupStorageMount('readwrite');
 
     mkdirSync(backupDir, { recursive: true });
 
@@ -704,9 +722,9 @@ export class ServiceManager {
 
     const backupContainerId = await this.docker.runInfraContainer({
       Image: 'alpine',
-      Cmd: ['tar', 'czf', `/backup/${backupId}.tar.gz`, '-C', '/data', '.'],
+      Cmd: ['tar', 'czf', `${backupMount.containerDir}/${backupFilename}`, '-C', '/data', '.'],
       HostConfig: {
-        Binds: [`${volumeName}:/data:ro`, `${backupDir}:/backup`],
+        Binds: [`${volumeName}:/data:ro`, backupMount.bind],
         AutoRemove: true,
       },
     });
@@ -745,6 +763,7 @@ export class ServiceManager {
     }
 
     const volumeName = this.getVolumeName(service.name);
+    const backupMount = this.getBackupStorageMount('readonly');
     await this.stop(id);
 
     try {
@@ -752,9 +771,13 @@ export class ServiceManager {
 
       const restoreContainerId = await this.docker.runInfraContainer({
         Image: 'alpine',
-        Cmd: ['sh', '-c', `rm -rf /data/* && tar xzf /backup/${backupFilename} -C /data`],
+        Cmd: [
+          'sh',
+          '-c',
+          `rm -rf /data/* && tar xzf ${shellQuote(`${backupMount.containerDir}/${backupFilename}`)} -C /data`,
+        ],
         HostConfig: {
-          Binds: [`${volumeName}:/data`, `${backupDir}:/backup:ro`],
+          Binds: [`${volumeName}:/data`, backupMount.bind],
           AutoRemove: true,
         },
       });
@@ -1325,6 +1348,26 @@ export class ServiceManager {
 
   private getBackupDir(): string {
     return join(this.dataDir, 'backups');
+  }
+
+  private getBackupStorageMount(mode: 'readwrite' | 'readonly'): BackupStorageMount {
+    if (isTruthyEnv(process.env.OPENLANDER_CONTAINERIZED)) {
+      const dataVolume =
+        process.env.OPENLANDER_DATA_VOLUME?.trim() || DEFAULT_CONTAINERIZED_DATA_VOLUME;
+      return {
+        bind:
+          mode === 'readonly'
+            ? `${dataVolume}:${CONTAINERIZED_DATA_MOUNT}:ro`
+            : `${dataVolume}:${CONTAINERIZED_DATA_MOUNT}`,
+        containerDir: `${CONTAINERIZED_DATA_MOUNT}/backups`,
+      };
+    }
+
+    const backupDir = this.getBackupDir();
+    return {
+      bind: mode === 'readonly' ? `${backupDir}:/backup:ro` : `${backupDir}:/backup`,
+      containerDir: '/backup',
+    };
   }
 
   private getDataMountPath(type: string): string {
