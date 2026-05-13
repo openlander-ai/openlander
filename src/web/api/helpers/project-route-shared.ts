@@ -19,6 +19,7 @@ import {
 import {
   getAllIps,
   getEnvironmentProjectHostname,
+  getPreferredProjectUrl,
   getProjectUrl,
   getProjectUrls,
 } from '../../../pipeline/traefik.js';
@@ -283,6 +284,7 @@ export function mapProjectForApi(project: ProjectRow, deployable?: DeployableFor
     dockerfile_path: dockerfilePath,
     port,
     url: port ? getProjectUrl(project.name) : null,
+    preferred_url: port ? getPreferredProjectUrl(project.name) : null,
     urls: port ? getProjectUrls(project.name) : [],
     publicUrl,
     source,

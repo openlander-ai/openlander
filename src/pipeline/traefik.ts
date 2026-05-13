@@ -248,12 +248,50 @@ export class TraefikManager {
   }
 }
 
+function configuredPublicHost(): string | undefined {
+  const raw = process.env['OPENLANDER_PUBLIC_HOST']?.trim();
+  if (!raw) return undefined;
+  const withoutWildcard = raw.startsWith('*.') ? raw.slice(2) : raw;
+  try {
+    const parsed = new URL(
+      withoutWildcard.includes('://') ? withoutWildcard : `http://${withoutWildcard}`,
+    );
+    return parsed.hostname || undefined;
+  } catch (_error) {
+    return withoutWildcard.replace(/\/.*$/, '').replace(/:\d+$/, '') || undefined;
+  }
+}
+
+function isIpv4Address(value: string): boolean {
+  const parts = value.split('.');
+  return (
+    parts.length === 4 &&
+    parts.every((part) => {
+      if (!/^\d{1,3}$/.test(part)) return false;
+      const n = Number(part);
+      return n >= 0 && n <= 255;
+    })
+  );
+}
+
+function hostnameFromPublicHost(projectName: string, publicHost: string): string {
+  if (isIpv4Address(publicHost)) {
+    return `${projectName}.${publicHost}.sslip.io`;
+  }
+  return `${projectName}.${publicHost}`;
+}
+
 /**
  * Get the hostname for a project.
- * Uses sslip.io wildcard DNS so the URL works from any device on the network.
- * Falls back to .localhost if no LAN IP is available.
+ * Prefers OPENLANDER_PUBLIC_HOST when configured so containerized installs do
+ * not advertise the backend container's private bridge IP.
  */
 export function getProjectHostname(projectName: string, lanIp?: string): string {
+  const explicitPublicHost = lanIp ? undefined : configuredPublicHost();
+  if (explicitPublicHost) {
+    return hostnameFromPublicHost(projectName, explicitPublicHost);
+  }
+
   const ip = lanIp ?? getLanIp();
   if (ip) {
     return `${projectName}.${ip}.sslip.io`;
@@ -364,16 +402,46 @@ export function getAllIps(): NetworkIp[] {
 
 export interface ProjectUrl {
   url: string;
-  type: 'lan' | 'vpn';
-  ip: string;
+  type: 'public' | 'lan' | 'vpn' | 'host';
+  ip?: string;
+  host?: string;
+  reachable?: 'external' | 'host-only' | 'container-only';
 }
 
 export function getProjectUrls(projectName: string): ProjectUrl[] {
-  return getAllIps().map((ip) => ({
+  const publicHost = configuredPublicHost();
+  if (publicHost) {
+    return [
+      {
+        url: `http://${hostnameFromPublicHost(projectName, publicHost)}`,
+        type: 'public',
+        host: publicHost,
+        reachable: 'external',
+      },
+    ];
+  }
+
+  const urls: ProjectUrl[] = getAllIps().map((ip) => ({
     url: `http://${projectName}.${ip.address}.sslip.io`,
     type: ip.type,
     ip: ip.address,
+    reachable: 'external' as const,
   }));
+
+  if (urls.length === 0) {
+    urls.push({
+      url: `http://${projectName}.localhost`,
+      type: 'host',
+      host: 'localhost',
+      reachable: 'host-only',
+    });
+  }
+
+  return urls;
+}
+
+export function getPreferredProjectUrl(projectName: string): string {
+  return getProjectUrls(projectName)[0]?.url ?? getProjectUrl(projectName);
 }
 
 export function buildTraefikLabels(

@@ -27,7 +27,7 @@ import { createOverviewRoutes } from './overview-routes.js';
 import { createNotificationsRoutes } from './notifications-routes.js';
 import { createWebServerRoutes } from './web-server-routes.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
-import { getEnvironmentProjectHostname, getAllIps } from '../../pipeline/traefik.js';
+import { getProjectUrls } from '../../pipeline/traefik.js';
 import { projectIdToDeployableServiceId } from '../../db/service-ids.js';
 import type { ProjectRow, ServiceRow } from '../../db/types.js';
 import { normalizeDomainPathPrefix } from '../../db/repos/domain-mapping.repo.js';
@@ -362,15 +362,14 @@ export function createApiRoutes(ctx: AppContext): Hono {
       };
     }
 
-    const detectedIps = getAllIps();
     for (const project of allProjects) {
       const svcName = `svc-${project.name}`;
       if (!traefikServices[svcName]) continue;
-      for (const ip of detectedIps) {
-        const sslipHost = getEnvironmentProjectHostname(project.name, 'production', ip.address);
-        if (sslipHost && !sslipHost.endsWith('.localhost')) {
-          routers[`sslip-${project.name}-${ip.type}`] = {
-            rule: `Host(\`${sslipHost}\`)`,
+      for (const route of getProjectUrls(project.name)) {
+        const host = new URL(route.url).hostname;
+        if (host) {
+          routers[`route-${project.name}-${traefikObjectName(`${route.type}-${host}`)}`] = {
+            rule: `Host(\`${host}\`)`,
             entryPoints: ['web'],
             service: svcName,
           };

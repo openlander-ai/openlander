@@ -494,6 +494,13 @@ export class ContainerOps {
           error: `Container entered restart loop (exit code: ${String(info.State.ExitCode)})`,
         };
       }
+      if (info.State.Health && info.State.Health.Status !== 'healthy') {
+        return {
+          healthy: false,
+          exitCode: info.State.ExitCode,
+          error: `Container healthcheck is ${info.State.Health.Status}`,
+        };
+      }
       return {
         healthy: info.State.Running,
         exitCode: info.State.ExitCode,

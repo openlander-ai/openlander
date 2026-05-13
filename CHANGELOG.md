@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Hardened the installer update path so `update` preserves the existing Compose
+  project name, pulls only the OpenLander runtime image, and recreates only the
+  app container instead of disturbing the Postgres sidecar.
+- Added `OPENLANDER_PUBLIC_HOST` support for advertised app URLs, avoiding
+  container-private bridge IPs in Docker installs.
+- Added `preferred_url` to project/deploy responses so agents can use the
+  canonical app URL without interpreting the full `urls` array.
+
+### Fixed
+
+- Made `deploy_app` report `readiness` and return `status: "unhealthy"` when a
+  running container's Docker healthcheck is failing instead of treating it as a
+  successful deploy.
+
 ## [0.1.1-rc.6] — 2026-05-13
 
 ### Fixed

@@ -254,6 +254,7 @@ describe('Tool Registry', () => {
           port: 10001,
           containerName: null,
           url: getProjectUrl('my-app'),
+          preferred_url: getProjectUrl('my-app'),
           publicUrl: null,
         },
       ],
@@ -337,9 +338,7 @@ describe('Tool Registry', () => {
       changed: [{ key: 'API_URL', op: 'insert' }],
       needs_redeploy: true,
       _agent_guidance: {
-        next_steps: [
-          'Redeploy required: call redeploy_app to apply env changes.',
-        ],
+        next_steps: ['Redeploy required: call redeploy_app to apply env changes.'],
       },
     });
 

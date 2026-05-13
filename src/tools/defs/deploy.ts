@@ -3,7 +3,7 @@ import { eventBus } from '../../events/index.js';
 import { parseDBTimestamp } from '../../lib/parse-db-timestamp.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
-import { getProjectUrls } from '../../pipeline/traefik.js';
+import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import type { ToolDef } from './types.js';
 import {
   cleanupPreviewSchema,
@@ -112,6 +112,7 @@ export const deployToolDefs: ToolDef[] = [
         error: job.errorSummary,
         ...(job.phase === 'done'
           ? {
+              preferred_url: getPreferredProjectUrl(job.projectName),
               urls: getProjectUrls(job.projectName),
               internal_host: projectContainerName(job.projectName),
               docker_host: getDockerHostType(),

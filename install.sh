@@ -4,6 +4,7 @@ set -Eeuo pipefail
 OPENLANDER_REPO="openlander-ai/openlander"
 OPENLANDER_VERSION="${OPENLANDER_VERSION:-latest}"
 OPENLANDER_INSTALL_DIR="${OPENLANDER_INSTALL_DIR:-/opt/openlander}"
+OPENLANDER_PORT_EXPLICIT="${OPENLANDER_PORT+x}"
 OPENLANDER_PORT="${OPENLANDER_PORT:-10114}"
 DOCKER_COMPOSE_VERSION="${DOCKER_COMPOSE_VERSION:-v2.29.7}"
 RESOLVED_OPENLANDER_REF=""
@@ -40,6 +41,7 @@ Environment:
   OPENLANDER_VERSION       latest or vX.Y.Z / X.Y.Z (default: latest)
   OPENLANDER_INSTALL_DIR   install directory (default: /opt/openlander)
   OPENLANDER_PORT          host port mapped to OpenLander (default: 10114)
+  OPENLANDER_PUBLIC_HOST   host/IP used when advertising deployed app URLs
   DOCKER_COMPOSE_VERSION   fallback Compose plugin version (default: ${DOCKER_COMPOSE_VERSION})
 EOF
 }
@@ -192,8 +194,44 @@ generate_password() {
   dd if=/dev/urandom bs=24 count=1 2>/dev/null | base64 | tr -d '=+/'
 }
 
+normalize_public_host() {
+  local host
+  host="$1"
+  case "${host}" in
+    http://*)
+      host="${host#http://}"
+      ;;
+    https://*)
+      host="${host#https://}"
+      ;;
+  esac
+  host="${host%%/*}"
+  host="${host%%:*}"
+  case "${host}" in
+    \*.*)
+      host="${host#*.}"
+      ;;
+  esac
+  printf '%s' "${host}"
+}
+
+server_host() {
+  local host
+  host="${OPENLANDER_PUBLIC_HOST:-}"
+  if [ -n "${host}" ]; then
+    host="$(normalize_public_host "${host}")"
+  fi
+  if [ -z "${host}" ] && command_exists hostname; then
+    host="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+  if [ -z "${host}" ]; then
+    host="localhost"
+  fi
+  printf '%s' "${host}"
+}
+
 write_env_if_missing() {
-  local env_path password image
+  local env_path password image public_host
   env_path="${OPENLANDER_INSTALL_DIR}/.env"
 
   if [ -f "${env_path}" ]; then
@@ -203,13 +241,98 @@ write_env_if_missing() {
 
   password="$(generate_password)"
   image="$(runtime_image)"
+  public_host="$(server_host)"
   cat >"${env_path}" <<EOF
 OPENLANDER_POSTGRES_PASSWORD=${password}
 OPENLANDER_IMAGE=${image}
 OPENLANDER_PORT=${OPENLANDER_PORT}
+OPENLANDER_PUBLIC_HOST=${public_host}
+COMPOSE_PROJECT_NAME=openlander
 EOF
   chmod 600 "${env_path}"
   log "Created ${env_path}."
+}
+
+env_file_value() {
+  local env_path key
+  env_path="${OPENLANDER_INSTALL_DIR}/.env"
+  key="$1"
+  [ -f "${env_path}" ] || return 1
+  sed -n "s/^${key}=//p" "${env_path}" | tail -n 1
+}
+
+env_file_has_key() {
+  local env_path key
+  env_path="${OPENLANDER_INSTALL_DIR}/.env"
+  key="$1"
+  [ -f "${env_path}" ] && grep -q "^${key}=" "${env_path}"
+}
+
+set_env_file_value() {
+  local env_path key tmp value
+  env_path="${OPENLANDER_INSTALL_DIR}/.env"
+  key="$1"
+  value="$2"
+  mkdir -p "${OPENLANDER_INSTALL_DIR}"
+  touch "${env_path}"
+  chmod 600 "${env_path}"
+  tmp="$(mktemp "${OPENLANDER_INSTALL_DIR}/.env.XXXXXX")"
+  awk -v key="${key}" -v value="${value}" '
+    BEGIN { replaced = 0 }
+    index($0, key "=") == 1 {
+      print key "=" value
+      replaced = 1
+      next
+    }
+    { print }
+    END {
+      if (replaced == 0) {
+        print key "=" value
+      }
+    }
+  ' "${env_path}" >"${tmp}"
+  cat "${tmp}" >"${env_path}"
+  rm -f "${tmp}"
+  chmod 600 "${env_path}"
+}
+
+detect_compose_project_name() {
+  local container label
+  for container in openlander-db openlander; do
+    label="$(docker inspect "${container}" --format '{{ index .Config.Labels "com.docker.compose.project" }}' 2>/dev/null || true)"
+    if [ -n "${label}" ] && [ "${label}" != "<no value>" ]; then
+      printf '%s' "${label}"
+      return
+    fi
+  done
+
+  if env_file_value COMPOSE_PROJECT_NAME >/dev/null; then
+    env_file_value COMPOSE_PROJECT_NAME
+    return
+  fi
+
+  printf 'openlander'
+}
+
+sync_runtime_env() {
+  local image project_name public_host
+  image="$(runtime_image)"
+  project_name="$(detect_compose_project_name)"
+  public_host="${OPENLANDER_PUBLIC_HOST:-}"
+
+  set_env_file_value OPENLANDER_IMAGE "${image}"
+  if [ -n "${OPENLANDER_PORT_EXPLICIT}" ] || ! env_file_has_key OPENLANDER_PORT; then
+    set_env_file_value OPENLANDER_PORT "${OPENLANDER_PORT}"
+  fi
+  if [ -n "${public_host}" ] || ! env_file_has_key OPENLANDER_PUBLIC_HOST; then
+    set_env_file_value OPENLANDER_PUBLIC_HOST "$(server_host)"
+  fi
+  set_env_file_value COMPOSE_PROJECT_NAME "${project_name}"
+  log "Using Compose project ${project_name} with image ${image}."
+}
+
+compose_project_name() {
+  env_file_value COMPOSE_PROJECT_NAME || printf 'openlander'
 }
 
 download_compose() {
@@ -244,20 +367,26 @@ run_compose() {
   log "Starting OpenLander..."
   (
     cd "${OPENLANDER_INSTALL_DIR}"
-    docker compose -f docker-compose.runtime.yml up -d
+    COMPOSE_PROJECT_NAME="$(compose_project_name)" docker compose -f docker-compose.runtime.yml up -d
   )
 }
 
+smoke_check() {
+  local port url
+  port="$(env_file_value OPENLANDER_PORT || printf '%s' "${OPENLANDER_PORT}")"
+  url="http://127.0.0.1:${port}/"
+  for _ in $(seq 1 30); do
+    if curl -fsS -o /dev/null --max-time 2 "${url}"; then
+      log "OpenLander responded at ${url}."
+      return
+    fi
+    sleep 1
+  done
+  log "warning: OpenLander did not respond at ${url} within 30s. Check docker logs openlander."
+}
+
 server_url() {
-  local host
-  host="localhost"
-  if command_exists hostname; then
-    host="$(hostname -I 2>/dev/null | awk '{print $1}')"
-  fi
-  if [ -z "${host}" ]; then
-    host="localhost"
-  fi
-  printf 'http://%s:%s' "${host}" "${OPENLANDER_PORT}"
+  printf 'http://%s:%s' "$(server_host)" "${OPENLANDER_PORT}"
 }
 
 install_openlander() {
@@ -271,7 +400,9 @@ install_openlander() {
   ensure_compose
   download_compose
   write_env_if_missing
+  sync_runtime_env
   run_compose
+  smoke_check
 
   log "OpenLander is starting."
   log "Open $(server_url) and create the admin password."
@@ -285,13 +416,18 @@ update_openlander() {
   start_docker
   ensure_compose
   download_compose
+  if [ -f "${OPENLANDER_INSTALL_DIR}/.env" ]; then
+    cp -p "${OPENLANDER_INSTALL_DIR}/.env" "${OPENLANDER_INSTALL_DIR}/.env.bak.$(date +%Y%m%d%H%M%S)"
+  fi
+  sync_runtime_env
 
   log "Updating OpenLander..."
   (
     cd "${OPENLANDER_INSTALL_DIR}"
-    docker compose -f docker-compose.runtime.yml pull
-    docker compose -f docker-compose.runtime.yml up -d
+    COMPOSE_PROJECT_NAME="$(compose_project_name)" docker compose -f docker-compose.runtime.yml pull openlander
+    COMPOSE_PROJECT_NAME="$(compose_project_name)" docker compose -f docker-compose.runtime.yml up -d --no-deps openlander
   )
+  smoke_check
   log "OpenLander update requested."
 }
 

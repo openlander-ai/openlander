@@ -673,6 +673,12 @@ export const deploySchema = z
       .describe(
         'Block until deployment completes or fails (default: true). Set false to return immediately after build starts.',
       ),
+    wait_healthy: z
+      .boolean()
+      .optional()
+      .describe(
+        'When wait=true, also wait up to 30s for Docker HEALTHCHECK to become healthy (default: true). Set false to return an immediate readiness snapshot.',
+      ),
     timeout: z
       .number()
       .optional()

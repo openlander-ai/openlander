@@ -43,6 +43,16 @@ export/import data.
 Open the printed dashboard URL, usually `http://<server-ip>:10114`, and create
 the admin password.
 
+If deployed app URLs should use a specific public host, set it during install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh \
+  | sudo env OPENLANDER_PUBLIC_HOST=apps.example.com bash
+```
+
+Use a domain such as `apps.example.com` or a LAN IP such as `192.168.1.50`.
+IP values are advertised through `sslip.io`.
+
 ### Install A Specific Version
 
 ```bash
