@@ -152,19 +152,21 @@ async function resolveEnvTarget(args: Record<string, unknown>, appCtx: AppCtx): 
   return { project, service, runtimeProject };
 }
 
-function parseEnvVariables(raw: string): Record<string, string> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    throw new OpenLanderError(
-      'variables must be a valid JSON object of string values.',
-      'BAD_REQUEST',
-      400,
-      {
-        cause: error instanceof Error ? error.message : String(error),
-      },
-    );
+function parseEnvVariables(raw: unknown): Record<string, string> {
+  let parsed: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      throw new OpenLanderError(
+        'variables must be a valid JSON object string or an object with string values.',
+        'BAD_REQUEST',
+        400,
+        {
+          cause: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
   }
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
@@ -355,13 +357,13 @@ export const envToolDefs: ToolDef[] = [
     name: 'set_env_vars',
     riskLevel: 'medium',
     description:
-      'Set environment variables for a deployable service. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false for immediate apply. variables must be a JSON string object with string values only; null is rejected. Returns { status, project, service, keys, changed, needs_redeploy }.',
+      'Set environment variables for a deployable service. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false for immediate apply. variables may be an object or JSON-stringified object with string values only; null is rejected. Returns { status, project, service, keys, changed, needs_redeploy }.',
     mcpDescription:
       'Set service-scoped env vars. Default saves only; call redeploy_app to apply, or pass defer_redeploy=false.',
     inputSchema: setEnvVarsSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolveEnvTarget(args, appCtx);
-      const vars = parseEnvVariables(args['variables'] as string);
+      const vars = parseEnvVariables(args['variables']);
       const deferRedeploy = (args['defer_redeploy'] as boolean | undefined) ?? true;
       await appCtx.db.assertEnvToolSchemaReady();
 

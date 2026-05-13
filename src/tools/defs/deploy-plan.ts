@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { DeployLockedError } from '../../errors.js';
+import { DeployLockedError, OpenLanderError } from '../../errors.js';
 import type { ToolContext, ToolDef } from './types.js';
 import type { DeployPlan } from '../../pipeline/deploy-plan/types.js';
 import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/engine.js';
@@ -22,6 +22,48 @@ import {
 
 type AppCtx = ToolContext['appCtx'];
 type ServiceRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getService']>>>;
+
+function parseEnvVarsInput(
+  raw: unknown,
+  fieldName = 'env_vars',
+): Record<string, string> | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+
+  let parsed: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      throw new OpenLanderError(
+        `${fieldName} must be a JSON object string or an object with string values.`,
+        'BAD_REQUEST',
+        400,
+        { cause: error instanceof Error ? error.message : String(error) },
+      );
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new OpenLanderError(
+      `${fieldName} must be an object with string values.`,
+      'BAD_REQUEST',
+      400,
+    );
+  }
+
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value !== 'string') {
+      throw new OpenLanderError(`${fieldName}.${key} must be a string.`, 'BAD_REQUEST', 400, {
+        key,
+      });
+    }
+    result[key] = value;
+  }
+  return result;
+}
 
 function isManagedService(kind: string): boolean {
   return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
@@ -81,8 +123,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     inputSchema: createDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
-      const envVarsRaw = (args['env_vars'] as string | undefined) ?? undefined;
-      const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
+      const envVars = parseEnvVarsInput(args['env_vars']);
 
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
@@ -277,8 +318,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     execute: async (args, context) => {
       const appCtx = context.appCtx;
       const toolSessionId = `mcp-deploy-${nanoid(12)}`;
-      const envVarsRaw = (args['env_vars'] as string | undefined) ?? undefined;
-      const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
+      const envVars = parseEnvVarsInput(args['env_vars']);
       const wait = (args['wait'] as boolean | undefined) ?? true;
       const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
       const expose = (args['expose'] as boolean | undefined) ?? false;
