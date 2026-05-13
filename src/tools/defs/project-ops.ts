@@ -65,6 +65,9 @@ export const projectOpsToolDefs: ToolDef[] = [
             const port = deployable?.assigned_port ?? project.assigned_port;
             const containerId = deployable?.container_id ?? project.container_id;
             const publicUrl = deployable?.public_url ?? project.public_url;
+            const deployableContainerName =
+              deployable?.container_name ??
+              (containerId ? projectContainerName(project.name) : null);
             const deployableService = deployable
               ? {
                   service_id: deployable.id,
@@ -73,7 +76,7 @@ export const projectOpsToolDefs: ToolDef[] = [
                   source: deployable.source,
                   status: deployable.status,
                   port: deployable.assigned_port,
-                  container_name: deployable.container_name,
+                  container_name: deployableContainerName,
                 }
               : null;
             return {

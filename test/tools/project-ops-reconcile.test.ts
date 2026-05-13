@@ -41,7 +41,7 @@ describe('project-ops list_projects reconciliation', () => {
       status: 'running',
       assigned_port: 10001,
       container_id: 'container-1',
-      container_name: 'ol-demo-app',
+      container_name: null,
       public_url: null,
     };
 
@@ -68,6 +68,7 @@ describe('project-ops list_projects reconciliation', () => {
             service_name: 'demo-web',
             kind: 'git',
             source: 'git',
+            container_name: 'ol-demo-app',
           },
         },
       ],

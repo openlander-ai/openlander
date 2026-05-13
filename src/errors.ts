@@ -211,6 +211,22 @@ export function isDockerNotFoundError(error: unknown): boolean {
   return /not found|No such (container|network|volume|image)/i.test(msg);
 }
 
+/**
+ * Check if a raw dockerode error is the daemon's container-name conflict.
+ * Keep this string parsing at the Docker boundary so MCP never exposes the
+ * daemon's full conflict message (which includes the conflicting container id).
+ */
+export function isDockerContainerNameConflictError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const status =
+    typeof error === 'object' && error !== null && 'statusCode' in error
+      ? Number((error as { statusCode?: unknown }).statusCode)
+      : undefined;
+  const looksLikeNameConflict =
+    /conflict/i.test(message) && /container name/i.test(message) && /already in use/i.test(message);
+  return looksLikeNameConflict && (status === undefined || status === 409);
+}
+
 // --- Port errors ---
 
 export class PortExhaustedError extends OpenLanderError {
@@ -801,6 +817,36 @@ export class ManagedServicePersistenceCleanedError extends OpenLanderError {
       },
     );
     this.name = 'ManagedServicePersistenceCleanedError';
+  }
+}
+
+/** Managed service creation failed because the target Docker container name already exists. */
+export class ManagedServiceNameConflictError extends OpenLanderError {
+  constructor(
+    serviceName: string,
+    details: {
+      containerName: string;
+      volumeName: string;
+      volumeRolledBack: boolean;
+    },
+  ) {
+    super(
+      `Managed service "${serviceName}" cannot be created because container "${details.containerName}" already exists.`,
+      'MANAGED_SERVICE_NAME_CONFLICT',
+      409,
+      {
+        serviceName,
+        containerName: details.containerName,
+        volumeName: details.volumeName,
+        volumeRolledBack: details.volumeRolledBack,
+        retrySafe: false,
+        _agent_guidance: {
+          message:
+            'Choose a different service name, or remove/rename the existing Docker container from the dashboard before retrying create_service.',
+        },
+      },
+    );
+    this.name = 'ManagedServiceNameConflictError';
   }
 }
 
