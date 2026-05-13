@@ -25,6 +25,7 @@ export interface AvailableService {
   type: DetectedServiceType;
   name: string;
   id: string;
+  connectVia?: string;
 }
 
 /**
@@ -33,6 +34,7 @@ export interface AvailableService {
 export interface MissingService {
   type: DetectedServiceType;
   suggestion: string;
+  connectVia?: string;
 }
 
 /**
@@ -69,19 +71,16 @@ function kindToDetectedType(kind: string | null | undefined): DetectedServiceTyp
 /**
  * Dependency patterns to detect service needs from package.json.
  * Maps package names to service types.
- * Exact list from plan: pg, mysql2, ioredis, redis, mongoose, mongodb, @prisma/client, typeorm, drizzle-orm, sequelize
+ * Exact database drivers are safe to infer. Generic ORMs (Prisma, TypeORM,
+ * Sequelize, Drizzle, SQLAlchemy) are intentionally excluded because their
+ * backing database is configured elsewhere.
  */
 const DEPENDENCY_PATTERNS: Record<string, DetectedServiceType> = {
-  // PostgreSQL: pg, @prisma/client, drizzle-orm, sequelize, typeorm
+  // PostgreSQL drivers.
   pg: 'postgresql',
-  '@prisma/client': 'postgresql',
-  'drizzle-orm': 'postgresql',
-  sequelize: 'postgresql',
-  typeorm: 'postgresql',
   asyncpg: 'postgresql',
   psycopg2: 'postgresql',
   psycopg: 'postgresql',
-  sqlalchemy: 'postgresql',
 
   mysql2: 'mysql',
   asyncmy: 'mysql',
@@ -149,6 +148,76 @@ const ENV_VAR_PATTERNS: Record<string, DetectedServiceType> = {
   RABBITMQ_DEFAULT_USER: 'rabbitmq',
   RABBITMQ_DEFAULT_PASS: 'rabbitmq',
 };
+
+function inferServiceTypeFromUrl(value: string): DetectedServiceType | null {
+  const trimmed = value.trim().replace(/^['"]|['"]$/g, '');
+  if (!trimmed || /^\$\{?[A-Z0-9_]+\}?$/i.test(trimmed)) {
+    return null;
+  }
+
+  const scheme = trimmed.match(/^([a-z][a-z0-9+.-]*):\/\//i)?.[1]?.toLowerCase();
+  switch (scheme) {
+    case 'postgres':
+    case 'postgresql':
+      return 'postgresql';
+    case 'mysql':
+    case 'mysql2':
+    case 'mariadb':
+      return 'mysql';
+    case 'redis':
+    case 'rediss':
+      return 'redis';
+    case 'mongodb':
+    case 'mongo':
+      return 'mongodb';
+    case 'amqp':
+    case 'amqps':
+      return 'rabbitmq';
+    default:
+      return null;
+  }
+}
+
+function inferServiceTypeFromPrismaProvider(provider: string): DetectedServiceType | null {
+  switch (provider.trim().toLowerCase()) {
+    case 'postgresql':
+      return 'postgresql';
+    case 'mysql':
+      return 'mysql';
+    case 'mongodb':
+      return 'mongodb';
+    default:
+      return null;
+  }
+}
+
+function inferEnvServiceType(key: string, rawValue: string): DetectedServiceType | null {
+  if (key === 'DATABASE_URL') {
+    return inferServiceTypeFromUrl(rawValue);
+  }
+  return ENV_VAR_PATTERNS[key] ?? null;
+}
+
+function connectViaForDetection(
+  type: DetectedServiceType,
+  detectedFrom: string,
+): string | undefined {
+  if (/^[A-Z_][A-Z0-9_]*$/.test(detectedFrom) && ENV_VAR_PATTERNS[detectedFrom]) {
+    return detectedFrom;
+  }
+
+  switch (type) {
+    case 'postgresql':
+    case 'mysql':
+      return 'DATABASE_URL';
+    case 'redis':
+      return 'REDIS_URL';
+    case 'mongodb':
+      return 'MONGODB_URI';
+    case 'rabbitmq':
+      return 'RABBITMQ_URL';
+  }
+}
 
 function findDepFiles(dir: string, filename: string, maxDepth = 3): string[] {
   const results: string[] = [];
@@ -276,6 +345,24 @@ export function analyzeInfrastructure(
     }
   }
 
+  const prismaSchemaPaths = findDepFiles(repoPath, 'schema.prisma');
+  for (const prismaSchemaPath of prismaSchemaPaths) {
+    try {
+      const prismaContent = readFileSync(prismaSchemaPath, 'utf8');
+      const providerMatches = prismaContent.matchAll(/\bprovider\s*=\s*["']([^"']+)["']/g);
+      for (const match of providerMatches) {
+        const provider = match[1];
+        if (!provider) continue;
+        const serviceType = inferServiceTypeFromPrismaProvider(provider);
+        if (serviceType && !detectedTypes.has(serviceType)) {
+          detectedTypes.set(serviceType, `schema.prisma:${provider}`);
+        }
+      }
+    } catch (err) {
+      log.debug({ err, prismaSchemaPath }, 'Could not analyze schema.prisma');
+    }
+  }
+
   // Analyze .env.example and .env.sample files (per plan scope)
   const envFileNames = ['.env.example', '.env.sample'];
   for (const envFileName of envFileNames) {
@@ -283,14 +370,16 @@ export function analyzeInfrastructure(
       const envPath = join(repoPath, envFileName);
       const envContent = readFileSync(envPath, 'utf8');
 
-      // Extract env var keys (simple pattern: KEY=value or KEY)
-      const envVarPattern = /^([A-Z_][A-Z0-9_]*)\s*=/gm;
+      // Extract env var assignments. DATABASE_URL is intentionally inferred
+      // from its scheme; an empty placeholder does not imply PostgreSQL.
+      const envVarPattern = /^([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/gm;
       let match: RegExpExecArray | null;
       while ((match = envVarPattern.exec(envContent)) !== null) {
         const envKey = match[1];
         if (!envKey) continue;
 
-        const serviceType = ENV_VAR_PATTERNS[envKey];
+        const envValue = match[2] ?? '';
+        const serviceType = inferEnvServiceType(envKey, envValue);
         if (serviceType && !detectedTypes.has(serviceType)) {
           detectedTypes.set(serviceType, envKey);
         }
@@ -326,6 +415,10 @@ export function analyzeInfrastructure(
       type: kindToDetectedType(s.kind) as DetectedServiceType,
       name: s.name,
       id: s.id,
+      connectVia: connectViaForDetection(
+        kindToDetectedType(s.kind) as DetectedServiceType,
+        detectedTypes.get(kindToDetectedType(s.kind) as DetectedServiceType) ?? '',
+      ),
     }));
 
   const missing: MissingService[] = Array.from(detectedTypes.keys())
@@ -333,6 +426,7 @@ export function analyzeInfrastructure(
     .map((type) => ({
       type,
       suggestion: `Create a ${type} service to satisfy the detected dependency`,
+      connectVia: connectViaForDetection(type, detectedTypes.get(type) ?? ''),
     }));
 
   return {

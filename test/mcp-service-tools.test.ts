@@ -13,6 +13,23 @@ const mockCloneRepo = vi.fn();
 const mockAnalyzeInfrastructure = vi.fn();
 const mockWebSearch = vi.fn();
 
+function legacyTypeToKind(legacy: string | undefined): ServiceRow['kind'] {
+  switch (legacy) {
+    case 'postgresql':
+      return 'postgres';
+    case 'mongodb':
+      return 'mongo';
+    case 'mysql':
+      return 'mysql';
+    case 'redis':
+      return 'redis';
+    case 'minio':
+      return 'minio';
+    default:
+      return 'image';
+  }
+}
+
 function createServiceRow(partial: Partial<ServiceRow>): ServiceRow {
   const legacyType = partial.type ?? 'postgresql';
   const legacyImage = partial.image ?? 'postgres:16-alpine';
@@ -31,7 +48,7 @@ function createServiceRow(partial: Partial<ServiceRow>): ServiceRow {
     created_at: partial.created_at ?? '2026-01-01T00:00:00.000Z',
     updated_at: partial.updated_at ?? '2026-01-01T00:00:00.000Z',
     // Canonical columns — PR 2.5 migration
-    kind: partial.kind ?? (legacyType as ServiceRow['kind']),
+    kind: partial.kind ?? legacyTypeToKind(legacyType),
     image_url: partial.image_url ?? legacyImage,
     assigned_port: partial.assigned_port ?? legacyPort,
   };
@@ -66,8 +83,15 @@ function createMockContext(
       },
     },
     serviceManager,
+    db: {
+      getService: vi.fn(async (id: string) => services.find((service) => service.id === id)),
+    },
     docker: {
       listManagedContainers: vi.fn(async () => containers),
+      inspectContainer: vi.fn(async () => ({
+        State: {},
+      })),
+      getLogs: vi.fn(async () => ''),
     },
   } as unknown as AppContext;
 
@@ -123,14 +147,12 @@ describe('MCP service tools (Task 8)', () => {
     }
   });
 
-  it('enforces service_name contracts for service lookup tools', () => {
+  it('enforces managed service target contracts for service lookup tools', () => {
     const { ctx } = createMockContext();
     const requiredServiceNameTools = [
-      'get_service_status',
       'start_service',
       'stop_service',
       'remove_service',
-      'get_service_credentials',
       'create_service_user',
     ];
 
@@ -138,6 +160,14 @@ describe('MCP service tools (Task 8)', () => {
       const tool = getTool(ctx, name);
       expect(tool.inputSchema.safeParse({ service_id: 'svc-1' }).success).toBe(false);
     }
+
+    expect(
+      getTool(ctx, 'get_service_status').inputSchema.safeParse({ service_id: 'svc-1' }).success,
+    ).toBe(true);
+    expect(
+      getTool(ctx, 'get_service_credentials').inputSchema.safeParse({ service_id: 'svc-1' })
+        .success,
+    ).toBe(true);
 
     expect(
       getTool(ctx, 'create_service_user').inputSchema.safeParse({
@@ -330,6 +360,14 @@ describe('MCP service tools (Task 8)', () => {
     const services = [
       createServiceRow({ id: 'svc-pg', name: 'shared-pg' }),
       createServiceRow({ id: 'svc-redis', name: 'shared-redis', type: 'redis', port: 6379 }),
+      createServiceRow({
+        id: 'app__svc',
+        name: 'web',
+        type: null,
+        kind: 'git',
+        port: null,
+        assigned_port: 10001,
+      }),
     ];
     const { ctx, serviceManager } = createMockContext(services);
     const tool = getTool(ctx, 'list_services');
@@ -425,6 +463,12 @@ describe('MCP service tools (Task 8)', () => {
         ],
       }),
     );
+    expect(await statusTool.execute({ service_id: 'svc-pg' }, { target: 'mcp' })).toEqual(
+      expect.objectContaining({
+        id: 'svc-pg',
+        name: 'shared-pg',
+      }),
+    );
     expect(await startTool.execute({ service_name: 'shared-pg' }, { target: 'mcp' })).toEqual({
       status: 'started',
       service: 'shared-pg',
@@ -463,11 +507,46 @@ describe('MCP service tools (Task 8)', () => {
         externalConnectionStrings: [],
       },
     );
+    expect(await credentialsTool.execute({ service_id: 'svc-pg' }, { target: 'mcp' })).toEqual(
+      expect.objectContaining({
+        service: 'shared-pg',
+        type: 'postgresql',
+      }),
+    );
 
     for (const tool of [statusTool, startTool, stopTool, removeTool, credentialsTool]) {
       await expect(
         tool.execute({ service_name: 'missing-service' }, { target: 'mcp' }),
       ).rejects.toThrow('Service not found: missing-service');
+    }
+  });
+
+  it('managed service status and credentials reject deployable app services with guidance', async () => {
+    const services = [
+      createServiceRow({
+        id: 'app__svc',
+        name: 'web',
+        type: null,
+        kind: 'git',
+        port: null,
+        assigned_port: 10001,
+      }),
+    ];
+    const { ctx } = createMockContext(services);
+
+    for (const toolName of ['get_service_status', 'get_service_credentials']) {
+      const result = await getTool(ctx, toolName).execute(
+        { service_id: 'app__svc' },
+        { target: 'mcp' },
+      );
+      expect(result).toMatchObject({
+        status: 'blocked',
+        code: 'SERVICE_KIND_MISMATCH',
+        service: { id: 'app__svc', kind: 'git' },
+        _agent_guidance: {
+          next_steps: expect.arrayContaining([expect.stringContaining('diagnose_service')]),
+        },
+      });
     }
   });
 

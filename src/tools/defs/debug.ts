@@ -11,15 +11,24 @@ export const debugToolDefs: ToolDef[] = [
     mcpDescription: 'Get raw Docker build output for debugging build failures.',
     inputSchema: getBuildLogSchema,
     execute: async (args, { appCtx }) => {
-      const projectName = args['project_name'] as string;
-      const project = await appCtx.db.getProjectByName(projectName);
-      if (!project) throw new ProjectNotFoundError(projectName);
-
+      const deployId = args['deploy_id'] as string | undefined;
+      const projectId = args['project_id'] as string | undefined;
+      const projectName = args['project_name'] as string | undefined;
       const index = (args['deploy_index'] as number | undefined) ?? 0;
-      const logs = await appCtx.db.getDeployLogs(project.id, index + 1);
-      const log = logs[index];
+      const project = deployId
+        ? undefined
+        : projectId
+          ? await appCtx.db.getProject(projectId)
+          : await appCtx.db.getProjectByName(projectName ?? '');
+      if (!deployId && !project) throw new ProjectNotFoundError(projectId ?? projectName ?? '');
+
+      const log = deployId
+        ? await appCtx.db.getDeployLog(deployId)
+        : project
+          ? (await appCtx.db.getDeployLogs(project.id, index + 1))[index]
+          : undefined;
       if (!log) {
-        const activeJob = appCtx.jobManager.getStatus(project.id);
+        const activeJob = project ? appCtx.jobManager.getStatus(project.id) : undefined;
         if (activeJob && activeJob.phase !== 'done' && activeJob.phase !== 'failed') {
           throw new Error(
             `DEPLOY_IN_PROGRESS: Deploy is currently ${activeJob.phase}. Logs will be available after completion.`,
@@ -36,6 +45,7 @@ export const debugToolDefs: ToolDef[] = [
       }
 
       return Promise.resolve({
+        id: log.id,
         status: log.status,
         build_log: buildLog,
         duration_ms: log.duration_ms,

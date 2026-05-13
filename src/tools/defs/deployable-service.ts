@@ -30,7 +30,7 @@ const serviceTargetFields = {
     .string()
     .min(1)
     .optional()
-    .describe('Optional project group name/id to scope service_name lookups'),
+    .describe('Optional project group name to scope service_name lookups'),
 } as const;
 
 const serviceTargetSchema = z

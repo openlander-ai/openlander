@@ -134,8 +134,11 @@ Get deployment history.
 
 | Parameter      | Type   | Required | Description               |
 | -------------- | ------ | -------- | ------------------------- |
-| `project_name` | string | Yes      | Project name              |
+| `project_id`   | string | No       | Project group id          |
+| `project_name` | string | No       | Project group name        |
 | `limit`        | number | No       | Max entries (default: 10) |
+
+Provide either `project_id` or `project_name`.
 
 ### `rollback_service`
 
@@ -329,11 +332,20 @@ Exports all service env vars as raw `.env` text and records an audit event witho
 
 MCP `list_services` intentionally omits credential values. Use `get_service_credentials` for connection strings, users, passwords, and database names.
 
-### `get_service_status` / `start_service` / `stop_service`
+### `get_service_status`
 
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `service_name` | string | Yes      | Service name |
+| Parameter      | Type   | Required | Description                         |
+| -------------- | ------ | -------- | ----------------------------------- |
+| `service_id`   | string | No       | Managed/infrastructure service id   |
+| `service_name` | string | No       | Managed/infrastructure service name |
+
+Provide either `service_id` or `service_name`. Deployable app/worker services are intentionally rejected; use `openlander_service` or `diagnose_service` for those.
+
+### `start_service` / `stop_service`
+
+| Parameter      | Type   | Required | Description                         |
+| -------------- | ------ | -------- | ----------------------------------- |
+| `service_name` | string | Yes      | Managed/infrastructure service name |
 
 `remove_service` is human-only in OpenLander 0.1 and returns
 `OPERATION_REQUIRES_HUMAN_UI` from MCP. Use the service page delete action for
@@ -341,9 +353,12 @@ typed-confirm deletion with the managed-volume opt-in checkbox.
 
 ### `get_service_credentials`
 
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `service_name` | string | Yes      | Service name |
+| Parameter      | Type   | Required | Description                         |
+| -------------- | ------ | -------- | ----------------------------------- |
+| `service_id`   | string | No       | Managed/infrastructure service id   |
+| `service_name` | string | No       | Managed/infrastructure service name |
+
+Provide either `service_id` or `service_name`.
 
 ### `get_service_logs`
 
@@ -425,6 +440,8 @@ No parameters.
 | --------- | ------ | -------- | ------------ |
 | `query`   | string | Yes      | Search query |
 
+GitHub repository discovery returns safe HTTPS clone URLs only. Private-repo credentials are injected internally at clone time and are never included in MCP responses.
+
 ---
 
 ## Monitoring & Logs
@@ -435,10 +452,11 @@ No parameters.
 | -------------- | ------ | -------- | ----------------------------------------------------- |
 | `service_id`   | string | No       | Deployable service id; preferred from `list_projects` |
 | `service_name` | string | No       | Deployable service name                               |
+| `project_id`   | string | No       | Convenience target for single-service groups          |
 | `project_name` | string | No       | Convenience target for single-service groups          |
 | `lines`        | number | No       | Number of lines                                       |
 
-Provide one of `service_id`, `service_name`, or `project_name`. Prefer
+Provide one of `service_id`, `service_name`, `project_id`, or `project_name`. Prefer
 `service_id` when chaining from `list_projects`.
 
 ### `get_system_stats`
@@ -451,6 +469,7 @@ Host CPU, memory, disk usage. No parameters.
 | -------------- | ------ | -------- | -------------------------------------------- |
 | `service_id`   | string | No       | Deployable service id; preferred             |
 | `service_name` | string | No       | Deployable service name                      |
+| `project_id`   | string | No       | Convenience target for single-service groups |
 | `project_name` | string | No       | Convenience target for single-service groups |
 
 ### `get_alerts` / `dismiss_alert`
@@ -467,8 +486,12 @@ Host CPU, memory, disk usage. No parameters.
 
 | Parameter      | Type   | Required | Description               |
 | -------------- | ------ | -------- | ------------------------- |
-| `project_name` | string | Yes      | Project name              |
+| `deploy_id`    | string | No       | Deploy log id             |
+| `project_id`   | string | No       | Project group id          |
+| `project_name` | string | No       | Project group name        |
 | `deploy_index` | number | No       | Deploy index (0 = latest) |
+
+Provide `deploy_id` by itself when known, or provide `project_id`/`project_name` with optional `deploy_index`.
 
 OpenLander 0.1 does not expose built-in AI diagnosis. External MCP agents should
 read `get_build_log` / `get_logs`, inspect the failure in their own context, then

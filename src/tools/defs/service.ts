@@ -5,8 +5,9 @@ import {
   isDockerNotFoundError,
   ManagedServicePersistenceCleanedError,
   ServiceNotFoundError,
+  ServiceOperationUnsupportedError,
 } from '../../errors.js';
-import { kindToLegacyType } from '../../db/repos/service.repo.js';
+import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import type { ToolDef } from './types.js';
 import {
   backupServiceSchema,
@@ -21,6 +22,7 @@ import {
   listDatabasesSchema,
   listServiceBackupsSchema,
   listServicesSchema,
+  managedServiceTargetSchema,
   removeServiceSchema,
   restoreServiceSchema,
   serviceNameSchema,
@@ -81,7 +83,48 @@ async function getServiceByName(
   if (!service) {
     throw new ServiceNotFoundError(serviceName);
   }
+  if (!(MANAGED_SERVICE_KINDS as readonly string[]).includes(service.kind)) {
+    throw new ServiceOperationUnsupportedError('managed service operation', service.kind);
+  }
   return service;
+}
+
+async function resolveServiceByIdOrName(
+  appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
+  args: Record<string, unknown>,
+) {
+  const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
+  const serviceName = typeof args['service_name'] === 'string' ? args['service_name'].trim() : '';
+  if (serviceId) {
+    const service = await appCtx.db.getService(serviceId);
+    if (!service) throw new ServiceNotFoundError(serviceId);
+    return service;
+  }
+  const services = await appCtx.serviceManager.list();
+  const service = services.find((item) => item.name === serviceName);
+  if (!service) throw new ServiceNotFoundError(serviceName);
+  return service;
+}
+
+function isManagedServiceKind(kind: string): boolean {
+  return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
+}
+
+function serviceKindMismatchResponse(service: { id: string; name: string; kind: string }) {
+  return {
+    status: 'blocked',
+    error: 'SERVICE_KIND_MISMATCH',
+    code: 'SERVICE_KIND_MISMATCH',
+    service: { id: service.id, name: service.name, kind: service.kind },
+    message:
+      'This tool manages infrastructure services only. Use openlander_service for deployable app/worker actions.',
+    _agent_guidance: {
+      next_steps: [
+        `Use openlander_monitor.diagnose_service with service_id="${service.id}" for deployable service diagnostics.`,
+        `Use openlander_service actions with service_id="${service.id}" for deployable service lifecycle/config changes.`,
+      ],
+    },
+  };
 }
 
 export const serviceToolDefs: ToolDef[] = [
@@ -197,9 +240,10 @@ export const serviceToolDefs: ToolDef[] = [
     inputSchema: listServicesSchema,
     execute: async (_args, { appCtx, target }) => {
       const includeOrphans = (_args['include_orphans'] as boolean | undefined) ?? false;
-      const services = await appCtx.serviceManager.list();
+      const allServices = await appCtx.serviceManager.list();
+      const services = allServices.filter((service) => isManagedServiceKind(service.kind));
       const knownContainerRefs = new Set(
-        services.flatMap((service) => [
+        allServices.flatMap((service) => [
           service.container_id ?? '',
           service.container_name ?? '',
           service.name,
@@ -421,11 +465,14 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'get_service_status',
     riskLevel: 'low',
     description:
-      'Get the current status of a specific service. Returns { id, name, status, health, type, port, ... } where status is running/stopped and health reflects container health (healthy/unhealthy/unknown/degraded). healthDetail may be included when crash-like log patterns are detected. Errors: SERVICE_NOT_FOUND if the service name is invalid.',
+      'Get the current status of a specific managed/infrastructure service. Returns { id, name, status, health, type, port, ... } where status is running/stopped and health reflects container health (healthy/unhealthy/unknown/degraded). healthDetail may be included when crash-like log patterns are detected. Errors: SERVICE_NOT_FOUND if the service target is invalid.',
     mcpDescription: 'Get service status, health, container state, and metadata.',
-    inputSchema: serviceNameSchema,
+    inputSchema: managedServiceTargetSchema,
     execute: async (args, { appCtx }) => {
-      const service = await getServiceByName(appCtx, args['service_name'] as string);
+      const service = await resolveServiceByIdOrName(appCtx, args);
+      if (!isManagedServiceKind(service.kind)) {
+        return serviceKindMismatchResponse(service);
+      }
       let health: 'healthy' | 'unhealthy' | 'unknown' | 'degraded' = 'unknown';
       let healthDetail: string | undefined;
 
@@ -689,10 +736,13 @@ export const serviceToolDefs: ToolDef[] = [
       'Get connection credentials for a service (connection string, host, port, user, password). Use when a project needs to connect to a service. Returns { service, type, credentials, connectionString, host, port, user, password, database, externalAccess, externalConnectionStrings }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription:
       'Get service connection credentials. Host is Docker internal DNS (e.g., ol-svc-pg), not localhost. Use for DATABASE_URL, REDIS_URL, etc. in projects.',
-    inputSchema: serviceNameSchema,
+    inputSchema: managedServiceTargetSchema,
     execute: async (args, { appCtx }) => {
-      const serviceName = args['service_name'] as string;
-      const service = await getServiceByName(appCtx, serviceName);
+      const service = await resolveServiceByIdOrName(appCtx, args);
+      if (!isManagedServiceKind(service.kind)) {
+        return serviceKindMismatchResponse(service);
+      }
+      const serviceName = service.name;
       const credentials = parseServiceCredentials(service.credentials);
       const internalHost = (credentials?.['host'] as string | undefined) || null;
       const connectionString = (credentials?.['connectionString'] as string | undefined) || null;

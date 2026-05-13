@@ -1,4 +1,6 @@
 import { join } from 'node:path';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 import { describe, expect, it } from 'vitest';
 
@@ -42,7 +44,7 @@ function service(partial: Partial<ServiceRow> & { type?: string }): ServiceRow {
     assigned_port: partial.assigned_port ?? null,
     container_id: partial.container_id ?? 'container-1',
     container_name: partial.container_name ?? 'ol-svc-shared',
-    container_port: partial.container_port ?? (partial.port ?? 5432),
+    container_port: partial.container_port ?? partial.port ?? 5432,
     image_tag: partial.image_tag ?? null,
     previous_image_tag: partial.previous_image_tag ?? null,
     public_url: partial.public_url ?? null,
@@ -71,6 +73,81 @@ function service(partial: Partial<ServiceRow> & { type?: string }): ServiceRow {
 }
 
 describe('analyzeInfrastructure', () => {
+  it('does not infer PostgreSQL from Prisma package alone', () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'openlander-infra-prisma-only-'));
+    try {
+      writeFileSync(
+        join(repoPath, 'package.json'),
+        JSON.stringify({ dependencies: { '@prisma/client': '^6.0.0' } }),
+      );
+
+      const result = analyzeInfrastructure(repoPath, []);
+
+      expect(result.needs).toEqual([]);
+      expect(result.missing).toEqual([]);
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ['mysql', 'mysql'],
+    ['postgresql', 'postgresql'],
+    ['mongodb', 'mongodb'],
+  ] as const)('detects Prisma datasource provider %s', (provider, expectedType) => {
+    const repoPath = mkdtempSync(join(tmpdir(), `openlander-infra-prisma-${provider}-`));
+    try {
+      mkdirSync(join(repoPath, 'prisma'));
+      writeFileSync(
+        join(repoPath, 'prisma', 'schema.prisma'),
+        `datasource db {\n  provider = "${provider}"\n  url = env("DATABASE_URL")\n}\n`,
+      );
+
+      const result = analyzeInfrastructure(repoPath, []);
+
+      expect(result.needs).toEqual([
+        { type: expectedType, detectedFrom: `schema.prisma:${provider}` },
+      ]);
+      expect(result.missing[0]).toMatchObject({ type: expectedType });
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it('does not create a managed service need for Prisma sqlite', () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'openlander-infra-prisma-sqlite-'));
+    try {
+      writeFileSync(
+        join(repoPath, 'schema.prisma'),
+        'datasource db {\n  provider = "sqlite"\n  url = env("DATABASE_URL")\n}\n',
+      );
+
+      const result = analyzeInfrastructure(repoPath, []);
+
+      expect(result.needs).toEqual([]);
+      expect(result.missing).toEqual([]);
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it('infers DATABASE_URL service type from URL scheme and ignores empty placeholders', () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'openlander-infra-env-url-'));
+    try {
+      writeFileSync(join(repoPath, '.env.example'), 'DATABASE_URL=mysql://db/app\nEMPTY_URL=\n');
+
+      const result = analyzeInfrastructure(repoPath, []);
+
+      expect(result.needs).toEqual([{ type: 'mysql', detectedFrom: 'DATABASE_URL' }]);
+      expect(result.missing[0]).toMatchObject({
+        type: 'mysql',
+        connectVia: 'DATABASE_URL',
+      });
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
+
   it('detects dependency and env-based needs with detectedFrom values', () => {
     const fixturePath = join(fixturesRoot, 'node-multi-needs');
 
@@ -97,15 +174,15 @@ describe('analyzeInfrastructure', () => {
 
     expect(result.available).toEqual(
       expect.arrayContaining([
-        { id: 'svc-pg', name: 'shared-pg', type: 'postgresql' },
-        { id: 'svc-redis', name: 'shared-redis', type: 'redis' },
+        expect.objectContaining({ id: 'svc-pg', name: 'shared-pg', type: 'postgresql' }),
+        expect.objectContaining({ id: 'svc-redis', name: 'shared-redis', type: 'redis' }),
       ]),
     );
     expect(result.missing).toEqual([
-      {
+      expect.objectContaining({
         type: 'mysql',
         suggestion: 'Create a mysql service to satisfy the detected dependency',
-      },
+      }),
     ]);
   });
 
@@ -117,10 +194,10 @@ describe('analyzeInfrastructure', () => {
     expect(result.needs).toEqual([{ type: 'mongodb', detectedFrom: 'MONGODB_URI' }]);
     expect(result.available).toEqual([]);
     expect(result.missing).toEqual([
-      {
+      expect.objectContaining({
         type: 'mongodb',
         suggestion: 'Create a mongodb service to satisfy the detected dependency',
-      },
+      }),
     ]);
   });
 
@@ -132,10 +209,10 @@ describe('analyzeInfrastructure', () => {
     expect(result.needs.map((need) => need.type)).toEqual(['postgresql']);
     expect(result.available).toEqual([]);
     expect(result.missing).toEqual([
-      {
+      expect.objectContaining({
         type: 'postgresql',
         suggestion: 'Create a postgresql service to satisfy the detected dependency',
-      },
+      }),
     ]);
   });
 
@@ -150,14 +227,14 @@ describe('analyzeInfrastructure', () => {
     expect(result.available).toEqual([]);
     expect(result.missing).toEqual(
       expect.arrayContaining([
-        {
+        expect.objectContaining({
           type: 'postgresql',
           suggestion: 'Create a postgresql service to satisfy the detected dependency',
-        },
-        {
+        }),
+        expect.objectContaining({
           type: 'redis',
           suggestion: 'Create a redis service to satisfy the detected dependency',
-        },
+        }),
       ]),
     );
   });

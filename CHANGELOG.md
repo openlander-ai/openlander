@@ -22,6 +22,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Made `deploy_app` report `readiness` and return `status: "unhealthy"` when a
   running container's Docker healthcheck is failing instead of treating it as a
   successful deploy.
+- Stopped GitHub repo discovery MCP responses from returning credentialed clone
+  URLs; private repo credentials are now kept internal to clone time.
+- Reduced infrastructure analyzer false positives by no longer treating generic
+  ORM packages as PostgreSQL, and by reading Prisma datasource providers and
+  `DATABASE_URL` schemes instead.
+- Removed `postgresql://localhost` deploy-plan placeholders; planned or reused
+  managed services now satisfy required env vars and inject real connection
+  strings at execution time.
+- Normalized MCP targeting for logs, stats, diagnostics, deploy history, build
+  logs, host probes, action status, and managed-service status/credentials.
+- Kept deployable app/worker services out of managed-service MCP responses and
+  return explicit guidance when a managed-service action receives one.
+- Increased Docker disk-usage timeout to avoid false cleanup preflight failures
+  on slower hosts.
 
 ## [0.1.1-rc.6] — 2026-05-13
 

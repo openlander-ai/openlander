@@ -37,6 +37,8 @@ export interface PlanService {
   action: 'create' | 'reuse';
   /** Optional service name */
   name?: string;
+  /** Existing service id when action is reuse */
+  service_id?: string;
   /** Environment variable or connection string name */
   connect_via: string;
 }

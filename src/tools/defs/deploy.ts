@@ -513,16 +513,20 @@ export const deployToolDefs: ToolDef[] = [
     inputSchema: deployHistorySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
-      const projectName = args['project_name'] as string;
+      const projectId = args['project_id'] as string | undefined;
+      const projectName = args['project_name'] as string | undefined;
       const limit = (args['limit'] as number | undefined) ?? 10;
 
-      const project = await appCtx.db.getProjectByName(projectName);
-      if (!project) throw new ProjectNotFoundError(projectName);
+      const project = projectId
+        ? await appCtx.db.getProject(projectId)
+        : await appCtx.db.getProjectByName(projectName ?? '');
+      if (!project) throw new ProjectNotFoundError(projectId ?? projectName ?? '');
 
       const logs = await appCtx.db.getDeployLogs(project.id, limit);
 
       return Promise.resolve({
-        project: projectName,
+        project: project.name,
+        project_id: project.id,
         count: logs.length,
         history: logs.map((log) => ({
           id: log.id,

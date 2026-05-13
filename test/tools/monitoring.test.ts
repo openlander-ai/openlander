@@ -76,6 +76,26 @@ describe('probe_host tool', () => {
       }
     });
 
+    it('accepts host as an alias for target', async () => {
+      const ctx = createMockContext();
+      const tool = getProbeHostTool(ctx);
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn(async () => new Response('OK', { status: 200 }));
+
+      try {
+        const result = (await tool.execute(
+          { host: 'http://localhost:3000', path: '/health' },
+          { target: 'mcp' },
+        )) as Record<string, unknown>;
+
+        expect(result.reachable).toBe(true);
+        expect(result.target_resolved).toContain('localhost');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
     it('returns not reachable for 500 status', async () => {
       const ctx = createMockContext();
       const tool = getProbeHostTool(ctx);
@@ -431,8 +451,7 @@ describe('diagnose_service tool', () => {
             trigger_detail: null,
             commit_sha: 'abc123',
             commit_message: 'test',
-            build_log:
-              `Collecting page data\nDATABASE_URL=postgresql://postgres:secret@ol-db:5432/app\nAuthorization: Bearer ${jwtFixture}\nAuthorization: Basic ${basicAuthFixture}\nplain ${githubPatFixture}\nAWS creds ${awsAccessKeyFixture} ${awsSessionKeyFixture}\nGoogle ${googleApiKeyFixture}\nOpenAI ${openaiTokenFixture}\nAnthropic ${anthropicTokenFixture}\nSendGrid ${sendgridTokenFixture}\nError: DATABASE_URL is not set`,
+            build_log: `Collecting page data\nDATABASE_URL=postgresql://postgres:secret@ol-db:5432/app\nAuthorization: Bearer ${jwtFixture}\nAuthorization: Basic ${basicAuthFixture}\nplain ${githubPatFixture}\nAWS creds ${awsAccessKeyFixture} ${awsSessionKeyFixture}\nGoogle ${googleApiKeyFixture}\nOpenAI ${openaiTokenFixture}\nAnthropic ${anthropicTokenFixture}\nSendGrid ${sendgridTokenFixture}\nError: DATABASE_URL is not set`,
             runtime_log: null,
             duration_ms: 12000,
             created_at: '2026-05-12T00:01:00.000Z',
@@ -453,8 +472,7 @@ describe('diagnose_service tool', () => {
             Running: false,
             Status: 'exited',
             ExitCode: 1,
-            Error:
-              `pull failed https://robot:secret@registry.example.com/image with ${ghpFixture}, ${stripeSecretFixture}, and ${stripeRestrictedFixture}`,
+            Error: `pull failed https://robot:secret@registry.example.com/image with ${ghpFixture}, ${stripeSecretFixture}, and ${stripeRestrictedFixture}`,
             StartedAt: '2026-05-12T00:00:00.000Z',
             FinishedAt: '2026-05-12T00:02:00.000Z',
           },
@@ -508,6 +526,11 @@ describe('diagnose_service tool', () => {
       expect(JSON.stringify(result)).toContain('openai_***');
       expect(JSON.stringify(result)).toContain('anthropic_***');
       expect(JSON.stringify(result)).toContain('sendgrid_***');
+      expect(result.httpCheck).toMatchObject({
+        probe_mode: 'internal_docker_dns',
+        target_resolved: 'http://ol-app:3000/health',
+      });
+      expect(JSON.stringify(result.httpCheck)).not.toContain('127.0.0.1');
       const deployment = result.recentDeployment as {
         latest?: { buildLogTailSanitized?: boolean; fullBuildLogHint?: string };
       };
@@ -532,8 +555,14 @@ describe('service-targeted monitoring tools', () => {
       kind: 'git',
       source: 'git',
       status: 'running',
+      assigned_port: 10001,
       container_id: 'service-container',
       container_name: 'ol-app',
+      container_port: 3000,
+      health_check_path: '/health',
+      repo_url: 'https://github.com/acme/app.git',
+      branch: 'main',
+      image_url: null,
     };
     const ctx = {
       db: {
@@ -545,6 +574,9 @@ describe('service-targeted monitoring tools', () => {
         ),
         getDeployablesByGroup: vi.fn(async () => [service]),
         listServices: vi.fn(async () => [service]),
+        getEnvVars: vi.fn(async () => ({})),
+        getEnvVarsForService: vi.fn(async () => ({ NODE_ENV: 'production' })),
+        getDeployLogs: vi.fn(async () => []),
       },
       pipeline: {
         getLogs: vi.fn(async () => 'service logs'),
@@ -562,9 +594,20 @@ describe('service-targeted monitoring tools', () => {
           memory_stats: { usage: 104857600, limit: 536870912 },
         })),
         inspectContainer: vi.fn(async () => ({
+          Name: '/ol-app',
+          State: {
+            Running: true,
+            Status: 'running',
+            ExitCode: 0,
+            Error: '',
+            StartedAt: new Date(Date.now() - 10_000).toISOString(),
+            FinishedAt: '0001-01-01T00:00:00Z',
+          },
+          Config: { Image: 'app:latest' },
           RestartCount: 2,
-          State: { StartedAt: new Date(Date.now() - 10_000).toISOString() },
         })),
+        listManagedContainers: vi.fn(async () => [{ id: 'service-container', status: 'running' }]),
+        execSimple: vi.fn(async () => ({ exitCode: 0, stdout: 'OK', stderr: '' })),
       },
     } as unknown as AppContext;
     return { ctx, project, service };
@@ -607,6 +650,21 @@ describe('service-targeted monitoring tools', () => {
     });
   });
 
+  it('get_logs accepts project_id targets', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    const result = (await getMonitoringTool(ctx, 'get_logs').execute(
+      { project_id: 'app', lines: 6 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.db.getProject).toHaveBeenCalledWith('app');
+    expect(ctx.pipeline.getLogs).toHaveBeenCalledWith('app', 6);
+    expect(result).toMatchObject({
+      service: { id: service.id },
+      logs: 'service logs',
+    });
+  });
+
   it('get_project_stats accepts deployable service_id from list_projects output', async () => {
     const { ctx, service } = createServiceTargetContext();
     const result = (await getMonitoringTool(ctx, 'get_project_stats').execute(
@@ -625,6 +683,67 @@ describe('service-targeted monitoring tools', () => {
       memory_usage_mb: 100,
       memory_limit_mb: 512,
       restarts: 2,
+    });
+  });
+
+  it('get_project_stats accepts project_id targets', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    const result = (await getMonitoringTool(ctx, 'get_project_stats').execute(
+      { project_id: 'app' },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.docker.getContainerStats).toHaveBeenCalledWith('service-container');
+    expect(result).toMatchObject({
+      service: { id: service.id },
+      status: 'running',
+    });
+  });
+
+  it('diagnose_service accepts project_id targets', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.db.getProject).toHaveBeenCalledWith('app');
+    expect(result).toMatchObject({
+      service: { id: service.id },
+      httpCheck: {
+        probe_mode: 'internal_docker_dns',
+        target_resolved: 'http://ol-app:3000/health',
+      },
+    });
+  });
+});
+
+describe('mcp_action_status aliases', () => {
+  it('accepts action_id as an alias for action_run_id', async () => {
+    const getActionRun = vi.fn(async () => ({
+      id: 'action-run-1',
+      project_id: 'project-1',
+      status: 'pending_approval',
+      approval_status: 'approved',
+      approval_tool: 'destructive_mcp',
+      error_message: null,
+      approval_requested_at: '2026-05-05T00:00:00.000Z',
+      approval_resolved_at: '2026-05-05T00:01:00.000Z',
+    }));
+    const ctx = {
+      db: {
+        getActionRun,
+      },
+    } as unknown as AppContext;
+    const result = (await getMonitoringTool(ctx, 'mcp_action_status').execute(
+      { action_id: 'action-run-1' },
+      { target: 'mcp', appCtx: ctx },
+    )) as Record<string, unknown>;
+
+    expect(getActionRun).toHaveBeenCalledWith('action-run-1');
+    expect(result).toMatchObject({
+      actionRunId: 'action-run-1',
+      status: 'approved_executing',
     });
   });
 });

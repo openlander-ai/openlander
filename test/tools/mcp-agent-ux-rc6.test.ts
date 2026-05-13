@@ -12,7 +12,11 @@ import type { PlanEngineDeps } from '../../src/pipeline/deploy-plan/engine.js';
 import { cloneRepo } from '../../src/pipeline/git.js';
 import { createMockDeployPlan } from '../helpers/deploy-plan-mocks.js';
 import * as infraAnalyzer from '../../src/lib/infra-analyzer.js';
-import { createDeployPlanSchema, deploySchema, setEnvVarsSchema } from '../../src/tools/defs/schemas.js';
+import {
+  createDeployPlanSchema,
+  deploySchema,
+  setEnvVarsSchema,
+} from '../../src/tools/defs/schemas.js';
 import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
 import { envToolDefs } from '../../src/tools/defs/env.js';
 
@@ -26,6 +30,7 @@ function createEngine() {
     listServices: vi.fn().mockResolvedValue([]),
     getProjectByName: vi.fn().mockResolvedValue(null),
     getLastDeployLog: vi.fn().mockResolvedValue(null),
+    getService: vi.fn().mockResolvedValue(undefined),
   };
   const mockPipeline = {
     startDeploy: vi
@@ -136,7 +141,7 @@ describe('MCP agent UX rc6 regressions', () => {
       status: 'needs_input',
       services: [{ type: 'postgresql', action: 'create', connect_via: 'DATABASE_URL' }],
       env: {
-        auto: { DATABASE_URL: 'postgresql://localhost' },
+        auto: {},
         required: ['DATABASE_URL'],
         provided: {},
         detected: [{ key: 'DATABASE_URL', source: 'source', required: true }],
@@ -153,6 +158,27 @@ describe('MCP agent UX rc6 regressions', () => {
     expect(updated.services).toEqual([]);
     expect(updated.env.auto).toEqual({});
     expect(updated.env.provided).toEqual({ DATABASE_URL: 'mysql://external.example.com/app' });
+  });
+
+  it('treats a planned managed service as satisfying required env without localhost placeholders', async () => {
+    const { engine } = createEngine();
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/example/app',
+      branch: 'main',
+    });
+
+    expect(plan.status).toBe('ready');
+    expect(plan.missing).toEqual([]);
+    expect(plan.env.auto).toEqual({});
+    expect(plan.services).toEqual([
+      expect.objectContaining({
+        type: 'postgresql',
+        action: 'create',
+        connect_via: 'DATABASE_URL',
+      }),
+    ]);
+    expect(JSON.stringify(plan)).not.toContain('postgresql://localhost');
   });
 
   it('does not create a managed service or overwrite explicit env on legacy plans', async () => {
@@ -177,6 +203,75 @@ describe('MCP agent UX rc6 regressions', () => {
       expect.objectContaining({
         envVars: expect.objectContaining({
           DATABASE_URL: 'mysql://external.example.com/app',
+        }),
+      }),
+    );
+  });
+
+  it('injects created managed service credentials during execute_deploy_plan', async () => {
+    const { engine, mockDb, mockPipeline, mockServiceManager } = createEngine();
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      services: [{ type: 'postgresql', action: 'create', connect_via: 'DATABASE_URL' }],
+      env: {
+        auto: {},
+        required: ['DATABASE_URL'],
+        provided: {},
+        detected: [{ key: 'DATABASE_URL', source: 'source', required: true }],
+      },
+      missing: [],
+    });
+    mockDb.getDeployPlan.mockResolvedValue({ plan_json: JSON.stringify(plan) });
+
+    await engine.executePlan(plan.plan_id);
+
+    expect(mockServiceManager.create).toHaveBeenCalledWith({
+      name: expect.stringMatching(/^postgresql-/),
+      template: 'postgresql',
+    });
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envVars: expect.objectContaining({
+          DATABASE_URL: 'postgres://managed/db',
+        }),
+      }),
+    );
+  });
+
+  it('injects reused managed service credentials during execute_deploy_plan', async () => {
+    const { engine, mockDb, mockPipeline, mockServiceManager } = createEngine();
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      services: [
+        {
+          type: 'postgresql',
+          action: 'reuse',
+          service_id: 'svc-pg',
+          connect_via: 'DATABASE_URL',
+        },
+      ],
+      env: {
+        auto: {},
+        required: ['DATABASE_URL'],
+        provided: {},
+        detected: [{ key: 'DATABASE_URL', source: 'source', required: true }],
+      },
+      missing: [],
+    });
+    mockDb.getDeployPlan.mockResolvedValue({ plan_json: JSON.stringify(plan) });
+    mockDb.getService.mockResolvedValue({
+      id: 'svc-pg',
+      kind: 'postgres',
+      credentials: JSON.stringify({ connectionString: 'postgres://reused/db' }),
+    });
+
+    await engine.executePlan(plan.plan_id);
+
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envVars: expect.objectContaining({
+          DATABASE_URL: 'postgres://reused/db',
         }),
       }),
     );
