@@ -76,6 +76,25 @@ async function resolveProjectScope(appCtx: AppCtx, projectName: string) {
   );
 }
 
+async function resolveSingleDeployableProjectAlias(
+  appCtx: AppCtx,
+  projectName: string,
+): Promise<ResolvedServiceRow | undefined> {
+  const project = await resolveProjectScope(appCtx, projectName);
+  if (!project) return undefined;
+
+  const deployables = await appCtx.db.getDeployablesByGroup(project.id);
+  const filtered = deployables.filter((item) => !isManagedService(item.kind));
+  if (filtered.length > 1) {
+    await throwEnvServiceSelectionRequired(
+      appCtx,
+      `Project '${project.name}' has ${String(filtered.length)} deployable services. Specify service_name or service_id.`,
+      filtered,
+    );
+  }
+  return filtered[0];
+}
+
 async function resolveEnvTarget(args: Record<string, unknown>, appCtx: AppCtx): Promise<EnvTarget> {
   const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
   const serviceName = typeof args['service_name'] === 'string' ? args['service_name'].trim() : '';
@@ -108,6 +127,9 @@ async function resolveEnvTarget(args: Record<string, unknown>, appCtx: AppCtx): 
     }
 
     service = deployableServices[0] ?? scopedServices[0];
+    if (!service && !projectName) {
+      service = await resolveSingleDeployableProjectAlias(appCtx, serviceName);
+    }
     if (!service) {
       throw new ServiceNotFoundError(
         projectName ? `${serviceName} in ${projectName}` : serviceName,

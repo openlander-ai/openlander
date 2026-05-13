@@ -278,6 +278,7 @@ export const monitoringToolDefs: ToolDef[] = [
       const lines = (args['lines'] as number | undefined) ?? 80;
       const timeoutMs = (args['timeout_ms'] as number | undefined) ?? 5000;
       const pathArg = (args['path'] as string | undefined)?.trim();
+      const healthCheckPathArg = (args['health_check_path'] as string | undefined)?.trim();
 
       const [groupEnv, serviceEnv, deployLogs] = await Promise.all([
         appCtx.db.getEnvVars(project.id),
@@ -286,7 +287,7 @@ export const monitoringToolDefs: ToolDef[] = [
       ]);
       const effectiveEnv = { ...groupEnv, ...serviceEnv };
       const probePath = selectServiceProbePath({
-        requestedPath: pathArg,
+        requestedPath: pathArg || healthCheckPathArg,
         healthCheckPath: service.health_check_path,
         env: effectiveEnv,
       });

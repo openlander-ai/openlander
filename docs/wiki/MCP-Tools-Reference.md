@@ -492,14 +492,15 @@ Host CPU, memory, disk usage. No parameters.
 
 ### `diagnose_service`
 
-| Parameter      | Type   | Required | Description                                  |
-| -------------- | ------ | -------- | -------------------------------------------- |
-| `service_id`   | string | No       | Deployable service id; preferred             |
-| `service_name` | string | No       | Deployable service name                      |
-| `project_id`   | string | No       | Convenience target for single-service groups |
-| `project_name` | string | No       | Convenience target for single-service groups |
-| `path`         | string | No       | HTTP path to probe                           |
-| `lines`        | number | No       | Log lines to include                         |
+| Parameter           | Type   | Required | Description                                  |
+| ------------------- | ------ | -------- | -------------------------------------------- |
+| `service_id`        | string | No       | Deployable service id; preferred             |
+| `service_name`      | string | No       | Deployable service name                      |
+| `project_id`        | string | No       | Convenience target for single-service groups |
+| `project_name`      | string | No       | Convenience target for single-service groups |
+| `path`              | string | No       | HTTP path to probe                           |
+| `health_check_path` | string | No       | Alias for `path`                             |
+| `lines`             | number | No       | Log lines to include                         |
 
 If `path` is omitted, OpenLander uses a configured base path env such as
 `NEXT_PUBLIC_BASE_PATH` before falling back to the service health path.

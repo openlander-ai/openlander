@@ -732,6 +732,21 @@ describe('service-targeted monitoring tools', () => {
     });
   });
 
+  it('diagnose_service accepts health_check_path as a path alias', async () => {
+    const { ctx } = createServiceTargetContext();
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', health_check_path: '/admin', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      httpCheck: {
+        probe_mode: 'internal_docker_dns',
+        target_resolved: 'http://ol-app:3000/admin',
+      },
+    });
+  });
+
   it('diagnose_service accepts a project group name through service_name when unambiguous', async () => {
     const { ctx, service } = createServiceTargetContext();
     const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(

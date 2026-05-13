@@ -50,7 +50,13 @@ export const projectNameSchema = z.object({
 
 const monitoringTargetFields = {
   service_id: z.string().min(1).optional().describe('Deployable service id'),
-  service_name: z.string().min(1).optional().describe('Deployable service name'),
+  service_name: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Deployable service row name. If no service has that name, a project group name with exactly one deployable service is accepted.',
+    ),
   project_id: z
     .string()
     .min(1)
@@ -93,7 +99,13 @@ export const getProjectStatsSchema = monitoringTargetSchema({});
 export const diagnoseServiceSchema = z
   .object({
     service_id: z.string().min(1).optional().describe('Deployable service id'),
-    service_name: z.string().min(1).optional().describe('Deployable service name'),
+    service_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Deployable service row name. If no service has that name, a project group name with exactly one deployable service is accepted.',
+      ),
     project_id: z
       .string()
       .min(1)
@@ -119,6 +131,7 @@ export const diagnoseServiceSchema = z
       .string()
       .optional()
       .describe('HTTP path to probe on the service assigned port (default: health path or "/").'),
+    health_check_path: z.string().optional().describe('Alias for path.'),
     timeout_ms: z
       .number()
       .int()
@@ -226,7 +239,13 @@ export const platformRecoverSchema = z.object({
 
 const envTargetFields = {
   service_id: z.string().min(1).optional().describe('Deployable service id'),
-  service_name: z.string().min(1).optional().describe('Deployable service name'),
+  service_name: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Deployable service row name. If no service has that name, a project group name with exactly one deployable service is accepted.',
+    ),
   project_name: z
     .string()
     .min(1)

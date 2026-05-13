@@ -34,10 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   logs, host probes, action status, and managed-service status/credentials.
 - Allowed deployable-service MCP actions to resolve `service_name` as the
   project group name when that group has exactly one deployable service.
+- Extended the same single-deployable project-name fallback to deployable env
+  variable actions.
 - Added `deploy_id`/`job_id` lookup to `get_deploy_status` so completed deploys
   and unknown ids are distinguishable.
 - Improved `diagnose_service` HTTP probes for apps mounted under a base path
   such as `NEXT_PUBLIC_BASE_PATH=/admin`.
+- Accepted `health_check_path` as an alias for `diagnose_service.path`.
 - Kept deployable app/worker services out of managed-service MCP responses and
   return explicit guidance when a managed-service action receives one.
 - Increased Docker disk-usage timeout to avoid false cleanup preflight failures

@@ -89,6 +89,7 @@ function createEnvToolContext() {
     getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
     getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
     getDeployablesByGroup: vi.fn().mockResolvedValue([service]),
+    listServices: vi.fn().mockResolvedValue([service]),
     assertEnvToolSchemaReady: vi.fn().mockResolvedValue(undefined),
   };
   const env = {
@@ -296,6 +297,24 @@ describe('MCP agent UX rc6 regressions', () => {
         variables: { API_KEY: 'secret' },
       }).success,
     ).toBe(true);
+  });
+
+  it('accepts project group name as service_name for env tools when unambiguous', async () => {
+    const { db, env, pipeline } = createEnvToolContext();
+
+    const result = (await getEnvTool('set_env_vars').execute(
+      { service_name: 'my-app', variables: { API_KEY: 'secret' } },
+      { appCtx: { db, env, pipeline }, target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(env.setBulkForServiceDetailed).toHaveBeenCalledWith('p1', 'my-app__svc', {
+      API_KEY: 'secret',
+    });
+    expect(result).toMatchObject({
+      status: 'updated',
+      project: 'my-app',
+      service: 'web',
+    });
   });
 
   it('rejects malformed JSON env var strings with BAD_REQUEST', async () => {
