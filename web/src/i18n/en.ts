@@ -150,6 +150,9 @@ export const translations = {
       manualSetup: 'Manual setup instructions',
       skipForNow: 'Skip for now',
       startDeploying: 'Start Deploying',
+      generateToken: 'Generate MCP token',
+      generating: 'Generating…',
+      noTokenYet: 'No MCP token issued yet. Generate one to copy your client config.',
       tokenName: 'Setup wizard',
       tokenAlreadyIssued:
         'An MCP token (olp_…{suffix}) is already issued. To get a fresh copy you can paste here, regenerate it from Your Agent (sidebar) — the existing one will be revoked.',

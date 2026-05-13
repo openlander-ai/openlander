@@ -11,17 +11,29 @@
  * wizard to issue an org-scoped PAT closes that gap — the user leaves
  * setup with a token Your Agent can reveal/copy/regenerate.
  *
- * Idempotency: a single `POST /api/mcp/token` (PR #235's
- * `ensureOrgMcpPatToken` wrapper) does the work — the backend mints a
- * fresh token when none exists (returns plaintext) and reuses the
- * keeper when one already does (returns metadata only, no plaintext,
- * and dedupes any straggler PATs). The wizard renders the plaintext
- * into copyable snippets when we have it, and falls back to a
- * "regenerate at Your Agent" notice with the suffix when we don't.
+ * Onboarding R3 (2026-05-13): the wizard no longer auto-issues the
+ * token on mount. Previously `Skip for now` would still leave a freshly
+ * minted PAT in the database — confusing for the user who clicks Skip
+ * expecting NOT to be enrolled. Now mount does a metadata GET only;
+ * issuance happens behind an explicit "Generate token" CTA. Existing
+ * tokens (returning user) surface via the same suffix banner as before.
+ *
+ * Token issuance contract:
+ *   - GET /api/mcp/token — metadata only, never plaintext.
+ *   - POST /api/mcp/token — `ensureOrgMcpPatToken`: mint when missing
+ *     (returns plaintext), reuse + dedupe when present (metadata only).
  */
 import { useState, useEffect } from 'react';
-import { Zap, ChevronDown, ChevronUp, ChevronRight, Rocket, ArrowLeft } from 'lucide-react';
-import { ensureOrgMcpToken } from '@/lib/api';
+import {
+  Zap,
+  ChevronDown,
+  ChevronUp,
+  ChevronRight,
+  Rocket,
+  ArrowLeft,
+  Loader2,
+} from 'lucide-react';
+import { ensureOrgMcpToken, getOrgMcpToken } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from './shared';
 import { useLanguage } from '@/i18n/context';
@@ -42,39 +54,64 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [legacyRotated, setLegacyRotated] = useState(false);
   const [showManual, setShowManual] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isFetching, setIsFetching] = useState(true);
 
+  // Mount-time probe — metadata only, never the plaintext. The user
+  // gets the snippet block only after they explicitly click Generate
+  // (or, for returning users, the existing-token banner makes it clear
+  // why no copyable snippet appears — they should regenerate from
+  // Your Agent rather than re-mint here).
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        // POST /api/mcp/token is idempotent: mints when missing,
-        // reuses + dedupes when present. plaintext is set only on
-        // fresh issuance (`created: true`); on reuse we only have
-        // metadata, so the wizard surfaces the suffix and a
-        // "regenerate at Your Agent" notice instead of a placeholder
-        // pretending to be a real token.
-        const issued = await ensureOrgMcpToken({ name: t('setup.mcp.tokenName') });
+        const { token: existing } = await getOrgMcpToken();
         if (cancelled) return;
-        if (issued.plaintext) {
-          setToken(issued.plaintext);
-        } else {
-          setExistingSuffix(issued.token.suffix);
-        }
-        // Surface the legacy `ol_` rotation that PR #235 may have done
-        // server-side — silently revoking the prior credential during
-        // setup would break any still-running MCP client.
-        if (issued.legacyTokenRotated) {
-          setLegacyRotated(true);
+        if (existing) {
+          setExistingSuffix(existing.suffix);
         }
       } catch (err) {
         if (cancelled) return;
         setTokenError(err instanceof Error ? err.message : t('setup.mcp.tokenError'));
+      } finally {
+        if (!cancelled) setIsFetching(false);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [t]);
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    setTokenError(null);
+    try {
+      // ensureOrgMcpToken is idempotent: mint when missing (plaintext
+      // set), reuse + dedupe when present (plaintext null). The
+      // wizard surfaces plaintext only on actual mint, never a
+      // placeholder pretending to be a real token.
+      const issued = await ensureOrgMcpToken({ name: t('setup.mcp.tokenName') });
+      if (issued.plaintext) {
+        setToken(issued.plaintext);
+        // Returning-user banner is no longer meaningful once we have
+        // a fresh plaintext — clear it so the UI is unambiguous.
+        setExistingSuffix(null);
+      } else {
+        setExistingSuffix(issued.token.suffix);
+      }
+      // Surface the legacy `ol_` rotation that PR #235 may have done
+      // server-side — silently revoking the prior credential during
+      // setup would break any still-running MCP client.
+      if (issued.legacyTokenRotated) {
+        setLegacyRotated(true);
+      }
+    } catch (err) {
+      setTokenError(err instanceof Error ? err.message : t('setup.mcp.tokenError'));
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const mcpUrl = getMcpEndpoint();
   // Render snippets (and the quick-copy block) with the freshly issued
@@ -90,6 +127,19 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
   const quickCopyText = `Connect the OpenLander MCP server.\nURL: ${mcpUrl}\nToken: ${tokenForSnippet}`;
 
   const clientConfigs = buildAllClientConfigs({ endpoint: mcpUrl, token: tokenForSnippet });
+
+  // Hide the copy/manual surface unless we actually have plaintext to
+  // hand the user. Showing the `olp_YOUR_TOKEN` placeholder dressed up
+  // as a copyable value is worse than no block at all — they'd happily
+  // Copy that garbage into their MCP config.
+  //
+  // Gemini CCG R3 follow-up: the returning-user (existingSuffix only)
+  // path used to flip the surface on too, leaving the user with a
+  // banner saying "regenerate at Your Agent" AND a Copy block holding
+  // a placeholder. That looked like a Generate failure rather than
+  // intended behaviour. Now the surface is plaintext-gated; the
+  // banner alone owns the returning-user explanation.
+  const showSnippetSurface = token !== null;
 
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
@@ -132,53 +182,87 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
           </div>
         )}
 
-        {/* Quick copy block */}
-        <div className="space-y-2 text-left">
-          <p className="text-sm font-body text-foreground/80">{t('setup.mcp.copyPrompt')}</p>
-          <div className="relative bg-bg-panel border border-border rounded-lg p-4">
-            <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-all pr-8">
-              {quickCopyText}
-            </pre>
-            <div className="absolute top-2 right-2">
-              <CopyButton text={quickCopyText} />
+        {/* R3 (2026-05-13): explicit Generate CTA for new users. Until
+            this is clicked we don't POST to /api/mcp/token — the
+            previous auto-issue behaviour silently enrolled users who
+            clicked Skip. */}
+        {!showSnippetSurface && (
+          <div
+            data-testid="setup-mcp-generate-cta"
+            className="rounded-lg border border-dashed border-border bg-bg-panel/50 px-4 py-6 text-left space-y-3"
+          >
+            <p className="text-sm font-body text-foreground/80">{t('setup.mcp.noTokenYet')}</p>
+            <Button
+              type="button"
+              onClick={() => void handleGenerate()}
+              disabled={isGenerating || isFetching}
+              className="bg-agent hover:bg-agent/90 text-white font-body gap-2"
+            >
+              {isGenerating || isFetching ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Zap className="h-4 w-4" />
+              )}
+              {isGenerating ? t('setup.mcp.generating') : t('setup.mcp.generateToken')}
+            </Button>
+          </div>
+        )}
+
+        {/* Quick copy block — only rendered once a real token (fresh or
+            existing) is in play, so the user never sees the
+            `olp_YOUR_TOKEN` placeholder dressed up as a copyable
+            value. */}
+        {showSnippetSurface && (
+          <div className="space-y-2 text-left">
+            <p className="text-sm font-body text-foreground/80">{t('setup.mcp.copyPrompt')}</p>
+            <div className="relative bg-bg-panel border border-border rounded-lg p-4">
+              <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-all pr-8">
+                {quickCopyText}
+              </pre>
+              <div className="absolute top-2 right-2">
+                <CopyButton text={quickCopyText} />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Collapsible manual setup */}
-        <div className="border border-border rounded-lg overflow-hidden text-left">
-          <button
-            type="button"
-            onClick={() => setShowManual(!showManual)}
-            className="w-full flex items-center justify-between px-4 py-3 text-sm font-body text-foreground/80 hover:text-foreground hover:bg-bg-subtle/50 transition-colors"
-          >
-            <span className="flex items-center gap-1.5">
-              <ChevronRight className="h-4 w-4" /> {t('setup.mcp.manualSetup')}
-            </span>
-            {showManual ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
+        {/* Collapsible manual setup — same visibility rules as the
+            quick copy block above. */}
+        {showSnippetSurface && (
+          <div className="border border-border rounded-lg overflow-hidden text-left">
+            <button
+              type="button"
+              onClick={() => setShowManual(!showManual)}
+              className="w-full flex items-center justify-between px-4 py-3 text-sm font-body text-foreground/80 hover:text-foreground hover:bg-bg-subtle/50 transition-colors"
+            >
+              <span className="flex items-center gap-1.5">
+                <ChevronRight className="h-4 w-4" /> {t('setup.mcp.manualSetup')}
+              </span>
+              {showManual ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
 
-          {showManual && (
-            <div className="px-4 pb-4 space-y-4 border-t border-border">
-              {clientConfigs.map((cfg, idx) => (
-                <div key={cfg.id} className={`space-y-1 ${idx === 0 ? 'pt-3' : ''}`}>
-                  <p className="text-xs font-body text-foreground/80 font-medium">
-                    {cfg.label}
-                    {cfg.filename ? ` (${cfg.filename})` : ''}
-                  </p>
-                  <div className="relative bg-bg-app rounded p-3">
-                    <pre className="text-xs font-mono text-foreground break-all pr-8 overflow-auto max-h-40 whitespace-pre-wrap">
-                      {cfg.snippet}
-                    </pre>
-                    <div className="absolute top-1.5 right-1.5">
-                      <CopyButton text={cfg.snippet} />
+            {showManual && (
+              <div className="px-4 pb-4 space-y-4 border-t border-border">
+                {clientConfigs.map((cfg, idx) => (
+                  <div key={cfg.id} className={`space-y-1 ${idx === 0 ? 'pt-3' : ''}`}>
+                    <p className="text-xs font-body text-foreground/80 font-medium">
+                      {cfg.label}
+                      {cfg.filename ? ` (${cfg.filename})` : ''}
+                    </p>
+                    <div className="relative bg-bg-app rounded p-3">
+                      <pre className="text-xs font-mono text-foreground break-all pr-8 overflow-auto max-h-40 whitespace-pre-wrap">
+                        {cfg.snippet}
+                      </pre>
+                      <div className="absolute top-1.5 right-1.5">
+                        <CopyButton text={cfg.snippet} />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={onBack} className="gap-1.5 font-body">

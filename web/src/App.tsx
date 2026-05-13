@@ -116,7 +116,21 @@ function SetupGuard() {
           ready: s.ready ?? false,
         }),
       )
-      .catch(() => setSetupStatus({ loading: false, hasPassword: true, ready: true }));
+      .catch((err) => {
+        // R3 (2026-05-13): fail-open is intentional — a backend blip
+        // shouldn't lock returning users out of the dashboard. But a
+        // silent flip to `ready: true` masks real outages during local
+        // development. Log loudly in dev so a misconfigured proxy /
+        // dead server is obvious; production stays quiet to avoid
+        // console noise on transient network hiccups.
+        if (import.meta.env.DEV) {
+          console.warn(
+            '[SetupGuard] /api/setup/status failed — assuming ready=true (fail-open)',
+            err,
+          );
+        }
+        setSetupStatus({ loading: false, hasPassword: true, ready: true });
+      });
   }, []);
 
   if (setupStatus.loading || authLoading) {
@@ -169,7 +183,15 @@ function SetupAccessGuard() {
       // On status error, pessimistically assume password is already set —
       // failing closed avoids leaking the wizard to drive-by visitors
       // when the backend is briefly unreachable.
-      .catch(() => setSetupStatus({ loading: false, hasPassword: true }));
+      .catch((err) => {
+        if (import.meta.env.DEV) {
+          console.warn(
+            '[SetupAccessGuard] /api/setup/status failed — assuming hasPassword=true (fail-closed)',
+            err,
+          );
+        }
+        setSetupStatus({ loading: false, hasPassword: true });
+      });
   }, []);
 
   if (setupStatus.loading || authLoading) {

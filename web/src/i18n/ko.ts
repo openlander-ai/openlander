@@ -174,10 +174,13 @@ export const translations = {
       manualSetup: 'Manual setup instructions',
       skipForNow: 'Skip for now',
       startDeploying: 'Start Deploying',
+      generateToken: 'Generate MCP token',
+      generating: 'Generating…',
       tokenName: 'Setup wizard',
       // Content.
       subtitle: 'Claude Code, Cursor 또는 모든 MCP 클라이언트에서 배포하세요.',
       copyPrompt: '아래를 AI 코딩 도구에 붙여넣으세요:',
+      noTokenYet: '아직 발급된 MCP 토큰이 없습니다. 생성하면 연동 설정을 확인할 수 있습니다.',
       tokenAlreadyIssued:
         'MCP 토큰(olp_…{suffix})이 이미 발급되어 있습니다. 설정 코드에 사용할 새 토큰을 받으려면 사이드바의 Your Agent에서 재발급하세요. 기존 토큰은 무효화됩니다.',
       tokenError:

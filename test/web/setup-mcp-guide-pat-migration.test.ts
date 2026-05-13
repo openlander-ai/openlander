@@ -96,4 +96,63 @@ describe('McpGuideStep — PAT migration (v0.1)', () => {
     expect(koSource).not.toMatch(/여기에 붙여 쓸 새 값/);
     expect(koSource).not.toMatch(/기존 토큰은 폐기됩니다/);
   });
+
+  // Onboarding R3 (2026-05-13): the wizard no longer auto-issues a
+  // token on mount. Skip-for-now must mean "don't enrol me yet". The
+  // mount-time probe is a metadata GET; issuance lives behind an
+  // explicit Generate CTA.
+  describe('R3 — explicit issuance', () => {
+    it('mount probe uses getOrgMcpToken (metadata) instead of ensure', () => {
+      // The first `await` after mount must be the GET, not the POST.
+      // ensureOrgMcpToken still appears elsewhere — inside handleGenerate —
+      // so we anchor the assertion to the mount useEffect body by its
+      // dependency array `[t]`, ensuring the auto-issue pattern isn't
+      // hiding inside the mount path.
+      expect(source).toMatch(
+        /useEffect\(\(\) => \{[\s\S]*?await getOrgMcpToken\(\)[\s\S]*?\}, \[t\]\)/,
+      );
+      // The handleGenerate path is the only place the POST may live.
+      // ensureOrgMcpToken must NOT appear inside any line whose
+      // enclosing block is the mount useEffect — by far the easiest
+      // check is "between `setIsFetching(true)` (mount probe init) and
+      // the closing `}, [t])` we never see ensureOrgMcpToken".
+      const mountBlockMatch = source.match(
+        /useEffect\(\(\) => \{[\s\S]*?\}, \[t\]\)/,
+      );
+      expect(mountBlockMatch?.[0]).toBeDefined();
+      expect(mountBlockMatch?.[0]).not.toContain('ensureOrgMcpToken');
+    });
+
+    it('exposes a Generate CTA when no token is in play', () => {
+      expect(source).toContain('data-testid="setup-mcp-generate-cta"');
+      expect(source).toMatch(/handleGenerate/);
+      expect(source).toContain("t('setup.mcp.generateToken')");
+      expect(source).toContain("t('setup.mcp.noTokenYet')");
+    });
+
+    it('gates the snippet surface on plaintext only — not the existing-token suffix', () => {
+      // CCG (Codex + Gemini, R3): existingSuffix has no plaintext, so
+      // surfacing the copy/manual block in that case would leave the
+      // user copying `olp_YOUR_TOKEN` placeholder while a banner says
+      // "regenerate at Your Agent". Surface is now plaintext-gated;
+      // the banner alone owns the returning-user explanation.
+      expect(source).toMatch(/showSnippetSurface = token !== null;/);
+      expect(source).not.toMatch(
+        /showSnippetSurface = token !== null \|\| existingSuffix !== null/,
+      );
+      expect(source).toMatch(/\{showSnippetSurface && \(/);
+    });
+
+    it('keeps the explicit ensure call inside handleGenerate (post-CTA)', () => {
+      expect(source).toMatch(/handleGenerate[\s\S]*?await ensureOrgMcpToken/);
+    });
+
+    it('defines generateToken / generating / noTokenYet in both languages', () => {
+      for (const dict of [enSource, koSource]) {
+        expect(dict).toMatch(/generateToken:/);
+        expect(dict).toMatch(/generating:/);
+        expect(dict).toMatch(/noTokenYet:/);
+      }
+    });
+  });
 });
