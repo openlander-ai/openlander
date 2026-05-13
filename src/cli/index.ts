@@ -299,7 +299,7 @@ program
 program
   .command('config')
   .description('Manage configuration')
-  .argument('[action]', 'Action: show (default), reset, or reset-password')
+  .argument('[action]', 'Action: show (default), reset, reset-password, or reset-apps')
   .action(async (action) => {
     const { loadConfig, isOnboarded, getDataDir } = await import('../config/index.js');
     const configPath = join(getDataDir(), 'config.json');
@@ -316,6 +316,92 @@ program
       } else {
         console.log(pc.yellow('No config file found. Already reset.'));
       }
+      return;
+    }
+
+    if (action === 'reset-apps') {
+      // List + stop + remove every application-managed container
+      // (openlander.role label present). The OpenLander backend itself
+      // carries no openlander.role label so it is excluded — `docker
+      // compose down` is still the correct way to reset the backend
+      // stack. Volumes are NOT removed; use that compose command for
+      // full state cleanup.
+      const force = process.argv.includes('--force') || process.argv.includes('--yes');
+      const { default: Dockerode } = await import('dockerode');
+      const docker = new Dockerode();
+
+      let containers: Array<{
+        Id: string;
+        Names: string[];
+        Image: string;
+        State: string;
+        Labels?: Record<string, string>;
+      }>;
+      try {
+        containers = await docker.listContainers({
+          all: true,
+          filters: { label: ['openlander.managed=true'] },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(pc.red(`Could not query Docker: ${msg}`));
+        process.exitCode = 1;
+        return;
+      }
+
+      const targets = containers.filter((c) => c.Labels?.['openlander.role']);
+
+      if (targets.length === 0) {
+        console.log(pc.dim('No application-managed containers found.'));
+        return;
+      }
+
+      console.log(pc.bold(`Found ${String(targets.length)} application-managed container(s):`));
+      for (const c of targets) {
+        const role = c.Labels?.['openlander.role'] ?? '?';
+        const name = (c.Names[0] ?? c.Id.slice(0, 12)).replace(/^\//, '');
+        console.log(`  ${role.padEnd(8)} ${name.padEnd(40)} ${c.Image}`);
+      }
+
+      if (!force) {
+        console.log();
+        console.log(pc.yellow('Re-run with --force to stop and remove these containers.'));
+        console.log(
+          pc.dim(
+            'Volumes are preserved. Use `docker compose -p openlander down --volumes` for full state cleanup.',
+          ),
+        );
+        return;
+      }
+
+      console.log();
+      console.log(pc.bold('Stopping and removing...'));
+      let removed = 0;
+      let failed = 0;
+      for (const c of targets) {
+        const name = (c.Names[0] ?? c.Id.slice(0, 12)).replace(/^\//, '');
+        try {
+          const container = docker.getContainer(c.Id);
+          if (c.State === 'running') {
+            await container.stop({ t: 5 }).catch(() => {
+              /* already stopping / not running — ignore, force remove handles it */
+            });
+          }
+          await container.remove({ force: true });
+          removed += 1;
+          console.log(pc.green(`  ✓ ${name}`));
+        } catch (err) {
+          failed += 1;
+          const msg = err instanceof Error ? err.message : String(err);
+          console.log(pc.red(`  ✗ ${name} — ${msg}`));
+        }
+      }
+      console.log();
+      console.log(
+        pc.green(`Removed ${String(removed)} container(s).`) +
+          (failed > 0 ? pc.red(` ${String(failed)} failed.`) : ''),
+      );
+      if (failed > 0) process.exitCode = 1;
       return;
     }
 

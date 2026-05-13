@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   container-private bridge IPs in Docker installs.
 - Added `preferred_url` to project/deploy responses so agents can use the
   canonical app URL without interpreting the full `urls` array.
+- Added `openlander config reset-apps [--force]` CLI subcommand. Lists every
+  application-managed container (label `openlander.managed=true` + a non-empty
+  `openlander.role`) and, with `--force`, stops + removes them. The OpenLander
+  backend itself is intentionally excluded; use `docker compose down` for that.
+  Volumes are preserved.
 
 ### Fixed
 
