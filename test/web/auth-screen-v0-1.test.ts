@@ -127,7 +127,7 @@ describe('AuthScreen v0.1 — single page, two modes', () => {
   });
 });
 
-describe('SetupScreen v0.1 — PasswordStep removed', () => {
+describe('SetupScreen — PasswordStep + LanguageStep removed', () => {
   const setupSource = readRepoFile('web/src/components/setup/SetupScreen.tsx');
 
   it('no longer imports or renders PasswordStep', () => {
@@ -135,17 +135,24 @@ describe('SetupScreen v0.1 — PasswordStep removed', () => {
     expect(setupSource).not.toMatch(/<PasswordStep\b/);
   });
 
-  it('renders 4 steps (Language / Infra / GitHub / MCP)', () => {
-    expect(setupSource).toMatch(/\[0, 1, 2, 3\]\.map/);
-    expect(setupSource).not.toMatch(/\[0, 1, 2, 3, 4\]\.map/);
-    expect(setupSource).toContain('const MAX_STEP = 3');
+  // Onboarding R1 (2026-05-13): LanguageStep retired in favour of the
+  // /login header toggle + AccountPopover toggle.
+  it('no longer imports or renders LanguageStep', () => {
+    expect(setupSource).not.toMatch(/from '\.\/LanguageStep'/);
+    expect(setupSource).not.toMatch(/<LanguageStep\b/);
+  });
+
+  it('renders 3 steps (Infra / GitHub / MCP)', () => {
+    expect(setupSource).toMatch(/\[0, 1, 2\]\.map/);
+    expect(setupSource).not.toMatch(/\[0, 1, 2, 3\]\.map/);
+    expect(setupSource).toContain('const MAX_STEP = 2');
   });
 
   it('migrates legacy localStorage step values into the new range', () => {
-    // Old step 1 (PasswordStep) folds back to step 0 so the user does not
-    // land on Infra mid-flow.
-    expect(setupSource).toMatch(/if \(parsed === 1\) return 0/);
-    // Old steps 2..4 shift one position earlier.
+    // Legacy values: Language=0, Infra=1, GitHub=2, MCP=3. After R1
+    // both Language(0) and Infra(1) collapse onto new Infra(0); 2/3 shift
+    // one earlier to GitHub(1) / MCP(2).
+    expect(setupSource).toMatch(/if \(parsed <= 1\) return 0/);
     expect(setupSource).toMatch(/return Math\.min\(parsed - 1, MAX_STEP\)/);
   });
 });
