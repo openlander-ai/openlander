@@ -144,7 +144,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
 
   const handleCopyConnString = (text: string, id: string) => {
     void copy(text, id);
-    toast.success(t('services.detail.toasts.copied'));
+    toast.success(t('services.detail.toasts.copiedToClipboard'));
   };
 
   if (loading) {

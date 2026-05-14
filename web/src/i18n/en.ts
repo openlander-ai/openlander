@@ -591,7 +591,7 @@ export const translations = {
         userCreated: 'User created successfully',
         userCreateFailed: 'Failed to create user',
         connStringCopied: 'Connection string copied to clipboard',
-        copied: 'Copied to clipboard',
+        copiedToClipboard: 'Copied to clipboard',
       },
       header: {
         backToServices: 'Back to Services',

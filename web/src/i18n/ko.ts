@@ -123,7 +123,7 @@ export const translations = {
       // Content — empty state + formatted display.
       empty: '모든 시스템이 정상입니다.',
       projectError: '{name} 배포 실패',
-      pendingApprovals: '승인 대기 {count}개',
+      pendingApprovals: '승인 대기 {count}건',
       unhealthyServices: '비정상 서비스 {count}개',
     },
     health: {
@@ -682,7 +682,7 @@ export const translations = {
         userCreated: '사용자가 생성되었습니다',
         userCreateFailed: '사용자 생성에 실패했습니다',
         connStringCopied: '연결 문자열을 클립보드에 복사했습니다',
-        copied: '클립보드에 복사했습니다',
+        copiedToClipboard: '클립보드에 복사했습니다',
       },
       header: {
         // Chrome — back link + action buttons.
