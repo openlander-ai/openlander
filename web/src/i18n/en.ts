@@ -68,6 +68,8 @@ export const translations = {
   sidebar: {
     collapse: 'Collapse sidebar',
     expand: 'Expand sidebar',
+    primaryNavAria: 'Primary navigation',
+    versionAria: 'Version v0.1',
   },
   account: {
     popover: {
@@ -276,7 +278,20 @@ export const translations = {
   },
   projects: {
     title: 'Project Overview',
+    pageTitle: 'Projects',
+    pageSubtitle: 'Create and manage your projects',
     newProject: 'New Project',
+    tags: 'Tags',
+    newestFirst: 'Newest first',
+    filterPlaceholder: 'Filter projects…',
+    moreOptions: 'More options',
+    emptyTitle: "You don't have any projects yet",
+    emptyDescription:
+      'A project bundles related services — web, api, worker, db — that share environment and deploy together.',
+    createFirst: 'Create your first project',
+    searchEmpty: 'No projects match "{query}"',
+    deployedAgo: 'Deployed {time}',
+    createdAgo: 'Created {time}',
     monitored: '{count} projects monitored',
     noProjects: 'No projects found',
     deployFirstApp: 'Deploy your first app',
@@ -287,6 +302,22 @@ export const translations = {
     },
     filter: {
       showArchived: 'Show archived',
+      hideArchived: 'Hide archived',
+    },
+    create: {
+      title: 'Create project',
+      description:
+        'A project is a workspace for related services. Add repos, images, databases, or compose stacks after creation.',
+      closeAria: 'Close create project dialog',
+      nameLabel: 'Project display name',
+      namePlaceholder: 'Hotdeal Tracker',
+      cancel: 'Cancel',
+      submit: 'Create project',
+      submitting: 'Creating...',
+      errors: {
+        nameRequired: 'Project name is required.',
+        fallback: 'Failed to create project.',
+      },
     },
     card: {
       archivedBadge: 'Archived',
