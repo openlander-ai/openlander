@@ -5,9 +5,9 @@
  *
  *  1. `derivePhaseStatus` — walks the line buffer to compute the
  *     `Record<PhaseId, PhaseStatus>` the PhaseRail consumes. Handles
- *     pending → active → done transitions and back-fills "done" on
- *     successful builds for any phases earlier than the last emitted
- *     line.
+ *     pending → active → done/skipped transitions. On successful builds,
+ *     silent phases before the last emitted phase are treated as skipped
+ *     instead of inventing log output for phases that never ran.
  *
  *  2. `buildLogRows` — flattens phase-grouped lines into the flat
  *     virtual-row list the virtualizer renders. Inserts phase header

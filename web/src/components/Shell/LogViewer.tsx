@@ -273,12 +273,11 @@ export function LogViewer({
   const showReconNotice = connState === 'RECONNECTING' || connState === 'BACKFILLING';
 
   // ─── Copy handler ──────────────────────────────────────────────────────
-  // Copies all currently-loaded log lines as plain text. Drops renderer
-  // sentinels (`{progress}` placeholders + `{step}#N` build-step
-  // headers) so the clipboard text is greppable / pastable into a bug
-  // report without UI noise. "Visible range" in the button title is a
-  // historical label — the actual scope is the loaded buffer, which
-  // matches what every other CI log viewer treats as "copy".
+  // Copies all currently-loaded log lines as plain text. Drops renderer-only
+  // `{progress}` placeholders and strips the `{step}` display marker while
+  // keeping the underlying Docker step/error text greppable for bug reports.
+  // "Visible range" in the button title is a historical label; the actual
+  // scope is the loaded buffer, matching common CI log viewer behavior.
   const [logCopied, setLogCopied] = useState(false);
   const handleCopyLog = useCallback(() => {
     // Preserve every real log line; only drop `{progress}` placeholder
