@@ -127,16 +127,14 @@ export class ContainerOps {
     const volumeBinds = await getProjectVolumeBinds(this.ctx.client, projectName);
     const binds = [...secretBinds, ...volumeBinds];
     const networkMode = opts.network ?? opts.networks?.[0] ?? this.ctx.networkName;
-    const networkingConfig =
-      networkMode === SHARED_NETWORK_NAME
-        ? {
-            EndpointsConfig: {
-              [SHARED_NETWORK_NAME]: {
-                Aliases: [projectName],
-              },
-            },
-          }
-        : undefined;
+    const aliases = Array.from(new Set([projectName, ...(opts.aliases ?? [])]));
+    const networkingConfig = {
+      EndpointsConfig: {
+        [networkMode]: {
+          Aliases: aliases,
+        },
+      },
+    };
 
     if (typeof opts.command === 'string' && /[;&|`$(){}]/.test(opts.command)) {
       throw new Error('Command contains disallowed shell metacharacters');

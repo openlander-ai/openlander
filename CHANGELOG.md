@@ -79,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   compose deploys that failed with the same endpoint-conflict error.
 - Show compose child services in project topology and service detail lists
   instead of showing only the compose parent metadata service.
+- Preserve Docker Compose service-name DNS aliases (for example `postgres` and
+  `redis`) when OpenLander runs compose services through Dockerode.
 
 ## [0.1.1-rc.6] — 2026-05-13
 
