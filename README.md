@@ -29,7 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/insta
   | sudo env OPENLANDER_PUBLIC_HOST=apps.example.com bash
 ```
 
-OpenLander `0.1.0` uses a fresh public Postgres baseline. If you ran a
+The public `0.1.x` releases use a fresh Postgres baseline. If you ran a
 pre-public dogfood build, start from a new Postgres volume or export/import data
 manually before upgrading.
 
@@ -58,6 +58,10 @@ inspect runtime state, or recover safely.
 OpenLander is a self-hosted control plane designed around MCP. It exposes
 deploys, logs, services, approvals, and recovery state in a shape coding
 agents can read, with risky actions held behind explicit human approval.
+
+<p align="center">
+  <img src="docs/assets/your-agent-setup.png" alt="OpenLander MCP agent setup — connect Claude, Cursor, Windsurf, and more" width="920" />
+</p>
 
 ---
 
@@ -129,6 +133,10 @@ common single-service case.
 - Postgres ships in the same compose file; no external database required.
 - Traefik handles routing for deployed services. TLS depends on your domain
   / proxy setup.
+
+<p align="center">
+  <img src="docs/assets/home-dashboard.png" alt="OpenLander dashboard — projects, deployments, and agent activity at a glance" width="920" />
+</p>
 
 ---
 
