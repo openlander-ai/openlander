@@ -263,30 +263,36 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
     loading: deploymentsLoading,
     refetch: refetchDeployments,
   } = useServiceDeployments(projectId ?? '', id ?? '');
-  // hasRunning intentionally reads from the live service status (`building`
-  // is what the backend sets on `updateProject` before
-  // `pipeline.redeploy()` runs), NOT from the deployments list.
-  // `useServiceDeployments()` hits `/api/projects/:p/services/:s/deployments`,
-  // which only returns persisted deploy_log rows — their `status` is one of
-  // `success | failed | cancelled` (terminal-only) and `isInProgress`
-  // exists only on the client-side `DeploymentViewModel` shape, not on
-  // wire-format `DeployLogSummary`. Using the service status keeps the
-  // button in sync with redeploys started in other tabs / via MCP / via
-  // the webhook, which a deploy-log scan can never catch.
-  const hasRunning = resolvedService?.status === 'building';
+  // Local-only throttle for the Deploy button. We intentionally do NOT
+  // try to derive a "deploy in progress on the server" signal in the
+  // frontend: useServiceDeployments() returns terminal deploy_logs only,
+  // and service `building` status is a lagging proxy for the backend
+  // lock. Concurrent deploys are authoritatively rejected by the
+  // backend (409 / DEPLOY_LOCKED) and rendered as a friendly banner —
+  // making the backend the single source of truth and keeping the
+  // button free of stale-signal disables.
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
 
   const handleDeploy = async () => {
-    if (!projectId || !id) return;
-    if (deploying || hasRunning) return;
+    if (!projectId || !id || deploying) return;
     setDeployError(null);
     setDeploying(true);
     try {
       await redeployService(projectId, id);
       refetchDeployments();
     } catch (err) {
-      setDeployError(err instanceof Error ? err.message : t('serviceDetail.deploy.fallbackError'));
+      // The redeploy route returns 409 with body
+      // `{ error: 'DEPLOY_LOCKED', code: 'DEPLOY_LOCKED', ... }` when
+      // another deploy is already running for this project. apiPost()
+      // throws Error(responseBodyText), so we sniff the sentinel code
+      // out of the message rather than threading res.status through.
+      const raw = err instanceof Error ? err.message : '';
+      if (raw.includes('DEPLOY_LOCKED')) {
+        setDeployError(t('serviceDetail.deploy.locked'));
+      } else {
+        setDeployError(raw || t('serviceDetail.deploy.fallbackError'));
+      }
     } finally {
       setDeploying(false);
     }
@@ -388,17 +394,17 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
             <button
               type="button"
               onClick={handleDeploy}
-              disabled={hasRunning || deploying}
+              disabled={deploying}
               className={cn(
                 'inline-flex items-center gap-1 rounded-md px-3 py-1 text-[12px] font-medium transition-opacity',
-                hasRunning || deploying
+                deploying
                   ? 'cursor-not-allowed bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-subtle)]'
                   : 'bg-[color:var(--ol-primary)] text-[color:var(--ol-primary-fg)] hover:opacity-90',
               )}
-              aria-disabled={hasRunning || deploying}
+              aria-disabled={deploying}
             >
               <Rocket className="h-3.5 w-3.5" />
-              {hasRunning || deploying ? 'Deploying…' : 'Deploy'}
+              {deploying ? 'Deploying…' : 'Deploy'}
             </button>
           </>
         }
