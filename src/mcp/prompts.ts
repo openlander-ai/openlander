@@ -49,7 +49,7 @@ const PROMPTS: PromptDef[] = [
     - \`create_service\` with template (postgresql/mysql/redis/mongodb).
     - The response includes \`suggested_env\` with the recommended env var key and connection string.
     - Call \`set_env_vars\` on the deployable service with the suggested key/value to save the binding.
-3. **Deploy** — \`create_deploy_plan\` with the repo URL, then \`execute_deploy_plan\`. Add \`env_vars\` for any additional config.
+3. **Deploy** — \`create_deploy_plan\` with the repo URL and optional \`name\`, then \`execute_deploy_plan\`. Add \`env_vars\` for any additional config.
 4. **Monitor** — \`get_deploy_status\` to poll build progress. \`get_build_log\` for raw output if it fails.
 5. **Debug failures** — \`get_build_log\` and \`get_logs\` provide evidence; analyze it in your own external agent.
 
@@ -64,7 +64,7 @@ create_service({ name: "mydb", template: "postgresql" })
 set_env_vars({ service_name: "myapp-web", variables: '{"DATABASE_URL": "postgresql://..."}' })
 
 // 3. Redeploy to apply saved env to the running container
-create_deploy_plan({ project_name: "myapp" })
+create_deploy_plan({ name: "myapp", repo_url: "https://github.com/user/repo" })
 execute_deploy_plan({ plan_id: "..." })
 \`\`\`
 

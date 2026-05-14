@@ -20,18 +20,18 @@ describe('createDeployPlanSchema - image deployment validation', () => {
     }
   });
 
-  it('accepts project_name as a create_deploy_plan name alias', () => {
+  it('keeps name as the create_deploy_plan project-name field', () => {
     const input = {
       source: 'image',
       image: 'httpd:latest',
-      project_name: 'qa-name-check',
+      name: 'qa-name-check',
       port: 80,
     };
 
     const result = createDeployPlanSchema.safeParse(input);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.project_name).toBe('qa-name-check');
+      expect(result.data.name).toBe('qa-name-check');
     }
   });
 

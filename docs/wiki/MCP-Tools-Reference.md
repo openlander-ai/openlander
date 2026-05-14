@@ -6,7 +6,11 @@ OpenLander exposes its functionality to AI coding agents through a **composite-t
 - **64 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
-Each composite takes `{ action, params }` — e.g. `openlander_deploy({ action: "deploy_app", params: { repo_url: "..." } })`. Run `{ action: "help" }` on any composite to list its action catalog.
+Each composite takes `{ action, params }` — e.g.
+`openlander_deploy({ action: "deploy_app", params: { repo_url: "...", name: "my-app" } })`.
+Run `{ action: "help" }` on any composite to list its action catalog with machine-readable
+`input_schema`, `required_params`, and `optional_params`. Run
+`{ action: "help", params: { action_name: "create_deploy_plan" } }` to fetch one action contract.
 
 Model note: **Project = workspace/group** and **Service = deployable unit**. Repository, image,
 branch, Dockerfile, and build context belong to services. Project-level runtime actions have been
@@ -91,27 +95,28 @@ Execute a deployment plan (non-blocking).
 
 ### `deploy_app`
 
-One-call app deploy front door. With `service_id`, `service_name`, or an existing project `name`,
-it redeploys the existing app. With `repo_url` or `image`, it creates a new app.
+One-call app deploy front door. With `service_id`, `service_name`, `project_name`, or an existing
+project `name`, it redeploys the existing app. With `repo_url` or `image`, it creates a new app.
+For new app names, use `name`; `project_name` is only for existing app lookup/scoping.
 
-| Parameter           | Type    | Required | Description                                   |
-| ------------------- | ------- | -------- | --------------------------------------------- |
-| `service_id`        | string  | No       | Existing deployable service id                |
-| `service_name`      | string  | No       | Existing deployable service name              |
-| `project_name`      | string  | No       | Optional group scope for service name lookups |
-| `repo_url`          | string  | No       | Git repository URL for a new app              |
-| `branch`            | string  | No       | Branch                                        |
-| `name`              | string  | No       | Project name, or existing project alias       |
-| `source`            | string  | No       | `'git'` or `'image'`                          |
-| `image`             | string  | No       | Docker image                                  |
-| `cmd`               | string  | No       | Command override                              |
-| `port`              | number  | No       | Container port                                |
-| `env_vars`          | object  | No       | Environment variables                         |
-| `no_cache`          | boolean | No       | Force fresh build when redeploying existing   |
-| `strategy`          | string  | No       | Redeploy strategy for existing services       |
-| `health_check_path` | string  | No       | Health check path                             |
-| `wait`              | boolean | No       | Block until complete (default: true)          |
-| `timeout`           | number  | No       | Max seconds to wait (default: 300)            |
+| Parameter           | Type    | Required | Description                                 |
+| ------------------- | ------- | -------- | ------------------------------------------- |
+| `service_id`        | string  | No       | Existing deployable service id              |
+| `service_name`      | string  | No       | Existing deployable service name            |
+| `project_name`      | string  | No       | Existing group lookup or service name scope |
+| `repo_url`          | string  | No       | Git repository URL for a new app            |
+| `branch`            | string  | No       | Branch                                      |
+| `name`              | string  | No       | New project name, or existing project alias |
+| `source`            | string  | No       | `'git'` or `'image'`                        |
+| `image`             | string  | No       | Docker image                                |
+| `cmd`               | string  | No       | Command override                            |
+| `port`              | number  | No       | Container port                              |
+| `env_vars`          | object  | No       | Environment variables                       |
+| `no_cache`          | boolean | No       | Force fresh build when redeploying existing |
+| `strategy`          | string  | No       | Redeploy strategy for existing services     |
+| `health_check_path` | string  | No       | Health check path                           |
+| `wait`              | boolean | No       | Block until complete (default: true)        |
+| `timeout`           | number  | No       | Max seconds to wait (default: 300)          |
 
 ### `validate_deploy_plan`
 

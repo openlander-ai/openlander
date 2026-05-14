@@ -337,10 +337,7 @@ export const deployPlanToolDefs: ToolDef[] = [
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
         branch: (args['branch'] as string | undefined) ?? undefined,
-        name:
-          (args['name'] as string | undefined) ??
-          (args['project_name'] as string | undefined) ??
-          undefined,
+        name: (args['name'] as string | undefined) ?? undefined,
         source: (args['source'] as 'git' | 'image' | undefined) ?? undefined,
         imageUrl: (args['image'] as string | undefined) ?? undefined,
         imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
@@ -525,7 +522,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     description:
       'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing project with exactly one deployable service, this redeploys that service. Otherwise it creates a new app from repo_url or image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. If the plan needs missing env vars, returns status "needs_input" with the missing list.',
     mcpDescription:
-      'App deploy front door. Existing app: pass service_id/service_name or project name to redeploy. New app: pass repo_url or image. Poll get_deploy_status to track progress.',
+      'App deploy front door. Existing app: pass service_id/service_name or project_name/name to redeploy. New app: pass repo_url/image and use name for the project name. Poll get_deploy_status to track progress.',
     inputSchema: deploySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -540,10 +537,9 @@ export const deployPlanToolDefs: ToolDef[] = [
       const source = (args['source'] as 'git' | 'image' | undefined) ?? undefined;
       const image = (args['image'] as string | undefined) ?? undefined;
       const repoUrl = (args['repo_url'] as string | undefined) ?? undefined;
-      const projectName =
-        (args['name'] as string | undefined) ??
-        (args['project_name'] as string | undefined) ??
-        undefined;
+      const newAppName = (args['name'] as string | undefined) ?? undefined;
+      const scopedProjectName = (args['project_name'] as string | undefined) ?? undefined;
+      const projectName = newAppName ?? scopedProjectName ?? undefined;
 
       const frontDoorTarget = await resolveExistingDeployAppTarget(args, context);
       if (frontDoorTarget?.kind === 'needs_selection') {
@@ -568,6 +564,38 @@ export const deployPlanToolDefs: ToolDef[] = [
           ...(frontDoorTarget.kind === 'existing_project'
             ? { existing_service: frontDoorTarget.existingService }
             : {}),
+        };
+      }
+
+      if ((repoUrl || image) && scopedProjectName && !newAppName) {
+        return {
+          error: 'INVALID_PARAMS',
+          action: 'deploy_app',
+          details:
+            'project_name scopes existing app lookups only. For new app deploys, use name as the project name.',
+          invalid_params: ['project_name'],
+          allowed_params: [
+            'name',
+            'repo_url',
+            'image',
+            'source',
+            'branch',
+            'port',
+            'env_vars',
+            'cmd',
+            'wait',
+            'wait_healthy',
+            'timeout',
+          ],
+          required_params: [],
+          _agent_guidance: {
+            message:
+              'For a new app deploy, pass params.name. Keep params.project_name only for existing project lookup/scoping.',
+            next_steps: [
+              'Retry deploy_app with name set to the desired new project name.',
+              'If you intended to redeploy an existing app, omit repo_url/image or pass service_id.',
+            ],
+          },
         };
       }
 
@@ -616,7 +644,7 @@ export const deployPlanToolDefs: ToolDef[] = [
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
         branch: (args['branch'] as string | undefined) ?? undefined,
-        name: projectName,
+        name: newAppName,
         source,
         imageUrl: image,
         imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,

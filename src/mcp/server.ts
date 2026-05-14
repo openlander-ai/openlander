@@ -69,7 +69,7 @@ function getCompositeTools(allToolDefs: ToolDef[]): CompositeTool[] {
 const SERVER_INSTRUCTIONS = `You are connected to OpenLander — a self-hosted deployment platform.
 
 CRITICAL: Use ONLY the 5 composite tools below. Each tool takes an { action, params } input.
-Use action="help" on any tool to list available operations.
+Use action="help" on any tool to list available operations and machine-readable input schemas.
 NEVER call docker CLI, curl localhost, or docker compose directly — use OpenLander tools instead.
 Docker may run on a remote host. Always use tools, not local commands.
 
@@ -99,7 +99,7 @@ Key actions: diagnose_service, get_logs, get_alerts, get_system_stats, get_proje
 All actions: action="help"
 
 ## Usage
-Example: openlander_deploy({ action: "deploy_app", params: { repo_url: "https://github.com/user/repo" } })
+Example: openlander_deploy({ action: "deploy_app", params: { repo_url: "https://github.com/user/repo", name: "my-app" } })
 Example: openlander_project({ action: "help" })
 Example: openlander_managed_service({ action: "create_service", params: { name: "pg", template: "postgresql" } })
 Example: openlander_service({ action: "set_env_vars", params: { service_name: "app-web", variables: '{"DATABASE_URL":"..."}' } })
@@ -111,7 +111,7 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - export_env_vars returns raw .env text and should be used sparingly.
 
 ## Deploy Flow
-1. For "deploy this app", call openlander_deploy.deploy_app first. It creates a new app when repo_url/image is provided, or redeploys an existing app when service_id/service_name/name matches one.
+1. For "deploy this app", call openlander_deploy.deploy_app first. New apps use params.name for the project name. Existing apps can be targeted by service_id/service_name/project_name/name.
 2. openlander_deploy({ action: "get_deploy_status", params: { project_name: "..." } })  ← poll until done when deploy_app returns building/deploying
 3. openlander_project({ action: "list_projects" })  ← confirm running and use returned service_id for later service-level actions
 

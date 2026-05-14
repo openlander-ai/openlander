@@ -168,7 +168,7 @@ describe('deploy MCP guidance', () => {
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
   });
 
-  it('uses project_name as the new app name when creating a deploy plan', async () => {
+  it('rejects project_name as a new deploy_app name', async () => {
     const ctx = {
       db: {
         getProject: vi.fn(() => undefined),
@@ -194,6 +194,41 @@ describe('deploy MCP guidance', () => {
       { target: 'mcp' },
     )) as Record<string, unknown>;
 
+    expect(result).toMatchObject({
+      error: 'INVALID_PARAMS',
+      action: 'deploy_app',
+      invalid_params: ['project_name'],
+      allowed_params: expect.arrayContaining(['name']),
+    });
+    expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
+  });
+
+  it('uses name as the new deploy_app project name', async () => {
+    const ctx = {
+      db: {
+        getProject: vi.fn(() => undefined),
+        getProjectByName: vi.fn(() => undefined),
+      },
+      planEngine: {
+        createPlan: vi.fn(async () => ({
+          plan_id: 'plan-1',
+          status: 'needs_input',
+          missing: ['PORT'],
+          warnings: [],
+        })),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      {
+        source: 'image',
+        image: 'httpd:latest',
+        name: 'my-custom-name-123',
+        wait: false,
+      },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
     expect(result).toMatchObject({ status: 'needs_input' });
     expect(ctx.planEngine.createPlan).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -204,7 +239,7 @@ describe('deploy MCP guidance', () => {
     );
   });
 
-  it('uses project_name as the create_deploy_plan app name alias', async () => {
+  it('uses name as the create_deploy_plan app name', async () => {
     const ctx = {
       planEngine: {
         createPlan: vi.fn(async () => ({
@@ -225,7 +260,7 @@ describe('deploy MCP guidance', () => {
       {
         source: 'image',
         image: 'httpd:latest',
-        project_name: 'qa-name-check',
+        name: 'qa-name-check',
       },
       { target: 'mcp' },
     )) as Record<string, unknown>;

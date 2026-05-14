@@ -660,14 +660,6 @@ export const createDeployPlanSchema = z
       )
       .optional()
       .describe('Project name (auto-generated from repo if not provided)'),
-    project_name: z
-      .string()
-      .regex(
-        /^[a-z0-9][a-z0-9-]*$/,
-        'Project name must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens',
-      )
-      .optional()
-      .describe('Alias for name. Use this when the user says project_name.'),
     source: z.enum(['git', 'image']).optional().describe('Deployment source type'),
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
@@ -745,7 +737,7 @@ export const deploySchema = z
       .min(1)
       .optional()
       .describe(
-        'Project group name. For existing apps this scopes service_name lookups; for new apps this is accepted as an alias for name.',
+        'Existing project group name for redeploy lookup or service_name scoping. For new app names, use name.',
       ),
     repo_url: z
       .string()
@@ -839,7 +831,17 @@ export const deploySchema = z
       message:
         'If source is "image", image is required. If source is "git" or undefined, repo_url is required.',
     },
-  );
+  )
+  .superRefine((data, ctx) => {
+    if ((data.repo_url || data.image) && data.project_name && !data.name) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['project_name'],
+        message:
+          'project_name scopes existing app lookups only. For new app deploys, use name as the project name.',
+      });
+    }
+  });
 
 export const validateDeployPlanSchema = z.object({
   plan_id: z.string().min(1).describe('Plan ID returned from create_deploy_plan'),

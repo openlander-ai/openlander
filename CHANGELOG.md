@@ -48,8 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Improved `diagnose_service` HTTP probes for apps mounted under a base path
   such as `NEXT_PUBLIC_BASE_PATH=/admin`.
 - Accepted `health_check_path` as an alias for `diagnose_service.path`.
-- Honored `project_name` as a new app name in `create_deploy_plan` and
-  `deploy_app` instead of falling back to image-derived names.
+- Added machine-readable MCP composite action contracts in `help` and
+  `INVALID_PARAMS` responses, and made new app naming use the explicit `name`
+  parameter instead of silently accepting `project_name`.
 - Fixed managed-service backups in Docker installs by writing backup archives
   through the shared OpenLander data volume instead of a container-local path.
 - Kept deployable app/worker services out of managed-service MCP responses and

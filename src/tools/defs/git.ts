@@ -204,7 +204,7 @@ export const gitToolDefs: ToolDef[] = [
     name: 'search_github_repos',
     riskLevel: 'low',
     description:
-      'Search the user\'s GitHub repositories by name or keyword. Use when user says "deploy my-project" or "find repo X" — this resolves a project name to a deployable repo URL. Returns { total, repos[] } with safe clone URLs ready for create_deploy_plan. Private repo credentials are injected internally at clone time and are never returned. Errors: GITHUB_NOT_CONFIGURED. Tip: after finding the repo, call create_deploy_plan with the clone URL.',
+      'Search the user\'s GitHub repositories by name or keyword. Use when user says "deploy my-project" or "find repo X" — this resolves a project name to a deployable repo URL. Returns { total, repos[] } with safe token-free clone URLs. Private repo credentials are injected internally at clone time and are never returned. Errors: GITHUB_NOT_CONFIGURED. Tip: after finding the repo, call create_deploy_plan with the clone URL.',
     mcpDescription: 'Search connected GitHub repositories by name or keyword.',
     inputSchema: searchGithubReposSchema,
     execute: async (args, { target }) => {
