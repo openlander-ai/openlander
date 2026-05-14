@@ -79,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   compose deploys that failed with the same endpoint-conflict error.
 - Classified MCP/tool-initiated deploys and redeploys as MCP activity instead
   of `human` in the Activity feed.
+- Preserve Docker Compose service-name DNS aliases (for example `postgres` and
+  `redis`) when OpenLander runs compose services through Dockerode.
 
 ## [0.1.1-rc.6] — 2026-05-13
 

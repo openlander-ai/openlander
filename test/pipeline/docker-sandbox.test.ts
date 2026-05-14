@@ -248,9 +248,24 @@ describe('Docker sandbox race prevention', () => {
       envVars: {},
       traefikLabels: {},
       networks: ['ol-demo-stack', 'openlander'],
+      aliases: ['postgres'],
     });
 
     expect(container.start).toHaveBeenCalledOnce();
+    expect(mockCreateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        NetworkingConfig: {
+          EndpointsConfig: {
+            'ol-demo-stack': {
+              Aliases: ['demo-stack-postgres', 'postgres'],
+            },
+          },
+        },
+        HostConfig: expect.objectContaining({
+          NetworkMode: 'ol-demo-stack',
+        }),
+      }),
+    );
     expect(connect).toHaveBeenCalledTimes(1);
     expect(connect).toHaveBeenCalledWith({
       Container: 'ctr-compose',

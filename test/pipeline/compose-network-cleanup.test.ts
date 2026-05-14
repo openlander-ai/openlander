@@ -123,6 +123,31 @@ describe('compose network cleanup', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it('passes original compose service names as Docker network aliases', async () => {
+    const runComposeService = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => `container-${config.name}`);
+    const docker = createFakeDocker({ runComposeService } as Partial<Docker>);
+    const pipeline = new ComposePipeline(docker, createFakeDb(), createEventBus());
+
+    const result = await deployWithEnv(pipeline, {
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(true);
+    expect(runComposeService).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'ol-stack-web',
+        networks: ['stack-network', SHARED_NETWORK_NAME],
+        aliases: ['web'],
+      }),
+    );
+  });
+
   it('retries once after Docker reports a stale network endpoint conflict', async () => {
     const runComposeService = vi
       .fn()
