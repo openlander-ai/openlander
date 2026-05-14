@@ -123,8 +123,8 @@ export const translations = {
       // Content — empty state + formatted display.
       empty: '모든 시스템이 정상입니다.',
       projectError: '{name} 배포 실패',
-      pendingApprovals: '{count}개의 승인 대기',
-      unhealthyServices: '{count}개의 비정상 서비스',
+      pendingApprovals: '승인 대기 {count}개',
+      unhealthyServices: '비정상 서비스 {count}개',
     },
     health: {
       // Chrome — section title.
@@ -676,6 +676,13 @@ export const translations = {
         startFailed: '서비스 시작에 실패했습니다',
         stopFailed: '서비스 중지에 실패했습니다',
         deleteFailed: '서비스 삭제에 실패했습니다',
+        loadDatabasesFailed: '데이터베이스를 불러오지 못했습니다',
+        dbCreated: '데이터베이스가 생성되었습니다',
+        dbCreateFailed: '데이터베이스 생성에 실패했습니다',
+        userCreated: '사용자가 생성되었습니다',
+        userCreateFailed: '사용자 생성에 실패했습니다',
+        connStringCopied: '연결 문자열을 클립보드에 복사했습니다',
+        copied: '클립보드에 복사했습니다',
       },
       header: {
         // Chrome — back link + action buttons.
@@ -720,6 +727,13 @@ export const translations = {
       // Content — empty state.
       title: '서비스가 없습니다',
       description: '데이터베이스, 캐시 또는 기타 인프라 서비스를 생성하세요',
+    },
+    create: {
+      toasts: {
+        // Content — toast prose.
+        success: '서비스가 생성되었습니다',
+        errorFallback: '서비스 생성에 실패했습니다',
+      },
     },
   },
   timeline: {

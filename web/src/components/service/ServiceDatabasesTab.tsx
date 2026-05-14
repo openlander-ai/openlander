@@ -75,7 +75,9 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
       setDatabases(dbs);
       setUsers(usrs);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load databases');
+      setError(
+        err instanceof Error ? err.message : t('services.detail.toasts.loadDatabasesFailed'),
+      );
     } finally {
       setLoading(false);
     }
@@ -92,17 +94,17 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
     try {
       setCreatingDb(true);
       const res = await createServiceDatabase(service.id, newDbName.trim());
-      toast.success('Database created successfully');
+      toast.success(t('services.detail.toasts.dbCreated'));
       setCreateDbOpen(false);
       setNewDbName('');
       void fetchData();
 
       if (res.connectionString) {
         await copyToClipboard(res.connectionString);
-        toast.success('Connection string copied to clipboard');
+        toast.success(t('services.detail.toasts.connStringCopied'));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create database');
+      toast.error(err instanceof Error ? err.message : t('services.detail.toasts.dbCreateFailed'));
     } finally {
       setCreatingDb(false);
     }
@@ -120,7 +122,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
         newUserPassword || undefined,
         newUserDatabase || undefined,
       );
-      toast.success('User created successfully');
+      toast.success(t('services.detail.toasts.userCreated'));
       setCreateUserOpen(false);
       setNewUsername('');
       setNewUserPassword('');
@@ -129,10 +131,12 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
 
       if (res.connectionString) {
         await copyToClipboard(res.connectionString);
-        toast.success('Connection string copied to clipboard');
+        toast.success(t('services.detail.toasts.connStringCopied'));
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create user');
+      toast.error(
+        err instanceof Error ? err.message : t('services.detail.toasts.userCreateFailed'),
+      );
     } finally {
       setCreatingUser(false);
     }
@@ -140,7 +144,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
 
   const handleCopyConnString = (text: string, id: string) => {
     void copy(text, id);
-    toast.success('Copied to clipboard');
+    toast.success(t('services.detail.toasts.copied'));
   };
 
   if (loading) {
