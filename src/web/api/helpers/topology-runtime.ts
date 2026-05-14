@@ -219,14 +219,17 @@ async function fetchTopologyNodeRuntime(
   // Containers in their HEALTHCHECK `start_period` (typically 30s for
   // postgres/mongo) are healthy by default — collapsing `starting` to
   // `crashed` triggered false alarms in InfraMap on every fresh deploy.
-  // Only `unhealthy` collapses to `crashed`. `null` (no healthcheck)
-  // and `healthy` keep the default `healthy`.
+  // Only `unhealthy` collapses to `crashed`. `building` is explicitly
+  // treated as non-crashed so the project list and service topology do
+  // not disagree while a deploy is in progress.
   //
   // Inspect failure collapses to `crashed` for parity with
   // ServiceManager.inspectServiceContainer (which sets status: 'error'
   // on the same failure mode).
   let health: 'healthy' | 'crashed' = 'healthy';
-  if (node.status !== 'running') {
+  if (node.status === 'building') {
+    health = 'healthy';
+  } else if (node.status !== 'running') {
     health = 'crashed';
   } else if (node.container_id) {
     try {
