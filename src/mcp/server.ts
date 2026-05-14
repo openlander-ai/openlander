@@ -120,7 +120,10 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 ## Networking
 - All containers share the "openlander" Docker network
 - Container-to-container: http://ol-{project-name}:{port}
-- Never create Docker networks manually`;
+- Never create Docker networks manually
+
+## Human UI-only operations
+Project/app archive, delete, and purge are intentionally NOT exposed as MCP actions. If the user asks to archive, delete, or remove a project or app, tell them to use the web UI: Settings → Danger zone for that project/service. Do NOT substitute remove_service or cleanup_docker — those target managed infrastructure services and Docker hosts, not deployable apps.`;
 
 function buildServerInstructions(ctx: AppContext, incidentBriefing: string): string {
   const instance = getMcpInstanceContext(ctx.config);
