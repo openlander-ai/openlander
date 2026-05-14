@@ -23,6 +23,7 @@ import { AgentGuideDialog } from '@/components/agent-guide';
 import { useActivityFeed } from '@/hooks/use-activity-feed';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useProjectTopology } from '@/hooks/use-project-topology';
+import { useLanguage } from '@/i18n/context';
 import { getRecentDeployments } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -97,6 +98,7 @@ export function Home() {
   const navigate = useNavigate();
   const { projects, loading } = useProjectsContext();
   const { events: activityEvents } = useActivityFeed({ limit: 5 });
+  const { t } = useLanguage();
 
   // Flat health tally across all projects
   const tally = useMemo(() => {
@@ -174,31 +176,24 @@ export function Home() {
                   : '0 0 0 3px color-mix(in oklch, var(--ol-error) 25%, transparent)',
               }}
             />
-            System status · just now
+            {t('home.hero.statusJustNow')}
           </div>
 
           {/* Headline */}
           <h1 className="text-[15px] font-medium leading-snug text-[color:var(--ol-fg)]">
-            {tally.total === 0 ? (
-              <>No projects yet. Tell your agent to deploy — projects show up here as it works.</>
-            ) : allHealthy ? (
-              <>
-                All <b className="font-semibold">{tally.total}</b> service
-                {tally.total === 1 ? '' : 's'} running across{' '}
-                <b className="font-semibold">{projects.length}</b> project
-                {projects.length === 1 ? '' : 's'}.
-              </>
-            ) : (
-              <>
-                <b className="font-semibold text-[color:var(--ol-error)]">{tally.crashed}</b> of{' '}
-                {tally.total} service{tally.total === 1 ? '' : 's'} crashed
-                <span className="text-[color:var(--ol-fg-muted)]">
-                  {' '}
-                  · {tally.healthy} running across {projects.length} project
-                  {projects.length === 1 ? '' : 's'}.
-                </span>
-              </>
-            )}
+            {tally.total === 0
+              ? t('home.hero.noProjects')
+              : allHealthy
+                ? t('home.hero.allHealthy', {
+                    services: t('common.count.services', { count: totalServices }),
+                    projects: t('common.count.projects', { count: projects.length }),
+                  })
+                : t('home.hero.someCrashed', {
+                    crashed: tally.crashed,
+                    total: tally.total,
+                    healthy: tally.healthy,
+                    services: t('common.count.services', { count: totalServices }),
+                  })}
           </h1>
         </div>
       </OuterCard>
@@ -241,7 +236,7 @@ export function Home() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="text-[12px] text-[color:var(--ol-fg-muted)]">
-                    Last deploy · {timeAgo}
+                    {t('home.hero.lastDeploy', { time: timeAgo })}
                   </span>
                   <span className="text-[12.5px] font-medium text-[color:var(--ol-fg)]">
                     {projectName}
@@ -269,28 +264,28 @@ export function Home() {
 
       {/* ── 2. Projects grid ── */}
       <OuterCard
-        title="Projects"
-        subtitle={`${projects.length} project${projects.length === 1 ? '' : 's'} · ${totalServices} service${totalServices === 1 ? '' : 's'}`}
+        title={t('home.projects.sectionTitle')}
+        subtitle={`${t('common.count.projects', { count: projects.length })} · ${t('common.count.services', { count: totalServices })}`}
         actions={
           <button
             type="button"
             onClick={() => navigate('/projects')}
             className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
           >
-            View all
+            {t('common.viewAll')}
             <ChevronRight className="h-3 w-3" />
           </button>
         }
       >
         {projects.length === 0 ? (
           <div className="py-8 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
-            No projects yet.{' '}
+            {t('home.projects.emptyText')}{' '}
             <button
               type="button"
               onClick={() => setGuideOpen(true)}
               className="text-[color:var(--ol-primary)] underline underline-offset-2"
             >
-              Create one
+              {t('home.projects.createOne')}
             </button>
           </div>
         ) : (
@@ -303,7 +298,7 @@ export function Home() {
                   key={p.id}
                   type="button"
                   onClick={() => navigate(`/projects/${p.id}`)}
-                  aria-label={`Open ${p.name} project`}
+                  aria-label={t('home.projects.openProject', { name: p.name })}
                   className={cn(
                     'group flex items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors',
                     state === 'crashed'
@@ -326,13 +321,13 @@ export function Home() {
                       </span>
                       {state === 'crashed' && (
                         <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium bg-[color-mix(in_oklch,var(--ol-error)_12%,transparent)] text-[color:var(--ol-error)]">
-                          crashed
+                          {t('home.projects.crashedPill')}
                         </span>
                       )}
                     </div>
                     <div className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
                       {p.serviceCount != null
-                        ? `${p.serviceCount} service${p.serviceCount === 1 ? '' : 's'}`
+                        ? t('common.count.services', { count: p.serviceCount })
                         : ''}
                     </div>
                     {/* Service dots — one per service, color-coded by health */}
@@ -354,15 +349,15 @@ export function Home() {
 
       {/* ── 3. Activity peek ── */}
       <OuterCard
-        title="Recent activity"
-        subtitle="Audit log of deploys, config changes, and agent calls."
+        title={t('home.recentActivity.sectionTitle')}
+        subtitle={t('home.recentActivity.sectionSubtitle')}
         actions={
           <button
             type="button"
             onClick={() => navigate('/activity')}
             className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
           >
-            View all
+            {t('common.viewAll')}
             <ChevronRight className="h-3 w-3" />
           </button>
         }
@@ -374,7 +369,7 @@ export function Home() {
           // names — Home shares the same name resolver as the full Activity
           // page even though it doesn't render the tab strip.
           projects={projects.map((p) => ({ id: p.id, name: p.name }))}
-          emptyState="No activity yet. Triggers, deploys, agent runs, and incidents will appear here as they happen."
+          emptyState={t('activity.page.emptyState')}
           onOpenService={(project, service) => navigate(`/services/${service}?project=${project}`)}
           onOpenDeployment={(deploymentId, projectId) =>
             navigate(`/projects/${projectId}/deployments/${deploymentId}`)

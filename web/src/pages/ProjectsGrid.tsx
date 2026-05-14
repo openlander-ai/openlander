@@ -19,6 +19,7 @@ import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useProjects } from '@/hooks/use-projects';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { createProjectGroup } from '@/lib/api/projects';
+import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/types';
 
@@ -78,6 +79,7 @@ function timeAgo(dateStr: string): string {
 export function ProjectsGrid() {
   const navigate = useNavigate();
   const ctx = useProjectsContext();
+  const { t } = useLanguage();
   const [showArchived, setShowArchived] = useState(false);
   // When the toggle is off (default), reuse the shared context so we don't
   // double-poll. When on, mount a per-page useProjects(true) so archived
@@ -296,9 +298,7 @@ export function ProjectsGrid() {
                             padding-top, and 16px gap (styles.css `.project-card-stats`). */}
                         <div className="mt-2 flex items-center gap-4 border-t border-[color:var(--ol-border-subtle)] pt-3 text-[11.5px] text-[color:var(--ol-fg-muted)]">
                           {p.serviceCount != null && (
-                            <span>
-                              {p.serviceCount} service{p.serviceCount === 1 ? '' : 's'}
-                            </span>
+                            <span>{t('common.count.services', { count: p.serviceCount })}</span>
                           )}
                           <span>Deployed {timeAgo(p.updatedAt)}</span>
                           <span className="ml-auto text-[color:var(--ol-fg-subtle)]">

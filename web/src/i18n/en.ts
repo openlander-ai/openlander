@@ -29,6 +29,17 @@ export const translations = {
         'Host memory usage is at {percent}%. Consider reducing container limits or increasing host resources.',
     },
   },
+  common: {
+    viewAll: 'View all',
+    count: {
+      // Content — count phrases with units. en accepts the "1 services"
+      // anomaly at count=1; ko renders identically since Korean does not
+      // mark plural on counted nouns. Tracked: introduce Intl.PluralRules
+      // before adding a third language with grammatical plural distinctions.
+      services: '{count} services',
+      projects: '{count} projects',
+    },
+  },
   nav: {
     overview: 'Overview',
     projects: 'Projects',
@@ -85,6 +96,13 @@ export const translations = {
         mcp: 'MCP',
       },
     },
+    page: {
+      title: 'Activity',
+      subtitle:
+        'Audit log — pick a tab to focus on deployments, MCP, system events, or config changes.',
+      emptyState:
+        'No activity yet. Triggers, deploys, agent runs, and incidents will appear here as they happen.',
+    },
   },
   overview: {
     title: 'Overview',
@@ -119,6 +137,26 @@ export const translations = {
     approval: 'Approval',
     incidents: 'Alerts',
     aiSpend: 'AI Spend',
+  },
+  home: {
+    hero: {
+      statusJustNow: 'System status · just now',
+      noProjects: 'No projects yet. Tell your agent to deploy — projects show up here as it works.',
+      allHealthy: 'All {services} running across {projects}.',
+      someCrashed: '{crashed} of {total} projects crashed · {healthy} healthy across {services}.',
+      lastDeploy: 'Last deploy · {time}',
+    },
+    projects: {
+      sectionTitle: 'Projects',
+      crashedPill: 'crashed',
+      openProject: 'Open {name} project',
+      emptyText: 'No projects yet.',
+      createOne: 'Create one',
+    },
+    recentActivity: {
+      sectionTitle: 'Recent activity',
+      sectionSubtitle: 'Audit log of deploys, config changes, and agent calls.',
+    },
   },
   setup: {
     welcome: {
