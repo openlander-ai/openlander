@@ -225,6 +225,41 @@ export const PLATFORM_REGISTRY = {
   platform: PLATFORM_ACTIONS,
 } as const;
 
+/**
+ * Actions that intentionally do NOT exist as MCP operations because the
+ * underlying flow is human UI-only (project/app archive, delete, purge).
+ *
+ * Agents reaching for these names get a `HUMAN_UI_ONLY` response with a
+ * clear pointer to the web UI instead of a generic `UNKNOWN_ACTION`. That
+ * keeps a "삭제해줘" prompt from spiraling into adjacent destructive tools
+ * like `remove_service` or `cleanup_docker`.
+ */
+export const HUMAN_UI_ONLY_ACTIONS = [
+  'archive_app',
+  'archive_project',
+  'archive_service',
+  'delete_app',
+  'delete_project',
+  'delete_service',
+  'destroy_app',
+  'destroy_project',
+  'purge_app',
+  'purge_project',
+  'remove_app',
+  'remove_project',
+  'unarchive_app',
+  'unarchive_project',
+  'unarchive_service',
+] as const;
+
+export type HumanUiOnlyAction = (typeof HUMAN_UI_ONLY_ACTIONS)[number];
+
+const HUMAN_UI_ONLY_SET: ReadonlySet<string> = new Set(HUMAN_UI_ONLY_ACTIONS);
+
+export function isHumanUiOnlyAction(action: string): boolean {
+  return HUMAN_UI_ONLY_SET.has(action);
+}
+
 export interface CompositeTool {
   name: string;
   description: string;
@@ -347,6 +382,17 @@ function invalidParamsResponse(
   };
 }
 
+function humanUiOnlyResponse(toolName: string, action: string): Record<string, unknown> {
+  return {
+    error: 'HUMAN_UI_ONLY',
+    action,
+    composite: toolName,
+    _agent_guidance: {
+      message: `"${action}" is not exposed to MCP. Project/app archive, delete, and purge are human UI-only operations. Tell the user to use the web UI: Settings → Danger zone for that project or service. Do not substitute remove_service, cleanup_docker, or other destructive tools — those target managed infrastructure services, not deployable apps/projects.`,
+    },
+  };
+}
+
 function createCompositeTool(
   toolName: keyof typeof COMPOSITE_REGISTRY,
   description: string,
@@ -368,6 +414,9 @@ function createCompositeTool(
         if (requestedAction) {
           const requestedDef = toolDefs.find((def) => def.name === requestedAction);
           if (!requestedDef) {
+            if (isHumanUiOnlyAction(requestedAction)) {
+              return humanUiOnlyResponse(toolName, requestedAction);
+            }
             return {
               error: 'UNKNOWN_ACTION',
               action: requestedAction,
@@ -401,6 +450,9 @@ function createCompositeTool(
 
       const def = toolDefs.find((item) => item.name === action);
       if (!def) {
+        if (isHumanUiOnlyAction(action)) {
+          return humanUiOnlyResponse(toolName, action);
+        }
         return {
           error: 'UNKNOWN_ACTION',
           action,

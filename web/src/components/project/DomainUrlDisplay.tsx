@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, Wifi, Shield, ExternalLink, ChevronDown, Copy, Check } from 'lucide-react';
+import { Globe, Wifi, Shield, Monitor, ExternalLink, ChevronDown, Copy, Check } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { useCopy } from '@/hooks/use-copy';
@@ -8,7 +8,8 @@ import { cn } from '@/lib/utils';
 interface UrlItem {
   url: string;
   type: string;
-  ip: string;
+  ip?: string;
+  host?: string;
 }
 
 interface DomainUrlDisplayProps {
@@ -38,6 +39,16 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
       type: 'lan',
       label: 'LAN',
       icon: Wifi,
+    });
+  }
+
+  const hostUrls = urls.filter((u) => u.type === 'host');
+  for (const u of hostUrls) {
+    allUrls.push({
+      url: u.url,
+      type: 'host',
+      label: 'Local',
+      icon: Monitor,
     });
   }
 

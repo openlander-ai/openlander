@@ -20,7 +20,6 @@ import {
   getAllIps,
   getEnvironmentProjectHostname,
   getPreferredProjectUrl,
-  getProjectUrl,
   getProjectUrls,
 } from '../../../pipeline/traefik.js';
 
@@ -283,9 +282,12 @@ export function mapProjectForApi(project: ProjectRow, deployable?: DeployableFor
     build_method: buildMethod,
     dockerfile_path: dockerfilePath,
     port,
-    url: port ? getProjectUrl(project.name) : null,
-    preferred_url: port ? getPreferredProjectUrl(project.name) : null,
-    urls: port ? getProjectUrls(project.name) : [],
+    // Legacy consumers still read `url`; keep it aligned with
+    // `preferred_url` so they pick up the port-aware host URL instead of
+    // the Traefik `{name}.localhost` fallback on containerized installs.
+    url: port ? getPreferredProjectUrl(project.name, port) : null,
+    preferred_url: port ? getPreferredProjectUrl(project.name, port) : null,
+    urls: port ? getProjectUrls(project.name, port) : [],
     publicUrl,
     source,
     imageUrl,

@@ -270,6 +270,63 @@ describe('DOCKER_HOST env override', () => {
   });
 });
 
+describe('OPENLANDER_CONTAINERIZED suppresses interface detection', () => {
+  beforeEach(() => {
+    mockNetworkInterfaces.mockReset();
+    delete process.env['HOST_IP'];
+    delete process.env['HOST_VPN_IP'];
+    delete process.env['DOCKER_HOST'];
+    delete process.env['OPENLANDER_CONTAINERIZED'];
+  });
+
+  afterEach(() => {
+    delete process.env['OPENLANDER_CONTAINERIZED'];
+  });
+
+  it('returns no IPs from container eth0 when containerized and no env override', () => {
+    // Simulate the Docker-bridge IP a containerized OpenLander would see —
+    // `eth0` doesn't match the br-/docker/veth filter and would otherwise
+    // leak into sslip URLs like app.172.18.0.3.sslip.io.
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('172.18.0.3')],
+    });
+
+    expect(getAllIps()).toEqual([]);
+    expect(getLanIp()).toBeUndefined();
+  });
+
+  it('still honors HOST_IP when containerized', () => {
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    process.env['HOST_IP'] = '192.168.1.50';
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('172.18.0.3')],
+    });
+
+    const ips = getAllIps();
+    expect(ips).toHaveLength(1);
+    expect(ips[0]).toMatchObject({ address: '192.168.1.50', type: 'lan' });
+  });
+
+  it('still honors DOCKER_HOST when containerized', () => {
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    process.env['DOCKER_HOST'] = 'tcp://10.0.0.5:2375';
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('172.18.0.3')],
+    });
+
+    expect(getLanIp()).toBe('10.0.0.5');
+  });
+
+  it('keeps interface detection when OPENLANDER_CONTAINERIZED is unset', () => {
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('192.168.1.100')],
+    });
+
+    expect(getLanIp()).toBe('192.168.1.100');
+  });
+});
+
 describe('getAllIps', () => {
   beforeEach(() => {
     mockNetworkInterfaces.mockReset();

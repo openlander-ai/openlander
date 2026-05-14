@@ -41,16 +41,19 @@ const allToolDefs: ToolDef[] = [
 ];
 
 const mockContext: ToolContext = { target: 'mcp', appCtx: {} as AppContext };
+// Actions removed from openlander_project that should still surface as
+// UNKNOWN_ACTION. Archive/unarchive are intentionally excluded — they now
+// route to the HUMAN_UI_ONLY sentinel (see HUMAN_UI_ONLY_ACTIONS in
+// src/mcp/composite-tools.ts).
 const removedProjectRuntimeActions = [
   'stop_project',
   'start_project',
   'restart_project',
   'redeploy_project',
   'rollback_project',
-  'archive_project',
-  'unarchive_project',
   'update_project_config',
 ] as const;
+const humanUiOnlyProjectActions = ['archive_project', 'unarchive_project'] as const;
 
 describe('openlander_project runtime aliases removed', () => {
   let tool: CompositeTool;
@@ -64,7 +67,7 @@ describe('openlander_project runtime aliases removed', () => {
       actions: Array<{ name: string }>;
     };
     const actionNames = result.actions.map((action) => action.name);
-    for (const removed of removedProjectRuntimeActions) {
+    for (const removed of [...removedProjectRuntimeActions, ...humanUiOnlyProjectActions]) {
       expect(actionNames).not.toContain(removed);
     }
   });
@@ -78,6 +81,20 @@ describe('openlander_project runtime aliases removed', () => {
       expect(result).toHaveProperty('error', 'UNKNOWN_ACTION');
       expect(result).toHaveProperty('action', removed);
       expect(result).toHaveProperty('composite', 'openlander_project');
+    }
+  });
+
+  it('returns HUMAN_UI_ONLY for project archive/unarchive', async () => {
+    for (const action of humanUiOnlyProjectActions) {
+      const result = (await tool.execute({ action, params: {} }, mockContext)) as Record<
+        string,
+        unknown
+      >;
+      expect(result).toHaveProperty('error', 'HUMAN_UI_ONLY');
+      expect(result).toHaveProperty('action', action);
+      expect(result).toHaveProperty('composite', 'openlander_project');
+      const guidance = result['_agent_guidance'] as Record<string, unknown>;
+      expect(String(guidance['message'])).toMatch(/Settings → Danger zone/);
     }
   });
 
@@ -134,19 +151,47 @@ describe('openlander_service direct deployable runtime actions', () => {
   });
 
   it('does not expose managed start/stop actions on openlander_service', async () => {
-    for (const action of [
-      'start_service',
-      'stop_service',
-      'remove_service',
-      'archive_service',
-      'unarchive_service',
-    ] as const) {
+    for (const action of ['start_service', 'stop_service', 'remove_service'] as const) {
       const result = (await tool.execute({ action, params: {} }, mockContext)) as Record<
         string,
         unknown
       >;
       expect(result).toHaveProperty('error', 'UNKNOWN_ACTION');
       expect(result).toHaveProperty('composite', 'openlander_service');
+    }
+  });
+
+  it('returns HUMAN_UI_ONLY for service archive/unarchive on openlander_service', async () => {
+    for (const action of ['archive_service', 'unarchive_service'] as const) {
+      const result = (await tool.execute({ action, params: {} }, mockContext)) as Record<
+        string,
+        unknown
+      >;
+      expect(result).toHaveProperty('error', 'HUMAN_UI_ONLY');
+      expect(result).toHaveProperty('action', action);
+      expect(result).toHaveProperty('composite', 'openlander_service');
+      const guidance = result['_agent_guidance'] as Record<string, unknown>;
+      expect(String(guidance['message'])).toMatch(/Settings → Danger zone/);
+      expect(String(guidance['message'])).toMatch(/remove_service|cleanup_docker/);
+    }
+  });
+
+  it('returns HUMAN_UI_ONLY for delete/remove/purge aliases agents commonly reach for', async () => {
+    for (const action of [
+      'delete_project',
+      'delete_app',
+      'delete_service',
+      'remove_app',
+      'remove_project',
+      'purge_project',
+      'destroy_app',
+    ] as const) {
+      const result = (await tool.execute({ action, params: {} }, mockContext)) as Record<
+        string,
+        unknown
+      >;
+      expect(result).toHaveProperty('error', 'HUMAN_UI_ONLY');
+      expect(result).toHaveProperty('action', action);
     }
   });
 });

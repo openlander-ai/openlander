@@ -67,6 +67,66 @@ describe('Traefik environment hostnames', () => {
   });
 });
 
+describe('localhost:port advertised when assignedPort is known', () => {
+  const originalContainerized = process.env['OPENLANDER_CONTAINERIZED'];
+
+  afterEach(() => {
+    if (originalPublicHost === undefined) {
+      delete process.env['OPENLANDER_PUBLIC_HOST'];
+    } else {
+      process.env['OPENLANDER_PUBLIC_HOST'] = originalPublicHost;
+    }
+    if (originalContainerized === undefined) {
+      delete process.env['OPENLANDER_CONTAINERIZED'];
+    } else {
+      process.env['OPENLANDER_CONTAINERIZED'] = originalContainerized;
+    }
+  });
+
+  it('returns only localhost:port when containerized with no sslip LAN IP', () => {
+    delete process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+
+    const urls = getProjectUrls('my-app', 10008);
+    expect(urls).toEqual([
+      {
+        url: 'http://localhost:10008',
+        type: 'host',
+        host: 'localhost',
+        reachable: 'host-only',
+      },
+    ]);
+    expect(getPreferredProjectUrl('my-app', 10008)).toBe('http://localhost:10008');
+  });
+
+  it('omits localhost:port when port is missing', () => {
+    delete process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+
+    const urls = getProjectUrls('my-app');
+    expect(urls).toEqual([
+      {
+        url: 'http://my-app.localhost',
+        type: 'host',
+        host: 'localhost',
+        reachable: 'host-only',
+      },
+    ]);
+  });
+
+  it('still uses public host as preferred even when port is provided', () => {
+    process.env['OPENLANDER_PUBLIC_HOST'] = 'apps.example.com';
+    delete process.env['OPENLANDER_CONTAINERIZED'];
+
+    const urls = getProjectUrls('my-app', 10008);
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toMatchObject({
+      url: 'http://my-app.apps.example.com',
+      type: 'public',
+    });
+  });
+});
+
 describe('Traefik labels with environment', () => {
   it('keeps production labels unchanged when environment is omitted', () => {
     delete process.env['OPENLANDER_PUBLIC_HOST'];

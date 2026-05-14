@@ -37,6 +37,13 @@ Destructive MCP operations are intentionally gated. Service deletion is blocked 
 and must be completed in the web UI with typed confirmation. Supported bulk cleanup actions such as
 `bulk_delete_env_vars confirm=true` enter the human approval hold queue before execution.
 
+**Project/app archive, delete, and purge are human UI-only.** Composites do not expose
+`archive_service`, `archive_project`, `delete_project`, `delete_app`, `remove_app`, or
+`purge_project`. Calls to those names return
+`{ error: "HUMAN_UI_ONLY", _agent_guidance: { message: "...use the web UI: Settings → Danger zone..." } }`
+so agents do not silently substitute `remove_service` or `cleanup_docker` (those target managed
+infrastructure services, not deployable apps).
+
 Composite catalog:
 
 | Composite                    | Action slots | Purpose                                                                      |

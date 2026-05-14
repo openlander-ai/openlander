@@ -262,6 +262,11 @@ function configuredPublicHost(): string | undefined {
   }
 }
 
+function isContainerizedRuntime(): boolean {
+  const raw = process.env['OPENLANDER_CONTAINERIZED']?.trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes';
+}
+
 function isIpv4Address(value: string): boolean {
   const parts = value.split('.');
   return (
@@ -342,29 +347,23 @@ export interface NetworkIp {
 /**
  * Get all non-internal IPv4 addresses.
  * Detects LAN IPs and VPN IPs (Tailscale, ZeroTier, WireGuard).
+ *
+ * Inside a containerized OpenLander runtime (OPENLANDER_CONTAINERIZED=true),
+ * `networkInterfaces()` sees the container's own bridge IP (typically a
+ * 172.x.x.x address on `eth0`) — useless as a public URL because host
+ * browsers cannot reach it directly. In that case we ignore detected
+ * interfaces entirely and rely solely on explicit env overrides
+ * (HOST_IP, HOST_VPN_IP, DOCKER_HOST). Operators with a containerized
+ * install on a real server should set OPENLANDER_PUBLIC_HOST or HOST_IP so
+ * sslip.io URLs advertise a reachable address.
  */
 export function getAllIps(): NetworkIp[] {
   const hostIp = process.env['HOST_IP'];
   const hostVpnIp = process.env['HOST_VPN_IP'];
   const dockerHost = process.env['DOCKER_HOST'];
+  const containerized = isContainerizedRuntime();
 
-  const nets = networkInterfaces();
-  const detected: NetworkIp[] = [];
-  const vpnPatterns = /^(tailscale|ts|zt|zerotier|wg|tun|utun)/i;
-  const dockerPatterns = /^(br-|docker|veth)/i;
-
-  for (const name of Object.keys(nets)) {
-    for (const net of nets[name] ?? []) {
-      if (net.internal || net.family !== 'IPv4') continue;
-      if (dockerPatterns.test(name)) continue;
-      const isVpn = vpnPatterns.test(name) || net.address.startsWith('100.');
-      detected.push({
-        address: net.address,
-        interface: name,
-        type: isVpn ? 'vpn' : 'lan',
-      });
-    }
-  }
+  const detected: NetworkIp[] = containerized ? [] : detectInterfaceIps();
 
   const result: NetworkIp[] = [];
   let dockerHostIp: string | undefined;
@@ -400,6 +399,28 @@ export function getAllIps(): NetworkIp[] {
   return result.sort((a, b) => (a.type === 'lan' ? -1 : 1) - (b.type === 'lan' ? -1 : 1));
 }
 
+function detectInterfaceIps(): NetworkIp[] {
+  const nets = networkInterfaces();
+  const detected: NetworkIp[] = [];
+  const vpnPatterns = /^(tailscale|ts|zt|zerotier|wg|tun|utun)/i;
+  const dockerPatterns = /^(br-|docker|veth)/i;
+
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] ?? []) {
+      if (net.internal || net.family !== 'IPv4') continue;
+      if (dockerPatterns.test(name)) continue;
+      const isVpn = vpnPatterns.test(name) || net.address.startsWith('100.');
+      detected.push({
+        address: net.address,
+        interface: name,
+        type: isVpn ? 'vpn' : 'lan',
+      });
+    }
+  }
+
+  return detected;
+}
+
 export interface ProjectUrl {
   url: string;
   type: 'public' | 'lan' | 'vpn' | 'host';
@@ -408,7 +429,7 @@ export interface ProjectUrl {
   reachable?: 'external' | 'host-only' | 'container-only';
 }
 
-export function getProjectUrls(projectName: string): ProjectUrl[] {
+export function getProjectUrls(projectName: string, assignedPort?: number | null): ProjectUrl[] {
   const publicHost = configuredPublicHost();
   if (publicHost) {
     return [
@@ -428,6 +449,19 @@ export function getProjectUrls(projectName: string): ProjectUrl[] {
     reachable: 'external' as const,
   }));
 
+  // Always advertise the host-published port when known. On Mac Docker
+  // Desktop this is often the only address the user's browser can reach,
+  // and on bare-metal it remains useful as a localhost dev URL alongside
+  // the LAN sslip URL.
+  if (assignedPort && assignedPort > 0) {
+    urls.push({
+      url: `http://localhost:${String(assignedPort)}`,
+      type: 'host',
+      host: 'localhost',
+      reachable: 'host-only',
+    });
+  }
+
   if (urls.length === 0) {
     urls.push({
       url: `http://${projectName}.localhost`,
@@ -440,8 +474,8 @@ export function getProjectUrls(projectName: string): ProjectUrl[] {
   return urls;
 }
 
-export function getPreferredProjectUrl(projectName: string): string {
-  return getProjectUrls(projectName)[0]?.url ?? getProjectUrl(projectName);
+export function getPreferredProjectUrl(projectName: string, assignedPort?: number | null): string {
+  return getProjectUrls(projectName, assignedPort)[0]?.url ?? getProjectUrl(projectName);
 }
 
 export function buildTraefikLabels(
