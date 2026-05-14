@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Removed `archive_service` and `unarchive_service` from the default MCP
   composite surface; archive/restore remains available through the web/API
   lifecycle.
+- Added `openlander config reset-apps [--force]` CLI subcommand. Lists every
+  application-managed container (label `openlander.managed=true` + a non-empty
+  `openlander.role`) and, with `--force`, stops + removes them. The OpenLander
+  backend itself is intentionally excluded; use `docker compose down` for that.
+  Volumes are preserved.
 
 ### Fixed
 
@@ -57,6 +62,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   return explicit guidance when a managed-service action receives one.
 - Increased Docker disk-usage timeout to avoid false cleanup preflight failures
   on slower hosts.
+- `openlander_monitor.diagnose_service` now accepts `internal: true` and routes
+  the HTTP probe through `docker exec` against the service container's own
+  network namespace (using `container_port`). Previously the flag was silently
+  dropped at the schema layer and the probe always hit the backend container's
+  loopback, making the result useless for "is the app actually listening?"
+  diagnostics.
+- Clarified `openlander_monitor.probe_host` description so agents know
+  `ol-svc-*` / `ol-{project}` internal Docker DNS names require `internal: true`
+  to resolve — the backend cannot reach those from its own network namespace.
 
 ## [0.1.1-rc.6] — 2026-05-13
 

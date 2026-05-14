@@ -141,6 +141,12 @@ export const diagnoseServiceSchema = z
       .max(30000)
       .optional()
       .describe('Probe timeout in milliseconds (default: 5000).'),
+    internal: z
+      .boolean()
+      .optional()
+      .describe(
+        'When true, run the HTTP probe from inside the service container itself (against its container_port). Use this when the deploy reports a healthcheck failure or the host-side probe cannot reach the assigned port. Default: false (host-side probe against assigned_port).',
+      ),
   })
   .refine(
     (value) =>

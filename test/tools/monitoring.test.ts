@@ -543,6 +543,120 @@ describe('diagnose_service tool', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('probes from inside the service container when internal=true', async () => {
+    const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
+    const service = {
+      id: 'app__svc',
+      project_id: 'app',
+      name: 'web',
+      kind: 'git',
+      source: 'git',
+      status: 'running',
+      assigned_port: 10001,
+      container_id: 'abc123def4567890',
+      container_name: 'ol-app',
+      container_port: 3000,
+      health_check_path: '/healthz',
+      created_at: '2026-05-13T00:00:00.000Z',
+      updated_at: '2026-05-13T00:00:00.000Z',
+      archived_at: null,
+      server_id: 'local',
+    };
+    const execSimple = vi.fn(async () => ({ exitCode: 0, stdout: 'OK', stderr: '' }));
+    const ctx = {
+      db: {
+        getProject: vi.fn(() => project),
+        getProjectByName: vi.fn(() => project),
+        getService: vi.fn(() => service),
+        getDeployablesByGroup: vi.fn(async () => [service]),
+        listServices: vi.fn(async () => [service]),
+        getEnvVars: vi.fn(async () => ({})),
+        getEnvVarsForService: vi.fn(async () => ({})),
+        getDeployLogs: vi.fn(async () => []),
+      },
+      pipeline: { getLogs: vi.fn(async () => '') },
+      docker: {
+        inspectContainer: vi.fn(async () => ({
+          Name: '/ol-app',
+          State: { Running: true, Status: 'running', StartedAt: '2026-05-13T00:00:00.000Z' },
+          Config: { Image: 'app:latest' },
+        })),
+        execSimple,
+      },
+    } as unknown as AppContext;
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { service_id: 'app__svc', internal: true },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    // exec was called against the SERVICE container (not the backend),
+    // and the command targets the service's container_port (3000), not
+    // the host-side assigned_port (10001).
+    expect(execSimple).toHaveBeenCalledTimes(1);
+    expect(execSimple.mock.calls[0][0]).toBe('abc123def4567890');
+    expect(execSimple.mock.calls[0][1][2]).toContain('127.0.0.1:3000/healthz');
+
+    const httpCheck = result.httpCheck as Record<string, unknown>;
+    expect(httpCheck).toMatchObject({
+      reachable: true,
+      probed_from: 'service-container',
+      protocol_used: 'http',
+    });
+    expect(httpCheck.target_resolved).toContain(':3000/healthz');
+    expect(httpCheck.target_resolved).toContain('abc123def456');
+  });
+
+  it('reports skipped when internal=true is requested before container_id exists', async () => {
+    const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
+    const service = {
+      id: 'app__svc',
+      project_id: 'app',
+      name: 'web',
+      kind: 'git',
+      source: 'git',
+      status: 'starting',
+      assigned_port: 10001,
+      container_id: null,
+      container_name: null,
+      container_port: 3000,
+      health_check_path: '/',
+      created_at: '2026-05-13T00:00:00.000Z',
+      updated_at: '2026-05-13T00:00:00.000Z',
+      archived_at: null,
+      server_id: 'local',
+    };
+    const execSimple = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+    const ctx = {
+      db: {
+        getProject: vi.fn(() => project),
+        getProjectByName: vi.fn(() => project),
+        getService: vi.fn(() => service),
+        getDeployablesByGroup: vi.fn(async () => [service]),
+        listServices: vi.fn(async () => [service]),
+        getEnvVars: vi.fn(async () => ({})),
+        getEnvVarsForService: vi.fn(async () => ({})),
+        getDeployLogs: vi.fn(async () => []),
+      },
+      pipeline: { getLogs: vi.fn(async () => '') },
+      docker: {
+        inspectContainer: vi.fn(async () => ({})),
+        execSimple,
+      },
+    } as unknown as AppContext;
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { service_id: 'app__svc', internal: true },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(execSimple).not.toHaveBeenCalled();
+    expect(result.httpCheck).toMatchObject({
+      skipped: true,
+      reason: expect.stringContaining('container_id'),
+    });
+  });
 });
 
 describe('service-targeted monitoring tools', () => {

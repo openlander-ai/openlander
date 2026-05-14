@@ -31,7 +31,13 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     if (saved === 'en' || saved === 'ko') {
       return saved;
     }
-    return navigator.language.startsWith('ko') ? 'ko' : 'en';
+    // 2026-05-13: default to English regardless of browser locale.
+    // OpenLander positions as an agent-first PaaS with an
+    // English-speaking primary audience; auto-detecting `navigator.language`
+    // dropped Korean users into the Korean copy by default, but the
+    // English UI is the canonical surface. Users can flip via the
+    // /login header toggle or the AccountPopover menu.
+    return 'en';
   });
 
   useEffect(() => {
