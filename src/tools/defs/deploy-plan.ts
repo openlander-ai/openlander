@@ -1203,6 +1203,22 @@ export const deployPlanToolDefs: ToolDef[] = [
 
       if (plan.build.method === 'compose') {
         const services = plan.build.compose_services ?? [];
+        const servicesWithHostPorts = services.filter(
+          (service) => service.host_ports && service.host_ports.length > 0,
+        );
+
+        if (servicesWithHostPorts.length > 0) {
+          checks.push({
+            name: 'compose_ports',
+            status: 'fail',
+            message:
+              'Compose `ports:` host mappings are not supported. OpenLander manages public routing through Traefik; remove `ports:` and use `expose:` or the service container port instead. Affected services: ' +
+              servicesWithHostPorts
+                .map((service) => `${service.name} (${service.host_ports?.join(', ') ?? ''})`)
+                .join('; '),
+          });
+        }
+
         const withHealth = services.filter((s) => s.healthcheck);
         if (withHealth.length === 0 && services.length > 0) {
           checks.push({

@@ -304,7 +304,7 @@ describe('ComposePipeline', () => {
     const composePath = join(tmpDir, 'docker-compose.yml');
     writeFileSync(
       composePath,
-      `services:\n  web:\n    image: nginx\n    ports:\n      - "3000:3000"\n  db:\n    image: postgres\n`,
+      `services:\n  web:\n    image: nginx\n    expose:\n      - "3000"\n  db:\n    image: postgres\n`,
       'utf8',
     );
 
@@ -344,7 +344,7 @@ describe('ComposePipeline', () => {
     const composePath = join(tmpDir, 'docker-compose.yml');
     writeFileSync(
       composePath,
-      `services:\n  web:\n    build: .\n    ports:\n      - "3000:3000"\n`,
+      `services:\n  web:\n    build: .\n    expose:\n      - "3000"\n`,
       'utf8',
     );
 
@@ -369,7 +369,7 @@ describe('ComposePipeline', () => {
     const composePath = join(tmpDir, 'docker-compose.yml');
     writeFileSync(
       composePath,
-      `services:\n  web:\n    image: nginx\n    ports:\n      - "3000:3000"\n`,
+      `services:\n  web:\n    image: nginx\n    expose:\n      - "3000"\n`,
       'utf8',
     );
 
@@ -918,7 +918,7 @@ describe('ComposePipeline', () => {
     const composePath = join(tmpDir, 'docker-compose.yml');
     writeFileSync(
       composePath,
-      `services:\n  web:\n    image: nginx\n    ports:\n      - "3000:3000"\n`,
+      `services:\n  web:\n    image: nginx\n    expose:\n      - "3000"\n`,
       'utf8',
     );
 
@@ -941,7 +941,7 @@ describe('ComposePipeline', () => {
     const composePath = join(tmpDir, 'docker-compose.yml');
     writeFileSync(
       composePath,
-      `services:\n  web:\n    image: nginx\n    ports:\n      - "3000:3000"\n`,
+      `services:\n  web:\n    image: nginx\n    expose:\n      - "3000"\n`,
       'utf8',
     );
 
