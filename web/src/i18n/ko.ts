@@ -175,44 +175,6 @@ export const translations = {
     incidents: 'Alerts',
     aiSpend: 'AI Spend',
   },
-  projects: {
-    // Chrome — page title + buttons + filter/sort controls + aria.
-    pageTitle: 'Projects',
-    newProject: 'New Project',
-    tags: 'Tags',
-    showArchived: 'Show archived',
-    hideArchived: 'Hide archived',
-    newestFirst: 'Newest first',
-    moreOptions: 'More options',
-    // Content — subtitle + placeholders + empty state + relative-time
-    // formatted strings + create dialog prose.
-    pageSubtitle: '프로젝트를 생성하고 관리합니다.',
-    filterPlaceholder: '프로젝트 검색…',
-    emptyTitle: '아직 프로젝트가 없습니다',
-    emptyDescription:
-      '프로젝트는 환경 변수를 공유하고 함께 배포되는 관련 서비스(웹, API, 워커, 데이터베이스)를 묶어줍니다.',
-    createFirst: 'Create your first project',
-    deployedAgo: '배포: {time}',
-    createdAgo: '생성: {time}',
-    create: {
-      // Chrome — modal buttons + form label.
-      cancel: 'Cancel',
-      submit: 'Create project',
-      submitting: 'Creating...',
-      nameLabel: 'Project display name',
-      namePlaceholder: 'Hotdeal Tracker',
-      // Chrome — modal heading is a primitive create-noun pattern.
-      title: 'Create project',
-      // Content — descriptive prose + close-aria + errors.
-      description:
-        '프로젝트는 관련 서비스의 작업 공간입니다. 생성 후 레포지토리, 이미지, 데이터베이스, compose 스택을 추가하세요.',
-      closeAria: '프로젝트 만들기 대화상자 닫기',
-      errors: {
-        nameRequired: '프로젝트 이름을 입력하세요.',
-        fallback: '프로젝트 생성에 실패했습니다.',
-      },
-    },
-  },
   home: {
     hero: {
       // Content — hero status prose on /home.
@@ -362,11 +324,25 @@ export const translations = {
     commandPlaceholder: '예: --model-id BAAI/bge-m3',
   },
   projects: {
-    // Chrome — page title + primary action + CTA button.
+    // Chrome — page title + primary action + CTA button + controls.
     title: 'Projects overview',
-    newProject: 'New project',
+    pageTitle: 'Projects',
+    newProject: 'New Project',
+    tags: 'Tags',
+    newestFirst: 'Newest first',
+    moreOptions: 'More options',
+    createFirst: 'Create your first project',
     deployFirstApp: 'Deploy your first app',
-    // Content — empty state + descriptive copy + error.
+    // Content — page subtitle + placeholders + empty state + descriptive
+    // copy + relative-time formatted strings + errors.
+    pageSubtitle: '프로젝트를 생성하고 관리합니다.',
+    filterPlaceholder: '프로젝트 검색…',
+    emptyTitle: '아직 프로젝트가 없습니다',
+    emptyDescription:
+      '프로젝트는 환경 변수를 공유하고 함께 배포되는 관련 서비스(웹, API, 워커, 데이터베이스)를 묶어줍니다.',
+    searchEmpty: '"{query}"와 일치하는 프로젝트가 없습니다',
+    deployedAgo: '배포 · {time}',
+    createdAgo: '생성 · {time}',
     monitored: '프로젝트 {count}개 모니터링 중',
     noProjects: '프로젝트가 없습니다',
     connectGithub: 'GitHub 레포지토리를 연결하면 에이전트가 나머지를 처리합니다.',
@@ -375,8 +351,26 @@ export const translations = {
         '프로젝트 이름은 소문자 또는 숫자로 시작해야 하며, 소문자, 숫자, 하이픈만 포함할 수 있습니다',
     },
     filter: {
-      // Chrome — toggle label.
+      // Chrome — toggle labels.
       showArchived: 'Show archived',
+      hideArchived: 'Hide archived',
+    },
+    create: {
+      // Chrome — modal heading + buttons + form labels.
+      title: 'Create project',
+      cancel: 'Cancel',
+      submit: 'Create project',
+      submitting: 'Creating...',
+      nameLabel: 'Project display name',
+      namePlaceholder: 'Hotdeal Tracker',
+      // Content — descriptive prose + close-aria + errors.
+      description:
+        '프로젝트는 관련 서비스의 작업 공간입니다. 생성 후 레포지토리, 이미지, 데이터베이스, compose 스택을 추가하세요.',
+      closeAria: '프로젝트 만들기 대화상자 닫기',
+      errors: {
+        nameRequired: '프로젝트 이름을 입력하세요.',
+        fallback: '프로젝트 생성에 실패했습니다.',
+      },
     },
     card: {
       // Chrome — card field labels + badges.

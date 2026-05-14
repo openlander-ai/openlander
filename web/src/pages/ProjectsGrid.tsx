@@ -189,7 +189,9 @@ export function ProjectsGrid() {
                     : 'border-[color:var(--ol-border)] text-[color:var(--ol-fg-muted)] hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]',
                 )}
               >
-                {showArchived ? t('projects.hideArchived') : t('projects.showArchived')}
+                {showArchived
+                  ? t('projects.filter.hideArchived')
+                  : t('projects.filter.showArchived')}
               </button>
               <button
                 type="button"
@@ -204,7 +206,7 @@ export function ProjectsGrid() {
             <div className="flex flex-col gap-1">
               {filtered.length === 0 ? (
                 <div className="py-8 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
-                  No projects match &quot;{q}&quot;
+                  {t('projects.searchEmpty', { query: q })}
                 </div>
               ) : (
                 filtered.map((p) => {
@@ -240,7 +242,7 @@ export function ProjectsGrid() {
                           )}
                           {isArchived ? (
                             <span className="inline-flex items-center rounded-full bg-[color:var(--ol-panel)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--ol-fg-muted)]">
-                              Archived
+                              {t('projects.card.archivedBadge')}
                             </span>
                           ) : (
                             <>
