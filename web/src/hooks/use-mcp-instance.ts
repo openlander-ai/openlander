@@ -31,7 +31,11 @@ export function useMcpInstance() {
     setSaving(true);
     setError(null);
     try {
-      const info = await updateMcpInstanceName(draftName);
+      // Trim before sending so a draft of " name " doesn't slip past
+      // the dirty check (`draftName.trim() !== instance.name`) only to
+      // be normalized server-side, leaving the on-screen input with
+      // stale whitespace.
+      const info = await updateMcpInstanceName(draftName.trim());
       setInstance(info);
       setDraftName(info.name);
       return info;

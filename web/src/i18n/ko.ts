@@ -1111,13 +1111,14 @@ export const translations = {
       // Chrome — section title + action.
       title: 'Setup',
       copyConfig: 'Copy config',
+      copyNeedsGenerate: '토큰 발급 후 복사',
+      copyNeedsRegenerate: '재발급 후 복사',
       copyNeedsReveal: '토큰 표시 후 복사',
       // Content — descriptive copy.
       subtitle: '클라이언트를 선택하고 설정 스니펫을 붙여넣으세요.',
       restartHint: '저장 후 클라이언트를 재시작하세요. 첫 호출 시 위 상태가 연결됨으로 바뀝니다.',
-      placeholderHint:
-        '재방문 사용자도 설정 형식을 확인할 수 있도록 <your-token> 자리표시자로 보여줍니다.',
-      revealToCopyHint: '실제 토큰이 포함된 설정을 복사하려면 토큰을 새로 발급하거나 재발급하세요.',
+      placeholderHint: '토큰을 발급하기 전까지는 예시에 <your-token> 자리표시자가 사용됩니다.',
+      revealToCopyHint: '실제 토큰이 포함된 설정을 복사하려면 토큰을 발급하세요.',
     },
     recent: {
       // Chrome — section title + link affordance.
