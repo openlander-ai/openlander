@@ -51,6 +51,7 @@ import { ServiceResourceLimitsPanel } from '@/components/service/ServiceResource
 import { Sparkline } from '@/components/Shell/Sparkline';
 import { DeployRow } from '@/components/Shell/DeployRow';
 import { type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
+import { ApiError } from '@/lib/api/client';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useProjectTopology } from '@/hooks/use-project-topology';
 import { useServiceHealth } from '@/hooks/use-service-health';
@@ -282,16 +283,12 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
       await redeployService(projectId, id);
       refetchDeployments();
     } catch (err) {
-      // The redeploy route returns 409 with body
-      // `{ error: 'DEPLOY_LOCKED', code: 'DEPLOY_LOCKED', ... }` when
-      // another deploy is already running for this project. apiPost()
-      // throws Error(responseBodyText), so we sniff the sentinel code
-      // out of the message rather than threading res.status through.
-      const raw = err instanceof Error ? err.message : '';
-      if (raw.includes('DEPLOY_LOCKED')) {
+      if (err instanceof ApiError && err.code === 'DEPLOY_LOCKED') {
         setDeployError(t('serviceDetail.deploy.locked'));
       } else {
-        setDeployError(raw || t('serviceDetail.deploy.fallbackError'));
+        setDeployError(
+          err instanceof Error ? err.message : t('serviceDetail.deploy.fallbackError'),
+        );
       }
     } finally {
       setDeploying(false);
