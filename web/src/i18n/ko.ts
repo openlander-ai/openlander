@@ -73,6 +73,8 @@ export const translations = {
   sidebar: {
     collapse: '사이드바 접기',
     expand: '사이드바 펼치기',
+    primaryNavAria: '주 메뉴',
+    versionAria: '버전 v0.1',
   },
   account: {
     popover: {
@@ -172,6 +174,43 @@ export const translations = {
     approval: 'Approval',
     incidents: 'Alerts',
     aiSpend: 'AI Spend',
+  },
+  projects: {
+    // Chrome — page title + buttons + filter/sort controls + aria.
+    pageTitle: 'Projects',
+    newProject: 'New Project',
+    tags: 'Tags',
+    showArchived: 'Show archived',
+    hideArchived: 'Hide archived',
+    newestFirst: 'Newest first',
+    moreOptions: 'More options',
+    // Content — subtitle + placeholders + empty state + relative-time
+    // formatted strings + create dialog prose.
+    pageSubtitle: '프로젝트를 생성하고 관리합니다.',
+    filterPlaceholder: '프로젝트 검색…',
+    emptyTitle: '아직 프로젝트가 없습니다',
+    emptyDescription:
+      '프로젝트는 환경 변수를 공유하고 함께 배포되는 관련 서비스(웹, API, 워커, 데이터베이스)를 묶어줍니다.',
+    createFirst: '첫 프로젝트 만들기',
+    deployedAgo: '배포: {time}',
+    createdAgo: '생성: {time}',
+    create: {
+      // Chrome — modal buttons + form label.
+      cancel: 'Cancel',
+      submit: 'Create project',
+      submitting: 'Creating...',
+      nameLabel: 'Project display name',
+      namePlaceholder: 'Hotdeal Tracker',
+      // Content — modal title + description + close-aria + errors.
+      title: '프로젝트 만들기',
+      description:
+        '프로젝트는 관련 서비스의 작업 공간입니다. 생성 후 레포지토리, 이미지, 데이터베이스, compose 스택을 추가하세요.',
+      closeAria: '프로젝트 만들기 대화상자 닫기',
+      errors: {
+        nameRequired: '프로젝트 이름을 입력하세요.',
+        fallback: '프로젝트 생성에 실패했습니다.',
+      },
+    },
   },
   home: {
     hero: {

@@ -20,6 +20,7 @@ import { useProjects } from '@/hooks/use-projects';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { createProjectGroup } from '@/lib/api/projects';
 import { useLanguage } from '@/i18n/context';
+import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/types';
 
@@ -64,18 +65,6 @@ function StatusPill({ status }: { status: Project['status'] }) {
   );
 }
 
-function timeAgo(dateStr: string): string {
-  const ts = new Date(dateStr).getTime();
-  if (Number.isNaN(ts)) return '';
-  const diff = Date.now() - ts;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
 export function ProjectsGrid() {
   const navigate = useNavigate();
   const ctx = useProjectsContext();
@@ -107,7 +96,7 @@ export function ProjectsGrid() {
     event.preventDefault();
     const name = projectName.trim();
     if (!name) {
-      setCreateError('Project name is required.');
+      setCreateError(t('projects.create.errors.nameRequired'));
       return;
     }
     setCreating(true);
@@ -119,7 +108,7 @@ export function ProjectsGrid() {
       setProjectName('');
       navigate(`/projects/${result.project.id}`);
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Failed to create project.');
+      setCreateError(err instanceof Error ? err.message : t('projects.create.errors.fallback'));
     } finally {
       setCreating(false);
     }
@@ -128,8 +117,8 @@ export function ProjectsGrid() {
   return (
     <div className="mx-auto w-full max-w-5xl">
       <OuterCard
-        title="Projects"
-        subtitle="Create and manage your projects"
+        title={t('projects.pageTitle')}
+        subtitle={t('projects.pageSubtitle')}
         actions={
           <button
             type="button"
@@ -137,7 +126,7 @@ export function ProjectsGrid() {
             className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:opacity-90"
           >
             <Plus className="h-3.5 w-3.5" />
-            New Project
+            {t('projects.newProject')}
           </button>
         }
       >
@@ -155,11 +144,10 @@ export function ProjectsGrid() {
             </div>
             <div>
               <h3 className="text-[14px] font-semibold text-[color:var(--ol-fg)]">
-                You don&apos;t have any projects yet
+                {t('projects.emptyTitle')}
               </h3>
               <p className="mt-1.5 max-w-md text-[13px] text-[color:var(--ol-fg-muted)]">
-                A project bundles related services — web, api, worker, db — that share environment
-                and deploy together.
+                {t('projects.emptyDescription')}
               </p>
             </div>
             <button
@@ -168,7 +156,7 @@ export function ProjectsGrid() {
               className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
-              Create your first project
+              {t('projects.createFirst')}
             </button>
           </div>
         ) : (
@@ -178,7 +166,7 @@ export function ProjectsGrid() {
               <div className="relative min-w-0 flex-1">
                 <input
                   type="search"
-                  placeholder="Filter projects…"
+                  placeholder={t('projects.filterPlaceholder')}
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   className="w-full rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[13px] text-[color:var(--ol-fg)] placeholder:text-[color:var(--ol-fg-subtle)] focus:border-[color:var(--ol-border)] focus:outline-none"
@@ -188,7 +176,7 @@ export function ProjectsGrid() {
                 type="button"
                 className="rounded-md border border-[color:var(--ol-border)] px-2.5 py-1.5 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
               >
-                Tags
+                {t('projects.tags')}
               </button>
               <button
                 type="button"
@@ -201,13 +189,13 @@ export function ProjectsGrid() {
                     : 'border-[color:var(--ol-border)] text-[color:var(--ol-fg-muted)] hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]',
                 )}
               >
-                {showArchived ? 'Hide archived' : 'Show archived'}
+                {showArchived ? t('projects.hideArchived') : t('projects.showArchived')}
               </button>
               <button
                 type="button"
                 className="flex items-center gap-1 rounded-md border border-[color:var(--ol-border)] px-2.5 py-1.5 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
               >
-                Newest first
+                {t('projects.newestFirst')}
                 <ChevronDown className="h-3 w-3" />
               </button>
             </div>
@@ -307,9 +295,15 @@ export function ProjectsGrid() {
                               )}
                             </span>
                           )}
-                          <span>Deployed {timeAgo(p.updatedAt)}</span>
+                          <span>
+                            {t('projects.deployedAgo', {
+                              time: formatRelativeTime(p.updatedAt, t),
+                            })}
+                          </span>
                           <span className="ml-auto text-[color:var(--ol-fg-subtle)]">
-                            Created {timeAgo(p.createdAt)}
+                            {t('projects.createdAgo', {
+                              time: formatRelativeTime(p.createdAt, t),
+                            })}
                           </span>
                         </div>
                       </div>
@@ -317,7 +311,7 @@ export function ProjectsGrid() {
                       {/* More */}
                       <button
                         type="button"
-                        aria-label="More options"
+                        aria-label={t('projects.moreOptions')}
                         onClick={(e) => e.stopPropagation()}
                         className="grid h-7 w-7 place-items-center rounded-md text-[color:var(--ol-fg-subtle)] opacity-0 transition-opacity hover:bg-[color:var(--ol-panel)] hover:text-[color:var(--ol-fg)] group-hover:opacity-100"
                       >
@@ -338,18 +332,17 @@ export function ProjectsGrid() {
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-[16px] font-semibold text-[color:var(--ol-fg)]">
-                  Create project
+                  {t('projects.create.title')}
                 </h2>
                 <p className="mt-1 text-[12.5px] text-[color:var(--ol-fg-muted)]">
-                  A project is a workspace for related services. Add repos, images, databases, or
-                  compose stacks after creation.
+                  {t('projects.create.description')}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setCreateOpen(false)}
                 className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
-                aria-label="Close create project dialog"
+                aria-label={t('projects.create.closeAria')}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -358,12 +351,12 @@ export function ProjectsGrid() {
             <form onSubmit={handleCreateProject} className="space-y-4">
               <label className="block">
                 <span className="mb-1.5 block text-[12px] font-medium text-[color:var(--ol-fg-muted)]">
-                  Project display name
+                  {t('projects.create.nameLabel')}
                 </span>
                 <input
                   value={projectName}
                   onChange={(event) => setProjectName(event.target.value)}
-                  placeholder="Hotdeal Tracker"
+                  placeholder={t('projects.create.namePlaceholder')}
                   autoFocus
                   className="w-full rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-2 text-[13px] text-[color:var(--ol-fg)] outline-none transition-colors placeholder:text-[color:var(--ol-fg-subtle)] focus:border-[color:var(--ol-primary)]"
                 />
@@ -381,14 +374,14 @@ export function ProjectsGrid() {
                   onClick={() => setCreateOpen(false)}
                   className="rounded-md border border-[color:var(--ol-border)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
                 >
-                  Cancel
+                  {t('projects.create.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
                   className="rounded-md bg-[color:var(--ol-primary)] px-3 py-2 text-[12.5px] font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {creating ? 'Creating...' : 'Create project'}
+                  {creating ? t('projects.create.submitting') : t('projects.create.submit')}
                 </button>
               </div>
             </form>
