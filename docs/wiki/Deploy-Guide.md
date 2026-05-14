@@ -2,19 +2,31 @@
 
 ## Overview
 
-OpenLander deploys deployable services through a 3-step pipeline. A **project** is the
+OpenLander deploys **deployable services** through a plan-first pipeline. A **project** is the
 workspace/group that holds related services; a repository, Docker image, or compose stack is attached
 to a service inside that project.
 
 ```
-create_deploy_plan  →  execute_deploy_plan  →  get_deploy_status
-     ↓                       ↓                        ↓
-  Analyze repo          Run the build            Poll until done
-  Detect services       Docker build + run       completed / failed
-  Check env vars        Traefik routing
+create_deploy_plan  →  validate_deploy_plan  →  execute_deploy_plan  →  get_deploy_status
+     ↓                         ↓                         ↓                       ↓
+  Analyze repo           Catch bad env/URLs         Docker build + run      Poll until done
+  Detect services        Check missing input        Traefik routing         completed / failed
+  Check env vars         Confirm readiness
 ```
 
 There's also a convenience `deploy_app` tool that combines all 3 steps.
+
+## Mental Model
+
+| Term               | Meaning                                                                    | Use it for                                                   |
+| ------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Project group      | A workspace that groups related services.                                  | Organization, settings, service list.                        |
+| Deployable service | An app, API, worker, or compose child that OpenLander builds/runs.         | Env vars, redeploys, domains, logs, diagnostics.             |
+| Managed service    | Shared infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, or MinIO. | Credentials, backups, databases, buckets, service lifecycle. |
+
+After a deploy, call `list_projects` and keep `projects[].deployable_service.service_id`.
+Use that `service_id` for follow-up MCP actions such as `redeploy_app`, `set_env_vars`,
+`map_domain`, and `diagnose_service`.
 
 ---
 
@@ -48,7 +60,7 @@ After a service deploy succeeds, the service gets a URL:
 
 - **Internal**: `http://your-server:assigned-port`
 - **Traefik**: `http://service-name.your-server`
-- **Public**: Quick Share via TryCloudflare (temporary URL)
+- **Public**: optional temporary share URL or a custom domain mapping
 
 ---
 
@@ -60,12 +72,14 @@ After a service deploy succeeds, the service gets a URL:
 deploy_app(
   repo_url: "https://github.com/user/my-app",
   branch: "main",
+  name: "my-app",
   wait: true
 )
 ```
 
-This clones, builds, runs, and waits for completion. It creates or selects a project group, then
-creates a deployable service that owns the repo/branch/build source.
+This is the app deploy front door. For a new app, pass `name` as the project group name. If `name`,
+`project_name`, `service_id`, or `service_name` matches an existing single-deployable app, it
+redeploys that app. Once an app exists, prefer the returned `service_id` for follow-up actions.
 
 ### Step-by-Step Deploy
 
@@ -104,13 +118,31 @@ execute_deploy_plan(plan_id: "plan_xxx")
 
 Returns immediately (non-blocking).
 
-#### Step 4: Poll Status
+#### Step 4: Validate or Poll Status
+
+Before executing, you can call:
+
+```
+validate_deploy_plan(plan_id: "plan_xxx")
+```
+
+After executing, poll:
 
 ```
 get_deploy_status(project_name: "my-app")
 ```
 
 Poll until status is `completed` or `failed`.
+
+#### Step 5: Diagnose Failures
+
+If deployment reports `failed`, `unhealthy`, timeout, or the app behaves unexpectedly:
+
+```
+diagnose_service(service_id: "my-app__svc")
+```
+
+Use `get_build_log(deploy_id: "...")` when you need the full build output.
 
 ---
 
@@ -199,20 +231,20 @@ deploy_compose(
 ### Redeploy (Same Config)
 
 ```
-redeploy_app(service_name: "my-app")
+redeploy_app(service_id: "my-app__svc")
 ```
 
 ### Redeploy with Fresh Build
 
 ```
-redeploy_app(service_name: "my-app", no_cache: true)
+redeploy_app(service_id: "my-app__svc", no_cache: true)
 ```
 
 ### Blue-Green Deploy (Zero Downtime)
 
 ```
 redeploy_app(
-  service_name: "my-app",
+  service_id: "my-app__svc",
   strategy: "blue-green",
   health_check_path: "/health"
 )

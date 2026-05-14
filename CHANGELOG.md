@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   container-private bridge IPs in Docker installs.
 - Added `preferred_url` to project/deploy responses so agents can use the
   canonical app URL without interpreting the full `urls` array.
+- Made `deploy_app` the MCP app-deploy front door: it creates new apps when
+  `repo_url`/`image` is provided, and routes existing app targets to redeploy
+  when `service_id`, `service_name`, or a single-service project `name` is
+  provided.
+- Removed `archive_service` and `unarchive_service` from the default MCP
+  composite surface; archive/restore remains available through the web/API
+  lifecycle.
 - Added `openlander config reset-apps [--force]` CLI subcommand. Lists every
   application-managed container (label `openlander.managed=true` + a non-empty
   `openlander.role`) and, with `--force`, stops + removes them. The OpenLander
@@ -27,6 +34,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Made `deploy_app` report `readiness` and return `status: "unhealthy"` when a
   running container's Docker healthcheck is failing instead of treating it as a
   successful deploy.
+- Stopped GitHub repo discovery MCP responses from returning credentialed clone
+  URLs; private repo credentials are now kept internal to clone time.
+- Reduced infrastructure analyzer false positives by no longer treating generic
+  ORM packages as PostgreSQL, and by reading Prisma datasource providers and
+  `DATABASE_URL` schemes instead.
+- Removed `postgresql://localhost` deploy-plan placeholders; planned or reused
+  managed services now satisfy required env vars and inject real connection
+  strings at execution time.
+- Normalized MCP targeting for logs, stats, diagnostics, deploy history, build
+  logs, host probes, action status, and managed-service status/credentials.
+- Allowed deployable-service MCP actions to resolve `service_name` as the
+  project group name when that group has exactly one deployable service.
+- Extended the same single-deployable project-name fallback to deployable env
+  variable actions.
+- Added `deploy_id`/`job_id` lookup to `get_deploy_status` so completed deploys
+  and unknown ids are distinguishable.
+- Improved `diagnose_service` HTTP probes for apps mounted under a base path
+  such as `NEXT_PUBLIC_BASE_PATH=/admin`.
+- Accepted `health_check_path` as an alias for `diagnose_service.path`.
+- Added machine-readable MCP composite action contracts in `help` and
+  `INVALID_PARAMS` responses, and made new app naming use the explicit `name`
+  parameter instead of silently accepting `project_name`.
+- Fixed managed-service backups in Docker installs by writing backup archives
+  through the shared OpenLander data volume instead of a container-local path.
+- Kept deployable app/worker services out of managed-service MCP responses and
+  return explicit guidance when a managed-service action receives one.
+- Increased Docker disk-usage timeout to avoid false cleanup preflight failures
+  on slower hosts.
 - `openlander_monitor.diagnose_service` now accepts `internal: true` and routes
   the HTTP probe through `docker exec` against the service container's own
   network namespace (using `container_port`). Previously the flag was silently

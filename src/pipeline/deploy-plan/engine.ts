@@ -23,6 +23,7 @@ import type {
 import { PlanStateMachine } from './types.js';
 import { computeComplexity, computeMissingEnvVars } from './plan-utils.js';
 import type { Database } from '../../db/index.js';
+import type { ServiceRow } from '../../db/index.js';
 import type { DeployPipeline } from '../deploy.js';
 import type { EnvManager } from '../env.js';
 import type { ServiceManager } from '../service-manager.js';
@@ -31,6 +32,7 @@ import type { OpenLanderConfig } from '../../config/index.js';
 import type { EventBus } from '../../events/index.js';
 import type { ComposePipeline } from '../compose.js';
 import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
+import { ServiceConfigError } from '../../errors.js';
 
 const log = createModuleLogger('plan-engine');
 
@@ -82,7 +84,7 @@ export interface PlanEngineDeps {
 
 const SERVICE_ENV_VARS: Record<string, string> = {
   postgresql: 'DATABASE_URL',
-  mysql: 'MYSQL_URL',
+  mysql: 'DATABASE_URL',
   redis: 'REDIS_URL',
   mongodb: 'MONGODB_URI',
   rabbitmq: 'RABBITMQ_URL',
@@ -263,7 +265,9 @@ export class PlanEngine {
         type: missingService.type,
         action: 'create',
         connect_via:
-          SERVICE_ENV_VARS[missingService.type] || `${missingService.type.toUpperCase()}_URL`,
+          missingService.connectVia ??
+          SERVICE_ENV_VARS[missingService.type] ??
+          `${missingService.type.toUpperCase()}_URL`,
       });
     }
 
@@ -271,9 +275,12 @@ export class PlanEngine {
       services.push({
         type: availableService.type,
         action: 'reuse',
+        service_id: availableService.id,
         name: availableService.name,
         connect_via:
-          SERVICE_ENV_VARS[availableService.type] || `${availableService.type.toUpperCase()}_URL`,
+          availableService.connectVia ??
+          SERVICE_ENV_VARS[availableService.type] ??
+          `${availableService.type.toUpperCase()}_URL`,
       });
     }
 
@@ -364,16 +371,77 @@ export class PlanEngine {
   }
 
   private buildAutoEnvVars(services: PlanService[]): Record<string, string> {
-    const autoEnvVars: Record<string, string> = {};
-    for (const service of services) {
-      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-      const envVarName = SERVICE_ENV_VARS[service.type];
-      if (envVarName) {
-        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-        autoEnvVars[envVarName] = `${service.type}://localhost`;
+    void services;
+    return {};
+  }
+
+  private plannedServiceEnvKeys(services: PlanService[]): Set<string> {
+    return new Set(services.map((service) => service.connect_via).filter(Boolean));
+  }
+
+  private serviceKindMatchesPlanType(service: ServiceRow, type: PlanService['type']): boolean {
+    switch (type) {
+      case 'postgresql':
+        return service.kind === 'postgres';
+      case 'mongodb':
+        return service.kind === 'mongo';
+      default:
+        return service.kind === type;
+    }
+  }
+
+  private async resolveReusableService(planService: PlanService): Promise<ServiceRow> {
+    if (planService.service_id) {
+      const service = await this.db.getService(planService.service_id);
+      if (service && this.serviceKindMatchesPlanType(service, planService.type)) {
+        return service;
       }
     }
-    return autoEnvVars;
+
+    const services = await this.db.listServices();
+    const service = services.find(
+      (candidate) =>
+        candidate.name === planService.name &&
+        this.serviceKindMatchesPlanType(candidate, planService.type),
+    );
+    if (!service) {
+      throw new ServiceConfigError(
+        `Reusable managed service not found for ${planService.type}: ${planService.name ?? planService.service_id ?? 'unknown'}`,
+        {
+          serviceType: planService.type,
+          serviceName: planService.name,
+          serviceId: planService.service_id,
+        },
+      );
+    }
+    return service;
+  }
+
+  private getServiceConnectionString(service: ServiceRow, envVarName: string): string {
+    let parsed: unknown;
+    try {
+      parsed = service.credentials ? JSON.parse(service.credentials) : null;
+    } catch (error) {
+      throw new ServiceConfigError(`Invalid managed service credentials: ${service.id}`, {
+        serviceId: service.id,
+        envVarName,
+        cause: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const credentials =
+      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    const connectionString = credentials?.['connectionString'];
+    if (typeof connectionString !== 'string' || connectionString.trim().length === 0) {
+      throw new ServiceConfigError(
+        `Managed service ${service.name} did not provide a connection string for ${envVarName}`,
+        { serviceId: service.id, envVarName },
+      );
+    }
+
+    return connectionString;
   }
 
   private hasExplicitEnvValue(envVars: Record<string, string>, key: string): boolean {
@@ -666,6 +734,7 @@ export class PlanEngine {
       envVars,
       autoEnvVars,
       existingEnvVars,
+      this.plannedServiceEnvKeys(services),
     );
     const missing = missingEntries.map((entry) => entry.key);
 
@@ -785,6 +854,8 @@ export class PlanEngine {
       requiredEntries,
       merged.env.provided,
       merged.env.auto,
+      {},
+      this.plannedServiceEnvKeys(merged.services),
     );
     const missing = missingEntries.map((entry) => entry.key);
     merged.missing = missing;
@@ -878,18 +949,20 @@ export class PlanEngine {
       );
 
       for (const service of plan.services) {
-        if (service.action === 'create') {
-          // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not services.type DB row access.
-          const envVarName = SERVICE_ENV_VARS[service.type];
-          if (envVarName && this.hasExplicitEnvValue(plan.env.provided, envVarName)) {
+        // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not the legacy services.type DB column.
+        const envVarName = service.connect_via || SERVICE_ENV_VARS[service.type];
+        if (!envVarName || this.hasExplicitEnvValue(plan.env.provided, envVarName)) {
+          if (envVarName) {
             log.info(
-              // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not services.type DB row access.
+              // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not the legacy services.type DB column.
               { serviceType: service.type, envVarName },
-              'Skipping managed service create because explicit env var was provided',
+              'Skipping managed service env injection because explicit env var was provided',
             );
-            continue;
           }
+          continue;
+        }
 
+        if (service.action === 'create') {
           // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
           log.info({ serviceType: service.type }, 'Creating service');
           // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
@@ -899,14 +972,10 @@ export class PlanEngine {
             // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             template: service.type,
           });
-          // Use created service's credentials for env injection
-          if (created.credentials) {
-            const creds = JSON.parse(created.credentials) as { connectionString?: string };
-
-            if (envVarName && creds.connectionString) {
-              mergedEnv[envVarName] = creds.connectionString;
-            }
-          }
+          mergedEnv[envVarName] = this.getServiceConnectionString(created, envVarName);
+        } else {
+          const reusable = await this.resolveReusableService(service);
+          mergedEnv[envVarName] = this.getServiceConnectionString(reusable, envVarName);
         }
       }
 

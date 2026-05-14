@@ -62,7 +62,92 @@ describe('Composite Action Routing', () => {
       for (const action of actions) {
         expect(action).toHaveProperty('name');
         expect(action).toHaveProperty('description');
+        expect(action).toHaveProperty('input_schema');
+        expect(action).toHaveProperty('allowed_params');
+        expect(action).toHaveProperty('required_params');
+        expect(action).toHaveProperty('optional_params');
       }
+    });
+
+    it('returns one action contract when help is scoped by action_name', async () => {
+      const result = (await tool.execute(
+        { action: 'help', params: { action_name: 'create_deploy_plan' } },
+        mockContext,
+      )) as Record<string, unknown>;
+
+      expect(result).toHaveProperty('composite', 'openlander_deploy');
+      expect(result).not.toHaveProperty('actions');
+      const action = result['action'] as Record<string, unknown>;
+      expect(action).toMatchObject({
+        name: 'create_deploy_plan',
+        allowed_params: expect.arrayContaining(['name', 'repo_url', 'source', 'image']),
+        optional_params: expect.arrayContaining(['name']),
+      });
+      expect(action['allowed_params']).not.toEqual(expect.arrayContaining(['project_name']));
+      const inputSchema = action['input_schema'] as Record<string, unknown>;
+      expect(inputSchema).not.toHaveProperty('$schema');
+      expect(inputSchema).toMatchObject({
+        type: 'object',
+        additionalProperties: false,
+      });
+    });
+
+    it('rejects unknown top-level params with machine-readable contract details', async () => {
+      const result = (await tool.execute(
+        {
+          action: 'create_deploy_plan',
+          params: {
+            source: 'image',
+            image: 'httpd:latest',
+            project_name: 'qa-final-check',
+          },
+        },
+        mockContext,
+      )) as Record<string, unknown>;
+
+      expect(result).toMatchObject({
+        error: 'INVALID_PARAMS',
+        action: 'create_deploy_plan',
+        composite: 'openlander_deploy',
+        unknown_params: ['project_name'],
+        allowed_params: expect.arrayContaining(['name', 'image', 'source']),
+        required_params: [],
+      });
+      expect(result['allowed_params']).not.toEqual(expect.arrayContaining(['project_name']));
+      const inputSchema = result['input_schema'] as Record<string, unknown>;
+      expect(inputSchema).toMatchObject({
+        type: 'object',
+        additionalProperties: false,
+      });
+      const guidance = result['_agent_guidance'] as Record<string, unknown>;
+      expect(guidance['message']).toContain('project_name');
+    });
+
+    it('rejects deploy_app new app naming through project_name', async () => {
+      const result = (await tool.execute(
+        {
+          action: 'deploy_app',
+          params: {
+            source: 'image',
+            image: 'httpd:latest',
+            project_name: 'qa-final-check',
+          },
+        },
+        mockContext,
+      )) as Record<string, unknown>;
+
+      expect(result).toMatchObject({
+        error: 'INVALID_PARAMS',
+        action: 'deploy_app',
+        composite: 'openlander_deploy',
+        allowed_params: expect.arrayContaining(['name', 'project_name', 'image']),
+      });
+      expect(String(result['details'])).toContain('new app deploys');
+      const inputSchema = result['input_schema'] as Record<string, unknown>;
+      expect(inputSchema).toMatchObject({
+        type: 'object',
+        additionalProperties: false,
+      });
     });
 
     it('returns UNKNOWN_ACTION for unknown action', async () => {

@@ -1,6 +1,15 @@
 # Services
 
-OpenLander can provision and manage infrastructure services as Docker containers.
+OpenLander has two service concepts:
+
+| Kind               | What it is                                                          | MCP composite                |
+| ------------------ | ------------------------------------------------------------------- | ---------------------------- |
+| Deployable service | Your app, API, worker, or compose child.                            | `openlander_service`         |
+| Managed service    | Infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, or MinIO. | `openlander_managed_service` |
+
+This page covers **managed services**. They run as Docker containers on the OpenLander network and
+are usually connected to deployable services through environment variables such as `DATABASE_URL` or
+`REDIS_URL`.
 
 ## Available Templates
 
@@ -16,7 +25,7 @@ OpenLander can provision and manage infrastructure services as Docker containers
 
 ---
 
-## Create a Service
+## Create a Managed Service
 
 ### Via Web Dashboard
 
@@ -30,6 +39,9 @@ OpenLander can provision and manage infrastructure services as Docker containers
 ```
 create_service(name: "my-postgres", template: "postgresql")
 ```
+
+This creates infrastructure. It does not deploy or redeploy your app. To use the new service from an
+app, read credentials and set env vars on the deployable service.
 
 ---
 
@@ -151,7 +163,8 @@ restore_service(service_name: "my-postgres", backup_id: "backup_xxx")
 
 ## Connecting Projects to Services
 
-Services run on the `openlander` Docker network. Projects can connect using the service container name as hostname:
+Managed services run on the `openlander` Docker network. Deployable services can connect using the
+managed service container name as hostname:
 
 ```
 # In the deployable service env vars:
@@ -159,18 +172,27 @@ DATABASE_URL=postgresql://user:pass@ol-svc-my-postgres:5432/myapp
 REDIS_URL=redis://ol-svc-my-redis:6379
 ```
 
-Set via MCP:
+Set via MCP on the deployable service:
 
 ```
 set_env_vars(
-  service_name: "my-app-web",
+  service_id: "my-app__svc",
   variables: {
     DATABASE_URL: "postgresql://user:pass@ol-svc-my-postgres:5432/myapp"
   }
 )
 ```
 
-MCP env changes target deployable services and save only by default. Use `service_id` or
-`service_name`; `project_name` works only for groups with exactly one deployable service.
-Redeploy the app with `redeploy_app`, or pass `defer_redeploy=false` to `set_env_vars`,
-for the new value to reach a running container.
+MCP env changes target deployable services and save only by default. Prefer `service_id` from
+`list_projects().projects[].deployable_service.service_id`; `project_name` works only for groups
+with exactly one deployable service. Redeploy the app with `redeploy_app`, or pass
+`defer_redeploy=false` to `set_env_vars`, for the new value to reach a running container.
+
+Typical agent flow:
+
+```
+create_service(name: "my-postgres", template: "postgresql")
+get_service_credentials(service_name: "my-postgres")
+set_env_vars(service_id: "my-app__svc", variables: { DATABASE_URL: "..." })
+redeploy_app(service_id: "my-app__svc")
+```

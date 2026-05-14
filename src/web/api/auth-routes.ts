@@ -3,9 +3,15 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { AppContext } from '../../app.js';
 import type { AuthService } from '../../auth/auth-service.js';
+import { saveConfig } from '../../config/index.js';
 import { generatePkce, getGoogleAuthUrl, exchangeGoogleCode } from '../../auth/google-oauth.js';
 import { encryptAndStoreToken, loadDecryptedToken } from '../../auth/token-store.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import {
+  getMcpEndpointFromRequestUrl,
+  getMcpInstancePublicInfo,
+  normalizeMcpInstanceName,
+} from '../../mcp/instance-identity.js';
 
 const log = createModuleLogger('auth-routes');
 
@@ -348,6 +354,60 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
         (!token.expires_at || Date.parse(token.expires_at) > Date.now()),
     );
     return c.json({ token: activeOrgPat ? tokenMetadata(activeOrgPat) : null });
+  });
+
+  api.get('/mcp/instance', async (c) => {
+    const rejected = await requireWebSession(c);
+    if (rejected) return rejected;
+    if (!ctx) {
+      return c.json(
+        {
+          error: 'MCP_INSTANCE_UNAVAILABLE',
+          code: 'MCP_INSTANCE_UNAVAILABLE',
+          message: 'MCP instance configuration is not available in this runtime.',
+        },
+        500,
+      );
+    }
+
+    const { endpoint, host } = getMcpEndpointFromRequestUrl(c.req.url);
+    return c.json(getMcpInstancePublicInfo(ctx.config, { endpoint, host }));
+  });
+
+  api.patch('/mcp/instance', async (c) => {
+    const rejected = await requireWebSession(c);
+    if (rejected) return rejected;
+    if (!ctx) {
+      return c.json(
+        {
+          error: 'MCP_INSTANCE_UNAVAILABLE',
+          code: 'MCP_INSTANCE_UNAVAILABLE',
+          message: 'MCP instance configuration is not available in this runtime.',
+        },
+        500,
+      );
+    }
+
+    const body = await c.req.json<{ name?: unknown }>().catch((): { name?: unknown } => ({}));
+    const name = normalizeMcpInstanceName(body.name);
+    if (!name) {
+      return c.json(
+        {
+          error: 'INVALID_INSTANCE_NAME',
+          code: 'INVALID_INSTANCE_NAME',
+          message: 'Instance name must use lowercase letters, numbers, hyphen, underscore, or dot.',
+          details: {
+            allowedPattern: '^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$',
+          },
+        },
+        400,
+      );
+    }
+
+    ctx.config.mcp = { ...ctx.config.mcp, instanceName: name };
+    saveConfig(ctx.config);
+    const { endpoint, host } = getMcpEndpointFromRequestUrl(c.req.url);
+    return c.json(getMcpInstancePublicInfo(ctx.config, { endpoint, host }));
   });
 
   api.post('/tokens', async (c) => {

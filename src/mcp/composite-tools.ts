@@ -48,7 +48,7 @@ export const DEPLOY_ACTIONS = [
  * openlander_project: Project groups & configuration
  * - Global secrets (shared across all projects)
  * - Secret files (encrypted credential files)
- * - Public URL exposure (Cloudflare tunnel)
+ * - Temporary public share URLs
  * Total: 14 tools
  */
 export const PROJECT_ACTIONS = [
@@ -109,14 +109,12 @@ export const MANAGED_SERVICE_ACTIONS = [
 
 /**
  * openlander_service: Deployable services (apps + workers).
- * Total: 19 tools
+ * Total: 17 tools
  */
 export const SERVICE_ACTIONS = [
   'restart_service',
   'redeploy_app',
   'rollback_service',
-  'archive_service',
-  'unarchive_service',
   'update_service_config',
   'list_env_vars',
   'get_env_var',
@@ -140,9 +138,10 @@ export const SERVICE_ACTIONS = [
  * - Project statistics
  * - Host/endpoint connectivity probing
  * - One-shot service diagnostics
- * Total: 8 tools
+ * Total: 9 tools
  */
 export const MONITOR_ACTIONS = [
+  'get_instance_info',
   'get_logs',
   'diagnose_service',
   'get_system_stats',
@@ -184,8 +183,8 @@ export const PLATFORM_ACTIONS = [
  * - DEPLOY_ACTIONS: 18 tools
  * - PROJECT_ACTIONS: 14 tools
  * - MANAGED_SERVICE_ACTIONS: 21 tools
- * - SERVICE_ACTIONS: 19 tools
- * - MONITOR_ACTIONS: 8 tools
+ * - SERVICE_ACTIONS: 17 tools
+ * - MONITOR_ACTIONS: 9 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
  * - Platform tools: 13 direct tools (gated separately)
  */
@@ -233,6 +232,17 @@ export interface CompositeTool {
   execute: (args: unknown, context: ToolContext) => Promise<unknown>;
 }
 
+type JsonObject = Record<string, unknown>;
+
+interface ActionContract {
+  name: string;
+  description: string;
+  input_schema: JsonObject;
+  allowed_params: string[];
+  required_params: string[];
+  optional_params: string[];
+}
+
 const compositeToolInputSchema = z.object({
   action: z
     .string()
@@ -243,10 +253,98 @@ const compositeToolInputSchema = z.object({
     .describe('Parameters for the operation. See action="help" for parameter details.'),
 });
 
+function isMcpTargeted(def: ToolDef): boolean {
+  return !def.targets || def.targets.includes('mcp');
+}
+
 function buildCompositeToolDefs(allToolDefs: ToolDef[], actions: readonly string[]): ToolDef[] {
   return actions
     .map((name) => allToolDefs.find((def) => def.name === name))
-    .filter((def): def is ToolDef => def !== undefined);
+    .filter((def): def is ToolDef => def !== undefined && isMcpTargeted(def));
+}
+
+function asObject(value: unknown): JsonObject | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as JsonObject;
+}
+
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
+function toolSchemaToJson(schema: z.ZodType): JsonObject {
+  const jsonSchema = z.toJSONSchema(schema) as JsonObject;
+  delete jsonSchema['$schema'];
+  return jsonSchema;
+}
+
+function buildActionContract(def: ToolDef): ActionContract {
+  const inputSchema = toolSchemaToJson(def.inputSchema);
+  const properties = asObject(inputSchema['properties']) ?? {};
+  const allowedParams = Object.keys(properties).sort();
+  const requiredParams = stringList(inputSchema['required'])
+    .filter((name) => allowedParams.includes(name))
+    .sort();
+  const optionalParams = allowedParams.filter((name) => !requiredParams.includes(name)).sort();
+
+  return {
+    name: def.name,
+    description: def.mcpDescription ?? def.description,
+    input_schema: inputSchema,
+    allowed_params: allowedParams,
+    required_params: requiredParams,
+    optional_params: optionalParams,
+  };
+}
+
+function shouldRejectUnknownTopLevelParams(contract: ActionContract): boolean {
+  return (
+    contract.input_schema['type'] === 'object' &&
+    contract.input_schema['additionalProperties'] === false
+  );
+}
+
+function unknownTopLevelParams(
+  params: Record<string, unknown>,
+  contract: ActionContract,
+): string[] {
+  if (!shouldRejectUnknownTopLevelParams(contract)) {
+    return [];
+  }
+
+  return Object.keys(params)
+    .filter((name) => !contract.allowed_params.includes(name))
+    .sort();
+}
+
+function invalidParamsResponse(
+  toolName: string,
+  action: string,
+  contract: ActionContract,
+  details: string,
+  unknownParams: string[] = [],
+): Record<string, unknown> {
+  return {
+    error: 'INVALID_PARAMS',
+    action,
+    composite: toolName,
+    details,
+    unknown_params: unknownParams,
+    allowed_params: contract.allowed_params,
+    required_params: contract.required_params,
+    input_schema: contract.input_schema,
+    _agent_guidance: {
+      message:
+        unknownParams.length > 0
+          ? `Unknown parameter(s) for action "${action}": ${unknownParams.join(', ')}. Use the allowed_params list from this response and retry.`
+          : `Invalid parameters for action "${action}". Use input_schema and required_params from this response and retry.`,
+    },
+  };
 }
 
 function createCompositeTool(
@@ -265,15 +363,38 @@ function createCompositeTool(
       const { action, params } = args as { action: string; params?: Record<string, unknown> };
 
       if (action === 'help') {
+        const requestedAction =
+          params && typeof params['action_name'] === 'string' ? params['action_name'] : undefined;
+        if (requestedAction) {
+          const requestedDef = toolDefs.find((def) => def.name === requestedAction);
+          if (!requestedDef) {
+            return {
+              error: 'UNKNOWN_ACTION',
+              action: requestedAction,
+              composite: toolName,
+              available_actions: toolDefs.map((item) => item.name).sort(),
+              _agent_guidance: {
+                message: `Unknown action "${requestedAction}". Use action="help" without params to list available operations.`,
+              },
+            };
+          }
+
+          return {
+            composite: toolName,
+            description,
+            action: buildActionContract(requestedDef),
+            _agent_guidance: {
+              message: `Use params matching input_schema for action "${requestedAction}".`,
+            },
+          };
+        }
+
         return {
           composite: toolName,
           description,
-          actions: toolDefs.map((def) => ({
-            name: def.name,
-            description: def.mcpDescription ?? def.description,
-          })),
+          actions: toolDefs.map(buildActionContract),
           _agent_guidance: {
-            message: `Pick an action and call with params. Example: { action: "${toolDefs[0]?.name ?? 'help'}", params: { ... } }`,
+            message: `Pick an action and call with params that match input_schema. Example: { action: "${toolDefs[0]?.name ?? 'help'}", params: { ... } }. For one action only, call { action: "help", params: { action_name: "..." } }.`,
           },
         };
       }
@@ -291,17 +412,21 @@ function createCompositeTool(
         };
       }
 
+      const contract = buildActionContract(def);
+      const unknownParams = unknownTopLevelParams(params ?? {}, contract);
+      if (unknownParams.length > 0) {
+        return invalidParamsResponse(
+          toolName,
+          action,
+          contract,
+          `Unknown parameter(s): ${unknownParams.join(', ')}`,
+          unknownParams,
+        );
+      }
+
       const parsed = def.inputSchema.safeParse(params ?? {});
       if (!parsed.success) {
-        return {
-          error: 'INVALID_PARAMS',
-          action,
-          composite: toolName,
-          details: parsed.error.message,
-          _agent_guidance: {
-            message: `Invalid parameters for action "${action}". Use action="help" to see parameter details.`,
-          },
-        };
+        return invalidParamsResponse(toolName, action, contract, parsed.error.message);
       }
 
       const safetyResult = await maybeHandleMcpSafety(def, parsed.data, context);
@@ -318,7 +443,7 @@ function createCompositeTool(
 export function createOpenLanderDeployCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_deploy',
-    'Deploy plans, execution, previews, rollbacks, build logs, Git scans, infrastructure, domains.',
+    'Deploy front door for new apps plus plans, validation, execution, status, build logs, Git scans, previews, and domains.',
     toolDefs,
   );
 }
@@ -326,7 +451,7 @@ export function createOpenLanderDeployCompositeTool(toolDefs: ToolDef[]): Compos
 export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_project',
-    'Project groups, secrets, and public exposure. Env actions route to deployable services.',
+    'Project groups and shared config. Project groups organize deployable services; env actions route to service targets.',
     toolDefs,
   );
 }
@@ -334,7 +459,7 @@ export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): Compo
 export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_service',
-    'Deployable services (apps + workers): redeploy, restart, rollback, config, env vars, secrets, and public exposure.',
+    'Deployable services (apps + workers): redeploy, restart, rollback, config, env vars, domains, and temporary public URLs. Prefer service_id.',
     toolDefs,
   );
 }
@@ -350,7 +475,7 @@ export function createOpenLanderManagedServiceCompositeTool(toolDefs: ToolDef[])
 export function createOpenLanderMonitorCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_monitor',
-    'Logs, system stats, alerts, project stats, and host connectivity probing.',
+    'Diagnostics first: instance info, service diagnosis, logs, system stats, alerts, project stats, and host probing.',
     toolDefs,
   );
 }

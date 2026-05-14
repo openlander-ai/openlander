@@ -45,31 +45,31 @@ export function getAgentGuideContent(
     case 'add-service':
       return {
         heading: 'Tell your agent what to deploy',
-        lead: 'Service creation runs through your agent over MCP. Paste a prompt — your agent deploys, wires, and reports back here.',
+        lead: 'A project is the group; a service is the deployable app, API, or worker inside it. Paste a prompt and your agent will deploy through MCP.',
         prompts: [
           {
-            text: `Deploy github.com/myorg/myapp to project ${projectName} as a worker service.`,
+            text: `Deploy github.com/myorg/myapp to project ${projectName} as a new service.`,
           },
           {
-            text: `Add a postgres database to project ${projectName} named cache.`,
-            hint: 'Managed DBs are global in 1.0. The agent provisions, then wires `DATABASE_URL` for you.',
+            text: `Add a PostgreSQL managed service, then wire DATABASE_URL into project ${projectName}.`,
+            hint: 'Managed services are infrastructure; the agent provisions one, sets env vars on the deployable service, then redeploys.',
           },
           {
-            text: `Connect the existing redis-prod managed service to project ${projectName}.`,
+            text: `Connect the existing redis-prod managed service to the deployable service in ${projectName}.`,
           },
         ],
       };
     case 'add-managed-db':
       return {
         heading: 'Tell your agent what to provision',
-        lead: 'Managed databases are provisioned through MCP, then wired into a project as environment variables. Both steps are one prompt away.',
+        lead: 'Managed services are databases, caches, and shared infrastructure. They are provisioned first, then wired into deployable services as env vars.',
         prompts: [
           {
             text: 'Provision a managed postgres named cache.',
-            hint: 'Then: add the connection string to project hotdeal as `DATABASE_URL`.',
+            hint: 'Then: add the connection string to a deployable service as `DATABASE_URL` and redeploy it.',
           },
           {
-            text: 'Provision a managed redis named sessions, then wire it into project hotdeal as `REDIS_URL`.',
+            text: 'Provision a managed redis named sessions, then wire it into my app as `REDIS_URL`.',
           },
           {
             text: 'List existing managed services and tell me which ones are unwired.',

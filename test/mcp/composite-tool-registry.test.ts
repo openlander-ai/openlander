@@ -59,6 +59,24 @@ function createPlatformTool(name: string, targets?: ToolDef['targets']): ToolDef
   };
 }
 
+const mockAppCtx = {
+  config: {
+    server: {
+      port: 10114,
+      host: '0.0.0.0',
+      baseUrl: 'http://localhost:10114',
+    },
+    mcp: {
+      enabled: true,
+      transport: 'sse',
+      instanceId: 'olinst_test',
+      instanceName: 'openlander-test',
+      servers: [],
+      platformTools: false,
+    },
+  },
+} as AppContext;
+
 describe('registerCompositeMcpTools', () => {
   it('lists composite tools plus MCP-targeted platform tools', async () => {
     const server = createMockServer();
@@ -73,7 +91,7 @@ describe('registerCompositeMcpTools', () => {
       createPlatformTool('agent_only_platform', ['agent']),
     ];
 
-    registerCompositeMcpTools(server, composites, platformDefs, {} as AppContext);
+    registerCompositeMcpTools(server, composites, platformDefs, mockAppCtx);
 
     const response = (await server.listHandler?.()) as {
       tools: Array<{ name: string }>;
@@ -99,7 +117,7 @@ describe('registerCompositeMcpTools', () => {
       server,
       [createComposite('openlander_deploy', execute)],
       [],
-      {} as AppContext,
+      mockAppCtx,
     );
 
     const response = (await server.callHandler?.({
@@ -118,6 +136,11 @@ describe('registerCompositeMcpTools', () => {
     expect(JSON.parse(response.content[0]?.text ?? '{}')).toEqual({
       args: { action: 'help', params: { verbose: true } },
       target: 'mcp',
+      _instance: {
+        id: 'olinst_test',
+        name: 'openlander-test',
+        endpoint: 'http://localhost:10114/mcp',
+      },
     });
   });
 
@@ -128,7 +151,7 @@ describe('registerCompositeMcpTools', () => {
       server,
       [createComposite('openlander_monitor', async () => ({ composite: true }))],
       [createPlatformTool('platform_health', ['mcp'])],
-      {} as AppContext,
+      mockAppCtx,
     );
 
     const response = (await server.callHandler?.({
@@ -144,6 +167,11 @@ describe('registerCompositeMcpTools', () => {
       wrapped: {
         source: 'platform_health',
         args: { value: 'ok' },
+      },
+      _instance: {
+        id: 'olinst_test',
+        name: 'openlander-test',
+        endpoint: 'http://localhost:10114/mcp',
       },
     });
   });

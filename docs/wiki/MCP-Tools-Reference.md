@@ -3,14 +3,31 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **66 unique default operations** surfaced through those composites
+- **65 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
-Each composite takes `{ action, params }` — e.g. `openlander_deploy({ action: "deploy_app", params: { repo_url: "..." } })`. Run `{ action: "help" }` on any composite to list its action catalog.
+Each composite takes `{ action, params }` — e.g.
+`openlander_deploy({ action: "deploy_app", params: { repo_url: "...", name: "my-app" } })`.
+Run `{ action: "help" }` on any composite to list its action catalog with machine-readable
+`input_schema`, `required_params`, and `optional_params`. Run
+`{ action: "help", params: { action_name: "create_deploy_plan" } }` to fetch one action contract.
 
 Model note: **Project = workspace/group** and **Service = deployable unit**. Repository, image,
 branch, Dockerfile, and build context belong to services. Project-level runtime actions have been
 removed; use service runtime actions instead.
+
+Agent routing rule of thumb:
+
+| User asks for                                 | Call                                                                       |
+| --------------------------------------------- | -------------------------------------------------------------------------- |
+| "Deploy this new app/repo/image"              | `openlander_deploy.deploy_app`                                             |
+| "Redeploy/restart/rollback this existing app" | `openlander_service.redeploy_app` / `restart_service` / `rollback_service` |
+| "Set env vars or connect DB/Redis to an app"  | `openlander_service.set_env_vars`, then `redeploy_app`                     |
+| "Create PostgreSQL/Redis/MySQL/etc."          | `openlander_managed_service.create_service`                                |
+| "Why is this failing?"                        | `openlander_monitor.diagnose_service` with `service_id`                    |
+
+Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a project
+group contains exactly one deployable service.
 
 Remote MCP uses scoped Bearer tokens. Use **Settings → MCP** for org-wide admin tokens and a
 project's **MCP** tab for project-scoped agent tokens. Project-scoped tokens are the safer default
@@ -22,13 +39,13 @@ and must be completed in the web UI with typed confirmation. Supported bulk clea
 
 Composite catalog:
 
-| Composite                    | Action slots | Purpose                                                                    |
-| ---------------------------- | ------------ | -------------------------------------------------------------------------- |
-| `openlander_deploy`          | 18           | Deploy plans, execution, previews, rollbacks, build logs, Git, domains     |
-| `openlander_project`         | 14           | Project groups, secrets, public exposure; env actions route to services    |
-| `openlander_service`         | 19           | Deployable app/worker lifecycle, config, and service env vocabulary        |
-| `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage |
-| `openlander_monitor`         | 8            | Logs, alerts, system stats, project stats, probes                          |
+| Composite                    | Action slots | Purpose                                                                      |
+| ---------------------------- | ------------ | ---------------------------------------------------------------------------- |
+| `openlander_deploy`          | 18           | Deploy plans, execution, previews, rollbacks, build logs, Git, domains       |
+| `openlander_project`         | 14           | Project groups, secrets, temporary share URLs; env actions route to services |
+| `openlander_service`         | 17           | Deployable app/worker lifecycle, config, and service env vocabulary          |
+| `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage   |
+| `openlander_monitor`         | 9            | Logs, alerts, system stats, project stats, probes                            |
 
 `openlander_project` owns group/config actions. `openlander_service` owns deployable runtime actions.
 
@@ -91,20 +108,28 @@ Execute a deployment plan (non-blocking).
 
 ### `deploy_app`
 
-One-call deploy: analyze, plan, execute, optionally wait.
+One-call app deploy front door. With `service_id`, `service_name`, `project_name`, or an existing
+project `name`, it redeploys the existing app. With `repo_url` or `image`, it creates a new app.
+For new app names, use `name`; `project_name` is only for existing app lookup/scoping.
 
-| Parameter  | Type    | Required | Description                          |
-| ---------- | ------- | -------- | ------------------------------------ |
-| `repo_url` | string  | No       | Git repository URL                   |
-| `branch`   | string  | No       | Branch                               |
-| `name`     | string  | No       | Project name                         |
-| `source`   | string  | No       | `'git'` or `'image'`                 |
-| `image`    | string  | No       | Docker image                         |
-| `cmd`      | string  | No       | Command override                     |
-| `port`     | number  | No       | Container port                       |
-| `env_vars` | object  | No       | Environment variables                |
-| `wait`     | boolean | No       | Block until complete (default: true) |
-| `timeout`  | number  | No       | Max seconds to wait (default: 300)   |
+| Parameter           | Type    | Required | Description                                 |
+| ------------------- | ------- | -------- | ------------------------------------------- |
+| `service_id`        | string  | No       | Existing deployable service id              |
+| `service_name`      | string  | No       | Existing deployable service name            |
+| `project_name`      | string  | No       | Existing group lookup or service name scope |
+| `repo_url`          | string  | No       | Git repository URL for a new app            |
+| `branch`            | string  | No       | Branch                                      |
+| `name`              | string  | No       | New project name, or existing project alias |
+| `source`            | string  | No       | `'git'` or `'image'`                        |
+| `image`             | string  | No       | Docker image                                |
+| `cmd`               | string  | No       | Command override                            |
+| `port`              | number  | No       | Container port                              |
+| `env_vars`          | object  | No       | Environment variables                       |
+| `no_cache`          | boolean | No       | Force fresh build when redeploying existing |
+| `strategy`          | string  | No       | Redeploy strategy for existing services     |
+| `health_check_path` | string  | No       | Health check path                           |
+| `wait`              | boolean | No       | Block until complete (default: true)        |
+| `timeout`           | number  | No       | Max seconds to wait (default: 300)          |
 
 ### `validate_deploy_plan`
 
@@ -122,11 +147,18 @@ Validate a plan before executing.
 
 Get real-time deployment status.
 
-| Parameter      | Type    | Required | Description                 |
-| -------------- | ------- | -------- | --------------------------- |
-| `project_name` | string  | No       | Project name (omit for all) |
-| `wait`         | boolean | No       | Block until complete        |
-| `timeout`      | number  | No       | Max wait seconds            |
+| Parameter      | Type    | Required | Description             |
+| -------------- | ------- | -------- | ----------------------- |
+| `project_id`   | string  | No       | Project group id        |
+| `project_name` | string  | No       | Project group name      |
+| `deploy_id`    | string  | No       | Completed deploy log id |
+| `job_id`       | string  | No       | Alias for `deploy_id`   |
+| `wait`         | boolean | No       | Block until complete    |
+| `timeout`      | number  | No       | Max wait seconds        |
+
+Use `project_id`/`project_name` for current in-flight deploys. Use `deploy_id`
+or `job_id` to distinguish a completed deploy from an unknown id; unknown ids
+return `status: "not_found"` instead of the same empty list as "no active jobs".
 
 ### `get_deploy_history`
 
@@ -134,8 +166,11 @@ Get deployment history.
 
 | Parameter      | Type   | Required | Description               |
 | -------------- | ------ | -------- | ------------------------- |
-| `project_name` | string | Yes      | Project name              |
+| `project_id`   | string | No       | Project group id          |
+| `project_name` | string | No       | Project group name        |
 | `limit`        | number | No       | Max entries (default: 10) |
+
+Provide either `project_id` or `project_name`.
 
 ### `rollback_service`
 
@@ -193,19 +228,12 @@ Deploy or restart a deployable app/worker service. Project-level runtime actions
 
 Provide either `service_id` or `service_name`.
 
-### `archive_service` / `unarchive_service`
-
-Archive or restore a deployable service while preserving configuration, environment variables, and history.
-
-| Parameter      | Type   | Required | Description                           |
-| -------------- | ------ | -------- | ------------------------------------- |
-| `service_id`   | string | No       | Deployable service id                 |
-| `service_name` | string | No       | Deployable service name               |
-| `project_name` | string | No       | Optional group scope for name lookups |
-
 ### `expose_public` / `unexpose_public`
 
-Expose a project publicly through a temporary tunnel, or remove that public exposure.
+Create or remove a temporary public share URL for a project. This is an optional public-access
+feature and requires a configured tunnel backend on the OpenLander host. If the tunnel backend is
+not installed/configured, use the normal service URL, custom domain routing, or configure the tunnel
+first.
 
 | Parameter      | Type   | Required | Description  |
 | -------------- | ------ | -------- | ------------ |
@@ -293,6 +321,9 @@ Exports all service env vars as raw `.env` text and records an audit event witho
 
 ### `expose_public` / `unexpose_public`
 
+Project composite aliases for temporary public URLs. This is optional and depends on the configured
+tunnel backend; it is not required for normal deploy/redeploy flows.
+
 | Parameter      | Type   | Required | Description  |
 | -------------- | ------ | -------- | ------------ |
 | `project_name` | string | Yes      | Project name |
@@ -329,11 +360,31 @@ Exports all service env vars as raw `.env` text and records an audit event witho
 
 MCP `list_services` intentionally omits credential values. Use `get_service_credentials` for connection strings, users, passwords, and database names.
 
-### `get_service_status` / `start_service` / `stop_service`
+### `get_service_status`
 
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `service_name` | string | Yes      | Service name |
+| Parameter      | Type   | Required | Description                         |
+| -------------- | ------ | -------- | ----------------------------------- |
+| `service_id`   | string | No       | Managed/infrastructure service id   |
+| `service_name` | string | No       | Managed/infrastructure service name |
+
+Provide either `service_id` or `service_name`. Deployable app/worker services are intentionally rejected; use `openlander_service` or `diagnose_service` for those.
+
+### `start_service` / `stop_service`
+
+| Parameter      | Type   | Required | Description                         |
+| -------------- | ------ | -------- | ----------------------------------- |
+| `service_name` | string | Yes      | Managed/infrastructure service name |
+
+### `exec_service_container`
+
+| Parameter         | Type     | Required | Description                         |
+| ----------------- | -------- | -------- | ----------------------------------- |
+| `service_name`    | string   | Yes      | Managed/infrastructure service name |
+| `command`         | string[] | Yes      | Command argv array                  |
+| `timeout_seconds` | number   | No       | Max execution time                  |
+
+`command` must be an argv array such as `["psql", "-U", "openlander", "-c", "SELECT 1"]`.
+Shell strings like `"psql -U openlander"` are intentionally rejected.
 
 `remove_service` is human-only in OpenLander 0.1 and returns
 `OPERATION_REQUIRES_HUMAN_UI` from MCP. Use the service page delete action for
@@ -341,9 +392,12 @@ typed-confirm deletion with the managed-volume opt-in checkbox.
 
 ### `get_service_credentials`
 
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `service_name` | string | Yes      | Service name |
+| Parameter      | Type   | Required | Description                         |
+| -------------- | ------ | -------- | ----------------------------------- |
+| `service_id`   | string | No       | Managed/infrastructure service id   |
+| `service_name` | string | No       | Managed/infrastructure service name |
+
+Provide either `service_id` or `service_name`.
 
 ### `get_service_logs`
 
@@ -397,6 +451,10 @@ typed-confirm deletion with the managed-volume opt-in checkbox.
 Provide `service_id`, `service_name`, or `project_name`. Multi-service groups require an explicit
 service target.
 
+Domain mapping requires DNS to point at the OpenLander host or reverse proxy. v0.1 does not create
+Cloudflare records automatically. For path routing, set `path_prefix`; for service targeting, prefer
+`service_id`.
+
 ### `list_domains`
 
 No parameters.
@@ -425,9 +483,17 @@ No parameters.
 | --------- | ------ | -------- | ------------ |
 | `query`   | string | Yes      | Search query |
 
+GitHub repository discovery returns safe HTTPS clone URLs only. Private-repo credentials are injected internally at clone time and are never included in MCP responses.
+
 ---
 
 ## Monitoring & Logs
+
+### `get_instance_info`
+
+No parameters. Returns the current OpenLander MCP instance identity:
+`id`, `name`, `endpoint`, `host`, `suggestedName`, and whether the name is still a default.
+Use this first when multiple OpenLander servers are connected to the same AI client.
 
 ### `get_logs`
 
@@ -435,10 +501,11 @@ No parameters.
 | -------------- | ------ | -------- | ----------------------------------------------------- |
 | `service_id`   | string | No       | Deployable service id; preferred from `list_projects` |
 | `service_name` | string | No       | Deployable service name                               |
+| `project_id`   | string | No       | Convenience target for single-service groups          |
 | `project_name` | string | No       | Convenience target for single-service groups          |
 | `lines`        | number | No       | Number of lines                                       |
 
-Provide one of `service_id`, `service_name`, or `project_name`. Prefer
+Provide one of `service_id`, `service_name`, `project_id`, or `project_name`. Prefer
 `service_id` when chaining from `list_projects`.
 
 ### `get_system_stats`
@@ -451,7 +518,46 @@ Host CPU, memory, disk usage. No parameters.
 | -------------- | ------ | -------- | -------------------------------------------- |
 | `service_id`   | string | No       | Deployable service id; preferred             |
 | `service_name` | string | No       | Deployable service name                      |
+| `project_id`   | string | No       | Convenience target for single-service groups |
 | `project_name` | string | No       | Convenience target for single-service groups |
+
+### `diagnose_service`
+
+| Parameter           | Type   | Required | Description                                  |
+| ------------------- | ------ | -------- | -------------------------------------------- |
+| `service_id`        | string | No       | Deployable service id; preferred             |
+| `service_name`      | string | No       | Deployable service name                      |
+| `project_id`        | string | No       | Convenience target for single-service groups |
+| `project_name`      | string | No       | Convenience target for single-service groups |
+| `path`              | string | No       | HTTP path to probe                           |
+| `health_check_path` | string | No       | Alias for `path`                             |
+| `lines`             | number | No       | Log lines to include                         |
+
+If `path` is omitted, OpenLander uses a configured base path env such as
+`NEXT_PUBLIC_BASE_PATH` before falling back to the service health path.
+
+### `probe_host`
+
+| Parameter    | Type    | Required | Description                                    |
+| ------------ | ------- | -------- | ---------------------------------------------- |
+| `target`     | string  | No       | Hostname, URL, IP, or `container-name:port`    |
+| `host`       | string  | No       | Alias for `target`                             |
+| `port`       | number  | No       | Port for TCP or host-only probes               |
+| `protocol`   | string  | No       | `http`, `https`, or `tcp`; default auto-detect |
+| `path`       | string  | No       | HTTP path                                      |
+| `internal`   | boolean | No       | Probe from inside Docker network when `true`   |
+| `timeout_ms` | number  | No       | Probe timeout                                  |
+
+Provide either `target` or `host`.
+
+### `mcp_action_status`
+
+| Parameter       | Type   | Required | Description                               |
+| --------------- | ------ | -------- | ----------------------------------------- |
+| `action_run_id` | string | No       | Action run id returned by a held MCP call |
+| `action_id`     | string | No       | Alias for `action_run_id`                 |
+
+Provide either `action_run_id` or `action_id`.
 
 ### `get_alerts` / `dismiss_alert`
 
@@ -467,8 +573,12 @@ Host CPU, memory, disk usage. No parameters.
 
 | Parameter      | Type   | Required | Description               |
 | -------------- | ------ | -------- | ------------------------- |
-| `project_name` | string | Yes      | Project name              |
+| `deploy_id`    | string | No       | Deploy log id             |
+| `project_id`   | string | No       | Project group id          |
+| `project_name` | string | No       | Project group name        |
 | `deploy_index` | number | No       | Deploy index (0 = latest) |
+
+Provide `deploy_id` by itself when known, or provide `project_id`/`project_name` with optional `deploy_index`.
 
 OpenLander 0.1 does not expose built-in AI diagnosis. External MCP agents should
 read `get_build_log` / `get_logs`, inspect the failure in their own context, then

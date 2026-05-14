@@ -20,10 +20,14 @@ OpenLander runs as an MCP (Model Context Protocol) server, allowing AI coding ag
 
 Add to OpenClaw config (`~/.openclaw/openclaw.json` or via `openclaw config edit`):
 
+Use a specific server key such as `openlander-ais-prod` when you connect more than one
+OpenLander instance to the same AI client. The Your Agent page generates this key from
+the instance name.
+
 ```json
 {
   "mcpServers": {
-    "openlander": {
+    "openlander-ais-prod": {
       "type": "http",
       "url": "http://YOUR_SERVER:10114/mcp",
       "headers": {
@@ -69,7 +73,7 @@ openclaw agent --thinking high --message \
 // opencode.json or ~/.config/opencode/config.json
 {
   "mcp": {
-    "openlander": {
+    "openlander-ais-prod": {
       "type": "local",
       "command": ["openlander", "mcp"],
       "enabled": true,
@@ -83,7 +87,7 @@ openclaw agent --thinking high --message \
 ```jsonc
 {
   "mcp": {
-    "openlander": {
+    "openlander-ais-prod": {
       "type": "remote",
       "url": "http://YOUR_SERVER:10114/mcp",
       "enabled": true,
@@ -103,7 +107,7 @@ Verify: `opencode mcp list`
 // Windows: %APPDATA%\Claude\claude_desktop_config.json
 {
   "mcpServers": {
-    "openlander": {
+    "openlander-local": {
       "command": "openlander",
       "args": ["mcp"],
     },
@@ -119,7 +123,7 @@ Verify: `opencode mcp list`
 // .cursor/mcp.json (project root)
 {
   "mcpServers": {
-    "openlander": {
+    "openlander-local": {
       "command": "openlander",
       "args": ["mcp"],
     },
@@ -135,7 +139,7 @@ Verify: `opencode mcp list`
 // ~/.codeium/windsurf/mcp_config.json
 {
   "mcpServers": {
-    "openlander": {
+    "openlander-local": {
       "command": "openlander",
       "args": ["mcp"],
     },
@@ -173,27 +177,27 @@ Local stdio connections (Claude Desktop, Cursor, Windsurf) don't need tokens —
 
 ## Available Tools
 
-Once connected, AI agents see **5 composite MCP tools** covering **66 unique default operations** (80 routed composite actions, plus 13 optional platform tools with `config.mcp.platformTools: true`; the default is `false`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** covering **65 unique default operations** (79 routed composite actions, plus 13 optional platform tools with `config.mcp.platformTools: true`; the default is `false`). Each composite takes `{ action, params }`:
 
 | Composite                    | Actions | Purpose                                               |
 | ---------------------------- | ------- | ----------------------------------------------------- |
 | `openlander_deploy`          | 18      | Deploy lifecycle: plans, execution, rollback, build   |
 | `openlander_project`         | 14      | Project groups: metadata, secrets, exposure           |
-| `openlander_service`         | 19      | Deployable app/worker lifecycle and config vocabulary |
+| `openlander_service`         | 17      | Deployable app/worker lifecycle and config vocabulary |
 | `openlander_managed_service` | 21      | Databases, caches, credentials, backups, volumes      |
-| `openlander_monitor`         | 8       | Monitoring & ops: logs, alerts, stats, host probing   |
+| `openlander_monitor`         | 9       | Monitoring & ops: logs, alerts, stats, host probing   |
 
 Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 
 | Task     | Composite → action                              | Description                        |
 | -------- | ----------------------------------------------- | ---------------------------------- |
-| Deploy   | `openlander_deploy` → `deploy_app`              | One-call deploy from Git URL       |
+| Deploy   | `openlander_deploy` → `deploy_app`              | App deploy front door              |
 | Status   | `openlander_deploy` → `get_deploy_status`       | Check deployment status            |
 | List     | `openlander_project` → `list_projects`          | Show all projects                  |
 | Logs     | `openlander_monitor` → `get_logs`               | Container logs                     |
 | Env Vars | `openlander_service` → `set_env_vars`           | Save service environment variables |
 | Rollback | `openlander_deploy` → `rollback_service`        | Revert to previous version         |
-| Share    | `openlander_project` → `expose_public`          | Generate public URL                |
+| Share    | `openlander_project` → `expose_public`          | Generate temporary share URL       |
 | Service  | `openlander_managed_service` → `create_service` | Create database/cache              |
 
 MCP env changes target deployable services. Use `service_id` or `service_name`;

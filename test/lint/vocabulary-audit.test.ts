@@ -72,8 +72,6 @@ const FROZEN_DEPLOYABLE_SERVICE_ACTIONS = [
   'restart_service',
   'redeploy_app',
   'rollback_service',
-  'archive_service',
-  'unarchive_service',
   'update_service_config',
   'list_env_vars',
   'get_env_var',
@@ -107,15 +105,15 @@ describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () =
         'redeploy_app',
         'restart_service',
         'rollback_service',
-        'archive_service',
-        'unarchive_service',
         'update_service_config',
       ]),
     );
   });
 
   it('MANAGED_SERVICE_ACTIONS remains the infrastructure-service surface', () => {
-    expect(MANAGED_SERVICE_ACTIONS as readonly string[]).toEqual([...FROZEN_MANAGED_SERVICE_ACTIONS]);
+    expect(MANAGED_SERVICE_ACTIONS as readonly string[]).toEqual([
+      ...FROZEN_MANAGED_SERVICE_ACTIONS,
+    ]);
   });
 
   it('App.tsx exposes both /services/:id (deployable) and /managed-services/:id (managed) routes', () => {

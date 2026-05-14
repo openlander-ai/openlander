@@ -143,7 +143,7 @@ export const gitToolDefs: ToolDef[] = [
     name: 'list_github_repos',
     riskLevel: 'low',
     description:
-      'List repositories from the user\'s connected GitHub account, sorted by most recently pushed. Use when user asks "show my repos", "what can I deploy?", or needs to find a project by name. Returns { count, repos[] } with name, description, language, private flag, and clone URL. Errors: GITHUB_NOT_CONFIGURED if no GitHub token is set — tell user to add one in settings. Supports pagination with page parameter.',
+      'List repositories from the user\'s connected GitHub account, sorted by most recently pushed. Use when user asks "show my repos", "what can I deploy?", or needs to find a project by name. Returns { count, repos[] } with name, description, language, private flag, and safe clone URL. Private repo credentials are injected internally at clone time and are never returned. Errors: GITHUB_NOT_CONFIGURED if no GitHub token is set — tell user to add one in settings. Supports pagination with page parameter.',
     mcpDescription: 'List repositories from the connected GitHub account by recent activity.',
     inputSchema: listGithubReposSchema,
     execute: async (args, { target }) => {
@@ -176,7 +176,7 @@ export const gitToolDefs: ToolDef[] = [
             description: repo.description,
             language: repo.language,
             private: repo.isPrivate,
-            cloneUrl: repo.isPrivate ? provider.getAuthCloneUrl(repo.fullName) : repo.cloneUrl,
+            cloneUrl: repo.cloneUrl,
             htmlUrl: repo.htmlUrl,
           })),
         };
@@ -193,7 +193,7 @@ export const gitToolDefs: ToolDef[] = [
           private: repo.isPrivate,
           defaultBranch: repo.defaultBranch,
           stars: repo.stars,
-          cloneUrl: repo.isPrivate ? provider.getAuthCloneUrl(repo.fullName) : repo.cloneUrl,
+          cloneUrl: repo.cloneUrl,
           htmlUrl: repo.htmlUrl,
           updatedAt: repo.updatedAt,
         })),
@@ -204,7 +204,7 @@ export const gitToolDefs: ToolDef[] = [
     name: 'search_github_repos',
     riskLevel: 'low',
     description:
-      'Search the user\'s GitHub repositories by name or keyword. Use when user says "deploy my-project" or "find repo X" — this resolves a project name to a deployable repo URL. Returns { total, repos[] } with clone URLs ready for create_deploy_plan. Errors: GITHUB_NOT_CONFIGURED. Tip: after finding the repo, call create_deploy_plan with the clone URL.',
+      'Search the user\'s GitHub repositories by name or keyword. Use when user says "deploy my-project" or "find repo X" — this resolves a project name to a deployable repo URL. Returns { total, repos[] } with safe token-free clone URLs. Private repo credentials are injected internally at clone time and are never returned. Errors: GITHUB_NOT_CONFIGURED. Tip: after finding the repo, call create_deploy_plan with the clone URL.',
     mcpDescription: 'Search connected GitHub repositories by name or keyword.',
     inputSchema: searchGithubReposSchema,
     execute: async (args, { target }) => {
@@ -233,7 +233,7 @@ export const gitToolDefs: ToolDef[] = [
             description: repo.description,
             language: repo.language,
             private: repo.isPrivate,
-            cloneUrl: repo.isPrivate ? provider.getAuthCloneUrl(repo.fullName) : repo.cloneUrl,
+            cloneUrl: repo.cloneUrl,
             htmlUrl: repo.htmlUrl,
           })),
         };
@@ -248,7 +248,7 @@ export const gitToolDefs: ToolDef[] = [
           language: repo.language,
           private: repo.isPrivate,
           defaultBranch: repo.defaultBranch,
-          cloneUrl: repo.isPrivate ? provider.getAuthCloneUrl(repo.fullName) : repo.cloneUrl,
+          cloneUrl: repo.cloneUrl,
           htmlUrl: repo.htmlUrl,
         })),
       };

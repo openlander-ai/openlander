@@ -9,11 +9,14 @@ import {
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
+import { getMcpInstancePublicInfo } from '../../mcp/instance-identity.js';
 import { BUILD_TIME_PREFIXES } from '../../pipeline/build-args.js';
+import { resolveContainerHost } from '../../pipeline/url-resolver.js';
 import {
   diagnoseServiceSchema,
   dismissAlertSchema,
   getAlertsSchema,
+  getInstanceInfoSchema,
   getLogsSchema,
   getProjectStatsSchema,
   getSystemStatsSchema,
@@ -37,6 +40,16 @@ interface ResolvedDeployableService {
 }
 
 export const monitoringToolDefs: ToolDef[] = [
+  {
+    name: 'get_instance_info',
+    riskLevel: 'low',
+    description:
+      'Return this OpenLander MCP instance identity: id, name, endpoint, host, suggestedName, and whether the name is still a default. Use this first when the user has multiple OpenLander MCP servers connected.',
+    mcpDescription:
+      'Return this OpenLander instance identity so agents can choose the right connected server.',
+    inputSchema: getInstanceInfoSchema,
+    execute: (_args, context) => Promise.resolve(getMcpInstancePublicInfo(context.appCtx.config)),
+  },
   {
     name: 'get_logs',
     riskLevel: 'low',
@@ -68,10 +81,14 @@ export const monitoringToolDefs: ToolDef[] = [
         };
       }
 
-      const projectName = args['project_name'] as string;
-      const project = await appCtx.db.getProjectByName(projectName);
+      const projectId = typeof args['project_id'] === 'string' ? args['project_id'].trim() : '';
+      const projectName =
+        typeof args['project_name'] === 'string' ? args['project_name'].trim() : '';
+      const project = projectId
+        ? await appCtx.db.getProject(projectId)
+        : await appCtx.db.getProjectByName(projectName);
       if (!project) {
-        throw new ProjectNotFoundError(projectName);
+        throw new ProjectNotFoundError(projectId || projectName);
       }
 
       const deployable =
@@ -161,10 +178,14 @@ export const monitoringToolDefs: ToolDef[] = [
         status = service.status;
         containerId = service.container_id ?? resolved.runtimeProject.container_id;
       } else {
-        const projectName = args['project_name'] as string;
-        const resolvedProject = await appCtx.db.getProjectByName(projectName);
+        const projectId = typeof args['project_id'] === 'string' ? args['project_id'].trim() : '';
+        const projectName =
+          typeof args['project_name'] === 'string' ? args['project_name'].trim() : '';
+        const resolvedProject = projectId
+          ? await appCtx.db.getProject(projectId)
+          : await appCtx.db.getProjectByName(projectName);
         if (!resolvedProject) {
-          throw new ProjectNotFoundError(projectName);
+          throw new ProjectNotFoundError(projectId || projectName);
         }
         project = resolvedProject;
         // PR 4.5: canonical-first read of runtime fields with `??` fallback to
@@ -270,8 +291,7 @@ export const monitoringToolDefs: ToolDef[] = [
       const timeoutMs = (args['timeout_ms'] as number | undefined) ?? 5000;
       const internal = (args['internal'] as boolean | undefined) ?? false;
       const pathArg = (args['path'] as string | undefined)?.trim();
-      const probePathSource = pathArg || service.health_check_path || '/';
-      const probePath = probePathSource.startsWith('/') ? probePathSource : `/${probePathSource}`;
+      const healthCheckPathArg = (args['health_check_path'] as string | undefined)?.trim();
 
       const [groupEnv, serviceEnv, deployLogs] = await Promise.all([
         appCtx.db.getEnvVars(project.id),
@@ -279,6 +299,11 @@ export const monitoringToolDefs: ToolDef[] = [
         appCtx.db.getDeployLogs(runtimeProject.id, 5),
       ]);
       const effectiveEnv = { ...groupEnv, ...serviceEnv };
+      const probePath = selectServiceProbePath({
+        requestedPath: pathArg || healthCheckPathArg,
+        healthCheckPath: service.health_check_path,
+        env: effectiveEnv,
+      });
 
       const container = await summarizeContainer(appCtx, service);
       const runtimeLogs = await readServiceLogs(appCtx, runtimeProject.id, lines);
@@ -334,13 +359,13 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'probe_host',
     riskLevel: 'low',
     description:
-      'Check if a host, URL, or container endpoint is reachable. Targets like `ol-svc-*` / `ol-{project}` are internal Docker DNS names and only resolve with internal=true (the backend cannot resolve them from its own network namespace). External hosts probe from the OpenLander host by default.',
+      'Check if a host, URL, or container endpoint is reachable. Pass target, or host as an alias for target. Targets like `ol-svc-*` / `ol-{project}` are internal Docker DNS names and require internal=true. External hosts probe from the OpenLander host by default.',
     mcpDescription:
-      'Check connectivity to a host, URL, or container endpoint. Internal Docker DNS names (ol-svc-*, ol-{project}) require internal=true.',
+      'Check connectivity to a host, URL, or container endpoint. Accepts target or host; internal Docker DNS names require internal=true.',
     inputSchema: probeHostSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
-      const target = args['target'] as string;
+      const target = (args['target'] as string | undefined) ?? (args['host'] as string);
       const portArg = args['port'] as number | undefined;
       const protocolArg = args['protocol'] as 'http' | 'https' | 'tcp' | undefined;
       const pathArg = (args['path'] as string | undefined) ?? '/';
@@ -371,11 +396,14 @@ export const monitoringToolDefs: ToolDef[] = [
   {
     name: 'mcp_action_status',
     riskLevel: 'low',
-    description: 'Check the status of a destructive MCP action that was routed to human approval.',
-    mcpDescription: 'Check pending/approved/rejected/failed status for a held MCP action.',
+    description:
+      'Check the status of a destructive MCP action that was routed to human approval. Pass action_run_id, or action_id as an alias.',
+    mcpDescription:
+      'Check pending/approved/rejected/failed status for a held MCP action. Accepts action_run_id or action_id.',
     inputSchema: mcpActionStatusSchema,
     execute: async (args, context) => {
-      const actionRunId = args['action_run_id'] as string;
+      const actionRunId =
+        (args['action_run_id'] as string | undefined) ?? (args['action_id'] as string);
       const run = await context.appCtx.db.getActionRun(actionRunId);
       if (!run) {
         return {
@@ -443,13 +471,42 @@ async function serviceSelectionCandidates(
   );
 }
 
+async function resolveSingleDeployableProjectAlias(
+  projectName: string,
+  context: ToolContext,
+): Promise<ServiceRow | undefined> {
+  const project = await resolveProjectScope(projectName, context);
+  if (!project) return undefined;
+
+  const deployables =
+    typeof context.appCtx.db.getDeployablesByGroup === 'function'
+      ? await context.appCtx.db.getDeployablesByGroup(project.id)
+      : (await context.appCtx.db.listServices()).filter((item) => item.project_id === project.id);
+  const filtered = deployables.filter((item) => !isManagedService(item.kind));
+  if (filtered.length > 1) {
+    throw new OpenLanderError(
+      `Project '${projectName}' has multiple deployable services. Specify service_id or the service row name.`,
+      'SERVICE_SELECTION_REQUIRED',
+      400,
+      {
+        projectId: project.id,
+        projectName: project.name,
+        candidates: await serviceSelectionCandidates(filtered, context),
+      },
+    );
+  }
+  return filtered[0];
+}
+
 async function resolveDeployableServiceForMonitoring(
   args: Record<string, unknown>,
   context: ToolContext,
 ): Promise<ResolvedDeployableService> {
   const serviceId = typeof args.service_id === 'string' ? args.service_id.trim() : '';
   const serviceName = typeof args.service_name === 'string' ? args.service_name.trim() : '';
+  const projectId = typeof args.project_id === 'string' ? args.project_id.trim() : '';
   const projectName = typeof args.project_name === 'string' ? args.project_name.trim() : '';
+  const projectIdentifier = projectId || projectName;
 
   let service: ServiceRow | undefined;
   let projectScope: ProjectRow | undefined;
@@ -457,9 +514,9 @@ async function resolveDeployableServiceForMonitoring(
   if (serviceId) {
     service = await context.appCtx.db.getService(serviceId);
   } else if (serviceName) {
-    projectScope = await resolveProjectScope(projectName, context);
-    if (projectName && !projectScope) {
-      throw new ProjectNotFoundError(projectName);
+    projectScope = await resolveProjectScope(projectIdentifier, context);
+    if (projectIdentifier && !projectScope) {
+      throw new ProjectNotFoundError(projectIdentifier);
     }
     const services = await context.appCtx.db.listServices();
     const named = services.filter((item) => item.name === serviceName);
@@ -480,10 +537,13 @@ async function resolveDeployableServiceForMonitoring(
       );
     }
     service = deployable[0] ?? scoped[0];
-  } else if (projectName) {
-    projectScope = await resolveProjectScope(projectName, context);
+    if (!service && !projectIdentifier) {
+      service = await resolveSingleDeployableProjectAlias(serviceName, context);
+    }
+  } else if (projectIdentifier) {
+    projectScope = await resolveProjectScope(projectIdentifier, context);
     if (!projectScope) {
-      throw new ProjectNotFoundError(projectName);
+      throw new ProjectNotFoundError(projectIdentifier);
     }
     const deployables =
       typeof context.appCtx.db.getDeployablesByGroup === 'function'
@@ -494,11 +554,11 @@ async function resolveDeployableServiceForMonitoring(
     const filtered = deployables.filter((item) => !isManagedService(item.kind));
     if (filtered.length > 1) {
       throw new OpenLanderError(
-        `Project '${projectName}' has multiple deployable services. Specify service_id or service_name.`,
+        `Project '${projectIdentifier}' has multiple deployable services. Specify service_id or service_name.`,
         'SERVICE_SELECTION_REQUIRED',
         400,
         {
-          projectName,
+          projectName: projectIdentifier,
           candidates: await serviceSelectionCandidates(filtered, context),
         },
       );
@@ -507,7 +567,7 @@ async function resolveDeployableServiceForMonitoring(
   }
 
   if (!service) {
-    throw new ServiceNotFoundError(serviceId || serviceName || projectName || 'unknown');
+    throw new ServiceNotFoundError(serviceId || serviceName || projectIdentifier || 'unknown');
   }
   if (isManagedService(service.kind)) {
     throw new ServiceOperationUnsupportedError('diagnose_service', service.kind);
@@ -517,8 +577,8 @@ async function resolveDeployableServiceForMonitoring(
   if (!project) {
     throw new ProjectNotFoundError(service.project_id);
   }
-  if (projectName && projectName !== project.id && projectName !== project.name) {
-    throw new ServiceNotFoundError(`${service.name} in ${projectName}`);
+  if (projectIdentifier && projectIdentifier !== project.id && projectIdentifier !== project.name) {
+    throw new ServiceNotFoundError(`${service.name} in ${projectIdentifier}`);
   }
 
   const runtimeProjectId = deployableServiceIdToProjectId(service.id);
@@ -752,21 +812,58 @@ async function readServiceLogs(
   }
 }
 
+function normalizeProbePath(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    const pathname = parsed.pathname || '/';
+    return pathname.startsWith('/') ? pathname : `/${pathname}`;
+  } catch {
+    return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  }
+}
+
+function inferBasePathFromEnv(env: Record<string, string>): string | null {
+  const candidateKeys = [
+    'NEXT_PUBLIC_BASE_PATH',
+    'PUBLIC_BASE_PATH',
+    'VITE_BASE_PATH',
+    'REACT_APP_BASE_PATH',
+    'APP_BASE_PATH',
+    'BASE_PATH',
+    'PUBLIC_URL',
+    'NEXTAUTH_URL',
+  ];
+  for (const key of candidateKeys) {
+    const path = normalizeProbePath(env[key]);
+    if (path && path !== '/') return path;
+  }
+  return null;
+}
+
+function selectServiceProbePath(input: {
+  requestedPath?: string;
+  healthCheckPath?: string | null;
+  env: Record<string, string>;
+}): string {
+  return (
+    normalizeProbePath(input.requestedPath) ??
+    inferBasePathFromEnv(input.env) ??
+    normalizeProbePath(input.healthCheckPath) ??
+    '/'
+  );
+}
+
 async function probeServiceHttp(
-  appCtx: ToolContext['appCtx'],
+  appCtx: AppCtx,
   service: ServiceRow,
   path: string,
   timeoutMs: number,
   options: { internal?: boolean } = {},
 ): Promise<Record<string, unknown>> {
-  // R3 (2026-05-13): when internal=true, probe from inside the service's
-  // own container against the container's localhost. Backend container's
-  // 127.0.0.1 is meaningless for "is the app actually serving?" — the app
-  // listens inside the service container's network namespace, not the
-  // backend's. Previously this flag was silently accepted at the agent
-  // layer (no schema entry) and ignored, producing a self-referential
-  // _agent_guidance loop where the response told the agent to "Try with
-  // internal=true" while internal=true did nothing.
+  // `internal=true` answers "is the app serving inside its own container?"
+  // Default mode answers "can OpenLander reach the service over Docker DNS?"
   if (options.internal) {
     if (!service.container_id) {
       return {
@@ -822,19 +919,41 @@ async function probeServiceHttp(
     }
   }
 
+  if (service.container_name && service.container_port) {
+    const internalUrl = `http://${service.container_name}:${String(service.container_port)}${path}`;
+    const internalResult = await probeInternal(
+      appCtx,
+      'http',
+      service.container_name,
+      service.container_port,
+      path,
+      timeoutMs,
+      internalUrl,
+    );
+    if (
+      internalResult['reachable'] === true ||
+      (internalResult['error'] !== 'No running managed containers available for internal probe' &&
+        internalResult['probe_tool_unavailable'] !== true)
+    ) {
+      return {
+        ...internalResult,
+        probe_mode: 'internal_docker_dns',
+      };
+    }
+  }
+
   if (!service.assigned_port) {
     return {
       skipped: true,
-      reason: 'service has no assigned host port',
+      reason: 'service has no internal container port or assigned host port',
     };
   }
-  return probeHttp(
-    `http://127.0.0.1:${String(service.assigned_port)}${path}`,
-    timeoutMs,
-    'http',
-    `http://127.0.0.1:${String(service.assigned_port)}${path}`,
-    Date.now(),
-  );
+  const host = resolveContainerHost();
+  const url = `http://${host}:${String(service.assigned_port)}${path}`;
+  return probeHttp(url, timeoutMs, 'http', url, Date.now()).then((result) => ({
+    ...result,
+    probe_mode: 'host_port_fallback',
+  }));
 }
 
 interface DependencyTarget {
@@ -979,7 +1098,7 @@ function buildDiagnoseNextSteps(input: {
     );
   }
   nextSteps.push(
-    'For existing services, use openlander_service.redeploy_app. Use openlander_deploy.deploy_app only for creating a new app.',
+    'For existing services, call openlander_deploy.deploy_app with service_id/service_name/name, or call openlander_service.redeploy_app directly with service_id.',
   );
   return nextSteps;
 }

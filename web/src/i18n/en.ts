@@ -152,6 +152,15 @@ export const translations = {
       startDeploying: 'Start Deploying',
       generateToken: 'Generate MCP token',
       generating: 'Generating…',
+      instanceName: 'Instance name',
+      instanceHelp: 'This becomes the MCP server key copied into your client config.',
+      instanceDefaultWarning:
+        'If you connect multiple OpenLander servers, rename this to something specific.',
+      saveInstance: 'Save name',
+      savingInstance: 'Saving…',
+      instanceSaveFailed: 'Could not save the MCP instance name.',
+      tryAfterConnect: 'After connecting, try:',
+      tryPrompt: 'Use {name} to deploy this app',
       noTokenYet: 'No MCP token issued yet. Generate one to copy your client config.',
       tokenName: 'Setup wizard',
       tokenAlreadyIssued:
@@ -361,6 +370,14 @@ export const translations = {
       confirmButton: 'Delete service',
       error: 'Failed to delete service',
     },
+    servicesGuide: {
+      empty:
+        'No deployable services in this project yet. Add a Git repo, Docker image, or compose service.',
+      help: 'A project is the group; services are the deployable apps/workers inside it. MCP follow-up actions should use service_id.',
+      banner:
+        'These are deployable services. Use the MCP service_id shown below for env vars, redeploys, domains, and diagnostics.',
+      serviceId: 'MCP service_id: {id}',
+    },
     domains: {
       empty: 'No domains attached yet.',
       emptyExternal:
@@ -521,7 +538,9 @@ export const translations = {
     title: 'Services',
     createService: 'Create Service',
     subtitle:
-      'Run Docker images as shared infrastructure. Multiple projects can connect to these services.',
+      'Managed services are databases, caches, and shared infrastructure. Apps connect to them through env vars.',
+    mcpHint:
+      'Use openlander_managed_service for provisioning and credentials, then set env vars on a deployable service.',
     noServices: 'No services running',
     getStarted: 'Create a service from a template or run any Docker image.',
     templates: 'Quick Start Templates',
@@ -879,7 +898,9 @@ export const translations = {
     subtitle: 'Connect Claude or any MCP client to manage your services.',
     row: {
       status: 'Status',
+      instance: 'Instance name',
       endpoint: 'Endpoint',
+      tryThis: 'Try saying this',
       token: 'Access token',
       copy: 'Copy',
       copied: 'Copied',
@@ -918,6 +939,20 @@ export const translations = {
       passwordHint: 'Treat like a password — one token unlocks every project. Regenerate if lost.',
       issuedAt: 'issued {when}',
       loadFailed: 'Failed to load tokens',
+    },
+    instance: {
+      save: 'Save',
+      saving: 'Saving…',
+      saved: 'Instance name saved.',
+      saveFailed: 'Failed to save instance name',
+      loadFailed: 'Could not load instance identity.',
+      defaultWarning:
+        'Rename this if you connect multiple OpenLander servers to the same AI client.',
+      tryPrompt: 'Use {name} to deploy this project',
+      tryHelp: 'Mention the server name so your AI client picks the right OpenLander instance.',
+      troubleshootingTitle: 'Agent using Docker or SSH instead?',
+      troubleshootingHint: 'Paste this correction prompt only when the agent ignores MCP.',
+      copyCorrection: 'Copy correction prompt',
     },
     setup: {
       title: 'Setup',

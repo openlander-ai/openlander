@@ -25,12 +25,18 @@ const log = createModuleLogger('tools-defs-deployable-service');
 
 const serviceTargetFields = {
   service_id: z.string().min(1).optional().describe('Deployable service id'),
-  service_name: z.string().min(1).optional().describe('Deployable service name'),
+  service_name: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Deployable service row name. If no service has that name, a project group name with exactly one deployable service is accepted as a convenience.',
+    ),
   project_name: z
     .string()
     .min(1)
     .optional()
-    .describe('Optional project group name/id to scope service_name lookups'),
+    .describe('Optional project group name to scope service_name lookups'),
 } as const;
 
 const serviceTargetSchema = z
@@ -127,6 +133,30 @@ async function throwServiceSelectionRequired(
   );
 }
 
+async function resolveSingleDeployableProjectAlias(
+  projectName: string,
+  context: ToolContext,
+): Promise<ResolvedServiceRow | undefined> {
+  const project = await resolveProjectScope(projectName, context);
+  if (!project) return undefined;
+
+  const services = await context.appCtx.db.getDeployablesByGroup(project.id);
+  const deployables = services.filter((item) => !isManagedService(item.kind));
+  if (deployables.length > 1) {
+    throw new OpenLanderError(
+      `Project '${projectName}' has multiple deployable services. Specify service_id or the service row name.`,
+      'SERVICE_SELECTION_REQUIRED',
+      400,
+      {
+        projectId: project.id,
+        projectName: project.name,
+        candidates: await serviceSelectionCandidates(deployables, context),
+      },
+    );
+  }
+  return deployables[0];
+}
+
 async function resolveServiceByName(
   serviceName: string,
   projectName: string,
@@ -149,6 +179,12 @@ async function resolveServiceByName(
   }
 
   const service = deployableServices[0] ?? scopedServices[0];
+  if (!service && !projectName) {
+    const projectAliasService = await resolveSingleDeployableProjectAlias(serviceName, context);
+    if (projectAliasService) {
+      return projectAliasService;
+    }
+  }
   if (!service) {
     throw new ServiceNotFoundError(projectName ? `${serviceName} in ${projectName}` : serviceName);
   }
@@ -208,7 +244,7 @@ function serviceSummary(service: NonNullable<ServiceRow>, project: NonNullable<P
   };
 }
 
-async function runRedeploy(
+export async function runDeployableServiceAction(
   args: Record<string, unknown>,
   context: ToolContext,
   action: 'redeploy_app' | 'restart_service',
@@ -323,7 +359,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
     mcpDescription:
       'Deploy/redeploy a deployable app/worker service. Provide service_id or service_name.',
     inputSchema: deployServiceSchema,
-    execute: (args, context) => runRedeploy(args, context, 'redeploy_app'),
+    execute: (args, context) => runDeployableServiceAction(args, context, 'redeploy_app'),
   },
   {
     name: 'restart_service',
@@ -332,7 +368,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
       'Restart a deployable app/worker service by stopping and redeploying it. Provide service_id or service_name.',
     mcpDescription: 'Restart a deployable app/worker service by stopping and redeploying it.',
     inputSchema: restartServiceSchema,
-    execute: (args, context) => runRedeploy(args, context, 'restart_service'),
+    execute: (args, context) => runDeployableServiceAction(args, context, 'restart_service'),
   },
   {
     name: 'rollback_service',
@@ -420,6 +456,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
     mcpDescription:
       'Archive a deployable app/worker service while preserving configuration/history.',
     inputSchema: serviceTargetSchema,
+    targets: ['agent'],
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(
         args,
@@ -438,6 +475,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
     mcpDescription:
       'Restore an archived deployable app/worker service. Call redeploy_app to run it.',
     inputSchema: serviceTargetSchema,
+    targets: ['agent'],
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(
         args,

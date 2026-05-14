@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../../src/app.js';
 import * as configModule from '../../src/config/index.js';
+import * as gitProviders from '../../src/git-providers/index.js';
+import type { GitProvider } from '../../src/git-providers/index.js';
 import * as gitPipeline from '../../src/pipeline/git.js';
 import { DeployOrchestrator } from '../../src/pipeline/orchestrator.js';
 import * as portModule from '../../src/pipeline/port.js';
@@ -52,8 +54,35 @@ function createMockContext() {
       },
     },
     db: {
+      getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
       getProjectByName: vi.fn().mockReturnValue(project),
       getLastDeployLog: vi.fn(),
+      getDeployLogs: vi.fn().mockReturnValue([
+        {
+          id: 'deploy-1',
+          service_id: 'p1__svc',
+          status: 'failed',
+          trigger: 'api',
+          commit_sha: 'abc123',
+          duration_ms: 1200,
+          created_at: '2026-05-13T00:00:00.000Z',
+          build_log: 'build failed',
+        },
+      ]),
+      getDeployLog: vi.fn((id: string) =>
+        id === 'deploy-1'
+          ? {
+              id: 'deploy-1',
+              service_id: 'p1__svc',
+              status: 'failed',
+              trigger: 'api',
+              commit_sha: 'abc123',
+              duration_ms: 1200,
+              created_at: '2026-05-13T00:00:00.000Z',
+              build_log: 'line 1\nline 2',
+            }
+          : undefined,
+      ),
       getDeployLockInfo: vi.fn().mockReturnValue(null),
     },
     composePipeline,
@@ -116,6 +145,28 @@ describe('registry critical tool behaviors', () => {
     expect(pipeline.getLogs).toHaveBeenNthCalledWith(2, 'p1', 50);
   });
 
+  it('deployment debug tools accept project_id and deploy_id targets', async () => {
+    const { ctx } = createMockContext();
+    const historyTool = getTool(ctx, 'get_deploy_history');
+    const buildLogTool = getTool(ctx, 'get_build_log');
+
+    const history = await historyTool.execute({ project_id: 'p1', limit: 3 }, { target: 'mcp' });
+    const buildLog = await buildLogTool.execute({ deploy_id: 'deploy-1' }, { target: 'mcp' });
+
+    expect(ctx.db.getDeployLogs).toHaveBeenCalledWith('p1', 3);
+    expect(history).toMatchObject({
+      project: 'critical-app',
+      project_id: 'p1',
+      count: 1,
+    });
+    expect(ctx.db.getDeployLog).toHaveBeenCalledWith('deploy-1');
+    expect(buildLog).toMatchObject({
+      id: 'deploy-1',
+      status: 'failed',
+      build_log: 'line 1\nline 2',
+    });
+  });
+
   it('get_deploy_status formats single project status for agent and mcp targets', async () => {
     const { ctx, jobManager } = createMockContext();
     const tool = getTool(ctx, 'get_deploy_status');
@@ -157,6 +208,45 @@ describe('registry critical tool behaviors', () => {
           elapsed: expect.any(String),
         }),
       ],
+    });
+  });
+
+  it('get_deploy_status resolves completed deploy logs by deploy_id', async () => {
+    const { ctx } = createMockContext();
+    const tool = getTool(ctx, 'get_deploy_status');
+
+    const result = await tool.execute({ deploy_id: 'deploy-1' }, { target: 'mcp' });
+
+    expect(ctx.db.getDeployLog).toHaveBeenCalledWith('deploy-1');
+    expect(result).toMatchObject({
+      active: 0,
+      status: 'found',
+      jobs: [
+        {
+          deploy_id: 'deploy-1',
+          service_id: 'p1__svc',
+          project_id: 'p1',
+          name: 'critical-app',
+          phase: 'failed',
+          build_log_tail: 'line 1\nline 2',
+        },
+      ],
+    });
+  });
+
+  it('get_deploy_status distinguishes unknown deploy ids from completed jobs', async () => {
+    const { ctx } = createMockContext();
+    const tool = getTool(ctx, 'get_deploy_status');
+
+    const result = await tool.execute({ job_id: 'missing-deploy' }, { target: 'mcp' });
+
+    expect(ctx.db.getDeployLog).toHaveBeenCalledWith('missing-deploy');
+    expect(result).toMatchObject({
+      active: 0,
+      jobs: [],
+      status: 'not_found',
+      code: 'DEPLOY_STATUS_NOT_FOUND',
+      deploy_id: 'missing-deploy',
     });
   });
 
@@ -245,5 +335,46 @@ describe('registry critical tool behaviors', () => {
     await expect(searchRepos.execute({ query: 'openlander' }, { target: 'mcp' })).rejects.toThrow(
       'GITHUB_NOT_CONFIGURED: No GitHub token configured.',
     );
+  });
+
+  it('github repo discovery never returns credentialed clone URLs', async () => {
+    const { ctx } = createMockContext();
+    const listRepos = getTool(ctx, 'list_github_repos');
+    const searchRepos = getTool(ctx, 'search_github_repos');
+    const token = 'gho_supersecretfixture';
+    const repo = {
+      name: 'private-app',
+      fullName: 'acme/private-app',
+      description: 'private',
+      language: 'TypeScript',
+      isPrivate: true,
+      defaultBranch: 'main',
+      stars: 0,
+      cloneUrl: 'https://github.com/acme/private-app.git',
+      htmlUrl: 'https://github.com/acme/private-app',
+      updatedAt: '2026-05-13T00:00:00.000Z',
+    };
+
+    mockLoadConfig.mockReturnValue({ gitProviders: { github: { token, username: 'acme' } } });
+    const provider: GitProvider = {
+      type: 'github',
+      displayName: 'GitHub',
+      validateToken: vi.fn(),
+      listRepos: vi.fn().mockResolvedValue({ repos: [repo], hasMore: false }),
+      searchRepos: vi.fn().mockResolvedValue({ repos: [repo], total: 1 }),
+      getRepo: vi.fn(),
+      hasDockerfile: vi.fn(),
+      getAuthCloneUrl: vi.fn(),
+    };
+    vi.spyOn(gitProviders, 'createGitProvider').mockReturnValue(provider);
+
+    const listResult = await listRepos.execute({}, { target: 'mcp' });
+    const searchResult = await searchRepos.execute({ query: 'private' }, { target: 'mcp' });
+    const payload = JSON.stringify({ listResult, searchResult });
+
+    expect(payload).toContain('https://github.com/acme/private-app.git');
+    expect(payload).not.toContain(token);
+    expect(payload).not.toContain('x-access-token');
+    expect(payload).not.toContain('gho_');
   });
 });

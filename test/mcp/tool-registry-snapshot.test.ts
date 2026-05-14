@@ -16,7 +16,6 @@ import type { ToolDef } from '../../src/tools/defs/types.js';
 const EXPECTED_TOOLS = [
   'add_volume',
   'analyze_infrastructure',
-  'archive_service',
   'backup_service',
   'bulk_delete_env_vars',
   'cleanup_docker',
@@ -40,6 +39,7 @@ const EXPECTED_TOOLS = [
   'get_deploy_status',
   'get_disk_usage',
   'get_env_var',
+  'get_instance_info',
   'get_logs',
   'get_project_stats',
   'get_service_credentials',
@@ -74,7 +74,6 @@ const EXPECTED_TOOLS = [
   'set_global_secret',
   'start_service',
   'stop_service',
-  'unarchive_service',
   'unexpose_public',
   'update_deploy_plan',
   'update_service_config',
@@ -126,8 +125,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 66 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(66);
+  it('maintains exactly 65 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(65);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

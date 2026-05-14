@@ -50,13 +50,26 @@ export const projectNameSchema = z.object({
 
 const monitoringTargetFields = {
   service_id: z.string().min(1).optional().describe('Deployable service id'),
-  service_name: z.string().min(1).optional().describe('Deployable service name'),
+  service_name: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Deployable service row name. If no service has that name, a project group name with exactly one deployable service is accepted.',
+    ),
+  project_id: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Project group id. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+    ),
   project_name: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Project group name/id. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+      'Project group name. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
     ),
 } as const;
 
@@ -64,10 +77,15 @@ function monitoringTargetSchema<T extends z.ZodRawShape>(shape: T) {
   return z
     .object({ ...monitoringTargetFields, ...shape })
     .refine(
-      (value: { service_id?: unknown; service_name?: unknown; project_name?: unknown }) =>
-        Boolean(value.service_id || value.service_name || value.project_name),
+      (value: {
+        service_id?: unknown;
+        service_name?: unknown;
+        project_id?: unknown;
+        project_name?: unknown;
+      }) =>
+        Boolean(value.service_id || value.service_name || value.project_id || value.project_name),
       {
-        message: 'service_id, service_name, or project_name is required',
+        message: 'service_id, service_name, project_id, or project_name is required',
       },
     );
 }
@@ -78,16 +96,31 @@ export const getLogsSchema = monitoringTargetSchema({
 
 export const getProjectStatsSchema = monitoringTargetSchema({});
 
+export const getInstanceInfoSchema = z.object({}).strict();
+
 export const diagnoseServiceSchema = z
   .object({
     service_id: z.string().min(1).optional().describe('Deployable service id'),
-    service_name: z.string().min(1).optional().describe('Deployable service name'),
+    service_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Deployable service row name. If no service has that name, a project group name with exactly one deployable service is accepted.',
+      ),
+    project_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Project group id. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+      ),
     project_name: z
       .string()
       .min(1)
       .optional()
       .describe(
-        'Project group name/id. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+        'Project group name. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
       ),
     lines: z
       .number()
@@ -100,6 +133,7 @@ export const diagnoseServiceSchema = z
       .string()
       .optional()
       .describe('HTTP path to probe on the service assigned port (default: health path or "/").'),
+    health_check_path: z.string().optional().describe('Alias for path.'),
     timeout_ms: z
       .number()
       .int()
@@ -114,13 +148,35 @@ export const diagnoseServiceSchema = z
         'When true, run the HTTP probe from inside the service container itself (against its container_port). Use this when the deploy reports a healthcheck failure or the host-side probe cannot reach the assigned port. Default: false (host-side probe against assigned_port).',
       ),
   })
-  .refine((value) => Boolean(value.service_id || value.service_name || value.project_name), {
-    message: 'service_id, service_name, or project_name is required',
+  .refine(
+    (value) =>
+      Boolean(value.service_id || value.service_name || value.project_id || value.project_name),
+    {
+      message: 'service_id, service_name, project_id, or project_name is required',
+    },
+  );
+
+export const managedServiceTargetSchema = z
+  .object({
+    service_id: z.string().min(1).optional().describe('Managed/infrastructure service id'),
+    service_name: z.string().min(1).optional().describe('Managed/infrastructure service name'),
+  })
+  .refine((value) => Boolean(value.service_id || value.service_name), {
+    message: 'service_id or service_name is required',
   });
 
-export const mcpActionStatusSchema = z.object({
-  action_run_id: z.string().min(1).describe('Action run id returned by a pending MCP action'),
-});
+export const mcpActionStatusSchema = z
+  .object({
+    action_run_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Action run id returned by a pending MCP action'),
+    action_id: z.string().min(1).optional().describe('Alias for action_run_id'),
+  })
+  .refine((value) => Boolean(value.action_run_id || value.action_id), {
+    message: 'action_run_id or action_id is required',
+  });
 
 export const platformHealthSchema = z.object({});
 
@@ -191,13 +247,19 @@ export const platformRecoverSchema = z.object({
 
 const envTargetFields = {
   service_id: z.string().min(1).optional().describe('Deployable service id'),
-  service_name: z.string().min(1).optional().describe('Deployable service name'),
+  service_name: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Deployable service row name. If no service has that name, a project group name with exactly one deployable service is accepted.',
+    ),
   project_name: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Project group name/id. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+      'Project group name. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
     ),
 } as const;
 
@@ -267,7 +329,7 @@ export const domainSchema = z
       .min(1)
       .optional()
       .describe(
-        'Optional project group name/id. Legacy fallback: if service_id/service_name is omitted, the group must contain exactly one deployable service.',
+        'Optional project group name. Legacy fallback: if service_id/service_name is omitted, the group must contain exactly one deployable service.',
       ),
     domain: z.string().min(1).describe('Domain name'),
   })
@@ -287,7 +349,16 @@ export const previewIdSchema = z.object({
 
 // Status & monitoring schemas
 export const deployStatusSchema = z.object({
-  project_name: z.string().optional().describe('Project name (optional, returns all if omitted)'),
+  project_id: z
+    .string()
+    .optional()
+    .describe('Project group id for current in-flight status lookup'),
+  project_name: z
+    .string()
+    .optional()
+    .describe('Project group name for current in-flight status lookup'),
+  deploy_id: z.string().optional().describe('Completed deploy log id to look up'),
+  job_id: z.string().optional().describe('Alias for deploy_id; also checks active in-memory jobs'),
   wait: z
     .boolean()
     .optional()
@@ -456,20 +527,30 @@ export const analyzeInfrastructureSchema = z.object({
 });
 
 // Debug & troubleshooting schemas
-export const getBuildLogSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
-  deploy_index: z
-    .number()
-    .int()
-    .optional()
-    .describe('Deploy index (0 = latest, 1 = previous). Default: 0'),
-  tail: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Return only the last N lines of the build log. Useful for large logs.'),
-});
+export const getBuildLogSchema = z
+  .object({
+    deploy_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Deploy log id. If provided, no project target is required.'),
+    project_id: z.string().min(1).optional().describe('Project group id'),
+    project_name: z.string().min(1).optional().describe('Project group name'),
+    deploy_index: z
+      .number()
+      .int()
+      .optional()
+      .describe('Deploy index (0 = latest, 1 = previous). Default: 0'),
+    tail: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Return only the last N lines of the build log. Useful for large logs.'),
+  })
+  .refine((value) => Boolean(value.deploy_id || value.project_id || value.project_name), {
+    message: 'deploy_id, project_id, or project_name is required',
+  });
 
 export const debugBuildErrorSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
@@ -645,6 +726,27 @@ export const executeDeployPlanSchema = z.object({
 // One-call deploy schema (create plan + execute + optionally wait)
 export const deploySchema = z
   .object({
+    service_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Existing deployable service id. When provided, deploy_app acts as a redeploy front door.',
+      ),
+    service_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Existing deployable service row name. Project group name is accepted only when that group has exactly one deployable service.',
+      ),
+    project_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Existing project group name for redeploy lookup or service_name scoping. For new app names, use name.',
+      ),
     repo_url: z
       .string()
       .min(1)
@@ -656,6 +758,18 @@ export const deploySchema = z
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
     port: z.number().int().positive().max(65535).optional().describe('Container port'),
+    no_cache: z
+      .boolean()
+      .optional()
+      .describe('When deploy_app resolves an existing service, force a fresh Docker build.'),
+    strategy: z
+      .enum(['blue-green', 'force'])
+      .optional()
+      .describe('When deploy_app resolves an existing service, redeploy strategy.'),
+    health_check_path: z
+      .string()
+      .optional()
+      .describe('Health check path for the deployed or redeployed service.'),
     env_vars: envVarsInputSchema
       .optional()
       .describe(
@@ -693,13 +807,13 @@ export const deploySchema = z
       .boolean()
       .optional()
       .describe(
-        'Create a temporary public URL via TryCloudflare after deploy succeeds (default: false). Requires wait=true.',
+        'After deploy succeeds, create a temporary tunnel URL using the configured tunnel backend (default: false). Requires wait=true.',
       ),
     domain: z
       .string()
       .optional()
       .describe(
-        'Map a custom domain after deploy succeeds (requires Cloudflare config). Example: api.myapp.com. Requires wait=true.',
+        'Map a custom domain after deploy succeeds using the configured domain routing backend. Example: api.myapp.com. Requires wait=true.',
       ),
     target_project_id: z
       .string()
@@ -710,6 +824,12 @@ export const deploySchema = z
   })
   .refine(
     (data) => {
+      if (data.service_id || data.service_name) {
+        return true;
+      }
+      if ((data.name || data.project_name) && !data.repo_url && !data.image) {
+        return true;
+      }
       if (data.source === 'image') {
         return !!data.image && data.image.length > 0;
       }
@@ -719,7 +839,17 @@ export const deploySchema = z
       message:
         'If source is "image", image is required. If source is "git" or undefined, repo_url is required.',
     },
-  );
+  )
+  .superRefine((data, ctx) => {
+    if ((data.repo_url || data.image) && data.project_name && !data.name) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['project_name'],
+        message:
+          'project_name scopes existing app lookups only. For new app deploys, use name as the project name.',
+      });
+    }
+  });
 
 export const validateDeployPlanSchema = z.object({
   plan_id: z.string().min(1).describe('Plan ID returned from create_deploy_plan'),
@@ -758,10 +888,15 @@ export const updateProjectConfigSchema = z
   );
 
 // Deployment history schema
-export const deployHistorySchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
-  limit: z.number().optional().describe('Max entries to return (default 10)'),
-});
+export const deployHistorySchema = z
+  .object({
+    project_id: z.string().min(1).optional().describe('Project group id'),
+    project_name: z.string().min(1).optional().describe('Project group name'),
+    limit: z.number().optional().describe('Max entries to return (default 10)'),
+  })
+  .refine((value) => Boolean(value.project_id || value.project_name), {
+    message: 'project_id or project_name is required',
+  });
 
 export const addVolumeSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
@@ -830,30 +965,39 @@ export const cleanupDockerSchema = z.object({
     ),
 });
 
-export const probeHostSchema = z.object({
-  target: z.string().min(1).describe('Hostname, IP, URL, or "container-name:port" to probe'),
-  port: z
-    .number()
-    .int()
-    .positive()
-    .max(65535)
-    .optional()
-    .describe('Port to probe (required for TCP mode, optional for HTTP)'),
-  protocol: z
-    .enum(['http', 'https', 'tcp'])
-    .optional()
-    .describe('Protocol to use (default: auto-detect from target)'),
-  path: z.string().optional().describe('HTTP path to probe (default: "/")'),
-  timeout_ms: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Timeout in milliseconds (default: 5000)'),
-  internal: z
-    .boolean()
-    .optional()
-    .describe(
-      'If true, probe from inside a running managed container (useful for container-to-container DNS). Default: false.',
-    ),
-});
+export const probeHostSchema = z
+  .object({
+    target: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Hostname, IP, URL, or "container-name:port" to probe'),
+    host: z.string().min(1).optional().describe('Alias for target'),
+    port: z
+      .number()
+      .int()
+      .positive()
+      .max(65535)
+      .optional()
+      .describe('Port to probe (required for TCP mode, optional for HTTP)'),
+    protocol: z
+      .enum(['http', 'https', 'tcp'])
+      .optional()
+      .describe('Protocol to use (default: auto-detect from target)'),
+    path: z.string().optional().describe('HTTP path to probe (default: "/")'),
+    timeout_ms: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Timeout in milliseconds (default: 5000)'),
+    internal: z
+      .boolean()
+      .optional()
+      .describe(
+        'If true, probe from inside a running managed container (useful for container-to-container DNS). Default: false.',
+      ),
+  })
+  .refine((value) => Boolean(value.target || value.host), {
+    message: 'target or host is required',
+  });

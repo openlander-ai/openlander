@@ -28,7 +28,7 @@ export class InfraOps {
   }
 
   /** Docker system disk usage (images, containers, volumes). */
-  async getDiskUsage(timeoutMs = 5_000): Promise<unknown> {
+  async getDiskUsage(timeoutMs = 30_000): Promise<unknown> {
     return await withTimeout(this.ctx.client.df(), timeoutMs, 'Docker disk usage');
   }
 }

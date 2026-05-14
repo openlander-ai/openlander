@@ -33,6 +33,7 @@ export default defineConfig({
       'test/mcp/client-manager-ssrf.test.ts',
       'test/mcp/composite-routing*.test.ts',
       'test/mcp/composite-tool-registry.test.ts',
+      'test/mcp/instance-identity.test.ts',
       'test/mcp/managed-service-rename.test.ts',
       'test/mcp/mode-switching.test.ts',
       'test/mcp/session-heartbeat.test.ts',

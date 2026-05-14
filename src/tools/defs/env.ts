@@ -76,6 +76,25 @@ async function resolveProjectScope(appCtx: AppCtx, projectName: string) {
   );
 }
 
+async function resolveSingleDeployableProjectAlias(
+  appCtx: AppCtx,
+  projectName: string,
+): Promise<ResolvedServiceRow | undefined> {
+  const project = await resolveProjectScope(appCtx, projectName);
+  if (!project) return undefined;
+
+  const deployables = await appCtx.db.getDeployablesByGroup(project.id);
+  const filtered = deployables.filter((item) => !isManagedService(item.kind));
+  if (filtered.length > 1) {
+    await throwEnvServiceSelectionRequired(
+      appCtx,
+      `Project '${project.name}' has ${String(filtered.length)} deployable services. Specify service_name or service_id.`,
+      filtered,
+    );
+  }
+  return filtered[0];
+}
+
 async function resolveEnvTarget(args: Record<string, unknown>, appCtx: AppCtx): Promise<EnvTarget> {
   const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
   const serviceName = typeof args['service_name'] === 'string' ? args['service_name'].trim() : '';
@@ -108,6 +127,9 @@ async function resolveEnvTarget(args: Record<string, unknown>, appCtx: AppCtx): 
     }
 
     service = deployableServices[0] ?? scopedServices[0];
+    if (!service && !projectName) {
+      service = await resolveSingleDeployableProjectAlias(appCtx, serviceName);
+    }
     if (!service) {
       throw new ServiceNotFoundError(
         projectName ? `${serviceName} in ${projectName}` : serviceName,
@@ -585,8 +607,9 @@ export const envToolDefs: ToolDef[] = [
     name: 'expose_public',
     riskLevel: 'medium',
     description:
-      'Create a temporary public URL for a project via TryCloudflare tunnel. Use when user wants to share their app externally or test from another device. Returns { status, project, publicUrl }. The URL is temporary and changes on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For permanent custom domains, use map_domain instead.',
-    mcpDescription: 'Generate a temporary public URL for a project via TryCloudflare.',
+      'Create a temporary public URL for a project using the configured tunnel backend. This optional feature requires tunnel infrastructure on the OpenLander host. Use when the user wants a quick external share URL without changing app source code. Returns { status, project, publicUrl }. The URL is temporary and may change on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For stable domains, use domain routing instead.',
+    mcpDescription:
+      'Generate a temporary public share URL using the configured tunnel backend. Optional; requires tunnel infrastructure.',
     inputSchema: projectNameSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
@@ -604,7 +627,10 @@ export const envToolDefs: ToolDef[] = [
         project: projectName,
         publicUrl: url,
         _agent_guidance: {
-          next_steps: ['Access the app via the publicUrl above'],
+          next_steps: [
+            'Access the app via the publicUrl above',
+            'If expose_public fails because the tunnel backend is unavailable, use the normal service URL or configure public access first.',
+          ],
         },
       };
     },
@@ -613,8 +639,8 @@ export const envToolDefs: ToolDef[] = [
     name: 'unexpose_public',
     riskLevel: 'medium',
     description:
-      'Remove the public TryCloudflare tunnel URL for a project. Use when user wants to make a project private again. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
-    mcpDescription: 'Remove a public URL and stop the TryCloudflare tunnel.',
+      'Remove the temporary public share URL for a project. Use when the user wants to make a project private again. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
+    mcpDescription: 'Remove a temporary public share URL.',
     inputSchema: projectNameSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;

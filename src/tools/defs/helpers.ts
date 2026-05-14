@@ -77,7 +77,7 @@ export function buildPolicyRejectionResponse(
       message: 'Project state does not allow this operation right now.',
       next_steps: [
         err instanceof ProjectArchivedError
-          ? 'Unarchive the project first via unarchive_service.'
+          ? 'Restore the archived service in the web UI first, then retry.'
           : err instanceof ProjectRecoveringError
             ? 'Wait for recovery to complete, then try again.'
             : 'Wait for the circuit breaker cooldown to pass before retrying.',

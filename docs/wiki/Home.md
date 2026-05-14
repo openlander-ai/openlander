@@ -35,10 +35,10 @@ Deploy Pipeline (deterministic — rule-based execution)
     ├─ git clone
     ├─ docker build (Dockerfile or auto-generated)
     ├─ docker run (auto port + Traefik labels)
-    ├─ expose (TryCloudflare / Cloudflare Tunnel)
+    ├─ expose (temporary share URL / custom domain)
     └─ monitor (health checks + logs/status)
     ↓
-Infrastructure (Docker + Traefik + Cloudflare + Postgres)
+Infrastructure (Docker + Traefik + Postgres)
 ```
 
 **Key principle**: Execution is deterministic (rule-based). OpenLander 0.1 does
@@ -63,23 +63,23 @@ to read logs, change repo/config, and call deploy/redeploy explicitly.
 
 ### Integration
 
-- [[MCP Tools Reference]] — Complete tool reference for AI agents (5 composite MCP tools, 66 unique default operations)
+- [[MCP Tools Reference]] — Complete tool reference for AI agents (5 composite MCP tools, 65 unique default operations)
 - [[Integration Guide]] — Connect OpenClaw, Claude Code, Cursor, and more
 
 ---
 
 ## Architecture
 
-| Component     | Technology                        |
-| ------------- | --------------------------------- |
-| Language      | TypeScript (strict ESM)           |
-| Runtime       | Node.js >= 22                     |
-| Web UI        | React 19 + Tailwind CSS v3        |
-| Agent I/O     | MCP server for external agents    |
-| Database      | PostgreSQL 16 (Docker Compose)    |
-| Containers    | Docker + dockerode                |
-| Reverse Proxy | Traefik (Docker label routing)    |
-| Tunnel        | TryCloudflare / Cloudflare Tunnel |
+| Component     | Technology                            |
+| ------------- | ------------------------------------- |
+| Language      | TypeScript (strict ESM)               |
+| Runtime       | Node.js >= 22                         |
+| Web UI        | React 19 + Tailwind CSS v3            |
+| Agent I/O     | MCP server for external agents        |
+| Database      | PostgreSQL 16 (Docker Compose)        |
+| Containers    | Docker + dockerode                    |
+| Reverse Proxy | Traefik (Docker label routing)        |
+| Public access | Temporary share URLs / custom domains |
 
 ## Supported Frameworks (Auto-Dockerfile)
 

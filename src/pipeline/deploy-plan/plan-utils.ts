@@ -9,6 +9,7 @@ export function computeMissingEnvVars(
   provided: Record<string, string>,
   autoDetected: Record<string, string>,
   existingEnvVars: Record<string, string> = {},
+  plannedServiceKeys: ReadonlySet<string> = new Set<string>(),
 ): PlanEnvEntry[] {
   const missing: PlanEnvEntry[] = [];
   const seen = new Set<string>();
@@ -23,8 +24,9 @@ export function computeMissingEnvVars(
     const isProvided = entry.key in provided;
     const isAutoDetected = entry.key in autoDetected;
     const isInDb = entry.key in existingEnvVars;
+    const isPlannedServiceKey = plannedServiceKeys.has(entry.key);
 
-    if (!isProvided && !isAutoDetected && !isInDb) {
+    if (!isProvided && !isAutoDetected && !isInDb && !isPlannedServiceKey) {
       missing.push(entry);
     }
   }

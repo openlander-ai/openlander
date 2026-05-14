@@ -32,6 +32,7 @@ import type { ToolDef } from '../tools/defs/types.js';
 import type { RequestIdentity } from '../types/identity.js';
 import { buildIncidentBriefing } from '../llm/prompts.js';
 import { createCompositeTools, type CompositeTool } from './composite-tools.js';
+import { getMcpInstanceContext } from './instance-identity.js';
 
 const log = createModuleLogger('mcp');
 
@@ -69,23 +70,23 @@ function getCompositeTools(allToolDefs: ToolDef[]): CompositeTool[] {
 const SERVER_INSTRUCTIONS = `You are connected to OpenLander — a self-hosted deployment platform.
 
 CRITICAL: Use ONLY the 5 composite tools below. Each tool takes an { action, params } input.
-Use action="help" on any tool to list available operations.
+Use action="help" on any tool to list available operations and machine-readable input schemas.
 NEVER call docker CLI, curl localhost, or docker compose directly — use OpenLander tools instead.
 Docker may run on a remote host. Always use tools, not local commands.
 
 ## openlander_deploy
-Deploy & build operations: plans, execution, rollbacks, previews, build logs, Git, infrastructure.
+Deploy front door for new apps plus plans, validation, execution, rollbacks, previews, build logs, Git, infrastructure.
 Key actions: deploy_app, create_deploy_plan, execute_deploy_plan, get_deploy_status, rollback_service, get_build_log
 All actions: action="help"
 
 ## openlander_project
-Project group config: secrets and public URLs. Env actions route to deployable services.
+Project groups and shared config. A project group organizes deployable services; env actions route to service targets.
 Key actions: list_projects, set_global_secret, upload_secret_file, expose_public
 All actions: action="help"
 
 ## openlander_service
-Deployable services (apps + workers): lifecycle, config, env vars, secrets, public exposure.
-Key actions: redeploy_app, restart_service, set_env_vars, list_env_vars, archive_service, expose_public
+Deployable services (apps + workers): lifecycle, config, env vars, domains, and temporary public URLs. Prefer service_id from list_projects.
+Key actions: redeploy_app, restart_service, set_env_vars, list_env_vars, update_service_config, expose_public
 All actions: action="help"
 
 ## openlander_managed_service
@@ -94,12 +95,12 @@ Key actions: create_service, list_services, get_service_credentials, backup_serv
 All actions: action="help"
 
 ## openlander_monitor
-Monitoring & operations: diagnostics, logs, alerts, system stats, and connectivity checks.
-Key actions: diagnose_service, get_logs, get_alerts, get_system_stats, get_project_stats, dismiss_alert
+Monitoring & diagnostics: instance info, one-shot service diagnosis, logs, alerts, system stats, and connectivity checks.
+Key actions: get_instance_info, diagnose_service, get_logs, get_alerts, get_system_stats, get_project_stats, dismiss_alert
 All actions: action="help"
 
 ## Usage
-Example: openlander_deploy({ action: "deploy_app", params: { repo_url: "https://github.com/user/repo" } })
+Example: openlander_deploy({ action: "deploy_app", params: { repo_url: "https://github.com/user/repo", name: "my-app" } })
 Example: openlander_project({ action: "help" })
 Example: openlander_managed_service({ action: "create_service", params: { name: "pg", template: "postgresql" } })
 Example: openlander_service({ action: "set_env_vars", params: { service_name: "app-web", variables: '{"DATABASE_URL":"..."}' } })
@@ -110,15 +111,23 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - list_env_vars masks values by default; pass reveal=true only when the user explicitly needs raw values for audit or migration.
 - export_env_vars returns raw .env text and should be used sparingly.
 
-## Deploy Flow (ALWAYS follow for new projects)
-1. openlander_deploy({ action: "deploy_app", params: { repo_url: "...", name: "..." } })
-2. openlander_deploy({ action: "get_deploy_status", params: { project_name: "..." } })  ← poll until done
-3. openlander_project({ action: "list_projects" })  ← confirm running
+## Deploy Flow
+1. For "deploy this app", call openlander_deploy.deploy_app first. New apps use params.name for the project group name. Existing apps can be targeted by service_id/service_name/project_name/name.
+2. openlander_deploy({ action: "get_deploy_status", params: { project_name: "..." } })  ← poll until done when deploy_app returns building/deploying
+3. openlander_project({ action: "list_projects" })  ← confirm running and use projects[].deployable_service.service_id for later service-level actions
+4. If anything fails, times out, or looks unhealthy, call openlander_monitor.diagnose_service with service_id before retrying.
 
 ## Networking
 - All containers share the "openlander" Docker network
 - Container-to-container: http://ol-{project-name}:{port}
 - Never create Docker networks manually`;
+
+function buildServerInstructions(ctx: AppContext, incidentBriefing: string): string {
+  const instance = getMcpInstanceContext(ctx.config);
+  const instancePrefix = `You are connected to OpenLander instance "${instance.name}" at "${instance.endpoint}". Use this instance identity when the user has multiple OpenLander MCP servers connected.`;
+  const base = `${instancePrefix}\n\n${SERVER_INSTRUCTIONS}`;
+  return incidentBriefing ? `${base}\n\n${incidentBriefing}` : base;
+}
 
 function toRequestIdentity(token: McpTokenIdentity | null): RequestIdentity | undefined {
   if (!token) return undefined;
@@ -170,9 +179,7 @@ async function createMcpServerInstance(
 ): Promise<Server> {
   const unresolvedIncidents = await ctx.db.listUnresolvedRuntimeIncidents();
   const incidentBriefing = await buildIncidentBriefing(unresolvedIncidents, ctx.db);
-  const instructions = incidentBriefing
-    ? `${SERVER_INSTRUCTIONS}\n\n${incidentBriefing}`
-    : SERVER_INSTRUCTIONS;
+  const instructions = buildServerInstructions(ctx, incidentBriefing);
 
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
   const server = new Server(

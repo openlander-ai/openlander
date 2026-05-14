@@ -177,6 +177,14 @@ export const translations = {
       generateToken: 'Generate MCP token',
       generating: 'Generating…',
       tokenName: 'Setup wizard',
+      instanceName: 'Instance name',
+      instanceHelp: '이 이름이 MCP 클라이언트 설정의 server key로 사용됩니다.',
+      instanceDefaultWarning: '여러 OpenLander 서버를 연결한다면 구분 가능한 이름으로 바꾸세요.',
+      saveInstance: 'Save name',
+      savingInstance: 'Saving…',
+      instanceSaveFailed: 'MCP 인스턴스 이름을 저장하지 못했습니다.',
+      tryAfterConnect: '연결 후 이렇게 말해보세요:',
+      tryPrompt: '{name}에 이 앱 배포해줘',
       // Content.
       subtitle: 'Claude Code, Cursor 또는 모든 MCP 클라이언트에서 배포하세요.',
       copyPrompt: '아래를 AI 코딩 도구에 붙여넣으세요:',
@@ -422,6 +430,14 @@ export const translations = {
       deleteVolumes: '이 그룹의 마지막 배포 서비스일 때 관리 프로젝트 볼륨도 삭제합니다.',
       error: '서비스 삭제에 실패했습니다',
     },
+    servicesGuide: {
+      empty:
+        '아직 이 프로젝트에 배포 가능한 서비스가 없습니다. Git 저장소, Docker 이미지 또는 compose 서비스를 추가하세요.',
+      help: '프로젝트는 그룹이고, 서비스는 그 안에서 실제로 배포되는 앱/워커입니다. MCP 후속 작업은 service_id를 사용하는 것이 가장 안전합니다.',
+      banner:
+        '아래 항목은 배포 가능한 서비스입니다. 환경 변수, 재배포, 도메인, 진단 작업에는 표시된 MCP service_id를 사용하세요.',
+      serviceId: 'MCP service_id: {id}',
+    },
     domains: {
       // Chrome — action button + retry + badge.
       add: 'Add domain',
@@ -607,7 +623,9 @@ export const translations = {
     createService: 'Create service',
     // Content — descriptive copy + empty states + format strings.
     subtitle:
-      'Docker 이미지를 공유 인프라로 실행합니다. 여러 프로젝트가 이 서비스에 연결할 수 있습니다.',
+      'Managed Service는 데이터베이스, 캐시, 공유 인프라입니다. 앱은 환경 변수로 여기에 연결합니다.',
+    mcpHint:
+      '프로비저닝과 자격 증명은 openlander_managed_service를 사용하고, 앱 연결은 배포 가능한 서비스의 환경 변수로 설정하세요.',
     noServices: '실행 중인 서비스 없음',
     getStarted: '템플릿에서 서비스를 생성하거나 Docker 이미지를 직접 실행하세요.',
     templates: '빠른 시작 템플릿',
@@ -1025,7 +1043,9 @@ export const translations = {
     row: {
       // Chrome — bare labels + actions.
       status: 'Status',
+      instance: 'Instance name',
       endpoint: 'Endpoint',
+      tryThis: '이렇게 말해보세요',
       token: 'Access token',
       copy: 'Copy',
       copied: 'Copied',
@@ -1067,6 +1087,23 @@ export const translations = {
       passwordHint: '비밀번호와 같습니다. 유출 시 모든 프로젝트가 노출되니 주의하세요.',
       issuedAt: '{when} 발급',
       loadFailed: '토큰 목록을 불러오지 못했습니다',
+    },
+    instance: {
+      // Chrome — buttons.
+      save: 'Save',
+      saving: 'Saving…',
+      // Content.
+      saved: '인스턴스 이름을 저장했습니다.',
+      saveFailed: '인스턴스 이름을 저장하지 못했습니다',
+      loadFailed: '인스턴스 정보를 불러오지 못했습니다.',
+      defaultWarning:
+        '같은 AI 클라이언트에 여러 OpenLander 서버를 연결한다면 이 이름을 더 구체적으로 바꾸세요.',
+      tryPrompt: '{name}에 이 프로젝트 배포해줘',
+      tryHelp:
+        '서버 이름을 같이 말하면 여러 OpenLander 서버가 연결되어 있어도 AI가 올바른 서버를 선택하기 쉽습니다.',
+      troubleshootingTitle: 'AI가 Docker나 SSH로 진행하려고 하나요?',
+      troubleshootingHint: '그럴 때만 아래 문장을 한 번 붙여넣으세요.',
+      copyCorrection: '보정 프롬프트 복사',
     },
     setup: {
       // Chrome — section title + action.

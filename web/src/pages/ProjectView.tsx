@@ -282,11 +282,16 @@ function ServicesPanel({
   onOpen: (id: string) => void;
   onAddService: () => void;
 }) {
+  const { t } = useLanguage();
+
   if (services.length === 0) {
     return (
       <div className="flex flex-col items-start gap-3 px-5 py-8">
         <p className="text-[13px] text-[color:var(--ol-fg-muted)]">
-          No services in this project yet.
+          {t('projectDetail.servicesGuide.empty')}
+        </p>
+        <p className="max-w-2xl text-[12px] text-[color:var(--ol-fg-subtle)]">
+          {t('projectDetail.servicesGuide.help')}
         </p>
         <button
           type="button"
@@ -300,62 +305,70 @@ function ServicesPanel({
     );
   }
   return (
-    <ul className="divide-y divide-[color:var(--ol-border-subtle)]">
-      {services.map((s) => {
-        const KindIcon = s.kind === 'Database' ? Database : Box;
-        return (
-          <li key={s.id}>
-            <button
-              type="button"
-              onClick={() => onOpen(s.id)}
-              className="flex w-full items-center gap-4 px-5 py-3.5 text-left transition-colors hover:bg-[color:var(--ol-panel-2)]"
-            >
-              <span
-                aria-hidden
-                className={cn(
-                  'grid h-9 w-9 shrink-0 place-items-center rounded-md',
-                  s.health === 'crashed'
-                    ? 'bg-[color:var(--ol-error-soft)] text-[color:var(--ol-error)]'
-                    : 'bg-[color:var(--ol-primary-soft)] text-[color:var(--ol-primary)]',
-                )}
+    <div>
+      <div className="border-b border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-5 py-3 text-[12px] text-[color:var(--ol-fg-muted)]">
+        {t('projectDetail.servicesGuide.banner')}
+      </div>
+      <ul className="divide-y divide-[color:var(--ol-border-subtle)]">
+        {services.map((s) => {
+          const KindIcon = s.kind === 'Database' ? Database : Box;
+          return (
+            <li key={s.id}>
+              <button
+                type="button"
+                onClick={() => onOpen(s.id)}
+                className="flex w-full items-center gap-4 px-5 py-3.5 text-left transition-colors hover:bg-[color:var(--ol-panel-2)]"
               >
-                <KindIcon className="h-4 w-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[13.5px] font-semibold text-[color:var(--ol-fg)]">
-                    {s.name}
-                  </span>
-                  <HealthPill health={s.health} />
+                <span
+                  aria-hidden
+                  className={cn(
+                    'grid h-9 w-9 shrink-0 place-items-center rounded-md',
+                    s.health === 'crashed'
+                      ? 'bg-[color:var(--ol-error-soft)] text-[color:var(--ol-error)]'
+                      : 'bg-[color:var(--ol-primary-soft)] text-[color:var(--ol-primary)]',
+                  )}
+                >
+                  <KindIcon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[13.5px] font-semibold text-[color:var(--ol-fg)]">
+                      {s.name}
+                    </span>
+                    <HealthPill health={s.health} />
+                  </div>
+                  <div className="ol-mono mt-0.5 truncate text-[11.5px] text-[color:var(--ol-fg-muted)]">
+                    {/* `s` is the frontend ServiceNode shape (lib/projectTopology), not a DB row;
+                        `image` and `port` are wire-format fields, not the dropped service columns. */}
+                    {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
+                    {s.image}
+                    {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
+                    {s.port != null && <span> · :{s.port}</span>}
+                  </div>
+                  <div className="ol-mono mt-0.5 truncate text-[11px] text-[color:var(--ol-fg-subtle)]">
+                    {t('projectDetail.servicesGuide.serviceId', { id: s.id })}
+                  </div>
                 </div>
-                <div className="ol-mono mt-0.5 truncate text-[11.5px] text-[color:var(--ol-fg-muted)]">
-                  {/* `s` is the frontend ServiceNode shape (lib/projectTopology), not a DB row;
-                      `image` and `port` are wire-format fields, not the dropped service columns. */}
-                  {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
-                  {s.image}
-                  {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
-                  {s.port != null && <span> · :{s.port}</span>}
+                <div className="hidden shrink-0 text-right text-[11.5px] text-[color:var(--ol-fg-muted)] sm:block">
+                  <div className="ol-mono tabular-nums">
+                    {s.cpu} · {s.mem}
+                  </div>
+                  {s.url && (
+                    <span
+                      className="inline-flex items-center gap-1 text-[color:var(--ol-primary)]"
+                      aria-hidden
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {s.url.replace(/^https?:\/\//, '')}
+                    </span>
+                  )}
                 </div>
-              </div>
-              <div className="hidden shrink-0 text-right text-[11.5px] text-[color:var(--ol-fg-muted)] sm:block">
-                <div className="ol-mono tabular-nums">
-                  {s.cpu} · {s.mem}
-                </div>
-                {s.url && (
-                  <span
-                    className="inline-flex items-center gap-1 text-[color:var(--ol-primary)]"
-                    aria-hidden
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    {s.url.replace(/^https?:\/\//, '')}
-                  </span>
-                )}
-              </div>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
