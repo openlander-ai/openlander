@@ -16,7 +16,7 @@ import { buildTraefikLabels } from './traefik.js';
 import { getCommitSubject } from './git.js';
 import { getPolicy } from '../config/index.js';
 import type { OpenLanderEnv } from '../config/index.js';
-import { extractProjectName, composeContainerName } from './helpers.js';
+import { extractProjectName, composeContainerName, containerName } from './helpers.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
@@ -158,6 +158,11 @@ function sanitizeComposeProjectName(name: string): string {
     .toLowerCase();
 }
 
+function isDockerEndpointConflictError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('endpoint with name') && message.includes('already exists in network');
+}
+
 export class ComposePipeline {
   private stateManager?: ProjectStateTransitioner;
 
@@ -184,6 +189,42 @@ export class ComposePipeline {
     }
 
     await this.db.updateProject(projectId, { status: targetStatus });
+  }
+
+  private composeNetworkNames(projectNetwork: string | null, envType: OpenLanderEnv): string[] {
+    return Array.from(
+      new Set(
+        [projectNetwork, getPolicy(envType).networkName].filter((name): name is string =>
+          Boolean(name),
+        ),
+      ),
+    );
+  }
+
+  private async cleanupComposeContainer(
+    containerRef: string,
+    networkNames: string[],
+    reason: string,
+  ): Promise<void> {
+    for (const networkName of networkNames) {
+      try {
+        await this.docker.disconnectContainerFromNetwork(containerRef, networkName);
+      } catch (error) {
+        log.debug(
+          { err: error, containerRef, networkName, reason },
+          'Failed to disconnect compose container from network during cleanup',
+        );
+      }
+    }
+
+    try {
+      await this.docker.safeRemoveContainer(containerRef);
+    } catch (error) {
+      log.debug(
+        { err: error, containerRef, reason },
+        'Failed to remove compose container during cleanup',
+      );
+    }
   }
 
   detectComposeFile(projectPath: string): string | null {
@@ -704,6 +745,7 @@ export class ComposePipeline {
       { containerId: string; port: number; containerPort: number }
     >();
     const containerNameByService = new Map<string, string>();
+    let projectNetwork: string | null = null;
     const sharedSecretFiles = this.env
       ? await this.env.getSecretFilesForDeploy(parentProjectId)
       : [];
@@ -711,7 +753,8 @@ export class ComposePipeline {
     try {
       this.jobManager?.updatePhase(parentProjectId, 'building');
 
-      const projectNetwork = await this.docker.ensureProjectNetwork(projectName);
+      projectNetwork = await this.docker.ensureProjectNetwork(projectName);
+      const activeProjectNetwork = projectNetwork;
       const services: ServiceNode[] = filteredComposeProject.services.map((service) => {
         const parsedPort = this.resolveServicePortMapping(service);
         return {
@@ -747,11 +790,11 @@ export class ComposePipeline {
 
       for (const service of filteredComposeProject.services) {
         const staleContainerName = composeContainerName(parentName, service.name);
-        try {
-          await this.docker.safeRemoveContainer(staleContainerName);
-        } catch {
-          // container doesn't exist — expected
-        }
+        await this.cleanupComposeContainer(
+          staleContainerName,
+          this.composeNetworkNames(projectNetwork, envType),
+          'pre-compose-service-start',
+        );
       }
 
       const orchestration = await orchestrator.executeOrdered(topology, {
@@ -833,7 +876,7 @@ export class ComposePipeline {
                   entrypoint: composeService.entrypoint,
                   restart: composeService.restart,
                   healthcheck,
-                  networks: [projectNetwork, getPolicy(envType).networkName],
+                  networks: [activeProjectNetwork, getPolicy(envType).networkName],
                 });
                 break;
               } catch (error) {
@@ -846,6 +889,14 @@ export class ComposePipeline {
                   clearPortScanCache();
                   hostPort = await allocatePort(this.db, this.docker, {}, envType);
                   allocatedHostPort = hostPort;
+                  continue;
+                }
+                if (attempt === 0 && isDockerEndpointConflictError(error)) {
+                  await this.cleanupComposeContainer(
+                    containerName,
+                    this.composeNetworkNames(projectNetwork, envType),
+                    'compose-endpoint-conflict-retry',
+                  );
                   continue;
                 }
                 throw error;
@@ -886,6 +937,12 @@ export class ComposePipeline {
             if (allocatedHostPort !== null) {
               releasePortReservation(allocatedHostPort);
             }
+
+            await this.cleanupComposeContainer(
+              containerName,
+              this.composeNetworkNames(projectNetwork, envType),
+              'compose-service-start-failure',
+            );
 
             await this.db.updateProject(childId, {
               status: 'error',
@@ -938,7 +995,11 @@ export class ComposePipeline {
                 throw error;
               }
             }
-            await this.docker.safeRemoveContainer(deployment.containerId);
+            await this.cleanupComposeContainer(
+              deployment.containerId,
+              this.composeNetworkNames(projectNetwork, envType),
+              'compose-rollback-deployed-service',
+            );
             releasePortReservation(deployment.port);
           } else if (containerName) {
             try {
@@ -948,7 +1009,11 @@ export class ComposePipeline {
                 throw error;
               }
             }
-            await this.docker.safeRemoveContainer(containerName);
+            await this.cleanupComposeContainer(
+              containerName,
+              this.composeNetworkNames(projectNetwork, envType),
+              'compose-rollback-container-name',
+            );
           }
 
           if (childId) {
@@ -1139,12 +1204,17 @@ export class ComposePipeline {
             );
           }
         }
-        try {
-          await this.docker.safeRemoveContainer(deployment.containerId);
-        } catch (removeError) {
-          log.debug(
-            { err: removeError, serviceName },
-            'Failed to remove compose service container during rollback',
+        await this.cleanupComposeContainer(
+          deployment.containerId,
+          this.composeNetworkNames(projectNetwork, envType),
+          'compose-orchestration-error',
+        );
+        const containerName = containerNameByService.get(serviceName);
+        if (containerName && containerName !== deployment.containerId) {
+          await this.cleanupComposeContainer(
+            containerName,
+            this.composeNetworkNames(projectNetwork, envType),
+            'compose-orchestration-error-name',
           );
         }
       }
@@ -1191,8 +1261,15 @@ export class ComposePipeline {
     const parent = await this.resolveParentProject(projectId);
     // PR 2: fetch compose children via services.parent_service_id.
     const children = await this.db.getComposeChildProjects(parent.id);
+    const projectNetwork = containerName(sanitizeComposeProjectName(parent.name));
+    const networkNames = this.composeNetworkNames(projectNetwork, 'production');
 
     for (const child of children) {
+      const serviceName = child.name.startsWith(`${parent.name}/`)
+        ? child.name.slice(parent.name.length + 1)
+        : child.name;
+      const expectedContainerName = composeContainerName(parent.name, serviceName);
+
       if (child.container_id) {
         try {
           await this.docker.stopContainer(child.container_id);
@@ -1203,15 +1280,10 @@ export class ComposePipeline {
           );
         }
 
-        try {
-          await this.docker.safeRemoveContainer(child.container_id);
-        } catch (error) {
-          log.debug(
-            { err: error, childProjectId: child.id, containerId: child.container_id },
-            'Failed to remove compose child container',
-          );
-        }
+        await this.cleanupComposeContainer(child.container_id, networkNames, 'compose-stop');
       }
+
+      await this.cleanupComposeContainer(expectedContainerName, networkNames, 'compose-stop-name');
 
       await this.transitionProjectStatus(child.id, 'stopped', 'compose-service-stop');
     }

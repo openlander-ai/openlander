@@ -222,4 +222,39 @@ describe('Docker sandbox race prevention', () => {
       EndpointConfig: { Aliases: ['worker'] },
     });
   });
+
+  it('runComposeService does not strictly reconnect the shared network after alias attach', async () => {
+    const container = {
+      id: 'ctr-compose',
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    mockCreateContainer.mockResolvedValueOnce(container);
+
+    const connect = vi.fn().mockResolvedValue(undefined);
+    mockGetNetwork.mockReturnValue({
+      connect,
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      inspect: vi.fn().mockResolvedValue({}),
+    });
+
+    const docker = new Docker('/var/run/docker.sock', 'openlander');
+    await docker.runComposeService({
+      imageTag: 'postgres:16',
+      name: 'ol-demo-stack-postgres',
+      port: 10003,
+      containerPort: 5432,
+      envVars: {},
+      traefikLabels: {},
+      networks: ['ol-demo-stack', 'openlander'],
+    });
+
+    expect(container.start).toHaveBeenCalledOnce();
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(connect).toHaveBeenCalledWith({
+      Container: 'ctr-compose',
+      EndpointConfig: { Aliases: ['demo-stack-postgres'] },
+    });
+  });
 });

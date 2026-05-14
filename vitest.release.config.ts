@@ -52,6 +52,8 @@ export default defineConfig({
       'test/public-release-tree.test.ts',
       'test/pipeline/auto-recovery-llm-down.test.ts',
       'test/pipeline/cascade-isolation.test.ts',
+      'test/pipeline/compose-network-cleanup.test.ts',
+      'test/pipeline/docker-sandbox.test.ts',
       'test/pipeline/deploy-cancellation.test.ts',
       'test/pipeline/deploy-lock-session-propagation.test.ts',
       'test/pipeline/mutation-policy.test.ts',
