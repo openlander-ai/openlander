@@ -690,18 +690,36 @@ export const createDeployPlanSchema = z
       .optional()
       .describe('Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)'),
   })
-  .refine(
-    (data) => {
-      if (data.source === 'image') {
-        return !!data.image && data.image.length > 0;
+  .superRefine((data, ctx) => {
+    if (data.image && data.source !== 'image') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['source'],
+        message:
+          'image was provided, so source must be set to "image". For Git deploys, omit image and pass repo_url.',
+      });
+      return;
+    }
+
+    if (data.source === 'image') {
+      if (!data.image || data.image.length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['image'],
+          message: 'image is required when source is "image".',
+        });
       }
-      return !!data.repo_url && data.repo_url.length > 0;
-    },
-    {
-      message:
-        'If source is "image", image is required. If source is "git" or undefined, repo_url is required.',
-    },
-  );
+      return;
+    }
+
+    if (!data.repo_url || data.repo_url.length === 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['repo_url'],
+        message: 'repo_url is required for Git deploys. For image deploys, set source to "image".',
+      });
+    }
+  });
 
 export const updateDeployPlanSchema = z.object({
   plan_id: z.string().min(1).describe('Plan ID returned from create_deploy_plan'),
@@ -822,24 +840,43 @@ export const deploySchema = z
         'Attach the new deployable as an additional service under an existing project group instead of creating a fresh project. The deployable receives a unique service id (the project keeps its existing services). Use this to add a worker/api/web sibling to an existing app group.',
       ),
   })
-  .refine(
-    (data) => {
-      if (data.service_id || data.service_name) {
-        return true;
+  .superRefine((data, ctx) => {
+    if (data.service_id || data.service_name) {
+      return;
+    }
+    if ((data.name || data.project_name) && !data.repo_url && !data.image) {
+      return;
+    }
+
+    if (data.image && data.source !== 'image') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['source'],
+        message:
+          'image was provided, so source must be set to "image". For Git deploys, omit image and pass repo_url.',
+      });
+      return;
+    }
+
+    if (data.source === 'image') {
+      if (!data.image || data.image.length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['image'],
+          message: 'image is required when source is "image".',
+        });
       }
-      if ((data.name || data.project_name) && !data.repo_url && !data.image) {
-        return true;
-      }
-      if (data.source === 'image') {
-        return !!data.image && data.image.length > 0;
-      }
-      return !!data.repo_url && data.repo_url.length > 0;
-    },
-    {
-      message:
-        'If source is "image", image is required. If source is "git" or undefined, repo_url is required.',
-    },
-  )
+      return;
+    }
+
+    if (!data.repo_url || data.repo_url.length === 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['repo_url'],
+        message: 'repo_url is required for Git deploys. For image deploys, set source to "image".',
+      });
+    }
+  })
   .superRefine((data, ctx) => {
     if ((data.repo_url || data.image) && data.project_name && !data.name) {
       ctx.addIssue({

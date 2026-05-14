@@ -299,6 +299,31 @@ describe('MCP agent UX rc6 regressions', () => {
     ).toBe(true);
   });
 
+  it('explains image deploys that omit source="image"', () => {
+    const createPlanResult = createDeployPlanSchema.safeParse({
+      name: 'image-demo',
+      image: 'nginx:alpine',
+    });
+    const deployAppResult = deploySchema.safeParse({
+      name: 'image-demo',
+      image: 'nginx:alpine',
+    });
+
+    for (const result of [createPlanResult, deployAppResult]) {
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              path: ['source'],
+              message: expect.stringContaining('source must be set to "image"'),
+            }),
+          ]),
+        );
+      }
+    }
+  });
+
   it('accepts project group name as service_name for env tools when unambiguous', async () => {
     const { db, env, pipeline } = createEnvToolContext();
 
