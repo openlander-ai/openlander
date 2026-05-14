@@ -73,7 +73,9 @@ describe('Your Agent (MCP) v0.1 surface', () => {
     expect(source).toMatch(/buildAllClientConfigs\(/);
     expect(source).toMatch(/buildAgentInstruction\(/);
     expect(source).toContain('serverName: mcpInstance.serverName');
-    expect(source).toContain("t('mcpServer.row.instruction')");
+    expect(source).toContain("t('mcpServer.row.tryThis')");
+    expect(source).toContain("t('mcpServer.instance.tryPrompt', { name: mcpInstance.serverName })");
+    expect(source).toContain("t('mcpServer.instance.troubleshootingTitle')");
     expect(source).toMatch(/<TabsTrigger /);
     expect(source).toMatch(/<TabsContent /);
     expect(snippetSource).toContain('mcpServers');
@@ -137,6 +139,10 @@ describe('Your Agent (MCP) v0.1 surface', () => {
       expect(dict).toMatch(/regenerateAction:/);
       expect(dict).toMatch(/legacyTokenRotated:/);
       expect(dict).toMatch(/instance:\s*\{/);
+      expect(dict).toMatch(/tryPrompt:/);
+      expect(dict).toMatch(/tryHelp:/);
+      expect(dict).toMatch(/troubleshootingTitle:/);
+      expect(dict).toMatch(/copyCorrection:/);
       expect(dict).toMatch(/passwordHint:/);
       expect(dict).toMatch(/revealedHint:/);
       expect(dict).toMatch(/restartHint:/);

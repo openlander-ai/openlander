@@ -183,6 +183,8 @@ export const translations = {
       saveInstance: 'Save name',
       savingInstance: 'Saving…',
       instanceSaveFailed: 'MCP 인스턴스 이름을 저장하지 못했습니다.',
+      tryAfterConnect: '연결 후 이렇게 말해보세요:',
+      tryPrompt: '{name}에 이 앱 배포해줘',
       // Content.
       subtitle: 'Claude Code, Cursor 또는 모든 MCP 클라이언트에서 배포하세요.',
       copyPrompt: '아래를 AI 코딩 도구에 붙여넣으세요:',
@@ -1033,7 +1035,7 @@ export const translations = {
       status: 'Status',
       instance: 'Instance name',
       endpoint: 'Endpoint',
-      instruction: 'Agent prompt',
+      tryThis: '이렇게 말해보세요',
       token: 'Access token',
       copy: 'Copy',
       copied: 'Copied',
@@ -1086,9 +1088,12 @@ export const translations = {
       loadFailed: '인스턴스 정보를 불러오지 못했습니다.',
       defaultWarning:
         '같은 AI 클라이언트에 여러 OpenLander 서버를 연결한다면 이 이름을 더 구체적으로 바꾸세요.',
-      instructionHelp:
-        'AI 클라이언트에 OpenLander로 배포하라고 요청할 때 이 문장을 함께 붙여넣으세요.',
-      copyInstruction: 'Copy prompt',
+      tryPrompt: '{name}에 이 프로젝트 배포해줘',
+      tryHelp:
+        '서버 이름을 같이 말하면 여러 OpenLander 서버가 연결되어 있어도 AI가 올바른 서버를 선택하기 쉽습니다.',
+      troubleshootingTitle: 'AI가 Docker나 SSH로 진행하려고 하나요?',
+      troubleshootingHint: '그럴 때만 아래 문장을 한 번 붙여넣으세요.',
+      copyCorrection: '보정 프롬프트 복사',
     },
     setup: {
       // Chrome — section title + action.

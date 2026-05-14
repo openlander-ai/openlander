@@ -159,6 +159,8 @@ export const translations = {
       saveInstance: 'Save name',
       savingInstance: 'Saving…',
       instanceSaveFailed: 'Could not save the MCP instance name.',
+      tryAfterConnect: 'After connecting, try:',
+      tryPrompt: 'Use {name} to deploy this app',
       noTokenYet: 'No MCP token issued yet. Generate one to copy your client config.',
       tokenName: 'Setup wizard',
       tokenAlreadyIssued:
@@ -888,7 +890,7 @@ export const translations = {
       status: 'Status',
       instance: 'Instance name',
       endpoint: 'Endpoint',
-      instruction: 'Agent prompt',
+      tryThis: 'Try saying this',
       token: 'Access token',
       copy: 'Copy',
       copied: 'Copied',
@@ -936,8 +938,11 @@ export const translations = {
       loadFailed: 'Could not load instance identity.',
       defaultWarning:
         'Rename this if you connect multiple OpenLander servers to the same AI client.',
-      instructionHelp: 'Paste this once when asking an AI client to deploy through OpenLander.',
-      copyInstruction: 'Copy prompt',
+      tryPrompt: 'Use {name} to deploy this project',
+      tryHelp: 'Mention the server name so your AI client picks the right OpenLander instance.',
+      troubleshootingTitle: 'Agent using Docker or SSH instead?',
+      troubleshootingHint: 'Paste this correction prompt only when the agent ignores MCP.',
+      copyCorrection: 'Copy correction prompt',
     },
     setup: {
       title: 'Setup',

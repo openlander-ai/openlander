@@ -83,6 +83,7 @@ export function MCPServer() {
   const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
   const [endpointCopied, setEndpointCopied] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
+  const [tryPromptCopied, setTryPromptCopied] = useState(false);
   const [instructionCopied, setInstructionCopied] = useState(false);
   const [configCopied, setConfigCopied] = useState(false);
   const [activeClient, setActiveClient] = useState<McpClientId>('claude-code');
@@ -249,10 +250,8 @@ export function MCPServer() {
     token: snippetToken,
     serverName: mcpInstance.serverName,
   });
-  const agentInstruction = buildAgentInstruction({
-    endpoint: mcpEndpoint,
-    serverName: mcpInstance.serverName,
-  });
+  const agentInstruction = buildAgentInstruction({ serverName: mcpInstance.serverName });
+  const tryPrompt = t('mcpServer.instance.tryPrompt', { name: mcpInstance.serverName });
   const activeConfig = clientConfigs.find((c) => c.id === activeClient) ?? clientConfigs[0];
 
   return (
@@ -348,27 +347,52 @@ export function MCPServer() {
             </button>
           </Row>
 
-          {/* Agent instruction row */}
-          <Row label={t('mcpServer.row.instruction')}>
+          {/* Agent usage row */}
+          <Row label={t('mcpServer.row.tryThis')}>
             <div className="flex min-w-0 flex-1 flex-col gap-2">
-              <pre className="ol-mono w-full overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-[color:var(--ol-panel-2)] p-3 text-[12px] leading-relaxed text-[color:var(--ol-fg)]">
-                <code>{agentInstruction}</code>
-              </pre>
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[11.5px] leading-snug text-[color:var(--ol-fg-muted)]">
-                  {t('mcpServer.instance.instructionHelp')}
-                </p>
+              <div className="flex items-center justify-between gap-3 rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-3 py-2">
+                <code className="ol-mono min-w-0 break-all text-[12.5px] text-[color:var(--ol-fg)]">
+                  {tryPrompt}
+                </code>
                 <button
                   type="button"
-                  onClick={() => void copy(agentInstruction, setInstructionCopied)}
+                  onClick={() => void copy(tryPrompt, setTryPromptCopied)}
                   className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
                 >
-                  {instructionCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{' '}
-                  {instructionCopied
-                    ? t('mcpServer.row.copied')
-                    : t('mcpServer.instance.copyInstruction')}
+                  {tryPromptCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{' '}
+                  {tryPromptCopied ? t('mcpServer.row.copied') : t('mcpServer.row.copy')}
                 </button>
               </div>
+              <p className="text-[11.5px] leading-snug text-[color:var(--ol-fg-muted)]">
+                {t('mcpServer.instance.tryHelp')}
+              </p>
+              <details className="rounded-md border border-dashed border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel)] p-3">
+                <summary className="cursor-pointer text-[12px] font-medium text-[color:var(--ol-fg)]">
+                  {t('mcpServer.instance.troubleshootingTitle')}
+                </summary>
+                <div className="mt-3 flex flex-col gap-2">
+                  <p className="text-[11.5px] leading-snug text-[color:var(--ol-fg-muted)]">
+                    {t('mcpServer.instance.troubleshootingHint')}
+                  </p>
+                  <pre className="ol-mono w-full overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-[color:var(--ol-panel-2)] p-3 text-[12px] leading-relaxed text-[color:var(--ol-fg)]">
+                    <code>{agentInstruction}</code>
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => void copy(agentInstruction, setInstructionCopied)}
+                    className="inline-flex w-fit shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
+                  >
+                    {instructionCopied ? (
+                      <Check className="h-3 w-3" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}{' '}
+                    {instructionCopied
+                      ? t('mcpServer.row.copied')
+                      : t('mcpServer.instance.copyCorrection')}
+                  </button>
+                </div>
+              </details>
             </div>
           </Row>
 

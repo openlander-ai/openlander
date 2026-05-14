@@ -57,9 +57,10 @@ describe('McpGuideStep — PAT migration (v0.1)', () => {
 
   it('uses the editable instance name for generated snippets', () => {
     expect(source).toContain('useMcpInstance()');
-    expect(source).toContain('buildAgentInstruction');
     expect(source).toContain('serverName: mcpInstance.serverName');
     expect(source).toContain("t('setup.mcp.instanceName')");
+    expect(source).toContain("t('setup.mcp.tryPrompt', { name: mcpInstance.serverName })");
+    expect(source).toContain("t('setup.mcp.tryAfterConnect')");
   });
 
   it('surfaces the legacy ol_ rotation banner when the backend retired one during setup', () => {
@@ -93,6 +94,8 @@ describe('McpGuideStep — PAT migration (v0.1)', () => {
       expect(dict).toMatch(/legacyTokenRotated:/);
       expect(dict).toMatch(/instanceName:/);
       expect(dict).toMatch(/instanceDefaultWarning:/);
+      expect(dict).toMatch(/tryAfterConnect:/);
+      expect(dict).toMatch(/tryPrompt:/);
       // {suffix} placeholder must survive in both languages.
       expect(dict).toMatch(/olp_…\{suffix\}/);
     }
