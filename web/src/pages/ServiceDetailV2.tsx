@@ -74,6 +74,7 @@ import {
   getServiceDomains,
   getServiceEnvVars,
   getWebServerSummary,
+  redeployService,
   updateServiceEnvVars,
   type CreateDomainBody,
   type DomainMapping,
@@ -257,11 +258,29 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
 
   // Deployments are service-scoped. The top-level Deployments page is folded
   // into Activity; this tab remains the canonical per-service deploy history.
-  const { deployments, loading: deploymentsLoading } = useServiceDeployments(
-    projectId ?? '',
-    id ?? '',
-  );
-  const hasRunning = false;
+  const {
+    deployments,
+    loading: deploymentsLoading,
+    refetch: refetchDeployments,
+  } = useServiceDeployments(projectId ?? '', id ?? '');
+  const hasRunning = deployments.some((d) => d.isInProgress);
+  const [deploying, setDeploying] = useState(false);
+  const [deployError, setDeployError] = useState<string | null>(null);
+
+  const handleDeploy = async () => {
+    if (!projectId || !id) return;
+    if (deploying || hasRunning) return;
+    setDeployError(null);
+    setDeploying(true);
+    try {
+      await redeployService(projectId, id);
+      refetchDeployments();
+    } catch (err) {
+      setDeployError(err instanceof Error ? err.message : 'Deploy failed');
+    } finally {
+      setDeploying(false);
+    }
+  };
 
   // v0.1 spec mandates an observability-first order:
   //   Overview · Logs · Deployments · Monitoring · Environment · Domains.
@@ -358,17 +377,18 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
             )}
             <button
               type="button"
-              disabled={hasRunning}
+              onClick={handleDeploy}
+              disabled={hasRunning || deploying}
               className={cn(
                 'inline-flex items-center gap-1 rounded-md px-3 py-1 text-[12px] font-medium transition-opacity',
-                hasRunning
+                hasRunning || deploying
                   ? 'cursor-not-allowed bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-subtle)]'
                   : 'bg-[color:var(--ol-primary)] text-[color:var(--ol-primary-fg)] hover:opacity-90',
               )}
-              aria-disabled={hasRunning}
+              aria-disabled={hasRunning || deploying}
             >
               <Rocket className="h-3.5 w-3.5" />
-              {hasRunning ? 'Deploying…' : 'Deploy'}
+              {hasRunning || deploying ? 'Deploying…' : 'Deploy'}
             </button>
           </>
         }
@@ -386,6 +406,24 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           <div className="mx-5 mt-4 rounded-md border border-[color:var(--ol-warning)] bg-[color:var(--ol-warning-soft)] px-3 py-2 text-[12px] text-[color:var(--ol-warning)]">
             Service metadata could not be loaded. Showing last known topology data.{' '}
             <span className="ol-mono">{serviceDetailError}</span>
+          </div>
+        )}
+
+        {deployError && (
+          <div
+            role="alert"
+            className="mx-5 mt-4 flex items-start justify-between gap-3 rounded-md border border-[color:var(--ol-error)] bg-[color-mix(in_oklch,var(--ol-error)_5%,transparent)] px-3 py-2 text-[12px] text-[color:var(--ol-error)]"
+          >
+            <span>
+              Deploy failed. <span className="ol-mono">{deployError}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setDeployError(null)}
+              className="shrink-0 text-[color:var(--ol-error)] underline-offset-2 hover:underline"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
