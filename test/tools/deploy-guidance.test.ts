@@ -65,7 +65,10 @@ describe('deploy MCP guidance', () => {
     });
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
     await vi.waitFor(() =>
-      expect(ctx.pipeline.redeploy).toHaveBeenCalledWith('app', expect.anything()),
+      expect(ctx.pipeline.redeploy).toHaveBeenCalledWith(
+        'app',
+        expect.objectContaining({ trigger: 'chat' }),
+      ),
     );
   });
 
@@ -116,7 +119,10 @@ describe('deploy MCP guidance', () => {
     });
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
     await vi.waitFor(() =>
-      expect(ctx.pipeline.redeploy).toHaveBeenCalledWith('app', expect.anything()),
+      expect(ctx.pipeline.redeploy).toHaveBeenCalledWith(
+        'app',
+        expect.objectContaining({ trigger: 'chat' }),
+      ),
     );
   });
 
@@ -235,6 +241,7 @@ describe('deploy MCP guidance', () => {
         imageUrl: 'httpd:latest',
         name: 'my-custom-name-123',
         source: 'image',
+        trigger: 'chat',
       }),
     );
   });
@@ -274,7 +281,42 @@ describe('deploy MCP guidance', () => {
         imageUrl: 'httpd:latest',
         name: 'qa-name-check',
         source: 'image',
+        trigger: 'chat',
       }),
+    );
+  });
+
+  it('executes deploy plans with MCP deploy trigger so Activity shows MCP actor', async () => {
+    const plan = {
+      plan_id: 'plan-1',
+      project_id: 'app',
+      app: { name: 'app' },
+    };
+    const ctx = {
+      db: {
+        getDeployPlan: vi.fn(() => ({ plan_json: JSON.stringify(plan) })),
+        getProjectByName: vi.fn(() => ({ id: 'app', name: 'app' })),
+        acquireDeployLock: vi.fn(async () => true),
+        getDeployLockInfo: vi.fn(async () => null),
+      },
+      planEngine: {
+        executePlan: vi.fn(async () => ({
+          plan_id: 'plan-1',
+          status: 'building',
+          project_name: 'app',
+          project_id: 'app',
+          estimated_seconds: 60,
+        })),
+      },
+    } as unknown as AppContext;
+
+    await getTool(ctx, 'execute_deploy_plan').execute({ plan_id: 'plan-1' }, { target: 'mcp' });
+
+    expect(ctx.planEngine.executePlan).toHaveBeenCalledWith(
+      'plan-1',
+      undefined,
+      expect.stringMatching(/^mcp-execute-plan-/),
+      'chat',
     );
   });
 
@@ -353,6 +395,15 @@ describe('deploy MCP guidance', () => {
 
     const result = (await pending) as Record<string, unknown>;
 
+    expect(ctx.planEngine.createPlan).toHaveBeenCalledWith(
+      expect.objectContaining({ trigger: 'chat' }),
+    );
+    expect(ctx.planEngine.executePlan).toHaveBeenCalledWith(
+      'plan-1',
+      undefined,
+      expect.stringMatching(/^mcp-deploy-/),
+      'chat',
+    );
     expect(result).toMatchObject({
       status: 'unhealthy',
       readiness: 'unhealthy',

@@ -63,6 +63,7 @@ export default defineConfig({
       'test/pipeline/port-scan-fallback.test.ts',
       'test/pipeline/readiness-gate.test.ts',
       'test/tools/deploy-lock-mcp-tools.test.ts',
+      'test/tools/deploy-guidance.test.ts',
       'test/tools/image-schema.test.ts',
       'test/tools/mcp-agent-ux-rc6.test.ts',
       'test/tools/monitoring.test.ts',

@@ -876,6 +876,7 @@ export class PlanEngine {
     planId: string,
     deployOnly?: string[],
     lockSessionId?: string,
+    triggerOverride?: 'chat' | 'webhook' | 'api',
   ): Promise<ExecutePlanResult> {
     // Re-read from DB to prevent race condition
     const freshRow = await this.db.getDeployPlan(planId);
@@ -982,7 +983,10 @@ export class PlanEngine {
       log.info({ planId, planCommit: plan.app.source.commit_sha }, 'Executing plan (non-blocking)');
 
       const deployMode = this.getDeployMode(plan);
-      const execution = this.getExecutionContext(plan);
+      const execution = {
+        ...this.getExecutionContext(plan),
+        ...(triggerOverride ? { trigger: triggerOverride } : {}),
+      };
       const isImage = plan.build.method === 'image';
       const propagatedLockSession = lockProjectId ? (lockSessionId ?? `plan-${planId}`) : undefined;
 

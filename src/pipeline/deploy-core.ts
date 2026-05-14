@@ -184,6 +184,7 @@ export interface RedeployOptions {
   healthCheckIntervalMs?: number;
   cmd?: string[];
   lockSessionId?: string;
+  trigger?: 'chat' | 'webhook' | 'api';
 }
 
 export interface MonorepoConfig {
@@ -1644,6 +1645,7 @@ export class DeployPipeline {
           _lockSessionId: lockSession,
           _noCacheBuild: redeploySource === 'image' ? true : options?.noCache,
           environment: 'production',
+          trigger: options?.trigger,
           ...(options?.cmd && { imageCmd: options.cmd }),
         },
         db: this.db,

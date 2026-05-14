@@ -9,6 +9,22 @@ import type { ProjectRow } from '../../db/index.js';
 import { assertProjectMutable } from '../../pipeline/mutation-policy.js';
 import type { ToolDef } from './types.js';
 
+export type ToolDeployTrigger = 'chat' | 'webhook' | 'api';
+
+const TOOL_DEPLOY_TRIGGERS: Record<Parameters<ToolDef['execute']>[1]['target'], ToolDeployTrigger> =
+  {
+    agent: 'chat',
+    mcp: 'chat',
+  };
+
+export function deployTriggerForToolContext(
+  context: Parameters<ToolDef['execute']>[1],
+): ToolDeployTrigger {
+  // deploy_logs only has chat/webhook/api. Both MCP and internal tool calls are
+  // non-human tool-originated deploys, and Activity maps `chat` to the MCP actor.
+  return TOOL_DEPLOY_TRIGGERS[context.target];
+}
+
 export async function getProjectByName(
   appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
   name: string,
