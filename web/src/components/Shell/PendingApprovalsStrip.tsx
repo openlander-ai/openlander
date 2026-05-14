@@ -164,7 +164,7 @@ export function PendingApprovalsStrip() {
                       {approval.metadata.toolName}
                     </span>
                     <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
-                      {formatRelativeTime(approval.createdAt)}
+                      {formatRelativeTime(approval.createdAt, t)}
                     </span>
                   </div>
                   <p className="mt-1 truncate text-xs text-[color:var(--ol-fg-muted)]">

@@ -111,7 +111,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
           </div>
           <div className="flex items-center gap-2 text-xs font-body text-muted-foreground">
             <Clock className="h-3 w-3" />
-            {service.status === 'running' ? formatRelativeTime(service.created_at) : 'N/A'}
+            {service.status === 'running' ? formatRelativeTime(service.created_at, t) : 'N/A'}
           </div>
         </div>
 

@@ -13,6 +13,8 @@
 import { Bot, ChevronRight, PanelLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useMcpStatus } from '@/hooks/use-mcp-status';
+import { useLanguage } from '@/i18n/context';
+import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
 export interface Crumb {
@@ -30,16 +32,6 @@ export interface TopBarProps {
   lastAgentAction?: string;
 }
 
-function timeAgo(iso: string): string {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${String(m)}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${String(h)}h ago`;
-  return `${String(Math.floor(h / 24))}d ago`;
-}
-
 export function TopBar({
   crumbs = [],
   onToggleSidebar,
@@ -48,12 +40,13 @@ export function TopBar({
 }: TopBarProps) {
   const navigate = useNavigate();
   const { status } = useMcpStatus();
+  const { t } = useLanguage();
   const sessions = status?.sessions ?? [];
   const live = status != null;
   const liveAgentState: 'connected' | 'disconnected' =
     sessions.length > 0 ? 'connected' : 'disconnected';
   const lastSession = sessions[0];
-  const liveLastAction = lastSession ? timeAgo(lastSession.lastActivityAt) : 'idle';
+  const liveLastAction = lastSession ? formatRelativeTime(lastSession.lastActivityAt, t) : 'idle';
 
   // Test/fixture overrides win when explicitly set; otherwise read live state.
   // The pre-fetch placeholder ("idle") shows briefly before the first

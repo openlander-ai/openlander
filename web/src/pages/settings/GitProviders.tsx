@@ -291,7 +291,7 @@ function GitHubCard({ data, onReload }: GitHubCardProps) {
   // `formatRelativeTime` / `formatDateTime` return '' for unparseable
   // input (corrupt config), so the `|| '—'` fallback keeps the tile
   // from rendering blank in that edge case.
-  const lastSyncRelative = data.lastSyncAt ? formatRelativeTime(data.lastSyncAt) : '';
+  const lastSyncRelative = data.lastSyncAt ? formatRelativeTime(data.lastSyncAt, t) : '';
   const lastSyncAbsolute = data.lastSyncAt ? formatDateTime(data.lastSyncAt) : '';
   const lastSyncDisplay: ReactNode = data.lastSyncAt ? (
     // Absolute datetime in the title tooltip so audit/debug doesn't
@@ -305,124 +305,127 @@ function GitHubCard({ data, onReload }: GitHubCardProps) {
 
   return (
     <>
-    <OuterCard
-      title={
-        <span className="flex items-center gap-2">
-          <Github className="h-4 w-4 text-[color:var(--ol-fg-muted)]" />
-          {t('gitProviders.github.cardTitle')}
-        </span>
-      }
-      actions={
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleManageOnGithub}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] px-3 text-[12.5px] font-medium text-[color:var(--ol-fg)] transition-colors hover:bg-[color:var(--ol-panel-2)]"
-          >
-            <ExternalLink className="h-3.5 w-3.5 text-[color:var(--ol-fg-muted)]" />
-            {t('gitProviders.github.manageOnGithub')}
-          </button>
-          <MoreActionsMenu
-            data={data}
-            onReauthorize={handleReauthorize}
-            onRefresh={handleRefresh}
-            onDisconnect={handleDisconnect}
-            busy={busy}
-          />
-        </div>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <span
-            data-testid="github-pip"
-            data-pip={pip}
-            className={cn('inline-block h-2 w-2 shrink-0 rounded-full', pipColorClass(pip))}
-          />
-          <span className="ol-mono text-[13px] text-[color:var(--ol-fg)]">
-            {data.login ? `@${data.login}` : '—'}
+      <OuterCard
+        title={
+          <span className="flex items-center gap-2">
+            <Github className="h-4 w-4 text-[color:var(--ol-fg-muted)]" />
+            {t('gitProviders.github.cardTitle')}
           </span>
-          <span className="text-[12px] text-[color:var(--ol-fg-muted)]">
-            {pip === 'connected' && t('gitProviders.github.pip.connected')}
-            {pip === 'invalid' && t('gitProviders.github.pip.invalid')}
-            {pip === 'unknown' && t('gitProviders.github.pip.unknown')}
-            {pip === 'disconnected' && t('gitProviders.github.pip.disconnected')}
-          </span>
-          <span className="rounded-full border border-[color:var(--ol-border-subtle)] px-2 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)]">
-            {authMethodLabel(data.authMethod, t)}
-          </span>
-        </div>
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleManageOnGithub}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] px-3 text-[12.5px] font-medium text-[color:var(--ol-fg)] transition-colors hover:bg-[color:var(--ol-panel-2)]"
+            >
+              <ExternalLink className="h-3.5 w-3.5 text-[color:var(--ol-fg-muted)]" />
+              {t('gitProviders.github.manageOnGithub')}
+            </button>
+            <MoreActionsMenu
+              data={data}
+              onReauthorize={handleReauthorize}
+              onRefresh={handleRefresh}
+              onDisconnect={handleDisconnect}
+              busy={busy}
+            />
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <span
+              data-testid="github-pip"
+              data-pip={pip}
+              className={cn('inline-block h-2 w-2 shrink-0 rounded-full', pipColorClass(pip))}
+            />
+            <span className="ol-mono text-[13px] text-[color:var(--ol-fg)]">
+              {data.login ? `@${data.login}` : '—'}
+            </span>
+            <span className="text-[12px] text-[color:var(--ol-fg-muted)]">
+              {pip === 'connected' && t('gitProviders.github.pip.connected')}
+              {pip === 'invalid' && t('gitProviders.github.pip.invalid')}
+              {pip === 'unknown' && t('gitProviders.github.pip.unknown')}
+              {pip === 'disconnected' && t('gitProviders.github.pip.disconnected')}
+            </span>
+            <span className="rounded-full border border-[color:var(--ol-border-subtle)] px-2 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)]">
+              {authMethodLabel(data.authMethod, t)}
+            </span>
+          </div>
 
-        {pip === 'invalid' && data.validationError && (
-          <div
-            data-testid="github-validation-error"
-            className="rounded-md border border-[color:var(--ol-error)] bg-[color:color-mix(in_oklch,var(--ol-error)_8%,transparent)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg)]"
-          >
-            {t('gitProviders.github.validationError', { message: data.validationError })}
-          </div>
-        )}
-        {pip === 'unknown' && data.validationError && (
-          <div
-            data-testid="github-validation-unreachable"
-            className="rounded-md border border-[color:var(--ol-warn)] bg-[color:color-mix(in_oklch,var(--ol-warn)_8%,transparent)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg)]"
-          >
-            {t('gitProviders.github.validationUnreachable', { message: data.validationError })}
-          </div>
-        )}
-        {actionError && (
-          <div className="rounded-md border border-[color:var(--ol-error)] bg-[color:color-mix(in_oklch,var(--ol-error)_8%,transparent)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg)]">
-            {actionError}
-          </div>
-        )}
+          {pip === 'invalid' && data.validationError && (
+            <div
+              data-testid="github-validation-error"
+              className="rounded-md border border-[color:var(--ol-error)] bg-[color:color-mix(in_oklch,var(--ol-error)_8%,transparent)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg)]"
+            >
+              {t('gitProviders.github.validationError', { message: data.validationError })}
+            </div>
+          )}
+          {pip === 'unknown' && data.validationError && (
+            <div
+              data-testid="github-validation-unreachable"
+              className="rounded-md border border-[color:var(--ol-warn)] bg-[color:color-mix(in_oklch,var(--ol-warn)_8%,transparent)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg)]"
+            >
+              {t('gitProviders.github.validationUnreachable', { message: data.validationError })}
+            </div>
+          )}
+          {actionError && (
+            <div className="rounded-md border border-[color:var(--ol-error)] bg-[color:color-mix(in_oklch,var(--ol-error)_8%,transparent)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg)]">
+              {actionError}
+            </div>
+          )}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatTile label={t('gitProviders.github.stats.reposLinked')} value={reposLinkedDisplay} />
-          <StatTile
-            label={t('gitProviders.github.stats.lastSync')}
-            value={lastSyncDisplay}
-            hint={!data.lastSyncAt ? t('gitProviders.github.pendingFirstSync') : undefined}
-          />
-          <StatTile
-            label={t('gitProviders.github.stats.connectedOn')}
-            value={connectedOnDisplay}
-            hint={!data.connectedAt ? t('gitProviders.github.pendingFirstSync') : undefined}
-          />
-          <StatTile
-            label={t('gitProviders.github.stats.scopes')}
-            value={
-              data.scopes.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {data.scopes.map((scope) => (
-                    <span
-                      key={scope}
-                      data-testid="github-scope-chip"
-                      className="ol-mono rounded-full border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2 py-0.5 text-[11px] text-[color:var(--ol-fg)]"
-                    >
-                      {scope}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <span className="text-[12px] text-[color:var(--ol-fg-muted)]">
-                  {data.authMethod === 'pat'
-                    ? t('gitProviders.github.scopesUnavailableForPat')
-                    : t('gitProviders.github.scopesEmpty')}
-                </span>
-              )
-            }
-          />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatTile
+              label={t('gitProviders.github.stats.reposLinked')}
+              value={reposLinkedDisplay}
+            />
+            <StatTile
+              label={t('gitProviders.github.stats.lastSync')}
+              value={lastSyncDisplay}
+              hint={!data.lastSyncAt ? t('gitProviders.github.pendingFirstSync') : undefined}
+            />
+            <StatTile
+              label={t('gitProviders.github.stats.connectedOn')}
+              value={connectedOnDisplay}
+              hint={!data.connectedAt ? t('gitProviders.github.pendingFirstSync') : undefined}
+            />
+            <StatTile
+              label={t('gitProviders.github.stats.scopes')}
+              value={
+                data.scopes.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {data.scopes.map((scope) => (
+                      <span
+                        key={scope}
+                        data-testid="github-scope-chip"
+                        className="ol-mono rounded-full border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2 py-0.5 text-[11px] text-[color:var(--ol-fg)]"
+                      >
+                        {scope}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-[12px] text-[color:var(--ol-fg-muted)]">
+                    {data.authMethod === 'pat'
+                      ? t('gitProviders.github.scopesUnavailableForPat')
+                      : t('gitProviders.github.scopesEmpty')}
+                  </span>
+                )
+              }
+            />
+          </div>
         </div>
-      </div>
-    </OuterCard>
-    <ConfirmDialog
-      open={disconnectConfirmOpen}
-      onOpenChange={setDisconnectConfirmOpen}
-      title={t('gitProviders.github.disconnectConfirm.title')}
-      description={t('gitProviders.github.disconnectConfirm.description')}
-      confirmLabel={t('gitProviders.github.disconnectConfirm.confirmLabel')}
-      variant="destructive"
-      onConfirm={() => void confirmDisconnect()}
-    />
+      </OuterCard>
+      <ConfirmDialog
+        open={disconnectConfirmOpen}
+        onOpenChange={setDisconnectConfirmOpen}
+        title={t('gitProviders.github.disconnectConfirm.title')}
+        description={t('gitProviders.github.disconnectConfirm.description')}
+        confirmLabel={t('gitProviders.github.disconnectConfirm.confirmLabel')}
+        variant="destructive"
+        onConfirm={() => void confirmDisconnect()}
+      />
     </>
   );
 }

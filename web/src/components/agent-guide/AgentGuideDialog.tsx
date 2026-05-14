@@ -17,6 +17,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Cable, Check, Copy, Lock, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useMcpStatus } from '@/hooks/use-mcp-status';
+import { useLanguage } from '@/i18n/context';
+import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { getAgentGuideContent, type AgentGuideKind } from './prompt-sets';
 
@@ -34,16 +36,6 @@ export interface AgentGuideDialogProps {
   managedServiceName?: string;
 }
 
-function timeAgo(iso: string): string {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
 export function AgentGuideDialog({
   open,
   onOpenChange,
@@ -56,6 +48,7 @@ export function AgentGuideDialog({
 }: AgentGuideDialogProps) {
   const navigate = useNavigate();
   const { status } = useMcpStatus();
+  const { t } = useLanguage();
   const sessions = status?.sessions ?? [];
   const connected = sessions.length > 0;
   const lastSession = sessions[0];
@@ -103,7 +96,11 @@ export function AgentGuideDialog({
               // Windsurf). Use a generic label until the backend captures
               // clientInfo.name on connect — better-than-wrong.
               agentName="Your agent"
-              lastActiveLabel={lastSession ? timeAgo(lastSession.lastActivityAt) : 'just now'}
+              lastActiveLabel={
+                lastSession
+                  ? formatRelativeTime(lastSession.lastActivityAt, t)
+                  : t('common.relative.justNow')
+              }
             />
           ) : (
             <ConnectAgentBanner onOpenMcpSetup={handleSetupAgent} />

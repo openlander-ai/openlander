@@ -223,7 +223,7 @@ export function DeploymentDetail() {
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
-                    {formatRelativeTime(deployment.createdAt)}
+                    {formatRelativeTime(deployment.createdAt, t)}
                   </span>
                   {deployment.durationMs && (
                     <span className="flex items-center gap-1">
