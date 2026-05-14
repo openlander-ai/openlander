@@ -214,7 +214,7 @@ export function Home() {
               ? deploy.commitMessage.slice(0, 60) + '…'
               : deploy.commitMessage
             : null;
-          const timeAgo = formatRelativeTime(deploy.createdAt);
+          const timeAgo = formatRelativeTime(deploy.createdAt, t);
           return (
             <button
               type="button"

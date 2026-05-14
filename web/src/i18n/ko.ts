@@ -40,6 +40,15 @@ export const translations = {
       services: '서비스 {count}개',
       projects: '프로젝트 {count}개',
     },
+    relative: {
+      // Content — relative-time labels rendered by lib/time.formatRelativeTime
+      // when a t() callback is passed. Un-migrated callers continue to see
+      // the English fallback ('2m ago' etc.).
+      justNow: '방금',
+      minutes: '{count}분 전',
+      hours: '{count}시간 전',
+      days: '{count}일 전',
+    },
   },
   nav: {
     // Chrome — primary nav labels.
@@ -165,9 +174,10 @@ export const translations = {
     hero: {
       // Content — hero status prose on /home.
       statusJustNow: '시스템 상태 · 방금 전',
-      noProjects: '아직 프로젝트가 없습니다. 에이전트에게 배포를 요청하면 여기에 표시됩니다.',
+      noProjects:
+        '아직 프로젝트가 없습니다. 에이전트에게 배포해 달라고 말해보세요. 작업이 시작되면 여기에 나타납니다.',
       allHealthy: '{projects}에서 {services} 모두 정상 실행 중입니다.',
-      someCrashed: '프로젝트 {total}개 중 {crashed}개 충돌 · {healthy}개 정상 ({services})',
+      someCrashed: '프로젝트 {total}개 중 {crashed}개 크래시 · {healthy}개 정상 (총 {services})',
       lastDeploy: '최근 배포 · {time}',
     },
     projects: {

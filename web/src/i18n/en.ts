@@ -39,6 +39,15 @@ export const translations = {
       services: '{count} services',
       projects: '{count} projects',
     },
+    relative: {
+      // Content — relative-time labels rendered by lib/time.formatRelativeTime
+      // when a t() callback is passed. Without t(), the helper falls back to
+      // English ("2m ago" etc.) to preserve behaviour for un-migrated callers.
+      justNow: 'just now',
+      minutes: '{count}m ago',
+      hours: '{count}h ago',
+      days: '{count}d ago',
+    },
   },
   nav: {
     overview: 'Overview',
