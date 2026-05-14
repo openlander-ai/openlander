@@ -31,6 +31,28 @@ export const translations = {
         '호스트 메모리 사용률이 {percent}%입니다. 컨테이너 제한을 줄이거나 호스트 리소스를 늘려보세요.',
     },
   },
+  common: {
+    // Chrome — link text.
+    viewAll: 'View all',
+    count: {
+      // Content — count phrases with units. Korean does not mark plural
+      // on counted nouns, so _one and _other resolve to the same string.
+      // Keys mirror en.ts so call sites can switch by count uniformly.
+      services_one: '서비스 {count}개',
+      services_other: '서비스 {count}개',
+      projects_one: '프로젝트 {count}개',
+      projects_other: '프로젝트 {count}개',
+    },
+    relative: {
+      // Content — relative-time labels rendered by lib/time.formatRelativeTime
+      // when a t() callback is passed. Un-migrated callers continue to see
+      // the English fallback ('2m ago' etc.).
+      justNow: '방금',
+      minutes: '{count}분 전',
+      hours: '{count}시간 전',
+      days: '{count}일 전',
+    },
+  },
   nav: {
     // Chrome — primary nav labels.
     overview: 'Overview',
@@ -98,6 +120,16 @@ export const translations = {
         mcp: 'MCP',
       },
     },
+    page: {
+      // Chrome — page heading.
+      title: 'Activity',
+      // Content — descriptive subtitle + empty state, shared with the
+      // Recent-activity peek on Home.
+      subtitle:
+        '활동 감사 로그 — 탭에서 배포 / MCP / 시스템 이벤트 / 설정 변경 활동을 선택해 보세요.',
+      emptyState:
+        '아직 활동이 없습니다. 트리거, 배포, 에이전트 실행, 인시던트가 발생하면 여기에 표시됩니다.',
+    },
   },
   overview: {
     // Chrome — page title + KPI tile labels.
@@ -140,6 +172,32 @@ export const translations = {
     approval: 'Approval',
     incidents: 'Alerts',
     aiSpend: 'AI Spend',
+  },
+  home: {
+    hero: {
+      // Content — hero status prose on /home.
+      statusJustNow: '시스템 상태 · 방금 전',
+      noProjects:
+        '아직 프로젝트가 없습니다. 에이전트에게 배포해 달라고 말해보세요. 작업이 시작되면 여기에 나타납니다.',
+      allHealthy: '{projects}에서 {services} 모두 정상 실행 중입니다.',
+      someCrashed: '프로젝트 {total}개 중 {crashed}개 크래시 · {healthy}개 정상 (총 {services})',
+      lastDeploy: '최근 배포 · {time}',
+    },
+    projects: {
+      // Chrome — section title + status pill + aria label.
+      sectionTitle: 'Projects',
+      crashedPill: 'crashed',
+      openProject: 'Open {name} project',
+      // Content — empty state + inline action link.
+      emptyText: '아직 프로젝트가 없습니다.',
+      createOne: '새로 만들기',
+    },
+    recentActivity: {
+      // Chrome — section title.
+      sectionTitle: 'Recent activity',
+      // Content — section subtitle.
+      sectionSubtitle: '배포, 설정 변경, 에이전트 호출의 감사 로그입니다.',
+    },
   },
   setup: {
     welcome: {

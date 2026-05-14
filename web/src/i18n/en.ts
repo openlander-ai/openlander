@@ -29,6 +29,28 @@ export const translations = {
         'Host memory usage is at {percent}%. Consider reducing container limits or increasing host resources.',
     },
   },
+  common: {
+    viewAll: 'View all',
+    count: {
+      // Content — count phrases with units. Two keys per noun (_one /
+      // _other) so English renders grammatically correct at count=1
+      // without bringing in Intl.PluralRules. Korean has no plural
+      // distinction, so both keys carry the same string in ko.ts.
+      services_one: '{count} service',
+      services_other: '{count} services',
+      projects_one: '{count} project',
+      projects_other: '{count} projects',
+    },
+    relative: {
+      // Content — relative-time labels rendered by lib/time.formatRelativeTime
+      // when a t() callback is passed. Without t(), the helper falls back to
+      // English ("2m ago" etc.) to preserve behaviour for un-migrated callers.
+      justNow: 'just now',
+      minutes: '{count}m ago',
+      hours: '{count}h ago',
+      days: '{count}d ago',
+    },
+  },
   nav: {
     overview: 'Overview',
     projects: 'Projects',
@@ -85,6 +107,13 @@ export const translations = {
         mcp: 'MCP',
       },
     },
+    page: {
+      title: 'Activity',
+      subtitle:
+        'Audit log — pick a tab to focus on deployments, MCP, system events, or config changes.',
+      emptyState:
+        'No activity yet. Triggers, deploys, agent runs, and incidents will appear here as they happen.',
+    },
   },
   overview: {
     title: 'Overview',
@@ -119,6 +148,26 @@ export const translations = {
     approval: 'Approval',
     incidents: 'Alerts',
     aiSpend: 'AI Spend',
+  },
+  home: {
+    hero: {
+      statusJustNow: 'System status · just now',
+      noProjects: 'No projects yet. Tell your agent to deploy — projects show up here as it works.',
+      allHealthy: 'All {services} running across {projects}.',
+      someCrashed: '{crashed} of {total} projects crashed · {healthy} healthy across {services}.',
+      lastDeploy: 'Last deploy · {time}',
+    },
+    projects: {
+      sectionTitle: 'Projects',
+      crashedPill: 'crashed',
+      openProject: 'Open {name} project',
+      emptyText: 'No projects yet.',
+      createOne: 'Create one',
+    },
+    recentActivity: {
+      sectionTitle: 'Recent activity',
+      sectionSubtitle: 'Audit log of deploys, config changes, and agent calls.',
+    },
   },
   setup: {
     welcome: {

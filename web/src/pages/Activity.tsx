@@ -19,6 +19,7 @@ import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
 import { useActivityFeed } from '@/hooks/use-activity-feed';
 import { useProjectsContext } from '@/hooks/use-projects-context';
+import { useLanguage } from '@/i18n/context';
 import {
   kindGroupFromTypeParam,
   typeParamFromKindGroup,
@@ -30,6 +31,7 @@ export function Activity() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { projects } = useProjectsContext();
+  const { t } = useLanguage();
   const projectFilter = searchParams.get('project') || 'all';
   const kindFilter = kindGroupFromTypeParam(searchParams.get('type'));
   const { events } = useActivityFeed({ limit: 200, project: projectFilter });
@@ -50,8 +52,8 @@ export function Activity() {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
       <OuterCard
-        title="Activity"
-        subtitle="Audit log — pick a tab to focus on deployments, MCP, system events, or config changes."
+        title={t('activity.page.title')}
+        subtitle={t('activity.page.subtitle')}
         bodyClassName="p-0"
       >
         <ActivityTimeline
@@ -65,7 +67,7 @@ export function Activity() {
           projectFilter={projectFilter}
           onProjectFilterChange={(next) => updateSearchParam('project', next)}
           bucketed
-          emptyState="No activity yet. Triggers, deploys, agent runs, and incidents will appear here as they happen."
+          emptyState={t('activity.page.emptyState')}
           onOpenService={(project, service) => navigate(`/services/${service}?project=${project}`)}
           onOpenDeployment={(deploymentId, projectId) =>
             navigate(`/projects/${projectId}/deployments/${deploymentId}`)

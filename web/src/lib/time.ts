@@ -9,24 +9,26 @@ export function parseTimestamp(timestamp: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function formatRelativeTime(dateStr: string, t?: (key: string) => string): string {
+type RelativeTimeT = (key: string, params?: Record<string, string | number>) => string;
+
+export function formatRelativeTime(dateStr: string, t?: RelativeTimeT): string {
   const date = parseTimestamp(dateStr);
   if (!date) return '';
 
   const diffInSeconds = Math.floor((Date.now() - date.getTime()) / 1000);
   if (diffInSeconds < 60) {
-    return t ? 'just now' : 'just now';
+    return t ? t('common.relative.justNow') : 'just now';
   }
   const diffInMinutes = Math.floor(diffInSeconds / 60);
   if (diffInMinutes < 60) {
-    return t ? `${diffInMinutes}${'m ago'}` : `${diffInMinutes}m ago`;
+    return t ? t('common.relative.minutes', { count: diffInMinutes }) : `${diffInMinutes}m ago`;
   }
   const diffInHours = Math.floor(diffInMinutes / 60);
   if (diffInHours < 24) {
-    return t ? `${diffInHours}${'h ago'}` : `${diffInHours}h ago`;
+    return t ? t('common.relative.hours', { count: diffInHours }) : `${diffInHours}h ago`;
   }
   const diffInDays = Math.floor(diffInHours / 24);
-  return t ? `${diffInDays}${'d ago'}` : `${diffInDays}d ago`;
+  return t ? t('common.relative.days', { count: diffInDays }) : `${diffInDays}d ago`;
 }
 
 export function formatTime(timestamp: string): string {
