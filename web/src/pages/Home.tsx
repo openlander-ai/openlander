@@ -99,6 +99,11 @@ export function Home() {
   const { projects, loading } = useProjectsContext();
   const { events: activityEvents } = useActivityFeed({ limit: 5 });
   const { t } = useLanguage();
+  // Two-form plural helper: en grammar needs '1 service' vs '5 services'
+  // and our t() has no plural rules. ko renders identically for both
+  // forms (see common.count in ko.ts).
+  const pluralCount = (noun: 'services' | 'projects', count: number): string =>
+    t(`common.count.${noun}_${count === 1 ? 'one' : 'other'}`, { count });
 
   // Flat health tally across all projects
   const tally = useMemo(() => {
@@ -185,14 +190,14 @@ export function Home() {
               ? t('home.hero.noProjects')
               : allHealthy
                 ? t('home.hero.allHealthy', {
-                    services: t('common.count.services', { count: totalServices }),
-                    projects: t('common.count.projects', { count: projects.length }),
+                    services: pluralCount('services', totalServices),
+                    projects: pluralCount('projects', projects.length),
                   })
                 : t('home.hero.someCrashed', {
                     crashed: tally.crashed,
                     total: tally.total,
                     healthy: tally.healthy,
-                    services: t('common.count.services', { count: totalServices }),
+                    services: pluralCount('services', totalServices),
                   })}
           </h1>
         </div>
@@ -265,7 +270,7 @@ export function Home() {
       {/* ── 2. Projects grid ── */}
       <OuterCard
         title={t('home.projects.sectionTitle')}
-        subtitle={`${t('common.count.projects', { count: projects.length })} · ${t('common.count.services', { count: totalServices })}`}
+        subtitle={`${pluralCount('projects', projects.length)} · ${pluralCount('services', totalServices)}`}
         actions={
           <button
             type="button"
@@ -326,9 +331,7 @@ export function Home() {
                       )}
                     </div>
                     <div className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
-                      {p.serviceCount != null
-                        ? t('common.count.services', { count: p.serviceCount })
-                        : ''}
+                      {p.serviceCount != null ? pluralCount('services', p.serviceCount) : ''}
                     </div>
                     {/* Service dots — one per service, color-coded by health */}
                     <ServiceDots

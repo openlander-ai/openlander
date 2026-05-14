@@ -298,7 +298,14 @@ export function ProjectsGrid() {
                             padding-top, and 16px gap (styles.css `.project-card-stats`). */}
                         <div className="mt-2 flex items-center gap-4 border-t border-[color:var(--ol-border-subtle)] pt-3 text-[11.5px] text-[color:var(--ol-fg-muted)]">
                           {p.serviceCount != null && (
-                            <span>{t('common.count.services', { count: p.serviceCount })}</span>
+                            <span>
+                              {t(
+                                p.serviceCount === 1
+                                  ? 'common.count.services_one'
+                                  : 'common.count.services_other',
+                                { count: p.serviceCount },
+                              )}
+                            </span>
                           )}
                           <span>Deployed {timeAgo(p.updatedAt)}</span>
                           <span className="ml-auto text-[color:var(--ol-fg-subtle)]">

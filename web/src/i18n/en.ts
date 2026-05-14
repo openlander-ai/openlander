@@ -32,12 +32,14 @@ export const translations = {
   common: {
     viewAll: 'View all',
     count: {
-      // Content — count phrases with units. en accepts the "1 services"
-      // anomaly at count=1; ko renders identically since Korean does not
-      // mark plural on counted nouns. Tracked: introduce Intl.PluralRules
-      // before adding a third language with grammatical plural distinctions.
-      services: '{count} services',
-      projects: '{count} projects',
+      // Content — count phrases with units. Two keys per noun (_one /
+      // _other) so English renders grammatically correct at count=1
+      // without bringing in Intl.PluralRules. Korean has no plural
+      // distinction, so both keys carry the same string in ko.ts.
+      services_one: '{count} service',
+      services_other: '{count} services',
+      projects_one: '{count} project',
+      projects_other: '{count} projects',
     },
     relative: {
       // Content — relative-time labels rendered by lib/time.formatRelativeTime

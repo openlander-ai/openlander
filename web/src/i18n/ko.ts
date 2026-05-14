@@ -36,9 +36,12 @@ export const translations = {
     viewAll: 'View all',
     count: {
       // Content — count phrases with units. Korean does not mark plural
-      // on counted nouns, so a single key suffices per noun.
-      services: '서비스 {count}개',
-      projects: '프로젝트 {count}개',
+      // on counted nouns, so _one and _other resolve to the same string.
+      // Keys mirror en.ts so call sites can switch by count uniformly.
+      services_one: '서비스 {count}개',
+      services_other: '서비스 {count}개',
+      projects_one: '프로젝트 {count}개',
+      projects_other: '프로젝트 {count}개',
     },
     relative: {
       // Content — relative-time labels rendered by lib/time.formatRelativeTime
