@@ -140,6 +140,15 @@ export async function deployService(input: DeployServiceInput): Promise<DeploySe
   return apiPost<DeployServiceResult>('/api/services/deploy', body);
 }
 
+// Redeploy an existing service using its stored config. For git sources
+// this fetches the latest HEAD of the saved branch; for image sources it
+// re-pulls the saved image reference. Body is intentionally empty —
+// strategy / no_cache / health-check overrides belong to Settings, not
+// the header Deploy button.
+export async function redeployService(projectId: string, serviceId: string): Promise<DeployResult> {
+  return apiPost<DeployResult>(`/api/projects/${projectId}/services/${serviceId}/deploy`, {});
+}
+
 export async function createProject(
   name?: string,
 ): Promise<{ project: { id: string; name: string; status: Project['status'] } }> {

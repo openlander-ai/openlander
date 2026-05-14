@@ -1147,6 +1147,18 @@ export const translations = {
     deployableService: 'Deployable service',
     managedService: 'Managed service',
   },
+  serviceDetail: {
+    deploy: {
+      failed: 'Deploy failed.',
+      fallbackError: 'Deploy failed',
+      dismiss: 'Dismiss',
+      // Surfaced when the redeploy route returns 409 / DEPLOY_LOCKED —
+      // another deploy is already running for this project (could be the
+      // same user in another tab, an MCP agent, or a webhook push).
+      locked:
+        'Another deploy is already running for this project. Wait for it to finish, then try again.',
+    },
+  },
 } as const;
 
 export type TranslationType = typeof translations;

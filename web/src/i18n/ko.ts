@@ -1327,4 +1327,15 @@ export const translations = {
     deployableService: 'Deployable service',
     managedService: 'Managed service',
   },
+  serviceDetail: {
+    deploy: {
+      failed: '배포에 실패했습니다.',
+      fallbackError: '배포 실패',
+      dismiss: '닫기',
+      // 재배포 라우트가 409 / DEPLOY_LOCKED 를 반환했을 때 노출합니다 —
+      // 같은 프로젝트의 다른 배포가 진행 중인 상황 (다른 탭, MCP 에이전트,
+      // 웹훅 푸시 등).
+      locked: '이미 배포가 진행 중입니다. 완료 후 다시 시도하세요.',
+    },
+  },
 } as const;
