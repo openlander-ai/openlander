@@ -77,6 +77,9 @@
 .health-summary-item.h-crashed {
   color: var(--ol-error);
 }
+.health-summary-item.h-deploying {
+  color: var(--ol-info);
+}
 .health-summary-item.h-restarting,
 .health-summary-item.h-degraded {
   color: var(--ol-warning);
@@ -98,6 +101,9 @@
 }
 .health-pip.crashed {
   background: var(--ol-error);
+}
+.health-pip.deploying {
+  background: var(--ol-info);
 }
 .health-pip.starting {
   background: var(--ol-primary);
@@ -235,6 +241,9 @@
 .topology-node-disk.h-crashed {
   background: var(--ol-error);
 }
+.topology-node-disk.h-deploying {
+  background: var(--ol-info);
+}
 .topology-node-disk.h-starting {
   background: var(--ol-primary);
 }
@@ -303,6 +312,9 @@
 .topology-node-status.h-crashed {
   color: var(--ol-error);
 }
+.topology-node-status.h-deploying {
+  color: var(--ol-info);
+}
 .topology-node-status.h-starting {
   color: var(--ol-primary);
 }
@@ -349,6 +361,9 @@
 }
 .popover-pip.h-crashed {
   background: var(--ol-error);
+}
+.popover-pip.h-deploying {
+  background: var(--ol-info);
 }
 .popover-pip.h-degraded,
 .popover-pip.h-restarting {

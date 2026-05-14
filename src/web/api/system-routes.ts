@@ -417,6 +417,18 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     try {
       const inspection = await ctx.serviceManager.getInspectionHealth(id);
       if (inspection.status !== 'running') {
+        // Force redeploys tear the container down before the new one
+        // boots, so a probe here legitimately fails. Before flipping
+        // to a 404 / "stale" banner on the page, check whether the
+        // service is mid-deploy and surface that as a first-class
+        // `deploying` state — same vocab as /topology so the badges
+        // agree across surfaces.
+        const service = await ctx.db.getService(id);
+        const owningProject = service ? await ctx.db.getProject(service.project_id) : null;
+        const isDeploying = service?.status === 'building' || owningProject?.status === 'building';
+        if (isDeploying) {
+          return c.json({ health: 'deploying' });
+        }
         return c.json(
           { error: 'NOT_FOUND', message: `Service container is not running: ${id}` },
           404,
@@ -428,7 +440,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       // documented but the UI type + zod schema both reject it, so the
       // health contract test fails when a seeded container has no
       // HEALTHCHECK declared. Parity with /topology, which also lands
-      // on `healthy | crashed`.
+      // on `healthy | crashed`. (Plus `deploying` from the not-running
+      // branch above — see PR widening the UI vocab.)
       //
       //   docker 'healthy'                  → UI 'healthy'
       //   docker 'starting' (start_period)  → UI 'healthy'  (grace window)
