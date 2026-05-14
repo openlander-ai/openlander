@@ -39,6 +39,7 @@ const EXPECTED_TOOLS = [
   'get_deploy_status',
   'get_disk_usage',
   'get_env_var',
+  'get_instance_info',
   'get_logs',
   'get_project_stats',
   'get_service_credentials',
@@ -124,8 +125,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 64 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(64);
+  it('maintains exactly 65 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(65);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

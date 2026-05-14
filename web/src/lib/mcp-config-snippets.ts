@@ -24,17 +24,23 @@ export interface McpClientConfig {
 interface BuildOptions {
   endpoint: string;
   token: string;
+  serverName: string;
 }
 
-export function buildClaudeCodeCmd({ endpoint, token }: BuildOptions): string {
-  return `claude mcp add openlander --url ${endpoint} --header "Authorization: Bearer ${token}"`;
+function serverKey(name: string): string {
+  const normalized = name.trim();
+  return normalized || 'openlander';
 }
 
-export function buildCursorConfig({ endpoint, token }: BuildOptions): string {
+export function buildClaudeCodeCmd({ endpoint, token, serverName }: BuildOptions): string {
+  return `claude mcp add ${serverKey(serverName)} --url ${endpoint} --header "Authorization: Bearer ${token}"`;
+}
+
+export function buildCursorConfig({ endpoint, token, serverName }: BuildOptions): string {
   return JSON.stringify(
     {
       mcpServers: {
-        openlander: {
+        [serverKey(serverName)]: {
           url: endpoint,
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -45,11 +51,11 @@ export function buildCursorConfig({ endpoint, token }: BuildOptions): string {
   );
 }
 
-export function buildWindsurfConfig({ endpoint, token }: BuildOptions): string {
+export function buildWindsurfConfig({ endpoint, token, serverName }: BuildOptions): string {
   return JSON.stringify(
     {
       mcpServers: {
-        openlander: {
+        [serverKey(serverName)]: {
           serverUrl: endpoint,
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -60,11 +66,11 @@ export function buildWindsurfConfig({ endpoint, token }: BuildOptions): string {
   );
 }
 
-export function buildClaudeDesktopConfig({ endpoint, token }: BuildOptions): string {
+export function buildClaudeDesktopConfig({ endpoint, token, serverName }: BuildOptions): string {
   return JSON.stringify(
     {
       mcpServers: {
-        openlander: {
+        [serverKey(serverName)]: {
           command: 'npx',
           args: ['-y', 'mcp-remote', endpoint, '--header', `Authorization: Bearer ${token}`],
         },
@@ -75,11 +81,11 @@ export function buildClaudeDesktopConfig({ endpoint, token }: BuildOptions): str
   );
 }
 
-export function buildVscodeConfig({ endpoint, token }: BuildOptions): string {
+export function buildVscodeConfig({ endpoint, token, serverName }: BuildOptions): string {
   return JSON.stringify(
     {
       servers: {
-        openlander: {
+        [serverKey(serverName)]: {
           command: 'npx',
           args: ['-y', 'mcp-remote', endpoint, '--header', `Authorization: Bearer ${token}`],
         },

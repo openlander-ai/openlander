@@ -96,6 +96,8 @@ export const getLogsSchema = monitoringTargetSchema({
 
 export const getProjectStatsSchema = monitoringTargetSchema({});
 
+export const getInstanceInfoSchema = z.object({}).strict();
+
 export const diagnoseServiceSchema = z
   .object({
     service_id: z.string().min(1).optional().describe('Deployable service id'),

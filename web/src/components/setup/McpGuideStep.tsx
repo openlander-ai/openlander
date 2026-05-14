@@ -37,8 +37,8 @@ import { ensureOrgMcpToken, getOrgMcpToken } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from './shared';
 import { useLanguage } from '@/i18n/context';
-import { getMcpEndpoint } from '@/lib/mcp-endpoint';
 import { buildAllClientConfigs } from '@/lib/mcp-config-snippets';
+import { useMcpInstance } from '@/hooks/use-mcp-instance';
 
 interface McpGuideStepProps {
   onNext: () => void;
@@ -56,6 +56,7 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
   const [showManual, setShowManual] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
+  const mcpInstance = useMcpInstance();
 
   // Mount-time probe — metadata only, never the plaintext. The user
   // gets the snippet block only after they explicitly click Generate
@@ -113,7 +114,15 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
     }
   };
 
-  const mcpUrl = getMcpEndpoint();
+  const handleSaveInstanceName = async () => {
+    try {
+      await mcpInstance.save();
+    } catch {
+      setTokenError(t('setup.mcp.instanceSaveFailed'));
+    }
+  };
+
+  const mcpUrl = mcpInstance.endpoint;
   // Render snippets (and the quick-copy block) with the freshly issued
   // plaintext when we have it, and a clean `olp_YOUR_TOKEN` placeholder
   // otherwise. The existing-token / error / loading messages live in
@@ -124,9 +133,13 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
   // MCP config.
   const tokenForSnippet = token ?? TOKEN_PLACEHOLDER;
 
-  const quickCopyText = `Connect the OpenLander MCP server.\nURL: ${mcpUrl}\nToken: ${tokenForSnippet}`;
+  const quickCopyText = `Connect the OpenLander MCP server.\nName: ${mcpInstance.serverName}\nURL: ${mcpUrl}\nToken: ${tokenForSnippet}`;
 
-  const clientConfigs = buildAllClientConfigs({ endpoint: mcpUrl, token: tokenForSnippet });
+  const clientConfigs = buildAllClientConfigs({
+    endpoint: mcpUrl,
+    token: tokenForSnippet,
+    serverName: mcpInstance.serverName,
+  });
 
   // Hide the copy/manual surface unless we actually have plaintext to
   // hand the user. Showing the `olp_YOUR_TOKEN` placeholder dressed up
@@ -170,7 +183,7 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
             data-testid="setup-mcp-token-error"
             className="rounded-md border border-[color:var(--ol-error)]/40 bg-[color:var(--ol-error-soft,rgba(239,68,68,0.08))] px-4 py-3 text-left text-[12.5px] text-foreground/80"
           >
-            {t('setup.mcp.tokenError')}
+            {tokenError}
           </div>
         )}
         {legacyRotated && (
@@ -181,6 +194,35 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
             {t('setup.mcp.legacyTokenRotated')}
           </div>
         )}
+
+        <div className="rounded-lg border border-border bg-bg-panel/50 px-4 py-4 text-left space-y-2">
+          <label className="text-xs font-body font-semibold uppercase tracking-[0.08em] text-foreground/60">
+            {t('setup.mcp.instanceName')}
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="text"
+              value={mcpInstance.draftName}
+              disabled={mcpInstance.loading || mcpInstance.saving}
+              onChange={(event) => mcpInstance.setDraftName(event.target.value)}
+              className="min-w-0 flex-1 rounded-md border border-border bg-bg-app px-3 py-2 font-mono text-sm text-foreground outline-none focus:border-agent"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleSaveInstanceName()}
+              disabled={mcpInstance.loading || mcpInstance.saving}
+              className="font-body"
+            >
+              {mcpInstance.saving ? t('setup.mcp.savingInstance') : t('setup.mcp.saveInstance')}
+            </Button>
+          </div>
+          <p className="text-xs font-body text-foreground/60">
+            {mcpInstance.instance?.isDefaultName
+              ? t('setup.mcp.instanceDefaultWarning')
+              : t('setup.mcp.instanceHelp')}
+          </p>
+        </div>
 
         {/* R3 (2026-05-13): explicit Generate CTA for new users. Until
             this is clicked we don't POST to /api/mcp/token — the

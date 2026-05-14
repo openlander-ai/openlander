@@ -10,6 +10,7 @@ import type { AppContext } from '../../app.js';
 import { OpenLanderError } from '../../errors.js';
 import type { CompositeTool } from '../../mcp/composite-tools.js';
 import { maybeHandleMcpSafety } from '../../mcp/destructive-safety.js';
+import { getMcpInstanceContext, type McpInstanceContext } from '../../mcp/instance-identity.js';
 import type { RequestIdentity } from '../../types/identity.js';
 import type { ToolDef } from '../defs/types.js';
 
@@ -21,9 +22,19 @@ function toInputSchema(schema: z.ZodType): Record<string, unknown> {
   return jsonSchema;
 }
 
-function successResponse(result: unknown): { content: Array<{ type: 'text'; text: string }> } {
+function attachInstance(result: unknown, instance: McpInstanceContext): unknown {
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return { ...(result as Record<string, unknown>), _instance: instance };
+  }
+  return { result, _instance: instance };
+}
+
+function successResponse(
+  result: unknown,
+  instance: McpInstanceContext,
+): { content: Array<{ type: 'text'; text: string }> } {
   return {
-    content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    content: [{ type: 'text', text: JSON.stringify(attachInstance(result, instance), null, 2) }],
   };
 }
 
@@ -42,7 +53,10 @@ function inferErrorCode(message: string): string {
   return match?.[1] ?? 'TOOL_ERROR';
 }
 
-function errorResponse(error: unknown): {
+function errorResponse(
+  error: unknown,
+  instance: McpInstanceContext,
+): {
   content: Array<{ type: 'text'; text: string }>;
   isError: true;
 } {
@@ -73,7 +87,7 @@ function errorResponse(error: unknown): {
   }
 
   return {
-    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+    content: [{ type: 'text', text: JSON.stringify({ ...payload, _instance: instance }, null, 2) }],
     isError: true,
   };
 }
@@ -116,6 +130,7 @@ export function registerCompositeMcpTools(
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const instance = getMcpInstanceContext(appCtx.config);
     try {
       const toolName = request.params.name;
       const rawArgs = request.params.arguments ?? {};
@@ -128,7 +143,7 @@ export function registerCompositeMcpTools(
         }
 
         const result = await composite.execute(parsed.data, { target: 'mcp', appCtx, identity });
-        return successResponse(result);
+        return successResponse(result, instance);
       }
 
       const def = mcpPlatformDefs.find((item) => item.name === toolName);
@@ -144,14 +159,14 @@ export function registerCompositeMcpTools(
       const context = { target: 'mcp' as const, appCtx, identity };
       const safetyResult = await maybeHandleMcpSafety(def, parsed.data, context);
       if (safetyResult !== undefined) {
-        return successResponse(safetyResult);
+        return successResponse(safetyResult, instance);
       }
 
       const result = await def.execute(parsed.data, context);
       const transformed = def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
-      return successResponse(transformed);
+      return successResponse(transformed, instance);
     } catch (error) {
-      return errorResponse(error);
+      return errorResponse(error, instance);
     }
   });
 }

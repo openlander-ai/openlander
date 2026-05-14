@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPostVoid } from './client';
+import { apiGet, apiPatch, apiPost, apiPostVoid } from './client';
 
 export async function fetchWithAuth(url: string, options?: RequestInit): Promise<Response> {
   const res = await fetch(url, options);
@@ -65,6 +65,15 @@ export interface McpPatTokenMetadata {
   createdAt: string;
 }
 
+export interface McpInstanceInfo {
+  id: string;
+  name: string;
+  suggestedName: string;
+  endpoint: string;
+  host: string;
+  isDefaultName: boolean;
+}
+
 /**
  * v0.1 single-token MCP endpoints (PR #235). The frontend's "Your
  * Agent" page and setup wizard talk to these instead of composing
@@ -76,6 +85,14 @@ export interface McpPatTokenMetadata {
 /** GET /api/mcp/token — the active org MCP token metadata, or null. */
 export async function getOrgMcpToken(): Promise<{ token: McpPatTokenMetadata | null }> {
   return apiGet<{ token: McpPatTokenMetadata | null }>('/api/mcp/token');
+}
+
+export async function getMcpInstance(): Promise<McpInstanceInfo> {
+  return apiGet<McpInstanceInfo>('/api/mcp/instance');
+}
+
+export async function updateMcpInstanceName(name: string): Promise<McpInstanceInfo> {
+  return apiPatch<McpInstanceInfo>('/api/mcp/instance', { name });
 }
 
 export interface OrgMcpTokenIssueResult {

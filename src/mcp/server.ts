@@ -32,6 +32,7 @@ import type { ToolDef } from '../tools/defs/types.js';
 import type { RequestIdentity } from '../types/identity.js';
 import { buildIncidentBriefing } from '../llm/prompts.js';
 import { createCompositeTools, type CompositeTool } from './composite-tools.js';
+import { getMcpInstanceContext } from './instance-identity.js';
 
 const log = createModuleLogger('mcp');
 
@@ -95,7 +96,7 @@ All actions: action="help"
 
 ## openlander_monitor
 Monitoring & operations: diagnostics, logs, alerts, system stats, and connectivity checks.
-Key actions: diagnose_service, get_logs, get_alerts, get_system_stats, get_project_stats, dismiss_alert
+Key actions: get_instance_info, diagnose_service, get_logs, get_alerts, get_system_stats, get_project_stats, dismiss_alert
 All actions: action="help"
 
 ## Usage
@@ -119,6 +120,13 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - All containers share the "openlander" Docker network
 - Container-to-container: http://ol-{project-name}:{port}
 - Never create Docker networks manually`;
+
+function buildServerInstructions(ctx: AppContext, incidentBriefing: string): string {
+  const instance = getMcpInstanceContext(ctx.config);
+  const instancePrefix = `You are connected to OpenLander instance "${instance.name}" at "${instance.endpoint}". Use this instance identity when the user has multiple OpenLander MCP servers connected.`;
+  const base = `${instancePrefix}\n\n${SERVER_INSTRUCTIONS}`;
+  return incidentBriefing ? `${base}\n\n${incidentBriefing}` : base;
+}
 
 function toRequestIdentity(token: McpTokenIdentity | null): RequestIdentity | undefined {
   if (!token) return undefined;
@@ -170,9 +178,7 @@ async function createMcpServerInstance(
 ): Promise<Server> {
   const unresolvedIncidents = await ctx.db.listUnresolvedRuntimeIncidents();
   const incidentBriefing = await buildIncidentBriefing(unresolvedIncidents, ctx.db);
-  const instructions = incidentBriefing
-    ? `${SERVER_INSTRUCTIONS}\n\n${incidentBriefing}`
-    : SERVER_INSTRUCTIONS;
+  const instructions = buildServerInstructions(ctx, incidentBriefing);
 
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
   const server = new Server(

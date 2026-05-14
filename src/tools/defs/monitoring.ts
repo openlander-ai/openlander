@@ -9,12 +9,14 @@ import {
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
+import { getMcpInstancePublicInfo } from '../../mcp/instance-identity.js';
 import { BUILD_TIME_PREFIXES } from '../../pipeline/build-args.js';
 import { resolveContainerHost } from '../../pipeline/url-resolver.js';
 import {
   diagnoseServiceSchema,
   dismissAlertSchema,
   getAlertsSchema,
+  getInstanceInfoSchema,
   getLogsSchema,
   getProjectStatsSchema,
   getSystemStatsSchema,
@@ -38,6 +40,16 @@ interface ResolvedDeployableService {
 }
 
 export const monitoringToolDefs: ToolDef[] = [
+  {
+    name: 'get_instance_info',
+    riskLevel: 'low',
+    description:
+      'Return this OpenLander MCP instance identity: id, name, endpoint, host, suggestedName, and whether the name is still a default. Use this first when the user has multiple OpenLander MCP servers connected.',
+    mcpDescription:
+      'Return this OpenLander instance identity so agents can choose the right connected server.',
+    inputSchema: getInstanceInfoSchema,
+    execute: (_args, context) => Promise.resolve(getMcpInstancePublicInfo(context.appCtx.config)),
+  },
   {
     name: 'get_logs',
     riskLevel: 'low',

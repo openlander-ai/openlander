@@ -35,6 +35,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useActivityFeed } from '@/hooks/use-activity-feed';
+import { useMcpInstance } from '@/hooks/use-mcp-instance';
 import { useMcpStatus } from '@/hooks/use-mcp-status';
 import { useLanguage } from '@/i18n/context';
 import {
@@ -44,7 +45,6 @@ import {
   type McpPatTokenMetadata,
 } from '@/lib/api';
 import { buildAllClientConfigs, type McpClientId } from '@/lib/mcp-config-snippets';
-import { getMcpEndpoint } from '@/lib/mcp-endpoint';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -64,8 +64,9 @@ export function MCPServer() {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { status: mcpStatus, loading: mcpLoading, error: mcpError } = useMcpStatus();
+  const mcpInstance = useMcpInstance();
   const { events: mcpEvents } = useActivityFeed({ limit: 5, actor: 'mcp' });
-  const mcpEndpoint = getMcpEndpoint();
+  const mcpEndpoint = mcpInstance.endpoint;
 
   const [activeToken, setActiveToken] = useState<McpPatTokenMetadata | null>(null);
   const [tokensLoading, setTokensLoading] = useState(true);
@@ -171,6 +172,15 @@ export function MCPServer() {
     }
   }
 
+  async function handleSaveInstanceName() {
+    try {
+      await mcpInstance.save();
+      toast.success(t('mcpServer.instance.saved'));
+    } catch {
+      toast.error(t('mcpServer.instance.saveFailed'));
+    }
+  }
+
   async function copy(value: string, setFlag: (v: boolean) => void) {
     if (typeof navigator === 'undefined' || !navigator.clipboard) return;
     try {
@@ -229,7 +239,11 @@ export function MCPServer() {
   // would mask while the config block continued to leak the same
   // plaintext to anyone glancing over the shoulder).
   const snippetToken = revealed && newTokenPlain ? newTokenPlain : '<your-token>';
-  const clientConfigs = buildAllClientConfigs({ endpoint: mcpEndpoint, token: snippetToken });
+  const clientConfigs = buildAllClientConfigs({
+    endpoint: mcpEndpoint,
+    token: snippetToken,
+    serverName: mcpInstance.serverName,
+  });
   const activeConfig = clientConfigs.find((c) => c.id === activeClient) ?? clientConfigs[0];
 
   return (
@@ -268,6 +282,45 @@ export function MCPServer() {
                 {t('mcpServer.row.lastCall', { when: lastCallLabel })}
               </span>
             )}
+          </Row>
+
+          {/* Instance row */}
+          <Row label={t('mcpServer.row.instance')}>
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  value={mcpInstance.draftName}
+                  disabled={mcpInstance.loading || mcpInstance.saving}
+                  onChange={(event) => mcpInstance.setDraftName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      void handleSaveInstanceName();
+                    }
+                  }}
+                  className="ol-mono min-w-0 flex-1 rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-2.5 py-1.5 text-[12.5px] text-[color:var(--ol-fg)] outline-none transition-colors focus:border-[color:var(--ol-primary)]"
+                  aria-label={t('mcpServer.row.instance')}
+                />
+                <Button
+                  type="button"
+                  onClick={() => void handleSaveInstanceName()}
+                  disabled={mcpInstance.loading || mcpInstance.saving}
+                  size="sm"
+                  variant="outline"
+                >
+                  {mcpInstance.saving
+                    ? t('mcpServer.instance.saving')
+                    : t('mcpServer.instance.save')}
+                </Button>
+              </div>
+              {(mcpInstance.instance?.isDefaultName || mcpInstance.error) && (
+                <p className="text-[11.5px] leading-snug text-[color:var(--ol-fg-muted)]">
+                  {mcpInstance.error
+                    ? t('mcpServer.instance.loadFailed')
+                    : t('mcpServer.instance.defaultWarning')}
+                </p>
+              )}
+            </div>
           </Row>
 
           {/* Endpoint row */}
@@ -375,47 +428,47 @@ export function MCPServer() {
           preview is hidden rather than showing a `<your-token>`
           placeholder the user can't act on. */}
       {newTokenPlain && (
-      <OuterCard title={t('mcpServer.setup.title')} subtitle={t('mcpServer.setup.subtitle')}>
-        <Tabs
-          value={activeConfig.id}
-          onValueChange={(v) => {
-            setActiveClient(v as McpClientId);
-            setConfigCopied(false);
-          }}
-          className="flex flex-col gap-3"
-        >
-          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-[color:var(--ol-panel-2)] p-1">
+        <OuterCard title={t('mcpServer.setup.title')} subtitle={t('mcpServer.setup.subtitle')}>
+          <Tabs
+            value={activeConfig.id}
+            onValueChange={(v) => {
+              setActiveClient(v as McpClientId);
+              setConfigCopied(false);
+            }}
+            className="flex flex-col gap-3"
+          >
+            <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-[color:var(--ol-panel-2)] p-1">
+              {clientConfigs.map((cfg) => (
+                <TabsTrigger key={cfg.id} value={cfg.id} className="text-[12px]">
+                  {cfg.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
             {clientConfigs.map((cfg) => (
-              <TabsTrigger key={cfg.id} value={cfg.id} className="text-[12px]">
-                {cfg.label}
-              </TabsTrigger>
+              <TabsContent key={cfg.id} value={cfg.id} className="m-0 flex flex-col gap-2">
+                {cfg.filename && (
+                  <p className="text-[11.5px] text-[color:var(--ol-fg-muted)]">{cfg.filename}</p>
+                )}
+                <pre className="ol-mono overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-[color:var(--ol-panel-2)] p-3 text-[12px] leading-relaxed text-[color:var(--ol-fg)]">
+                  <code>{cfg.snippet}</code>
+                </pre>
+              </TabsContent>
             ))}
-          </TabsList>
-          {clientConfigs.map((cfg) => (
-            <TabsContent key={cfg.id} value={cfg.id} className="m-0 flex flex-col gap-2">
-              {cfg.filename && (
-                <p className="text-[11.5px] text-[color:var(--ol-fg-muted)]">{cfg.filename}</p>
-              )}
-              <pre className="ol-mono overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-[color:var(--ol-panel-2)] p-3 text-[12px] leading-relaxed text-[color:var(--ol-fg)]">
-                <code>{cfg.snippet}</code>
-              </pre>
-            </TabsContent>
-          ))}
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[12px] text-[color:var(--ol-fg-muted)]">
-              {t('mcpServer.setup.restartHint')}
-            </p>
-            <button
-              type="button"
-              onClick={() => void copy(activeConfig.snippet, setConfigCopied)}
-              className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
-            >
-              {configCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{' '}
-              {configCopied ? t('mcpServer.row.copied') : t('mcpServer.setup.copyConfig')}
-            </button>
-          </div>
-        </Tabs>
-      </OuterCard>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[12px] text-[color:var(--ol-fg-muted)]">
+                {t('mcpServer.setup.restartHint')}
+              </p>
+              <button
+                type="button"
+                onClick={() => void copy(activeConfig.snippet, setConfigCopied)}
+                className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
+              >
+                {configCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{' '}
+                {configCopied ? t('mcpServer.row.copied') : t('mcpServer.setup.copyConfig')}
+              </button>
+            </div>
+          </Tabs>
+        </OuterCard>
       )}
 
       {/* Recent agent calls */}

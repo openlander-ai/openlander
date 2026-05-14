@@ -152,6 +152,13 @@ export const translations = {
       startDeploying: 'Start Deploying',
       generateToken: 'Generate MCP token',
       generating: 'Generating…',
+      instanceName: 'Instance name',
+      instanceHelp: 'This becomes the MCP server key copied into your client config.',
+      instanceDefaultWarning:
+        'If you connect multiple OpenLander servers, rename this to something specific.',
+      saveInstance: 'Save name',
+      savingInstance: 'Saving…',
+      instanceSaveFailed: 'Could not save the MCP instance name.',
       noTokenYet: 'No MCP token issued yet. Generate one to copy your client config.',
       tokenName: 'Setup wizard',
       tokenAlreadyIssued:
@@ -879,6 +886,7 @@ export const translations = {
     subtitle: 'Connect Claude or any MCP client to manage your services.',
     row: {
       status: 'Status',
+      instance: 'Instance name',
       endpoint: 'Endpoint',
       token: 'Access token',
       copy: 'Copy',
@@ -918,6 +926,15 @@ export const translations = {
       passwordHint: 'Treat like a password — one token unlocks every project. Regenerate if lost.',
       issuedAt: 'issued {when}',
       loadFailed: 'Failed to load tokens',
+    },
+    instance: {
+      save: 'Save',
+      saving: 'Saving…',
+      saved: 'Instance name saved.',
+      saveFailed: 'Failed to save instance name',
+      loadFailed: 'Could not load instance identity.',
+      defaultWarning:
+        'Rename this if you connect multiple OpenLander servers to the same AI client.',
     },
     setup: {
       title: 'Setup',

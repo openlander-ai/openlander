@@ -177,6 +177,12 @@ export const translations = {
       generateToken: 'Generate MCP token',
       generating: 'Generating…',
       tokenName: 'Setup wizard',
+      instanceName: 'Instance name',
+      instanceHelp: '이 이름이 MCP 클라이언트 설정의 server key로 사용됩니다.',
+      instanceDefaultWarning: '여러 OpenLander 서버를 연결한다면 구분 가능한 이름으로 바꾸세요.',
+      saveInstance: 'Save name',
+      savingInstance: 'Saving…',
+      instanceSaveFailed: 'MCP 인스턴스 이름을 저장하지 못했습니다.',
       // Content.
       subtitle: 'Claude Code, Cursor 또는 모든 MCP 클라이언트에서 배포하세요.',
       copyPrompt: '아래를 AI 코딩 도구에 붙여넣으세요:',
@@ -1025,6 +1031,7 @@ export const translations = {
     row: {
       // Chrome — bare labels + actions.
       status: 'Status',
+      instance: 'Instance name',
       endpoint: 'Endpoint',
       token: 'Access token',
       copy: 'Copy',
@@ -1067,6 +1074,17 @@ export const translations = {
       passwordHint: '비밀번호와 같습니다. 유출 시 모든 프로젝트가 노출되니 주의하세요.',
       issuedAt: '{when} 발급',
       loadFailed: '토큰 목록을 불러오지 못했습니다',
+    },
+    instance: {
+      // Chrome — buttons.
+      save: 'Save',
+      saving: 'Saving…',
+      // Content.
+      saved: '인스턴스 이름을 저장했습니다.',
+      saveFailed: '인스턴스 이름을 저장하지 못했습니다',
+      loadFailed: '인스턴스 정보를 불러오지 못했습니다.',
+      defaultWarning:
+        '같은 AI 클라이언트에 여러 OpenLander 서버를 연결한다면 이 이름을 더 구체적으로 바꾸세요.',
     },
     setup: {
       // Chrome — section title + action.
