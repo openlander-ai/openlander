@@ -281,9 +281,15 @@ export function LogViewer({
   // matches what every other CI log viewer treats as "copy".
   const [logCopied, setLogCopied] = useState(false);
   const handleCopyLog = useCallback(() => {
+    // Preserve every real log line; only drop `{progress}` placeholder
+    // rows (they render as an animated bar, not text). `{step}#N`
+    // lines are real build/error content — the renderer just strips
+    // the `{step}` prefix marker for display, so we do the same when
+    // copying instead of dropping the line and silently losing the
+    // step's error output.
     const text = lines
-      .filter((l) => l.payload && l.payload !== '{progress}' && !l.payload.startsWith('{step}'))
-      .map((l) => l.payload)
+      .filter((l) => l.payload && l.payload !== '{progress}')
+      .map((l) => (l.payload.startsWith('{step}') ? l.payload.slice('{step}'.length) : l.payload))
       .join('\n');
     if (!text) return;
     void copyToClipboard(text).then(() => {

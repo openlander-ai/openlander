@@ -9,6 +9,8 @@
  */
 import { CheckCircle, Copy, ExternalLink, Globe } from 'lucide-react';
 
+import { copyToClipboard } from '@/lib/utils';
+
 export interface SuccessSummaryProps {
   /** Service name shown in the URL row */
   serviceName: string;
@@ -39,6 +41,25 @@ export function SuccessSummary({
   // success signal, just without lies about the address.
   const hasUrl = Boolean(publicUrl);
   const hasInternal = typeof internalPort === 'number' && internalPort > 0;
+  // Provide internal defaults so the Copy / Open buttons work out of
+  // the box. Callers can still override via the `onCopyUrl` /
+  // `onOpenUrl` props (e.g. to show a toast on copy success). If both
+  // a handler and the URL are missing, the buttons no-op gracefully —
+  // but the URL section is also hidden in that case via `hasUrl`.
+  const handleCopyUrl = () => {
+    if (onCopyUrl) {
+      onCopyUrl();
+      return;
+    }
+    if (publicUrl) void copyToClipboard(publicUrl);
+  };
+  const handleOpenUrl = () => {
+    if (onOpenUrl) {
+      onOpenUrl();
+      return;
+    }
+    if (publicUrl) window.open(publicUrl, '_blank', 'noreferrer');
+  };
   return (
     <div
       role="status"
@@ -73,7 +94,7 @@ export function SuccessSummary({
                 </a>
                 <button
                   type="button"
-                  onClick={onCopyUrl}
+                  onClick={handleCopyUrl}
                   className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
                   aria-label="Copy URL"
                 >
@@ -81,7 +102,7 @@ export function SuccessSummary({
                 </button>
                 <button
                   type="button"
-                  onClick={onOpenUrl}
+                  onClick={handleOpenUrl}
                   className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
                   aria-label="Open in new tab"
                 >
