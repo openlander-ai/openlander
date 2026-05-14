@@ -20,7 +20,6 @@ import {
   getAllIps,
   getEnvironmentProjectHostname,
   getPreferredProjectUrl,
-  getProjectUrl,
   getProjectUrls,
 } from '../../../pipeline/traefik.js';
 
@@ -283,7 +282,12 @@ export function mapProjectForApi(project: ProjectRow, deployable?: DeployableFor
     build_method: buildMethod,
     dockerfile_path: dockerfilePath,
     port,
-    url: port ? getProjectUrl(project.name) : null,
+    // `url` is the legacy alias still consumed by older UI surfaces (e.g.
+    // DeploymentDetail's SuccessSummary). Keep it aligned with
+    // `preferred_url` so a fresh containerized install does not surface the
+    // Traefik `{name}.localhost` fallback or a stale bridge-IP sslip URL —
+    // tracked as a High finding on PR #70.
+    url: port ? getPreferredProjectUrl(project.name, port) : null,
     preferred_url: port ? getPreferredProjectUrl(project.name, port) : null,
     urls: port ? getProjectUrls(project.name, port) : [],
     publicUrl,

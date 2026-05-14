@@ -92,6 +92,24 @@ export const deployToolDefs: ToolDef[] = [
       const wait = args['wait'] as boolean | undefined;
       const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
 
+      // Cache of project_id → assigned_port so formatJob can include
+      // localhost:{port} in the 'done' URL without going async. Populated
+      // lazily as we encounter new project IDs.
+      const portCache = new Map<string, number | undefined>();
+      const resolveAssignedPort = async (projectId: string): Promise<number | undefined> => {
+        if (portCache.has(projectId)) return portCache.get(projectId);
+        try {
+          const deployable = await appCtx.db.getDeployableForProject(projectId);
+
+          const port = deployable?.assigned_port ?? undefined;
+          portCache.set(projectId, port);
+          return port;
+        } catch {
+          portCache.set(projectId, undefined);
+          return undefined;
+        }
+      };
+
       const formatJob = (job: {
         projectId: string;
         projectName: string;
@@ -110,79 +128,94 @@ export const deployToolDefs: ToolDef[] = [
         buildStep?: number;
         buildStepTotal?: number;
         buildStepDesc?: string;
-      }) => ({
-        project_id: job.projectId,
-        name: job.projectName,
-        phase: job.phase,
-        elapsed: `${String(Math.round((Date.now() - job.startedAt.getTime()) / 1000))}s`,
-        error: job.errorSummary,
-        ...(job.phase === 'done'
-          ? {
-              preferred_url: getPreferredProjectUrl(job.projectName),
-              urls: getProjectUrls(job.projectName),
-              internal_host: projectContainerName(job.projectName),
-              docker_host: getDockerHostType(),
-              completed_at: job.completedAt?.toISOString(),
-              health: 'unknown',
-              _agent_guidance: {
-                next_steps: [
-                  'Call get_logs to confirm container is healthy',
-                  'Call get_system_stats if resource issues suspected.',
-                ],
-              },
-            }
-          : {}),
-        ...(job.phase === 'failed'
-          ? {
-              docker_host: getDockerHostType(),
-              ...(job.autoDiagnosis
-                ? {
-                    auto_diagnosis: {
-                      category: job.autoDiagnosis.category,
-                      tier: job.autoDiagnosis.tier,
-                      cause: job.autoDiagnosis.cause,
-                      auto_fixable: job.autoDiagnosis.autoFixable,
-                      ...(job.autoDiagnosis.suggestedAction
-                        ? { suggested_action: job.autoDiagnosis.suggestedAction }
-                        : {}),
-                    },
-                  }
-                : {}),
-              _agent_guidance: {
-                next_steps: [
-                  ...(!job.buildLogTail ? ['Call get_build_log for raw build output'] : []),
-                  ...(!job.autoDiagnosis ? ['Analyze the build log in your external agent'] : []),
-                  'Call get_deploy_history for deployment history and trends',
-                  'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
-                ],
-              },
-            }
-          : {}),
-        ...(job.phase === 'building' ||
-        job.phase === 'cloning' ||
-        job.phase === 'starting' ||
-        job.phase === 'queued'
-          ? {
-              _agent_guidance: {
-                next_steps: [
-                  'Deploy is in progress. Poll get_deploy_status periodically to check completion. Do NOT use wait=true — it blocks the agent from responding to the user.',
-                ],
-              },
-            }
-          : {}),
-        ...(job.buildLogTail && (job.phase === 'building' || job.phase === 'failed')
-          ? { build_log_tail: job.buildLogTail }
-          : {}),
-        ...(job.phase === 'building' &&
-        job.buildStep !== undefined &&
-        job.buildStepTotal !== undefined
-          ? {
-              build_step: job.buildStep,
-              build_step_total: job.buildStepTotal,
-              ...(job.buildStepDesc ? { build_step_desc: job.buildStepDesc } : {}),
-            }
-          : {}),
-      });
+      }) => {
+        // Pull the cached port (populated by primeAssignedPort before each
+        // formatJob call site). When the cache miss happens we still emit a
+        // URL, just without the localhost:{port} hint — strictly better than
+        // the pre-fix bridge-IP sslip URL.
+        const assignedPort = portCache.get(job.projectId);
+        return {
+          project_id: job.projectId,
+          name: job.projectName,
+          phase: job.phase,
+          elapsed: `${String(Math.round((Date.now() - job.startedAt.getTime()) / 1000))}s`,
+          error: job.errorSummary,
+          ...(job.phase === 'done'
+            ? {
+                preferred_url: getPreferredProjectUrl(job.projectName, assignedPort),
+                urls: getProjectUrls(job.projectName, assignedPort),
+                internal_host: projectContainerName(job.projectName),
+                docker_host: getDockerHostType(),
+                completed_at: job.completedAt?.toISOString(),
+                health: 'unknown',
+                _agent_guidance: {
+                  next_steps: [
+                    'Call get_logs to confirm container is healthy',
+                    'Call get_system_stats if resource issues suspected.',
+                  ],
+                },
+              }
+            : {}),
+          ...(job.phase === 'failed'
+            ? {
+                docker_host: getDockerHostType(),
+                ...(job.autoDiagnosis
+                  ? {
+                      auto_diagnosis: {
+                        category: job.autoDiagnosis.category,
+                        tier: job.autoDiagnosis.tier,
+                        cause: job.autoDiagnosis.cause,
+                        auto_fixable: job.autoDiagnosis.autoFixable,
+                        ...(job.autoDiagnosis.suggestedAction
+                          ? { suggested_action: job.autoDiagnosis.suggestedAction }
+                          : {}),
+                      },
+                    }
+                  : {}),
+                _agent_guidance: {
+                  next_steps: [
+                    ...(!job.buildLogTail ? ['Call get_build_log for raw build output'] : []),
+                    ...(!job.autoDiagnosis ? ['Analyze the build log in your external agent'] : []),
+                    'Call get_deploy_history for deployment history and trends',
+                    'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
+                  ],
+                },
+              }
+            : {}),
+          ...(job.phase === 'building' ||
+          job.phase === 'cloning' ||
+          job.phase === 'starting' ||
+          job.phase === 'queued'
+            ? {
+                _agent_guidance: {
+                  next_steps: [
+                    'Deploy is in progress. Poll get_deploy_status periodically to check completion. Do NOT use wait=true — it blocks the agent from responding to the user.',
+                  ],
+                },
+              }
+            : {}),
+          ...(job.buildLogTail && (job.phase === 'building' || job.phase === 'failed')
+            ? { build_log_tail: job.buildLogTail }
+            : {}),
+          ...(job.phase === 'building' &&
+          job.buildStep !== undefined &&
+          job.buildStepTotal !== undefined
+            ? {
+                build_step: job.buildStep,
+                build_step_total: job.buildStepTotal,
+                ...(job.buildStepDesc ? { build_step_desc: job.buildStepDesc } : {}),
+              }
+            : {}),
+        };
+      };
+
+      // Prime the port cache for the supplied project ids so formatJob can
+      // surface localhost:{assignedPort} synchronously. Best-effort: a DB
+      // error just leaves the cache empty and the URL falls back to the
+      // pre-port behavior, never silently picks up a bridge IP.
+      const primeAssignedPort = async (projectId: string): Promise<void> => {
+        await resolveAssignedPort(projectId);
+      };
 
       const tailLines = (value: string | null | undefined, lines: number): string | null => {
         if (!value) return null;
@@ -230,6 +263,7 @@ export const deployToolDefs: ToolDef[] = [
       if (deployLookupId) {
         const activeStatus = appCtx.jobManager.getStatus(deployLookupId);
         if (activeStatus) {
+          if (activeStatus.phase === 'done') await primeAssignedPort(activeStatus.projectId);
           const job = formatJob(activeStatus);
           return {
             active: activeStatus.phase === 'done' || activeStatus.phase === 'failed' ? 0 : 1,
@@ -291,6 +325,8 @@ export const deployToolDefs: ToolDef[] = [
           }
           throw new ProjectNotFoundError(missingProjectName);
         }
+
+        await primeAssignedPort(project.id);
 
         const buildProjectResult = (status?: {
           projectId: string;
@@ -523,7 +559,7 @@ export const deployToolDefs: ToolDef[] = [
         });
       }
 
-      const buildAllResult = () => {
+      const buildAllResult = async () => {
         const allJobs = appCtx.jobManager.getStatuses();
         const recentJobs = allJobs.filter(
           (j) =>
@@ -533,11 +569,14 @@ export const deployToolDefs: ToolDef[] = [
         const activeCount = recentJobs.filter(
           (j) => j.phase !== 'done' && j.phase !== 'failed',
         ).length;
+        await Promise.all(
+          recentJobs.filter((j) => j.phase === 'done').map((j) => primeAssignedPort(j.projectId)),
+        );
         return { active: activeCount, jobs: recentJobs.map(formatJob) };
       };
 
       if (!wait) {
-        return buildAllResult();
+        return await buildAllResult();
       }
 
       const trackedIds = new Set(
@@ -548,7 +587,7 @@ export const deployToolDefs: ToolDef[] = [
       );
 
       if (trackedIds.size === 0) {
-        return buildAllResult();
+        return await buildAllResult();
       }
 
       return await new Promise((resolve) => {
@@ -564,9 +603,11 @@ export const deployToolDefs: ToolDef[] = [
           clearTimeout(timer);
           unsubSuccess();
           unsubFailed();
-          const payload = buildAllResult() as Record<string, unknown>;
-          if (timedOut) payload['timeout'] = true;
-          resolve(payload);
+          void buildAllResult().then((payload) => {
+            const out = payload as Record<string, unknown>;
+            if (timedOut) out['timeout'] = true;
+            resolve(out);
+          });
         };
 
         const unsubSuccess = eventBus.on('deploy:success', () => {
@@ -583,9 +624,11 @@ export const deployToolDefs: ToolDef[] = [
             clearTimeout(timer);
             unsubSuccess();
             unsubFailed();
-            const payload = buildAllResult() as Record<string, unknown>;
-            payload['timeout'] = true;
-            resolve(payload);
+            void buildAllResult().then((payload) => {
+              const out = payload as Record<string, unknown>;
+              out['timeout'] = true;
+              resolve(out);
+            });
           },
           Math.max(1, timeoutSec) * 1000,
         );

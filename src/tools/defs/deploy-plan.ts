@@ -848,13 +848,22 @@ export const deployPlanToolDefs: ToolDef[] = [
                 : readiness.readiness === 'unhealthy'
                   ? 'unhealthy'
                   : 'timeout';
+              const finalProjectId = projectIdOverride ?? projectId;
+              const deployable = await appCtx.db
+                .getDeployableForProject(finalProjectId)
+                .catch(() => undefined);
+
+              const assignedPort = deployable?.assigned_port ?? undefined;
               resolve({
                 plan_id: plan.plan_id,
                 status: completionStatus,
                 project_name: result.project_name,
-                project_id: projectIdOverride ?? projectId,
-                preferred_url: payload.url ?? getPreferredProjectUrl(result.project_name),
-                urls: payload.url ? [payload.url] : getProjectUrls(result.project_name),
+                project_id: finalProjectId,
+                preferred_url:
+                  payload.url ?? getPreferredProjectUrl(result.project_name, assignedPort),
+                urls: payload.url
+                  ? [payload.url]
+                  : getProjectUrls(result.project_name, assignedPort),
                 internal_host: projectContainerName(result.project_name),
                 docker_host: getDockerHostType(),
                 readiness: readiness.readiness,
@@ -884,14 +893,23 @@ export const deployPlanToolDefs: ToolDef[] = [
                     }),
               });
             })
-            .catch((err: unknown) => {
+            .catch(async (err: unknown) => {
+              const finalProjectId = projectIdOverride ?? projectId;
+              const deployable = await appCtx.db
+                .getDeployableForProject(finalProjectId)
+                .catch(() => undefined);
+
+              const assignedPort = deployable?.assigned_port ?? undefined;
               resolve({
                 plan_id: plan.plan_id,
                 status: 'done',
                 project_name: result.project_name,
-                project_id: projectIdOverride ?? projectId,
-                preferred_url: payload.url ?? getPreferredProjectUrl(result.project_name),
-                urls: payload.url ? [payload.url] : getProjectUrls(result.project_name),
+                project_id: finalProjectId,
+                preferred_url:
+                  payload.url ?? getPreferredProjectUrl(result.project_name, assignedPort),
+                urls: payload.url
+                  ? [payload.url]
+                  : getProjectUrls(result.project_name, assignedPort),
                 internal_host: projectContainerName(result.project_name),
                 docker_host: getDockerHostType(),
                 readiness: 'starting',
