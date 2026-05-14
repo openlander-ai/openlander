@@ -49,6 +49,7 @@ import {
   buildAllClientConfigs,
   type McpClientId,
 } from '@/lib/mcp-config-snippets';
+import { copyToClipboard } from '@/lib/utils';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -187,9 +188,8 @@ export function MCPServer() {
   }
 
   async function copy(value: string, setFlag: (v: boolean) => void) {
-    if (typeof navigator === 'undefined' || !navigator.clipboard) return;
     try {
-      await navigator.clipboard.writeText(value);
+      await copyToClipboard(value);
       // Clear the previous "Copied" indicator immediately so only one
       // row shows the success state at a time, and cancel its pending
       // timer so it cannot race against this flag's lifecycle.
