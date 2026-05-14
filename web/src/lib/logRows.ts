@@ -49,9 +49,13 @@ export interface VirtualRow {
 /**
  * Walks `lines` left-to-right. The currently-emitting phase becomes
  * `active`; previous phases become `done`. On a failed build the last
- * touched phase becomes `failed`. On a successful build any phase
- * earlier than `lastPhase` that's still `pending` flips to `done`
- * (silent phases that the script skipped over).
+ * touched phase becomes `failed`. On a successful build, any phase
+ * that never emitted a line — whether *earlier* than the last emitted
+ * phase (e.g. cached image pull) or *later* (e.g. no Docker
+ * HEALTHCHECK so `healthcheck_wait` was never reached as an
+ * observable phase) — flips to `skipped`. That distinguishes "ran
+ * and finished" from "the pipeline did not need this step" so a
+ * green check never lies about a step that did not actually run.
  */
 export function derivePhaseStatus(
   lines: LogEntry[],
@@ -76,11 +80,16 @@ export function derivePhaseStatus(
     st[lastPhase] = 'failed';
   } else if (buildOutcome === 'success' && lastPhase) {
     st[lastPhase] = 'done';
-    let seenLast = false;
-    for (let i = PHASE_DEFS.length - 1; i >= 0; i--) {
+    // Any phase that never emitted a line on a successful pipeline
+    // is `skipped`, whether it sits before lastPhase (cached pull)
+    // or after it (e.g. no HEALTHCHECK so the rail never observes
+    // healthcheck_wait). Previously earlier silents were collapsed
+    // to `done` and trailing silents stayed `pending`, which (a)
+    // claimed the cached pull "ran" and (b) left the Health pip
+    // perpetually pending on services without a HEALTHCHECK.
+    for (let i = 0; i < PHASE_DEFS.length; i += 1) {
       const id = PHASE_DEFS[i].id as PhaseId;
-      if (id === lastPhase) seenLast = true;
-      else if (seenLast && st[id] === 'pending') st[id] = 'done';
+      if (st[id] === 'pending') st[id] = 'skipped';
     }
   }
   return st;

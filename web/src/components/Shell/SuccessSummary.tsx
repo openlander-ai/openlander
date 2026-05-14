@@ -30,8 +30,15 @@ export function SuccessSummary({
   onCopyUrl,
   onOpenUrl,
 }: SuccessSummaryProps) {
-  const fallbackUrl = `https://${serviceName}.{sslip}.sslip.io`;
-  const url = publicUrl ?? fallbackUrl;
+  // No silent fallback URL: rendering `https://{name}.{sslip}.sslip.io`
+  // as the live URL was leaking the literal `{sslip}` template through
+  // to users whenever the caller did not plumb `publicUrl`. If the
+  // public URL is not known, omit the row entirely; same policy for
+  // `internalPort` so we never render `:—` as a port suffix. The card
+  // still says "Deploy succeeded · 2m 48s" so the user sees the
+  // success signal, just without lies about the address.
+  const hasUrl = Boolean(publicUrl);
+  const hasInternal = typeof internalPort === 'number' && internalPort > 0;
   return (
     <div
       role="status"
@@ -47,43 +54,53 @@ export function SuccessSummary({
         )}
       </h4>
 
-      <div className="mt-3">
-        <div className="text-[11px] text-[color:var(--ol-fg-muted)]">Your app is live at:</div>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <Globe className="h-3.5 w-3.5 text-[color:var(--ol-primary)]" />
-          <a
-            href={publicUrl ?? '#'}
-            target={publicUrl ? '_blank' : undefined}
-            rel={publicUrl ? 'noreferrer' : undefined}
-            className="ol-mono break-all text-[12.5px] text-[color:var(--ol-primary)] hover:underline"
-          >
-            {url}
-          </a>
-          <button
-            type="button"
-            onClick={onCopyUrl}
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
-            aria-label="Copy URL"
-          >
-            <Copy className="h-3 w-3" />
-          </button>
-          <button
-            type="button"
-            onClick={onOpenUrl}
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
-            aria-label="Open in new tab"
-          >
-            <ExternalLink className="h-3 w-3" />
-          </button>
+      {(hasUrl || hasInternal) && (
+        <div className="mt-3">
+          {hasUrl && (
+            <>
+              <div className="text-[11px] text-[color:var(--ol-fg-muted)]">
+                Your app is live at:
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <Globe className="h-3.5 w-3.5 text-[color:var(--ol-primary)]" />
+                <a
+                  href={publicUrl ?? '#'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ol-mono break-all text-[12.5px] text-[color:var(--ol-primary)] hover:underline"
+                >
+                  {publicUrl}
+                </a>
+                <button
+                  type="button"
+                  onClick={onCopyUrl}
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
+                  aria-label="Copy URL"
+                >
+                  <Copy className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenUrl}
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
+                  aria-label="Open in new tab"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </button>
+              </div>
+            </>
+          )}
+          {hasInternal && (
+            <div className="ol-mono mt-1 text-[11px] text-[color:var(--ol-fg-muted)]">
+              Internal:{' '}
+              <span className="text-[color:var(--ol-fg-subtle)]">
+                http://ol-{serviceName}:{internalPort}
+              </span>{' '}
+              <span className="text-[color:var(--ol-fg-subtle)]">(for inter-container calls)</span>
+            </div>
+          )}
         </div>
-        <div className="ol-mono mt-1 text-[11px] text-[color:var(--ol-fg-muted)]">
-          Internal:{' '}
-          <span className="text-[color:var(--ol-fg-subtle)]">
-            http://ol-{serviceName}:{internalPort ?? '—'}
-          </span>{' '}
-          <span className="text-[color:var(--ol-fg-subtle)]">(for inter-container calls)</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
