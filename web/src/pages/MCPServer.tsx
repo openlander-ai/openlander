@@ -253,6 +253,10 @@ export function MCPServer() {
   const agentInstruction = buildAgentInstruction({ serverName: mcpInstance.serverName });
   const tryPrompt = t('mcpServer.instance.tryPrompt', { name: mcpInstance.serverName });
   const activeConfig = clientConfigs.find((c) => c.id === activeClient) ?? clientConfigs[0];
+  const instanceDirty = Boolean(
+    mcpInstance.instance && mcpInstance.draftName.trim() !== mcpInstance.instance.name,
+  );
+  const canCopyConfigWithToken = Boolean(revealed && newTokenPlain);
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
@@ -312,7 +316,7 @@ export function MCPServer() {
                 <Button
                   type="button"
                   onClick={() => void handleSaveInstanceName()}
-                  disabled={mcpInstance.loading || mcpInstance.saving}
+                  disabled={mcpInstance.loading || mcpInstance.saving || !instanceDirty}
                   size="sm"
                   variant="outline"
                 >
@@ -321,11 +325,14 @@ export function MCPServer() {
                     : t('mcpServer.instance.save')}
                 </Button>
               </div>
-              {(mcpInstance.instance?.isDefaultName || mcpInstance.error) && (
+              {mcpInstance.error && (
+                <p className="text-[11.5px] leading-snug text-[color:var(--ol-error)]">
+                  {t('mcpServer.instance.loadFailed')}
+                </p>
+              )}
+              {mcpInstance.instance?.isDefaultName && !mcpInstance.error && (
                 <p className="text-[11.5px] leading-snug text-[color:var(--ol-fg-muted)]">
-                  {mcpInstance.error
-                    ? t('mcpServer.instance.loadFailed')
-                    : t('mcpServer.instance.defaultWarning')}
+                  {t('mcpServer.instance.defaultWarning')}
                 </p>
               )}
             </div>
@@ -450,7 +457,7 @@ export function MCPServer() {
                     type="button"
                     onClick={() => setRegenerateConfirmOpen(true)}
                     disabled={working}
-                    className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)] disabled:cursor-progress disabled:opacity-60"
+                    className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-error)] transition-colors hover:bg-[color-mix(in_oklch,var(--ol-error)_9%,transparent)] disabled:cursor-progress disabled:opacity-60"
                   >
                     <RefreshCw className="h-3 w-3" />
                     {working
@@ -479,54 +486,64 @@ export function MCPServer() {
 
       {/* Setup card — one tab per supported MCP client, all driven by
           the shared snippet module so this page and the setup wizard
-          can't drift. Mounted only after Generate/Regenerate so the
-          snippet appears with the actual token baked in; before the
-          one-shot reveal there is nothing useful to paste, so the
-          preview is hidden rather than showing a `<your-token>`
-          placeholder the user can't act on. */}
-      {newTokenPlain && (
-        <OuterCard title={t('mcpServer.setup.title')} subtitle={t('mcpServer.setup.subtitle')}>
-          <Tabs
-            value={activeConfig.id}
-            onValueChange={(v) => {
-              setActiveClient(v as McpClientId);
-              setConfigCopied(false);
-            }}
-            className="flex flex-col gap-3"
-          >
-            <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-[color:var(--ol-panel-2)] p-1">
-              {clientConfigs.map((cfg) => (
-                <TabsTrigger key={cfg.id} value={cfg.id} className="text-[12px]">
-                  {cfg.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          can't drift. Always mounted: returning users still need the
+          client-specific config shape even though the backend cannot
+          re-display an existing token. */}
+      <OuterCard title={t('mcpServer.setup.title')} subtitle={t('mcpServer.setup.subtitle')}>
+        <Tabs
+          value={activeConfig.id}
+          onValueChange={(v) => {
+            setActiveClient(v as McpClientId);
+            setConfigCopied(false);
+          }}
+          className="flex flex-col gap-3"
+        >
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-[color:var(--ol-panel-2)] p-1">
             {clientConfigs.map((cfg) => (
-              <TabsContent key={cfg.id} value={cfg.id} className="m-0 flex flex-col gap-2">
-                {cfg.filename && (
-                  <p className="text-[11.5px] text-[color:var(--ol-fg-muted)]">{cfg.filename}</p>
-                )}
-                <pre className="ol-mono overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-[color:var(--ol-panel-2)] p-3 text-[12px] leading-relaxed text-[color:var(--ol-fg)]">
-                  <code>{cfg.snippet}</code>
-                </pre>
-              </TabsContent>
+              <TabsTrigger key={cfg.id} value={cfg.id} className="text-[12px]">
+                {cfg.label}
+              </TabsTrigger>
             ))}
-            <div className="flex items-center justify-between gap-3">
+          </TabsList>
+          {clientConfigs.map((cfg) => (
+            <TabsContent key={cfg.id} value={cfg.id} className="m-0 flex flex-col gap-2">
+              {cfg.filename && (
+                <p className="text-[11.5px] text-[color:var(--ol-fg-muted)]">{cfg.filename}</p>
+              )}
+              <pre className="ol-mono overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-[color:var(--ol-panel-2)] p-3 text-[12px] leading-relaxed text-[color:var(--ol-fg)]">
+                <code>{cfg.snippet}</code>
+              </pre>
+            </TabsContent>
+          ))}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1">
               <p className="text-[12px] text-[color:var(--ol-fg-muted)]">
-                {t('mcpServer.setup.restartHint')}
+                {canCopyConfigWithToken
+                  ? t('mcpServer.setup.restartHint')
+                  : t('mcpServer.setup.placeholderHint')}
               </p>
-              <button
-                type="button"
-                onClick={() => void copy(activeConfig.snippet, setConfigCopied)}
-                className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
-              >
-                {configCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{' '}
-                {configCopied ? t('mcpServer.row.copied') : t('mcpServer.setup.copyConfig')}
-              </button>
+              {!canCopyConfigWithToken && (
+                <p className="text-[11.5px] text-[color:var(--ol-fg-subtle)]">
+                  {t('mcpServer.setup.revealToCopyHint')}
+                </p>
+              )}
             </div>
-          </Tabs>
-        </OuterCard>
-      )}
+            <button
+              type="button"
+              onClick={() => void copy(activeConfig.snippet, setConfigCopied)}
+              disabled={!canCopyConfigWithToken}
+              className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {configCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{' '}
+              {configCopied
+                ? t('mcpServer.row.copied')
+                : canCopyConfigWithToken
+                  ? t('mcpServer.setup.copyConfig')
+                  : t('mcpServer.setup.copyNeedsReveal')}
+            </button>
+          </div>
+        </Tabs>
+      </OuterCard>
 
       {/* Recent agent calls */}
       <OuterCard
