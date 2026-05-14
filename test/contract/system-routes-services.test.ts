@@ -357,12 +357,12 @@ describe('system-routes /api/services wire shape contract', () => {
 describe("system-routes /api/services/:id/health — 'deploying' projection", () => {
   // The /health endpoint must surface `deploying` BEFORE running
   // docker inspect when the owning project is mid-redeploy
-  // (`projects.status = 'building'`). Otherwise a transient running
+  // (`building`). Otherwise a transient running
   // container during blue-green swap or late in a force redeploy gets
   // reported as `healthy` while the project is still building, which
   // shadows the topology `deploying` value via the ServiceDetail
   // header's `liveHealth.health ?? resolvedService?.health` chain.
-  it("returns { health: 'deploying' } when owning project status is 'building', regardless of docker inspect", async () => {
+  it("returns { health: 'deploying' } when owning project runtime status is 'building', regardless of docker inspect", async () => {
     const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
     const app = new Hono();
 
@@ -376,7 +376,7 @@ describe("system-routes /api/services/:id/health — 'deploying' projection", ()
     const mockCtx = {
       serviceManager: {
         // Even if docker inspect happens to think the container is
-        // running healthy, the DB project status MUST win.
+        // running healthy, the runtime project status MUST win.
         getInspectionHealth: vi
           .fn()
           .mockResolvedValue({ status: 'running', healthStatus: 'healthy' }),

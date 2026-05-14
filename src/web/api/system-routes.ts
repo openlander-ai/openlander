@@ -416,7 +416,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     const id = c.req.param('id');
     try {
       // Check DB state BEFORE docker inspection. During a redeploy the
-      // owning project is flipped to `status: 'building'` and may
+      // owning project runtime status is flipped to `building` and may
       // briefly run a new container before the lifecycle finishes —
       // none of those steady-state probes tell us the deploy is
       // actually done. Surfacing `deploying` from the project row is

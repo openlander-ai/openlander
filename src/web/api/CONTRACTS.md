@@ -106,7 +106,7 @@ GET /api/services/:id/health
   OR healthcheck is in `starting` (grace window — treated as healthy by default),
   OR no HEALTHCHECK declared (we can't prove unhealthy → assume healthy)
 - `"crashed"` — container running but healthcheck explicitly reports `unhealthy`
-- `"deploying"` — the owning project is mid-redeploy (`projects.status = 'building'`).
+- `"deploying"` — the owning project runtime status is mid-redeploy (`building`).
   Surfaced before docker inspection so a transient running/stopped container during
   blue-green swap or force redeploy does not flip the badge to a misleading
   `healthy` or `crashed`.

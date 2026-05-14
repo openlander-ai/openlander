@@ -2,7 +2,7 @@
  * Phase 4 validation — Blocker 3 fix
  *
  * Asserts the /api/projects/:id/topology endpoint health projection:
- *   - Project/service `building` status               → UI `deploying`
+ *   - Runtime `building` status                     → UI `deploying`
  *   - Docker `starting` (start_period grace window) → UI `healthy`
  *   - Docker `unhealthy`                            → UI `crashed`
  *   - Docker `healthy`                              → UI `healthy`
@@ -155,7 +155,7 @@ describe('project topology — health projection (Blocker 3)', () => {
     expect(await fetchTopologyHealth(ctx)).toBe('crashed');
   });
 
-  it("project status 'building' → UI 'deploying' while deploy is in progress", async () => {
+  it("runtime status 'building' → UI 'deploying' while deploy is in progress", async () => {
     const ctx = createCtx({
       inspectResult: { healthStatus: 'unhealthy' },
       status: 'building',
@@ -163,7 +163,7 @@ describe('project topology — health projection (Blocker 3)', () => {
     expect(await fetchTopologyHealth(ctx)).toBe('deploying');
   });
 
-  it("project status !== 'running' → UI 'crashed' (independent of inspect)", async () => {
+  it("runtime status !== 'running' → UI 'crashed' (independent of inspect)", async () => {
     const ctx = createCtx({
       inspectResult: { healthStatus: 'healthy' },
       status: 'stopped',
