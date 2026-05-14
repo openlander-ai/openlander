@@ -112,7 +112,7 @@ export interface DeployResult {
 
 export interface DeployLogSummary {
   id: string;
-  status: 'success' | 'failed' | 'cancelled';
+  status: 'success' | 'failed' | 'cancelled' | 'building';
   trigger: 'chat' | 'webhook' | 'api';
   triggerDetail?: string | null;
   commitSha: string | null;
@@ -120,6 +120,7 @@ export interface DeployLogSummary {
   durationMs: number | null;
   createdAt: string;
   failureSummary?: string | null;
+  isInProgress?: boolean;
 }
 
 export interface DeployLogDetail extends DeployLogSummary {

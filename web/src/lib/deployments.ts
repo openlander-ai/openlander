@@ -21,6 +21,12 @@ export function getDeploymentStatusMeta(status: DeployLogSummary['status']) {
         textClass: 'text-error',
         label: 'Failed',
       };
+    case 'building':
+      return {
+        dotClass: 'bg-agent animate-pulse',
+        textClass: 'text-agent',
+        label: 'Building',
+      };
     default:
       return {
         dotClass: 'bg-muted-foreground/40',
@@ -102,7 +108,7 @@ export function matchesDeploymentHistoryFilter(
   }
 
   if (filter === 'in_progress') {
-    return Boolean(deploy.isInProgress);
+    return deploy.status === 'building' || Boolean(deploy.isInProgress);
   }
 
   return deploy.status === filter;

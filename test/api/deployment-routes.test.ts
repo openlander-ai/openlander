@@ -128,6 +128,41 @@ describe('createDeploymentRoutes', () => {
     });
   });
 
+  it('prepends an in-flight deployment when the project deployable is building', async () => {
+    const project = makeProjectRow({ status: 'building' });
+    const service = makeServiceRow({
+      status: 'building' as ServiceRow['status'],
+      updated_at: '2026-01-03T04:05:06.000Z',
+    });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployLogs: vi.fn(async () => [makeDeployLog({ id: 'previous-deploy' })]),
+        getDeployableForProject: vi.fn(async () => service),
+      },
+    });
+
+    const res = await app.request('/api/projects/group-1/deployments');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      count: 2,
+      deployments: [
+        {
+          id: 'group-1__svc',
+          status: 'building',
+          trigger: 'api',
+          triggerDetail: 'deploy',
+          commitSha: null,
+          durationMs: null,
+          isInProgress: true,
+        },
+        { id: 'previous-deploy' },
+      ],
+    });
+  });
+
   it('returns deployment detail using canonical service ownership', async () => {
     const project = makeProjectRow();
     const service = makeServiceRow();
@@ -199,6 +234,39 @@ describe('createDeploymentRoutes', () => {
     await expect(res.json()).resolves.toMatchObject({
       count: 1,
       deployments: [{ id: 'deploy-service', commitMessage: 'Ship it' }],
+    });
+  });
+
+  it('prepends an in-flight service deployment while redeploy is running', async () => {
+    const project = makeProjectRow();
+    const service = makeServiceRow({
+      status: 'building' as ServiceRow['status'],
+      updated_at: '2026-01-03T04:05:06.000Z',
+    });
+    const getDeployLogs = vi.fn(async () => []);
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getService: vi.fn(async () => service),
+        getDeployLogs,
+      },
+    });
+
+    const res = await app.request('/api/projects/group-1/services/group-1__svc/deployments');
+
+    expect(res.status).toBe(200);
+    expect(getDeployLogs).toHaveBeenCalledWith('group-1__svc', 50, undefined);
+    await expect(res.json()).resolves.toMatchObject({
+      count: 1,
+      deployments: [
+        {
+          id: 'group-1__svc',
+          status: 'building',
+          isInProgress: true,
+          createdAt: '2026-01-03T04:05:06.000Z',
+        },
+      ],
     });
   });
 

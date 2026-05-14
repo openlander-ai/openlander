@@ -33,7 +33,7 @@ export function DeploymentsList({
   const { deployments, loading, error, refetch } = useProjectDeployments(projectId, projectStatus);
   const filteredDeployments = deployments.filter((deploy) => {
     if (statusFilter === 'all') return true;
-    if (statusFilter === 'in_progress') return false;
+    if (statusFilter === 'in_progress') return deploy.status === 'building' || deploy.isInProgress;
     return deploy.status === statusFilter;
   });
 
