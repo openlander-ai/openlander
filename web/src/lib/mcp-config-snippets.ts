@@ -36,16 +36,12 @@ export function buildClaudeCodeCmd({ endpoint, token, serverName }: BuildOptions
   return `claude mcp add ${serverKey(serverName)} --url ${endpoint} --header "Authorization: Bearer ${token}"`;
 }
 
-export function buildAgentInstruction({
-  endpoint,
-  serverName,
-}: Pick<BuildOptions, 'endpoint' | 'serverName'>): string {
+export function buildAgentInstruction({ serverName }: Pick<BuildOptions, 'serverName'>): string {
   const key = serverKey(serverName);
   return [
     `Use the MCP server "${key}" for OpenLander deploy, redeploy, logs, env vars, and diagnostics.`,
-    'Do not use local Docker, SSH, curl localhost, or docker compose unless I explicitly ask.',
+    'Do not use local Docker, SSH, curl, localhost, or docker compose unless I explicitly ask.',
     `If multiple OpenLander servers are connected, first call "${key}" get_instance_info and confirm it is the right instance.`,
-    `Endpoint: ${endpoint}`,
   ].join('\n');
 }
 
