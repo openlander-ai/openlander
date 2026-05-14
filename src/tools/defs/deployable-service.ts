@@ -16,6 +16,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import {
   buildDeployLockedResponse,
   buildPolicyRejectionResponse,
+  deployTriggerForToolContext,
   tryAcquireDeployLockOrResponse,
   tryRejectIfNotMutable,
 } from './helpers.js';
@@ -294,6 +295,7 @@ export async function runDeployableServiceAction(
       healthCheckPath: healthCheckPath?.trim() || undefined,
       cmd,
       lockSessionId: sessionId,
+      trigger: deployTriggerForToolContext(context),
     });
   };
 

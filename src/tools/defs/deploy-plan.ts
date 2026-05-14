@@ -10,7 +10,11 @@ import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.j
 import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
-import { buildDeployLockedResponse, tryAcquireDeployLockOrResponse } from './helpers.js';
+import {
+  buildDeployLockedResponse,
+  deployTriggerForToolContext,
+  tryAcquireDeployLockOrResponse,
+} from './helpers.js';
 import { runDeployableServiceAction } from './deployable-service.js';
 
 import {
@@ -365,6 +369,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
+        trigger: deployTriggerForToolContext(context),
       });
 
       return {
@@ -481,7 +486,12 @@ export const deployPlanToolDefs: ToolDef[] = [
       }
       let result: ExecutePlanResult;
       try {
-        result = await appCtx.planEngine.executePlan(planId, deployOnly, toolSessionId);
+        result = await appCtx.planEngine.executePlan(
+          planId,
+          deployOnly,
+          toolSessionId,
+          deployTriggerForToolContext(context),
+        );
       } catch (err) {
         if (err instanceof DeployLockedError) {
           return buildDeployLockedResponse(err);
@@ -672,6 +682,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
+        trigger: deployTriggerForToolContext(context),
       });
 
       if (plan.status === 'needs_input') {
@@ -708,7 +719,12 @@ export const deployPlanToolDefs: ToolDef[] = [
 
       let result: ExecutePlanResult;
       try {
-        result = await appCtx.planEngine.executePlan(plan.plan_id, undefined, toolSessionId);
+        result = await appCtx.planEngine.executePlan(
+          plan.plan_id,
+          undefined,
+          toolSessionId,
+          deployTriggerForToolContext(context),
+        );
       } catch (err) {
         if (err instanceof DeployLockedError) {
           return buildDeployLockedResponse(err);
