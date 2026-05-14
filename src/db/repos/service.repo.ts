@@ -298,13 +298,22 @@ export class ServiceRepo {
   }
 
   /**
-   * Returns all deployable (non-compose-child) services for a given project group.
+   * Returns user-addressable deployable services for a project group.
+   *
+   * A compose parent row (`kind='compose'`) is metadata for the stack as a
+   * whole; the actual runnable nodes are its `compose-child` rows. Keep this
+   * in sync with ProjectRepo serviceCount so list cards and detail pages agree.
    */
   async getDeployablesByGroup(projectId: string): Promise<ServiceRow[]> {
     const rows = await this.db
       .select()
       .from(services)
-      .where(and(eq(services.project_id, projectId), sql`${services.kind} != 'compose-child'`))
+      .where(
+        and(
+          eq(services.project_id, projectId),
+          notInArray(services.kind, [...MANAGED_SERVICE_KINDS, 'compose']),
+        ),
+      )
       .orderBy(desc(services.updated_at));
     return rows as ServiceRow[];
   }

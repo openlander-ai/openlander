@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Avoid reconnecting compose services to the shared `openlander` Docker network
   after they have already been attached with their DNS alias, fixing fresh
   compose deploys that failed with the same endpoint-conflict error.
+- Show compose child services in project topology and service detail lists
+  instead of showing only the compose parent metadata service.
 - Classified MCP/tool-initiated deploys and redeploys as MCP activity instead
   of `human` in the Activity feed.
 - Preserve Docker Compose service-name DNS aliases (for example `postgres` and
