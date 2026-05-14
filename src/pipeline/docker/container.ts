@@ -204,9 +204,19 @@ export class ContainerOps {
     }
 
     const additionalNetworks =
-      opts.networks
-        ?.slice(1)
-        .filter((networkName, index, arr) => arr.indexOf(networkName) === index) ?? [];
+      opts.networks?.slice(1).filter((networkName, index, arr) => {
+        if (arr.indexOf(networkName) !== index) return false;
+        if (networkName === networkMode) return false;
+        // Containers started on a project-scoped network are already
+        // attached to the shared OpenLander network above with the service
+        // DNS alias. Connecting it again in strict mode causes Docker's
+        // `endpoint already exists in network` failure on fresh compose
+        // deploys.
+        if (networkMode !== SHARED_NETWORK_NAME && networkName === SHARED_NETWORK_NAME) {
+          return false;
+        }
+        return true;
+      }) ?? [];
     try {
       for (const networkName of additionalNetworks) {
         await this.deps.connectToNetworkStrict(container.id, networkName);

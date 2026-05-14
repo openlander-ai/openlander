@@ -71,6 +71,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Clarified `openlander_monitor.probe_host` description so agents know
   `ol-svc-*` / `ol-{project}` internal Docker DNS names require `internal: true`
   to resolve — the backend cannot reach those from its own network namespace.
+- Clean up stale Docker network endpoints for compose services before
+  redeploying, after failed starts, and during rollback/stop so a failed compose
+  deploy cannot wedge future deploys with `endpoint already exists in network`.
+- Avoid reconnecting compose services to the shared `openlander` Docker network
+  after they have already been attached with their DNS alias, fixing fresh
+  compose deploys that failed with the same endpoint-conflict error.
 
 ## [0.1.1-rc.6] — 2026-05-13
 

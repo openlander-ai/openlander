@@ -80,10 +80,13 @@ describe('Your Agent (MCP) v0.1 surface', () => {
     expect(source).toMatch(/<TabsContent /);
     expect(snippetSource).toContain('mcpServers');
     expect(snippetSource).toContain('[serverKey(serverName)]');
-    // Setup card is mounted only after Generate/Regenerate so the snippet
-    // appears with the actual token baked in — no `<your-token>` preview
-    // before the one-shot reveal.
-    expect(source).toMatch(/\{newTokenPlain && \(\s*<OuterCard title=\{t\('mcpServer\.setup\.title'\)\}/);
+    // Setup card stays mounted for returning users. Existing tokens cannot
+    // be re-displayed, so the snippet remains visible with a placeholder
+    // and the copy button stays gated until a one-shot plaintext token is
+    // available in this browser session.
+    expect(source).toMatch(/<OuterCard title=\{t\('mcpServer\.setup\.title'\)\}/);
+    expect(source).toContain('!canCopyConfigWithToken');
+    expect(source).toContain("t('mcpServer.setup.placeholderHint')");
     // Hide still redacts the snippet within the same card by swapping in
     // the placeholder, so the ternary contract must stay.
     expect(source).toContain("'<your-token>'");
