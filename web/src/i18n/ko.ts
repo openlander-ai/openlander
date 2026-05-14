@@ -1327,4 +1327,11 @@ export const translations = {
     deployableService: 'Deployable service',
     managedService: 'Managed service',
   },
+  serviceDetail: {
+    deploy: {
+      failed: '배포에 실패했습니다.',
+      fallbackError: '배포 실패',
+      dismiss: '닫기',
+    },
+  },
 } as const;

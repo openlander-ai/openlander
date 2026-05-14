@@ -263,7 +263,17 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
     loading: deploymentsLoading,
     refetch: refetchDeployments,
   } = useServiceDeployments(projectId ?? '', id ?? '');
-  const hasRunning = deployments.some((d) => d.isInProgress);
+  // hasRunning intentionally reads from the live service status (`building`
+  // is what the backend sets on `updateProject` before
+  // `pipeline.redeploy()` runs), NOT from the deployments list.
+  // `useServiceDeployments()` hits `/api/projects/:p/services/:s/deployments`,
+  // which only returns persisted deploy_log rows — their `status` is one of
+  // `success | failed | cancelled` (terminal-only) and `isInProgress`
+  // exists only on the client-side `DeploymentViewModel` shape, not on
+  // wire-format `DeployLogSummary`. Using the service status keeps the
+  // button in sync with redeploys started in other tabs / via MCP / via
+  // the webhook, which a deploy-log scan can never catch.
+  const hasRunning = resolvedService?.status === 'building';
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
 
@@ -276,7 +286,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
       await redeployService(projectId, id);
       refetchDeployments();
     } catch (err) {
-      setDeployError(err instanceof Error ? err.message : 'Deploy failed');
+      setDeployError(err instanceof Error ? err.message : t('serviceDetail.deploy.fallbackError'));
     } finally {
       setDeploying(false);
     }
@@ -415,14 +425,14 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
             className="mx-5 mt-4 flex items-start justify-between gap-3 rounded-md border border-[color:var(--ol-error)] bg-[color-mix(in_oklch,var(--ol-error)_5%,transparent)] px-3 py-2 text-[12px] text-[color:var(--ol-error)]"
           >
             <span>
-              Deploy failed. <span className="ol-mono">{deployError}</span>
+              {t('serviceDetail.deploy.failed')} <span className="ol-mono">{deployError}</span>
             </span>
             <button
               type="button"
               onClick={() => setDeployError(null)}
               className="shrink-0 text-[color:var(--ol-error)] underline-offset-2 hover:underline"
             >
-              Dismiss
+              {t('serviceDetail.deploy.dismiss')}
             </button>
           </div>
         )}

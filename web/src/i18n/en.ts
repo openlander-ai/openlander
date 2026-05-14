@@ -1147,6 +1147,13 @@ export const translations = {
     deployableService: 'Deployable service',
     managedService: 'Managed service',
   },
+  serviceDetail: {
+    deploy: {
+      failed: 'Deploy failed.',
+      fallbackError: 'Deploy failed',
+      dismiss: 'Dismiss',
+    },
+  },
 } as const;
 
 export type TranslationType = typeof translations;
