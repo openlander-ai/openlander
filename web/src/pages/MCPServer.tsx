@@ -257,6 +257,18 @@ export function MCPServer() {
     mcpInstance.instance && mcpInstance.draftName.trim() !== mcpInstance.instance.name,
   );
   const canCopyConfigWithToken = Boolean(revealed && newTokenPlain);
+  // Three-state label for the disabled Copy button on the Setup card so
+  // the hint matches the actual action required:
+  //   - no token issued yet → tell the user to Generate
+  //   - token issued but client cannot re-display it (returning user)
+  //     → only path forward is Regenerate, since Reveal needs a fresh
+  //     `newTokenPlain` from this session
+  //   - newTokenPlain in memory but currently hidden → Reveal
+  const copyDisabledLabel = !activeToken
+    ? t('mcpServer.setup.copyNeedsGenerate')
+    : !newTokenPlain
+      ? t('mcpServer.setup.copyNeedsRegenerate')
+      : t('mcpServer.setup.copyNeedsReveal');
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
@@ -457,7 +469,12 @@ export function MCPServer() {
                     type="button"
                     onClick={() => setRegenerateConfirmOpen(true)}
                     disabled={working}
-                    className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-error)] transition-colors hover:bg-[color-mix(in_oklch,var(--ol-error)_9%,transparent)] disabled:cursor-progress disabled:opacity-60"
+                    // sm:ml-auto separates the destructive action from
+                    // adjacent lightweight Reveal/Hide/Copy buttons on
+                    // wider rows so a Regenerate misclick is less likely.
+                    // On narrow viewports the row wraps and the margin
+                    // collapses naturally.
+                    className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-error)] transition-colors hover:bg-[color-mix(in_oklch,var(--ol-error)_9%,transparent)] disabled:cursor-progress disabled:opacity-60 sm:ml-auto"
                   >
                     <RefreshCw className="h-3 w-3" />
                     {working
@@ -539,7 +556,7 @@ export function MCPServer() {
                 ? t('mcpServer.row.copied')
                 : canCopyConfigWithToken
                   ? t('mcpServer.setup.copyConfig')
-                  : t('mcpServer.setup.copyNeedsReveal')}
+                  : copyDisabledLabel}
             </button>
           </div>
         </Tabs>
