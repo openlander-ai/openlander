@@ -253,8 +253,15 @@ export function MCPServer() {
   const agentInstruction = buildAgentInstruction({ serverName: mcpInstance.serverName });
   const tryPrompt = t('mcpServer.instance.tryPrompt', { name: mcpInstance.serverName });
   const activeConfig = clientConfigs.find((c) => c.id === activeClient) ?? clientConfigs[0];
+  // `draftName` is the live input value; `instance.name` is what the
+  // server has. Save is enabled only when there is a real, trimmed,
+  // *different* value to send — so whitespace-only and empty drafts no
+  // longer pay a server roundtrip just to be rejected.
+  const draftNameTrimmed = mcpInstance.draftName.trim();
   const instanceDirty = Boolean(
-    mcpInstance.instance && mcpInstance.draftName.trim() !== mcpInstance.instance.name,
+    mcpInstance.instance &&
+    draftNameTrimmed.length > 0 &&
+    draftNameTrimmed !== mcpInstance.instance.name,
   );
   const canCopyConfigWithToken = Boolean(revealed && newTokenPlain);
   // Three-state label for the disabled Copy button on the Setup card so
