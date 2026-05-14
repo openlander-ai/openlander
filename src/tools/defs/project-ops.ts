@@ -1,6 +1,6 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
-import { getPreferredProjectUrl, getProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
+import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import { emptySchema } from './schemas.js';
 import type { ToolDef } from './types.js';
@@ -88,7 +88,7 @@ export const projectOpsToolDefs: ToolDef[] = [
               port,
               containerName: containerId ? projectContainerName(project.name) : null,
               network: SHARED_NETWORK_NAME,
-              url: port ? getProjectUrl(project.name) : null,
+              url: port ? getPreferredProjectUrl(project.name, port) : null,
               preferred_url: port ? getPreferredProjectUrl(project.name, port) : null,
               urls: port ? getProjectUrls(project.name, port) : [],
               publicUrl,
@@ -122,7 +122,7 @@ export const projectOpsToolDefs: ToolDef[] = [
             visibility: project.visibility,
             port,
             containerName: containerId ? projectContainerName(project.name) : null,
-            url: port ? getProjectUrl(project.name) : null,
+            url: port ? getPreferredProjectUrl(project.name, port) : null,
             preferred_url: port ? getPreferredProjectUrl(project.name, port) : null,
             publicUrl,
           };

@@ -25,6 +25,25 @@ type AppCtx = ToolContext['appCtx'];
 type ServiceRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getService']>>>;
 type DeploymentReadiness = 'healthy' | 'starting' | 'unhealthy' | 'no_healthcheck';
 
+// Pipeline success events emit `url` for both internal and tunnel deploys —
+// most regular deploys pass an internal getProjectUrl-derived value
+// (`{name}.localhost` or `*.sslip.io`) which is exactly what we want to
+// replace with the port-aware preferred URL. Only treat the payload URL as
+// authoritative when it advertises an external host (tunnel, custom domain,
+// configured OPENLANDER_PUBLIC_HOST, etc.).
+function isExternalDeployUrl(url: string | undefined | null): url is string {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname;
+    if (host === 'localhost') return false;
+    if (host.endsWith('.localhost')) return false;
+    if (host.endsWith('.sslip.io')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 interface ReadinessResult {
   readiness: DeploymentReadiness;
   ready: boolean;
@@ -854,16 +873,16 @@ export const deployPlanToolDefs: ToolDef[] = [
                 .catch(() => undefined);
 
               const assignedPort = deployable?.assigned_port ?? undefined;
+              const portAwareUrls = getProjectUrls(result.project_name, assignedPort);
+              const portAwarePreferred = getPreferredProjectUrl(result.project_name, assignedPort);
+              const externalUrl = isExternalDeployUrl(payload.url) ? payload.url : undefined;
               resolve({
                 plan_id: plan.plan_id,
                 status: completionStatus,
                 project_name: result.project_name,
                 project_id: finalProjectId,
-                preferred_url:
-                  payload.url ?? getPreferredProjectUrl(result.project_name, assignedPort),
-                urls: payload.url
-                  ? [payload.url]
-                  : getProjectUrls(result.project_name, assignedPort),
+                preferred_url: externalUrl ?? portAwarePreferred,
+                urls: externalUrl ? [externalUrl, ...portAwareUrls] : portAwareUrls,
                 internal_host: projectContainerName(result.project_name),
                 docker_host: getDockerHostType(),
                 readiness: readiness.readiness,
@@ -900,16 +919,16 @@ export const deployPlanToolDefs: ToolDef[] = [
                 .catch(() => undefined);
 
               const assignedPort = deployable?.assigned_port ?? undefined;
+              const portAwareUrls = getProjectUrls(result.project_name, assignedPort);
+              const portAwarePreferred = getPreferredProjectUrl(result.project_name, assignedPort);
+              const externalUrl = isExternalDeployUrl(payload.url) ? payload.url : undefined;
               resolve({
                 plan_id: plan.plan_id,
                 status: 'done',
                 project_name: result.project_name,
                 project_id: finalProjectId,
-                preferred_url:
-                  payload.url ?? getPreferredProjectUrl(result.project_name, assignedPort),
-                urls: payload.url
-                  ? [payload.url]
-                  : getProjectUrls(result.project_name, assignedPort),
+                preferred_url: externalUrl ?? portAwarePreferred,
+                urls: externalUrl ? [externalUrl, ...portAwareUrls] : portAwareUrls,
                 internal_host: projectContainerName(result.project_name),
                 docker_host: getDockerHostType(),
                 readiness: 'starting',
