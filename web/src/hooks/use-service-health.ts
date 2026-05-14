@@ -42,6 +42,13 @@ export function useServiceHealth(serviceId: string | null): UseServiceHealthResu
       setHealth(result);
       setError(null);
     } catch (err) {
+      // Clear health on fetch failure so a stale value (e.g. the
+      // last `deploying` before a failed deploy 404s the endpoint)
+      // does not pin the badge while topology has already moved on
+      // to `crashed`. ServiceDetailV2 reads
+      // `liveHealth.health ?? resolvedService?.health`, so null lets
+      // the topology snapshot take over.
+      setHealth(null);
       setError(err instanceof Error ? err.message : 'Failed to fetch health');
     } finally {
       setIsLoading(false);
