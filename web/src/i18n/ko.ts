@@ -76,6 +76,33 @@ export const translations = {
     primaryNavAria: '주요 탐색',
     versionAria: '버전 v0.1',
   },
+  topBar: {
+    // Chrome — short prefix label + status sentinel match agent-chip parallel
+    // with status pills elsewhere (idle stays English like Running/Stopped).
+    agentChipPrefix: 'Agent',
+    agentIdleStatus: 'idle',
+    // Content — sidebar toggle + breadcrumb a11y labels + descriptive tooltip.
+    sidebarToggleLabel: '사이드바 토글',
+    breadcrumbAria: '경로 탐색',
+    agentChipTitle: '에이전트 활동 — 에이전트가 한 작업을 확인하세요',
+  },
+  agentGuide: {
+    // Content — identity label + a11y prose. agentName follows the "generic
+    // placeholder until backend exposes clientInfo.name" comment in
+    // AgentGuideDialog and reads natively in Korean.
+    agentName: '내 에이전트',
+    closeDialogLabel: '대화상자 닫기',
+    connectAria: '에이전트 연결',
+    copy: {
+      // Chrome — bare verb + post-action verb (button state labels).
+      label: 'Copy',
+      success: 'Copied',
+      // Content — disabled state explanation (used as both tooltip and
+      // visible label) + tooltip prose for the enabled state.
+      disabledMessage: '먼저 에이전트를 연결하세요',
+      enabledTitle: '프롬프트 복사',
+    },
+  },
   account: {
     popover: {
       // aria-label / title attribute — kept in Korean so Korean screen

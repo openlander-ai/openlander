@@ -71,6 +71,24 @@ export const translations = {
     primaryNavAria: 'Primary navigation',
     versionAria: 'Version v0.1',
   },
+  topBar: {
+    sidebarToggleLabel: 'Toggle sidebar',
+    breadcrumbAria: 'Breadcrumb',
+    agentChipPrefix: 'Agent',
+    agentChipTitle: 'Agent activity — see what your agent did',
+    agentIdleStatus: 'idle',
+  },
+  agentGuide: {
+    closeDialogLabel: 'Close dialog',
+    agentName: 'Your agent',
+    connectAria: 'Connect your agent',
+    copy: {
+      label: 'Copy',
+      success: 'Copied',
+      disabledMessage: 'Connect agent first',
+      enabledTitle: 'Copy prompt',
+    },
+  },
   account: {
     popover: {
       openLabel: 'Open settings menu',

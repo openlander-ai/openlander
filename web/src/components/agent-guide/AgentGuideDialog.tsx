@@ -81,7 +81,7 @@ export function AgentGuideDialog({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            aria-label="Close dialog"
+            aria-label={t('agentGuide.closeDialogLabel')}
             className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[color:var(--ol-fg-subtle)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
           >
             <X className="h-3.5 w-3.5" />
@@ -95,7 +95,7 @@ export function AgentGuideDialog({
               // expose the connecting client's name (Claude vs Cursor vs
               // Windsurf). Use a generic label until the backend captures
               // clientInfo.name on connect — better-than-wrong.
-              agentName="Your agent"
+              agentName={t('agentGuide.agentName')}
               lastActiveLabel={
                 lastSession
                   ? formatRelativeTime(lastSession.lastActivityAt, t)
@@ -170,7 +170,7 @@ function ConnectAgentBanner({ onOpenMcpSetup }: { onOpenMcpSetup: () => void }) 
   return (
     <div
       role="region"
-      aria-label="Connect your agent"
+      aria-label={t('agentGuide.connectAria')}
       className="flex items-start gap-3 rounded-lg border border-[color:var(--ol-warning)]/30 bg-[color:var(--ol-warning-soft)]/40 px-3.5 py-3"
     >
       <div
@@ -200,6 +200,7 @@ function ConnectAgentBanner({ onOpenMcpSetup }: { onOpenMcpSetup: () => void }) 
 
 function PromptCard({ text, hint, disabled }: { text: string; hint?: string; disabled: boolean }) {
   const [copied, setCopied] = useState(false);
+  const { t } = useLanguage();
 
   const handleCopy = () => {
     if (disabled) return;
@@ -242,7 +243,7 @@ function PromptCard({ text, hint, disabled }: { text: string; hint?: string; dis
         onClick={handleCopy}
         disabled={disabled}
         aria-disabled={disabled}
-        title={disabled ? 'Connect agent first' : 'Copy prompt'}
+        title={disabled ? t('agentGuide.copy.disabledMessage') : t('agentGuide.copy.enabledTitle')}
         className={cn(
           'flex shrink-0 items-center gap-1 self-center rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors',
           disabled
@@ -253,17 +254,17 @@ function PromptCard({ text, hint, disabled }: { text: string; hint?: string; dis
         {disabled ? (
           <>
             <Lock className="h-3 w-3" />
-            Connect agent first
+            {t('agentGuide.copy.disabledMessage')}
           </>
         ) : copied ? (
           <>
             <Check className="h-3 w-3" />
-            Copied
+            {t('agentGuide.copy.success')}
           </>
         ) : (
           <>
             <Copy className="h-3 w-3" />
-            Copy
+            {t('agentGuide.copy.label')}
           </>
         )}
       </button>
