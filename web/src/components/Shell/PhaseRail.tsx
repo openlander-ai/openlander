@@ -6,11 +6,15 @@
  *   active  → primary (with subtle pulse)
  *   done    → success + check
  *   failed  → error + X
+ *   skipped → muted with dashed border + dash glyph; used for cached
+ *             pulls, missing HEALTHCHECK, or any silent phase on a
+ *             successful pipeline so a green "done" never lies about
+ *             a step that did not actually run.
  */
-import { Check, X } from 'lucide-react';
+import { Check, Minus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type PhaseStatus = 'pending' | 'active' | 'done' | 'failed';
+export type PhaseStatus = 'pending' | 'active' | 'done' | 'failed' | 'skipped';
 
 export const PHASE_DEFS = [
   { id: 'clone', label: 'Clone' },
@@ -54,10 +58,14 @@ export function PhaseRail({ status }: PhaseRailProps) {
                   'border border-[color:var(--ol-success)] bg-[color:var(--ol-success-soft)] text-[color:var(--ol-success)]',
                 st === 'failed' &&
                   'border border-[color:var(--ol-error)] bg-[color:var(--ol-error-soft)] font-medium text-[color:var(--ol-error)]',
+                st === 'skipped' &&
+                  'border border-dashed border-[color:var(--ol-border-subtle)] text-[color:var(--ol-fg-subtle)]',
               )}
+              title={st === 'skipped' ? 'Skipped (cached or not needed)' : undefined}
             >
               {st === 'done' && <Check aria-hidden className="h-3 w-3" />}
               {st === 'failed' && <X aria-hidden className="h-3 w-3" />}
+              {st === 'skipped' && <Minus aria-hidden className="h-3 w-3" />}
               {st === 'active' && (
                 <span
                   aria-hidden

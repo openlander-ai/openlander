@@ -40,9 +40,10 @@ import {
   Copy,
   Download,
   Info,
+  Loader2,
   StopCircle,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, copyToClipboard } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { cancelDeployment } from '@/lib/api';
 import { LOG_SCRIPT_BASE, LOG_SCRIPT_FAIL, type LogEntry } from '@/lib/logScripts';
@@ -271,6 +272,31 @@ export function LogViewer({
 
   const showReconNotice = connState === 'RECONNECTING' || connState === 'BACKFILLING';
 
+  // ─── Copy handler ──────────────────────────────────────────────────────
+  // Copies all currently-loaded log lines as plain text. Drops renderer-only
+  // `{progress}` placeholders and strips the `{step}` display marker while
+  // keeping the underlying Docker step/error text greppable for bug reports.
+  // "Visible range" in the button title is a historical label; the actual
+  // scope is the loaded buffer, matching common CI log viewer behavior.
+  const [logCopied, setLogCopied] = useState(false);
+  const handleCopyLog = useCallback(() => {
+    // Preserve every real log line; only drop `{progress}` placeholder
+    // rows (they render as an animated bar, not text). `{step}#N`
+    // lines are real build/error content — the renderer just strips
+    // the `{step}` prefix marker for display, so we do the same when
+    // copying instead of dropping the line and silently losing the
+    // step's error output.
+    const text = lines
+      .filter((l) => l.payload && l.payload !== '{progress}')
+      .map((l) => (l.payload.startsWith('{step}') ? l.payload.slice('{step}'.length) : l.payload))
+      .join('\n');
+    if (!text) return;
+    void copyToClipboard(text).then(() => {
+      setLogCopied(true);
+      window.setTimeout(() => setLogCopied(false), 1400);
+    });
+  }, [lines]);
+
   // ─── Cancel handler ────────────────────────────────────────────────────
   // Two paths:
   //   - Real SSE stream backed by `useDeployLogStream`: POST
@@ -342,6 +368,18 @@ export function LogViewer({
               </span>
             )}
             <HeaderPill connState={connState} buildOutcome={buildOutcome} liveDur={liveDur} />
+            {(connState === 'LIVE' ||
+              connState === 'CONNECTING' ||
+              connState === 'RECONNECTING' ||
+              connState === 'BACKFILLING') && (
+              // Explicit spinning ring next to the pill — the pill's
+              // pulsing dot is too subtle to read as "still working"
+              // when log lines stream in bursts.
+              <Loader2
+                aria-hidden
+                className="h-3.5 w-3.5 animate-spin text-[color:var(--log-header-muted)]"
+              />
+            )}
             <FsmBadge connState={connState} viewState={viewState} />
           </div>
           {headerSubtitle && (
@@ -351,8 +389,12 @@ export function LogViewer({
           )}
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-          <HeaderActionButton icon={<Copy className="h-3.5 w-3.5" />} title="Copy visible range">
-            Copy
+          <HeaderActionButton
+            icon={<Copy className="h-3.5 w-3.5" />}
+            title="Copy log to clipboard"
+            onClick={handleCopyLog}
+          >
+            {logCopied ? 'Copied' : 'Copy'}
           </HeaderActionButton>
           {onDownload && (
             <HeaderActionButton
