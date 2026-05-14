@@ -116,16 +116,25 @@ const ACTOR_ICON: Partial<Record<Actor, LucideIcon>> = {
   webhook: Webhook,
 };
 
-/** Strip the legacy `{projectId}__svc` suffix used by single-deployable
- *  groups so we don't render an opaque internal id. Returns null when the
- *  result is just the project id again (anonymous service). */
-function fallbackServiceName(
-  serviceId: string | null | undefined,
-  projectId: string | null | undefined,
+/** Normalize the service segment we render in the row meta. The legacy
+ *  `{project}__svc` shape is used for single-deployable groups where the
+ *  service is conceptually the project itself — both the row's
+ *  `event.service` (id) and `event.serviceName` (the services-row name)
+ *  can end with `__svc`, so this strip has to run on the chosen
+ *  candidate, not only on the raw id fallback.
+ *
+ *  Returns `null` when the stripped result matches any known project
+ *  identifier (display name OR id) — at that point the service is the
+ *  anonymous single-deployable and the meta line is cleaner without it. */
+function normalizeServiceSegment(
+  raw: string | null | undefined,
+  ...projectAliases: Array<string | null | undefined>
 ): string | null {
-  if (!serviceId) return null;
-  const stripped = serviceId.endsWith('__svc') ? serviceId.slice(0, -'__svc'.length) : serviceId;
-  if (stripped === projectId) return null;
+  if (!raw) return null;
+  const stripped = raw.endsWith('__svc') ? raw.slice(0, -'__svc'.length) : raw;
+  for (const alias of projectAliases) {
+    if (alias && stripped === alias) return null;
+  }
   return stripped;
 }
 
@@ -160,7 +169,15 @@ export function ActivityRow({
   const projectDisplay = event.project
     ? (resolveProjectName?.(event.project) ?? event.projectName ?? event.project)
     : null;
-  const serviceDisplay = event.serviceName ?? fallbackServiceName(event.service, event.project);
+  // Pick the best service candidate (backend-shipped name first, then raw
+  // id) and run it through the shared normalizer so `${project}__svc`
+  // suffixes collapse out regardless of which field carried them.
+  const serviceDisplay = normalizeServiceSegment(
+    event.serviceName ?? event.service,
+    event.project,
+    event.projectName,
+    projectDisplay,
+  );
 
   const isDeploy = isKindInGroup(event.kind, 'deploys');
   const canOpenDeployment = isDeploy && onOpenDeployment != null && event.project != null;
