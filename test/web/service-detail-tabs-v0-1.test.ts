@@ -128,6 +128,12 @@ describe('Service detail v0.1 tabs', () => {
     expect(source).not.toMatch(/fixed inset-0 z-40 flex items-stretch bg-black\/60/);
   });
 
+  it('starts service deploys asynchronously and opens the live deployment log page', () => {
+    expect(source).toMatch(/redeployService\(projectId,\s*id,\s*\{\s*async:\s*true\s*\}\)/);
+    expect(source).toMatch(/const deploymentId = result\.deploymentId \?\? result\.serviceId \?\? id/);
+    expect(source).toMatch(/navigate\(`\/projects\/\$\{projectId\}\/deployments\/\$\{deploymentId\}`\)/);
+  });
+
   it('keeps service deletion typed-confirm (Group A defensive UI path)', () => {
     expect(source).toContain('expectedDeleteSlug');
     expect(source).toContain("`${projectName}/${service.name}`");

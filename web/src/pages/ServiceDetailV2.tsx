@@ -264,14 +264,10 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
     loading: deploymentsLoading,
     refetch: refetchDeployments,
   } = useServiceDeployments(projectId ?? '', id ?? '');
-  // Local-only throttle for the Deploy button. We intentionally do NOT
-  // try to derive a "deploy in progress on the server" signal in the
-  // frontend: useServiceDeployments() returns terminal deploy_logs only,
-  // and service `building` status is a lagging proxy for the backend
-  // lock. Concurrent deploys are authoritatively rejected by the
-  // backend (409 / DEPLOY_LOCKED) and rendered as a friendly banner —
-  // making the backend the single source of truth and keeping the
-  // button free of stale-signal disables.
+  // Local-only throttle for the Deploy button. The backend remains the
+  // source of truth for same-service concurrency (409 / DEPLOY_LOCKED),
+  // while the accepted path immediately navigates to the in-flight log
+  // surface keyed by the service id.
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
 
@@ -280,8 +276,10 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
     setDeployError(null);
     setDeploying(true);
     try {
-      await redeployService(projectId, id);
+      const result = await redeployService(projectId, id, { async: true });
       refetchDeployments();
+      const deploymentId = result.deploymentId ?? result.serviceId ?? id;
+      navigate(`/projects/${projectId}/deployments/${deploymentId}`);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'DEPLOY_LOCKED') {
         setDeployError(t('serviceDetail.deploy.locked'));

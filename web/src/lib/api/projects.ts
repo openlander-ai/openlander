@@ -142,11 +142,18 @@ export async function deployService(input: DeployServiceInput): Promise<DeploySe
 
 // Redeploy an existing service using its stored config. For git sources
 // this fetches the latest HEAD of the saved branch; for image sources it
-// re-pulls the saved image reference. Body is intentionally empty —
-// strategy / no_cache / health-check overrides belong to Settings, not
-// the header Deploy button.
-export async function redeployService(projectId: string, serviceId: string): Promise<DeployResult> {
-  return apiPost<DeployResult>(`/api/projects/${projectId}/services/${serviceId}/deploy`, {});
+// re-pulls the saved image reference. The service-detail Deploy button
+// uses async mode so the UI can jump straight to the live log stream.
+export async function redeployService(
+  projectId: string,
+  serviceId: string,
+  options?: { async?: boolean },
+): Promise<DeployResult> {
+  const query = options?.async === true ? '?async=true' : '';
+  return apiPost<DeployResult>(
+    `/api/projects/${projectId}/services/${serviceId}/deploy${query}`,
+    {},
+  );
 }
 
 export async function createProject(

@@ -102,6 +102,11 @@ export interface SystemStats {
 export interface DeployResult {
   success: boolean;
   projectId?: string;
+  serviceId?: string;
+  deploymentId?: string;
+  status?: string;
+  statusUrl?: string;
+  logUrl?: string;
   error?: string;
 }
 
