@@ -377,6 +377,8 @@ export const translations = {
       banner:
         'These are deployable services. Use the MCP service_id shown below for env vars, redeploys, domains, and diagnostics.',
       serviceId: 'MCP service_id: {id}',
+      serviceIdTooltip:
+        'Pass this to MCP actions like redeploy_app, set_env_vars, and diagnose_service.',
     },
     domains: {
       empty: 'No domains attached yet.',
@@ -535,7 +537,7 @@ export const translations = {
     },
   },
   services: {
-    title: 'Services',
+    title: 'Managed Services',
     createService: 'Create Service',
     subtitle:
       'Managed services are databases, caches, and shared infrastructure. Apps connect to them through env vars.',
@@ -1133,6 +1135,17 @@ export const translations = {
       bitbucket: 'Bitbucket',
       comingInV02: 'Coming in v0.2',
     },
+  },
+  // Canonical OpenLander vocabulary. Kept in English across locales by
+  // project policy (see CONTRIBUTING / agent memory); descriptive copy
+  // around these terms still translates normally. Chrome that names the
+  // entity kind — header kickers, breadcrumbs, page badges — should
+  // pull from here instead of hardcoding the term so terminology
+  // changes and tests land in a single place.
+  vocab: {
+    projectGroup: 'Project group',
+    deployableService: 'Deployable service',
+    managedService: 'Managed service',
   },
 } as const;
 
