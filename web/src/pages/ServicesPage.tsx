@@ -80,6 +80,7 @@ export function ServicesPage() {
     return (
       <div className="flex flex-col h-full w-full">
         <div className="p-6 xl:p-8 space-y-6">
+          <ServicesIntro />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
               <div
@@ -101,6 +102,7 @@ export function ServicesPage() {
     return (
       <div className="flex flex-col h-full w-full">
         <div className="p-6 xl:p-8 space-y-6">
+          <ServicesIntro />
           <PageEmptyState
             icon={Database}
             title={t('services.empty.title')}
@@ -125,6 +127,7 @@ export function ServicesPage() {
     <div className="flex flex-col h-full w-full">
       <div className="p-6 xl:p-8 space-y-6">
         <AgentGuideDialog open={guideOpen} onOpenChange={setGuideOpen} kind="add-managed-db" />
+        <ServicesIntro />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <button
@@ -242,6 +245,19 @@ export function ServicesPage() {
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ServicesIntro() {
+  const { t } = useLanguage();
+  return (
+    <div>
+      <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+        {t('services.title')}
+      </h1>
+      <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{t('services.subtitle')}</p>
+      <p className="mt-1 max-w-2xl text-xs text-muted-foreground">{t('services.mcpHint')}</p>
     </div>
   );
 }

@@ -101,7 +101,7 @@ export const projectOpsToolDefs: ToolDef[] = [
             networking: [
               `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
               'For deployable app containers, use http://ol-{project-name}:{port}. Managed service containers use http://ol-svc-{service-name}:{port}.',
-              'Use projects[].deployable_service.service_id with openlander_service actions such as set_env_vars, list_env_vars, redeploy_app, expose_public, restart_service, rollback_service, or update_service_config.',
+              'Project groups are not deployable services. Use projects[].deployable_service.service_id with openlander_service actions such as set_env_vars, list_env_vars, redeploy_app, expose_public, restart_service, rollback_service, or update_service_config.',
             ],
           },
         };

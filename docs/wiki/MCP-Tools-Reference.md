@@ -16,6 +16,19 @@ Model note: **Project = workspace/group** and **Service = deployable unit**. Rep
 branch, Dockerfile, and build context belong to services. Project-level runtime actions have been
 removed; use service runtime actions instead.
 
+Agent routing rule of thumb:
+
+| User asks for                                 | Call                                                                       |
+| --------------------------------------------- | -------------------------------------------------------------------------- |
+| "Deploy this new app/repo/image"              | `openlander_deploy.deploy_app`                                             |
+| "Redeploy/restart/rollback this existing app" | `openlander_service.redeploy_app` / `restart_service` / `rollback_service` |
+| "Set env vars or connect DB/Redis to an app"  | `openlander_service.set_env_vars`, then `redeploy_app`                     |
+| "Create PostgreSQL/Redis/MySQL/etc."          | `openlander_managed_service.create_service`                                |
+| "Why is this failing?"                        | `openlander_monitor.diagnose_service` with `service_id`                    |
+
+Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a project
+group contains exactly one deployable service.
+
 Remote MCP uses scoped Bearer tokens. Use **Settings → MCP** for org-wide admin tokens and a
 project's **MCP** tab for project-scoped agent tokens. Project-scoped tokens are the safer default
 for daily work because they cannot operate outside the project group where they were issued.
@@ -217,7 +230,10 @@ Provide either `service_id` or `service_name`.
 
 ### `expose_public` / `unexpose_public`
 
-Create or remove a temporary public share URL for a project.
+Create or remove a temporary public share URL for a project. This is an optional public-access
+feature and requires a configured tunnel backend on the OpenLander host. If the tunnel backend is
+not installed/configured, use the normal service URL, custom domain routing, or configure the tunnel
+first.
 
 | Parameter      | Type   | Required | Description  |
 | -------------- | ------ | -------- | ------------ |
@@ -304,6 +320,9 @@ Exports all service env vars as raw `.env` text and records an audit event witho
 | `description` | string | No       | Description  |
 
 ### `expose_public` / `unexpose_public`
+
+Project composite aliases for temporary public URLs. This is optional and depends on the configured
+tunnel backend; it is not required for normal deploy/redeploy flows.
 
 | Parameter      | Type   | Required | Description  |
 | -------------- | ------ | -------- | ------------ |
@@ -431,6 +450,10 @@ Provide either `service_id` or `service_name`.
 
 Provide `service_id`, `service_name`, or `project_name`. Multi-service groups require an explicit
 service target.
+
+Domain mapping requires DNS to point at the OpenLander host or reverse proxy. v0.1 does not create
+Cloudflare records automatically. For path routing, set `path_prefix`; for service targeting, prefer
+`service_id`.
 
 ### `list_domains`
 

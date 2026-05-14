@@ -430,6 +430,14 @@ export const translations = {
       deleteVolumes: '이 그룹의 마지막 배포 서비스일 때 관리 프로젝트 볼륨도 삭제합니다.',
       error: '서비스 삭제에 실패했습니다',
     },
+    servicesGuide: {
+      empty:
+        '아직 이 프로젝트에 배포 가능한 서비스가 없습니다. Git 저장소, Docker 이미지 또는 compose 서비스를 추가하세요.',
+      help: '프로젝트는 그룹이고, 서비스는 그 안에서 실제로 배포되는 앱/워커입니다. MCP 후속 작업은 service_id를 사용하는 것이 가장 안전합니다.',
+      banner:
+        '아래 항목은 배포 가능한 서비스입니다. 환경 변수, 재배포, 도메인, 진단 작업에는 표시된 MCP service_id를 사용하세요.',
+      serviceId: 'MCP service_id: {id}',
+    },
     domains: {
       // Chrome — action button + retry + badge.
       add: 'Add domain',
@@ -615,7 +623,9 @@ export const translations = {
     createService: 'Create service',
     // Content — descriptive copy + empty states + format strings.
     subtitle:
-      'Docker 이미지를 공유 인프라로 실행합니다. 여러 프로젝트가 이 서비스에 연결할 수 있습니다.',
+      'Managed Service는 데이터베이스, 캐시, 공유 인프라입니다. 앱은 환경 변수로 여기에 연결합니다.',
+    mcpHint:
+      '프로비저닝과 자격 증명은 openlander_managed_service를 사용하고, 앱 연결은 배포 가능한 서비스의 환경 변수로 설정하세요.',
     noServices: '실행 중인 서비스 없음',
     getStarted: '템플릿에서 서비스를 생성하거나 Docker 이미지를 직접 실행하세요.',
     templates: '빠른 시작 템플릿',

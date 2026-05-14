@@ -443,7 +443,7 @@ function createCompositeTool(
 export function createOpenLanderDeployCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_deploy',
-    'Deploy plans, execution, previews, rollbacks, build logs, Git scans, infrastructure, domains.',
+    'Deploy front door for new apps plus plans, validation, execution, status, build logs, Git scans, previews, and domains.',
     toolDefs,
   );
 }
@@ -451,7 +451,7 @@ export function createOpenLanderDeployCompositeTool(toolDefs: ToolDef[]): Compos
 export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_project',
-    'Project groups, secrets, env vars, and temporary public share URLs. Env actions route to deployable services.',
+    'Project groups and shared config. Project groups organize deployable services; env actions route to service targets.',
     toolDefs,
   );
 }
@@ -459,7 +459,7 @@ export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): Compo
 export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_service',
-    'Deployable services (apps + workers): redeploy, restart, rollback, config, env vars, secrets, and temporary public share URLs.',
+    'Deployable services (apps + workers): redeploy, restart, rollback, config, env vars, domains, and temporary public URLs. Prefer service_id.',
     toolDefs,
   );
 }
@@ -475,7 +475,7 @@ export function createOpenLanderManagedServiceCompositeTool(toolDefs: ToolDef[])
 export function createOpenLanderMonitorCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_monitor',
-    'Logs, system stats, alerts, project stats, and host connectivity probing.',
+    'Diagnostics first: instance info, service diagnosis, logs, system stats, alerts, project stats, and host probing.',
     toolDefs,
   );
 }

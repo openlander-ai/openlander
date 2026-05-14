@@ -607,8 +607,9 @@ export const envToolDefs: ToolDef[] = [
     name: 'expose_public',
     riskLevel: 'medium',
     description:
-      'Create a temporary public URL for a project using the configured tunnel backend. Use when the user wants a quick external share URL without changing app source code. Returns { status, project, publicUrl }. The URL is temporary and may change on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For stable domains, use domain routing instead.',
-    mcpDescription: 'Generate a temporary public share URL for a project.',
+      'Create a temporary public URL for a project using the configured tunnel backend. This optional feature requires tunnel infrastructure on the OpenLander host. Use when the user wants a quick external share URL without changing app source code. Returns { status, project, publicUrl }. The URL is temporary and may change on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For stable domains, use domain routing instead.',
+    mcpDescription:
+      'Generate a temporary public share URL using the configured tunnel backend. Optional; requires tunnel infrastructure.',
     inputSchema: projectNameSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
@@ -626,7 +627,10 @@ export const envToolDefs: ToolDef[] = [
         project: projectName,
         publicUrl: url,
         _agent_guidance: {
-          next_steps: ['Access the app via the publicUrl above'],
+          next_steps: [
+            'Access the app via the publicUrl above',
+            'If expose_public fails because the tunnel backend is unavailable, use the normal service URL or configure public access first.',
+          ],
         },
       };
     },

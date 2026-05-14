@@ -116,8 +116,9 @@ export const infraToolDefs: ToolDef[] = [
     name: 'map_domain',
     riskLevel: 'medium',
     description:
-      'Map a custom domain to a deployable service using the configured domain routing backend. Use when the user wants their own stable domain (e.g., api.myapp.com). Routing takes effect immediately without redeploy. Only redeploy if the app needs build-time env changes (e.g., NEXT_PUBLIC_API_URL, CORS origins). Prefer service_id or service_name; legacy project_name works only when the group has exactly one deployable service. Returns { status, project, service, domain, url }. Errors: PROJECT_NOT_FOUND, SERVICE_NOT_FOUND, SERVICE_SELECTION_REQUIRED.',
-    mcpDescription: 'Map a custom domain to a deployable service.',
+      'Map a custom domain to a deployable service using the configured domain routing backend. Use when the user wants their own stable domain (e.g., api.myapp.com). DNS must point at the OpenLander host or reverse proxy; v0.1 does not create Cloudflare records automatically. Routing takes effect immediately without redeploy. Only redeploy if the app needs build-time env changes (e.g., NEXT_PUBLIC_API_URL, CORS origins). Prefer service_id or service_name; legacy project_name works only when the group has exactly one deployable service. Returns { status, project, service, domain, url }. Errors: PROJECT_NOT_FOUND, SERVICE_NOT_FOUND, SERVICE_SELECTION_REQUIRED.',
+    mcpDescription:
+      'Map a custom domain to a deployable service. DNS must already point at OpenLander; v0.1 does not create DNS records automatically.',
     inputSchema: mapDomainSchema,
     execute: async (args, { appCtx }) => {
       const domain = args['domain'] as string;

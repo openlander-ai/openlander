@@ -502,6 +502,7 @@ function GeneralTab({ service }: { service: ServiceNode }) {
   if (service.image) {
     sourceRows.push(['Image', service.image]);
   }
+  sourceRows.push(['MCP service_id', service.id]);
 
   return (
     <div className="flex flex-col gap-4">

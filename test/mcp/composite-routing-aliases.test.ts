@@ -117,6 +117,7 @@ describe('openlander_service direct deployable runtime actions', () => {
     )?.description;
 
     expect(exposeDescription).toContain('temporary public share URL');
+    expect(exposeDescription).toContain('configured tunnel backend');
     expect(exposeDescription).not.toMatch(/TryCloudflare|Cloudflare/i);
   });
 

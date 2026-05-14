@@ -370,6 +370,14 @@ export const translations = {
       confirmButton: 'Delete service',
       error: 'Failed to delete service',
     },
+    servicesGuide: {
+      empty:
+        'No deployable services in this project yet. Add a Git repo, Docker image, or compose service.',
+      help: 'A project is the group; services are the deployable apps/workers inside it. MCP follow-up actions should use service_id.',
+      banner:
+        'These are deployable services. Use the MCP service_id shown below for env vars, redeploys, domains, and diagnostics.',
+      serviceId: 'MCP service_id: {id}',
+    },
     domains: {
       empty: 'No domains attached yet.',
       emptyExternal:
@@ -530,7 +538,9 @@ export const translations = {
     title: 'Services',
     createService: 'Create Service',
     subtitle:
-      'Run Docker images as shared infrastructure. Multiple projects can connect to these services.',
+      'Managed services are databases, caches, and shared infrastructure. Apps connect to them through env vars.',
+    mcpHint:
+      'Use openlander_managed_service for provisioning and credentials, then set env vars on a deployable service.',
     noServices: 'No services running',
     getStarted: 'Create a service from a template or run any Docker image.',
     templates: 'Quick Start Templates',

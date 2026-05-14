@@ -326,9 +326,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'create_deploy_plan',
     riskLevel: 'medium',
     description:
-      'Analyze a repository and create a deployment plan. Returns a plan with detected services, required env vars, and build config. Use update_deploy_plan to fill missing values before executing.',
+      'Analyze a repository/image and create a deployment plan for a new deployable service. Use name for the project group name. Returns detected services, required env vars, and build config. Use update_deploy_plan to fill missing values before executing.',
     mcpDescription:
-      'Create deployment plan. Compose: build, ports, environment, depends_on, env_file, volumes, profiles, image. Not: command, entrypoint, healthcheck, restart, networks, secrets. Returns plan_id, status, complexity, missing vars, warnings.',
+      'Create a deployment plan for a new app/service. New app names use name, not project_name. Returns plan_id, status, detected services, missing vars, warnings.',
     inputSchema: createDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -522,7 +522,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     description:
       'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing project with exactly one deployable service, this redeploys that service. Otherwise it creates a new app from repo_url or image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. If the plan needs missing env vars, returns status "needs_input" with the missing list.',
     mcpDescription:
-      'App deploy front door. Existing app: pass service_id/service_name or project_name/name to redeploy. New app: pass repo_url/image and use name for the project name. Poll get_deploy_status to track progress.',
+      'App deploy front door. New app: pass repo_url/image and use name for the project group name. Existing app: prefer service_id, or use service_name/project_name/name lookup. Poll get_deploy_status; diagnose failures with diagnose_service.',
     inputSchema: deploySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
