@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
-import type { DeployLogRow, ProjectRow } from '../../db/index.js';
+import type { DeployLogRow, ProjectRow, ServiceRow } from '../../db/index.js';
+import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 import { extractFailureSummary, normalizeTimestamp } from './helpers/project-route-shared.js';
 import { resolveDeployableServiceForRoute } from './helpers/deployable-service-route-shared.js';
@@ -22,6 +23,43 @@ function mapDeployLogSummary(log: DeployLogRow) {
     createdAt: normalizeTimestamp(log.created_at),
     failureSummary: log.status === 'failed' ? extractFailureSummary(log.build_log) : null,
   };
+}
+
+type DeployLogSummary = ReturnType<typeof mapDeployLogSummary>;
+
+function mapInFlightDeploySummary(service: ServiceRow) {
+  return {
+    id: service.id,
+    status: 'building' as const,
+    trigger: 'api' as const,
+    triggerDetail: 'deploy',
+    commitSha: null,
+    commitMessage: null,
+    durationMs: null,
+    createdAt: normalizeTimestamp(service.updated_at),
+    failureSummary: null,
+    isInProgress: true,
+  };
+}
+
+function prependInFlightDeploy(
+  deployments: DeployLogSummary[],
+  service: ServiceRow | undefined | null,
+  runtimeProject?: ProjectRow | null,
+) {
+  if (!service) return deployments;
+
+  const serviceStatus = service.status as string | null;
+  const projectStatus = runtimeProject?.status as string | null | undefined;
+  if (serviceStatus !== 'building' && projectStatus !== 'building') {
+    return deployments;
+  }
+
+  if (deployments.some((deployment) => deployment.id === service.id)) {
+    return deployments;
+  }
+
+  return [mapInFlightDeploySummary(service), ...deployments];
 }
 
 function mapDeployLogDetail(log: DeployLogRow, project: ProjectRow) {
@@ -62,10 +100,15 @@ export function createDeploymentRoutes(ctx: AppContext): Hono {
     const limit = parseLimit(c.req.query('limit'), 50);
     const environmentId = c.req.query('environmentId');
     const logs = await ctx.db.getDeployLogs(project.id, limit, environmentId);
+    const deployable =
+      typeof ctx.db.getDeployableForProject === 'function'
+        ? await ctx.db.getDeployableForProject(project.id)
+        : undefined;
+    const deployments = prependInFlightDeploy(logs.map(mapDeployLogSummary), deployable, project);
 
     return c.json({
-      count: logs.length,
-      deployments: logs.map(mapDeployLogSummary),
+      count: deployments.length,
+      deployments,
     });
   });
 
@@ -89,9 +132,15 @@ export function createDeploymentRoutes(ctx: AppContext): Hono {
     const limit = parseLimit(c.req.query('limit'), 50);
     const environmentId = c.req.query('environmentId');
     const deployLogs = await ctx.db.getDeployLogs(service.id, limit, environmentId);
+    const runtimeProject = await ctx.db.getProject(deployableServiceIdToProjectId(service.id));
+    const deployments = prependInFlightDeploy(
+      deployLogs.map(mapDeployLogSummary),
+      service,
+      runtimeProject,
+    );
     return c.json({
-      count: deployLogs.length,
-      deployments: deployLogs.map(mapDeployLogSummary),
+      count: deployments.length,
+      deployments,
     });
   });
 

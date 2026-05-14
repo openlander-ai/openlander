@@ -368,16 +368,71 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
         409,
       );
     }
-    try {
+    const runRedeploy = async () => {
       ctx.coordinator.suppressProject(runtimeProject.id, 120_000);
       if (strategy !== 'blue-green') {
         await ctx.db.updateProject(runtimeProject.id, { status: 'building' });
       }
-      const result = await ctx.pipeline.redeploy(runtimeProject.id, {
+      return ctx.pipeline.redeploy(runtimeProject.id, {
         noCache: body.no_cache,
         strategy,
         healthCheckPath: body.health_check_path,
       });
+    };
+
+    if (c.req.query('async') === 'true') {
+      void (async () => {
+        try {
+          await runRedeploy();
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          log.error(
+            { err, projectId: runtimeProject.id, serviceId: service.id },
+            'Async service redeploy failed',
+          );
+          await ctx.db
+            .updateProject(runtimeProject.id, { status: 'error' })
+            .catch((updateErr: unknown) => {
+              log.warn(
+                { err: updateErr, projectId: runtimeProject.id },
+                'Failed to mark async redeploy project as error',
+              );
+            });
+          await ctx.db
+            .createDeployLog({
+              id: `deploy-${Date.now().toString(36)}`,
+              projectId: runtimeProject.id,
+              status: 'failed',
+              trigger: 'api',
+              buildLog: `[error] ${errMsg}`,
+            })
+            .catch((logErr: unknown) => {
+              log.warn(
+                { err: logErr, projectId: runtimeProject.id },
+                'Failed to persist async redeploy failure log',
+              );
+            });
+        } finally {
+          ctx.agentPool?.releaseProjectLock(runtimeProject.id, lockSessionId);
+        }
+      })();
+
+      return c.json(
+        {
+          success: true,
+          projectId: project.id,
+          serviceId: service.id,
+          deploymentId: service.id,
+          status: 'building',
+          statusUrl: `/api/projects/${runtimeProject.id}`,
+          logUrl: `/api/deployments/${service.id}/log/stream`,
+        },
+        202,
+      );
+    }
+
+    try {
+      const result = await runRedeploy();
       return c.json(
         { ...result, projectId: project.id, serviceId: service.id },
         result.success ? 200 : 500,

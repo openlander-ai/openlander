@@ -2,6 +2,7 @@
  * Phase 4 validation — Blocker 3 fix
  *
  * Asserts the /api/projects/:id/topology endpoint health projection:
+ *   - Project/service `building` status               → UI `healthy`
  *   - Docker `starting` (start_period grace window) → UI `healthy`
  *   - Docker `unhealthy`                            → UI `crashed`
  *   - Docker `healthy`                              → UI `healthy`
@@ -35,7 +36,7 @@ interface TopologyResponse {
 
 function createCtx(opts: {
   inspectResult: { healthStatus: string | null } | 'throw';
-  status?: 'running' | 'stopped';
+  status?: 'running' | 'building' | 'stopped';
 }) {
   const project = {
     id: 'p1',
@@ -45,6 +46,24 @@ function createCtx(opts: {
     image_tag: 'demo:latest',
     image_url: null,
     assigned_port: 3000,
+  };
+  const service = {
+    id: 'p1__svc',
+    name: 'demo__svc',
+    project_id: 'p1',
+    kind: 'git',
+    source: 'git',
+    status: opts.status ?? 'running',
+    container_id: 'c1',
+    assigned_port: 3000,
+    image_tag: 'demo:latest',
+    image_url: null,
+    repo_url: null,
+    branch: null,
+    dockerfile_path: null,
+    docker_target: null,
+    build_context: null,
+    build_method: null,
   };
 
   const inspectContainer = vi.fn(() => {
@@ -67,9 +86,10 @@ function createCtx(opts: {
       getProjectByName: vi.fn(() => null),
       getChildProjects: vi.fn(() => []),
       // PR #96 added getDeployablesByGroup to the topology code path.
-      getDeployablesByGroup: vi.fn(() => []),
+      getDeployablesByGroup: vi.fn(() => [service]),
+      getEnvironmentsByProject: vi.fn(() => []),
       findDependenciesByProject: vi.fn(() => []),
-      getDeployableForProject: vi.fn().mockReturnValue(undefined),
+      getDeployableForProject: vi.fn().mockReturnValue(service),
     },
     docker: {
       inspectContainer,
@@ -131,6 +151,14 @@ describe('project topology — health projection (Blocker 3)', () => {
   it("inspect throws → UI 'crashed' (parity with ServiceManager error path)", async () => {
     const ctx = createCtx({ inspectResult: 'throw' });
     expect(await fetchTopologyHealth(ctx)).toBe('crashed');
+  });
+
+  it("project status 'building' → UI 'healthy' while deploy is in progress", async () => {
+    const ctx = createCtx({
+      inspectResult: { healthStatus: 'unhealthy' },
+      status: 'building',
+    });
+    expect(await fetchTopologyHealth(ctx)).toBe('healthy');
   });
 
   it("project status !== 'running' → UI 'crashed' (independent of inspect)", async () => {

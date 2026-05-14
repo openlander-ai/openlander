@@ -102,12 +102,17 @@ export interface SystemStats {
 export interface DeployResult {
   success: boolean;
   projectId?: string;
+  serviceId?: string;
+  deploymentId?: string;
+  status?: string;
+  statusUrl?: string;
+  logUrl?: string;
   error?: string;
 }
 
 export interface DeployLogSummary {
   id: string;
-  status: 'success' | 'failed' | 'cancelled';
+  status: 'success' | 'failed' | 'cancelled' | 'building';
   trigger: 'chat' | 'webhook' | 'api';
   triggerDetail?: string | null;
   commitSha: string | null;
@@ -115,6 +120,7 @@ export interface DeployLogSummary {
   durationMs: number | null;
   createdAt: string;
   failureSummary?: string | null;
+  isInProgress?: boolean;
 }
 
 export interface DeployLogDetail extends DeployLogSummary {
