@@ -1136,6 +1136,17 @@ export const translations = {
       comingInV02: 'Coming in v0.2',
     },
   },
+  // Canonical OpenLander vocabulary. Kept in English across locales by
+  // project policy (see CONTRIBUTING / agent memory); descriptive copy
+  // around these terms still translates normally. Chrome that names the
+  // entity kind — header kickers, breadcrumbs, page badges — should
+  // pull from here instead of hardcoding the term so terminology
+  // changes and tests land in a single place.
+  vocab: {
+    projectGroup: 'Project group',
+    deployableService: 'Deployable service',
+    managedService: 'Managed service',
+  },
 } as const;
 
 export type TranslationType = typeof translations;

@@ -1318,4 +1318,13 @@ export const translations = {
       comingInV02: 'Coming in v0.2',
     },
   },
+  // Canonical OpenLander 용어. 프로젝트 정책상 모든 로케일에서 영어 표기를
+  // 유지합니다 (CONTRIBUTING / agent memory 참고). 주변 서술 카피는 한국어로
+  // 자유롭게 번역되지만, 엔티티 종류를 가리키는 chrome — 헤더 키커,
+  // breadcrumb, 페이지 뱃지 — 은 하드코딩하지 말고 이 키를 사용하세요.
+  vocab: {
+    projectGroup: 'Project group',
+    deployableService: 'Deployable service',
+    managedService: 'Managed service',
+  },
 } as const;

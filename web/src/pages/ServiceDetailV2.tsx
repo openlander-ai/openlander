@@ -167,6 +167,10 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   const id = canonicalServiceId ?? params.id;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  // Lifted to the top of the component so the canonical "Deployable
+  // service" header kicker can pull from i18n; nested tab panels keep
+  // their own useLanguage() declarations.
+  const { t } = useLanguage();
   // v0.1 IA: Settings/Advanced/Resources tabs removed. Legacy
   // ?tab={general|resources|advanced|settings} fall through to overview.
   const tabParam = searchParams.get('tab');
@@ -332,7 +336,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
         }
         subtitle={
           <span className="text-[12px]">
-            <span className="text-[color:var(--ol-fg-subtle)]">Deployable service</span>
+            <span className="text-[color:var(--ol-fg-subtle)]">{t('vocab.deployableService')}</span>
             <span className="ol-mono">
               {' · '}
               {resolvedService.kind} · {resolvedService.image}
@@ -1906,6 +1910,7 @@ function RangeToggle<T extends string>({
  */
 function ManagedServiceDetail({ id }: { id: string }) {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [service, setService] = useState<Service | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1985,7 +1990,7 @@ function ManagedServiceDetail({ id }: { id: string }) {
         // user lands here from a deep link or from a shared MCP reference.
         subtitle={
           <span>
-            <span className="text-[color:var(--ol-fg-subtle)]">Managed service</span>
+            <span className="text-[color:var(--ol-fg-subtle)]">{t('vocab.managedService')}</span>
             {' · '}
             {service.kind ?? service.type}
           </span>

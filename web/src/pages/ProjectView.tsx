@@ -186,7 +186,7 @@ export function ProjectView() {
               realProject?.displayName != null && realProject.displayName !== realProject.name;
             return (
               <span className="line-clamp-2 break-words">
-                <span className="text-[color:var(--ol-fg-subtle)]">Project group</span>
+                <span className="text-[color:var(--ol-fg-subtle)]">{t('vocab.projectGroup')}</span>
                 {description && <span> · {description}</span>}
                 {showSlug && (
                   <span className="ml-1.5 text-[color:var(--ol-fg-subtle)]">
