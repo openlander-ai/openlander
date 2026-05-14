@@ -960,13 +960,13 @@ export const translations = {
       title: 'Setup',
       subtitle: 'Pick your MCP client and paste the snippet into its config.',
       copyConfig: 'Copy config',
+      copyNeedsGenerate: 'Generate token to copy',
+      copyNeedsRegenerate: 'Regenerate to copy',
       copyNeedsReveal: 'Reveal token to copy',
       restartHint:
         'Restart your MCP client after saving. The status above flips to Connected on the first call.',
-      placeholderHint:
-        'Config examples stay visible with a <your-token> placeholder for returning users.',
-      revealToCopyHint:
-        'Generate or regenerate a token to copy a ready-to-paste config with the real value.',
+      placeholderHint: 'Examples use a <your-token> placeholder until a token is revealed.',
+      revealToCopyHint: 'Issue a token to copy a config with the real value included.',
     },
     recent: {
       title: 'Recent agent calls',
