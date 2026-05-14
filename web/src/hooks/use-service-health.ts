@@ -48,7 +48,9 @@ export function useServiceHealth(serviceId: string | null): UseServiceHealthResu
     }
   }, [serviceId]);
 
-  const pollMs = health === 'crashed' ? ACTIVE_POLL_MS : IDLE_POLL_MS;
+  // Active polling for any non-steady state so the badge flips
+  // promptly when a redeploy finishes or a crashed service recovers.
+  const pollMs = health === 'crashed' || health === 'deploying' ? ACTIVE_POLL_MS : IDLE_POLL_MS;
   usePollingTask(fetcher, { intervalMs: pollMs, enabled: serviceId != null });
 
   return { health, isLoading, error };

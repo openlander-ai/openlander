@@ -23,7 +23,7 @@ import { InfraMap } from '@/components/Shell/InfraMap';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { SettingsTab } from '@/components/project/SettingsTab';
 import { AddServiceDialog } from '@/components/project/AddServiceDialog';
-import { type ServiceNode } from '@/lib/projectTopology';
+import { type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useIsBelowMd } from '@/hooks/use-viewport';
 import { useProjectTopology } from '@/hooks/use-project-topology';
@@ -376,7 +376,7 @@ function ServicesPanel({
   );
 }
 
-function HealthPill({ health }: { health: 'healthy' | 'crashed' }) {
+function HealthPill({ health }: { health: ServiceHealth }) {
   if (health === 'crashed') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--ol-error-soft)] px-2 py-0.5 text-[10px] font-medium text-[color:var(--ol-error)]">
@@ -386,6 +386,18 @@ function HealthPill({ health }: { health: 'healthy' | 'crashed' }) {
           style={{ backgroundColor: 'var(--ol-error)' }}
         />
         crashed
+      </span>
+    );
+  }
+  if (health === 'deploying') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--ol-info-soft)] px-2 py-0.5 text-[10px] font-medium text-[color:var(--ol-info)]">
+        <span
+          aria-hidden
+          className="h-1 w-1 animate-pulse rounded-full"
+          style={{ backgroundColor: 'var(--ol-info)' }}
+        />
+        deploying
       </span>
     );
   }
