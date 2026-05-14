@@ -331,8 +331,12 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
           </span>
         }
         subtitle={
-          <span className="ol-mono text-[12px]">
-            {resolvedService.kind} · {resolvedService.image}
+          <span className="text-[12px]">
+            <span className="text-[color:var(--ol-fg-subtle)]">Deployable service</span>
+            <span className="ol-mono">
+              {' · '}
+              {resolvedService.kind} · {resolvedService.image}
+            </span>
           </span>
         }
         actions={
@@ -1975,7 +1979,17 @@ function ManagedServiceDetail({ id }: { id: string }) {
         // discriminator when the row carries it (P1 additive schema);
         // fall back to legacy `type` to keep older response shapes
         // rendering during the transition.
-        subtitle={service.kind ?? service.type}
+        //
+        // PR #59 follow-up: prefix the subtitle with the canonical
+        // "Managed service" label so the page identity stays clear when a
+        // user lands here from a deep link or from a shared MCP reference.
+        subtitle={
+          <span>
+            <span className="text-[color:var(--ol-fg-subtle)]">Managed service</span>
+            {' · '}
+            {service.kind ?? service.type}
+          </span>
+        }
         actions={
           <button
             type="button"

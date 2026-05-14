@@ -377,6 +377,8 @@ export const translations = {
       banner:
         'These are deployable services. Use the MCP service_id shown below for env vars, redeploys, domains, and diagnostics.',
       serviceId: 'MCP service_id: {id}',
+      serviceIdTooltip:
+        'Pass this to MCP actions like redeploy_app, set_env_vars, and diagnose_service.',
     },
     domains: {
       empty: 'No domains attached yet.',
@@ -535,7 +537,7 @@ export const translations = {
     },
   },
   services: {
-    title: 'Services',
+    title: 'Managed Services',
     createService: 'Create Service',
     subtitle:
       'Managed services are databases, caches, and shared infrastructure. Apps connect to them through env vars.',

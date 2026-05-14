@@ -176,24 +176,25 @@ export function ProjectView() {
           //   - keep the slug visible alongside when displayName
           //     diverges, since ops users key off the slug for CLI /
           //     compose paths.
+          // Always anchor the subtitle with the "Project group" label so the
+          // user keeps the containing-group context even when a custom
+          // description is set. PR #59 follow-up: post-onboarding users were
+          // losing the group-vs-service distinction once descriptions appeared.
           (() => {
             const description = realProject?.description?.trim();
             const showSlug =
               realProject?.displayName != null && realProject.displayName !== realProject.name;
-            if (description) {
-              return (
-                <span className="line-clamp-2 break-words">
-                  {description}
-                  {showSlug && (
-                    <span className="ml-1.5 text-[color:var(--ol-fg-subtle)]">
-                      · {realProject!.name}
-                    </span>
-                  )}
-                </span>
-              );
-            }
-            if (showSlug) return realProject!.name;
-            return 'Project group';
+            return (
+              <span className="line-clamp-2 break-words">
+                <span className="text-[color:var(--ol-fg-subtle)]">Project group</span>
+                {description && <span> · {description}</span>}
+                {showSlug && (
+                  <span className="ml-1.5 text-[color:var(--ol-fg-subtle)]">
+                    · {realProject!.name}
+                  </span>
+                )}
+              </span>
+            );
           })()
         }
         actions={
@@ -345,7 +346,10 @@ function ServicesPanel({
                     {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
                     {s.port != null && <span> · :{s.port}</span>}
                   </div>
-                  <div className="ol-mono mt-0.5 truncate text-[11px] text-[color:var(--ol-fg-subtle)]">
+                  <div
+                    className="ol-mono mt-0.5 truncate text-[11px] text-[color:var(--ol-fg-subtle)]"
+                    title={t('projectDetail.servicesGuide.serviceIdTooltip')}
+                  >
                     {t('projectDetail.servicesGuide.serviceId', { id: s.id })}
                   </div>
                 </div>

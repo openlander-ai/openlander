@@ -437,6 +437,8 @@ export const translations = {
       banner:
         '아래 항목은 배포 가능한 서비스입니다. 환경 변수, 재배포, 도메인, 진단 작업에는 표시된 MCP service_id를 사용하세요.',
       serviceId: 'MCP service_id: {id}',
+      serviceIdTooltip:
+        'redeploy_app, set_env_vars, diagnose_service 같은 MCP 액션에 이 값을 전달하세요.',
     },
     domains: {
       // Chrome — action button + retry + badge.
@@ -619,7 +621,7 @@ export const translations = {
   },
   services: {
     // Chrome — page title + primary action.
-    title: 'Services',
+    title: 'Managed Services',
     createService: 'Create service',
     // Content — descriptive copy + empty states + format strings.
     subtitle:
