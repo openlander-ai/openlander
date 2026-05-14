@@ -99,7 +99,7 @@ describe('createDeployableServiceRoutes', () => {
     const db = {
       getProject: vi.fn(async () => project),
       getProjectByName: vi.fn(async () => undefined),
-      getServices: vi.fn(async () => [service]),
+      getDeployablesByGroup: vi.fn(async () => [service]),
       getEnvironmentsByProject: vi.fn(async () => [env]),
     };
     const app = createApp({ db });
@@ -107,10 +107,7 @@ describe('createDeployableServiceRoutes', () => {
     const res = await app.request('/api/projects/group-1/services');
 
     expect(res.status).toBe(200);
-    expect(db.getServices).toHaveBeenCalledWith({
-      project_id: 'group-1',
-      kindNotIn: expect.arrayContaining(['postgres', 'redis', 'mysql', 'minio']),
-    });
+    expect(db.getDeployablesByGroup).toHaveBeenCalledWith('group-1');
     await expect(res.json()).resolves.toMatchObject({
       count: 1,
       services: [
@@ -121,6 +118,47 @@ describe('createDeployableServiceRoutes', () => {
           imageCmd: ['nginx', '-g', 'daemon off;'],
           deployedBranch: 'main',
         },
+      ],
+    });
+  });
+
+  it('lists compose child services instead of compose parent metadata', async () => {
+    const project = makeProjectRow({ id: 'stack', name: 'demo-stack' });
+    const composeChildren = [
+      makeServiceRow({
+        id: 'stack__web__svc',
+        name: 'demo-stack/web__svc',
+        project_id: 'stack',
+        kind: 'compose-child',
+        parent_service_id: 'stack__svc',
+      }),
+      makeServiceRow({
+        id: 'stack__postgres__svc',
+        name: 'demo-stack/postgres__svc',
+        project_id: 'stack',
+        kind: 'compose-child',
+        parent_service_id: 'stack__svc',
+      }),
+    ];
+    const getDeployablesByGroup = vi.fn(async () => composeChildren);
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup,
+        getEnvironmentsByProject: vi.fn(async () => []),
+      },
+    });
+
+    const res = await app.request('/api/projects/stack/services');
+
+    expect(res.status).toBe(200);
+    expect(getDeployablesByGroup).toHaveBeenCalledWith('stack');
+    await expect(res.json()).resolves.toMatchObject({
+      count: 2,
+      services: [
+        { id: 'stack__web__svc', name: 'demo-stack/web', kind: 'compose-child' },
+        { id: 'stack__postgres__svc', name: 'demo-stack/postgres', kind: 'compose-child' },
       ],
     });
   });

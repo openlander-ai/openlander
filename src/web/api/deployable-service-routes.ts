@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
-import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import {
   findService,
@@ -29,10 +28,7 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
     }
 
     const [deployables, environments] = await Promise.all([
-      ctx.db.getServices({
-        project_id: project.id,
-        kindNotIn: MANAGED_SERVICE_KINDS,
-      }),
+      ctx.db.getDeployablesByGroup(project.id),
       ctx.db.getEnvironmentsByProject(project.id),
     ]);
 
