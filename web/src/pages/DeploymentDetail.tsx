@@ -36,15 +36,27 @@ export function DeploymentDetail() {
 
   // Look up the owning project so we can plumb the real publicUrl /
   // internalPort / serviceName through to LogViewer's SuccessSummary.
-  // Without this the summary card hides the URL row entirely (PR #68
-  // dropped the misleading `{sslip}` placeholder fallback), so the
-  // user finished a deploy and saw only "Deploy succeeded" without
-  // the address.
+  // Critical: fall back to the route param `id` while
+  // `getDeploymentDetail()` is still 404-ing for an in-flight deploy
+  // (the deploy_logs row is written at completion, not at start).
+  // Without that fallback the Deploy-button → live-page → success
+  // path keeps `owningProject` null and the URL row stays hidden even
+  // after the SSE success event lands.
+  //
+  // `name` (immutable slug) is the source of truth for the
+  // internal hostname — `displayName` can carry spaces / casing /
+  // unicode that would not survive `http://ol-{name}:{port}` resolution.
+  //
+  // `containerPort` is the inter-container port. The host-assigned
+  // `port` is not equivalent and would mislead the "for inter-container
+  // calls" label, so we deliberately do NOT fall through to it; the
+  // Internal row hides instead.
+  const projectIdForLookup = deployment?.projectId ?? id ?? null;
   const owningProject =
-    deployment != null ? (projects.find((p) => p.id === deployment.projectId) ?? null) : null;
-  const summaryServiceName = owningProject?.displayName ?? owningProject?.name ?? 'web';
+    projectIdForLookup != null ? (projects.find((p) => p.id === projectIdForLookup) ?? null) : null;
+  const summaryServiceName = owningProject?.name ?? 'web';
   const summaryPublicUrl = owningProject?.publicUrl ?? owningProject?.url ?? null;
-  const summaryInternalPort = owningProject?.containerPort ?? owningProject?.port ?? null;
+  const summaryInternalPort = owningProject?.containerPort ?? null;
 
   useEffect(() => {
     if (!id || !deployId) return;
