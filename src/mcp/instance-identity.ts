@@ -17,6 +17,9 @@ export interface McpInstancePublicInfo extends McpInstanceContext {
 export const MCP_INSTANCE_NAME_RE = /^[a-z0-9](?:[a-z0-9._-]{0,61}[a-z0-9])?$/;
 
 const GENERIC_INSTANCE_NAMES = new Set([
+  'ol',
+  'ol-local',
+  'ol-localhost',
   'openlander',
   'openlander-local',
   'openlander-localhost',
@@ -31,7 +34,7 @@ export function normalizeMcpInstanceName(value: unknown): string | null {
 }
 
 export function isGenericMcpInstanceName(name: string): boolean {
-  return GENERIC_INSTANCE_NAMES.has(name) || name.endsWith('-localhost');
+  return GENERIC_INSTANCE_NAMES.has(name) || name.endsWith('-localhost') || name.endsWith('-local');
 }
 
 export function ensureMcpInstanceId(config: OpenLanderConfig): string {
@@ -129,13 +132,14 @@ function suggestMcpInstanceName(host: string): string {
 function hostToInstanceName(host: string): string {
   const hostname = host.split(':')[0]?.trim().toLowerCase() ?? '';
   if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
-    return 'openlander-local';
+    return 'ol-local';
   }
 
   const safeHost = hostname
+    .replace(/^www\./, '')
     .replace(/^\[|\]$/g, '')
-    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/[^a-z0-9]+/g, '-')
     .replace(/^[._-]+|[._-]+$/g, '')
-    .slice(0, 52);
-  return normalizeMcpInstanceName(`openlander-${safeHost}`) ?? 'openlander-local';
+    .slice(0, 58);
+  return normalizeMcpInstanceName(`ol-${safeHost}`) ?? 'ol-local';
 }

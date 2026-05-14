@@ -71,7 +71,9 @@ describe('Your Agent (MCP) v0.1 surface', () => {
     // for one tab per supported MCP client. Both the page and the setup
     // wizard read the same source so they cannot drift.
     expect(source).toMatch(/buildAllClientConfigs\(/);
+    expect(source).toMatch(/buildAgentInstruction\(/);
     expect(source).toContain('serverName: mcpInstance.serverName');
+    expect(source).toContain("t('mcpServer.row.instruction')");
     expect(source).toMatch(/<TabsTrigger /);
     expect(source).toMatch(/<TabsContent /);
     expect(snippetSource).toContain('mcpServers');

@@ -57,6 +57,7 @@ describe('McpGuideStep — PAT migration (v0.1)', () => {
 
   it('uses the editable instance name for generated snippets', () => {
     expect(source).toContain('useMcpInstance()');
+    expect(source).toContain('buildAgentInstruction');
     expect(source).toContain('serverName: mcpInstance.serverName');
     expect(source).toContain("t('setup.mcp.instanceName')");
   });

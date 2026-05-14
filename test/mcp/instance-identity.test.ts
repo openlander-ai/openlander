@@ -9,7 +9,10 @@ import {
 } from '../../src/mcp/instance-identity.js';
 import { registerCompositeMcpTools } from '../../src/tools/adapters/mcp.js';
 import { monitoringToolDefs } from '../../src/tools/defs/monitoring.js';
-import { buildAllClientConfigs } from '../../web/src/lib/mcp-config-snippets.js';
+import {
+  buildAgentInstruction,
+  buildAllClientConfigs,
+} from '../../web/src/lib/mcp-config-snippets.js';
 
 function appCtx(overrides?: { instanceName?: string }) {
   return {
@@ -43,8 +46,19 @@ describe('MCP instance identity', () => {
       id: 'olinst_test',
       endpoint: 'http://www.aqainc.biz/mcp',
       host: 'www.aqainc.biz',
-      suggestedName: 'openlander-www.aqainc.biz',
+      suggestedName: 'ol-aqainc-biz',
     });
+  });
+
+  it('builds an agent instruction that makes MCP the default deploy path', () => {
+    const instruction = buildAgentInstruction({
+      endpoint: 'http://www.aqainc.biz/mcp',
+      serverName: 'ol-ais',
+    });
+
+    expect(instruction).toContain('Use the MCP server "ol-ais"');
+    expect(instruction).toContain('Do not use local Docker, SSH');
+    expect(instruction).toContain('get_instance_info');
   });
 
   it('validates slug-shaped instance names', () => {

@@ -1033,6 +1033,7 @@ export const translations = {
       status: 'Status',
       instance: 'Instance name',
       endpoint: 'Endpoint',
+      instruction: 'Agent prompt',
       token: 'Access token',
       copy: 'Copy',
       copied: 'Copied',
@@ -1085,6 +1086,9 @@ export const translations = {
       loadFailed: '인스턴스 정보를 불러오지 못했습니다.',
       defaultWarning:
         '같은 AI 클라이언트에 여러 OpenLander 서버를 연결한다면 이 이름을 더 구체적으로 바꾸세요.',
+      instructionHelp:
+        'AI 클라이언트에 OpenLander로 배포하라고 요청할 때 이 문장을 함께 붙여넣으세요.',
+      copyInstruction: 'Copy prompt',
     },
     setup: {
       // Chrome — section title + action.

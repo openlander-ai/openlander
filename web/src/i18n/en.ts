@@ -888,6 +888,7 @@ export const translations = {
       status: 'Status',
       instance: 'Instance name',
       endpoint: 'Endpoint',
+      instruction: 'Agent prompt',
       token: 'Access token',
       copy: 'Copy',
       copied: 'Copied',
@@ -935,6 +936,8 @@ export const translations = {
       loadFailed: 'Could not load instance identity.',
       defaultWarning:
         'Rename this if you connect multiple OpenLander servers to the same AI client.',
+      instructionHelp: 'Paste this once when asking an AI client to deploy through OpenLander.',
+      copyInstruction: 'Copy prompt',
     },
     setup: {
       title: 'Setup',

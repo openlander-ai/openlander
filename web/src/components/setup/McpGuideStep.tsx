@@ -37,7 +37,7 @@ import { ensureOrgMcpToken, getOrgMcpToken } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from './shared';
 import { useLanguage } from '@/i18n/context';
-import { buildAllClientConfigs } from '@/lib/mcp-config-snippets';
+import { buildAgentInstruction, buildAllClientConfigs } from '@/lib/mcp-config-snippets';
 import { useMcpInstance } from '@/hooks/use-mcp-instance';
 
 interface McpGuideStepProps {
@@ -140,6 +140,10 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
     token: tokenForSnippet,
     serverName: mcpInstance.serverName,
   });
+  const agentInstruction = buildAgentInstruction({
+    endpoint: mcpUrl,
+    serverName: mcpInstance.serverName,
+  });
 
   // Hide the copy/manual surface unless we actually have plaintext to
   // hand the user. Showing the `olp_YOUR_TOKEN` placeholder dressed up
@@ -222,6 +226,14 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
               ? t('setup.mcp.instanceDefaultWarning')
               : t('setup.mcp.instanceHelp')}
           </p>
+          <div className="relative rounded-md bg-bg-app p-3">
+            <pre className="pr-8 text-xs font-mono text-foreground whitespace-pre-wrap break-all">
+              {agentInstruction}
+            </pre>
+            <div className="absolute top-1.5 right-1.5">
+              <CopyButton text={agentInstruction} />
+            </div>
+          </div>
         </div>
 
         {/* R3 (2026-05-13): explicit Generate CTA for new users. Until

@@ -44,7 +44,11 @@ import {
   regenerateOrgMcpToken,
   type McpPatTokenMetadata,
 } from '@/lib/api';
-import { buildAllClientConfigs, type McpClientId } from '@/lib/mcp-config-snippets';
+import {
+  buildAgentInstruction,
+  buildAllClientConfigs,
+  type McpClientId,
+} from '@/lib/mcp-config-snippets';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -78,6 +82,7 @@ export function MCPServer() {
   const [regenerateConfirmOpen, setRegenerateConfirmOpen] = useState(false);
   const [endpointCopied, setEndpointCopied] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
+  const [instructionCopied, setInstructionCopied] = useState(false);
   const [configCopied, setConfigCopied] = useState(false);
   const [activeClient, setActiveClient] = useState<McpClientId>('claude-code');
   // Track the most recent "Copied!" reset so that copying a second row
@@ -244,6 +249,10 @@ export function MCPServer() {
     token: snippetToken,
     serverName: mcpInstance.serverName,
   });
+  const agentInstruction = buildAgentInstruction({
+    endpoint: mcpEndpoint,
+    serverName: mcpInstance.serverName,
+  });
   const activeConfig = clientConfigs.find((c) => c.id === activeClient) ?? clientConfigs[0];
 
   return (
@@ -337,6 +346,30 @@ export function MCPServer() {
               {endpointCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{' '}
               {endpointCopied ? t('mcpServer.row.copied') : t('mcpServer.row.copy')}
             </button>
+          </Row>
+
+          {/* Agent instruction row */}
+          <Row label={t('mcpServer.row.instruction')}>
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <pre className="ol-mono w-full overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-[color:var(--ol-panel-2)] p-3 text-[12px] leading-relaxed text-[color:var(--ol-fg)]">
+                <code>{agentInstruction}</code>
+              </pre>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11.5px] leading-snug text-[color:var(--ol-fg-muted)]">
+                  {t('mcpServer.instance.instructionHelp')}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void copy(agentInstruction, setInstructionCopied)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
+                >
+                  {instructionCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}{' '}
+                  {instructionCopied
+                    ? t('mcpServer.row.copied')
+                    : t('mcpServer.instance.copyInstruction')}
+                </button>
+              </div>
+            </div>
           </Row>
 
           {/* Token row */}
