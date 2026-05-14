@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
+import { useProjectsContext } from '@/hooks/use-projects-context';
 import { StaticLogViewer } from '@/components/logs/StaticLogViewer';
 import { LogViewer } from '@/components/Shell/LogViewer';
 import { DiagnosisPanel } from '@/components/deploy/DiagnosisPanel';
@@ -29,8 +30,33 @@ export function DeploymentDetail() {
   const { id, deployId } = useParams();
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { projects } = useProjectsContext();
   const [deployment, setDeployment] = useState<DeployLogDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Look up the owning project so we can plumb the real publicUrl /
+  // internalPort / serviceName through to LogViewer's SuccessSummary.
+  // Critical: fall back to the route param `id` while
+  // `getDeploymentDetail()` is still 404-ing for an in-flight deploy
+  // (the deploy_logs row is written at completion, not at start).
+  // Without that fallback the Deploy-button → live-page → success
+  // path keeps `owningProject` null and the URL row stays hidden even
+  // after the SSE success event lands.
+  //
+  // `name` (immutable slug) is the source of truth for the
+  // internal hostname — `displayName` can carry spaces / casing /
+  // unicode that would not survive `http://ol-{name}:{port}` resolution.
+  //
+  // `containerPort` is the inter-container port. The host-assigned
+  // `port` is not equivalent and would mislead the "for inter-container
+  // calls" label, so we deliberately do NOT fall through to it; the
+  // Internal row hides instead.
+  const projectIdForLookup = deployment?.projectId ?? id ?? null;
+  const owningProject =
+    projectIdForLookup != null ? (projects.find((p) => p.id === projectIdForLookup) ?? null) : null;
+  const summaryServiceName = owningProject?.name ?? 'web';
+  const summaryPublicUrl = owningProject?.publicUrl ?? owningProject?.url ?? null;
+  const summaryInternalPort = owningProject?.containerPort ?? null;
 
   useEffect(() => {
     if (!id || !deployId) return;
@@ -138,6 +164,9 @@ export function DeploymentDetail() {
           <div className="flex flex-col h-[640px] min-h-[400px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
             <LogViewer
               deploymentId={deployId}
+              serviceName={summaryServiceName}
+              publicUrl={summaryPublicUrl}
+              internalPort={summaryInternalPort}
               confirmKillCopy={{
                 title: t('deploy.killConfirm.title'),
                 description: t('deploy.killConfirm.description'),
@@ -227,6 +256,9 @@ export function DeploymentDetail() {
               {deployId ? (
                 <LogViewer
                   deploymentId={deployId}
+                  serviceName={summaryServiceName}
+                  publicUrl={summaryPublicUrl}
+                  internalPort={summaryInternalPort}
                   onDownload={deployment.buildLog ? handleDownload : undefined}
                   confirmKillCopy={{
                     title: t('deploy.killConfirm.title'),
