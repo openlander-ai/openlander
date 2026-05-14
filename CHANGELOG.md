@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Avoid reconnecting compose services to the shared `openlander` Docker network
   after they have already been attached with their DNS alias, fixing fresh
   compose deploys that failed with the same endpoint-conflict error.
+- Preserve Docker Compose service-name DNS aliases (for example `postgres` and
+  `redis`) when OpenLander runs compose services through Dockerode.
 
 ## [0.1.1-rc.6] — 2026-05-13
 
