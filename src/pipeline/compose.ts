@@ -23,7 +23,7 @@ import type { EventBus } from '../events/index.js';
 import type { ProjectStatus, StateTransitionOptions } from '../monitor/project-state-manager.js';
 import type { EnvManager } from './env.js';
 import type { JobManager } from './job-manager.js';
-import { isDockerNotFoundError } from '../errors.js';
+import { ComposeHostPortsUnsupportedError, isDockerNotFoundError } from '../errors.js';
 
 const log = createModuleLogger('compose');
 
@@ -48,6 +48,7 @@ export interface ComposeService {
   image?: string;
   build?: string | { context: string; dockerfile?: string };
   ports?: string[];
+  expose?: string[];
   profiles?: string[];
   environment?: Record<string, string> | string[];
   envFile?: ComposeEnvFile[];
@@ -74,6 +75,11 @@ export interface ComposeProject {
   services: ComposeService[];
   composePath: string;
   projectPath: string;
+}
+
+export interface ComposeHostPortUsage {
+  service: string;
+  ports: string[];
 }
 
 export interface ComposeDeployConfig {
@@ -119,6 +125,15 @@ export function filterServicesByProfiles(
       dependsOn: service.dependsOn.filter((dependency) => keptNames.has(dependency)),
     };
   });
+}
+
+export function findComposeHostPortUsages(composeProject: ComposeProject): ComposeHostPortUsage[] {
+  return composeProject.services
+    .map((service) => ({
+      service: service.name,
+      ports: (service.ports ?? []).filter((port) => port.trim().length > 0),
+    }))
+    .filter((usage) => usage.ports.length > 0);
 }
 
 export interface ComposeDeployResult {
@@ -389,6 +404,7 @@ export class ComposePipeline {
       }
 
       const portsRaw = serviceObj['ports'];
+      const exposeRaw = serviceObj['expose'];
       const volumesRaw = serviceObj['volumes'];
       const imageRaw = serviceObj['image'];
       const envFileRaw = serviceObj['env_file'];
@@ -485,7 +501,10 @@ export class ComposePipeline {
         name,
         image: typeof imageRaw === 'string' ? imageRaw : undefined,
         build,
-        ports: Array.isArray(portsRaw) ? portsRaw.map((port) => String(port)) : undefined,
+        ports: Array.isArray(portsRaw)
+          ? portsRaw.map((port) => formatComposePortValue(port)).filter((port) => port.length > 0)
+          : undefined,
+        expose: normalizeComposeStringList(exposeRaw),
         profiles,
         environment,
         envFile,
@@ -512,6 +531,7 @@ export class ComposePipeline {
   }> {
     const parentName = config.name ?? extractProjectName(config.repoUrl);
     const parentProjectId = nanoid(12);
+    this.assertNoHostPortMappings(this.filteredComposeProjectForConfig(config));
 
     await this.db.createProject({
       id: parentProjectId,
@@ -552,17 +572,8 @@ export class ComposePipeline {
     const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
     const composeProject = this.parseComposeFile(config.composePath);
-    const filteredComposeProject: ComposeProject = {
-      ...composeProject,
-      services: filterServicesByProfiles(composeProject.services, config.profiles),
-    };
-
-    if (config.services && config.services.length > 0) {
-      const requestedServices = new Set(config.services);
-      filteredComposeProject.services = filteredComposeProject.services.filter((service) =>
-        requestedServices.has(service.name),
-      );
-    }
+    const filteredComposeProject = this.filteredComposeProjectForConfig(config, composeProject);
+    this.assertNoHostPortMappings(filteredComposeProject);
 
     const envVars = { ...(config.envVars ?? {}) };
 
@@ -1416,7 +1427,39 @@ export class ComposePipeline {
         return parsed;
       }
     }
+    for (const exposedPort of service.expose ?? []) {
+      const parsed = parseComposePortMapping(exposedPort);
+      if (parsed) {
+        return { hostPort: null, containerPort: parsed.containerPort };
+      }
+    }
     return null;
+  }
+
+  private filteredComposeProjectForConfig(
+    config: Pick<ComposeDeployConfig, 'composePath' | 'profiles' | 'services'>,
+    composeProject = this.parseComposeFile(config.composePath),
+  ): ComposeProject {
+    const filtered: ComposeProject = {
+      ...composeProject,
+      services: filterServicesByProfiles(composeProject.services, config.profiles),
+    };
+
+    if (config.services && config.services.length > 0) {
+      const requestedServices = new Set(config.services);
+      filtered.services = filtered.services.filter((service) =>
+        requestedServices.has(service.name),
+      );
+    }
+
+    return filtered;
+  }
+
+  private assertNoHostPortMappings(composeProject: ComposeProject): void {
+    const usages = findComposeHostPortUsages(composeProject);
+    if (usages.length > 0) {
+      throw new ComposeHostPortsUnsupportedError(usages);
+    }
   }
 
   private resolveComposeServiceImageTag(service: ComposeService, projectName: string): string {
@@ -1569,6 +1612,68 @@ function parseHostPort(portMapping: string): number | null {
   }
   const hostPort = Number(match[1]);
   return Number.isFinite(hostPort) ? hostPort : null;
+}
+
+function formatComposePortValue(port: unknown): string {
+  if (typeof port === 'string' || typeof port === 'number') {
+    return String(port).trim();
+  }
+
+  if (!port || typeof port !== 'object' || Array.isArray(port)) {
+    return '';
+  }
+
+  const objectPort = port as Record<string, unknown>;
+  const published = scalarComposePortToken(objectPort['published']);
+  const target = scalarComposePortToken(objectPort['target']);
+  const protocol = objectPort['protocol'];
+  const parts: string[] = [];
+
+  if (published !== null) {
+    parts.push(published);
+  }
+  if (target !== null) {
+    parts.push(target);
+  }
+
+  const formatted = parts.join(':');
+  if (formatted.length > 0 && typeof protocol === 'string' && protocol.length > 0) {
+    return `${formatted}/${protocol}`;
+  }
+  if (formatted.length > 0) {
+    return formatted;
+  }
+
+  return JSON.stringify(objectPort);
+}
+
+function scalarComposePortToken(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  return null;
+}
+
+function normalizeComposeStringList(value: unknown): string[] | undefined {
+  if (typeof value === 'string' || typeof value === 'number') {
+    const normalized = String(value).trim();
+    return normalized.length > 0 ? [normalized] : undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const normalized = value
+    .map((item) =>
+      typeof item === 'string' || typeof item === 'number' ? String(item).trim() : '',
+    )
+    .filter((item) => item.length > 0);
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 function parseComposePortMapping(

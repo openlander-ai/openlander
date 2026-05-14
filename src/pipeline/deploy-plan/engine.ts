@@ -184,11 +184,18 @@ export class PlanEngine {
               port = parseInt(portMatch[1], 10);
             }
           }
+          if (port === undefined && svc.expose?.[0]) {
+            const exposeMatch = svc.expose[0].match(/^(\d+)/);
+            if (exposeMatch?.[1]) {
+              port = parseInt(exposeMatch[1], 10);
+            }
+          }
 
           return {
             name: svc.name,
             dockerfile,
             port,
+            host_ports: svc.ports && svc.ports.length > 0 ? svc.ports : undefined,
             // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
             image: svc.image,
             depends_on: svc.dependsOn,
@@ -512,6 +519,7 @@ export class PlanEngine {
       dockerfile: service.dockerfile,
       // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       port: service.port,
+      host_ports: service.host_ports,
       // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       image: service.image,
       depends_on: service.depends_on,

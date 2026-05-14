@@ -233,7 +233,7 @@ export const BUILD_RECIPES: Recipe[] = [
     title: 'Docker Compose port conflict',
     diagnosis:
       'A port specified in the docker-compose.yml is already in use by another container or service.',
-    fix: 'Either: (1) Stop the conflicting container: `docker ps` to find it, then `docker stop <container>`. (2) Change the port mapping in docker-compose.yml: `ports: ["8080:3000"]` instead of `"3000:3000"`. (3) Let OpenLander auto-assign ports by removing explicit port mappings.',
+    fix: 'Remove `ports:` from docker-compose.yml. OpenLander manages public routing through Traefik; use `expose:` to document internal container ports, then map domains or use the generated service URL.',
   },
   {
     pattern:

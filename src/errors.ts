@@ -241,6 +241,34 @@ export class PortExhaustedError extends OpenLanderError {
   }
 }
 
+export class ComposeHostPortsUnsupportedError extends OpenLanderError {
+  constructor(
+    mappings: Array<{
+      service: string;
+      ports: string[];
+    }>,
+  ) {
+    super(
+      'Docker Compose host port mappings are not supported by OpenLander. Remove `ports:` mappings and use `expose:` or the service container port instead.',
+      'COMPOSE_HOST_PORTS_UNSUPPORTED',
+      400,
+      {
+        mappings,
+        _agent_guidance: {
+          message:
+            'OpenLander manages public routing through Traefik. Compose `ports:` publishes directly on the host and can break safe redeploys.',
+          next_steps: [
+            'Remove `ports:` from docker-compose.yml.',
+            'Use `expose:` to document internal container ports if needed.',
+            'Use OpenLander domains or service URLs for public access.',
+          ],
+        },
+      },
+    );
+    this.name = 'ComposeHostPortsUnsupportedError';
+  }
+}
+
 // --- Tunnel errors ---
 
 export class TunnelStartError extends OpenLanderError {

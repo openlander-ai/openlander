@@ -224,6 +224,11 @@ deploy_compose(
 )
 ```
 
+OpenLander manages public HTTP routing through Traefik. Compose files must not
+publish host ports with `ports:` because that bypasses OpenLander's port
+allocation and can break safe redeploys. Use `expose:` to document internal
+container ports, then add a domain or use the generated service URL.
+
 ---
 
 ## Redeployment

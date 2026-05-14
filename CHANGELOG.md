@@ -247,6 +247,8 @@ This is an early release — expect breaking changes between 0.x versions. Produ
 - Git → Docker → URL pipeline. Auto-detects ports, proxies, containers before deploying.
 - Auto-Dockerfile for 28+ frameworks (Next.js, Express, NestJS, Vite, Nuxt, SvelteKit, Astro, FastAPI, Django, Flask, Rails, Spring Boot, Laravel, ASP.NET, Go, Rust, etc.) when no Dockerfile is present.
 - Docker Compose support — multi-service projects via `docker-compose.yml`.
+- Docker Compose host port mappings (`ports:`) are rejected before deployment;
+  use `expose:`/container ports and OpenLander's Traefik routing instead.
 - Monorepo support — scan multiple Dockerfiles, parallel builds, parent-child project model.
 - Real-time build log streaming with ANSI color rendering.
 - Blue-green redeploy with health check + one-click rollback.

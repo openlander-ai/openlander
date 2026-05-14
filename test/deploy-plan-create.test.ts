@@ -391,6 +391,7 @@ describe('PlanEngine.createPlan', () => {
     });
 
     expect(plan.build.method).toBe('compose');
+    expect(plan.build.compose_services?.[0]?.host_ports).toEqual(['3000:3000']);
     expect(mockComposePipeline.detectComposeFile).toHaveBeenCalled();
   });
 

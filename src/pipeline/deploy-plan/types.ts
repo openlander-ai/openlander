@@ -97,6 +97,7 @@ export interface PlanBuildService {
   name: string;
   dockerfile?: string;
   port?: number;
+  host_ports?: string[];
   image?: string;
   depends_on?: string[];
   internal_url?: string;
