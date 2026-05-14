@@ -73,7 +73,7 @@ export const translations = {
   sidebar: {
     collapse: '사이드바 접기',
     expand: '사이드바 펼치기',
-    primaryNavAria: '주 메뉴',
+    primaryNavAria: '주요 탐색',
     versionAria: '버전 v0.1',
   },
   account: {
@@ -191,7 +191,7 @@ export const translations = {
     emptyTitle: '아직 프로젝트가 없습니다',
     emptyDescription:
       '프로젝트는 환경 변수를 공유하고 함께 배포되는 관련 서비스(웹, API, 워커, 데이터베이스)를 묶어줍니다.',
-    createFirst: '첫 프로젝트 만들기',
+    createFirst: 'Create your first project',
     deployedAgo: '배포: {time}',
     createdAgo: '생성: {time}',
     create: {
@@ -201,8 +201,9 @@ export const translations = {
       submitting: 'Creating...',
       nameLabel: 'Project display name',
       namePlaceholder: 'Hotdeal Tracker',
-      // Content — modal title + description + close-aria + errors.
-      title: '프로젝트 만들기',
+      // Chrome — modal heading is a primitive create-noun pattern.
+      title: 'Create project',
+      // Content — descriptive prose + close-aria + errors.
       description:
         '프로젝트는 관련 서비스의 작업 공간입니다. 생성 후 레포지토리, 이미지, 데이터베이스, compose 스택을 추가하세요.',
       closeAria: '프로젝트 만들기 대화상자 닫기',
