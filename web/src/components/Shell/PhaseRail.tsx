@@ -58,8 +58,11 @@ export function PhaseRail({ status }: PhaseRailProps) {
                   'border border-[color:var(--ol-success)] bg-[color:var(--ol-success-soft)] text-[color:var(--ol-success)]',
                 st === 'failed' &&
                   'border border-[color:var(--ol-error)] bg-[color:var(--ol-error-soft)] font-medium text-[color:var(--ol-error)]',
+                // Strikethrough + filled panel surface (vs pending's
+                // empty outline) so a "did not run" phase reads as
+                // intentionally bypassed, not "still waiting".
                 st === 'skipped' &&
-                  'border border-dashed border-[color:var(--ol-border-subtle)] text-[color:var(--ol-fg-subtle)]',
+                  'border border-dashed border-[color:var(--ol-fg-subtle)] bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-subtle)] line-through decoration-[color:var(--ol-fg-subtle)] decoration-1',
               )}
               title={st === 'skipped' ? 'Skipped (cached or not needed)' : undefined}
             >
