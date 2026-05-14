@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { createService, type ServiceTemplate } from '@/lib/api';
+import { useLanguage } from '@/i18n/context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -42,6 +43,7 @@ export function CreateServiceDialog({
   const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>([]);
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (open) {
@@ -77,11 +79,11 @@ export function CreateServiceDialog({
         });
       }
 
-      toast.success('Service created successfully');
+      toast.success(t('services.create.toasts.success'));
       onSuccess();
       onOpenChange(false);
     } catch (err: unknown) {
-      const message = getErrorMessage(err, 'Failed to create service');
+      const message = getErrorMessage(err, t('services.create.toasts.errorFallback'));
       setCreateError(message);
       toast.error(message);
     } finally {

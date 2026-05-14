@@ -585,6 +585,13 @@ export const translations = {
         startFailed: 'Failed to start service',
         stopFailed: 'Failed to stop service',
         deleteFailed: 'Failed to delete service',
+        loadDatabasesFailed: 'Failed to load databases',
+        dbCreated: 'Database created successfully',
+        dbCreateFailed: 'Failed to create database',
+        userCreated: 'User created successfully',
+        userCreateFailed: 'Failed to create user',
+        connStringCopied: 'Connection string copied to clipboard',
+        copiedToClipboard: 'Copied to clipboard',
       },
       header: {
         backToServices: 'Back to Services',
@@ -621,6 +628,12 @@ export const translations = {
     empty: {
       title: 'No services yet',
       description: 'Create a database, cache, or other infrastructure service',
+    },
+    create: {
+      toasts: {
+        success: 'Service created successfully',
+        errorFallback: 'Failed to create service',
+      },
     },
   },
   timeline: {
