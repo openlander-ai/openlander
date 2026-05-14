@@ -98,7 +98,7 @@ GET /api/services/:id/health
 
 ```json
 {
-  "health": "healthy" | "crashed"
+  "health": "healthy" | "crashed" | "deploying"
 }
 ```
 
@@ -106,9 +106,13 @@ GET /api/services/:id/health
   OR healthcheck is in `starting` (grace window — treated as healthy by default),
   OR no HEALTHCHECK declared (we can't prove unhealthy → assume healthy)
 - `"crashed"` — container running but healthcheck explicitly reports `unhealthy`
+- `"deploying"` — the owning project runtime status is mid-redeploy (`building`).
+  Surfaced before docker inspection so a transient running/stopped container during
+  blue-green swap or force redeploy does not flip the badge to a misleading
+  `healthy` or `crashed`.
 
 **Response 404:** `{ error: "NOT_FOUND", message: string }` — service not
-found or container not running.
+found, or container not running AND the project is not mid-deploy.
 
 ---
 
@@ -160,7 +164,7 @@ GET /api/projects/:id/topology
       "name":       string,                    // project.name
       "kind":       "Application" | "Database",
       "image":      string,                    // image_url | image_tag | "<name>:latest"
-      "health":     "healthy" | "crashed",     // binary; no-healthcheck → "healthy"
+      "health":     "healthy" | "crashed" | "deploying", // building project → "deploying"; no-healthcheck → "healthy"
       "port":       number | null,             // assigned_port or null
       "url":        string | null,             // sslip.io URL or null
       "cpu":        string,                    // "2.1%" or "—" when unavailable

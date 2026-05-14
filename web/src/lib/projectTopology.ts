@@ -25,7 +25,7 @@
  */
 import type { ActivityEvent } from './agentActivity';
 
-export type ServiceHealth = 'healthy' | 'crashed';
+export type ServiceHealth = 'healthy' | 'crashed' | 'deploying';
 
 export type ServiceKind = 'Application' | 'Database';
 

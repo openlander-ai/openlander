@@ -13,7 +13,7 @@ export const ServiceNodeSchema = z.object({
   kind: z.enum(['Application', 'Database']),
   port: z.number().nullable(),
   image: z.string(),
-  health: z.enum(['healthy', 'crashed']),
+  health: z.enum(['healthy', 'crashed', 'deploying']),
   cpu: z.string(),
   mem: z.string(),
   url: z.string().nullable(),

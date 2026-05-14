@@ -42,13 +42,22 @@ export function useServiceHealth(serviceId: string | null): UseServiceHealthResu
       setHealth(result);
       setError(null);
     } catch (err) {
+      // Clear health on fetch failure so a stale value (e.g. the
+      // last `deploying` before a failed deploy 404s the endpoint)
+      // does not pin the badge while topology has already moved on
+      // to `crashed`. ServiceDetailV2 reads
+      // `liveHealth.health ?? resolvedService?.health`, so null lets
+      // the topology snapshot take over.
+      setHealth(null);
       setError(err instanceof Error ? err.message : 'Failed to fetch health');
     } finally {
       setIsLoading(false);
     }
   }, [serviceId]);
 
-  const pollMs = health === 'crashed' ? ACTIVE_POLL_MS : IDLE_POLL_MS;
+  // Active polling for any non-steady state so the badge flips
+  // promptly when a redeploy finishes or a crashed service recovers.
+  const pollMs = health === 'crashed' || health === 'deploying' ? ACTIVE_POLL_MS : IDLE_POLL_MS;
   usePollingTask(fetcher, { intervalMs: pollMs, enabled: serviceId != null });
 
   return { health, isLoading, error };

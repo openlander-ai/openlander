@@ -47,7 +47,7 @@ interface InfraMapProps {
   isDemo?: boolean;
 }
 
-// ServiceHealth is wire-locked to 'healthy' | 'crashed' (see
+// ServiceHealth wire vocab is 'healthy' | 'crashed' | 'deploying' (see
 // projectTopology.ts:28 + services-zod.ts:49). The CSS in InfraMap.css
 // also defines hooks for 'degraded' / 'restarting' / 'starting' /
 // 'stopped' / 'running' / 'recovering' / 'unknown' so the visual can
@@ -56,11 +56,13 @@ interface InfraMapProps {
 const HEALTH_PULSE: Record<ServiceHealth, boolean> = {
   healthy: false,
   crashed: true,
+  deploying: true,
 };
 
 const HEALTH_LABEL: Record<ServiceHealth, string> = {
   healthy: 'healthy',
   crashed: 'crashed',
+  deploying: 'deploying',
 };
 
 export function InfraMap(props: InfraMapProps) {
@@ -434,7 +436,10 @@ function NodePopover({
 // HealthSummary
 
 function HealthSummary({ counts }: { counts: Record<ServiceHealth, number> }) {
-  const order: ServiceHealth[] = ['crashed', 'healthy'];
+  // Order matters — `crashed` and `deploying` are the actionable
+  // states, surfaced before `healthy` so the summary reads from
+  // "needs attention" → "fine".
+  const order: ServiceHealth[] = ['crashed', 'deploying', 'healthy'];
   const items = order.map((k) => ({ k, n: counts[k] || 0 })).filter((x) => x.n > 0);
   if (items.length === 1 && items[0].k === 'healthy') {
     return (
@@ -519,6 +524,7 @@ function countByHealth(services: ServiceNode[]): Record<ServiceHealth, number> {
   const out: Record<ServiceHealth, number> = {
     healthy: 0,
     crashed: 0,
+    deploying: 0,
   };
   for (const s of services) out[s.health] = (out[s.health] ?? 0) + 1;
   return out;

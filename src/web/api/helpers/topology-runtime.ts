@@ -21,7 +21,7 @@ const log = createModuleLogger('api:topology-runtime');
 // globally unique across projects, so cache reuse is safe across tenants.
 
 export interface TopologyNodeRuntime {
-  health: 'healthy' | 'crashed';
+  health: 'healthy' | 'crashed' | 'deploying';
   cpuDisplay: string;
   memDisplay: string;
 }
@@ -219,16 +219,17 @@ async function fetchTopologyNodeRuntime(
   // Containers in their HEALTHCHECK `start_period` (typically 30s for
   // postgres/mongo) are healthy by default — collapsing `starting` to
   // `crashed` triggered false alarms in InfraMap on every fresh deploy.
-  // Only `unhealthy` collapses to `crashed`. `building` is explicitly
-  // treated as non-crashed so the project list and service topology do
-  // not disagree while a deploy is in progress.
+  // Only `unhealthy` collapses to `crashed`. `building` is surfaced
+  // as `deploying` so the project list and service topology agree —
+  // PR #66 mapped it to `healthy` as a tactical fix; now we widen the
+  // vocab to a first-class deploy-in-progress state.
   //
   // Inspect failure collapses to `crashed` for parity with
   // ServiceManager.inspectServiceContainer (which sets status: 'error'
   // on the same failure mode).
-  let health: 'healthy' | 'crashed' = 'healthy';
+  let health: 'healthy' | 'crashed' | 'deploying' = 'healthy';
   if (node.status === 'building') {
-    health = 'healthy';
+    health = 'deploying';
   } else if (node.status !== 'running') {
     health = 'crashed';
   } else if (node.container_id) {

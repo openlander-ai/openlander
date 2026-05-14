@@ -46,7 +46,7 @@ void _errorClassCheck;
 
 // ─── ServiceHealth ────────────────────────────────────────────────────────────
 
-export const ServiceHealthValueSchema = z.enum(['healthy', 'crashed']);
+export const ServiceHealthValueSchema = z.enum(['healthy', 'crashed', 'deploying']);
 
 // Compile-time parity assertion
 type _ServiceHealthParity =

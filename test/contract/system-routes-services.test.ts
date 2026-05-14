@@ -353,3 +353,68 @@ describe('system-routes /api/services wire shape contract', () => {
     expect(body[0].env_vars).toBe('{"PG_PASSWORD":"secret"}');
   });
 });
+
+describe("system-routes /api/services/:id/health — 'deploying' projection", () => {
+  // The /health endpoint must surface `deploying` BEFORE running
+  // docker inspect when the owning project is mid-redeploy
+  // (`building`). Otherwise a transient running
+  // container during blue-green swap or late in a force redeploy gets
+  // reported as `healthy` while the project is still building, which
+  // shadows the topology `deploying` value via the ServiceDetail
+  // header's `liveHealth.health ?? resolvedService?.health` chain.
+  it("returns { health: 'deploying' } when owning project runtime status is 'building', regardless of docker inspect", async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+
+    const service = makeCanonicalServiceRow();
+    const buildingProject = {
+      id: service.project_id,
+      name: 'test-redis',
+      status: 'building' as const,
+    };
+
+    const mockCtx = {
+      serviceManager: {
+        // Even if docker inspect happens to think the container is
+        // running healthy, the runtime project status MUST win.
+        getInspectionHealth: vi
+          .fn()
+          .mockResolvedValue({ status: 'running', healthStatus: 'healthy' }),
+        listWithCardSummary: vi.fn(),
+        create: vi.fn(),
+        getDetail: vi.fn(),
+        getLogs: vi.fn(),
+        getStats: vi.fn(),
+        getConnectedProjects: vi.fn(),
+        listDatabases: vi.fn(),
+        createDatabase: vi.fn(),
+        listUsers: vi.fn(),
+        createUser: vi.fn(),
+        remove: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        restart: vi.fn(),
+      },
+      db: {
+        getService: vi.fn().mockResolvedValue(service),
+        getProject: vi.fn().mockResolvedValue(buildingProject),
+        getEnvVars: vi.fn().mockReturnValue({}),
+        getEnvVarsForService: vi.fn().mockReturnValue({}),
+        hasAnyServiceMetrics: vi.fn(),
+        listServiceMetricsSince: vi.fn(),
+      },
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request(`/api/services/${service.id}/health`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { health: string };
+    expect(body.health).toBe('deploying');
+    // DB-status check must short-circuit docker inspect; the wire
+    // contract guarantees we don't pay the inspection cost when the
+    // answer is already known.
+    expect(mockCtx.serviceManager.getInspectionHealth).not.toHaveBeenCalled();
+  });
+});
