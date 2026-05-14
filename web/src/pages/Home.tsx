@@ -370,8 +370,15 @@ export function Home() {
       >
         <ActivityTimeline
           events={activityEvents}
+          // Pass the project list down so the row resolves IDs to display
+          // names — Home shares the same name resolver as the full Activity
+          // page even though it doesn't render the tab strip.
+          projects={projects.map((p) => ({ id: p.id, name: p.name }))}
           emptyState="No activity yet. Triggers, deploys, agent runs, and incidents will appear here as they happen."
           onOpenService={(project, service) => navigate(`/services/${service}?project=${project}`)}
+          onOpenDeployment={(deploymentId, projectId) =>
+            navigate(`/projects/${projectId}/deployments/${deploymentId}`)
+          }
         />
       </OuterCard>
 

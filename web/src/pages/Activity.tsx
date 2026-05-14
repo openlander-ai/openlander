@@ -51,7 +51,7 @@ export function Activity() {
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
       <OuterCard
         title="Activity"
-        subtitle="Audit log — deploys, config changes, crashes, and MCP connections."
+        subtitle="Audit log — pick a tab to focus on deployments, MCP, system events, or config changes."
         bodyClassName="p-0"
       >
         <ActivityTimeline

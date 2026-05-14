@@ -45,20 +45,26 @@ export interface ActivityEvent {
   project: string | null;
   /** Service ID within the project, or null for project-level events */
   service: string | null;
+  /** Optional display name for the project — emitted by the backend when known. */
+  projectName?: string | null;
+  /** Optional display name for the service — emitted by the backend when known. */
+  serviceName?: string | null;
   /** One-sentence headline */
   title: string;
   /** One-line detail / context. NOT a paragraph. Contains build #, error class, etc. */
   detail?: string;
 }
 
-/** Kind filter groups. Maps multiple ActivityKind values into the
- * pills the user sees on the Activity page. */
-export type KindGroup = 'all' | 'deploys' | 'crashes' | 'mcp' | 'config';
-export type ActivityTypeParam = 'all' | 'deploy' | 'config' | 'crash' | 'mcp';
+/** Kind filter groups. Drives the compact tab strip at the top of the
+ *  Activity page. `system` covers crash/recovery (the canonical "things
+ *  the platform noticed on its own"); `crashes` is kept as a legacy URL
+ *  alias so existing bookmarks like `/activity?type=crash` still route. */
+export type KindGroup = 'all' | 'deploys' | 'mcp' | 'system' | 'config';
+export type ActivityTypeParam = 'all' | 'deploy' | 'config' | 'system' | 'mcp';
 
 const KIND_GROUP_MAP: Record<Exclude<KindGroup, 'all'>, ActivityKind[]> = {
   deploys: ['deploy_started', 'deploy_completed', 'deploy_failed', 'deploy_cancelled'],
-  crashes: ['service_crashed', 'service_recovered'],
+  system: ['service_crashed', 'service_recovered'],
   mcp: ['mcp_connected', 'mcp_disconnected'],
   config: ['config_changed'],
 };
@@ -74,8 +80,11 @@ export function kindGroupFromTypeParam(value: string | null | undefined): KindGr
       return 'deploys';
     case 'config':
       return 'config';
+    // Legacy URL alias — `?type=crash` was the v0.1 spelling before the
+    // tab strip renamed the group to "System".
     case 'crash':
-      return 'crashes';
+    case 'system':
+      return 'system';
     case 'mcp':
       return 'mcp';
     case 'all':
@@ -90,13 +99,38 @@ export function typeParamFromKindGroup(kind: KindGroup): ActivityTypeParam {
       return 'deploy';
     case 'config':
       return 'config';
-    case 'crashes':
-      return 'crash';
+    case 'system':
+      return 'system';
     case 'mcp':
       return 'mcp';
     case 'all':
     default:
       return 'all';
+  }
+}
+
+/** Visual severity bucket for an event — drives the row's left status
+ *  icon + accent color. Successes stay neutral; failures and crashes are
+ *  the only categories that get a louder treatment. */
+export type ActivitySeverity = 'success' | 'failure' | 'warning' | 'info' | 'neutral';
+
+export function severityForKind(kind: ActivityKind): ActivitySeverity {
+  switch (kind) {
+    case 'deploy_completed':
+    case 'service_recovered':
+      return 'success';
+    case 'deploy_failed':
+    case 'service_crashed':
+      return 'failure';
+    case 'deploy_cancelled':
+      return 'warning';
+    case 'deploy_started':
+    case 'mcp_connected':
+      return 'info';
+    case 'mcp_disconnected':
+    case 'config_changed':
+    default:
+      return 'neutral';
   }
 }
 

@@ -86,11 +86,14 @@ export const translations = {
   activity: {
     filter: {
       type: {
-        // Chrome — filter chip labels.
+        // Chrome — tab strip labels.
         label: 'Type',
         all: 'All',
-        deploy: 'Deploys',
+        deploy: 'Deployments',
         config: 'Config',
+        // Renamed from "Crashes" — broader bucket for events the
+        // platform itself emits (crash + recovery).
+        system: 'System',
         crash: 'Crashes',
         mcp: 'MCP',
       },

@@ -1,20 +1,21 @@
 /**
  * Sidebar — v0.1 IA.
  *
- * v0.1 final design lock:
+ * v0.1 final design lock (post-tab fold):
  *
- *   Workspace (7):  Home · Your Agent · Projects · Activity · Deployments
- *                   · Monitoring · Web Server
+ *   Workspace (6):  Home · Your Agent · Projects · Activity ·
+ *                   Monitoring · Web Server
  *   Settings (1):   Git Providers
  *   Account footer: admin → popover (Change password · Sign out)
+ *
+ * Deployments is no longer a top-level nav item — it was a saved
+ * filter on top of /activity and reads better as one of the compact
+ * tabs inside the Activity page. Old `/activity?type=deploy` URLs
+ * still route to the same view; the sidebar entry is just gone.
  *
  * Removed in v0.1: Logs (lives only inside Service detail), SSH Keys (→ v0.2),
  * Notifications (→ v0.2). MCP Server item folded into Workspace as "Your Agent"
  * pointing at /mcp-server. Cloudflare Tunnel surface deferred to v0.2.
- *
- * Deployments uses the global Activity timeline filtered by deploy type
- * (`/activity?type=deploy`) — no separate page in v0.1, but the sidebar slot
- * gives users a one-click path to "what's been deployed lately?".
  */
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -25,7 +26,6 @@ import {
   Server,
   Bot,
   Code2,
-  Rocket,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -58,18 +58,10 @@ const startsWith =
   (pathname: string) =>
     prefixes.some((p) => pathname === p || pathname.startsWith(p + '/'));
 
-// Activity is the canonical timeline; Deployments is a saved filter on top
-// of it. The sidebar Deployments entry highlights only when the URL holds
-// `?type=deploy`; plain `/activity` activates the Activity item instead.
-const isDeploymentsView = (pathname: string, search: string): boolean => {
-  if (!pathname.startsWith('/activity')) return false;
-  return new URLSearchParams(search).get('type') === 'deploy';
-};
-
-const isActivityView = (pathname: string, search: string): boolean => {
-  if (!pathname.startsWith('/activity')) return false;
-  return new URLSearchParams(search).get('type') !== 'deploy';
-};
+// Activity is the canonical timeline and owns every `/activity*` URL —
+// type filters (deploy / mcp / system / config) live as tabs inside the
+// page, not as separate sidebar entries.
+const isActivityView = startsWith('/activity');
 
 const SECTIONS: NavSection[] = [
   {
@@ -99,13 +91,6 @@ const SECTIONS: NavSection[] = [
         icon: Activity,
         to: '/activity',
         matches: isActivityView,
-      },
-      {
-        id: 'deployments',
-        label: 'Deployments',
-        icon: Rocket,
-        to: '/activity?type=deploy',
-        matches: isDeploymentsView,
       },
       {
         id: 'monitoring',
