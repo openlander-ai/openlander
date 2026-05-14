@@ -70,6 +70,7 @@ describe('deployable restart_service non-blocking', () => {
       healthCheckPath: undefined,
       cmd: undefined,
       lockSessionId: expect.any(String),
+      trigger: 'chat',
     });
   });
 
@@ -90,6 +91,7 @@ describe('deployable restart_service non-blocking', () => {
       healthCheckPath: undefined,
       cmd: undefined,
       lockSessionId: expect.any(String),
+      trigger: 'chat',
     });
     expect(result).toMatchObject({
       status: 'restarting',
