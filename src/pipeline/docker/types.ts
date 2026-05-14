@@ -53,6 +53,7 @@ export interface RunComposeServiceOptions {
   };
   network?: string;
   networks?: string[];
+  aliases?: string[];
 }
 
 export interface ContainerInfo {

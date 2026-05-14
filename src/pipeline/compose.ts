@@ -877,6 +877,7 @@ export class ComposePipeline {
                   restart: composeService.restart,
                   healthcheck,
                   networks: [activeProjectNetwork, getPolicy(envType).networkName],
+                  aliases: [service.name],
                 });
                 break;
               } catch (error) {
