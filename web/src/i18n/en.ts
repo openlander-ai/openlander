@@ -82,6 +82,18 @@ export const translations = {
     closeDialogLabel: 'Close dialog',
     agentName: 'Your agent',
     connectAria: 'Connect your agent',
+    closeButton: 'Close',
+    agentNotConnectedPrompt: 'Agent not connected?',
+    setItUpCta: 'Set it up →',
+    identityStrip: {
+      lastActiveLine: 'last active {time}',
+      connectedOverMcp: 'connected over MCP',
+    },
+    connectBanner: {
+      title: 'First, connect your agent',
+      body: 'Point Claude — or any MCP-capable agent — at your OpenLander instance. About a minute.',
+      setupAgent: 'Set up agent',
+    },
     copy: {
       label: 'Copy',
       success: 'Copied',

@@ -87,12 +87,30 @@ export const translations = {
     agentChipTitle: '에이전트 활동 — 에이전트가 한 작업을 확인하세요',
   },
   agentGuide: {
-    // Content — identity label + a11y prose. agentName follows the "generic
-    // placeholder until backend exposes clientInfo.name" comment in
-    // AgentGuideDialog and reads natively in Korean.
+    // Chrome — bare-verb footer button.
+    closeButton: 'Close',
+    // Content — identity label + a11y prose + helper prompts. agentName
+    // follows the "generic placeholder until backend exposes
+    // clientInfo.name" comment in AgentGuideDialog and reads natively
+    // in Korean.
     agentName: '내 에이전트',
     closeDialogLabel: '대화상자 닫기',
     connectAria: '에이전트 연결',
+    agentNotConnectedPrompt: '에이전트가 연결되지 않았나요?',
+    setItUpCta: '연결하기 →',
+    identityStrip: {
+      // Content — '· last active {time}' template, restructured for ko word
+      // order. connectedOverMcp is descriptor prose, translated.
+      lastActiveLine: '마지막 활동: {time}',
+      connectedOverMcp: 'MCP로 연결됨',
+    },
+    connectBanner: {
+      // Content — banner title + body. setupAgent is Chrome (verb-noun
+      // CTA, parallel with 'New Project').
+      title: '먼저 에이전트를 연결하세요',
+      body: 'Claude나 다른 MCP 지원 에이전트를 OpenLander 인스턴스에 연결하세요. 약 1분 소요됩니다.',
+      setupAgent: 'Set up agent',
+    },
     copy: {
       // Chrome — bare verb + post-action verb (button state labels).
       label: 'Copy',

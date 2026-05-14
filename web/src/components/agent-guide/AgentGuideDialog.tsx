@@ -114,13 +114,13 @@ export function AgentGuideDialog({
 
           {connected && (
             <p className="mt-1 text-[12px] text-[color:var(--ol-fg-muted)]">
-              Agent not connected?{' '}
+              {t('agentGuide.agentNotConnectedPrompt')}{' '}
               <button
                 type="button"
                 onClick={handleSetupAgent}
                 className="bg-transparent p-0 text-[color:var(--ol-primary)] hover:underline"
               >
-                Set it up →
+                {t('agentGuide.setItUpCta')}
               </button>
             </p>
           )}
@@ -132,7 +132,7 @@ export function AgentGuideDialog({
             onClick={() => onOpenChange(false)}
             className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:opacity-90"
           >
-            Close
+            {t('agentGuide.closeButton')}
           </button>
         </footer>
       </DialogContent>
@@ -147,6 +147,7 @@ function AgentIdentityStrip({
   agentName: string;
   lastActiveLabel: string;
 }) {
+  const { t } = useLanguage();
   return (
     <div
       role="status"
@@ -159,14 +160,20 @@ function AgentIdentityStrip({
       />
       <span className="flex-1 text-[color:var(--ol-fg)]">
         <b className="font-semibold">{agentName}</b>
-        <span className="text-[color:var(--ol-fg-muted)]"> · last active {lastActiveLabel}</span>
+        <span className="text-[color:var(--ol-fg-muted)]">
+          {' · '}
+          {t('agentGuide.identityStrip.lastActiveLine', { time: lastActiveLabel })}
+        </span>
       </span>
-      <span className="text-[12px] text-[color:var(--ol-fg-muted)]">connected over MCP</span>
+      <span className="text-[12px] text-[color:var(--ol-fg-muted)]">
+        {t('agentGuide.identityStrip.connectedOverMcp')}
+      </span>
     </div>
   );
 }
 
 function ConnectAgentBanner({ onOpenMcpSetup }: { onOpenMcpSetup: () => void }) {
+  const { t } = useLanguage();
   return (
     <div
       role="region"
@@ -181,10 +188,10 @@ function ConnectAgentBanner({ onOpenMcpSetup }: { onOpenMcpSetup: () => void }) 
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-[13.5px] font-semibold text-[color:var(--ol-fg)]">
-          First, connect your agent
+          {t('agentGuide.connectBanner.title')}
         </div>
         <p className="mt-0.5 text-[12.5px] leading-snug text-[color:var(--ol-fg-muted)]">
-          Point Claude — or any MCP-capable agent — at your OpenLander instance. About a minute.
+          {t('agentGuide.connectBanner.body')}
         </p>
       </div>
       <button
@@ -192,7 +199,7 @@ function ConnectAgentBanner({ onOpenMcpSetup }: { onOpenMcpSetup: () => void }) 
         onClick={onOpenMcpSetup}
         className="flex shrink-0 items-center gap-1 rounded-md bg-[color:var(--ol-primary)] px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:opacity-90"
       >
-        Set up agent <ArrowRight className="h-3 w-3" />
+        {t('agentGuide.connectBanner.setupAgent')} <ArrowRight className="h-3 w-3" />
       </button>
     </div>
   );
