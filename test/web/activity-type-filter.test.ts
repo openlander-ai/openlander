@@ -11,7 +11,10 @@ describe('Activity type URL mapping', () => {
     ['all', 'all'],
     ['deploy', 'deploys'],
     ['config', 'config'],
-    ['crash', 'crashes'],
+    // Legacy URL alias kept decoding — old bookmarks like /activity?type=crash
+    // still surface the same set of events under the renamed "System" tab.
+    ['crash', 'system'],
+    ['system', 'system'],
     ['mcp', 'mcp'],
     ['unknown', 'all'],
   ] as const)('maps URL type %s to KindGroup %s', (param, expected) => {
@@ -22,7 +25,7 @@ describe('Activity type URL mapping', () => {
     ['all', 'all'],
     ['deploys', 'deploy'],
     ['config', 'config'],
-    ['crashes', 'crash'],
+    ['system', 'system'],
     ['mcp', 'mcp'],
   ] as const)('maps KindGroup %s back to URL type %s', (kind, expected) => {
     expect(typeParamFromKindGroup(kind)).toBe(expected);

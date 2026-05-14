@@ -201,9 +201,8 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         relTs,
         project: serviceRef.projectId,
         service: serviceRef.serviceId,
-        // Project name is intentionally omitted — ActivityRow renders the
-        // project badge from `event.project`, so re-encoding it in the
-        // title would duplicate.
+        projectName: projectNameById.get(serviceRef.projectId) ?? null,
+        serviceName: serviceRef.serviceName,
         title: `${titleVerb}${titleSuffix}`,
         detail,
       });
@@ -233,6 +232,8 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         relTs,
         project: projectId,
         service: serviceRef?.serviceId ?? null,
+        projectName: projectNameById.get(projectId) ?? null,
+        serviceName: serviceRef?.serviceName ?? null,
         title: row.title,
         detail: row.description,
       });
@@ -247,7 +248,6 @@ export function createActivityRoutes(ctx: AppContext): Hono {
       if (projectScoped && serviceRef.projectId !== projectFilter) continue;
       const ms = parseTimestamp(inc.created_at);
       if (ms == null) continue;
-      const projectName = projectNameById.get(serviceRef.projectId) ?? serviceRef.projectId;
       const { at, relTs } = relativeTime(ms, now);
       const detailBits: string[] = [];
       if (inc.exit_code != null) detailBits.push(`exit ${String(inc.exit_code)}`);
@@ -263,10 +263,12 @@ export function createActivityRoutes(ctx: AppContext): Hono {
         relTs,
         project: serviceRef.projectId,
         service: serviceRef.serviceId,
+        projectName: projectNameById.get(serviceRef.projectId) ?? null,
+        serviceName: serviceRef.serviceName,
         // Title leans on project badge in the UI; raw project name kept
         // out of the headline so the timeline stays uniform.
         title: 'Service crashed',
-        detail: detailBits.length > 0 ? `${projectName} · ${detailBits.join(' · ')}` : projectName,
+        detail: detailBits.length > 0 ? detailBits.join(' · ') : undefined,
       });
     }
 

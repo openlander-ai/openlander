@@ -2,63 +2,146 @@
  * ActivityTimeline — shared timeline primitive.
  *
  * Used by:
- *   - Home page (the Unified Activity Stream)
- *   - Activity page (with filter pills + bucketing)
+ *   - Home page (the recent-activity peek)
+ *   - Activity page (with tab strip + bucketing)
  *   - MCP Server page (filtered to MCP-actor events)
  *
- * Linear/Vercel tone:
- *   Actor identity is a small mono-tagged "label", not a colored circle
- *   icon. Bot icon appears ONLY when actor === 'mcp' so the agent
- *   presence reads at a glance without lighting up every row.
+ * Information hierarchy (post-IA cleanup):
+ *   1. Left rail: small status icon + accent color. Failure / crash gets a
+ *      louder treatment; success and config stay neutral.
+ *   2. Title: event name in the standard fg color (e.g. "Deploy succeeded",
+ *      "Service crashed", "Environment variables set").
+ *   3. Meta line below the title: `project / service · actor · time` in a
+ *      single muted row. Display names are preferred over raw IDs; the
+ *      backend ships `projectName` / `serviceName` when known and the row
+ *      strips the legacy `__svc` suffix off bare service IDs as a fallback.
+ *   4. Detail: optional one-line context (commit message, exit code, etc.)
+ *      rendered subtle. Successes can omit it entirely.
  *
- * Reasoning text:
- *   Single inline `detail` line per event. NO collapsible expansion.
- *   Multi-paragraph LLM reasoning is a v1.1+ feature.
+ * Failure / crash rows get an accent border-left and the title turns the
+ * error color so they stand out without changing the row height. Everything
+ * else stays calm — a long quiet timeline is the goal.
  */
 import { useMemo, useState } from 'react';
-import { Bot, Webhook, User, Settings as SettingsIcon } from 'lucide-react';
+import {
+  AlertTriangle,
+  Bot,
+  CheckCircle2,
+  Loader2,
+  PowerOff,
+  RotateCcw,
+  Settings as SettingsIcon,
+  Webhook,
+  XCircle,
+  type LucideIcon,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
 import {
   bucketByTime,
   filterEvents,
   isKindInGroup,
+  severityForKind,
   type Actor,
   type ActivityEvent,
   type ActivityFilters,
+  type ActivityKind,
+  type ActivitySeverity,
   type KindGroup,
   type ProjectSummary,
 } from '@/lib/agentActivity';
 
-const ACTOR_META: Record<
-  Actor,
-  { label: string; tone: 'mcp' | 'human' | 'webhook' | 'system'; Icon: typeof Bot }
-> = {
-  mcp: { label: 'mcp', tone: 'mcp', Icon: Bot },
-  human: { label: 'human', tone: 'human', Icon: User },
-  webhook: { label: 'webhook', tone: 'webhook', Icon: Webhook },
-  system: { label: 'system', tone: 'system', Icon: SettingsIcon },
+interface KindMeta {
+  Icon: LucideIcon;
+}
+
+const KIND_ICON: Record<ActivityKind, KindMeta> = {
+  deploy_started: { Icon: Loader2 },
+  deploy_completed: { Icon: CheckCircle2 },
+  deploy_failed: { Icon: XCircle },
+  deploy_cancelled: { Icon: PowerOff },
+  config_changed: { Icon: SettingsIcon },
+  service_crashed: { Icon: AlertTriangle },
+  service_recovered: { Icon: RotateCcw },
+  mcp_connected: { Icon: Bot },
+  mcp_disconnected: { Icon: Bot },
 };
 
-const TONE_BG: Record<string, string> = {
-  mcp: 'color-mix(in oklch, var(--ol-actor-mcp) 14%, transparent)',
-  human: 'color-mix(in oklch, var(--ol-actor-human) 10%, transparent)',
-  webhook: 'color-mix(in oklch, var(--ol-actor-webhook) 14%, transparent)',
-  system: 'color-mix(in oklch, var(--ol-actor-system) 12%, transparent)',
+interface SeverityStyle {
+  /** Foreground/icon color (CSS var ref). */
+  fg: string;
+  /** Soft chip background for the icon disc. */
+  bg: string;
+  /** Whether the row should pick up a louder accent (left border + title color). */
+  loud: boolean;
+}
+
+const SEVERITY_STYLE: Record<ActivitySeverity, SeverityStyle> = {
+  success: {
+    fg: 'var(--ol-success)',
+    bg: 'color-mix(in oklch, var(--ol-success) 12%, transparent)',
+    loud: false,
+  },
+  failure: {
+    fg: 'var(--ol-error)',
+    bg: 'color-mix(in oklch, var(--ol-error) 14%, transparent)',
+    loud: true,
+  },
+  warning: {
+    fg: 'var(--ol-warning)',
+    bg: 'color-mix(in oklch, var(--ol-warning) 14%, transparent)',
+    loud: false,
+  },
+  info: {
+    fg: 'var(--ol-actor-mcp)',
+    bg: 'color-mix(in oklch, var(--ol-actor-mcp) 12%, transparent)',
+    loud: false,
+  },
+  neutral: {
+    fg: 'var(--ol-fg-subtle)',
+    bg: 'var(--ol-panel-2)',
+    loud: false,
+  },
 };
-const TONE_FG: Record<string, string> = {
-  mcp: 'var(--ol-actor-mcp)',
-  human: 'var(--ol-actor-human)',
-  webhook: 'var(--ol-actor-webhook)',
-  system: 'var(--ol-actor-system)',
+
+const ACTOR_LABEL: Record<Actor, string> = {
+  mcp: 'MCP',
+  human: 'human',
+  webhook: 'git',
+  system: 'system',
 };
+
+const ACTOR_ICON: Partial<Record<Actor, LucideIcon>> = {
+  mcp: Bot,
+  webhook: Webhook,
+};
+
+/** Normalize the service segment we render in the row meta. The legacy
+ *  `{project}__svc` shape is used for single-deployable groups where the
+ *  service is conceptually the project itself — both the row's
+ *  `event.service` (id) and `event.serviceName` (the services-row name)
+ *  can end with `__svc`, so this strip has to run on the chosen
+ *  candidate, not only on the raw id fallback.
+ *
+ *  Returns `null` when the stripped result matches any known project
+ *  identifier (display name OR id) — at that point the service is the
+ *  anonymous single-deployable and the meta line is cleaner without it. */
+function normalizeServiceSegment(
+  raw: string | null | undefined,
+  ...projectAliases: Array<string | null | undefined>
+): string | null {
+  if (!raw) return null;
+  const stripped = raw.endsWith('__svc') ? raw.slice(0, -'__svc'.length) : raw;
+  for (const alias of projectAliases) {
+    if (alias && stripped === alias) return null;
+  }
+  return stripped;
+}
 
 export interface ActivityRowProps {
   event: ActivityEvent;
   /** Compact density (used in Home stream / inline cards) */
   compact?: boolean;
-  /** Whether to draw the connecting rail under this row */
-  isLast?: boolean;
   onOpenService?: (project: string, service: string) => void;
   /** Click handler for deploy_* events. Receives the deployment id
    *  (server-side: event.id has the form `deploy-<id>`) plus the
@@ -66,100 +149,147 @@ export interface ActivityRowProps {
    *  can construct the nested `/projects/:id/deployments/:deployId`
    *  route required by DeploymentDetail. */
   onOpenDeployment?: (deploymentId: string, projectId: string) => void;
+  /** Optional project-id → display-name resolver. Falls back to
+   *  `event.projectName`, then the raw id. */
+  resolveProjectName?: (projectId: string) => string | null;
 }
 
 export function ActivityRow({
   event,
   compact,
-  isLast,
   onOpenService,
   onOpenDeployment,
+  resolveProjectName,
 }: ActivityRowProps) {
-  const meta = ACTOR_META[event.actor];
-  const Icon = meta.Icon;
-  const showBotIcon = event.actor === 'mcp';
+  const severity = severityForKind(event.kind);
+  const sev = SEVERITY_STYLE[severity];
+  const { Icon } = KIND_ICON[event.kind];
+  const ActorIcon = ACTOR_ICON[event.actor];
+
+  const projectDisplay = event.project
+    ? (resolveProjectName?.(event.project) ?? event.projectName ?? event.project)
+    : null;
+  // Pick the best service candidate (backend-shipped name first, then raw
+  // id) and run it through the shared normalizer so `${project}__svc`
+  // suffixes collapse out regardless of which field carried them.
+  const serviceDisplay = normalizeServiceSegment(
+    event.serviceName ?? event.service,
+    event.project,
+    event.projectName,
+    projectDisplay,
+  );
+
+  const isDeploy = isKindInGroup(event.kind, 'deploys');
+  const canOpenDeployment = isDeploy && onOpenDeployment != null && event.project != null;
+  const canOpenService = event.project != null && event.service != null && onOpenService != null;
+
+  const titleClass = cn(
+    'text-[13.5px] font-medium leading-snug',
+    sev.loud
+      ? 'text-[color:var(--ol-error)]'
+      : severity === 'success'
+        ? 'text-[color:var(--ol-fg)]'
+        : 'text-[color:var(--ol-fg)]',
+  );
+
+  const handleTitleClick = (e: React.MouseEvent) => {
+    if (!canOpenDeployment || !event.project) return;
+    e.stopPropagation();
+    const deploymentId = event.id.startsWith('deploy-')
+      ? event.id.slice('deploy-'.length)
+      : event.id;
+    onOpenDeployment?.(deploymentId, event.project);
+  };
+
   return (
-    <div className={cn('relative flex gap-3 px-4', compact ? 'py-2.5' : 'py-3.5')}>
-      {/* Gutter rail */}
-      <div className="relative flex w-14 shrink-0 flex-col items-start pt-0.5">
-        <span
-          className="ol-mono inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none"
-          style={{
-            backgroundColor: TONE_BG[meta.tone],
-            color: TONE_FG[meta.tone],
-          }}
-        >
-          {showBotIcon && <Icon className="h-3 w-3" />}
-          {meta.label}
-        </span>
-        {!isLast && (
-          <span
-            aria-hidden
-            className="absolute left-[7px] top-7 bottom-[-14px] w-px"
-            style={{ backgroundColor: 'var(--ol-border-subtle)' }}
-          />
-        )}
+    <div
+      className={cn(
+        'group relative flex gap-3 border-l-2 px-4 transition-colors',
+        compact ? 'py-2.5' : 'py-3',
+        sev.loud
+          ? 'border-[color:var(--ol-error)] bg-[color-mix(in_oklch,var(--ol-error)_4%,transparent)]'
+          : 'border-transparent hover:bg-[color:var(--ol-panel-2)]',
+      )}
+    >
+      {/* Left status disc */}
+      <div
+        className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full"
+        style={{ backgroundColor: sev.bg, color: sev.fg }}
+        aria-hidden
+      >
+        <Icon className={cn('h-3.5 w-3.5', event.kind === 'deploy_started' && 'animate-spin')} />
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          {isKindInGroup(event.kind, 'deploys') && onOpenDeployment && event.project ? (
-            (() => {
-              // event.id has the form `deploy-<deploymentId>` per
-              // src/web/api/activity-routes.ts. Strip the prefix to deep-link.
-              const deploymentId = event.id.startsWith('deploy-')
-                ? event.id.slice('deploy-'.length)
-                : event.id;
-              const projectId = event.project;
-              return (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenDeployment(deploymentId, projectId);
-                  }}
-                  className="text-left text-[13.5px] leading-snug text-[color:var(--ol-fg)] transition-colors hover:text-[color:var(--ol-primary)] hover:underline"
-                >
-                  {event.title}
-                </button>
-              );
-            })()
-          ) : (
-            <span className="text-[13.5px] leading-snug text-[color:var(--ol-fg)]">
-              {event.title}
-            </span>
-          )}
-          {event.project && (
+        {/* Title + time */}
+        <div className="flex items-baseline gap-2">
+          {canOpenDeployment ? (
             <button
               type="button"
+              onClick={handleTitleClick}
+              className={cn(titleClass, 'text-left hover:underline')}
+            >
+              {event.title}
+            </button>
+          ) : (
+            <span className={titleClass}>{event.title}</span>
+          )}
+          <span className="ml-auto shrink-0 text-[11px] text-[color:var(--ol-fg-subtle)]">
+            {event.at}
+          </span>
+        </div>
+
+        {/* Meta line — project · service · actor */}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11.5px] text-[color:var(--ol-fg-muted)]">
+          {projectDisplay && (
+            <button
+              type="button"
+              disabled={!canOpenService}
               onClick={(e) => {
+                if (!canOpenService) return;
                 e.stopPropagation();
-                if (event.service && onOpenService) {
-                  onOpenService(event.project!, event.service);
-                }
+                onOpenService?.(event.project!, event.service!);
               }}
-              disabled={!event.service || !onOpenService}
               className={cn(
-                'ol-mono rounded border px-1.5 py-px text-[11px] leading-none',
-                'border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]',
-                event.service && onOpenService
-                  ? 'transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]'
+                'truncate',
+                canOpenService
+                  ? 'transition-colors hover:text-[color:var(--ol-fg)] hover:underline'
                   : 'cursor-default',
               )}
             >
-              {event.project}
-              {event.service ? `/${event.service}` : ''}
+              {projectDisplay}
+              {serviceDisplay && (
+                <span className="text-[color:var(--ol-fg-subtle)]"> / {serviceDisplay}</span>
+              )}
             </button>
           )}
-          <span className="ml-auto text-[11px] text-[color:var(--ol-fg-subtle)]">{event.at}</span>
+          {projectDisplay && <Separator />}
+          <span className="inline-flex items-center gap-1">
+            {ActorIcon && <ActorIcon className="h-3 w-3 opacity-70" />}
+            {ACTOR_LABEL[event.actor]}
+          </span>
         </div>
+
         {event.detail && (
-          <p className="mt-1 text-[12.5px] leading-snug text-[color:var(--ol-fg-muted)]">
+          <p
+            className={cn(
+              'mt-1 line-clamp-2 text-[12px] leading-snug',
+              sev.loud ? 'text-[color:var(--ol-fg)]' : 'text-[color:var(--ol-fg-muted)]',
+            )}
+          >
             {event.detail}
           </p>
         )}
       </div>
     </div>
+  );
+}
+
+function Separator() {
+  return (
+    <span aria-hidden className="text-[color:var(--ol-fg-subtle)]">
+      ·
+    </span>
   );
 }
 
@@ -170,9 +300,9 @@ export interface ActivityTimelineProps {
    *  deploy event with a non-null project, the title becomes a
    *  clickable deep-link to the deployment detail page. */
   onOpenDeployment?: (deploymentId: string, projectId: string) => void;
-  /** Show filter pills above the stream (Activity page) */
+  /** Show the type tab strip + project filter (Activity page). */
   showFilters?: boolean;
-  /** When showFilters is true, project pill needs the project list */
+  /** When showFilters is true, the project filter renders with this list. */
   projects?: ProjectSummary[];
   kindFilter?: KindGroup;
   onKindFilterChange?: (kind: KindGroup) => void;
@@ -217,93 +347,71 @@ export function ActivityTimeline({
     [events, effectiveFilters, showFilters],
   );
 
+  const projectNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of projects ?? []) m.set(p.id, p.name);
+    return m;
+  }, [projects]);
+  const resolveProjectName = (id: string): string | null => projectNameById.get(id) ?? null;
+
   const buckets = useMemo(() => (bucketed ? bucketByTime(filtered) : null), [filtered, bucketed]);
 
   const empty = filtered.length === 0;
 
-  const renderRow = (e: ActivityEvent, i: number, total: number) => (
+  const tabs = useMemo(
+    () => [
+      { v: 'all' as KindGroup, label: t('activity.filter.type.all'), count: events.length },
+      {
+        v: 'deploys' as KindGroup,
+        label: t('activity.filter.type.deploy'),
+        count: events.filter((e) => isKindInGroup(e.kind, 'deploys')).length,
+      },
+      {
+        v: 'mcp' as KindGroup,
+        label: t('activity.filter.type.mcp'),
+        count: events.filter((e) => isKindInGroup(e.kind, 'mcp')).length,
+      },
+      {
+        v: 'system' as KindGroup,
+        label: t('activity.filter.type.system'),
+        count: events.filter((e) => isKindInGroup(e.kind, 'system')).length,
+      },
+      {
+        v: 'config' as KindGroup,
+        label: t('activity.filter.type.config'),
+        count: events.filter((e) => isKindInGroup(e.kind, 'config')).length,
+      },
+    ],
+    [events, t],
+  );
+
+  const renderRow = (e: ActivityEvent) => (
     <ActivityRow
       key={e.id}
       event={e}
-      isLast={i === total - 1}
       onOpenService={onOpenService}
       onOpenDeployment={onOpenDeployment}
+      resolveProjectName={resolveProjectName}
     />
   );
 
   return (
     <div className={cn('flex flex-col', className)}>
       {showFilters && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-[color:var(--ol-border-subtle)] px-4 py-3">
-          <FilterPills
-            label="Actor"
-            value={filters.actor}
-            onChange={(v) => setFilters((f) => ({ ...f, actor: v as ActivityFilters['actor'] }))}
-            options={[
-              { v: 'all', label: 'All', count: events.length },
-              {
-                v: 'mcp',
-                label: 'MCP',
-                count: events.filter((e) => e.actor === 'mcp').length,
-                tone: 'mcp',
-              },
-              {
-                v: 'human',
-                label: 'Human',
-                count: events.filter((e) => e.actor === 'human').length,
-              },
-              {
-                v: 'webhook',
-                label: 'Git',
-                count: events.filter((e) => e.actor === 'webhook').length,
-                tone: 'webhook',
-              },
-              {
-                v: 'system',
-                label: 'System',
-                count: events.filter((e) => e.actor === 'system').length,
-              },
-            ]}
-          />
-          <FilterPills
-            label={t('activity.filter.type.label')}
+        <div className="flex flex-wrap items-center gap-3 border-b border-[color:var(--ol-border-subtle)] px-3 py-2.5">
+          <TabStrip
             value={effectiveFilters.kind ?? 'all'}
-            onChange={(v) => {
-              const next = v as KindGroup;
+            onChange={(next) => {
               if (onKindFilterChange) {
                 onKindFilterChange(next);
                 return;
               }
               setFilters((f) => ({ ...f, kind: next }));
             }}
-            options={[
-              { v: 'all', label: t('activity.filter.type.all'), count: events.length },
-              {
-                v: 'deploys',
-                label: t('activity.filter.type.deploy'),
-                count: events.filter((e) => isKindInGroup(e.kind, 'deploys')).length,
-              },
-              {
-                v: 'crashes',
-                label: t('activity.filter.type.crash'),
-                count: events.filter((e) => isKindInGroup(e.kind, 'crashes')).length,
-              },
-              {
-                v: 'mcp',
-                label: t('activity.filter.type.mcp'),
-                count: events.filter((e) => isKindInGroup(e.kind, 'mcp')).length,
-                tone: 'mcp',
-              },
-              {
-                v: 'config',
-                label: t('activity.filter.type.config'),
-                count: events.filter((e) => isKindInGroup(e.kind, 'config')).length,
-              },
-            ]}
+            tabs={tabs}
           />
-          {projects && projects.length > 0 && (
-            <FilterPills
-              label="Project"
+          {projects && projects.length > 1 && (
+            <ProjectSelect
               value={effectiveFilters.project}
               onChange={(v) => {
                 if (onProjectFilterChange) {
@@ -312,10 +420,7 @@ export function ActivityTimeline({
                 }
                 setFilters((f) => ({ ...f, project: v }));
               }}
-              options={[
-                { v: 'all', label: 'All projects' },
-                ...projects.map((p) => ({ v: p.id, label: p.name })),
-              ]}
+              projects={projects}
             />
           )}
         </div>
@@ -332,18 +437,18 @@ export function ActivityTimeline({
               <div className="border-y border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--ol-fg-subtle)]">
                 {bucketLabel}
               </div>
-              <ul className="flex flex-col">
-                {items.map((e, i) => (
-                  <li key={e.id}>{renderRow(e, i, items.length)}</li>
+              <ul className="flex flex-col divide-y divide-[color:var(--ol-border-subtle)]">
+                {items.map((e) => (
+                  <li key={e.id}>{renderRow(e)}</li>
                 ))}
               </ul>
             </div>
           ))}
         </div>
       ) : (
-        <ul className="flex flex-col">
-          {filtered.map((e, i) => (
-            <li key={e.id}>{renderRow(e, i, filtered.length)}</li>
+        <ul className="flex flex-col divide-y divide-[color:var(--ol-border-subtle)]">
+          {filtered.map((e) => (
+            <li key={e.id}>{renderRow(e)}</li>
           ))}
         </ul>
       )}
@@ -351,72 +456,73 @@ export function ActivityTimeline({
   );
 }
 
-interface FilterPillOption {
-  v: string;
-  label: string;
-  count?: number;
-  tone?: 'mcp' | 'webhook';
+interface TabStripProps {
+  value: KindGroup;
+  onChange: (v: KindGroup) => void;
+  tabs: Array<{ v: KindGroup; label: string; count: number }>;
 }
 
-interface FilterPillsProps {
-  label: string;
+function TabStrip({ value, onChange, tabs }: TabStripProps) {
+  return (
+    <div role="tablist" aria-label="Activity type" className="flex flex-wrap items-center gap-0.5">
+      {tabs.map((tab) => {
+        const active = value === tab.v;
+        return (
+          <button
+            key={tab.v}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(tab.v)}
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] transition-colors',
+              active
+                ? 'bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg)]'
+                : 'text-[color:var(--ol-fg-muted)] hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]',
+            )}
+          >
+            <span className={cn(active && 'font-medium')}>{tab.label}</span>
+            <span
+              className={cn(
+                'ol-mono text-[10.5px]',
+                active ? 'text-[color:var(--ol-fg-muted)]' : 'text-[color:var(--ol-fg-subtle)]',
+              )}
+            >
+              {tab.count}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+interface ProjectSelectProps {
   value: string;
   onChange: (v: string) => void;
-  options: FilterPillOption[];
+  projects: ProjectSummary[];
 }
 
-function FilterPills({ label, value, onChange, options }: FilterPillsProps) {
-  // Use a unique id per FilterPills instance so multiple pill groups
-  // (Actor, Project, …) can each be associated with their own visible
-  // label without colliding.
-  const groupLabelId = `filter-pills-label-${label.toLowerCase()}`;
+function ProjectSelect({ value, onChange, projects }: ProjectSelectProps) {
   return (
-    <div className="flex items-center gap-2">
-      <span
-        id={groupLabelId}
-        className="text-[11px] uppercase tracking-[0.06em] text-[color:var(--ol-fg-subtle)]"
+    <label className="ml-auto flex items-center gap-1.5 text-[11px] text-[color:var(--ol-fg-subtle)]">
+      <span className="uppercase tracking-[0.06em]">Project</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          'rounded-md border bg-[color:var(--ol-panel)] px-2 py-1 text-[12px] text-[color:var(--ol-fg-muted)]',
+          'border-[color:var(--ol-border-subtle)] hover:border-[color:var(--ol-border)] focus:outline-none focus:ring-1 focus:ring-[color:var(--ol-border-strong)]',
+        )}
       >
-        {label}
-      </span>
-      <div
-        role="radiogroup"
-        aria-labelledby={groupLabelId}
-        className="flex flex-wrap items-center gap-1"
-      >
-        {options.map((o) => {
-          const active = value === o.v;
-          return (
-            <button
-              key={o.v}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => onChange(o.v)}
-              className={cn(
-                'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] transition-colors',
-                active
-                  ? 'border-[color:var(--ol-fg)] bg-[color:var(--ol-fg)] text-[color:var(--ol-panel)]'
-                  : 'border-[color:var(--ol-border)] text-[color:var(--ol-fg-muted)] hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]',
-              )}
-              style={
-                !active && o.tone
-                  ? {
-                      color: TONE_FG[o.tone],
-                    }
-                  : undefined
-              }
-            >
-              <span>{o.label}</span>
-              {o.count != null && (
-                <span className={cn('ol-mono text-[10px]', active ? 'opacity-80' : 'opacity-60')}>
-                  {o.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </div>
+        <option value="all">All projects</option>
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

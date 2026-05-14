@@ -21,15 +21,16 @@ describe('Shell v0.1 cleanup (PR #196)', () => {
     ).toBe(false);
   });
 
-  it('updates sidebar IA to v0.1: Workspace 7 + Settings 1, Account popover footer', () => {
+  it('updates sidebar IA to v0.1: Workspace 6 + Settings 1, Account popover footer', () => {
     expect(sidebarSource).toContain("id: 'workspace'");
     expect(sidebarSource).toContain("id: 'settings'");
-    // Workspace items
+    // Workspace items — post-IA-cleanup the saved-filter "Deployments" slot
+    // was folded into the Activity page's tab strip, so the workspace
+    // section is six items instead of seven.
     expect(sidebarSource).toContain("id: 'home'");
     expect(sidebarSource).toContain("id: 'your-agent'");
     expect(sidebarSource).toContain("id: 'projects'");
     expect(sidebarSource).toContain("id: 'activity'");
-    expect(sidebarSource).toContain("id: 'deployments'");
     expect(sidebarSource).toContain("id: 'monitoring'");
     expect(sidebarSource).toContain("id: 'web-server'");
     // Settings items
@@ -38,8 +39,10 @@ describe('Shell v0.1 cleanup (PR #196)', () => {
     expect(sidebarSource).not.toMatch(/id:\s*'ssh'/);
     expect(sidebarSource).not.toMatch(/id:\s*'notifications'/);
     expect(sidebarSource).not.toContain("id: 'infrastructure'");
-    // Deployments deep-links to /activity?type=deploy
-    expect(sidebarSource).toContain("'/activity?type=deploy'");
+    // Removed by IA cleanup — Deployments is now an Activity tab, not a
+    // top-level nav entry, and no longer needs its dedicated deep-link.
+    expect(sidebarSource).not.toMatch(/id:\s*'deployments'/);
+    expect(sidebarSource).not.toContain("'/activity?type=deploy'");
     // Account popover replaces direct sign-out button
     expect(sidebarSource).toContain('<AccountPopover');
     expect(sidebarSource).not.toContain("window.confirm('Sign out?')");

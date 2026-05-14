@@ -76,8 +76,11 @@ export const translations = {
       type: {
         label: 'Type',
         all: 'All',
-        deploy: 'Deploys',
+        deploy: 'Deployments',
         config: 'Config',
+        // Renamed from "Crashes" — the tab now reads as the broader
+        // "events the platform noticed on its own" (crash + recovery).
+        system: 'System',
         crash: 'Crashes',
         mcp: 'MCP',
       },
