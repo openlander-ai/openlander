@@ -54,19 +54,46 @@ function shortSha(sha: string | null): string {
   return sha.length >= 7 ? sha.slice(0, 7) : sha;
 }
 
-function parseTimestamp(value: string | number | null): number | null {
+/**
+ * Parse the heterogeneous timestamp shapes that reach the activity feed.
+ *
+ * Postgres `now()::text` (the default on every audit table) emits values
+ * like `2026-05-15 04:23:11.123456+00` — a SPACE-separated body and a
+ * 2-digit timezone offset. Node/V8 `Date.parse` does not accept either,
+ * so the prior implementation silently dropped every deploy_log row and
+ * the activity / Deployments view came up empty.
+ *
+ * The fix normalizes three things before handing to `Date.parse`:
+ *   - replace the space with `T` so the body parses as ISO 8601
+ *   - expand a 2-digit offset (`+00`) to the 4-digit form `+00:00`
+ *   - keep `Z` and `±HH:MM` / `±HHMM` offsets untouched
+ *   - append `Z` only when no offset is present at all (legacy rows)
+ */
+export function parseTimestamp(value: string | number | null): number | null {
   if (value == null) return null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  // Legacy rows may use "YYYY-MM-DD HH:MM:SS" (UTC, no offset). Node parses
-  // that as LOCAL time, so append `Z` when there is no timezone suffix.
   const trimmed = value.trim();
-  const hasTimezone = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(trimmed);
-  const normalized = hasTimezone
-    ? trimmed
-    : trimmed.includes('T')
-      ? `${trimmed}Z`
-      : `${trimmed.replace(' ', 'T')}Z`;
-  const ms = Date.parse(normalized);
+  if (!trimmed) return null;
+
+  let body = trimmed;
+  let suffix = 'Z';
+
+  if (/[Zz]$/.test(trimmed)) {
+    suffix = trimmed.slice(-1);
+    body = trimmed.slice(0, -1);
+  } else {
+    const tzMatch = /([+-])(\d{2})(?::?(\d{2}))?$/.exec(trimmed);
+    if (tzMatch) {
+      const sign = tzMatch[1] ?? '+';
+      const hh = tzMatch[2] ?? '00';
+      const mm = tzMatch[3] ?? '00';
+      suffix = `${sign}${hh}:${mm}`;
+      body = trimmed.slice(0, tzMatch.index);
+    }
+  }
+
+  const withT = body.includes('T') ? body : body.replace(' ', 'T');
+  const ms = Date.parse(`${withT}${suffix}`);
   return Number.isNaN(ms) ? null : ms;
 }
 
