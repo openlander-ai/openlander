@@ -61,6 +61,8 @@ agents can read, with risky actions held behind explicit human approval.
 
 <p align="center">
   <img src="docs/assets/your-agent-setup.png" alt="OpenLander MCP agent setup — connect Claude, Cursor, Windsurf, and more" width="920" />
+  <br />
+  <sub>Connect your AI client once, then let it deploy, inspect logs, and diagnose services through MCP.</sub>
 </p>
 
 ---
@@ -136,6 +138,8 @@ common single-service case.
 
 <p align="center">
   <img src="docs/assets/home-dashboard.png" alt="OpenLander dashboard — projects, deployments, and agent activity at a glance" width="920" />
+  <br />
+  <sub>The dashboard stays focused on what the agent did: project health, latest deploys, service topology, and audit activity.</sub>
 </p>
 
 ---
