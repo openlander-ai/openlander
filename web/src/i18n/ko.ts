@@ -489,6 +489,8 @@ export const translations = {
   projectDetail: {
     // Content — descriptive copy.
     notFound: '프로젝트를 찾을 수 없습니다',
+    notFoundSubtitle: 'id "{id}"에 해당하는 프로젝트가 없습니다',
+    backToHome: '← Back to Home',
     noDeployments: '아직 배포가 없습니다',
     confirmDelete: '이 프로젝트를 삭제하시겠습니까?',
     tabs: {
@@ -834,6 +836,40 @@ export const translations = {
     detail: {
       // Content — empty state.
       notFound: '서비스를 찾을 수 없습니다',
+      // Content — error-card subtitles explaining why the service wasn't found.
+      notFoundReason: {
+        noProjectParam:
+          '서비스를 찾으려면 프로젝트 페이지에서 열어주세요. /services/{id} 직접 링크에는 ?project= 쿼리 파라미터가 필요합니다.',
+        serviceNotInProject: '프로젝트 "{projectId}"에 서비스 "{id}"가 없습니다.',
+      },
+      // Chrome — back-navigation link.
+      backToHome: '← Back to Home',
+      section: {
+        // Chrome — SubCard section headings.
+        source: 'Source',
+        build: 'Build',
+        runtime: 'Runtime',
+        domains: 'Domains',
+      },
+      runtime: {
+        // Content — button tooltip/aria-label prose.
+        copyUrl: 'URL 복사',
+        openInNewTab: '새 탭에서 열기',
+      },
+      envVars: {
+        // Chrome — short form-input placeholders, terse.
+        keyPlaceholder: 'KEY',
+        valuePlaceholder: 'value',
+      },
+      charts: {
+        // Chrome — metric chart titles + abbreviations.
+        cpu: 'CPU',
+        memory: 'Memory',
+        requestsPerSec: 'Requests / s',
+        errorRate: 'Error rate',
+      },
+      // Content — a11y label for the time-range select.
+      timeRangeAria: '시간 범위',
       tabs: {
         // Chrome — nav tabs.
         overview: 'Overview',
