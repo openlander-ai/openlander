@@ -321,17 +321,17 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
 
   if (!resolvedService || !project) {
     const reason = !projectId
-      ? `Open this service from a project page so we know which project owns it. Direct links to /services/${id} need a ?project= query parameter.`
-      : `No service "${id}" in project "${projectId}".`;
+      ? t('services.detail.notFoundReason.noProjectParam', { id })
+      : t('services.detail.notFoundReason.serviceNotInProject', { id, projectId });
     return (
       <div className="mx-auto w-full max-w-5xl">
-        <OuterCard title="Service not found" subtitle={reason}>
+        <OuterCard title={t('services.detail.notFound')} subtitle={reason}>
           <button
             type="button"
             onClick={() => navigate('/home')}
             className="text-[13px] text-[color:var(--ol-primary)] hover:underline"
           >
-            ← Back to Home
+            {t('services.detail.backToHome')}
           </button>
         </OuterCard>
       </div>
@@ -564,14 +564,14 @@ function GeneralTab({ service }: { service: ServiceNode }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <SubCard title="Source">
+        <SubCard title={t('services.detail.section.source')}>
           {sourceRows.length === 0 ? (
             <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">No source configured.</p>
           ) : (
             <KvList rows={sourceRows} valueClassName="ol-mono break-all text-[12px]" />
           )}
         </SubCard>
-        <SubCard title="Build">
+        <SubCard title={t('services.detail.section.build')}>
           <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
             Build method is detected on each deploy. Override via the agent —{' '}
             <span className="ol-mono">openlander_deploy.create_deploy_plan</span> exposes Dockerfile
@@ -579,7 +579,10 @@ function GeneralTab({ service }: { service: ServiceNode }) {
           </p>
         </SubCard>
       </div>
-      <SubCard title="Runtime" badge={<HealthBadge health={service.health} />}>
+      <SubCard
+        title={t('services.detail.section.runtime')}
+        badge={<HealthBadge health={service.health} />}
+      >
         <div className="grid grid-cols-2 gap-3">
           <Metric label="CPU" value={service.cpu} sub="last 60s" />
           <Metric label="Memory" value={service.mem} sub="latest sample" />
@@ -602,8 +605,8 @@ function GeneralTab({ service }: { service: ServiceNode }) {
               <button
                 type="button"
                 onClick={handleCopyUrl}
-                aria-label="Copy URL"
-                title="Copy URL"
+                aria-label={t('services.detail.runtime.copyUrl')}
+                title={t('services.detail.runtime.copyUrl')}
                 className="grid h-6 w-6 shrink-0 place-items-center rounded text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel)] hover:text-[color:var(--ol-fg)]"
               >
                 <Copy className="h-3 w-3" />
@@ -612,8 +615,8 @@ function GeneralTab({ service }: { service: ServiceNode }) {
                 href={service.url}
                 target="_blank"
                 rel="noreferrer"
-                aria-label="Open in new tab"
-                title="Open in new tab"
+                aria-label={t('services.detail.runtime.openInNewTab')}
+                title={t('services.detail.runtime.openInNewTab')}
                 className="grid h-6 w-6 shrink-0 place-items-center rounded text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel)] hover:text-[color:var(--ol-fg)]"
               >
                 <ExternalLink className="h-3 w-3" />
@@ -881,14 +884,14 @@ function EnvironmentTab({
                 <input
                   value={row.key}
                   onChange={(event) => updateVar(index, 'key', event.target.value)}
-                  placeholder="KEY"
+                  placeholder={t('services.detail.envVars.keyPlaceholder')}
                   className={inputClass}
                 />
                 <input
                   type={row.revealed ? 'text' : 'password'}
                   value={row.value}
                   onChange={(event) => updateVar(index, 'value', event.target.value)}
-                  placeholder="value"
+                  placeholder={t('services.detail.envVars.valuePlaceholder')}
                   className={inputClass}
                 />
                 <div className="flex items-center justify-end gap-1">
@@ -1029,7 +1032,7 @@ function DomainsTab({
   };
 
   return (
-    <SubCard title="Domains">
+    <SubCard title={t('services.detail.section.domains')}>
       <div className="flex flex-col gap-2">
         {service.url && (
           <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] p-3">
@@ -1716,28 +1719,28 @@ function MonitoringTab({ service }: { service: ServiceNode }) {
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <MetricCard
-          title="CPU"
+          title={t('services.detail.charts.cpu')}
           value={cpuDisplay}
           sub={`avg over ${range}`}
           data={cpuData}
           color="var(--ol-primary)"
         />
         <MetricCard
-          title="Memory"
+          title={t('services.detail.charts.memory')}
           value={memDisplay}
           sub={`avg over ${range}`}
           data={memData}
           color="var(--ol-success)"
         />
         <MetricCard
-          title="Requests / s"
+          title={t('services.detail.charts.requestsPerSec')}
           value={reqLatest != null ? `${reqLatest} rps` : '—'}
           sub={`p95: ${p95Display} · ${range}`}
           data={reqData}
           color="var(--ol-actor-webhook)"
         />
         <MetricCard
-          title="Error rate"
+          title={t('services.detail.charts.errorRate')}
           value={errLatest != null ? `${errLatest.toFixed(2)}%` : '—'}
           sub="HTTP 5xx · last hour"
           data={errData}
@@ -1931,7 +1934,7 @@ function RangeToggle<T extends string>({
   return (
     <div
       role="radiogroup"
-      aria-label="Time range"
+      aria-label={t('services.detail.timeRangeAria')}
       className="inline-flex rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] p-0.5"
     >
       {ranges.map((r) => {

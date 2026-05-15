@@ -118,13 +118,16 @@ export function ProjectView() {
   if (!projectsLoading && !realProject) {
     return (
       <div className="mx-auto w-full max-w-5xl">
-        <OuterCard title="Project not found" subtitle={`No project with id "${projectId}"`}>
+        <OuterCard
+          title={t('projectDetail.notFound')}
+          subtitle={t('projectDetail.notFoundSubtitle', { id: projectId ?? '' })}
+        >
           <button
             type="button"
             onClick={() => navigate('/home')}
             className="text-[13px] text-[color:var(--ol-primary)] hover:underline"
           >
-            ← Back to Home
+            {t('projectDetail.backToHome')}
           </button>
         </OuterCard>
       </div>

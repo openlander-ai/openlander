@@ -376,6 +376,8 @@ export const translations = {
   },
   projectDetail: {
     notFound: 'Project not found',
+    notFoundSubtitle: 'No project with id "{id}"',
+    backToHome: '← Back to Home',
     noDeployments: 'No deployments yet',
     confirmDelete: 'Are you sure you want to delete this project?',
     tabs: {
@@ -681,6 +683,33 @@ export const translations = {
     },
     detail: {
       notFound: 'Service not found',
+      notFoundReason: {
+        noProjectParam:
+          'Open this service from a project page so we know which project owns it. Direct links to /services/{id} need a ?project= query parameter.',
+        serviceNotInProject: 'No service "{id}" in project "{projectId}".',
+      },
+      backToHome: '← Back to Home',
+      section: {
+        source: 'Source',
+        build: 'Build',
+        runtime: 'Runtime',
+        domains: 'Domains',
+      },
+      runtime: {
+        copyUrl: 'Copy URL',
+        openInNewTab: 'Open in new tab',
+      },
+      envVars: {
+        keyPlaceholder: 'KEY',
+        valuePlaceholder: 'value',
+      },
+      charts: {
+        cpu: 'CPU',
+        memory: 'Memory',
+        requestsPerSec: 'Requests / s',
+        errorRate: 'Error rate',
+      },
+      timeRangeAria: 'Time range',
       tabs: {
         overview: 'Overview',
         connection: 'Connection',
