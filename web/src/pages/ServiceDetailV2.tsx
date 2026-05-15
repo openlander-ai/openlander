@@ -529,6 +529,8 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
 // ─── Tab content ────────────────────────────────────────────────────────────
 
 function GeneralTab({ service }: { service: ServiceNode }) {
+  const { t } = useLanguage();
+
   const handleCopyUrl = () => {
     if (!service.url) return;
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
