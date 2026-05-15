@@ -855,6 +855,25 @@ export const translations = {
         // Content — button tooltip/aria-label prose.
         copyUrl: 'URL 복사',
         openInNewTab: '새 탭에서 열기',
+        // Chrome — short field labels match overview.* convention
+        // (English in both files for metric / field labels).
+        publicUrlLabel: 'Public URL',
+        cpuLabel: 'CPU',
+        memLabel: 'Memory',
+        // Content — descriptive sub captions.
+        cpuSub: '현재 사용량',
+        memSub: '현재 사용량',
+      },
+      source: {
+        // Content — empty state on the Source SubCard.
+        empty: '구성된 소스가 없습니다.',
+      },
+      build: {
+        // Content — Build SubCard prose, split into two parts so the
+        // monospace `openlander_deploy.create_deploy_plan` identifier
+        // can render as a JSX <span> between them.
+        prosePart1: '빌드 방식은 배포할 때마다 자동 감지됩니다. 에이전트로 재정의하려면 —',
+        prosePart2: '를 사용해 Dockerfile 경로, 타겟 스테이지, 빌드 컨텍스트를 지정하세요.',
       },
       envVars: {
         // Chrome — short form-input placeholders, terse.
@@ -867,6 +886,10 @@ export const translations = {
         memory: 'Memory',
         requestsPerSec: 'Requests / s',
         errorRate: 'Error rate',
+        // Content — chart sub-captions describing the range.
+        avgOverRange: '{range} 평균',
+        p95Line: 'p95: {value} · {range}',
+        errorRateSub: 'HTTP 5xx · 지난 1시간',
       },
       // Content — a11y label for the time-range select.
       timeRangeAria: '시간 범위',

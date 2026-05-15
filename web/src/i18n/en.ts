@@ -731,6 +731,18 @@ export const translations = {
       runtime: {
         copyUrl: 'Copy URL',
         openInNewTab: 'Open in new tab',
+        publicUrlLabel: 'Public URL',
+        cpuLabel: 'CPU',
+        memLabel: 'Memory',
+        cpuSub: 'Current usage',
+        memSub: 'Current usage',
+      },
+      source: {
+        empty: 'No source configured.',
+      },
+      build: {
+        prosePart1: 'Build method is detected on each deploy. Override via the agent —',
+        prosePart2: 'exposes Dockerfile path, target stage, and build context.',
       },
       envVars: {
         keyPlaceholder: 'KEY',
@@ -741,6 +753,9 @@ export const translations = {
         memory: 'Memory',
         requestsPerSec: 'Requests / s',
         errorRate: 'Error rate',
+        avgOverRange: 'avg over {range}',
+        p95Line: 'p95: {value} · {range}',
+        errorRateSub: 'HTTP 5xx · last hour',
       },
       timeRangeAria: 'Time range',
       tabs: {
