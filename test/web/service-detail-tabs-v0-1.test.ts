@@ -95,6 +95,11 @@ describe('Service detail v0.1 tabs', () => {
   });
 
   it('uses operator-facing runtime metric labels instead of internal sample wording', () => {
+    const generalTabStart = source.indexOf('function GeneralTab(');
+    const generalTabEnd = source.indexOf('function LogsTab(');
+    const generalTabSource = source.slice(generalTabStart, generalTabEnd);
+
+    expect(generalTabSource).toContain('const { t } = useLanguage();');
     expect(source).toContain("t('serviceDetail.runtime.cpuSub')");
     expect(source).toContain("t('serviceDetail.runtime.memorySub')");
     expect(source).not.toContain('latest sample');
