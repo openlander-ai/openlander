@@ -2012,6 +2012,7 @@ function RangeToggle<T extends string>({
  * components are dead today and will be revived or deleted then.
  */
 function ManagedServiceDetail({ id }: { id: string }) {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [service, setService] = useState<Service | null>(null);
@@ -2051,8 +2052,10 @@ function ManagedServiceDetail({ id }: { id: string }) {
     // Fetch helpers surface "Not found"/"404" on actual 404; anything
     // else is a transport error worth surfacing honestly.
     const isNotFound = error == null || /not found|404/i.test(error);
-    const title = isNotFound ? 'Managed service not found' : 'Failed to load managed service';
-    const subtitle = error ?? `No service with id "${id}"`;
+    const title = isNotFound
+      ? t('services.managedDetail.notFound')
+      : t('services.managedDetail.loadFailed');
+    const subtitle = error ?? t('services.managedDetail.notFoundSubtitle', { id });
     return (
       <div className="mx-auto w-full max-w-5xl">
         <OuterCard title={title} subtitle={subtitle}>
@@ -2061,7 +2064,7 @@ function ManagedServiceDetail({ id }: { id: string }) {
             onClick={() => navigate('/managed-services')}
             className="text-[13px] text-[color:var(--ol-primary)] hover:underline"
           >
-            ← Back to Managed Services
+            {t('services.managedDetail.backToList')}
           </button>
         </OuterCard>
       </div>
@@ -2104,25 +2107,37 @@ function ManagedServiceDetail({ id }: { id: string }) {
             onClick={() => navigate('/managed-services')}
             className="text-[12px] text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-fg)]"
           >
-            ← Managed Services
+            {t('services.managedDetail.backToListShort')}
           </button>
         }
       >
         <dl className="grid grid-cols-1 gap-3 text-[13px] sm:grid-cols-2">
-          <ManagedDetailField label="Image" value={service.image} mono />
-          <ManagedDetailField label="Port" value={String(service.port)} mono />
-          <ManagedDetailField label="Container" value={service.container_name} mono />
           <ManagedDetailField
-            label="Container ID"
+            label={t('services.managedDetail.field.image')}
+            value={service.image}
+            mono
+          />
+          <ManagedDetailField
+            label={t('services.managedDetail.field.port')}
+            value={String(service.port)}
+            mono
+          />
+          <ManagedDetailField
+            label={t('services.managedDetail.field.container')}
+            value={service.container_name}
+            mono
+          />
+          <ManagedDetailField
+            label={t('services.managedDetail.field.containerId')}
             value={service.container_id ? service.container_id.slice(0, 12) : '—'}
             mono
           />
           <ManagedDetailField
-            label="Created"
+            label={t('services.managedDetail.field.created')}
             value={new Date(service.created_at).toLocaleString()}
           />
           <ManagedDetailField
-            label="Updated"
+            label={t('services.managedDetail.field.updated')}
             value={new Date(service.updated_at).toLocaleString()}
           />
         </dl>
