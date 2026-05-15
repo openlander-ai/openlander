@@ -580,7 +580,9 @@ function GeneralTab({ service }: { service: ServiceNode }) {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <SubCard title={t('services.detail.section.source')}>
           {sourceRows.length === 0 ? (
-            <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">No source configured.</p>
+            <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
+              {t('services.detail.source.empty')}
+            </p>
           ) : (
             <KvList rows={sourceRows} valueClassName="ol-mono break-all text-[12px]" />
           )}
@@ -594,13 +596,21 @@ function GeneralTab({ service }: { service: ServiceNode }) {
         badge={<HealthBadge health={service.health} />}
       >
         <div className="grid grid-cols-2 gap-3">
-          <Metric label="CPU" value={service.cpu} sub={t('serviceDetail.runtime.cpuSub')} />
-          <Metric label="Memory" value={service.mem} sub={t('serviceDetail.runtime.memorySub')} />
+          <Metric
+            label={t('services.detail.runtime.cpuLabel')}
+            value={service.cpu}
+            sub={t('services.detail.runtime.cpuSub')}
+          />
+          <Metric
+            label={t('services.detail.runtime.memLabel')}
+            value={service.mem}
+            sub={t('services.detail.runtime.memSub')}
+          />
         </div>
         {service.url && (
           <div className="mt-4">
             <div className="mb-1.5 text-[11px] font-medium text-[color:var(--ol-fg-muted)]">
-              Public URL
+              {t('services.detail.runtime.publicUrlLabel')}
             </div>
             <div className="flex items-center gap-2 rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-3 py-2">
               <Globe className="h-3.5 w-3.5 shrink-0 text-[color:var(--ol-primary)]" />
@@ -1732,28 +1742,28 @@ function MonitoringTab({ service }: { service: ServiceNode }) {
         <MetricCard
           title={t('services.detail.charts.cpu')}
           value={cpuDisplay}
-          sub={`avg over ${range}`}
+          sub={t('services.detail.charts.avgOverRange', { range })}
           data={cpuData}
           color="var(--ol-primary)"
         />
         <MetricCard
           title={t('services.detail.charts.memory')}
           value={memDisplay}
-          sub={`avg over ${range}`}
+          sub={t('services.detail.charts.avgOverRange', { range })}
           data={memData}
           color="var(--ol-success)"
         />
         <MetricCard
           title={t('services.detail.charts.requestsPerSec')}
           value={reqLatest != null ? `${reqLatest} rps` : '—'}
-          sub={`p95: ${p95Display} · ${range}`}
+          sub={t('services.detail.charts.p95Line', { value: p95Display, range })}
           data={reqData}
           color="var(--ol-actor-webhook)"
         />
         <MetricCard
           title={t('services.detail.charts.errorRate')}
           value={errLatest != null ? `${errLatest.toFixed(2)}%` : '—'}
-          sub="HTTP 5xx · last hour"
+          sub={t('services.detail.charts.errorRateSub')}
           data={errData}
           color="var(--ol-error)"
         />

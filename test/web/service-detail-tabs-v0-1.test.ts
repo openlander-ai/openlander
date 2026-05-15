@@ -100,8 +100,8 @@ describe('Service detail v0.1 tabs', () => {
     const generalTabSource = source.slice(generalTabStart, generalTabEnd);
 
     expect(generalTabSource).toContain('const { t } = useLanguage();');
-    expect(source).toContain("t('serviceDetail.runtime.cpuSub')");
-    expect(source).toContain("t('serviceDetail.runtime.memorySub')");
+    expect(source).toContain("t('services.detail.runtime.cpuSub')");
+    expect(source).toContain("t('services.detail.runtime.memSub')");
     expect(source).not.toContain('latest sample');
     expect(source).not.toContain('last 60s');
   });
