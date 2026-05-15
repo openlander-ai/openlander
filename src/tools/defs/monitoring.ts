@@ -1,5 +1,6 @@
 import net from 'node:net';
 import { createModuleLogger } from '../../lib/logger.js';
+import { DOCKER_LABELS } from '../../config/index.js';
 import {
   OpenLanderError,
   ProjectNotFoundError,
@@ -14,6 +15,7 @@ import { BUILD_TIME_PREFIXES } from '../../pipeline/build-args.js';
 import { resolveContainerHost } from '../../pipeline/url-resolver.js';
 import {
   diagnoseServiceSchema,
+  diagnoseHostResourcesSchema,
   dismissAlertSchema,
   getAlertsSchema,
   getInstanceInfoSchema,
@@ -32,6 +34,7 @@ type AppCtx = ToolContext['appCtx'];
 type ServiceRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getService']>>>;
 type ProjectRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getProject']>>>;
 type DeployLogRow = Awaited<ReturnType<AppCtx['db']['getDeployLogs']>>[number];
+type DockerContainerRow = Awaited<ReturnType<AppCtx['docker']['listAllContainers']>>[number];
 
 interface ResolvedDeployableService {
   service: ServiceRow;
@@ -117,6 +120,16 @@ export const monitoringToolDefs: ToolDef[] = [
         ...stats,
       });
     },
+  },
+  {
+    name: 'diagnose_host_resources',
+    riskLevel: 'low',
+    description:
+      'Diagnose OpenLander host resource pressure in one read-only MCP call. Returns Docker daemon status, host CPU/memory/disk stats, Docker disk totals, container counts, and top CPU/memory containers. Use when deploys fail with SIGKILL/OOM, Docker becomes unreachable, builds hang, or OpenLander itself appears unstable. Does not stop, remove, restart, or clean anything.',
+    mcpDescription:
+      'Read-only host/Docker resource diagnosis for SIGKILL/OOM, Docker instability, and stuck deploys.',
+    inputSchema: diagnoseHostResourcesSchema,
+    execute: async (args, context) => diagnoseHostResources(args, context.appCtx),
   },
   {
     name: 'get_alerts',
@@ -436,6 +449,342 @@ export const monitoringToolDefs: ToolDef[] = [
     },
   },
 ];
+
+interface ContainerResourceSummary {
+  id: string;
+  name: string;
+  image: string;
+  state: string;
+  status: string;
+  managedByOpenLander: boolean;
+  role: string | null;
+  project: string | null;
+  service: string | null;
+  composeProject: string | null;
+  cpuPercent: number | null;
+  memoryUsageMb: number | null;
+  memoryLimitMb: number | null;
+}
+
+interface DockerDiskUsageSummary {
+  available: boolean;
+  images: { count: number; totalSizeMb: number };
+  containers: { count: number; totalSizeMb: number };
+  volumes: { count: number; totalSizeMb: number };
+  error?: string;
+}
+
+const HOST_DIAGNOSTIC_STATS_SAMPLE_LIMIT = 50;
+
+async function diagnoseHostResources(
+  args: Record<string, unknown>,
+  appCtx: AppCtx,
+): Promise<Record<string, unknown>> {
+  const containerLimit = (args['container_limit'] as number | undefined) ?? 8;
+  const includeDiskUsage = (args['include_disk_usage'] as boolean | undefined) ?? true;
+  const systemStats = getSystemStats();
+
+  const dockerStatus = await appCtx.docker.status().catch((error: unknown) => ({
+    state: 'not_running' as const,
+    error: getUnknownErrorMessage(error),
+  }));
+  const dockerReachable = dockerStatus.state === 'running';
+  let containerListError: string | null = null;
+  const allContainers = dockerReachable
+    ? await appCtx.docker.listAllContainers().catch((error: unknown) => {
+        containerListError = getUnknownErrorMessage(error);
+        log.warn({ error }, 'Failed to list containers for host diagnosis');
+        return [] as DockerContainerRow[];
+      })
+    : [];
+
+  const runningContainerCount = allContainers.filter(
+    (container) => container.state === 'running',
+  ).length;
+  const sampleLimitReached = runningContainerCount > HOST_DIAGNOSTIC_STATS_SAMPLE_LIMIT;
+  const resourceSummaries = await summarizeContainerResources(
+    appCtx,
+    allContainers,
+    HOST_DIAGNOSTIC_STATS_SAMPLE_LIMIT,
+  );
+  const topByMemory = [...resourceSummaries]
+    // Failed or empty stats are represented as null and sorted to the bottom.
+    .sort((a, b) => (b.memoryUsageMb ?? -1) - (a.memoryUsageMb ?? -1))
+    .slice(0, containerLimit);
+  const topByCpu = [...resourceSummaries]
+    // Failed or empty stats are represented as null and sorted to the bottom.
+    .sort((a, b) => (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1))
+    .slice(0, containerLimit);
+  const diskUsage = includeDiskUsage
+    ? await summarizeDockerDiskUsage(appCtx)
+    : ({ available: false, skipped: true } as const);
+  const containerCounts = summarizeContainerCounts(allContainers);
+  const findings = buildHostResourceFindings({
+    dockerReachable,
+    containerListError,
+    systemStats,
+    topByMemory,
+    diskUsage,
+  });
+
+  return {
+    docker: {
+      reachable: dockerReachable,
+      status: dockerStatus,
+    },
+    system: {
+      summary: formatStatsSummary(systemStats),
+      cpu: systemStats.cpu,
+      memory: systemStats.memory,
+      disk: systemStats.disk,
+    },
+    units: {
+      cpuPercent: 'percent',
+      memoryMb: 'MB decimal',
+      diskMb: 'MB decimal',
+    },
+    containers: {
+      ...containerCounts,
+      listError: containerListError,
+      sampled: resourceSummaries.length,
+      statsSampleLimit: HOST_DIAGNOSTIC_STATS_SAMPLE_LIMIT,
+      sampleLimitReached,
+      topByMemory,
+      topByCpu,
+    },
+    dockerDiskUsage: diskUsage,
+    findings,
+    _agent_guidance: {
+      message:
+        findings.length > 0
+          ? 'Host resource pressure or Docker instability may explain deploy/runtime failures.'
+          : 'No obvious host-level resource pressure detected from this read-only check.',
+      next_steps: buildHostResourceNextSteps(findings),
+    },
+  };
+}
+
+async function summarizeContainerResources(
+  appCtx: AppCtx,
+  containers: DockerContainerRow[],
+  sampleLimit: number,
+): Promise<ContainerResourceSummary[]> {
+  const running = containers
+    .filter((container) => container.state === 'running')
+    .slice(0, sampleLimit);
+  const settled = await Promise.allSettled(
+    running.map(async (container) => ({
+      container,
+      stats: summarizeDockerStats(await appCtx.docker.getContainerStats(container.id)),
+    })),
+  );
+
+  return settled.flatMap((result): ContainerResourceSummary[] => {
+    if (result.status === 'rejected') {
+      log.debug({ error: result.reason }, 'Container resource stats unavailable');
+      return [];
+    }
+
+    const { container, stats } = result.value;
+    return [
+      {
+        id: container.id,
+        name: container.name,
+        image: container.image,
+        state: container.state,
+        status: container.status,
+        managedByOpenLander: container.managedByOpenLander,
+        role: container.labels[DOCKER_LABELS.ROLE] ?? null,
+        project: container.labels[DOCKER_LABELS.PROJECT] ?? null,
+        service: container.labels[DOCKER_LABELS.SERVICE] ?? null,
+        composeProject: container.composeProject,
+        cpuPercent: stats.cpuPercent,
+        memoryUsageMb: stats.memoryUsageMb,
+        memoryLimitMb: stats.memoryLimitMb,
+      },
+    ];
+  });
+}
+
+function summarizeDockerStats(stats: unknown): {
+  cpuPercent: number | null;
+  memoryUsageMb: number | null;
+  memoryLimitMb: number | null;
+} {
+  const root = asPlainRecord(stats);
+  const cpuStats = asPlainRecord(root['cpu_stats']);
+  const preCpuStats = asPlainRecord(root['precpu_stats']);
+  const cpuUsage = asPlainRecord(cpuStats['cpu_usage']);
+  const preCpuUsage = asPlainRecord(preCpuStats['cpu_usage']);
+  const cpuDelta =
+    toFiniteNumber(cpuUsage['total_usage']) - toFiniteNumber(preCpuUsage['total_usage']);
+  const systemDelta =
+    toFiniteNumber(cpuStats['system_cpu_usage']) - toFiniteNumber(preCpuStats['system_cpu_usage']);
+  const percpu = Array.isArray(cpuUsage['percpu_usage']) ? cpuUsage['percpu_usage'] : [];
+  const onlineCpus = toFiniteNumber(cpuStats['online_cpus']);
+  const cpuCount = onlineCpus > 0 ? onlineCpus : Math.max(percpu.length, 1);
+  const cpuPercent =
+    systemDelta > 0 && cpuDelta >= 0
+      ? roundResourceMetric((cpuDelta / systemDelta) * cpuCount * 100)
+      : null;
+
+  const memoryStats = asPlainRecord(root['memory_stats']);
+  const memoryUsage = toFiniteNumber(memoryStats['usage']);
+  const memoryLimit = toFiniteNumber(memoryStats['limit']);
+  return {
+    cpuPercent,
+    memoryUsageMb: memoryUsage > 0 ? roundResourceMetric(memoryUsage / 1e6) : null,
+    memoryLimitMb: memoryLimit > 0 ? roundResourceMetric(memoryLimit / 1e6) : null,
+  };
+}
+
+async function summarizeDockerDiskUsage(appCtx: AppCtx): Promise<DockerDiskUsageSummary> {
+  try {
+    const raw = await appCtx.docker.getDiskUsage(8_000);
+    const record = asPlainRecord(raw);
+    const images = Array.isArray(record['Images']) ? record['Images'] : [];
+    const containers = Array.isArray(record['Containers']) ? record['Containers'] : [];
+    const volumes = Array.isArray(record['Volumes']) ? record['Volumes'] : [];
+    return {
+      available: true,
+      images: { count: images.length, totalSizeMb: roundResourceMetric(sumSizeMb(images, 'Size')) },
+      containers: {
+        count: containers.length,
+        totalSizeMb: roundResourceMetric(sumSizeMb(containers, 'SizeRw')),
+      },
+      volumes: {
+        count: volumes.length,
+        totalSizeMb: roundResourceMetric(sumVolumeUsageMb(volumes)),
+      },
+    };
+  } catch (error) {
+    return {
+      available: false,
+      error: getUnknownErrorMessage(error),
+      images: { count: 0, totalSizeMb: 0 },
+      containers: { count: 0, totalSizeMb: 0 },
+      volumes: { count: 0, totalSizeMb: 0 },
+    };
+  }
+}
+
+function summarizeContainerCounts(containers: DockerContainerRow[]): Record<string, number> {
+  const running = containers.filter((container) => container.state === 'running').length;
+  const exited = containers.filter((container) => container.state === 'exited').length;
+  const openlanderManaged = containers.filter((container) => container.managedByOpenLander).length;
+  return {
+    total: containers.length,
+    running,
+    exited,
+    openlanderManaged,
+    unmanaged: containers.length - openlanderManaged,
+  };
+}
+
+function buildHostResourceFindings(input: {
+  dockerReachable: boolean;
+  containerListError: string | null;
+  systemStats: ReturnType<typeof getSystemStats>;
+  topByMemory: ContainerResourceSummary[];
+  diskUsage: DockerDiskUsageSummary | { available: false; skipped: true };
+}): string[] {
+  const findings: string[] = [];
+  if (!input.dockerReachable) {
+    findings.push('docker_unreachable');
+  }
+  if (input.containerListError) {
+    findings.push('docker_container_list_unavailable');
+  }
+  if (input.systemStats.memory.usagePercent >= 85) {
+    findings.push('host_memory_high');
+  }
+  if (input.systemStats.disk.usagePercent >= 90) {
+    findings.push('host_disk_high');
+  }
+  const hostTotalMb = input.systemStats.memory.totalMB;
+  const memoryHeavy = input.topByMemory.find(
+    (container) =>
+      container.memoryUsageMb !== null &&
+      hostTotalMb > 0 &&
+      container.memoryUsageMb / hostTotalMb > 0.4,
+  );
+  if (memoryHeavy) {
+    findings.push('container_memory_hotspot');
+  }
+  if ('error' in input.diskUsage && input.diskUsage.error) {
+    findings.push('docker_disk_usage_unavailable');
+  }
+  return findings;
+}
+
+function buildHostResourceNextSteps(findings: string[]): string[] {
+  if (findings.length === 0) {
+    return [
+      'Continue with service-level diagnosis using diagnose_service if one service is unhealthy.',
+      'If a build was killed, inspect the build log for SIGKILL/OOM details before retrying.',
+    ];
+  }
+
+  const steps: string[] = [];
+  if (findings.includes('docker_unreachable')) {
+    steps.push(
+      'Docker is not reachable from OpenLander; ask the operator to check Docker Desktop/daemon.',
+    );
+  }
+  if (findings.includes('docker_container_list_unavailable')) {
+    steps.push(
+      'Docker is reachable, but OpenLander could not list containers; ask the operator to check Docker socket permissions or daemon responsiveness.',
+    );
+  }
+  if (findings.includes('host_memory_high') || findings.includes('container_memory_hotspot')) {
+    steps.push(
+      'Review containers.topByMemory before retrying builds; free memory or stop non-critical workloads outside OpenLander if needed.',
+    );
+  }
+  if (findings.includes('host_disk_high')) {
+    steps.push(
+      'Call openlander_managed_service.get_disk_usage, then cleanup_docker if the user approves host-wide cleanup.',
+    );
+  }
+  if (findings.includes('docker_disk_usage_unavailable')) {
+    steps.push(
+      'Docker disk usage did not respond; avoid cleanup_docker until Docker responsiveness is confirmed.',
+    );
+  }
+  steps.push('After addressing host pressure, retry redeploy_app for the affected service_id.');
+  return steps;
+}
+
+function asPlainRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+function toFiniteNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function sumSizeMb(items: unknown[], key: string): number {
+  return items.reduce<number>(
+    (sum, item) => sum + toFiniteNumber(asPlainRecord(item)[key]) / 1e6,
+    0,
+  );
+}
+
+function sumVolumeUsageMb(items: unknown[]): number {
+  return items.reduce<number>((sum, item) => {
+    const record = asPlainRecord(item);
+    const usageData = asPlainRecord(record['UsageData']);
+    return sum + toFiniteNumber(usageData['Size']) / 1e6;
+  }, 0);
+}
+
+function roundResourceMetric(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function getUnknownErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 function isManagedService(kind: string): boolean {
   return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
@@ -1079,6 +1428,15 @@ function buildDiagnoseNextSteps(input: {
   } else if (input.httpCheck['reachable'] === false) {
     nextSteps.push(
       'Container is running but HTTP probe failed. Check logs.tail and verify the service listens on the configured container port/path.',
+    );
+  }
+
+  const latestDeployment = asRecord(input.recentDeployment['latest']) ?? {};
+  const buildLogTail =
+    typeof latestDeployment['buildLogTail'] === 'string' ? latestDeployment['buildLogTail'] : '';
+  if (/\b(SIGKILL|OOM|out of memory|killed)\b/i.test(buildLogTail)) {
+    nextSteps.push(
+      'Build/runtime logs suggest host resource pressure. Call openlander_monitor.diagnose_host_resources before retrying.',
     );
   }
 
