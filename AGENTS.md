@@ -74,6 +74,9 @@ function createProjectRoutes(ctx: AppContext): Hono { ... }
 
 ## Directory Structure
 
+This is a high-level map, not an exhaustive file list. Prefer `find` / `rg`
+for exact current files before editing a subsystem.
+
 ```
 src/
 ├── app.ts                   # AppContext interface & factory
@@ -84,29 +87,20 @@ src/
 ├── web/                     # HTTP layer (Hono)
 │   ├── server.ts            #   Server startup
 │   ├── api/                 #   Route modules (factory functions)
-│   │   ├── routes.ts        #   Main router + activity stream
-│   │   ├── project-routes.ts
-│   │   ├── overview-routes.ts   #   Overview/summary routes
-│   │   ├── deploy-stream-routes.ts
-│   │   ├── deploy-timeline-stream-routes.ts
-│   │   ├── deploy-failure-handler.ts #   Deploy failure event handler
-│   │   ├── terminal-routes.ts
-│   │   ├── chat-routes.ts      #   Disabled in 0.1 (410 FEATURE_DISABLED)
-│   │   ├── auth-routes.ts
-│   │   ├── setup-routes.ts
-│   │   ├── system-routes.ts     #   System status routes
-│   │   ├── ai-usage-routes.ts   #   Disabled in 0.1 (410 FEATURE_DISABLED)
-│   │   ├── approval-routes.ts   #   Disabled in 0.1 (410 FEATURE_DISABLED)
-│   │   ├── llm-routes.ts        #   Disabled in 0.1 (410 FEATURE_DISABLED)
-│   │   ├── ops-routes.ts        #   Passive activity/incidents; AI Ops mutations disabled in 0.1
-│   │   ├── domain-routes.ts     #   Domain management
-│   │   ├── webhook-routes.ts    #   Git-provider auto-deploy webhooks disabled in 0.1 (410 FEATURE_DISABLED)
-│   │   ├── helpers/             #   Route helper utilities
-│   │   └── setup/               #   Setup flow handlers
+│   │   ├── routes.ts        #   Main API router + shared error boundary
+│   │   ├── auth/setup/system routes
+│   │   ├── project-* routes #   Project groups, env, compat, deploy history
+│   │   ├── service-* routes #   Deployable services, runtime, logs, env, connection
+│   │   ├── deploy-* routes  #   Deploy streams, logs, failure handling
+│   │   ├── monitoring/resource/mcp-status routes
+│   │   ├── domain/web-server/git-provider routes
+│   │   └── disabled 0.1 routes # chat/LLM/approval/AI usage/webhook placeholders
 │   └── middleware/
 │       └── auth.ts          #   Auth middleware
 ├── pipeline/                # Core deployment logic
 │   ├── deploy-core.ts       #   DeployPipeline class
+│   ├── deploy.ts            #   Public deploy pipeline entry helpers
+│   ├── deploy-queue.ts      #   In-process deploy job tracking
 │   ├── docker.ts            #   Docker entry point (re-exports from docker/)
 │   ├── docker/              #   Docker abstraction layer (modular)
 │   │   ├── facade.ts        #   Public API (single import point for all Docker ops)
@@ -124,8 +118,11 @@ src/
 │   ├── compose.ts           #   Docker Compose pipeline
 │   ├── deploy-plan/         #   Plan engine (create → update → execute)
 │   ├── deploy/              #   Sub-steps (orchestrator, build, run, rollback)
-│   ├── service-manager.ts   #   Infrastructure services
-│   └── service-adapters/    #   DB adapters (postgres, mysql, redis)
+│   ├── service-manager.ts   #   Managed/infrastructure services
+│   ├── service-adapters/    #   DB/cache/storage adapters (postgres, mysql, redis, mongo, minio...)
+│   ├── url-resolver.ts      #   Public/internal URL resolution helpers
+│   ├── mutation-policy.ts   #   Pipeline mutation guardrails
+│   └── preflight/port/env/build helpers
 ├── tools/                   # MCP Tool System
 │   ├── defs/                #   ToolDef definitions (internal; MCP surface is 5 composites + 13 opt-in platform tools)
 │   │   ├── types.ts         #   ToolDef interface
@@ -139,7 +136,7 @@ src/
 │   ├── schema.drizzle.ts    #   Schema definitions
 │   ├── migration.ts         #   Auto-migration
 │   └── repos/               #   Repository classes (one per table)
-├── llm/                     # LLM integration (Vercel AI SDK)
+├── llm/                     # Dormant 0.2 LLM integration (Vercel AI SDK)
 │   ├── agent.ts             #   Chat agent (streaming + tool calling)
 │   ├── agent-pool.ts        #   AgentPool (session isolation, MAX_POOL_SIZE=5)
 │   ├── context-assembler.ts #   Structured context for recovery (project state, server stats)
@@ -149,7 +146,8 @@ src/
 │   ├── providers.ts         #   Provider definitions
 │   └── ...
 ├── events/                  # EventBus (decoupled communication)
-├── monitor/                 # Health monitoring, recovery & operations
+├── health/                  # Health strategy helpers
+├── monitor/                 # Passive health monitoring plus dormant 0.2 recovery/ops modules
 │   ├── activity-event-mapper.ts #   Maps EventBus events to activity_log schema
 │   ├── activity-logger.ts   #   Persists EventBus events to activity_log table
 │   ├── alerts.ts            #   Alert aggregation coordinator
@@ -175,7 +173,7 @@ src/
 │   ├── service-health-monitor.ts #   Shared infrastructure service health
 │   ├── stats.ts             #   System statistics collection
 │   └── system-maintenance-monitor.ts #   Periodic system cleanup
-├── mcp/                     # MCP server (stdio + HTTP)
+├── mcp/                     # MCP server, composites, identity, prompts, destructive-safety gates
 ├── auth/                    # Authentication service
 ├── config/                  # Config management (~/.openlander/)
 ├── channels/                # Notification (Slack, Discord, Telegram)
@@ -196,7 +194,6 @@ web/src/                     # React 19 Frontend
 │   ├── ProjectView.tsx      #   Project detail (/projects/:id)
 │   ├── ServiceDetailV2.tsx  #   Service detail (/projects/:p/services/:s, /managed-services/:id)
 │   ├── ServicesPage.tsx     #   Managed services list (/managed-services)
-│   ├── DeploymentsList.tsx  #   Cross-project deploy history (/deployments)
 │   ├── DeploymentDetail.tsx #   Deploy detail (/projects/:id/deployments/:deployId)
 │   ├── Activity.tsx         #   Audit log (/activity)
 │   ├── MCPServer.tsx        #   MCP status + connected agents (/mcp-server)
@@ -214,19 +211,19 @@ web/src/                     # React 19 Frontend
 │   ├── setup/               #   Onboarding wizard steps
 │   ├── agent-guide/         #   AgentGuideDialog (prompts users to use MCP for actions)
 │   ├── command/             #   Command palette
-│   ├── config/              #   DomainsPanel, EnvVarsTable
 │   ├── deploy-terminal/     #   Build/deploy terminal UI
 │   ├── deploy/              #   Deploy flow components
 │   ├── timeline/            #   ActivityRow, deploy timeline, RecoveryCard
 │   ├── logs/                #   Log viewer atoms
-│   ├── icons/               #   Custom icon set
-│   └── ops/                 #   Legacy/follow-up cleanup area
+│   ├── account/             #   Account/user chrome
+│   └── icons/               #   Custom icon set
 ├── contexts/                # React Context providers (no external state lib)
 │   ├── auth.tsx             #   Authentication state
 │   ├── projects-context.tsx #   Shared projects list with polling
 │   ├── app-data-context.tsx #   Cross-page shared data
 ├── hooks/                   # Custom hooks (polling-based data fetching)
 ├── i18n/                    # i18n (context.tsx, en.ts, ko.ts) — custom lightweight, no i18next
+├── styles/                  # Frontend-only style helpers
 ├── lib/
 │   ├── api/                 #   API layer (native fetch, no axios)
 │   │   ├── auth.ts, projects.ts, services.ts, system.ts
@@ -238,7 +235,7 @@ web/src/                     # React 19 Frontend
 
 test/                        # Vitest tests (separate from src/)
 e2e/                         # Playwright E2E tests
-docs/                        # Internal documentation
+docs/                        # Public docs/wiki/guides/release docs (no internal planning notes)
 ```
 
 ## Key Patterns
@@ -333,7 +330,7 @@ interface ToolDef {
 
 Tool definition files back the MCP tool system. The MCP adapter exposes **5 composite tools** (`openlander_deploy|_project|_service|_managed_service|_monitor`) over 66 unique default operations, plus **13 platform tools** gated by `config.mcp.platformTools`. Two adapters exist:
 
-- Current registry snapshot: (99 ToolDefs, across 19 tool definition files).
+- Current MCP-facing snapshot: 66 default MCP ToolDefs + 13 optional platform ToolDefs. Tool definition arrays currently total 87 entries across 15 exported groups; keep `test/mcp/*registry*` authoritative when counts change.
 - `src/tools/adapters/mcp.ts` — MCP protocol format (5 composite tools + gated platform tools)
 - `src/tools/adapters/ai-sdk.ts` — legacy/future internal LLM adapter, not part of the 0.1 runtime surface
 

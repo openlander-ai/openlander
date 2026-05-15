@@ -7,11 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-05-15
+
+### Added
+
+- Added service-level custom domain management with database-backed mappings,
+  path prefixes, target-port overrides, and dynamic Traefik config generation.
+- Added a Domains tab to service detail pages for add/delete domain flows.
+- Added multi-vendor MCP client setup snippets, instance identity, and clearer
+  "Your Agent" onboarding for multi-server MCP use.
+- Added machine-readable MCP composite action contracts in `help` and
+  `INVALID_PARAMS` responses so agents can self-correct invalid parameters.
+- Added `openlander_monitor.diagnose_service`, a read-only MCP diagnostic action
+  for deployable services with masked env inventory, sanitized logs, container
+  status, HTTP probes, dependency probes, and next-action guidance.
+- Added `openlander_monitor.diagnose_host_resources`, a read-only host resource
+  diagnostic for Docker reachability, host CPU/memory/disk pressure, and top
+  container resource usage.
+- Added `openlander config reset-apps [--force]` to remove application-managed
+  containers while preserving OpenLander itself and volumes.
+
+### Changed
+
+- Made `deploy_app` the MCP app-deploy front door: it creates new apps when
+  `repo_url`/`image` is provided and routes existing app targets to redeploy
+  when a concrete service or single-service project target is provided.
+- **Breaking (MCP):** renamed `openlander_deploy.deploy` to
+  `openlander_deploy.deploy_app` and `openlander_service.deploy_service` to
+  `openlander_service.redeploy_app`. `create_service` remains the managed
+  infrastructure action for databases, caches, and storage.
+- Removed `archive_service` and `unarchive_service` from the default MCP
+  composite surface; archive/restore remains available through the web/API
+  lifecycle.
+- Hardened the installer update path so `update` preserves the existing Compose
+  project name, pulls only the OpenLander runtime image, and recreates only the
+  app container instead of disturbing the Postgres sidecar.
+- Added `OPENLANDER_PUBLIC_HOST` support and `preferred_url` in project/deploy
+  responses so users and agents get a canonical app URL instead of Docker
+  bridge-only addresses.
+- Release publishing now supports RC tags without moving `latest`; final
+  releases update `latest` and the `<major>.<minor>` image tag.
+- Tightened GitHub Actions concurrency and trigger scopes to reduce duplicate
+  workflow runs.
+- Moved language selection out of setup and into login/account chrome so first
+  boot focuses on account creation and MCP setup.
+
 ### Fixed
+
+- Made `deploy_app` report `readiness` and return `status: "unhealthy"` when a
+  running container's Docker healthcheck is failing instead of treating it as a
+  successful deploy.
+- Stopped GitHub repo discovery MCP responses from returning credentialed clone
+  URLs; private repo credentials are now kept internal to clone time.
+- Reduced infrastructure analyzer false positives by no longer treating generic
+  ORM packages as PostgreSQL, and by reading Prisma datasource providers and
+  `DATABASE_URL` schemes instead.
+- Removed `postgresql://localhost` deploy-plan placeholders; planned or reused
+  managed services now satisfy required env vars and inject real connection
+  strings at execution time.
+- Normalized MCP targeting for logs, stats, diagnostics, deploy history, build
+  logs, host probes, action status, and managed-service status/credentials.
+- Allowed deployable-service MCP actions to resolve `service_name` as the
+  project group name when that group has exactly one deployable service.
+- Added `deploy_id`/`job_id` lookup to `get_deploy_status` so completed deploys
+  and unknown ids are distinguishable.
+- Improved `diagnose_service` HTTP probes for apps mounted under a base path and
+  for internal Docker DNS/network namespace checks.
+- Fixed managed-service backups in Docker installs by writing backup archives
+  through the shared OpenLander data volume instead of a container-local path.
+- Kept deployable app/worker services out of managed-service MCP responses and
+  return explicit guidance when a managed-service action receives one.
+- Cleaned up stale Docker network endpoints for compose services before
+  redeploying, after failed starts, and during rollback/stop so failed compose
+  deploys cannot wedge future deploys with `endpoint already exists in network`.
+- Avoided reconnecting compose services to the shared `openlander` Docker
+  network after they have already been attached with their DNS alias.
+- Preserved Docker Compose service-name DNS aliases such as `postgres` and
+  `redis` when OpenLander runs compose services through Dockerode.
+- Rejected Docker Compose host port mappings before deployment; use
+  `expose:`/container ports and OpenLander's Traefik routing instead.
+- Showed compose child services in project topology, service detail lists, and
+  monitoring pages instead of showing only the compose parent metadata service.
+- Classified MCP/tool-initiated deploys and redeploys as MCP activity instead
+  of `human` in the Activity feed.
+- Fixed managed service creation on fresh Postgres installs by ensuring the
+  synthetic managed-service group exists before inserting service rows.
+- Rolled back managed service containers and volumes if service persistence
+  fails after Docker resources have already been created.
+- Added a Linux `/proc/net/tcp{,6}` fallback for port scanning when `ss` is not
+  installed.
+- Hardened diagnostic sanitization for additional secret-like tokens in logs and
+  probe errors.
+- Fixed setup/login handoff, setup wizard step clamping, and remaining
+  Korean/English onboarding copy inconsistencies.
+
+### Performance
 
 - Batched periodic monitor sweeps so health, reconciler, and infrastructure
   alert checks reuse project/service maps instead of repeatedly querying
   deployable service rows per project.
+- Batched monitoring metric reads and added lightweight runtime metric refresh
+  samples so topology and service rows show recent CPU/memory without
+  per-request Docker stats fanout.
 
 ## [0.1.1-rc.7] - 2026-05-15
 
