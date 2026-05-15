@@ -2014,7 +2014,6 @@ function RangeToggle<T extends string>({
 function ManagedServiceDetail({ id }: { id: string }) {
   const { t } = useLanguage();
   const navigate = useNavigate();
-  const { t } = useLanguage();
   const [service, setService] = useState<Service | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
