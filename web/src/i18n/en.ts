@@ -1100,12 +1100,6 @@ export const translations = {
       fullTimeline: 'Full timeline',
       empty: 'No agent calls yet. MCP-triggered deploys and connections appear here.',
     },
-    relative: {
-      justNow: 'just now',
-      minutes: '{count}m ago',
-      hours: '{count}h ago',
-      days: '{count}d ago',
-    },
   },
   webServer: {
     title: 'Web Server',
@@ -1204,12 +1198,6 @@ export const translations = {
       warning: 'warning',
       error: 'error',
       inactive: 'inactive',
-    },
-    relative: {
-      justNow: 'just now',
-      minutes: '{count}m ago',
-      hours: '{count}h ago',
-      days: '{count}d ago',
     },
   },
   gitProviders: {

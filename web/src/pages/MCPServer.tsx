@@ -49,21 +49,8 @@ import {
   buildAllClientConfigs,
   type McpClientId,
 } from '@/lib/mcp-config-snippets';
+import { formatRelativeTime } from '@/lib/time';
 import { copyToClipboard } from '@/lib/utils';
-
-type Translate = (key: string, params?: Record<string, string | number>) => string;
-
-function formatRelative(iso: string, t: Translate): string {
-  const ts = Date.parse(iso);
-  if (Number.isNaN(ts)) return '';
-  const diff = Date.now() - ts;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return t('mcpServer.relative.justNow');
-  if (m < 60) return t('mcpServer.relative.minutes', { count: m });
-  const h = Math.floor(m / 60);
-  if (h < 24) return t('mcpServer.relative.hours', { count: h });
-  return t('mcpServer.relative.days', { count: Math.floor(h / 24) });
-}
 
 export function MCPServer() {
   const navigate = useNavigate();
@@ -229,7 +216,7 @@ export function MCPServer() {
     statusColor = 'var(--ol-fg-muted)';
   }
   const lastSession = mcpStatus?.sessions[0];
-  const lastCallLabel = lastSession ? formatRelative(lastSession.lastActivityAt, t) : null;
+  const lastCallLabel = lastSession ? formatRelativeTime(lastSession.lastActivityAt, t) : null;
 
   // Token display state — what we show on the Token row.
   const tokenDisplay = (() => {
@@ -497,7 +484,7 @@ export function MCPServer() {
                     <>
                       {' · '}
                       {t('mcpServer.tokens.issuedAt', {
-                        when: formatRelative(tokenIssuedAt, t),
+                        when: formatRelativeTime(tokenIssuedAt, t),
                       })}
                     </>
                   )}
