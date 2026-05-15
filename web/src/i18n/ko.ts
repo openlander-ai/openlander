@@ -871,11 +871,17 @@ export const translations = {
       // Content — a11y label for the time-range select.
       timeRangeAria: '시간 범위',
       tabs: {
-        // Chrome — nav tabs.
+        // Chrome — nav tabs (English in both files per Chrome rule).
         overview: 'Overview',
+        logs: 'Logs',
+        deployments: 'Deployments',
+        monitoring: 'Monitoring',
+        environment: 'Environment',
+        domains: 'Domains',
+        // Legacy keys retained for managed-service tabs that have not
+        // moved to the new v0.1 tab strip yet.
         connection: 'Connection',
         databases: 'Databases',
-        logs: 'Logs',
         settings: 'Settings',
       },
       toasts: {

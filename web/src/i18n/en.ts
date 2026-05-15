@@ -745,9 +745,15 @@ export const translations = {
       timeRangeAria: 'Time range',
       tabs: {
         overview: 'Overview',
+        logs: 'Logs',
+        deployments: 'Deployments',
+        monitoring: 'Monitoring',
+        environment: 'Environment',
+        domains: 'Domains',
+        // Legacy keys retained for managed-service tabs that have not
+        // moved to the new v0.1 tab strip yet.
         connection: 'Connection',
         databases: 'Databases',
-        logs: 'Logs',
         settings: 'Settings',
       },
       toasts: {
