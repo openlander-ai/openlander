@@ -32,8 +32,22 @@ function serverKey(name: string): string {
   return normalized || 'openlander';
 }
 
+function mcpRemoteArgs(endpoint: string): string[] {
+  const args = [
+    '-y',
+    'mcp-remote@latest',
+    endpoint,
+    '--header',
+    'Authorization:${OPENLANDER_MCP_AUTH}',
+  ];
+  if (endpoint.startsWith('http://')) {
+    args.push('--allow-http');
+  }
+  return args;
+}
+
 export function buildClaudeCodeCmd({ endpoint, token, serverName }: BuildOptions): string {
-  return `claude mcp add ${serverKey(serverName)} --url ${endpoint} --header "Authorization: Bearer ${token}"`;
+  return `claude mcp add --transport http --header "Authorization: Bearer ${token}" ${serverKey(serverName)} ${endpoint}`;
 }
 
 export function buildAgentInstruction({ serverName }: Pick<BuildOptions, 'serverName'>): string {
@@ -81,7 +95,11 @@ export function buildClaudeDesktopConfig({ endpoint, token, serverName }: BuildO
       mcpServers: {
         [serverKey(serverName)]: {
           command: 'npx',
-          args: ['-y', 'mcp-remote', endpoint, '--header', `Authorization: Bearer ${token}`],
+          // Claude Desktop still consumes stdio-style custom JSON, so use mcp-remote as the bridge.
+          args: mcpRemoteArgs(endpoint),
+          env: {
+            OPENLANDER_MCP_AUTH: `Bearer ${token}`,
+          },
         },
       },
     },
@@ -95,8 +113,11 @@ export function buildVscodeConfig({ endpoint, token, serverName }: BuildOptions)
     {
       servers: {
         [serverKey(serverName)]: {
-          command: 'npx',
-          args: ['-y', 'mcp-remote', endpoint, '--header', `Authorization: Bearer ${token}`],
+          type: 'http',
+          url: endpoint,
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
       },
     },

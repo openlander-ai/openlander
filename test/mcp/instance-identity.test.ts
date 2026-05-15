@@ -12,6 +12,7 @@ import { monitoringToolDefs } from '../../src/tools/defs/monitoring.js';
 import {
   buildAgentInstruction,
   buildAllClientConfigs,
+  buildClaudeDesktopConfig,
 } from '../../web/src/lib/mcp-config-snippets.js';
 
 function appCtx(overrides?: { instanceName?: string }) {
@@ -74,21 +75,56 @@ describe('MCP instance identity', () => {
       serverName: 'openlander-ais-prod',
     });
 
-    expect(configs.find((item) => item.id === 'claude-code')?.snippet).toContain(
-      'claude mcp add openlander-ais-prod',
+    const snippetById = new Map(configs.map((item) => [item.id, item.snippet]));
+    const claudeCode = snippetById.get('claude-code');
+    expect(claudeCode).toContain('claude mcp add --transport http');
+    expect(claudeCode).toContain('--header "Authorization: Bearer olp_token"');
+    expect(claudeCode).toContain('openlander-ais-prod http://www.aqainc.biz/mcp');
+
+    const cursor = JSON.parse(snippetById.get('cursor') ?? '{}');
+    expect(cursor.mcpServers['openlander-ais-prod']).toMatchObject({
+      url: 'http://www.aqainc.biz/mcp',
+      headers: { Authorization: 'Bearer olp_token' },
+    });
+
+    const windsurf = JSON.parse(snippetById.get('windsurf') ?? '{}');
+    expect(windsurf.mcpServers['openlander-ais-prod']).toMatchObject({
+      serverUrl: 'http://www.aqainc.biz/mcp',
+      headers: { Authorization: 'Bearer olp_token' },
+    });
+
+    const claudeDesktop = JSON.parse(snippetById.get('claude-desktop') ?? '{}');
+    expect(claudeDesktop.mcpServers['openlander-ais-prod']).toMatchObject({
+      command: 'npx',
+      args: [
+        '-y',
+        'mcp-remote@latest',
+        'http://www.aqainc.biz/mcp',
+        '--header',
+        'Authorization:${OPENLANDER_MCP_AUTH}',
+        '--allow-http',
+      ],
+      env: { OPENLANDER_MCP_AUTH: 'Bearer olp_token' },
+    });
+
+    const vscode = JSON.parse(snippetById.get('vscode') ?? '{}');
+    expect(vscode.servers['openlander-ais-prod']).toMatchObject({
+      type: 'http',
+      url: 'http://www.aqainc.biz/mcp',
+      headers: { Authorization: 'Bearer olp_token' },
+    });
+  });
+
+  it('only adds the mcp-remote HTTP escape hatch for non-TLS Claude Desktop endpoints', () => {
+    const config = JSON.parse(
+      buildClaudeDesktopConfig({
+        endpoint: 'https://openlander.example.com/mcp',
+        token: 'olp_token',
+        serverName: 'openlander-prod',
+      }),
     );
-    expect(configs.find((item) => item.id === 'cursor')?.snippet).toContain(
-      '"openlander-ais-prod"',
-    );
-    expect(configs.find((item) => item.id === 'windsurf')?.snippet).toContain(
-      '"openlander-ais-prod"',
-    );
-    expect(configs.find((item) => item.id === 'claude-desktop')?.snippet).toContain(
-      '"openlander-ais-prod"',
-    );
-    expect(configs.find((item) => item.id === 'vscode')?.snippet).toContain(
-      '"openlander-ais-prod"',
-    );
+
+    expect(config.mcpServers['openlander-prod'].args).not.toContain('--allow-http');
   });
 
   it('adds _instance to composite MCP success and error responses', async () => {
