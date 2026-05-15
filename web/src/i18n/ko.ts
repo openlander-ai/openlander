@@ -220,6 +220,43 @@ export const translations = {
     incidents: 'Alerts',
     aiSpend: 'AI Spend',
   },
+  monitoring: {
+    // Chrome — page heading + filter option + status pills + metric
+    // labels. Health states are machine-readable wire values
+    // (see useMonitoring's MonitoringServiceView['health']), so they
+    // stay English under the Hybrid rule.
+    pageTitle: 'Monitoring',
+    allProjects: 'All projects',
+    unattached: 'Unattached',
+    metrics: {
+      cpu: 'CPU',
+      mem: 'MEM',
+    },
+    health: {
+      healthy: 'Healthy',
+      healthyStale: 'Healthy · stale',
+      unhealthy: 'Unhealthy',
+      unhealthyStale: 'Unhealthy · stale',
+      unknown: 'Unknown',
+    },
+    // Content — descriptive subtitle + empty states + footer + relative
+    // time (seconds-precision since the poll cadence is 15s).
+    pageSubtitle:
+      '서비스별 CPU와 메모리를 한눈에 확인합니다. 행을 클릭하면 서비스 상세 차트로 이동합니다.',
+    empty: {
+      noServices:
+        '아직 서비스가 없습니다. 에이전트에게 배포해 달라고 말해보세요. 측정값이 여기에 나타납니다.',
+      noSamples: '아직 측정값이 있는 서비스가 없습니다.',
+    },
+    excludedFooter: '서비스 {total}개 중 {shown}개 표시 — {excluded}개는 측정값 없음',
+    relative: {
+      never: '없음',
+      seconds: '{count}초 전',
+      minutes: '{count}분 전',
+      hours: '{count}시간 전',
+      days: '{count}일 전',
+    },
+  },
   home: {
     hero: {
       // Content — hero status prose on /home.
