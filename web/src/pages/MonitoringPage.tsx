@@ -28,18 +28,21 @@ import { OuterCard } from '@/components/Shell/OuterCard';
 import { Sparkline } from '@/components/Shell/Sparkline';
 import { useMonitoring, type MonitoringServiceView } from '@/hooks/use-monitoring';
 import { useProjectsContext } from '@/hooks/use-projects-context';
+import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 
-function relativeAge(ms: number | null): string {
-  if (ms == null) return 'never';
+type RelativeAgeT = (key: string, params?: Record<string, string | number>) => string;
+
+function relativeAge(ms: number | null, t: RelativeAgeT): string {
+  if (ms == null) return t('monitoring.relative.never');
   const diff = Date.now() - ms;
   const sec = Math.max(0, Math.floor(diff / 1000));
-  if (sec < 60) return `${String(sec)}s ago`;
+  if (sec < 60) return t('monitoring.relative.seconds', { count: sec });
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${String(min)}m ago`;
+  if (min < 60) return t('monitoring.relative.minutes', { count: min });
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${String(hr)}h ago`;
-  return `${String(Math.floor(hr / 24))}d ago`;
+  if (hr < 24) return t('monitoring.relative.hours', { count: hr });
+  return t('monitoring.relative.days', { count: Math.floor(hr / 24) });
 }
 
 function HealthPill({
@@ -49,12 +52,19 @@ function HealthPill({
   health: MonitoringServiceView['health'];
   stale: boolean;
 }) {
+  const { t } = useLanguage();
   const cfg =
     health === 'healthy'
-      ? { color: 'var(--ol-success)', label: stale ? 'Healthy · stale' : 'Healthy' }
+      ? {
+          color: 'var(--ol-success)',
+          label: stale ? t('monitoring.health.healthyStale') : t('monitoring.health.healthy'),
+        }
       : health === 'unhealthy'
-        ? { color: 'var(--ol-error)', label: stale ? 'Unhealthy · stale' : 'Unhealthy' }
-        : { color: 'var(--ol-fg-muted)', label: 'Unknown' };
+        ? {
+            color: 'var(--ol-error)',
+            label: stale ? t('monitoring.health.unhealthyStale') : t('monitoring.health.unhealthy'),
+          }
+        : { color: 'var(--ol-fg-muted)', label: t('monitoring.health.unknown') };
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10.5px] font-medium"
@@ -75,6 +85,7 @@ interface ServiceRowProps {
 }
 
 function ServiceRow({ entry, onClick }: ServiceRowProps) {
+  const { t } = useLanguage();
   const cpuLatest = entry.cpu60[entry.cpu60.length - 1] ?? null;
   const memLatest = entry.mem60[entry.mem60.length - 1] ?? null;
 
@@ -92,13 +103,14 @@ function ServiceRow({ entry, onClick }: ServiceRowProps) {
           <HealthPill health={entry.health} stale={entry.stale} />
         </div>
         <div className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
-          {entry.projectName ?? 'Unattached'} · {relativeAge(entry.lastSampleAt)}
+          {entry.projectName ?? t('monitoring.unattached')} · {relativeAge(entry.lastSampleAt, t)}
         </div>
       </div>
 
       <div className="flex flex-1 flex-col">
         <div className="text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--ol-fg-subtle)]">
-          CPU{cpuLatest != null ? ` · ${cpuLatest.toFixed(1)}%` : ''}
+          {t('monitoring.metrics.cpu')}
+          {cpuLatest != null ? ` · ${cpuLatest.toFixed(1)}%` : ''}
         </div>
         <div className="h-7">
           <Sparkline data={entry.cpu60} color="var(--ol-primary)" />
@@ -107,7 +119,8 @@ function ServiceRow({ entry, onClick }: ServiceRowProps) {
 
       <div className="flex flex-1 flex-col">
         <div className="text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--ol-fg-subtle)]">
-          MEM{memLatest != null ? ` · ${memLatest.toFixed(0)}MB` : ''}
+          {t('monitoring.metrics.mem')}
+          {memLatest != null ? ` · ${memLatest.toFixed(0)}MB` : ''}
         </div>
         <div className="h-7">
           <Sparkline data={entry.mem60} color="var(--ol-warning)" />
@@ -120,15 +133,16 @@ function ServiceRow({ entry, onClick }: ServiceRowProps) {
 export function MonitoringPage() {
   const navigate = useNavigate();
   const { projects } = useProjectsContext();
+  const { t } = useLanguage();
   const [projectFilter, setProjectFilter] = useState<string>('all');
   const { snapshot, loading } = useMonitoring({ project: projectFilter });
 
   const projectOptions = useMemo(
     () => [
-      { id: 'all', name: 'All projects' },
+      { id: 'all', name: t('monitoring.allProjects') },
       ...projects.map((p) => ({ id: p.id, name: p.name })),
     ],
-    [projects],
+    [projects, t],
   );
 
   const handleRowClick = (entry: MonitoringServiceView) => {
@@ -148,10 +162,10 @@ export function MonitoringPage() {
         title={
           <span className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-[color:var(--ol-primary)]" />
-            Monitoring
+            {t('monitoring.pageTitle')}
           </span>
         }
-        subtitle="Cross-service CPU and memory at a glance. Click a row to drill into per-service charts."
+        subtitle={t('monitoring.pageSubtitle')}
         actions={
           <label className="flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] px-2 py-1 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]">
             <select
@@ -180,15 +194,19 @@ export function MonitoringPage() {
           </div>
         ) : !snapshot || snapshot.total === 0 ? (
           <div className="py-10 text-center text-[13px] text-[color:var(--ol-fg-muted)]">
-            No services yet. Tell your agent to deploy — metrics appear here.
+            {t('monitoring.empty.noServices')}
           </div>
         ) : snapshot.services.length === 0 ? (
           <div className="flex flex-col gap-1 py-10 text-center">
             <p className="text-[13px] text-[color:var(--ol-fg-muted)]">
-              No services have samples yet.
+              {t('monitoring.empty.noSamples')}
             </p>
             <p className="text-[11.5px] text-[color:var(--ol-fg-subtle)]">
-              Showing 0 of {snapshot.total} services — {snapshot.excluded} without samples.
+              {t('monitoring.excludedFooter', {
+                shown: 0,
+                total: snapshot.total,
+                excluded: snapshot.excluded,
+              })}
             </p>
           </div>
         ) : (
@@ -202,8 +220,11 @@ export function MonitoringPage() {
             ))}
             {snapshot.excluded > 0 && (
               <p className="pt-2 text-[11.5px] text-[color:var(--ol-fg-subtle)]">
-                Showing {snapshot.services.length} of {snapshot.total} services —{' '}
-                {snapshot.excluded} without samples.
+                {t('monitoring.excludedFooter', {
+                  shown: snapshot.services.length,
+                  total: snapshot.total,
+                  excluded: snapshot.excluded,
+                })}
               </p>
             )}
           </div>

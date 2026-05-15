@@ -181,6 +181,39 @@ export const translations = {
     incidents: 'Alerts',
     aiSpend: 'AI Spend',
   },
+  monitoring: {
+    pageTitle: 'Monitoring',
+    pageSubtitle:
+      'Cross-service CPU and memory at a glance. Click a row to drill into per-service charts.',
+    allProjects: 'All projects',
+    unattached: 'Unattached',
+    metrics: {
+      cpu: 'CPU',
+      mem: 'MEM',
+    },
+    health: {
+      healthy: 'Healthy',
+      healthyStale: 'Healthy · stale',
+      unhealthy: 'Unhealthy',
+      unhealthyStale: 'Unhealthy · stale',
+      unknown: 'Unknown',
+    },
+    empty: {
+      noServices: 'No services yet. Tell your agent to deploy — metrics appear here.',
+      noSamples: 'No services have samples yet.',
+    },
+    excludedFooter: 'Showing {shown} of {total} services — {excluded} without samples.',
+    relative: {
+      // Seconds-precision relative time. lib/time.formatRelativeTime
+      // collapses sub-minute deltas to "just now"; this page needs
+      // finer granularity because samples poll every 15s.
+      never: 'never',
+      seconds: '{count}s ago',
+      minutes: '{count}m ago',
+      hours: '{count}h ago',
+      days: '{count}d ago',
+    },
+  },
   home: {
     hero: {
       statusJustNow: 'System status · just now',
