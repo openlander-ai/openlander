@@ -295,6 +295,11 @@ class OpenLanderError extends Error {
 
 When in doubt, grep for the helper before adding inline logic — duplicating the policy is how Day 1-2's web-only fix had to be expanded to the full pipeline boundary in Day 5.
 
+**Performance rules**
+
+1. **No route-level N+1 fanout.** List/aggregate routes must not loop over services/projects and call a DB repository or Docker operation per row. Add a batch repository/helper method instead, then group results in memory.
+2. **No request-time Docker stats fanout for dashboards.** Dashboard/topology routes should read cached or sampled runtime state from the database unless the route is explicitly a service-detail diagnostic endpoint.
+
 ### Repository Pattern (Database)
 
 Each table has a repository class in `src/db/repos/`. The `Database` class aggregates them all:
