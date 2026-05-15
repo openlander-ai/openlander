@@ -24,6 +24,7 @@ export default defineConfig({
       'test/api/deploy-log-stream-routes.test.ts',
       'test/api/deployable-service-routes.test.ts',
       'test/api/docker-log-timestamps.test.ts',
+      'test/api/monitoring-routes.test.ts',
       'test/web/api/activity-parse-timestamp.test.ts',
       'test/web/api/auth-setup-password.test.ts',
       'test/api/service-log-routes.test.ts',
