@@ -53,11 +53,13 @@ function createProject(partial: Partial<ProjectRow> = {}): ProjectRow {
 
 type MonitorInternals = {
   runCheck(projectId: string): Promise<void>;
+  checkAllProjects(): Promise<void>;
 };
 
 describe('ProjectHealthMonitor', () => {
   let getProject: ReturnType<typeof vi.fn>;
   let listProjects: ReturnType<typeof vi.fn>;
+  let listServices: ReturnType<typeof vi.fn>;
   let emit: ReturnType<typeof vi.fn>;
   let monitor: ProjectHealthMonitor;
 
@@ -66,6 +68,7 @@ describe('ProjectHealthMonitor', () => {
     const db = {
       getProject,
       listProjects,
+      listServices,
       // PR 4.5: canonical-first reads need this helper.
       getDeployableForProject: vi.fn().mockReturnValue(undefined),
     } as unknown as Database;
@@ -87,8 +90,9 @@ describe('ProjectHealthMonitor', () => {
       if (status === 'error') {
         return [];
       }
-      return [];
+      return [createProject({ id: 'project-1', status: 'running' })];
     });
+    listServices = vi.fn().mockReturnValue([]);
     emit = vi.fn().mockResolvedValue(undefined);
     monitor = createMonitor();
     mockRunProbe.mockReset();
@@ -118,6 +122,29 @@ describe('ProjectHealthMonitor', () => {
     await (monitor as unknown as MonitorInternals).runCheck('project-1');
 
     expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith('monitor:healthcheck', {
+      projectId: 'project-1',
+      healthy: true,
+      responseTimeMs: 42,
+    });
+  });
+
+  it('batch-loads deployables once during the periodic sweep', async () => {
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http', responseTimeMs: 42 });
+    const getDeployableForProject = vi.fn().mockReturnValue(undefined);
+    const db = {
+      getProject,
+      listProjects,
+      listServices,
+      getDeployableForProject,
+    } as unknown as Database;
+    monitor = new ProjectHealthMonitor({} as Docker, db, { emit } as unknown as EventBus);
+
+    await (monitor as unknown as MonitorInternals).checkAllProjects();
+
+    expect(listProjects).toHaveBeenCalledOnce();
+    expect(listServices).toHaveBeenCalledOnce();
+    expect(getDeployableForProject).not.toHaveBeenCalled();
     expect(emit).toHaveBeenCalledWith('monitor:healthcheck', {
       projectId: 'project-1',
       healthy: true,

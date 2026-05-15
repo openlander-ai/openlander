@@ -69,6 +69,7 @@ describe('AlertMonitor', () => {
 
     db = {
       listProjects,
+      listServices: vi.fn().mockReturnValue([]),
       listOpsIncidentsByDateRange: vi.fn().mockReturnValue([]),
       listAllActiveOpsIncidents: vi.fn().mockReturnValue([]),
       getProject: vi.fn().mockReturnValue(null),
@@ -181,6 +182,7 @@ describe('AlertMonitor - checkPortConflicts', () => {
 
     db = {
       listProjects,
+      listServices: vi.fn().mockReturnValue([]),
       listOpsIncidentsByDateRange: vi.fn().mockReturnValue([]),
       listAllActiveOpsIncidents: vi.fn().mockReturnValue([]),
       getProject: vi.fn().mockReturnValue(null),

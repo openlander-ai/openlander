@@ -1,5 +1,6 @@
 import type { Docker } from '../pipeline/docker.js';
-import type { Database } from '../db/index.js';
+import type { Database, ProjectRow, ServiceRow } from '../db/index.js';
+import { projectIdToDeployableServiceId } from '../db/service-ids.js';
 import { getSystemStats } from './stats.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { parseDBTimestamp } from '../lib/parse-db-timestamp.js';
@@ -13,6 +14,11 @@ const RESTART_COUNT_THRESHOLD = 3;
 const DANGLING_IMAGES_THRESHOLD = 3;
 const CONTAINER_MEMORY_THRESHOLD = 90;
 const INITIAL_STAGGER_MS = 8000;
+
+interface RunningProjectContext {
+  projects: ProjectRow[];
+  deployablesByProject: Map<string, ServiceRow | undefined>;
+}
 
 export class InfrastructureAlerter {
   private intervalId: ReturnType<typeof setInterval> | undefined;
@@ -64,19 +70,36 @@ export class InfrastructureAlerter {
 
     this.checking = true;
     try {
+      const runningContext = await this.loadRunningProjectContext();
       await Promise.all([
         this.checkDiskUsage(),
-        this.checkInactiveProjects(),
-        this.checkContainerRestartLoops(),
-        this.checkContainerMemory(),
+        this.checkInactiveProjects(runningContext),
+        this.checkContainerRestartLoops(runningContext),
+        this.checkContainerMemory(runningContext),
         this.checkDanglingImages(),
-        this.checkPortConflicts(),
+        this.checkPortConflicts(runningContext),
       ]);
     } catch (err) {
       log.error({ err }, 'Error during infrastructure alert checks');
     } finally {
       this.checking = false;
     }
+  }
+
+  private async loadRunningProjectContext(): Promise<RunningProjectContext> {
+    const [projects, services] = await Promise.all([
+      this.db.listProjects('running'),
+      this.db.listServices(),
+    ]);
+    const deployableIds = new Set(
+      projects.map((project) => projectIdToDeployableServiceId(project.id)),
+    );
+    const deployablesByProject = new Map<string, ServiceRow | undefined>();
+    for (const service of services) {
+      if (!deployableIds.has(service.id)) continue;
+      deployablesByProject.set(service.project_id, service);
+    }
+    return { projects, deployablesByProject };
   }
 
   private async checkDiskUsage(): Promise<void> {
@@ -110,8 +133,8 @@ export class InfrastructureAlerter {
     });
   }
 
-  private async checkInactiveProjects(): Promise<void> {
-    const projects = await this.db.listProjects('running');
+  private async checkInactiveProjects(context: RunningProjectContext): Promise<void> {
+    const projects = context.projects;
     const now = Date.now();
 
     for (const project of projects) {
@@ -143,13 +166,13 @@ export class InfrastructureAlerter {
     }
   }
 
-  private async checkContainerRestartLoops(): Promise<void> {
-    const projects = await this.db.listProjects('running');
+  private async checkContainerRestartLoops(context: RunningProjectContext): Promise<void> {
+    const projects = context.projects;
 
     for (const project of projects) {
       // PR 4.5: canonical-first read of container_id with `??` fallback to
       // legacy `projects` column through migration 0012.
-      const deployable = await this.db.getDeployableForProject(project.id);
+      const deployable = context.deployablesByProject.get(project.id);
       const containerId = deployable?.container_id ?? project.container_id;
       if (!containerId) continue;
 
@@ -227,13 +250,13 @@ export class InfrastructureAlerter {
     }
   }
 
-  private async checkPortConflicts(): Promise<void> {
-    const projects = await this.db.listProjects('running');
+  private async checkPortConflicts(context: RunningProjectContext): Promise<void> {
+    const projects = context.projects;
     const portMap = new Map<number, string[]>();
 
     for (const project of projects) {
       // PR 4.5: canonical-first read of assigned_port with `??` fallback.
-      const deployable = await this.db.getDeployableForProject(project.id);
+      const deployable = context.deployablesByProject.get(project.id);
       const assignedPort = deployable?.assigned_port ?? project.assigned_port;
       if (assignedPort != null) {
         const names = portMap.get(assignedPort) ?? [];
@@ -267,12 +290,12 @@ export class InfrastructureAlerter {
     }
   }
 
-  private async checkContainerMemory(): Promise<void> {
-    const projects = await this.db.listProjects('running');
+  private async checkContainerMemory(context: RunningProjectContext): Promise<void> {
+    const projects = context.projects;
 
     for (const project of projects) {
       // PR 4.5: canonical-first read of container_id with `??` fallback.
-      const deployable = await this.db.getDeployableForProject(project.id);
+      const deployable = context.deployablesByProject.get(project.id);
       const containerId = deployable?.container_id ?? project.container_id;
       if (!containerId) continue;
 

@@ -1,4 +1,5 @@
-import type { Database, ProjectRow } from '../db/index.js';
+import type { Database, ProjectRow, ServiceRow } from '../db/index.js';
+import { projectIdToDeployableServiceId } from '../db/service-ids.js';
 import { isDockerNotFoundError } from '../errors.js';
 import type { EventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
@@ -32,6 +33,8 @@ const RECONCILE_ELIGIBLE_STATUSES: ReadonlySet<ProjectRow['status']> = new Set([
 ]);
 
 const INITIAL_STAGGER_MS = 3_000;
+
+type DeployableByProject = Map<string, ServiceRow | undefined>;
 
 export class ContainerStateReconciler {
   private intervalId?: ReturnType<typeof setInterval>;
@@ -93,35 +96,48 @@ export class ContainerStateReconciler {
 
     this.reconciling = true;
     try {
-      await this.detectMissingContainers();
-      await this.detectOrphanContainers();
-      await this.timeoutStuckRecovering();
+      const [projects, services] = await Promise.all([
+        this.db.listProjects(),
+        this.db.listServices(),
+      ]);
+      const deployablesByProject = this.buildDeployablesByProject(projects, services);
+
+      await this.detectMissingContainers(projects, deployablesByProject);
+      await this.detectOrphanContainers(projects, services, deployablesByProject);
+      await this.timeoutStuckRecovering(deployablesByProject);
     } finally {
       this.reconciling = false;
     }
   }
 
-  private async detectMissingContainers(): Promise<void> {
-    // PR 4.5: batch-resolve deployables once so canonical-first reads of
-    // status/container_id flow through a `??` fallback to legacy `projects`
-    // columns until migration 0012 drops them.
-    const allProjects = await this.db.listProjects();
-    const deployables = new Map<
-      string,
-      Awaited<ReturnType<typeof this.db.getDeployableForProject>>
-    >();
-    for (const p of allProjects) {
-      deployables.set(p.id, await this.db.getDeployableForProject(p.id));
+  private buildDeployablesByProject(
+    projects: readonly ProjectRow[],
+    services: readonly ServiceRow[],
+  ): DeployableByProject {
+    const deployableIds = new Set(
+      projects.map((project) => projectIdToDeployableServiceId(project.id)),
+    );
+    const deployablesByProject: DeployableByProject = new Map();
+    for (const service of services) {
+      if (!deployableIds.has(service.id)) continue;
+      deployablesByProject.set(service.project_id, service);
     }
+    return deployablesByProject;
+  }
+
+  private async detectMissingContainers(
+    allProjects: readonly ProjectRow[],
+    deployablesByProject: DeployableByProject,
+  ): Promise<void> {
     const projects = allProjects.filter((project) => {
-      const d = deployables.get(project.id);
+      const d = deployablesByProject.get(project.id);
       const containerId = d?.container_id ?? project.container_id;
       const status = d?.status ?? project.status;
       return Boolean(containerId) && RECONCILE_ELIGIBLE_STATUSES.has(status);
     });
 
     for (const project of projects) {
-      const d = deployables.get(project.id);
+      const d = deployablesByProject.get(project.id);
       const containerId = d?.container_id ?? project.container_id;
       if (!containerId) {
         continue;
@@ -157,13 +173,13 @@ export class ContainerStateReconciler {
     }
   }
 
-  private async timeoutStuckRecovering(): Promise<void> {
+  private async timeoutStuckRecovering(deployablesByProject: DeployableByProject): Promise<void> {
     if (!this.stateManager) return;
     const now = Date.now();
     const recovering = await this.db.listProjects('recovering');
     for (const project of recovering) {
       // PR 4.5: canonical-first read of recovering_started_at with `??` fallback.
-      const deployable = await this.db.getDeployableForProject(project.id);
+      const deployable = deployablesByProject.get(project.id);
       const recoveringStartedAt =
         deployable?.recovering_started_at ?? project.recovering_started_at;
       if (!recoveringStartedAt) continue;
@@ -209,16 +225,18 @@ export class ContainerStateReconciler {
     }
   }
 
-  private async detectOrphanContainers(): Promise<void> {
+  private async detectOrphanContainers(
+    projects: readonly ProjectRow[],
+    services: readonly ServiceRow[],
+    deployablesByProject: DeployableByProject,
+  ): Promise<void> {
     try {
       const containers = await this.docker.listAllContainers();
-      const projects = await this.db.listProjects();
-      const services = await this.db.listServices();
 
       const knownContainerIds = new Set<string>();
       for (const project of projects) {
         // PR 4.5: canonical-first read of container_id with `??` fallback.
-        const deployable = await this.db.getDeployableForProject(project.id);
+        const deployable = deployablesByProject.get(project.id);
         const containerId = deployable?.container_id ?? project.container_id;
         if (containerId) {
           knownContainerIds.add(containerId);
