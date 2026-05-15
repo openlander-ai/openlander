@@ -187,7 +187,7 @@ export const translations = {
       noProjects: 'No projects yet. Tell your agent to deploy — projects show up here as it works.',
       allHealthy: 'All {services} running across {projects}.',
       someCrashed: '{crashed} of {total} projects crashed · {healthy} healthy across {services}.',
-      lastDeploy: 'Last deploy · {time}',
+      lastDeploy: 'Last deploy',
     },
     projects: {
       sectionTitle: 'Projects',

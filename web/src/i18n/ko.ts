@@ -228,7 +228,7 @@ export const translations = {
         '아직 프로젝트가 없습니다. 에이전트에게 배포해 달라고 말해보세요. 작업이 시작되면 여기에 나타납니다.',
       allHealthy: '{projects}에서 {services} 모두 정상 실행 중입니다.',
       someCrashed: '프로젝트 {total}개 중 {crashed}개 크래시 · {healthy}개 정상 (총 {services})',
-      lastDeploy: '최근 배포 · {time}',
+      lastDeploy: '최근 배포',
     },
     projects: {
       // Chrome — section title + status pill + aria label.

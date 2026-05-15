@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
-import { TriggerChip } from '@/components/Shell/DeployRow';
+import { StatusPill, TriggerChip } from '@/components/Shell/DeployRow';
 import { PendingApprovalsStrip } from '@/components/Shell/PendingApprovalsStrip';
 import { AgentGuideDialog } from '@/components/agent-guide';
 import { useActivityFeed } from '@/hooks/use-activity-feed';
@@ -203,7 +203,7 @@ export function Home() {
         </div>
       </OuterCard>
 
-      {/* ── 1b. Last-deploy hero row ── */}
+      {/* ── 1b. Last-deploy hero card ── */}
       {lastDeployState &&
         (() => {
           const { deploy, projectId, projectName } = lastDeployState;
@@ -212,11 +212,13 @@ export function Home() {
               ? 'var(--ol-success)'
               : deploy.status === 'failed'
                 ? 'var(--ol-error)'
-                : 'var(--ol-fg-subtle)';
+                : deploy.status === 'building'
+                  ? 'var(--ol-info)'
+                  : 'var(--ol-fg-subtle)';
           const shortSha = deploy.commitSha ? deploy.commitSha.slice(0, 7) : deploy.id.slice(0, 8);
           const commitMsg = deploy.commitMessage
-            ? deploy.commitMessage.length > 60
-              ? deploy.commitMessage.slice(0, 60) + '…'
+            ? deploy.commitMessage.length > 80
+              ? deploy.commitMessage.slice(0, 80) + '…'
               : deploy.commitMessage
             : null;
           const timeAgo = formatRelativeTime(deploy.createdAt, t);
@@ -225,42 +227,53 @@ export function Home() {
               type="button"
               onClick={() => navigate(`/projects/${projectId}/deployments/${deploy.id}`)}
               className={cn(
-                'group flex w-full items-center gap-3 rounded-[var(--ol-radius)] px-4 py-3',
-                'bg-[color:var(--ol-panel)] transition-colors hover:bg-[color:var(--ol-panel-2)]',
-                'text-left',
+                'group flex w-full cursor-pointer flex-col gap-2 rounded-[var(--ol-radius)] px-4 py-3 text-left',
+                'border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel)]',
+                'shadow-[0_1px_0_color-mix(in_oklch,var(--ol-border-subtle)_70%,transparent)]',
+                'transition-colors hover:border-[color:var(--ol-border-strong)] hover:bg-[color:var(--ol-panel-2)]',
               )}
             >
-              {/* Status dot */}
-              <span
-                aria-hidden
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: dotColor }}
-              />
-
-              {/* Content */}
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                  <span className="text-[12px] text-[color:var(--ol-fg-muted)]">
-                    {t('home.hero.lastDeploy', { time: timeAgo })}
-                  </span>
-                  <span className="text-[12.5px] font-medium text-[color:var(--ol-fg)]">
-                    {projectName}
-                  </span>
-                  <span className="ol-mono text-[11.5px] text-[color:var(--ol-fg-muted)]">
-                    {shortSha}
-                  </span>
-                  {commitMsg && (
-                    <span className="truncate text-[12px] text-[color:var(--ol-fg-muted)]">
-                      {commitMsg}
-                    </span>
-                  )}
+              {/* Eyebrow + status badge */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-[color:var(--ol-fg-muted)]">
+                  <span
+                    aria-hidden
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{
+                      backgroundColor: dotColor,
+                      boxShadow: `0 0 0 3px color-mix(in oklch, ${dotColor} 25%, transparent)`,
+                    }}
+                  />
+                  {t('home.hero.lastDeploy')}
                 </div>
-                <div className="mt-0.5 flex items-center gap-2">
-                  <TriggerChip trigger={deploy.trigger} />
-                </div>
+                <StatusPill status={deploy.status} />
               </div>
 
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[color:var(--ol-fg-subtle)] opacity-0 transition-opacity group-hover:opacity-60" />
+              {/* Primary — commit message (falls back to project name when no commit msg) */}
+              <div className="text-[14px] font-medium leading-snug text-[color:var(--ol-fg)]">
+                {commitMsg ?? projectName}
+              </div>
+
+              {/* Secondary metadata — wraps on narrow widths */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-[color:var(--ol-fg-muted)]">
+                {commitMsg && (
+                  <>
+                    <span>{projectName}</span>
+                    <span aria-hidden className="text-[color:var(--ol-fg-subtle)]">
+                      ·
+                    </span>
+                  </>
+                )}
+                <span className="ol-mono">{shortSha}</span>
+                <span aria-hidden className="text-[color:var(--ol-fg-subtle)]">
+                  ·
+                </span>
+                <TriggerChip trigger={deploy.trigger} />
+                <span aria-hidden className="text-[color:var(--ol-fg-subtle)]">
+                  ·
+                </span>
+                <span>{timeAgo}</span>
+              </div>
             </button>
           );
         })()}
