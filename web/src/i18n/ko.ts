@@ -1333,7 +1333,7 @@ export const translations = {
     },
     routes: {
       // Chrome — section title + table headers.
-      title: 'Routes',
+      title: '감지된 라우트',
       col: {
         host: 'Public host',
         service: 'Service',
@@ -1342,10 +1342,12 @@ export const translations = {
         status: 'Status',
       },
       // Content — descriptive copy + loading / empty messages.
-      subtitle: '서비스에 매핑된 공개 호스트입니다.',
+      subtitle:
+        'OpenLander가 감지한 읽기 전용 라우팅 상태입니다. 커스텀 도메인 추가와 삭제는 서비스 상세의 Domains 탭에서 관리하세요.',
       loading: '라우트를 불러오는 중…',
       loadFailed: '라우트를 불러오지 못했습니다.',
-      empty: '아직 공개 라우트가 없습니다. 서비스가 외부에 노출되면 여기에 표시됩니다.',
+      empty:
+        '아직 감지된 공개 라우트가 없습니다. 서비스를 외부에 노출하거나 서비스 상세의 Domains 탭에서 커스텀 도메인을 추가하세요.',
     },
     ports: {
       // Chrome — section title + table headers + status pills.

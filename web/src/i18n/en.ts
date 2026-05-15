@@ -1149,11 +1149,13 @@ export const translations = {
       },
     },
     routes: {
-      title: 'Routes',
-      subtitle: 'Public hosts mapped to services.',
+      title: 'Detected routes',
+      subtitle:
+        'Read-only routing state detected by OpenLander. Add or remove custom domains from the service Domains tab.',
       loading: 'Loading routes…',
       loadFailed: 'Failed to load routes.',
-      empty: 'No public routes yet. They appear here once a service is reachable.',
+      empty:
+        'No detected public routes yet. Expose a service or add a custom domain from the service Domains tab.',
       col: {
         host: 'Public host',
         service: 'Service',
