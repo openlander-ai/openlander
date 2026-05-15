@@ -313,12 +313,20 @@ function ServicesPanel({
       <ul className="divide-y divide-[color:var(--ol-border-subtle)]">
         {services.map((s) => {
           const KindIcon = s.kind === 'Database' ? Database : Box;
+          const open = () => onOpen(s.id);
           return (
             <li key={s.id}>
-              <button
-                type="button"
-                onClick={() => onOpen(s.id)}
-                className="flex w-full items-center gap-4 px-5 py-3.5 text-left transition-colors hover:bg-[color:var(--ol-panel-2)]"
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={open}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    open();
+                  }
+                }}
+                className="flex w-full cursor-pointer items-center gap-4 px-5 py-3.5 text-left transition-colors hover:bg-[color:var(--ol-panel-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--ol-primary)]"
               >
                 <span
                   aria-hidden
@@ -360,16 +368,20 @@ function ServicesPanel({
                     {s.cpu} · {s.mem}
                   </div>
                   {s.url && (
-                    <span
-                      className="inline-flex items-center gap-1 text-[color:var(--ol-primary)]"
-                      aria-hidden
+                    <a
+                      href={s.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-[color:var(--ol-primary)] hover:underline"
+                      aria-label={`Open ${s.name}`}
                     >
                       <ExternalLink className="h-3 w-3" />
                       {s.url.replace(/^https?:\/\//, '')}
-                    </span>
+                    </a>
                   )}
                 </div>
-              </button>
+              </div>
             </li>
           );
         })}
