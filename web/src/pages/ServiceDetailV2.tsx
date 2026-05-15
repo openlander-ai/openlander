@@ -561,6 +561,14 @@ function GeneralTab({ service }: { service: ServiceNode }) {
   }
   sourceRows.push(['MCP service_id', service.id]);
 
+  const buildMethod = getBuildMethodLabel(service);
+  const buildRows: [string, string][] = [
+    ['Method', buildMethod],
+    ['Dockerfile', service.dockerfilePath ?? (buildMethod === 'Dockerfile' ? 'Dockerfile' : '—')],
+    ['Target stage', service.dockerTarget ?? '—'],
+    ['Build context', service.buildContext ?? (buildMethod === 'Dockerfile' ? '.' : '—')],
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -572,11 +580,7 @@ function GeneralTab({ service }: { service: ServiceNode }) {
           )}
         </SubCard>
         <SubCard title="Build">
-          <p className="text-[12.5px] text-[color:var(--ol-fg-muted)]">
-            Build method is detected on each deploy. Override via the agent —{' '}
-            <span className="ol-mono">openlander_deploy.create_deploy_plan</span> exposes Dockerfile
-            path, target stage, and build context.
-          </p>
+          <KvList rows={buildRows} valueClassName="ol-mono text-[12px]" />
         </SubCard>
       </div>
       <SubCard title="Runtime" badge={<HealthBadge health={service.health} />}>
@@ -1822,6 +1826,17 @@ function parseRepoUrl(url: string): { provider: string; path: string } | null {
   } catch {
     return null;
   }
+}
+
+function getBuildMethodLabel(service: ServiceNode): string {
+  const method = service.buildMethod?.trim();
+  const normalized = method?.toLowerCase();
+  if (normalized === 'compose') return 'Compose';
+  if (normalized === 'dockerfile') return 'Dockerfile';
+  if (normalized === 'image') return 'Image';
+  if (service.source === 'image') return 'Image';
+  if (service.dockerfilePath || service.repoUrl || service.source === 'git') return 'Dockerfile';
+  return method && method.length > 0 ? method : 'Auto';
 }
 
 function KvList({ rows, valueClassName }: { rows: [string, string][]; valueClassName?: string }) {
