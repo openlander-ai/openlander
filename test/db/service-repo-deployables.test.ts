@@ -27,3 +27,20 @@ describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
     expect(method).toContain("${services.parent_service_id} IS NULL");
   });
 });
+
+describe('ProjectRepo.listProjectsWithMetadata', () => {
+  it('derives list-card status from user-visible services, not compose parent metadata', () => {
+    const source = readFileSync('src/db/repos/project.repo.ts', 'utf8');
+    const method = source.slice(
+      source.indexOf('async listProjectsWithMetadata'),
+      source.indexOf('\n  }\n\n  /**', source.indexOf('async listProjectsWithMetadata')),
+    );
+
+    expect(method).toContain('deriveGroupStatusFromServices');
+    expect(method).toContain('servicesByProject');
+    expect(method).toContain('aggregateStatus ? { ...project, status: aggregateStatus } : project');
+    expect(source).toContain(
+      "s.kind NOT IN ('postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose')",
+    );
+  });
+});

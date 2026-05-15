@@ -55,6 +55,9 @@ const log = createModuleLogger('project-repo');
 type ProjectSelectRow = typeof projects.$inferSelect;
 type ServiceSelectRow = typeof services.$inferSelect;
 type EnvironmentSelectRow = typeof environments.$inferSelect;
+type ProjectStatus = NonNullable<ProjectRow['status']>;
+
+const NON_DEPLOYABLE_SERVICE_KINDS = ['postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose'];
 
 function toProjectRow(row: ProjectSelectRow): ProjectRow {
   return row as ProjectRow;
@@ -83,6 +86,20 @@ function excludesAttachedRuntimeProjectRows() {
   // Hide those runtime rows from all project list surfaces once the service
   // belongs to another group.
   return sql`NOT EXISTS (SELECT 1 FROM services s WHERE s.id = (${projects.id} || '__svc') AND s.project_id != ${projects.id})`;
+}
+
+function isDeployableStatusService(kind: string): boolean {
+  return !NON_DEPLOYABLE_SERVICE_KINDS.includes(kind);
+}
+
+function deriveGroupStatusFromServices(
+  serviceRows: Array<{ kind: string; status: ServiceRow['status'] }>,
+): ProjectStatus | undefined {
+  const deployableRows = serviceRows.filter((service) => isDeployableStatusService(service.kind));
+  if (deployableRows.length === 0) return undefined;
+  if (deployableRows.some((service) => service.status === 'error')) return 'error';
+  if (deployableRows.some((service) => service.status === 'running')) return 'running';
+  return 'stopped';
 }
 
 export class ProjectRepo {
@@ -321,7 +338,7 @@ export class ProjectRepo {
     ];
     if (status) {
       conditions.push(
-        sql`EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND s.kind != 'compose-child' AND s.status = ${status})`,
+        sql`EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND s.kind NOT IN ('postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose') AND s.status = ${status})`,
       );
     }
     if (!opts?.includeArchived) {
@@ -419,13 +436,25 @@ export class ProjectRepo {
     // Compose detection still needs the whole service group so the UI can mark
     // compose parents even though environments above are canonical-only.
     const groupServices = await this.db
-      .select({ id: services.id, project_id: services.project_id, kind: services.kind })
+      .select({
+        id: services.id,
+        project_id: services.project_id,
+        kind: services.kind,
+        status: services.status,
+      })
       .from(services)
       .where(inArray(services.project_id, projectIds));
 
     const isComposeByProject = new Map<string, boolean>();
+    const servicesByProject = new Map<
+      string,
+      Array<{ kind: string; status: ServiceRow['status'] }>
+    >();
     for (const s of groupServices) {
       if (!s.project_id) continue;
+      const rows = servicesByProject.get(s.project_id) ?? [];
+      rows.push({ kind: s.kind, status: s.status });
+      servicesByProject.set(s.project_id, rows);
       if (s.kind === 'compose' || s.kind === 'compose-child') {
         isComposeByProject.set(s.project_id, true);
       }
@@ -440,12 +469,17 @@ export class ProjectRepo {
     // + 3 children = 4," so omit the parent meta from the badge.
     const childCountByParent = await this.getDeployableServiceCountsByProjectIds(projectIds);
 
-    return projectRows.map((project) => ({
-      project,
-      environments: envByProject.get(project.id) ?? [],
-      childCount: childCountByParent.get(project.id) ?? 0,
-      isCompose: isComposeByProject.get(project.id) ?? false,
-    }));
+    return projectRows.map((project) => {
+      const aggregateStatus = deriveGroupStatusFromServices(
+        servicesByProject.get(project.id) ?? [],
+      );
+      return {
+        project: aggregateStatus ? { ...project, status: aggregateStatus } : project,
+        environments: envByProject.get(project.id) ?? [],
+        childCount: childCountByParent.get(project.id) ?? 0,
+        isCompose: isComposeByProject.get(project.id) ?? false,
+      };
+    });
   }
 
   /**
