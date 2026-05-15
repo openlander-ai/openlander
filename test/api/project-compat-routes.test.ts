@@ -2,12 +2,56 @@ import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../../src/app.js';
+import type { ServiceRow } from '../../src/db/types.js';
 import { createProjectCompatRoutes } from '../../src/web/api/project-compat-routes.js';
 
 function createApp(ctx: Partial<AppContext> = {}) {
   const app = new Hono();
   app.route('/api', createProjectCompatRoutes(ctx as AppContext));
   return app;
+}
+
+function makeServiceRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
+  return {
+    id: 'group-1__svc',
+    project_id: 'group-1',
+    name: 'group-1__svc',
+    kind: 'image',
+    parent_service_id: null,
+    status: 'running',
+    visibility: 'internal',
+    assigned_port: 10001,
+    container_id: null,
+    container_name: 'ol-workspace',
+    container_port: 3000,
+    image_tag: 'ol-workspace:latest',
+    previous_image_tag: null,
+    public_url: null,
+    dockerfile_path: 'Dockerfile',
+    docker_target: null,
+    build_context: '.',
+    build_method: null,
+    source: 'image',
+    repo_url: null,
+    branch: null,
+    image_url: 'nginx:alpine',
+    image_cmd: null,
+    pending_fix: null,
+    access_code: null,
+    access_code_iv: null,
+    is_preview: null,
+    pr_number: null,
+    project_type: 'web',
+    health_check_strategy: 'http',
+    health_check_path: '/',
+    recovering_started_at: null,
+    credentials: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    archived_at: null,
+    server_id: 'local',
+    ...overrides,
+  };
 }
 
 describe('createProjectCompatRoutes', () => {
@@ -141,6 +185,64 @@ describe('createProjectCompatRoutes', () => {
           image: 'legacy-app:latest',
           port: 10001,
           dependsOn: [],
+        },
+      ],
+    });
+  });
+
+  it('uses route-safe URLs for HTTP compose children and hides internal dependencies', async () => {
+    const previousPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_PUBLIC_HOST'] = 'localhost';
+    const project = { id: 'stack', name: 'demo-stack', container_id: null, status: null };
+    const appService = makeServiceRow({
+      id: 'stack__app__svc',
+      project_id: 'stack',
+      name: 'demo-stack/app__svc',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      assigned_port: 10006,
+      image_url: 'ol-demo-stack-app:latest',
+    });
+    const postgresService = makeServiceRow({
+      id: 'stack__postgres__svc',
+      project_id: 'stack',
+      name: 'demo-stack/postgres__svc',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      assigned_port: 10005,
+      image_url: 'postgres:16-alpine',
+    });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup: vi.fn(async () => [appService, postgresService]),
+        getEnvironmentsByProject: vi.fn(async () => []),
+        findDependenciesByProject: vi.fn(async () => []),
+        getLatestServiceMetric: vi.fn(async () => null),
+      },
+    });
+
+    const res = await app.request('/api/projects/stack/topology').finally(() => {
+      if (previousPublicHost === undefined) {
+        delete process.env['OPENLANDER_PUBLIC_HOST'];
+      } else {
+        process.env['OPENLANDER_PUBLIC_HOST'] = previousPublicHost;
+      }
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      services: [
+        {
+          id: 'stack__app__svc',
+          name: 'demo-stack/app',
+          url: 'http://demo-stack-app.localhost',
+        },
+        {
+          id: 'stack__postgres__svc',
+          name: 'demo-stack/postgres',
+          url: null,
         },
       ],
     });

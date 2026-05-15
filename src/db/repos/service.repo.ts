@@ -312,6 +312,7 @@ export class ServiceRepo {
         and(
           eq(services.project_id, projectId),
           notInArray(services.kind, [...MANAGED_SERVICE_KINDS, 'compose']),
+          sql`NOT (${services.parent_service_id} IS NULL AND ${services.build_method} = 'compose')`,
         ),
       )
       .orderBy(desc(services.updated_at));
