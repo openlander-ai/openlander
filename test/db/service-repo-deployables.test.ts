@@ -14,3 +14,16 @@ describe('ServiceRepo.getDeployablesByGroup', () => {
     expect(method).not.toContain("services.kind} != 'compose-child'");
   });
 });
+
+describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
+  it('excludes compose parent metadata rows even when legacy rows have non-compose kind', () => {
+    const source = readFileSync('src/db/repos/project.repo.ts', 'utf8');
+    const method = source.slice(
+      source.indexOf('async getDeployableServiceCountsByProjectIds'),
+      source.indexOf('\n  }\n\n  /**', source.indexOf('async getDeployableServiceCountsByProjectIds')),
+    );
+
+    expect(method).toContain("${services.build_method} = 'compose'");
+    expect(method).toContain("${services.parent_service_id} IS NULL");
+  });
+});

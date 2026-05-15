@@ -547,19 +547,18 @@ function GeneralTab({ service }: { service: ServiceNode }) {
     } else {
       sourceRows.push(['Source', service.repoUrl]);
     }
+    const branch = service.branch ?? service.deployedBranch;
+    if (branch) {
+      sourceRows.push(['Branch', branch]);
+    }
+    if (service.branch && service.deployedBranch && service.branch !== service.deployedBranch) {
+      sourceRows.push(['Deployed branch', service.deployedBranch]);
+    }
+    sourceRows.push(['Build path', formatBuildPath(service.buildContext)]);
   } else if (service.image) {
     sourceRows.push(['Source', 'Container image']);
-  }
-  if (service.branch) {
-    sourceRows.push(['Configured branch', service.branch]);
-  }
-  if (service.deployedBranch) {
-    sourceRows.push(['Deployed branch', service.deployedBranch]);
-  }
-  if (service.image) {
     sourceRows.push(['Image', service.image]);
   }
-  sourceRows.push(['MCP service_id', service.id]);
 
   const buildMethod = getBuildMethodLabel(service);
   const buildRows: [string, string][] = [
@@ -1837,6 +1836,12 @@ function getBuildMethodLabel(service: ServiceNode): string {
   if (service.source === 'image') return 'Image';
   if (service.dockerfilePath || service.repoUrl || service.source === 'git') return 'Dockerfile';
   return method && method.length > 0 ? method : 'Auto';
+}
+
+function formatBuildPath(value: string | null | undefined): string {
+  const path = value?.trim();
+  if (!path || path === '.') return './';
+  return path;
 }
 
 function KvList({ rows, valueClassName }: { rows: [string, string][]; valueClassName?: string }) {
