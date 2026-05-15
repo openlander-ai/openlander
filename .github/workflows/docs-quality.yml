@@ -27,10 +27,6 @@ concurrency:
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   validate-claims:
     name: Validate Doc Claims
@@ -42,6 +38,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Pin npm version
+        run: |
+          npm install --prefix "$RUNNER_TEMP/npm-11" npm@11.5.1 --no-audit --no-fund
+          echo "$RUNNER_TEMP/npm-11/node_modules/.bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/npm-11/node_modules/.bin/npm" --version
 
       - run: npm ci
 
