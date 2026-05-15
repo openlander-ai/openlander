@@ -38,6 +38,7 @@ import {
   type WebServerRoutesResponse,
   type WebServerSummary,
 } from '@/lib/api/web-server';
+import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
 type Translate = (key: string, params?: Record<string, string | number>) => string;
@@ -86,17 +87,13 @@ function translateIssue(issue: WebRouteIssue, t: Translate): string {
   return localized === key ? issue.message : localized;
 }
 
+// Wrap lib's formatRelativeTime to preserve the '—' fallback that this
+// page used for null / unparseable timestamps (the lib returns '' instead
+// since most callers prefer hiding the slot).
 function formatRelative(iso: string | null, t: Translate): string {
   if (!iso) return '—';
-  const ts = Date.parse(iso);
-  if (Number.isNaN(ts)) return '—';
-  const diff = Date.now() - ts;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return t('webServer.relative.justNow');
-  if (m < 60) return t('webServer.relative.minutes', { count: m });
-  const h = Math.floor(m / 60);
-  if (h < 24) return t('webServer.relative.hours', { count: h });
-  return t('webServer.relative.days', { count: Math.floor(h / 24) });
+  const out = formatRelativeTime(iso, t);
+  return out === '' ? '—' : out;
 }
 
 export function WebServerSettings() {

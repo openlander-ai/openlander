@@ -1282,13 +1282,6 @@ export const translations = {
       subtitle: 'MCP 호출 이벤트만 표시합니다. 전체 기록은 Activity에서 확인하세요.',
       empty: '아직 에이전트 호출이 없습니다. MCP 배포·접속이 여기에 표시됩니다.',
     },
-    relative: {
-      // Content — relative time display reads naturally in user's locale.
-      justNow: '방금',
-      minutes: '{count}분 전',
-      hours: '{count}시간 전',
-      days: '{count}일 전',
-    },
   },
   webServer: {
     // Chrome — section title.
@@ -1396,13 +1389,6 @@ export const translations = {
       warning: 'warning',
       error: 'error',
       inactive: 'inactive',
-    },
-    relative: {
-      // Content — relative time reads naturally in user's locale.
-      justNow: '방금',
-      minutes: '{count}분 전',
-      hours: '{count}시간 전',
-      days: '{count}일 전',
     },
   },
   gitProviders: {
