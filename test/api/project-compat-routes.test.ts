@@ -201,6 +201,8 @@ describe('createProjectCompatRoutes', () => {
       kind: 'compose-child',
       parent_service_id: 'stack__svc',
       assigned_port: 10006,
+      container_id: 'container-app',
+      container_name: 'ol-demo-stack-app',
       image_url: 'ol-demo-stack-app:latest',
     });
     const postgresService = makeServiceRow({
@@ -212,11 +214,31 @@ describe('createProjectCompatRoutes', () => {
       assigned_port: 10005,
       image_url: 'postgres:16-alpine',
     });
+    const redisService = makeServiceRow({
+      id: 'stack__redis__svc',
+      project_id: 'stack',
+      name: 'demo-stack/redis__svc',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      assigned_port: 10008,
+      image_url: 'redis:7-alpine',
+    });
     const app = createApp({
+      docker: {
+        inspectContainer: vi.fn(async () => ({
+          Config: {
+            Env: [
+              'DATABASE_URL=postgresql://demo:demo@postgres:5432/demo',
+              'REDIS_URL=redis://redis:6379',
+            ],
+          },
+          State: { Health: { Status: 'healthy' } },
+        })),
+      } as unknown as AppContext['docker'],
       db: {
         getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
         getProjectByName: vi.fn(async () => undefined),
-        getDeployablesByGroup: vi.fn(async () => [appService, postgresService]),
+        getDeployablesByGroup: vi.fn(async () => [appService, postgresService, redisService]),
         getEnvironmentsByProject: vi.fn(async () => []),
         findDependenciesByProject: vi.fn(async () => []),
         getLatestServiceMetric: vi.fn(async () => null),
@@ -238,10 +260,16 @@ describe('createProjectCompatRoutes', () => {
           id: 'stack__app__svc',
           name: 'demo-stack/app',
           url: 'http://demo-stack-app.localhost',
+          dependsOn: ['stack__postgres__svc', 'stack__redis__svc'],
         },
         {
           id: 'stack__postgres__svc',
           name: 'demo-stack/postgres',
+          url: null,
+        },
+        {
+          id: 'stack__redis__svc',
+          name: 'demo-stack/redis',
           url: null,
         },
       ],
