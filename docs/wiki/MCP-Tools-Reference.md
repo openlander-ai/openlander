@@ -182,7 +182,9 @@ Provide either `project_id` or `project_name`.
 
 ### `rollback_service`
 
-Rollback a deployable app/worker service to the previous Docker image.
+Rollback a deployable app/worker service to the stored previous Docker image.
+This is an image rollback only: it does not restore databases, volumes,
+environment variables, secrets, or service configuration.
 
 | Parameter      | Type   | Required | Description                           |
 | -------------- | ------ | -------- | ------------------------------------- |
@@ -190,7 +192,8 @@ Rollback a deployable app/worker service to the previous Docker image.
 | `service_name` | string | No       | Deployable service name               |
 | `project_name` | string | No       | Optional group scope for name lookups |
 
-Provide either `service_id` or `service_name`.
+Provide either `service_id` or `service_name`. If no previous image tag is
+available, fix the source/configuration issue and use `redeploy_app` instead.
 
 ### `preview_deploy`
 
