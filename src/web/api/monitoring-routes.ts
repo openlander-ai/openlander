@@ -100,13 +100,7 @@ export function createMonitoringRoutes(ctx: AppContext): Hono {
     const projectNameById = new Map<string, string>();
     for (const p of projects) projectNameById.set(p.id, p.name);
 
-    // service → first project connection (if any). One row per service.
-    const projectIdByService = new Map<string, string>();
-    for (const svc of allServices) {
-      const conns = await ctx.db.listServiceConnectionsByService(svc.id);
-      const first = conns[0];
-      if (first) projectIdByService.set(svc.id, first.service_id_consumer);
-    }
+    const visibleProjectIds = new Set(projectNameById.keys());
 
     const now = Date.now();
     const fromMs = now - WINDOW_MS;
@@ -115,7 +109,10 @@ export function createMonitoringRoutes(ctx: AppContext): Hono {
     const out: MonitoringServiceEntry[] = [];
 
     for (const svc of allServices) {
-      const projectId = projectIdByService.get(svc.id) ?? null;
+      const projectId = svc.project_id;
+      if (svc.archived_at != null) continue;
+      if (svc.kind === 'compose') continue;
+      if (!visibleProjectIds.has(projectId)) continue;
       if (projectScoped && projectId !== projectFilter) continue;
       total += 1;
 
