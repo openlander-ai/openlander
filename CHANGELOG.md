@@ -51,6 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   workflow runs.
 - Moved language selection out of setup and into login/account chrome so first
   boot focuses on account creation and MCP setup.
+- Completed the Korean/English i18n pass for Monitoring, ServiceDetail,
+  ManagedServiceDetail, ProjectView not-found states, and agent-guide copy.
+- Refreshed README screenshots for the dashboard and MCP setup surfaces.
+- Clarified MCP rollback guidance so deployable-service rollback/redeploy and
+  managed-service backup/restore are not presented as interchangeable actions.
 
 ### Fixed
 
