@@ -542,6 +542,36 @@ describe('diagnose_host_resources tool', () => {
     expect(ctx.docker.getContainerStats).toHaveBeenCalledTimes(50);
   });
 
+  it('surfaces container listing failures instead of treating them as zero containers', async () => {
+    const ctx = {
+      docker: {
+        status: vi.fn(async () => ({ state: 'running' })),
+        listAllContainers: vi.fn(async () => {
+          throw new Error('permission denied listing containers');
+        }),
+        getContainerStats: vi.fn(),
+        getDiskUsage: vi.fn(),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_host_resources').execute(
+      { include_disk_usage: false },
+      { target: 'mcp', appCtx: ctx } as unknown as ToolContext,
+    )) as Record<string, unknown>;
+
+    expect(result.docker).toMatchObject({ reachable: true, status: { state: 'running' } });
+    expect(result.containers).toMatchObject({
+      total: 0,
+      listError: 'permission denied listing containers',
+      sampled: 0,
+    });
+    expect(result.findings).toContain('docker_container_list_unavailable');
+    expect(JSON.stringify(result)).toContain(
+      'Docker is reachable, but OpenLander could not list containers',
+    );
+    expect(ctx.docker.getContainerStats).not.toHaveBeenCalled();
+  });
+
   it('returns guidance instead of throwing when Docker is unavailable', async () => {
     const ctx = {
       docker: {

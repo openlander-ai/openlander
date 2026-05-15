@@ -489,8 +489,10 @@ async function diagnoseHostResources(
     error: getUnknownErrorMessage(error),
   }));
   const dockerReachable = dockerStatus.state === 'running';
+  let containerListError: string | null = null;
   const allContainers = dockerReachable
     ? await appCtx.docker.listAllContainers().catch((error: unknown) => {
+        containerListError = getUnknownErrorMessage(error);
         log.warn({ error }, 'Failed to list containers for host diagnosis');
         return [] as DockerContainerRow[];
       })
@@ -519,6 +521,7 @@ async function diagnoseHostResources(
   const containerCounts = summarizeContainerCounts(allContainers);
   const findings = buildHostResourceFindings({
     dockerReachable,
+    containerListError,
     systemStats,
     topByMemory,
     diskUsage,
@@ -542,6 +545,7 @@ async function diagnoseHostResources(
     },
     containers: {
       ...containerCounts,
+      listError: containerListError,
       sampled: resourceSummaries.length,
       statsSampleLimit: HOST_DIAGNOSTIC_STATS_SAMPLE_LIMIT,
       sampleLimitReached,
@@ -679,6 +683,7 @@ function summarizeContainerCounts(containers: DockerContainerRow[]): Record<stri
 
 function buildHostResourceFindings(input: {
   dockerReachable: boolean;
+  containerListError: string | null;
   systemStats: ReturnType<typeof getSystemStats>;
   topByMemory: ContainerResourceSummary[];
   diskUsage: DockerDiskUsageSummary | { available: false; skipped: true };
@@ -686,6 +691,9 @@ function buildHostResourceFindings(input: {
   const findings: string[] = [];
   if (!input.dockerReachable) {
     findings.push('docker_unreachable');
+  }
+  if (input.containerListError) {
+    findings.push('docker_container_list_unavailable');
   }
   if (input.systemStats.memory.usagePercent >= 85) {
     findings.push('host_memory_high');
@@ -721,6 +729,11 @@ function buildHostResourceNextSteps(findings: string[]): string[] {
   if (findings.includes('docker_unreachable')) {
     steps.push(
       'Docker is not reachable from OpenLander; ask the operator to check Docker Desktop/daemon.',
+    );
+  }
+  if (findings.includes('docker_container_list_unavailable')) {
+    steps.push(
+      'Docker is reachable, but OpenLander could not list containers; ask the operator to check Docker socket permissions or daemon responsiveness.',
     );
   }
   if (findings.includes('host_memory_high') || findings.includes('container_memory_hotspot')) {
