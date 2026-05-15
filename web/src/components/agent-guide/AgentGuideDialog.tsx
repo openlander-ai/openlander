@@ -114,13 +114,13 @@ export function AgentGuideDialog({
 
           {connected && (
             <p className="mt-1 text-[12px] text-[color:var(--ol-fg-muted)]">
-              {t('agentGuide.agentNotConnectedPrompt')}{' '}
+              {t('agentGuide.wrongAgentPrompt')}{' '}
               <button
                 type="button"
                 onClick={handleSetupAgent}
                 className="bg-transparent p-0 text-[color:var(--ol-primary)] hover:underline"
               >
-                {t('agentGuide.setItUpCta')}
+                {t('agentGuide.switchAgentCta')}
               </button>
             </p>
           )}
