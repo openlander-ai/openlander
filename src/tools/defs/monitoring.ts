@@ -474,6 +474,8 @@ interface DockerDiskUsageSummary {
   error?: string;
 }
 
+const HOST_DIAGNOSTIC_STATS_SAMPLE_LIMIT = 50;
+
 async function diagnoseHostResources(
   args: Record<string, unknown>,
   appCtx: AppCtx,
@@ -494,11 +496,21 @@ async function diagnoseHostResources(
       })
     : [];
 
-  const resourceSummaries = await summarizeContainerResources(appCtx, allContainers);
+  const runningContainerCount = allContainers.filter(
+    (container) => container.state === 'running',
+  ).length;
+  const sampleLimitReached = runningContainerCount > HOST_DIAGNOSTIC_STATS_SAMPLE_LIMIT;
+  const resourceSummaries = await summarizeContainerResources(
+    appCtx,
+    allContainers,
+    HOST_DIAGNOSTIC_STATS_SAMPLE_LIMIT,
+  );
   const topByMemory = [...resourceSummaries]
+    // Failed or empty stats are represented as null and sorted to the bottom.
     .sort((a, b) => (b.memoryUsageMb ?? -1) - (a.memoryUsageMb ?? -1))
     .slice(0, containerLimit);
   const topByCpu = [...resourceSummaries]
+    // Failed or empty stats are represented as null and sorted to the bottom.
     .sort((a, b) => (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1))
     .slice(0, containerLimit);
   const diskUsage = includeDiskUsage
@@ -523,9 +535,16 @@ async function diagnoseHostResources(
       memory: systemStats.memory,
       disk: systemStats.disk,
     },
+    units: {
+      cpuPercent: 'percent',
+      memoryMb: 'MB decimal',
+      diskMb: 'MB decimal',
+    },
     containers: {
       ...containerCounts,
       sampled: resourceSummaries.length,
+      statsSampleLimit: HOST_DIAGNOSTIC_STATS_SAMPLE_LIMIT,
+      sampleLimitReached,
       topByMemory,
       topByCpu,
     },
@@ -544,8 +563,11 @@ async function diagnoseHostResources(
 async function summarizeContainerResources(
   appCtx: AppCtx,
   containers: DockerContainerRow[],
+  sampleLimit: number,
 ): Promise<ContainerResourceSummary[]> {
-  const running = containers.filter((container) => container.state === 'running').slice(0, 50);
+  const running = containers
+    .filter((container) => container.state === 'running')
+    .slice(0, sampleLimit);
   const settled = await Promise.allSettled(
     running.map(async (container) => ({
       container,

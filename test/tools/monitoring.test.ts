@@ -476,6 +476,13 @@ describe('diagnose_host_resources tool', () => {
       running: 2,
       exited: 1,
       sampled: 2,
+      statsSampleLimit: 50,
+      sampleLimitReached: false,
+    });
+    expect(result.units).toMatchObject({
+      cpuPercent: 'percent',
+      memoryMb: 'MB decimal',
+      diskMb: 'MB decimal',
     });
     expect(result.dockerDiskUsage).toMatchObject({
       available: true,
@@ -486,6 +493,53 @@ describe('diagnose_host_resources tool', () => {
     expect((result.containers as { topByMemory: Array<{ name: string }> }).topByMemory).toEqual([
       expect.objectContaining({ name: 'external-heavy' }),
     ]);
+  });
+
+  it('marks when running container resource stats are truncated', async () => {
+    const ctx = {
+      docker: {
+        status: vi.fn(async () => ({ state: 'running' })),
+        listAllContainers: vi.fn(async () =>
+          Array.from({ length: 51 }, (_, index) => ({
+            id: `c-${index}`,
+            name: `worker-${index}`,
+            image: 'worker:latest',
+            state: 'running',
+            status: 'Up 1 minute',
+            ports: [],
+            labels: {},
+            managedByOpenLander: false,
+            composeProject: null,
+            created: index,
+          })),
+        ),
+        getContainerStats: vi.fn(async () =>
+          dockerStats({
+            cpuTotal: 110,
+            preCpuTotal: 100,
+            systemTotal: 300,
+            preSystemTotal: 100,
+            memoryUsage: 10_000_000,
+            memoryLimit: 100_000_000,
+          }),
+        ),
+        getDiskUsage: vi.fn(),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_host_resources').execute(
+      { include_disk_usage: false },
+      { target: 'mcp', appCtx: ctx } as unknown as ToolContext,
+    )) as Record<string, unknown>;
+
+    expect(result.containers).toMatchObject({
+      total: 51,
+      running: 51,
+      sampled: 50,
+      statsSampleLimit: 50,
+      sampleLimitReached: true,
+    });
+    expect(ctx.docker.getContainerStats).toHaveBeenCalledTimes(50);
   });
 
   it('returns guidance instead of throwing when Docker is unavailable', async () => {
@@ -500,10 +554,10 @@ describe('diagnose_host_resources tool', () => {
       },
     } as unknown as AppContext;
 
-    const result = (await getMonitoringTool(ctx, 'diagnose_host_resources').execute(
-      {},
-      { target: 'mcp', appCtx: ctx } as unknown as ToolContext,
-    )) as Record<string, unknown>;
+    const result = (await getMonitoringTool(ctx, 'diagnose_host_resources').execute({}, {
+      target: 'mcp',
+      appCtx: ctx,
+    } as unknown as ToolContext)) as Record<string, unknown>;
 
     expect(result.docker).toMatchObject({
       reachable: false,
