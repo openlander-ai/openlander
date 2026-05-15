@@ -41,7 +41,7 @@ describe('Git Providers page v0.1', () => {
     // last-sync heartbeat, full datetime for the connected-on
     // milestone — and only fall back to "—" when the timestamp is
     // genuinely null (the brief window before the first sync).
-    expect(pageSource).toMatch(/formatRelativeTime\(data\.lastSyncAt\)/);
+    expect(pageSource).toMatch(/formatRelativeTime\(data\.lastSyncAt,\s*t\)/);
     expect(pageSource).toMatch(/formatDateTime\(data\.connectedAt\)/);
     // Corrupt-config defense: format helpers return '' for unparseable
     // input. The page must fall through to "—" rather than rendering

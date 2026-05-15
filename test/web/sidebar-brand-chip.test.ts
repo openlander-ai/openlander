@@ -14,19 +14,23 @@ function readRepoFile(relativePath: string): string {
 // theme tweak can't regress the visual back to the badge form.
 describe('Sidebar brand chip — version pin polish', () => {
   const sidebarSource = readRepoFile('web/src/components/Shell/Sidebar.tsx');
+  const enSource = readRepoFile('web/src/i18n/en.ts');
+  const koSource = readRepoFile('web/src/i18n/ko.ts');
 
   it('renders the version pin at a stable integer font size (no 9.5px half-pixel)', () => {
     // Half-pixel sizes round inconsistently across browsers (9 in some,
     // 10 in others), making the pin look heavier on Firefox vs Chrome.
     expect(sidebarSource).not.toMatch(/text-\[9\.5px\]/);
-    expect(sidebarSource).toMatch(/text-\[11px\][\s\S]*?aria-label="Version v0\.1"/);
+    expect(sidebarSource).toMatch(/text-\[11px\][\s\S]*?aria-label=\{t\('sidebar\.versionAria'\)\}/);
+    expect(enSource).toContain("versionAria: 'Version v0.1'");
+    expect(koSource).toContain("versionAria: '버전 v0.1'");
   });
 
   it('keeps the version label lowercase ("v0.1", not "V0.1")', () => {
     // The uppercase utility on a `v0.1` literal produces "V0.1", which
     // breaks the canonical product version form. Drop the transform.
     const versionPinBlock = sidebarSource.match(
-      /<span\b[^>]*aria-label="Version v0\.1"[^>]*>[\s\S]*?<\/span>/,
+      /<span\b[^>]*aria-label=\{t\('sidebar\.versionAria'\)\}[^>]*>[\s\S]*?<\/span>/,
     );
     expect(versionPinBlock).not.toBeNull();
     expect(versionPinBlock![0]).not.toMatch(/uppercase/);
@@ -34,7 +38,7 @@ describe('Sidebar brand chip — version pin polish', () => {
 
   it('drops the rounded-full border pill so the pin reads as text, not a status badge', () => {
     const versionPinBlock = sidebarSource.match(
-      /<span\b[^>]*aria-label="Version v0\.1"[^>]*>[\s\S]*?<\/span>/,
+      /<span\b[^>]*aria-label=\{t\('sidebar\.versionAria'\)\}[^>]*>[\s\S]*?<\/span>/,
     );
     expect(versionPinBlock).not.toBeNull();
     expect(versionPinBlock![0]).not.toMatch(/rounded-full/);
