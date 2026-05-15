@@ -10,6 +10,7 @@ describe('ServiceRepo.getDeployablesByGroup', () => {
     );
 
     expect(method).toContain("notInArray(services.kind, [...MANAGED_SERVICE_KINDS, 'compose'])");
+    expect(method).toContain("${services.build_method} = 'compose'");
     expect(method).not.toContain("services.kind} != 'compose-child'");
   });
 });

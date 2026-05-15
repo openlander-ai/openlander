@@ -20,6 +20,7 @@ import {
   getAllIps,
   getEnvironmentProjectHostname,
   getPreferredProjectUrl,
+  getProjectUrl,
   getProjectUrls,
 } from '../../../pipeline/traefik.js';
 
@@ -298,6 +299,29 @@ export function mapProjectForApi(project: ProjectRow, deployable?: DeployableFor
   };
 }
 
+const COMPOSE_INTERNAL_SERVICE_NAME_RE =
+  /(^|[/_-])(postgres|postgresql|mysql|mariadb|mongo|mongodb|redis|sqlite|clickhouse|minio)([/_.:-]|$)/i;
+
+function isComposeInternalDependency(service: ServiceRow): boolean {
+  if (service.kind !== 'compose-child') return false;
+  const displayName = getDeployableServiceDisplayName(service);
+  const image = service.image_url ?? service.image_tag ?? '';
+  return (
+    COMPOSE_INTERNAL_SERVICE_NAME_RE.test(displayName) ||
+    COMPOSE_INTERNAL_SERVICE_NAME_RE.test(image)
+  );
+}
+
+export function getDeployableServiceRouteName(service: ServiceRow): string {
+  return deriveProjectSlug(getDeployableServiceDisplayName(service));
+}
+
+export function getDeployableServiceUrl(service: ServiceRow): string | null {
+  const port = service.assigned_port ?? null;
+  if (!port || isComposeInternalDependency(service)) return null;
+  return getProjectUrl(getDeployableServiceRouteName(service));
+}
+
 export function mapServiceForApi(
   service: ServiceRow,
   environments: EnvironmentRow[] = [],
@@ -305,6 +329,7 @@ export function mapServiceForApi(
   const deployedBranch =
     environments.find((env) => env.service_id === service.id && env.type === 'production')
       ?.branch ?? null;
+  const url = getDeployableServiceUrl(service);
   return {
     id: service.id,
     name: deployableServiceIdToProjectId(service.name),
@@ -320,6 +345,9 @@ export function mapServiceForApi(
     containerPort: service.container_port,
     image_tag: service.image_tag,
     image: service.image_url ?? service.image_tag,
+    url,
+    preferred_url: url,
+    urls: url ? [{ url, type: 'host', host: new URL(url).hostname, reachable: 'host-only' }] : [],
     imageUrl: service.image_url,
     imageCmd: parseImageCmd(service.image_cmd),
     source: service.source,

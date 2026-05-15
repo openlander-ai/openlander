@@ -7,7 +7,11 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { encrypt } from '../../env/crypto.js';
 import { getProjectUrl } from '../../pipeline/traefik.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
-import { normalizeTimestamp } from './helpers/project-route-shared.js';
+import {
+  getDeployableServiceRouteName,
+  getDeployableServiceUrl,
+  normalizeTimestamp,
+} from './helpers/project-route-shared.js';
 import { parseDockerLogChunk } from './helpers/docker-log-timestamps.js';
 import {
   getTopologyNodeRuntime,
@@ -169,9 +173,9 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
             const port = svc.assigned_port ?? null;
             // Display name strips __svc suffix and group-name prefix.
             const displayName = deployableServiceIdToProjectId(svc.name);
-            const url = port ? getProjectUrl(displayName) : null;
+            const url = getDeployableServiceUrl(svc);
             const image = svc.image_url ?? svc.image_tag ?? `${displayName}:latest`;
-            const kind = resolveKind(svc.kind);
+            const kind = resolveKind(`${displayName} ${image}`);
             const runtime = await getTopologyNodeRuntime(ctx, {
               id: svc.id,
               container_id: svc.container_id,
@@ -199,6 +203,7 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
               dockerTarget: svc.docker_target,
               buildContext: svc.build_context,
               buildMethod: svc.build_method,
+              routeName: getDeployableServiceRouteName(svc),
             };
           })
         : await mapWithConcurrency(

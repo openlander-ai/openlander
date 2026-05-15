@@ -123,6 +123,8 @@ describe('createDeployableServiceRoutes', () => {
   });
 
   it('lists compose child services instead of compose parent metadata', async () => {
+    const previousPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_PUBLIC_HOST'] = 'localhost';
     const project = makeProjectRow({ id: 'stack', name: 'demo-stack' });
     const composeChildren = [
       makeServiceRow({
@@ -131,6 +133,8 @@ describe('createDeployableServiceRoutes', () => {
         project_id: 'stack',
         kind: 'compose-child',
         parent_service_id: 'stack__svc',
+        assigned_port: 10006,
+        image_url: 'ol-demo-stack-web:latest',
       }),
       makeServiceRow({
         id: 'stack__postgres__svc',
@@ -138,6 +142,8 @@ describe('createDeployableServiceRoutes', () => {
         project_id: 'stack',
         kind: 'compose-child',
         parent_service_id: 'stack__svc',
+        assigned_port: 10005,
+        image_url: 'postgres:16-alpine',
       }),
     ];
     const getDeployablesByGroup = vi.fn(async () => composeChildren);
@@ -150,15 +156,31 @@ describe('createDeployableServiceRoutes', () => {
       },
     });
 
-    const res = await app.request('/api/projects/stack/services');
+    const res = await app.request('/api/projects/stack/services').finally(() => {
+      if (previousPublicHost === undefined) {
+        delete process.env['OPENLANDER_PUBLIC_HOST'];
+      } else {
+        process.env['OPENLANDER_PUBLIC_HOST'] = previousPublicHost;
+      }
+    });
 
     expect(res.status).toBe(200);
     expect(getDeployablesByGroup).toHaveBeenCalledWith('stack');
     await expect(res.json()).resolves.toMatchObject({
       count: 2,
       services: [
-        { id: 'stack__web__svc', name: 'demo-stack/web', kind: 'compose-child' },
-        { id: 'stack__postgres__svc', name: 'demo-stack/postgres', kind: 'compose-child' },
+        {
+          id: 'stack__web__svc',
+          name: 'demo-stack/web',
+          kind: 'compose-child',
+          url: 'http://demo-stack-web.localhost',
+        },
+        {
+          id: 'stack__postgres__svc',
+          name: 'demo-stack/postgres',
+          kind: 'compose-child',
+          url: null,
+        },
       ],
     });
   });
