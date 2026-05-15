@@ -947,6 +947,9 @@ export class ServiceManager {
       recordedAt: Date.now(),
       cpu: runtime.cpuPercent ?? 0,
       mem: memMb,
+      // Mirrors recordMetricSample's placeholder counters. If req/err
+      // become real metrics, revisit this lightweight path so topology
+      // samples do not dilute service-detail sparklines.
       req: 0,
       err: 0,
       p95LatencyMs: null,
