@@ -1314,8 +1314,8 @@ export const translations = {
     noRecentActivity: '최근 활동이 없습니다',
   },
   mcpServer: {
-    // Chrome — brand title.
-    title: '내 에이전트',
+    // Chrome — brand title. English per chrome-stays-English convention.
+    title: 'Your Agent',
     // Content — description.
     subtitle: 'Claude 또는 다른 MCP 클라이언트에서 서비스를 관리하세요.',
     row: {
@@ -1384,8 +1384,8 @@ export const translations = {
       copyCorrection: '보정 프롬프트 복사',
     },
     setup: {
-      // Chrome — section title + action.
-      title: '설정',
+      // Chrome — section title + action. English per chrome convention.
+      title: 'Setup',
       copyConfig: '설정 복사',
       copyNeedsGenerate: '토큰 발급 후 복사',
       copyNeedsRegenerate: '재발급 후 복사',
@@ -1397,9 +1397,9 @@ export const translations = {
       revealToCopyHint: '실제 토큰이 포함된 설정을 복사하려면 토큰을 발급하세요.',
     },
     recent: {
-      // Chrome — section title + link affordance.
-      title: '최근 에이전트 호출',
-      fullTimeline: '전체 타임라인',
+      // Chrome — section title + link affordance. English per chrome convention.
+      title: 'Recent agent calls',
+      fullTimeline: 'Full timeline',
       // Content — descriptive copy and empty-state message.
       subtitle: 'MCP 호출 이벤트만 표시합니다. 전체 기록은 Activity에서 확인하세요.',
       empty: '아직 에이전트 호출이 없습니다. MCP 배포·접속이 여기에 표시됩니다.',
