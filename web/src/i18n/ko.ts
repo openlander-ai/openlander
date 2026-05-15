@@ -1202,7 +1202,7 @@ export const translations = {
       status: 'Status',
       instance: 'Instance name',
       endpoint: 'Endpoint',
-      tryThis: '이렇게 말해보세요',
+      tryThis: '에이전트 요청 예시',
       token: 'Access token',
       copy: 'Copy',
       copied: 'Copied',
