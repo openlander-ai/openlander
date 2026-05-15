@@ -9,7 +9,7 @@ export function parseTimestamp(timestamp: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-type RelativeTimeT = (key: string, params?: Record<string, string | number>) => string;
+export type RelativeTimeT = (key: string, params?: Record<string, string | number>) => string;
 
 export function formatRelativeTime(dateStr: string, t?: RelativeTimeT): string {
   const date = parseTimestamp(dateStr);

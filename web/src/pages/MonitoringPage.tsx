@@ -29,11 +29,10 @@ import { Sparkline } from '@/components/Shell/Sparkline';
 import { useMonitoring, type MonitoringServiceView } from '@/hooks/use-monitoring';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useLanguage } from '@/i18n/context';
+import { type RelativeTimeT } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
-type RelativeAgeT = (key: string, params?: Record<string, string | number>) => string;
-
-function relativeAge(ms: number | null, t: RelativeAgeT): string {
+function relativeAge(ms: number | null, t: RelativeTimeT): string {
   if (ms == null) return t('monitoring.relative.never');
   const diff = Date.now() - ms;
   const sec = Math.max(0, Math.floor(diff / 1000));
