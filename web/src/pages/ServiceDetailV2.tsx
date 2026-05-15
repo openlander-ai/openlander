@@ -584,8 +584,8 @@ function GeneralTab({ service }: { service: ServiceNode }) {
       </div>
       <SubCard title="Runtime" badge={<HealthBadge health={service.health} />}>
         <div className="grid grid-cols-2 gap-3">
-          <Metric label="CPU" value={service.cpu} sub="last 60s" />
-          <Metric label="Memory" value={service.mem} sub="latest sample" />
+          <Metric label="CPU" value={service.cpu} sub={t('serviceDetail.runtime.cpuSub')} />
+          <Metric label="Memory" value={service.mem} sub={t('serviceDetail.runtime.memorySub')} />
         </div>
         {service.url && (
           <div className="mt-4">

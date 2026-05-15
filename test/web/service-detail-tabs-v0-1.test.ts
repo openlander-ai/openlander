@@ -94,6 +94,13 @@ describe('Service detail v0.1 tabs', () => {
     expect(source).not.toContain('512 MB limit');
   });
 
+  it('uses operator-facing runtime metric labels instead of internal sample wording', () => {
+    expect(source).toContain("t('serviceDetail.runtime.cpuSub')");
+    expect(source).toContain("t('serviceDetail.runtime.memorySub')");
+    expect(source).not.toContain('latest sample');
+    expect(source).not.toContain('last 60s');
+  });
+
   it('replaces AdvancedTab with ServiceDangerZone (Advanced cut for v0.1)', () => {
     expect(source).toContain('function ServiceDangerZone(');
     expect(source).not.toContain('function AdvancedTab(');

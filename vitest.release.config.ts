@@ -104,6 +104,7 @@ export default defineConfig({
       'test/web/proxy-pip-format.test.ts',
       'test/web/project-settings-split.test.ts',
       'test/web/service-detail-tabs-v0-1.test.ts',
+      'test/web/runtime-log-viewer-timestamp.test.ts',
       'test/web/settings-security-tab-retired.test.ts',
       'test/web/setup-mcp-guide-pat-migration.test.ts',
       'test/web/sidebar-brand-chip.test.ts',
