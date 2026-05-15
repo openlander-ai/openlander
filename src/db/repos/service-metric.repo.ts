@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { serviceMetrics } from '../schema.drizzle.js';
@@ -60,6 +60,27 @@ export class ServiceMetricRepo {
   }
 
   /**
+   * Batch variant for aggregate routes. Avoids one metrics-window query per
+   * service when rendering cross-service dashboards.
+   */
+  async listMetricsSinceForServices(
+    serviceIds: readonly string[],
+    fromMs: number,
+  ): Promise<ServiceMetricRow[]> {
+    if (serviceIds.length === 0) return [];
+    return await this.db
+      .select()
+      .from(serviceMetrics)
+      .where(
+        and(
+          inArray(serviceMetrics.service_id, [...serviceIds]),
+          gte(serviceMetrics.recorded_at, fromMs),
+        ),
+      )
+      .orderBy(asc(serviceMetrics.service_id), asc(serviceMetrics.recorded_at));
+  }
+
+  /**
    * Used by the route to short-circuit to HTTP 204 when a service has
    * no history at all (first-deploy, recorder hasn't run yet). The
    * 204 path is required by the plan (Principle 4 strict reading —
@@ -112,5 +133,30 @@ export class ServiceMetricRepo {
           .limit(1)
       )[0] ?? null;
     return row?.recorded_at ?? null;
+  }
+
+  /**
+   * Batch latest-timestamp lookup. Services absent from the returned map have
+   * no metric history at all.
+   */
+  async getLastSampleAtByServiceIds(serviceIds: readonly string[]): Promise<Map<string, number>> {
+    const lastByService = new Map<string, number>();
+    if (serviceIds.length === 0) return lastByService;
+
+    const rows = await this.db
+      .select({
+        service_id: serviceMetrics.service_id,
+        recorded_at: sql<number | null>`MAX(${serviceMetrics.recorded_at})`,
+      })
+      .from(serviceMetrics)
+      .where(inArray(serviceMetrics.service_id, [...serviceIds]))
+      .groupBy(serviceMetrics.service_id);
+
+    for (const row of rows) {
+      if (row.recorded_at != null) {
+        lastByService.set(row.service_id, row.recorded_at);
+      }
+    }
+    return lastByService;
   }
 }

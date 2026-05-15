@@ -546,8 +546,10 @@ export class Database implements AuthDatabase {
   deleteActivityLogOlderThan(isoDate: string) { return this.activityLogRepo.deleteOlderThan(isoDate); }
   recordServiceMetricSample(sample: Parameters<ServiceMetricRepo['recordMetricSample']>[0]) { return this.serviceMetricRepo.recordMetricSample(sample); }
   listServiceMetricsSince(serviceId: string, fromMs: number) { return this.serviceMetricRepo.listMetricsSince(serviceId, fromMs); }
+  listServiceMetricsSinceForServices(serviceIds: readonly string[], fromMs: number) { return this.serviceMetricRepo.listMetricsSinceForServices(serviceIds, fromMs); }
   hasAnyServiceMetrics(serviceId: string) { return this.serviceMetricRepo.hasAnyMetrics(serviceId); }
   getLastServiceMetricAt(serviceId: string) { return this.serviceMetricRepo.getLastSampleAt(serviceId); }
+  getLastServiceMetricAtByServiceIds(serviceIds: readonly string[]) { return this.serviceMetricRepo.getLastSampleAtByServiceIds(serviceIds); }
   getLatestServiceMetric(serviceId: string) { return this.serviceMetricRepo.getLatestSample(serviceId); }
   getSetting(key: string) { return this.settingsRepo.getSetting(key); }
   upsertSetting(key: string, value: string) { return this.settingsRepo.upsertSetting(key, value); }

@@ -117,9 +117,17 @@ describe('createMonitoringRoutes', () => {
     const db = {
       listServices: vi.fn(async () => services),
       listProjects: vi.fn(async () => [visibleProject]),
-      hasAnyServiceMetrics: vi.fn(async () => true),
-      listServiceMetricsSince: vi.fn(async (serviceId: string) => [makeMetric(serviceId)]),
-      getLastServiceMetricAt: vi.fn(async () => Date.now() - 1000),
+      listServiceMetricsSinceForServices: vi.fn(async (serviceIds: readonly string[]) =>
+        serviceIds.map((serviceId) => makeMetric(serviceId)),
+      ),
+      getLastServiceMetricAtByServiceIds: vi.fn(async (serviceIds: readonly string[]) => {
+        const values = new Map<string, number>();
+        for (const serviceId of serviceIds) values.set(serviceId, Date.now() - 1000);
+        return values;
+      }),
+      hasAnyServiceMetrics: vi.fn(),
+      listServiceMetricsSince: vi.fn(),
+      getLastServiceMetricAt: vi.fn(),
     };
     const app = createApp({ db });
 
@@ -140,6 +148,18 @@ describe('createMonitoringRoutes', () => {
     ]);
     expect(body.services.every((service) => service.projectId === 'demo-stack')).toBe(true);
     expect(body.services.every((service) => service.projectName === 'demo-stack')).toBe(true);
+    expect(db.getLastServiceMetricAtByServiceIds).toHaveBeenCalledWith([
+      'demo-stack-app',
+      'demo-stack-redis',
+      'demo-stack-postgres',
+    ]);
+    expect(db.listServiceMetricsSinceForServices).toHaveBeenCalledWith(
+      ['demo-stack-app', 'demo-stack-redis', 'demo-stack-postgres'],
+      expect.any(Number),
+    );
+    expect(db.hasAnyServiceMetrics).not.toHaveBeenCalled();
+    expect(db.listServiceMetricsSince).not.toHaveBeenCalled();
+    expect(db.getLastServiceMetricAt).not.toHaveBeenCalled();
   });
 
   it('applies project filtering using the canonical service project_id', async () => {
@@ -153,9 +173,14 @@ describe('createMonitoringRoutes', () => {
         makeProjectRow({ id: 'demo-stack', name: 'demo-stack' }),
         makeProjectRow({ id: 'other-project', name: 'other-project' }),
       ]),
-      hasAnyServiceMetrics: vi.fn(async () => true),
-      listServiceMetricsSince: vi.fn(async (serviceId: string) => [makeMetric(serviceId)]),
-      getLastServiceMetricAt: vi.fn(async () => Date.now() - 1000),
+      listServiceMetricsSinceForServices: vi.fn(async (serviceIds: readonly string[]) =>
+        serviceIds.map((serviceId) => makeMetric(serviceId)),
+      ),
+      getLastServiceMetricAtByServiceIds: vi.fn(async (serviceIds: readonly string[]) => {
+        const values = new Map<string, number>();
+        for (const serviceId of serviceIds) values.set(serviceId, Date.now() - 1000);
+        return values;
+      }),
     };
     const app = createApp({ db });
 
@@ -168,5 +193,10 @@ describe('createMonitoringRoutes', () => {
     };
     expect(body.total).toBe(1);
     expect(body.services).toEqual([expect.objectContaining({ serviceId: 'demo-stack-app' })]);
+    expect(db.getLastServiceMetricAtByServiceIds).toHaveBeenCalledWith(['demo-stack-app']);
+    expect(db.listServiceMetricsSinceForServices).toHaveBeenCalledWith(
+      ['demo-stack-app'],
+      expect.any(Number),
+    );
   });
 });

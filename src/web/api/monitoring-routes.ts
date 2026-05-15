@@ -115,33 +115,51 @@ export function createMonitoringRoutes(ctx: AppContext): Hono {
 
     const now = Date.now();
     const fromMs = now - WINDOW_MS;
-    let total = 0;
     let excluded = 0;
     const out: MonitoringServiceEntry[] = [];
-
-    for (const svc of allServices) {
+    const targetServices = allServices.filter((svc) => {
       const projectId = svc.project_id;
-      if (!isRuntimeMonitoringTarget(svc)) continue;
-      if (!visibleProjectIds.has(projectId)) continue;
-      if (projectScoped && projectId !== projectFilter) continue;
-      total += 1;
+      if (!isRuntimeMonitoringTarget(svc)) return false;
+      if (!visibleProjectIds.has(projectId)) return false;
+      if (projectScoped && projectId !== projectFilter) return false;
+      return true;
+    });
+
+    const serviceIds = targetServices.map((service) => service.id);
+    const [lastSampleAtByService, windowSamples] = await Promise.all([
+      ctx.db.getLastServiceMetricAtByServiceIds(serviceIds),
+      ctx.db.listServiceMetricsSinceForServices(serviceIds, fromMs),
+    ]);
+
+    const samplesByService = new Map<string, typeof windowSamples>();
+    for (const sample of windowSamples) {
+      const samples = samplesByService.get(sample.service_id);
+      if (samples) {
+        samples.push(sample);
+      } else {
+        samplesByService.set(sample.service_id, [sample]);
+      }
+    }
+
+    for (const svc of targetServices) {
+      const projectId = svc.project_id;
 
       // Per Critic Amendment #2: only services with NO metrics ever are
       // excluded. Services with historical samples but none in the recent
       // window are surfaced as stale (Codex CCG flagged the prior
       // behavior — silently dropping >60m-old services — as a HIGH).
-      if (!(await ctx.db.hasAnyServiceMetrics(svc.id))) {
+      const lastEver = lastSampleAtByService.get(svc.id) ?? null;
+      if (lastEver == null) {
         excluded += 1;
         continue;
       }
 
-      const samples = await ctx.db.listServiceMetricsSince(svc.id, fromMs);
+      const samples = samplesByService.get(svc.id) ?? [];
       const cpu60 = samples.length > 0 ? downsample(samples.map((s) => s.cpu)) : [];
       const mem60 = samples.length > 0 ? downsample(samples.map((s) => s.mem)) : [];
       const lastInWindow = samples[samples.length - 1]?.recorded_at ?? null;
-      const lastEver = await ctx.db.getLastServiceMetricAt(svc.id);
       const lastSampleAt = lastInWindow ?? lastEver;
-      const stale = lastSampleAt == null ? true : now - lastSampleAt > STALE_AFTER_MS;
+      const stale = now - lastSampleAt > STALE_AFTER_MS;
 
       out.push({
         serviceId: svc.id,
@@ -160,7 +178,7 @@ export function createMonitoringRoutes(ctx: AppContext): Hono {
     const body: MonitoringResponse = {
       services: out,
       excluded,
-      total,
+      total: targetServices.length,
     };
     return c.json(body);
   });
