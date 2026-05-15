@@ -304,25 +304,30 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   // spec order over the previous config-first arrangement.
   const tabs = useMemo<TabDef<ServiceTabId>[]>(
     () => [
-      { id: 'overview', label: 'Overview', icon: SettingsIcon },
-      { id: 'logs', label: 'Logs', icon: ScrollText },
+      { id: 'overview', label: t('services.detail.tabs.overview'), icon: SettingsIcon },
+      { id: 'logs', label: t('services.detail.tabs.logs'), icon: ScrollText },
       {
         id: 'deployments',
-        label: 'Deployments',
+        label: t('services.detail.tabs.deployments'),
         icon: Rocket,
         count: deployments.length || undefined,
       },
-      { id: 'monitoring', label: 'Monitoring', icon: ActivityIcon },
-      { id: 'environment', label: 'Environment', icon: Code2 },
-      { id: 'domains', label: 'Domains', icon: Globe },
+      { id: 'monitoring', label: t('services.detail.tabs.monitoring'), icon: ActivityIcon },
+      { id: 'environment', label: t('services.detail.tabs.environment'), icon: Code2 },
+      { id: 'domains', label: t('services.detail.tabs.domains'), icon: Globe },
     ],
-    [deployments.length],
+    [deployments.length, t],
   );
 
   if (!resolvedService || !project) {
+    const safeId = id ?? '';
+    const safeProjectId = projectId ?? '';
     const reason = !projectId
-      ? t('services.detail.notFoundReason.noProjectParam', { id })
-      : t('services.detail.notFoundReason.serviceNotInProject', { id, projectId });
+      ? t('services.detail.notFoundReason.noProjectParam', { id: safeId })
+      : t('services.detail.notFoundReason.serviceNotInProject', {
+          id: safeId,
+          projectId: safeProjectId,
+        });
     return (
       <div className="mx-auto w-full max-w-5xl">
         <OuterCard title={t('services.detail.notFound')} subtitle={reason}>
@@ -529,6 +534,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
 // ─── Tab content ────────────────────────────────────────────────────────────
 
 function GeneralTab({ service }: { service: ServiceNode }) {
+  const { t } = useLanguage();
   const handleCopyUrl = () => {
     if (!service.url) return;
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -1669,6 +1675,7 @@ function ServiceDangerZone({
 }
 
 function MonitoringTab({ service }: { service: ServiceNode }) {
+  const { t } = useLanguage();
   const [range, setRange] = useState<MetricsRange>('1h');
   const ranges: readonly MetricsRange[] = ['15m', '1h', '6h', '24h', '7d'] as const;
   const { metrics } = useServiceMetrics(service.id, range);
@@ -1931,6 +1938,7 @@ function RangeToggle<T extends string>({
 }) {
   // Type-safe wrapper around metrics range pill. Generic over the range
   // string union so MetricsRange / future ranges share the same UI.
+  const { t } = useLanguage();
   return (
     <div
       role="radiogroup"
