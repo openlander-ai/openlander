@@ -138,12 +138,14 @@ export const SERVICE_ACTIONS = [
  * - Project statistics
  * - Host/endpoint connectivity probing
  * - One-shot service diagnostics
- * Total: 9 tools
+ * - Host resource pressure diagnosis
+ * Total: 10 tools
  */
 export const MONITOR_ACTIONS = [
   'get_instance_info',
   'get_logs',
   'diagnose_service',
+  'diagnose_host_resources',
   'get_system_stats',
   'get_alerts',
   'dismiss_alert',

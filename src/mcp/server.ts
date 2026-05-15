@@ -95,8 +95,8 @@ Key actions: create_service, list_services, get_service_credentials, backup_serv
 All actions: action="help"
 
 ## openlander_monitor
-Monitoring & diagnostics: instance info, one-shot service diagnosis, logs, alerts, system stats, and connectivity checks.
-Key actions: get_instance_info, diagnose_service, get_logs, get_alerts, get_system_stats, get_project_stats, dismiss_alert
+Monitoring & diagnostics: instance info, one-shot service diagnosis, host resource checks, logs, alerts, system stats, and connectivity checks.
+Key actions: get_instance_info, diagnose_service, diagnose_host_resources, get_logs, get_alerts, get_system_stats, get_project_stats, dismiss_alert
 All actions: action="help"
 
 ## Usage

@@ -365,6 +365,156 @@ describe('probe_host tool', () => {
   });
 });
 
+describe('diagnose_host_resources tool', () => {
+  function dockerStats(opts: {
+    cpuTotal: number;
+    preCpuTotal: number;
+    systemTotal: number;
+    preSystemTotal: number;
+    memoryUsage: number;
+    memoryLimit: number;
+  }) {
+    return {
+      cpu_stats: {
+        cpu_usage: { total_usage: opts.cpuTotal, percpu_usage: [1, 1] },
+        system_cpu_usage: opts.systemTotal,
+        online_cpus: 2,
+      },
+      precpu_stats: {
+        cpu_usage: { total_usage: opts.preCpuTotal },
+        system_cpu_usage: opts.preSystemTotal,
+      },
+      memory_stats: {
+        usage: opts.memoryUsage,
+        limit: opts.memoryLimit,
+      },
+    };
+  }
+
+  it('summarizes Docker health, disk totals, and top resource containers', async () => {
+    const ctx = {
+      docker: {
+        status: vi.fn(async () => ({ state: 'running' })),
+        listAllContainers: vi.fn(async () => [
+          {
+            id: 'c-heavy',
+            name: 'external-heavy',
+            image: 'worker:latest',
+            state: 'running',
+            status: 'Up 1 hour',
+            ports: [],
+            labels: {},
+            managedByOpenLander: false,
+            composeProject: null,
+            created: 1,
+          },
+          {
+            id: 'c-app',
+            name: 'ol-demo-app',
+            image: 'openlander/demo:latest',
+            state: 'running',
+            status: 'Up 5 minutes',
+            ports: [],
+            labels: {
+              'openlander.managed': 'true',
+              'openlander.role': 'service',
+              'openlander.project': 'demo',
+              'openlander.service': 'demo__svc',
+            },
+            managedByOpenLander: true,
+            composeProject: 'demo-stack',
+            created: 2,
+          },
+          {
+            id: 'c-old',
+            name: 'old',
+            image: 'old:latest',
+            state: 'exited',
+            status: 'Exited',
+            ports: [],
+            labels: {},
+            managedByOpenLander: false,
+            composeProject: null,
+            created: 3,
+          },
+        ]),
+        getContainerStats: vi.fn(async (containerId: string) =>
+          containerId === 'c-heavy'
+            ? dockerStats({
+                cpuTotal: 130,
+                preCpuTotal: 100,
+                systemTotal: 400,
+                preSystemTotal: 100,
+                memoryUsage: 800_000_000,
+                memoryLimit: 1_000_000_000,
+              })
+            : dockerStats({
+                cpuTotal: 110,
+                preCpuTotal: 100,
+                systemTotal: 300,
+                preSystemTotal: 100,
+                memoryUsage: 120_000_000,
+                memoryLimit: 500_000_000,
+              }),
+        ),
+        getDiskUsage: vi.fn(async () => ({
+          Images: [{ Size: 1_000_000 }],
+          Containers: [{ SizeRw: 2_000_000 }],
+          Volumes: [{ UsageData: { Size: 3_000_000 } }],
+        })),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_host_resources').execute(
+      { container_limit: 1 },
+      { target: 'mcp', appCtx: ctx } as unknown as ToolContext,
+    )) as Record<string, unknown>;
+
+    expect(result.docker).toMatchObject({ reachable: true, status: { state: 'running' } });
+    expect(result.containers).toMatchObject({
+      total: 3,
+      running: 2,
+      exited: 1,
+      sampled: 2,
+    });
+    expect(result.dockerDiskUsage).toMatchObject({
+      available: true,
+      images: { count: 1, totalSizeMb: 1 },
+      containers: { count: 1, totalSizeMb: 2 },
+      volumes: { count: 1, totalSizeMb: 3 },
+    });
+    expect((result.containers as { topByMemory: Array<{ name: string }> }).topByMemory).toEqual([
+      expect.objectContaining({ name: 'external-heavy' }),
+    ]);
+  });
+
+  it('returns guidance instead of throwing when Docker is unavailable', async () => {
+    const ctx = {
+      docker: {
+        status: vi.fn(async () => {
+          throw new Error('Docker daemon not reachable');
+        }),
+        listAllContainers: vi.fn(),
+        getContainerStats: vi.fn(),
+        getDiskUsage: vi.fn(),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_host_resources').execute(
+      {},
+      { target: 'mcp', appCtx: ctx } as unknown as ToolContext,
+    )) as Record<string, unknown>;
+
+    expect(result.docker).toMatchObject({
+      reachable: false,
+      status: { state: 'not_running', error: 'Docker daemon not reachable' },
+    });
+    expect(result.findings).toContain('docker_unreachable');
+    expect(JSON.stringify(result)).toContain('Docker is not reachable');
+    expect(ctx.docker.listAllContainers).not.toHaveBeenCalled();
+  });
+});
+
 describe('diagnose_service tool', () => {
   it('summarizes masked env keys and flags runtime-only build-time errors', async () => {
     const jwtFixture = [

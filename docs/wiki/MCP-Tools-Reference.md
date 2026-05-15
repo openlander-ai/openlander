@@ -25,6 +25,7 @@ Agent routing rule of thumb:
 | "Set env vars or connect DB/Redis to an app"  | `openlander_service.set_env_vars`, then `redeploy_app`                     |
 | "Create PostgreSQL/Redis/MySQL/etc."          | `openlander_managed_service.create_service`                                |
 | "Why is this failing?"                        | `openlander_monitor.diagnose_service` with `service_id`                    |
+| "Was this killed by host memory/Docker?"      | `openlander_monitor.diagnose_host_resources`                               |
 
 Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a project
 group contains exactly one deployable service.
@@ -52,7 +53,7 @@ Composite catalog:
 | `openlander_project`         | 14           | Project groups, secrets, temporary share URLs; env actions route to services |
 | `openlander_service`         | 17           | Deployable app/worker lifecycle, config, and service env vocabulary          |
 | `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage   |
-| `openlander_monitor`         | 9            | Logs, alerts, system stats, project stats, probes                            |
+| `openlander_monitor`         | 10           | Logs, alerts, system stats, host diagnosis, project stats, probes            |
 
 `openlander_project` owns group/config actions. `openlander_service` owns deployable runtime actions.
 
@@ -67,7 +68,7 @@ Composite catalog:
 | [Services](#services--infrastructure)                    | 17    | Create databases, manage infra         |
 | [Domains](#domains)                                      | 2     | Map custom domains                     |
 | [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos          |
-| [Monitoring](#monitoring--logs)                          | 5     | Logs, stats, alerts                    |
+| [Monitoring](#monitoring--logs)                          | 10    | Logs, stats, alerts, host diagnosis    |
 | [Debug](#debug--troubleshooting)                         | 1     | Build logs for external-agent analysis |
 | [Volume Management](#volume-management)                  | 5     | Docker volumes, disk cleanup           |
 | [Infrastructure Analysis](#infrastructure-analysis)      | 2     | Repo analysis, web search              |
@@ -518,6 +519,19 @@ Provide one of `service_id`, `service_name`, `project_id`, or `project_name`. Pr
 ### `get_system_stats`
 
 Host CPU, memory, disk usage. No parameters.
+
+### `diagnose_host_resources`
+
+Read-only host/Docker pressure diagnosis for SIGKILL/OOM, Docker instability,
+or stuck deploys. Does not stop, remove, restart, or clean anything.
+
+| Parameter            | Type    | Required | Description                                  |
+| -------------------- | ------- | -------- | -------------------------------------------- |
+| `container_limit`    | number  | No       | Max top CPU/memory containers to return      |
+| `include_disk_usage` | boolean | No       | Include Docker disk totals; defaults to true |
+
+Use this before falling back to SSH/Docker when build logs suggest `SIGKILL`,
+OOM, disk pressure, or Docker daemon instability.
 
 ### `get_project_stats`
 

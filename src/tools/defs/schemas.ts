@@ -593,6 +593,22 @@ export const cleanupPreviewSchema = z.object({
 // Get system stats schema
 export const getSystemStatsSchema = z.object({}).strict();
 
+export const diagnoseHostResourcesSchema = z
+  .object({
+    container_limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .optional()
+      .describe('Maximum number of top resource-consuming containers to return'),
+    include_disk_usage: z
+      .boolean()
+      .optional()
+      .describe('Whether to include Docker system df totals. Defaults to true.'),
+  })
+  .strict();
+
 // Get alerts schema
 export const getAlertsSchema = z.object({}).strict();
 
