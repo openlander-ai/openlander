@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Batched periodic monitor sweeps so health, reconciler, and infrastructure
+  alert checks reuse project/service maps instead of repeatedly querying
+  deployable service rows per project.
+
 ## [0.1.1-rc.7] - 2026-05-15
 
 ### Changed

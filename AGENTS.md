@@ -299,6 +299,7 @@ When in doubt, grep for the helper before adding inline logic — duplicating th
 
 1. **No route-level N+1 fanout.** List/aggregate routes must not loop over services/projects and call a DB repository or Docker operation per row. Add a batch repository/helper method instead, then group results in memory.
 2. **No request-time Docker stats fanout for dashboards.** Dashboard/topology routes should read cached or sampled runtime state from the database unless the route is explicitly a service-detail diagnostic endpoint.
+3. **Periodic monitors follow the same rule.** Health/reconciler/alert sweeps should batch-read projects/services once per tick and reuse maps; avoid `getDeployableForProject()` or Docker calls inside per-row loops unless the check is explicitly per-container.
 
 ### Repository Pattern (Database)
 

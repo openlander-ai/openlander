@@ -1,4 +1,5 @@
-import type { Database } from '../db/index.js';
+import type { Database, ProjectRow, ServiceRow } from '../db/index.js';
+import { projectIdToDeployableServiceId } from '../db/service-ids.js';
 import type { Docker } from '../pipeline/docker.js';
 import type { EventBus } from '../events/index.js';
 import { createLocalProbeRunner } from '../health/probe-runner.js';
@@ -20,6 +21,8 @@ type ProjectCheckResult = {
   error?: string;
   consecutiveFailures: number;
 };
+
+type DeployableByProject = Map<string, ServiceRow | undefined>;
 
 const DEFAULT_OPTIONS: Required<ProjectHealthMonitorOptions> = {
   intervalMs: 30000,
@@ -79,6 +82,15 @@ export class ProjectHealthMonitor {
 
   async checkProject(projectId: string): Promise<ProjectCheckResult> {
     const project = await this.db.getProject(projectId);
+    const deployable = project ? await this.db.getDeployableForProject(projectId) : undefined;
+    return this.checkProjectRows(projectId, project, deployable);
+  }
+
+  private async checkProjectRows(
+    projectId: string,
+    project: ProjectRow | undefined | null,
+    deployable: ServiceRow | undefined,
+  ): Promise<ProjectCheckResult> {
     const previousFailures = this.consecutiveFailures.get(projectId) ?? 0;
 
     if (!project) {
@@ -90,7 +102,6 @@ export class ProjectHealthMonitor {
       };
     }
 
-    const deployable = await this.db.getDeployableForProject(projectId);
     const profile = resolveMonitoringProfile(project, deployable);
     if (profile.health.strategy === 'none') {
       this.consecutiveFailures.set(projectId, 0);
@@ -139,6 +150,21 @@ export class ProjectHealthMonitor {
     }
   }
 
+  private async loadDeployablesByProject(
+    projects: readonly ProjectRow[],
+  ): Promise<DeployableByProject> {
+    const deployableIds = new Set(
+      projects.map((project) => projectIdToDeployableServiceId(project.id)),
+    );
+    const services = await this.db.listServices();
+    const byProject: DeployableByProject = new Map();
+    for (const service of services) {
+      if (!deployableIds.has(service.id)) continue;
+      byProject.set(service.project_id, service);
+    }
+    return byProject;
+  }
+
   private async checkAllProjects(): Promise<void> {
     if (this.checking) {
       return;
@@ -146,30 +172,44 @@ export class ProjectHealthMonitor {
 
     this.checking = true;
     try {
-      const runningProjects = (await this.db.listProjects('running')).map((project) => project.id);
-      const errorProjects = (await this.db.listProjects('error')).map((project) => project.id);
-      const activeProjectIds = [...new Set([...runningProjects, ...errorProjects])];
+      const projects = await this.db.listProjects();
+      const deployablesByProject = await this.loadDeployablesByProject(projects);
+      const activeProjects = projects.filter((project) => {
+        const deployable = deployablesByProject.get(project.id);
+        const status = deployable?.status ?? project.status;
+        return !project.archived_at && (status === 'running' || status === 'error');
+      });
 
-      await Promise.all(activeProjectIds.map((projectId) => this.runCheck(projectId)));
+      await Promise.all(
+        activeProjects.map((project) =>
+          this.runCheck(project.id, project, deployablesByProject.get(project.id)),
+        ),
+      );
     } finally {
       this.checking = false;
     }
   }
 
-  private async runCheck(projectId: string): Promise<void> {
-    const project = await this.db.getProject(projectId);
+  private async runCheck(
+    projectId: string,
+    projectArg?: ProjectRow,
+    deployableArg?: ServiceRow,
+  ): Promise<void> {
+    const project = projectArg ?? (await this.db.getProject(projectId));
     if (!project) {
       return;
     }
 
     // PR 4.5: canonical-first status read with `??` fallback.
-    const deployable = await this.db.getDeployableForProject(projectId);
+    const deployable =
+      deployableArg ??
+      (projectArg === undefined ? await this.db.getDeployableForProject(projectId) : undefined);
     const status = deployable?.status ?? project.status;
     if ((status !== 'running' && status !== 'error') || project.archived_at) {
       return;
     }
 
-    const result = await this.checkProject(projectId);
+    const result = await this.checkProjectRows(projectId, project, deployable);
 
     await this.events.emit('monitor:healthcheck', {
       projectId,

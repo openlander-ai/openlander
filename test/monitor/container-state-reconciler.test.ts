@@ -118,6 +118,7 @@ describe('ContainerStateReconciler', () => {
 
     expect(detectMissingSpy).toHaveBeenCalledTimes(1);
     expect(detectOrphansSpy).toHaveBeenCalledTimes(1);
+    expect(db.getDeployableForProject).not.toHaveBeenCalled();
   });
 
   it('emits container:missing with the expected payload when inspectContainer reports not found', async () => {
