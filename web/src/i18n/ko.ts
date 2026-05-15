@@ -96,8 +96,8 @@ export const translations = {
     agentName: '내 에이전트',
     closeDialogLabel: '대화상자 닫기',
     connectAria: '에이전트 연결',
-    agentNotConnectedPrompt: '에이전트가 연결되지 않았나요?',
-    setItUpCta: '연결하기 →',
+    wrongAgentPrompt: '다른 에이전트를 연결해야 하나요?',
+    switchAgentCta: '변경하기 →',
     identityStrip: {
       // Content — '· last active {time}' template, restructured for ko word
       // order. connectedOverMcp is descriptor prose, translated.

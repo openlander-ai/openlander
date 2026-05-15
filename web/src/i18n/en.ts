@@ -83,8 +83,8 @@ export const translations = {
     agentName: 'Your agent',
     connectAria: 'Connect your agent',
     closeButton: 'Close',
-    agentNotConnectedPrompt: 'Agent not connected?',
-    setItUpCta: 'Set it up →',
+    wrongAgentPrompt: 'Wrong agent?',
+    switchAgentCta: 'Switch agent →',
     identityStrip: {
       lastActiveLine: 'last active {time}',
       connectedOverMcp: 'connected over MCP',
