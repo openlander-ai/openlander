@@ -67,6 +67,7 @@ function createDbMock(
     getEnvVarsForService: vi.fn(() => ({})),
     getEnvironmentsByProject: vi.fn(() => []),
     getDeployablesByGroup: vi.fn(() => []),
+    recordServiceMetricSample: vi.fn(),
     updateService: vi.fn(
       (id: string, updates: { status?: ServiceRow['status']; containerId?: string | null }) => {
         const current = byId.get(id);
@@ -425,6 +426,57 @@ describe('ServiceManager detail/log/stats operations', () => {
       maxConnections: null,
     });
     expect(dockerHarness.getExecCommands('svc-stopped-container')).toEqual([]);
+  });
+
+  it('recordLightweightMetricSample() writes CPU and memory without service exec probes', async () => {
+    const service = createService({
+      id: 'svc-metric',
+      status: 'running',
+      container_id: 'svc-metric-container',
+    });
+    const db = createDbMock([service]);
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.docker.getContainerStats = vi.fn().mockResolvedValue({
+      cpu_stats: {
+        cpu_usage: { total_usage: 1500, percpu_usage: [0, 0] },
+        system_cpu_usage: 2000,
+      },
+      precpu_stats: { cpu_usage: { total_usage: 500 }, system_cpu_usage: 1000 },
+      memory_stats: { usage: 64 * 1024 * 1024, limit: 256 * 1024 * 1024 },
+    });
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    await manager.recordLightweightMetricSample('svc-metric');
+
+    expect(dockerHarness.docker.getContainerStats).toHaveBeenCalledWith('svc-metric-container');
+    expect(db.recordServiceMetricSample).toHaveBeenCalledWith(
+      expect.objectContaining({
+        serviceId: 'svc-metric',
+        cpu: 200,
+        mem: 64,
+        req: 0,
+        err: 0,
+        p95LatencyMs: null,
+        requestCount: 0,
+      }),
+    );
+    expect(dockerHarness.getExecCommands('svc-metric-container')).toEqual([]);
+  });
+
+  it('recordLightweightMetricSample() skips DB writes when Docker stats are unavailable', async () => {
+    const service = createService({
+      id: 'svc-metric',
+      status: 'running',
+      container_id: 'svc-metric-container',
+    });
+    const db = createDbMock([service]);
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.docker.getContainerStats = vi.fn().mockRejectedValue(new Error('daemon busy'));
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    await manager.recordLightweightMetricSample('svc-metric');
+
+    expect(db.recordServiceMetricSample).not.toHaveBeenCalled();
   });
 });
 

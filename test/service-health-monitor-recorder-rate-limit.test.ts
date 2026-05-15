@@ -29,9 +29,11 @@ function createService(partial: Partial<ServiceRow> = {}): ServiceRow {
     status: partial.status ?? 'running',
     container_id: partial.container_id ?? 'svc-1-container',
     container_name: partial.container_name ?? 'ol-svc-shared-pg',
+    kind: partial.kind ?? 'postgres',
     port: partial.port ?? 5432,
     env_vars: partial.env_vars ?? null,
     credentials: partial.credentials ?? null,
+    archived_at: partial.archived_at ?? null,
     created_at: partial.created_at ?? '2026-01-01T00:00:00.000Z',
     updated_at: partial.updated_at ?? '2026-01-01T00:00:00.000Z',
   } as ServiceRow;
@@ -123,6 +125,34 @@ describe('ServiceHealthMonitor — recorder rate-limit (Codex MEDIUM-2)', () => 
     // Tick 10: record (periodic).
     await monitor.checkAllServices();
     expect(recordMetricSample).toHaveBeenCalledTimes(3);
+  });
+
+  it('records lightweight runtime samples on the first tick and every configured runtime tick', async () => {
+    const service = createService({ status: 'running' });
+    const db = createMockDb([service]);
+    const docker = createMockDocker(true);
+    const events = createMockEvents();
+
+    const recordMetricSample = vi.fn().mockResolvedValue(undefined);
+    const recordLightweightMetricSample = vi.fn().mockResolvedValue(undefined);
+    const serviceManager = {
+      recordMetricSample,
+      recordLightweightMetricSample,
+    } as unknown as ServiceManager;
+
+    const monitor = new ServiceHealthMonitor(docker, db, events, {
+      serviceManager,
+      recordSampleEveryNTicks: 5,
+      recordRuntimeSampleEveryNTicks: 2,
+    });
+
+    await monitor.checkAllServices(); // tick 1: first tick
+    await monitor.checkAllServices(); // tick 2: runtime periodic
+    await monitor.checkAllServices(); // tick 3: skip runtime
+    await monitor.checkAllServices(); // tick 4: runtime periodic
+
+    expect(recordLightweightMetricSample).toHaveBeenCalledTimes(3);
+    expect(recordMetricSample).toHaveBeenCalledTimes(1);
   });
 
   it('default cadence is every 5th tick when option not provided', async () => {

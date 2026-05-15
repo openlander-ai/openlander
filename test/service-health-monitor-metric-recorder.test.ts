@@ -23,9 +23,11 @@ function createService(partial: Partial<ServiceRow> = {}): ServiceRow {
     status: partial.status ?? 'running',
     container_id: partial.container_id ?? 'svc-1-container',
     container_name: partial.container_name ?? 'ol-svc-shared-pg',
+    kind: partial.kind ?? 'postgres',
     port: partial.port ?? 5432,
     env_vars: partial.env_vars ?? null,
     credentials: partial.credentials ?? null,
+    archived_at: partial.archived_at ?? null,
     created_at: partial.created_at ?? '2026-01-01T00:00:00.000Z',
     updated_at: partial.updated_at ?? '2026-01-01T00:00:00.000Z',
   } as ServiceRow;
@@ -74,6 +76,90 @@ describe('ServiceHealthMonitor — recordMetricSample wiring (Blocker 1)', () =>
 
     expect(recordMetricSample).toHaveBeenCalledTimes(1);
     expect(recordMetricSample).toHaveBeenCalledWith('svc-1');
+  });
+
+  it('invokes lightweight metric recorder after a healthy check', async () => {
+    const service = createService({ status: 'running' });
+    const db = createMockDb([service]);
+    const docker = createMockDocker(true);
+    const events = createMockEvents();
+
+    const recordMetricSample = vi.fn().mockResolvedValue(undefined);
+    const recordLightweightMetricSample = vi.fn().mockResolvedValue(undefined);
+    const serviceManager = {
+      recordMetricSample,
+      recordLightweightMetricSample,
+    } as unknown as ServiceManager;
+
+    const monitor = new ServiceHealthMonitor(docker, db, events, { serviceManager });
+    await monitor.checkAllServices();
+
+    expect(recordLightweightMetricSample).toHaveBeenCalledTimes(1);
+    expect(recordLightweightMetricSample).toHaveBeenCalledWith('svc-1');
+    expect(recordMetricSample).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not crash the health loop when lightweight metric recorder throws', async () => {
+    const service = createService({ status: 'running' });
+    const db = createMockDb([service]);
+    const docker = createMockDocker(true);
+    const events = createMockEvents();
+
+    const recordMetricSample = vi.fn().mockResolvedValue(undefined);
+    const recordLightweightMetricSample = vi.fn().mockRejectedValue(new Error('stats failed'));
+    const serviceManager = {
+      recordMetricSample,
+      recordLightweightMetricSample,
+    } as unknown as ServiceManager;
+
+    const monitor = new ServiceHealthMonitor(docker, db, events, { serviceManager });
+
+    await expect(monitor.checkAllServices()).resolves.toBeUndefined();
+    expect(recordLightweightMetricSample).toHaveBeenCalledTimes(1);
+    expect(recordMetricSample).toHaveBeenCalledTimes(1);
+  });
+
+  it('samples compose children and managed services but skips compose parents and archived rows', async () => {
+    const composeParent = createService({
+      id: 'compose-parent',
+      kind: 'compose',
+      container_id: 'compose-parent-container',
+    });
+    const composeChild = createService({
+      id: 'compose-child',
+      kind: 'compose-child',
+      container_id: 'compose-child-container',
+    });
+    const redis = createService({
+      id: 'redis',
+      kind: 'redis',
+      container_id: 'redis-container',
+    });
+    const archived = createService({
+      id: 'archived',
+      kind: 'image',
+      container_id: 'archived-container',
+      archived_at: '2026-01-02T00:00:00.000Z',
+    });
+    const db = createMockDb([composeParent, composeChild, redis, archived]);
+    const docker = createMockDocker(true);
+    const events = createMockEvents();
+
+    const recordMetricSample = vi.fn().mockResolvedValue(undefined);
+    const recordLightweightMetricSample = vi.fn().mockResolvedValue(undefined);
+    const serviceManager = {
+      recordMetricSample,
+      recordLightweightMetricSample,
+    } as unknown as ServiceManager;
+
+    const monitor = new ServiceHealthMonitor(docker, db, events, { serviceManager });
+    await monitor.checkAllServices();
+
+    expect(recordLightweightMetricSample).toHaveBeenCalledTimes(2);
+    expect(recordLightweightMetricSample).toHaveBeenCalledWith('compose-child');
+    expect(recordLightweightMetricSample).toHaveBeenCalledWith('redis');
+    expect(recordLightweightMetricSample).not.toHaveBeenCalledWith('compose-parent');
+    expect(recordLightweightMetricSample).not.toHaveBeenCalledWith('archived');
   });
 
   it('does not crash the health loop when recordMetricSample throws', async () => {

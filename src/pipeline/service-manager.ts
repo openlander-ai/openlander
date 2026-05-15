@@ -54,6 +54,12 @@ type ServiceCardSummary = ServiceRow & {
   };
 };
 
+type ContainerUsageStats = {
+  cpuPercent: number | null;
+  memoryUsageBytes: number | null;
+  memoryLimitBytes: number | null;
+};
+
 type BackupStorageMount = {
   bind: string;
   containerDir: string;
@@ -941,6 +947,43 @@ export class ServiceManager {
       recordedAt: Date.now(),
       cpu: runtime.cpuPercent ?? 0,
       mem: memMb,
+      // Mirrors recordMetricSample's placeholder counters. If req/err
+      // become real metrics, revisit this lightweight path so topology
+      // samples do not dilute service-detail sparklines.
+      req: 0,
+      err: 0,
+      p95LatencyMs: null,
+      requestCount: 0,
+    });
+  }
+
+  /**
+   * Lightweight recorder for topology/project summaries. Unlike
+   * recordMetricSample(), this path only reads Docker stats and avoids
+   * disk usage (`du`) plus adapter probes so the health monitor can keep
+   * CPU/memory samples fresher than the topology stale window.
+   */
+  async recordLightweightMetricSample(serviceId: string): Promise<void> {
+    const service = await this.db.getService(serviceId);
+    if (!service || service.status !== 'running') {
+      return;
+    }
+
+    const runtime = await this.collectContainerUsageStats(service);
+    if (runtime.cpuPercent === null && runtime.memoryUsageBytes === null) {
+      return;
+    }
+
+    const memMb =
+      runtime.memoryUsageBytes !== null
+        ? Math.round((runtime.memoryUsageBytes / (1024 * 1024)) * 10) / 10
+        : 0;
+
+    await this.db.recordServiceMetricSample({
+      serviceId,
+      recordedAt: Date.now(),
+      cpu: runtime.cpuPercent ?? 0,
+      mem: memMb,
       req: 0,
       err: 0,
       p95LatencyMs: null,
@@ -1155,29 +1198,10 @@ export class ServiceManager {
     let cpuPercent: number | null = null;
     let memoryUsageBytes: number | null = null;
     let memoryLimitBytes: number | null = null;
-    try {
-      const containerId = service.container_id ?? service.container_name ?? '';
-      const rawStats = (await this.docker.getContainerStats(containerId)) as {
-        cpu_stats: {
-          cpu_usage: { total_usage: number; percpu_usage?: number[] };
-          system_cpu_usage: number;
-        };
-        precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
-        memory_stats: { usage?: number; limit?: number };
-      };
-      const cpuDelta =
-        rawStats.cpu_stats.cpu_usage.total_usage - rawStats.precpu_stats.cpu_usage.total_usage;
-      const systemDelta =
-        rawStats.cpu_stats.system_cpu_usage - rawStats.precpu_stats.system_cpu_usage;
-      const percpuUsage = rawStats.cpu_stats.cpu_usage.percpu_usage;
-      const numCpus = percpuUsage ? percpuUsage.length : 1;
-      cpuPercent =
-        systemDelta > 0 ? Math.round((cpuDelta / systemDelta) * numCpus * 100 * 10) / 10 : 0;
-      memoryUsageBytes = rawStats.memory_stats.usage ?? null;
-      memoryLimitBytes = rawStats.memory_stats.limit ?? null;
-    } catch {
-      // container stats unavailable — non-fatal
-    }
+    const usageStats = await this.collectContainerUsageStats(service);
+    cpuPercent = usageStats.cpuPercent;
+    memoryUsageBytes = usageStats.memoryUsageBytes;
+    memoryLimitBytes = usageStats.memoryLimitBytes;
 
     let activeConnections: number | null = null;
     let maxConnections: number | null = null;
@@ -1200,6 +1224,54 @@ export class ServiceManager {
       activeConnections,
       maxConnections,
     };
+  }
+
+  private async collectContainerUsageStats(service: ServiceRow): Promise<ContainerUsageStats> {
+    if (service.status !== 'running') {
+      return { cpuPercent: null, memoryUsageBytes: null, memoryLimitBytes: null };
+    }
+
+    try {
+      const containerId = service.container_id ?? service.container_name ?? '';
+      if (!containerId) {
+        return { cpuPercent: null, memoryUsageBytes: null, memoryLimitBytes: null };
+      }
+      const rawStats = (await this.docker.getContainerStats(containerId)) as {
+        cpu_stats?: {
+          cpu_usage?: { total_usage?: number; percpu_usage?: number[] };
+          system_cpu_usage?: number;
+          online_cpus?: number;
+        };
+        precpu_stats?: { cpu_usage?: { total_usage?: number }; system_cpu_usage?: number };
+        memory_stats?: { usage?: number; limit?: number };
+      };
+      const totalUsage = rawStats.cpu_stats?.cpu_usage?.total_usage;
+      const previousTotalUsage = rawStats.precpu_stats?.cpu_usage?.total_usage;
+      const systemUsage = rawStats.cpu_stats?.system_cpu_usage;
+      const previousSystemUsage = rawStats.precpu_stats?.system_cpu_usage;
+      const percpuUsage = rawStats.cpu_stats?.cpu_usage?.percpu_usage;
+      const numCpus = percpuUsage?.length ?? rawStats.cpu_stats?.online_cpus ?? 1;
+      let cpuPercent: number | null = null;
+      if (
+        totalUsage !== undefined &&
+        previousTotalUsage !== undefined &&
+        systemUsage !== undefined &&
+        previousSystemUsage !== undefined
+      ) {
+        const cpuDelta = totalUsage - previousTotalUsage;
+        const systemDelta = systemUsage - previousSystemUsage;
+        cpuPercent =
+          systemDelta > 0 ? Math.round((cpuDelta / systemDelta) * numCpus * 100 * 10) / 10 : 0;
+      }
+
+      return {
+        cpuPercent,
+        memoryUsageBytes: rawStats.memory_stats?.usage ?? null,
+        memoryLimitBytes: rawStats.memory_stats?.limit ?? null,
+      };
+    } catch {
+      return { cpuPercent: null, memoryUsageBytes: null, memoryLimitBytes: null };
+    }
   }
 
   async getProjectServices(projectId: string): Promise<ServiceRow[]> {

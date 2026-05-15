@@ -28,6 +28,13 @@ export interface ServiceHealthMonitorOptions {
    * "every tick" behaviour or to a high value to assert skip behaviour.
    */
   recordSampleEveryNTicks?: number;
+  /**
+   * Lightweight CPU/memory sample cadence for topology/project cards.
+   * This path intentionally avoids the heavier disk/adapter probes used by
+   * recordMetricSample so topology has a fresh DB-backed sample without doing
+   * Docker stats fan-out during HTTP requests.
+   */
+  recordRuntimeSampleEveryNTicks?: number;
 }
 
 export interface ServiceCheckResult {
@@ -45,11 +52,13 @@ const INITIAL_STAGGER_MS = 5_000;
  * tick boundary and trip the `checking` guard.
  */
 const DEFAULT_RECORD_SAMPLE_EVERY_N_TICKS = 5;
+const DEFAULT_RECORD_RUNTIME_SAMPLE_EVERY_N_TICKS = 2;
 
 export class ServiceHealthMonitor {
   private readonly intervalMs: number;
   private readonly serviceManager?: ServiceManager;
   private readonly recordSampleEveryNTicks: number;
+  private readonly recordRuntimeSampleEveryNTicks: number;
   private intervalId?: ReturnType<typeof setInterval>;
   private initialTimerId?: ReturnType<typeof setTimeout>;
   private checking = false;
@@ -72,10 +81,13 @@ export class ServiceHealthMonitor {
     this.intervalMs = options?.intervalMs ?? DEFAULT_INTERVAL_MS;
     this.serviceManager = options?.serviceManager;
     const everyN = options?.recordSampleEveryNTicks ?? DEFAULT_RECORD_SAMPLE_EVERY_N_TICKS;
+    const runtimeEveryN =
+      options?.recordRuntimeSampleEveryNTicks ?? DEFAULT_RECORD_RUNTIME_SAMPLE_EVERY_N_TICKS;
     // Defensive: a value <= 0 would zero-divide via `%`. Coerce to 1 so
     // callers that pass `0` (e.g. accidentally) still get correct
     // every-tick behaviour rather than crashing.
     this.recordSampleEveryNTicks = everyN > 0 ? everyN : 1;
+    this.recordRuntimeSampleEveryNTicks = runtimeEveryN > 0 ? runtimeEveryN : 1;
   }
 
   start(): void {
@@ -115,8 +127,8 @@ export class ServiceHealthMonitor {
 
     this.checking = true;
     try {
-      const services = (await this.db.listServices()).filter(
-        (service) => service.container_id !== null,
+      const services = (await this.db.listServices()).filter((service) =>
+        this.isMonitorableContainerService(service),
       );
 
       await Promise.all(services.map((service) => this.runServiceCheck(service)));
@@ -197,6 +209,28 @@ export class ServiceHealthMonitor {
         // sample points rather than waiting N ticks for the first.
         const isFirstTick = nextCount === 1;
         const isPeriodicTick = nextCount % this.recordSampleEveryNTicks === 0;
+        const isRuntimePeriodicTick = nextCount % this.recordRuntimeSampleEveryNTicks === 0;
+
+        const runtimeRecorder = this.serviceManager as {
+          recordLightweightMetricSample?: (serviceId: string) => Promise<void>;
+        };
+        if (
+          typeof runtimeRecorder.recordLightweightMetricSample === 'function' &&
+          (isFirstTick || isRuntimePeriodicTick)
+        ) {
+          try {
+            await runtimeRecorder.recordLightweightMetricSample(service.id);
+          } catch (recorderError) {
+            log.warn(
+              {
+                serviceId: service.id,
+                serviceName: service.name,
+                error: recorderError,
+              },
+              'Failed to record lightweight service metric sample — continuing health check',
+            );
+          }
+        }
 
         if (isFirstTick || isPeriodicTick) {
           try {
@@ -257,6 +291,12 @@ export class ServiceHealthMonitor {
 
       await this.recordServiceDownIncident(service, affectedProjects3);
     }
+  }
+
+  private isMonitorableContainerService(service: ServiceRow): boolean {
+    return (
+      service.container_id != null && service.archived_at == null && service.kind !== 'compose'
+    );
   }
 
   private async recordServiceDownIncident(

@@ -166,10 +166,10 @@ async function fetchTopologyNodeRuntime(
 
   // Pull cpu/mem from `service_metrics` instead of fanning out a
   // Docker stats RPC per node on every cold load. The recorder hook
-  // (ServiceHealthMonitor.runServiceCheck) populates this table on
-  // every poll, so a fresh row is the same number Docker would give
-  // us — minus the per-node 1-2s socket round trip that previously
-  // dominated /api/projects topology fan-out.
+  // (ServiceHealthMonitor.runServiceCheck) populates this table on a
+  // lightweight cadence, so a fresh row is the same CPU/mem projection
+  // Docker would give us — minus the per-node 1-2s socket round trip
+  // that previously dominated /api/projects topology fan-out.
   const getLatestServiceMetric =
     typeof ctx.db.getLatestServiceMetric === 'function'
       ? ctx.db.getLatestServiceMetric.bind(ctx.db)
