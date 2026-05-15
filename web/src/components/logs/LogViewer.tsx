@@ -431,7 +431,11 @@ export function LogViewer({ projectId, serviceId, toolbarActions }: LogViewerPro
                   </span>
                   {/* Timestamp */}
                   {entry.time && (
-                    <span className="shrink-0 pr-3 text-muted-foreground/50 group-hover:text-muted-foreground/70 select-none tabular-nums text-xs leading-5 font-mono">
+                    <span
+                      className="shrink-0 pr-3 font-mono text-[11px] leading-5 tabular-nums text-muted-foreground/35 select-none group-hover:text-muted-foreground/60"
+                      title={t('logs.collectedAtTooltip')}
+                      aria-label={t('logs.collectedAtTooltip')}
+                    >
                       {formatLogTime(entry.time)}
                     </span>
                   )}

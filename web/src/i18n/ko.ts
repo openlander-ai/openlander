@@ -964,6 +964,7 @@ export const translations = {
       '실시간 업데이트가 중단되었습니다. 다시 연결하여 최신 출력을 계속 따라가세요.',
     noMatchingTitle: '일치하는 줄이 없습니다',
     noMatchingBody: '검색어나 레벨 필터를 조정하면 로그 줄을 다시 볼 수 있습니다.',
+    collectedAtTooltip: 'Docker 로그 메타데이터에서 수집한 로컬 시각',
     // Chrome — action buttons + status badges.
     retryStream: 'Reconnect stream',
     clearFilters: 'Clear filters',
@@ -1473,6 +1474,10 @@ export const translations = {
     managedService: 'Managed service',
   },
   serviceDetail: {
+    runtime: {
+      cpuSub: '현재 사용량',
+      memorySub: '현재 사용량',
+    },
     deploy: {
       failed: '배포에 실패했습니다.',
       fallbackError: '배포 실패',

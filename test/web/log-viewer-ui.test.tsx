@@ -53,6 +53,7 @@ const messages = {
   'logs.disconnectedInlineBody': 'Live updates stopped. Reconnect to keep following fresh output.',
   'logs.noMatchingTitle': 'No matching lines',
   'logs.noMatchingBody': 'Adjust the search or level filter to see log lines again.',
+  'logs.collectedAtTooltip': 'Collected at local time from Docker log metadata',
   'logs.retryStream': 'Reconnect stream',
   'logs.clearFilters': 'Clear filters',
 } as const;

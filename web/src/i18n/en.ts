@@ -828,6 +828,7 @@ export const translations = {
     disconnectedInlineBody: 'Live updates stopped. Reconnect to keep following fresh output.',
     noMatchingTitle: 'No matching lines',
     noMatchingBody: 'Adjust the search or level filter to see log lines again.',
+    collectedAtTooltip: 'Collected at local time from Docker log metadata',
     retryStream: 'Reconnect stream',
     clearFilters: 'Clear filters',
     terminalReadyBadge: 'Ready',
@@ -1267,6 +1268,10 @@ export const translations = {
     managedService: 'Managed service',
   },
   serviceDetail: {
+    runtime: {
+      cpuSub: 'Current usage',
+      memorySub: 'Current usage',
+    },
     deploy: {
       failed: 'Deploy failed.',
       fallbackError: 'Deploy failed',
