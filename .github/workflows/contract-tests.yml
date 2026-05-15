@@ -66,16 +66,15 @@ jobs:
             package-lock.json
             web/package-lock.json
 
-      # Pin npm 11 — lockfile is generated locally with npm 11; npm 10 (Node 22
-      # default) misreads vitest's bundled esbuild platform deps and tries to
-      # install netbsd-arm64 on Linux. EBADPLATFORM follows.
-      # corepack handles npm-self-upgrade correctly (npm i -g npm@11 hits
-      # MODULE_NOT_FOUND promise-retry on Node 22's bundled npm 10).
-      - name: Pin npm version (corepack)
+      # Pin npm 11 — lockfile is generated locally with npm 11; Node 22
+      # runners may default to npm 10, which misreads vitest's bundled
+      # esbuild platform deps and fails npm ci. Install npm 11 into a
+      # separate prefix and add it to PATH for this job.
+      - name: Pin npm version
         run: |
-          corepack enable
-          corepack prepare npm@11.5.1 --activate
-          npm --version
+          npm install --prefix "$RUNNER_TEMP/npm-11" npm@11.5.1 --no-audit --no-fund
+          echo "$RUNNER_TEMP/npm-11/node_modules/.bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/npm-11/node_modules/.bin/npm" --version
 
       - name: Install web dependencies
         working-directory: web

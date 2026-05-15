@@ -55,9 +55,9 @@ jobs:
 
       - name: Pin npm version
         run: |
-          corepack enable
-          corepack prepare npm@11.5.1 --activate
-          npm --version
+          npm install --prefix "$RUNNER_TEMP/npm-11" npm@11.5.1 --no-audit --no-fund
+          echo "$RUNNER_TEMP/npm-11/node_modules/.bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/npm-11/node_modules/.bin/npm" --version
 
       - name: Install root dependencies
         run: npm ci
