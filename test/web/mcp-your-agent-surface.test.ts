@@ -136,9 +136,12 @@ describe('Your Agent (MCP) v0.1 surface', () => {
   });
 
   it('defines mcpServer.* keys in both en and ko', () => {
+    expect(enSource).toMatch(/mcpServer:\s*\{/);
+    expect(enSource).toMatch(/title: ['"]Your Agent['"]/);
+    expect(koSource).toMatch(/mcpServer:\s*\{/);
+    expect(koSource).toMatch(/title: ['"]내 에이전트['"]/);
+
     for (const dict of [enSource, koSource]) {
-      expect(dict).toMatch(/mcpServer:\s*\{/);
-      expect(dict).toMatch(/title: ['"]Your Agent['"]/);
       expect(dict).toMatch(/regenerateAction:/);
       expect(dict).toMatch(/legacyTokenRotated:/);
       expect(dict).toMatch(/instance:\s*\{/);

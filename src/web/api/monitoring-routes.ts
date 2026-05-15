@@ -85,6 +85,17 @@ function deriveHealth(status: string): MonitoringServiceEntry['health'] {
   return 'unknown';
 }
 
+function isRuntimeMonitoringTarget(service: {
+  archived_at?: string | null;
+  kind: string;
+  parent_service_id?: string | null;
+  build_method?: string | null;
+}): boolean {
+  if (service.archived_at != null) return false;
+  if (service.kind === 'compose') return false;
+  return !(service.parent_service_id == null && service.build_method === 'compose');
+}
+
 export function createMonitoringRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
@@ -110,8 +121,7 @@ export function createMonitoringRoutes(ctx: AppContext): Hono {
 
     for (const svc of allServices) {
       const projectId = svc.project_id;
-      if (svc.archived_at != null) continue;
-      if (svc.kind === 'compose') continue;
+      if (!isRuntimeMonitoringTarget(svc)) continue;
       if (!visibleProjectIds.has(projectId)) continue;
       if (projectScoped && projectId !== projectFilter) continue;
       total += 1;

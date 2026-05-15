@@ -1194,47 +1194,47 @@ export const translations = {
   },
   mcpServer: {
     // Chrome — brand title.
-    title: 'Your Agent',
+    title: '내 에이전트',
     // Content — description.
     subtitle: 'Claude 또는 다른 MCP 클라이언트에서 서비스를 관리하세요.',
     row: {
       // Chrome — bare labels + actions.
-      status: 'Status',
-      instance: 'Instance name',
-      endpoint: 'Endpoint',
-      tryThis: '이렇게 말해보세요',
-      token: 'Access token',
-      copy: 'Copy',
-      copied: 'Copied',
-      copyEndpoint: 'Copy endpoint',
+      status: '상태',
+      instance: '인스턴스 이름',
+      endpoint: '엔드포인트',
+      tryThis: '에이전트 요청 예시',
+      token: '액세스 토큰',
+      copy: '복사',
+      copied: '복사됨',
+      copyEndpoint: '엔드포인트 복사',
       // Content — formatted display.
       lastCall: '마지막 호출 · {when}',
     },
     status: {
       // Chrome — status pills double as log values.
-      connected: 'Connected',
-      listening: 'Listening',
-      checking: 'Checking…',
-      unknown: 'Unknown',
-      unreachable: 'Unreachable',
+      connected: '연결됨',
+      listening: '대기 중',
+      checking: '확인 중…',
+      unknown: '알 수 없음',
+      unreachable: '연결 불가',
     },
     tokens: {
       // Chrome — defaults + action buttons + reveal/hide affordance.
-      defaultName: 'OpenLander default',
-      loading: 'Loading…',
-      generateAction: 'Generate token',
-      issuing: 'Generating…',
-      regenerateAction: 'Regenerate',
-      regenerating: 'Regenerating…',
-      reveal: 'Reveal',
-      hide: 'Hide',
+      defaultName: 'OpenLander 기본값',
+      loading: '불러오는 중…',
+      generateAction: '토큰 발급',
+      issuing: '발급 중…',
+      regenerateAction: '재발급',
+      regenerating: '재발급 중…',
+      reveal: '표시',
+      hide: '숨기기',
       // Content — confirmation prompts, success/error notices, hints.
       issueFailed: '토큰 발급에 실패했습니다',
       regenerateConfirm: {
         title: 'MCP 토큰을 재발급할까요?',
         description:
           '기존 토큰은 무효화됩니다. 그 토큰을 사용하는 MCP 클라이언트는 다음 요청부터 401 오류로 거부되며, 새 토큰을 설정에 적용해야 다시 연결됩니다.',
-        confirmLabel: 'Regenerate token',
+        confirmLabel: '토큰 재발급',
       },
       regenerateSuccess: '토큰이 재발급되었습니다. 클라이언트 설정을 새 토큰으로 업데이트하세요.',
       regenerateFailed: '토큰 재발급에 실패했습니다',
@@ -1247,8 +1247,8 @@ export const translations = {
     },
     instance: {
       // Chrome — buttons.
-      save: 'Save',
-      saving: 'Saving…',
+      save: '저장',
+      saving: '저장 중…',
       // Content.
       saved: '인스턴스 이름을 저장했습니다.',
       saveFailed: '인스턴스 이름을 저장하지 못했습니다',
@@ -1264,8 +1264,8 @@ export const translations = {
     },
     setup: {
       // Chrome — section title + action.
-      title: 'Setup',
-      copyConfig: 'Copy config',
+      title: '설정',
+      copyConfig: '설정 복사',
       copyNeedsGenerate: '토큰 발급 후 복사',
       copyNeedsRegenerate: '재발급 후 복사',
       copyNeedsReveal: '토큰 표시 후 복사',
@@ -1277,8 +1277,8 @@ export const translations = {
     },
     recent: {
       // Chrome — section title + link affordance.
-      title: 'Recent agent calls',
-      fullTimeline: 'Full timeline',
+      title: '최근 에이전트 호출',
+      fullTimeline: '전체 타임라인',
       // Content — descriptive copy and empty-state message.
       subtitle: 'MCP 호출 이벤트만 표시합니다. 전체 기록은 Activity에서 확인하세요.',
       empty: '아직 에이전트 호출이 없습니다. MCP 배포·접속이 여기에 표시됩니다.',

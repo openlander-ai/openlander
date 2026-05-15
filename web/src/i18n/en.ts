@@ -1029,7 +1029,7 @@ export const translations = {
       status: 'Status',
       instance: 'Instance name',
       endpoint: 'Endpoint',
-      tryThis: 'Try saying this',
+      tryThis: 'Agent request example',
       token: 'Access token',
       copy: 'Copy',
       copied: 'Copied',

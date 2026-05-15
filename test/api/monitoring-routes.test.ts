@@ -95,6 +95,13 @@ describe('createMonitoringRoutes', () => {
       makeServiceRow({ id: 'demo-stack-postgres', name: 'demo-stack/postgres', kind: 'postgres' }),
       makeServiceRow({ id: 'demo-stack__svc', name: 'demo-stack', kind: 'compose' }),
       makeServiceRow({
+        id: 'legacy-compose-parent',
+        name: 'legacy-compose-parent',
+        kind: 'git',
+        build_method: 'compose',
+        parent_service_id: null,
+      }),
+      makeServiceRow({
         id: 'orphan-postgres',
         project_id: '__orphan_managed',
         name: 'postgresql-1778777639974',
