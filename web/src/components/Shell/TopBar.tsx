@@ -46,7 +46,9 @@ export function TopBar({
   const liveAgentState: 'connected' | 'disconnected' =
     sessions.length > 0 ? 'connected' : 'disconnected';
   const lastSession = sessions[0];
-  const liveLastAction = lastSession ? formatRelativeTime(lastSession.lastActivityAt, t) : 'idle';
+  const liveLastAction = lastSession
+    ? formatRelativeTime(lastSession.lastActivityAt, t)
+    : t('topBar.agentIdleStatus');
 
   // Test/fixture overrides win when explicitly set; otherwise read live state.
   // The pre-fetch placeholder ("idle") shows briefly before the first
@@ -66,14 +68,17 @@ export function TopBar({
           type="button"
           onClick={onToggleSidebar}
           className="grid h-8 w-8 place-items-center rounded-md text-[color:var(--ol-fg-muted)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
-          title="Toggle sidebar"
-          aria-label="Toggle sidebar"
+          title={t('topBar.sidebarToggleLabel')}
+          aria-label={t('topBar.sidebarToggleLabel')}
         >
           <PanelLeft className="h-4 w-4" />
         </button>
       )}
 
-      <nav className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px]" aria-label="Breadcrumb">
+      <nav
+        className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px]"
+        aria-label={t('topBar.breadcrumbAria')}
+      >
         {crumbs.map((c, i) => (
           <span key={`${c.label}-${i}`} className="flex items-center gap-1.5">
             {i > 0 && (
@@ -103,7 +108,7 @@ export function TopBar({
           'flex items-center gap-2 rounded-full border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5',
           'text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]',
         )}
-        title="Agent activity — see what your agent did"
+        title={t('topBar.agentChipTitle')}
       >
         <span
           aria-hidden
@@ -117,7 +122,8 @@ export function TopBar({
         />
         <Bot aria-hidden className="h-3.5 w-3.5 opacity-70" />
         <span className="whitespace-nowrap">
-          Agent · <span className="font-semibold text-[color:var(--ol-fg)]">{lastAgentAction}</span>
+          {t('topBar.agentChipPrefix')} ·{' '}
+          <span className="font-semibold text-[color:var(--ol-fg)]">{lastAgentAction}</span>
         </span>
       </button>
     </header>

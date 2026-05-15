@@ -81,7 +81,7 @@ export function AgentGuideDialog({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            aria-label="Close dialog"
+            aria-label={t('agentGuide.closeDialogLabel')}
             className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[color:var(--ol-fg-subtle)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
           >
             <X className="h-3.5 w-3.5" />
@@ -95,7 +95,7 @@ export function AgentGuideDialog({
               // expose the connecting client's name (Claude vs Cursor vs
               // Windsurf). Use a generic label until the backend captures
               // clientInfo.name on connect — better-than-wrong.
-              agentName="Your agent"
+              agentName={t('agentGuide.agentName')}
               lastActiveLabel={
                 lastSession
                   ? formatRelativeTime(lastSession.lastActivityAt, t)
@@ -114,13 +114,13 @@ export function AgentGuideDialog({
 
           {connected && (
             <p className="mt-1 text-[12px] text-[color:var(--ol-fg-muted)]">
-              Agent not connected?{' '}
+              {t('agentGuide.agentNotConnectedPrompt')}{' '}
               <button
                 type="button"
                 onClick={handleSetupAgent}
                 className="bg-transparent p-0 text-[color:var(--ol-primary)] hover:underline"
               >
-                Set it up →
+                {t('agentGuide.setItUpCta')}
               </button>
             </p>
           )}
@@ -132,7 +132,7 @@ export function AgentGuideDialog({
             onClick={() => onOpenChange(false)}
             className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:opacity-90"
           >
-            Close
+            {t('agentGuide.closeButton')}
           </button>
         </footer>
       </DialogContent>
@@ -147,6 +147,7 @@ function AgentIdentityStrip({
   agentName: string;
   lastActiveLabel: string;
 }) {
+  const { t } = useLanguage();
   return (
     <div
       role="status"
@@ -159,18 +160,24 @@ function AgentIdentityStrip({
       />
       <span className="flex-1 text-[color:var(--ol-fg)]">
         <b className="font-semibold">{agentName}</b>
-        <span className="text-[color:var(--ol-fg-muted)]"> · last active {lastActiveLabel}</span>
+        <span className="text-[color:var(--ol-fg-muted)]">
+          {' · '}
+          {t('agentGuide.identityStrip.lastActiveLine', { time: lastActiveLabel })}
+        </span>
       </span>
-      <span className="text-[12px] text-[color:var(--ol-fg-muted)]">connected over MCP</span>
+      <span className="text-[12px] text-[color:var(--ol-fg-muted)]">
+        {t('agentGuide.identityStrip.connectedOverMcp')}
+      </span>
     </div>
   );
 }
 
 function ConnectAgentBanner({ onOpenMcpSetup }: { onOpenMcpSetup: () => void }) {
+  const { t } = useLanguage();
   return (
     <div
       role="region"
-      aria-label="Connect your agent"
+      aria-label={t('agentGuide.connectAria')}
       className="flex items-start gap-3 rounded-lg border border-[color:var(--ol-warning)]/30 bg-[color:var(--ol-warning-soft)]/40 px-3.5 py-3"
     >
       <div
@@ -181,10 +188,10 @@ function ConnectAgentBanner({ onOpenMcpSetup }: { onOpenMcpSetup: () => void }) 
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-[13.5px] font-semibold text-[color:var(--ol-fg)]">
-          First, connect your agent
+          {t('agentGuide.connectBanner.title')}
         </div>
         <p className="mt-0.5 text-[12.5px] leading-snug text-[color:var(--ol-fg-muted)]">
-          Point Claude — or any MCP-capable agent — at your OpenLander instance. About a minute.
+          {t('agentGuide.connectBanner.body')}
         </p>
       </div>
       <button
@@ -192,7 +199,7 @@ function ConnectAgentBanner({ onOpenMcpSetup }: { onOpenMcpSetup: () => void }) 
         onClick={onOpenMcpSetup}
         className="flex shrink-0 items-center gap-1 rounded-md bg-[color:var(--ol-primary)] px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:opacity-90"
       >
-        Set up agent <ArrowRight className="h-3 w-3" />
+        {t('agentGuide.connectBanner.setupAgent')} <ArrowRight className="h-3 w-3" />
       </button>
     </div>
   );
@@ -200,6 +207,7 @@ function ConnectAgentBanner({ onOpenMcpSetup }: { onOpenMcpSetup: () => void }) 
 
 function PromptCard({ text, hint, disabled }: { text: string; hint?: string; disabled: boolean }) {
   const [copied, setCopied] = useState(false);
+  const { t } = useLanguage();
 
   const handleCopy = () => {
     if (disabled) return;
@@ -242,7 +250,7 @@ function PromptCard({ text, hint, disabled }: { text: string; hint?: string; dis
         onClick={handleCopy}
         disabled={disabled}
         aria-disabled={disabled}
-        title={disabled ? 'Connect agent first' : 'Copy prompt'}
+        title={disabled ? t('agentGuide.copy.disabledMessage') : t('agentGuide.copy.enabledTitle')}
         className={cn(
           'flex shrink-0 items-center gap-1 self-center rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors',
           disabled
@@ -253,17 +261,17 @@ function PromptCard({ text, hint, disabled }: { text: string; hint?: string; dis
         {disabled ? (
           <>
             <Lock className="h-3 w-3" />
-            Connect agent first
+            {t('agentGuide.copy.disabledMessage')}
           </>
         ) : copied ? (
           <>
             <Check className="h-3 w-3" />
-            Copied
+            {t('agentGuide.copy.success')}
           </>
         ) : (
           <>
             <Copy className="h-3 w-3" />
-            Copy
+            {t('agentGuide.copy.label')}
           </>
         )}
       </button>

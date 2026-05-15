@@ -71,6 +71,36 @@ export const translations = {
     primaryNavAria: 'Primary navigation',
     versionAria: 'Version v0.1',
   },
+  topBar: {
+    sidebarToggleLabel: 'Toggle sidebar',
+    breadcrumbAria: 'Breadcrumb',
+    agentChipPrefix: 'Agent',
+    agentChipTitle: 'Agent activity — see what your agent did',
+    agentIdleStatus: 'idle',
+  },
+  agentGuide: {
+    closeDialogLabel: 'Close dialog',
+    agentName: 'Your agent',
+    connectAria: 'Connect your agent',
+    closeButton: 'Close',
+    agentNotConnectedPrompt: 'Agent not connected?',
+    setItUpCta: 'Set it up →',
+    identityStrip: {
+      lastActiveLine: 'last active {time}',
+      connectedOverMcp: 'connected over MCP',
+    },
+    connectBanner: {
+      title: 'First, connect your agent',
+      body: 'Point Claude — or any MCP-capable agent — at your OpenLander instance. About a minute.',
+      setupAgent: 'Set up agent',
+    },
+    copy: {
+      label: 'Copy',
+      success: 'Copied',
+      disabledMessage: 'Connect agent first',
+      enabledTitle: 'Copy prompt',
+    },
+  },
   account: {
     popover: {
       openLabel: 'Open settings menu',
