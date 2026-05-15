@@ -32,6 +32,11 @@ import { cn } from '@/lib/utils';
 
 type ProjectTabId = 'services' | 'settings';
 
+function hasRuntimeMetricValue(value: string): boolean {
+  const normalized = value.trim();
+  return normalized !== '' && normalized !== '—' && normalized !== '-';
+}
+
 export function ProjectView() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -364,9 +369,11 @@ function ServicesPanel({
                   </div>
                 </div>
                 <div className="hidden shrink-0 text-right text-[11.5px] text-[color:var(--ol-fg-muted)] sm:block">
-                  <div className="ol-mono tabular-nums">
-                    {s.cpu} · {s.mem}
-                  </div>
+                  {(hasRuntimeMetricValue(s.cpu) || hasRuntimeMetricValue(s.mem)) && (
+                    <div className="ol-mono tabular-nums">
+                      {[s.cpu, s.mem].filter(hasRuntimeMetricValue).join(' · ')}
+                    </div>
+                  )}
                   {s.url && (
                     <a
                       href={s.url}
