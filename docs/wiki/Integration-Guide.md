@@ -189,16 +189,16 @@ Once connected, AI agents see **5 composite MCP tools** covering **66 unique def
 
 Sample actions (accessible via `{ action: "<name>", params: {...} }`):
 
-| Task     | Composite → action                              | Description                        |
-| -------- | ----------------------------------------------- | ---------------------------------- |
-| Deploy   | `openlander_deploy` → `deploy_app`              | App deploy front door              |
-| Status   | `openlander_deploy` → `get_deploy_status`       | Check deployment status            |
-| List     | `openlander_project` → `list_projects`          | Show all projects                  |
-| Logs     | `openlander_monitor` → `get_logs`               | Container logs                     |
-| Env Vars | `openlander_service` → `set_env_vars`           | Save service environment variables |
-| Rollback | `openlander_deploy` → `rollback_service`        | Revert to previous version         |
-| Share    | `openlander_project` → `expose_public`          | Generate temporary share URL       |
-| Service  | `openlander_managed_service` → `create_service` | Create database/cache              |
+| Task     | Composite → action                              | Description                          |
+| -------- | ----------------------------------------------- | ------------------------------------ |
+| Deploy   | `openlander_deploy` → `deploy_app`              | App deploy front door                |
+| Status   | `openlander_deploy` → `get_deploy_status`       | Check deployment status              |
+| List     | `openlander_project` → `list_projects`          | Show all projects                    |
+| Logs     | `openlander_monitor` → `get_logs`               | Container logs                       |
+| Env Vars | `openlander_service` → `set_env_vars`           | Save service environment variables   |
+| Rollback | `openlander_deploy` → `rollback_service`        | Revert to previous Docker image only |
+| Share    | `openlander_project` → `expose_public`          | Generate temporary share URL         |
+| Service  | `openlander_managed_service` → `create_service` | Create database/cache                |
 
 MCP env changes target deployable services. Use `service_id` or `service_name`;
 `project_name` works only for groups with exactly one deployable service.

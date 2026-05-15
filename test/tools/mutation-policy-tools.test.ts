@@ -73,6 +73,23 @@ const serviceArgs = { service_name: 'rejected-api' };
 
 describe('MCP service runtime mutation policy rejections', () => {
   describe('rollback_service', () => {
+    it('returns previous-image rollback guidance on success', async () => {
+      const ctx = createPolicyContext();
+      const result = await getTool(ctx, 'rollback_service').execute(serviceArgs, { target: 'mcp' });
+      expect(result).toMatchObject({
+        success: true,
+        service: { id: 'svc-1', name: 'rejected-api' },
+        _agent_guidance: {
+          message: expect.stringContaining('stored previous Docker image'),
+          next_steps: expect.arrayContaining([
+            expect.stringContaining('openlander_monitor.diagnose_service'),
+            expect.stringContaining('env vars'),
+          ]),
+        },
+      });
+      expect(JSON.stringify(result)).toContain('does not restore databases');
+    });
+
     it('rejects archived project with PROJECT_ARCHIVED', async () => {
       const ctx = createPolicyContext({ archived: true });
       const result = await getTool(ctx, 'rollback_service').execute(serviceArgs, { target: 'mcp' });

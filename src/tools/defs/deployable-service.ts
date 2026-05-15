@@ -245,6 +245,28 @@ function serviceSummary(service: NonNullable<ServiceRow>, project: NonNullable<P
   };
 }
 
+function rollbackServiceGuidance(result: { success?: unknown }, serviceId: string) {
+  const sharedLimit =
+    'Rollback only switches the deployable service back to the stored previous Docker image. It does not restore databases, volumes, environment variables, secrets, or service configuration.';
+  if (result.success === true) {
+    return {
+      message: `${sharedLimit} Verify the service after rollback before reporting recovery.`,
+      next_steps: [
+        `Call openlander_monitor.diagnose_service with service_id="${serviceId}" to confirm the rollback is healthy.`,
+        'If data/config drift caused the incident, inspect env vars, managed services, and volumes separately.',
+      ],
+    };
+  }
+
+  return {
+    message: `${sharedLimit} A rollback requires a stored previous image tag that still exists locally or can be pulled.`,
+    next_steps: [
+      `Call openlander_monitor.diagnose_service with service_id="${serviceId}" to inspect the current failure.`,
+      'If no previous image is available, fix the source/configuration issue and call redeploy_app instead.',
+    ],
+  };
+}
+
 export async function runDeployableServiceAction(
   args: Record<string, unknown>,
   context: ToolContext,
@@ -376,8 +398,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'rollback_service',
     riskLevel: 'high',
     description:
-      'Rollback a deployable app/worker service to its previous Docker image. Provide service_id or service_name.',
-    mcpDescription: 'Rollback a deployable app/worker service to its previous image.',
+      'Rollback a deployable app/worker service to its stored previous Docker image. This does not restore databases, volumes, environment variables, secrets, or config. Provide service_id or service_name.',
+    mcpDescription:
+      'Rollback a deployable app/worker service to its stored previous Docker image only. Does not restore DB/env/volumes/config.',
     inputSchema: serviceTargetSchema,
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(
@@ -433,7 +456,11 @@ export const deployableServiceToolDefs: ToolDef[] = [
           undefined,
           sessionId,
         );
-        return { ...result, service: serviceSummary(service, project) };
+        return {
+          ...result,
+          service: serviceSummary(service, project),
+          _agent_guidance: rollbackServiceGuidance(result, service.id),
+        };
       } catch (err) {
         if (err instanceof DeployLockedError) return buildDeployLockedResponse(err);
         if (

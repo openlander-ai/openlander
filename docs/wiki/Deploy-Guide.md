@@ -265,7 +265,10 @@ Starts new container → health check passes → switches traffic → stops old 
 rollback_service(service_name: "my-app")
 ```
 
-Reverts to the previous Docker image immediately.
+Reverts to the stored previous Docker image immediately. This does not restore
+databases, volumes, environment variables, secrets, or service configuration. If
+there is no previous image available, fix the source/configuration issue and run
+`redeploy_app` instead.
 
 ---
 
