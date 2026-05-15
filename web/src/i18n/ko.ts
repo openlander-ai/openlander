@@ -796,6 +796,25 @@ export const translations = {
       stopped: 'stopped',
       error: 'error',
     },
+    managedDetail: {
+      // Content — error titles + subtitle.
+      notFound: '관리형 서비스를 찾을 수 없습니다',
+      loadFailed: '관리형 서비스를 불러오지 못했습니다',
+      notFoundSubtitle: 'id "{id}"에 해당하는 서비스가 없습니다',
+      // Chrome — back-navigation links.
+      backToList: '← Back to Managed Services',
+      backToListShort: '← Managed Services',
+      // Chrome — field labels match the services.detail.overview.*
+      // convention (English in both files for metric / field labels).
+      field: {
+        image: 'Image',
+        port: 'Port',
+        container: 'Container',
+        containerId: 'Container ID',
+        created: 'Created',
+        updated: 'Updated',
+      },
+    },
     detail: {
       // Content — empty state.
       notFound: '서비스를 찾을 수 없습니다',

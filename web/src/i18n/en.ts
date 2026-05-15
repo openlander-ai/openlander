@@ -681,6 +681,21 @@ export const translations = {
       stopped: 'Stopped',
       error: 'Error',
     },
+    managedDetail: {
+      notFound: 'Managed service not found',
+      loadFailed: 'Failed to load managed service',
+      notFoundSubtitle: 'No service with id "{id}"',
+      backToList: '← Back to Managed Services',
+      backToListShort: '← Managed Services',
+      field: {
+        image: 'Image',
+        port: 'Port',
+        container: 'Container',
+        containerId: 'Container ID',
+        created: 'Created',
+        updated: 'Updated',
+      },
+    },
     detail: {
       notFound: 'Service not found',
       notFoundReason: {
