@@ -26,8 +26,109 @@ import {
   deployableServiceIdToProjectId,
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
+import type { ServiceRow } from '../../db/types.js';
 
 const log = createModuleLogger('api');
+
+type TopologyServiceForEnvInference = Pick<
+  ServiceRow,
+  'id' | 'name' | 'container_id' | 'container_name'
+>;
+
+function addAlias(
+  aliases: Map<string, string>,
+  alias: string | null | undefined,
+  serviceId: string,
+) {
+  const normalized = alias?.trim().toLowerCase();
+  if (!normalized) return;
+  aliases.set(normalized, serviceId);
+}
+
+function serviceAliasMap(services: TopologyServiceForEnvInference[]): Map<string, string> {
+  const aliases = new Map<string, string>();
+  for (const service of services) {
+    const displayName = deployableServiceIdToProjectId(service.name);
+    const shortName = displayName.includes('/')
+      ? displayName.slice(displayName.lastIndexOf('/') + 1)
+      : displayName;
+    addAlias(aliases, service.id, service.id);
+    addAlias(aliases, displayName, service.id);
+    addAlias(aliases, shortName, service.id);
+    addAlias(aliases, service.container_name, service.id);
+  }
+  return aliases;
+}
+
+function hostAliasesFromEnvValue(value: string): string[] {
+  const aliases = new Set<string>();
+  if (value.includes('://')) {
+    try {
+      const parsed = new URL(value);
+      if (parsed.hostname) aliases.add(parsed.hostname);
+    } catch {
+      // Not every value containing "://" is a URL; fall through to simple matching.
+    }
+  }
+
+  const plain = value.trim();
+  if (/^[a-zA-Z0-9_.-]+$/.test(plain)) {
+    aliases.add(plain);
+  }
+  return [...aliases];
+}
+
+async function inferRuntimeEnvDependencies(
+  ctx: AppContext,
+  services: TopologyServiceForEnvInference[],
+): Promise<Map<string, string[]>> {
+  const docker = (ctx as Partial<AppContext>).docker;
+  if (typeof docker?.inspectContainer !== 'function') {
+    return new Map();
+  }
+
+  const aliases = serviceAliasMap(services);
+  const inferred = new Map<string, Set<string>>();
+  for (const service of services) {
+    if (!service.container_id) continue;
+    try {
+      const inspect = (await docker.inspectContainer(service.container_id)) as {
+        Config?: { Env?: string[] };
+      };
+      const env = inspect.Config?.Env ?? [];
+      for (const entry of env) {
+        const separator = entry.indexOf('=');
+        if (separator === -1) continue;
+        const value = entry.slice(separator + 1);
+        for (const alias of hostAliasesFromEnvValue(value)) {
+          const targetId = aliases.get(alias.toLowerCase());
+          if (!targetId || targetId === service.id) continue;
+          const existing = inferred.get(service.id) ?? new Set<string>();
+          existing.add(targetId);
+          inferred.set(service.id, existing);
+        }
+      }
+    } catch (err) {
+      log.debug(
+        { err, serviceId: service.id },
+        'Skipping topology dependency inference from container env',
+      );
+    }
+  }
+
+  return new Map([...inferred.entries()].map(([serviceId, deps]) => [serviceId, [...deps]]));
+}
+
+function mergeDependsOn(
+  target: Map<string, string[]>,
+  source: Map<string, string[]>,
+): Map<string, string[]> {
+  for (const [serviceId, deps] of source.entries()) {
+    const merged = new Set([...(target.get(serviceId) ?? []), ...deps]);
+    target.set(serviceId, [...merged]);
+  }
+  return target;
+}
 
 export function createProjectCompatRoutes(ctx: AppContext): Hono {
   const api = new Hono();
@@ -154,6 +255,9 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
           .filter((sid): sid is string => sid !== null && nodeIds.has(sid));
         const nodeId = useServices ? projectIdToDeployableServiceId(lookupId) : lookupId;
         dependsOnMap.set(nodeId, siblingDeps);
+      }
+      if (useServices) {
+        mergeDependsOn(dependsOnMap, await inferRuntimeEnvDependencies(ctx, groupServices));
       }
 
       // Determine kind: 'Database' for known db service types, else 'Application'
