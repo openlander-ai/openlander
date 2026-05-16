@@ -139,7 +139,14 @@ describe('Your Agent (MCP) v0.1 surface', () => {
     expect(enSource).toMatch(/mcpServer:\s*\{/);
     expect(enSource).toMatch(/title: ['"]Your Agent['"]/);
     expect(koSource).toMatch(/mcpServer:\s*\{/);
-    expect(koSource).toMatch(/title: ['"]내 에이전트['"]/);
+    // Chrome-stays-English convention: section card titles and link
+    // affordances on the MCP page render in English even in the Korean
+    // locale, matching the rest of ko.ts (Projects, Recent activity,
+    // View all, crashed). Subtitles / empty / hint copy stays Korean.
+    expect(koSource).toMatch(/title: ['"]Your Agent['"]/);
+    expect(koSource).toMatch(/title: ['"]Setup['"]/);
+    expect(koSource).toMatch(/title: ['"]Recent agent calls['"]/);
+    expect(koSource).toMatch(/fullTimeline: ['"]Full timeline['"]/);
 
     for (const dict of [enSource, koSource]) {
       expect(dict).toMatch(/regenerateAction:/);
