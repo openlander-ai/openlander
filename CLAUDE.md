@@ -35,12 +35,13 @@ impossible scenarios — are intentionally omitted.
 
 ## 4. This repository — facts you cannot infer from the code
 
-- **Remotes**: `public` is the active GitHub remote
-  (`github.com/openlander-ai/openlander`). `origin` points to an archived private repo
-  and must NOT be pushed to. Run `git remote -v` before any `push` or `gh pr create`.
+- **Remotes**: check `git remote -v` before any `push` or `gh pr create`. In this
+  workspace, `public` is the intended GitHub remote (`github.com/openlander-ai/openlander`)
+  and `origin` may point to an archived private repo; do not push to a private remote
+  unless explicitly instructed.
 - **Two-repo model**: code and public docs live here. Internal planning, QA notes, and
-  scratch live in a sibling private repo `openlander-internal`. `.omc/` is local-only
-  and not committed.
+  scratch live in a sibling private repo `openlander-internal`. Do not add new `.omc/`
+  planning or scratch artifacts to public commits.
 - **i18n PR rule**: `web/src/i18n/en.ts` and `ko.ts` are edited in the same PR
   (patch-only mode was rescinded 2026-05-06 for v0.1).
 - **i18n chrome convention**: section card titles, nav labels, and link affordances
@@ -52,9 +53,9 @@ impossible scenarios — are intentionally omitted.
 - **Commit prefixes**: follow the existing log shape — `fix(web): …`, `feat(web): …`,
   `test(web): …`, `fix(monitor): …`. Subject in imperative; body explains _why_, not
   _what_.
-- **Codename**: `OpenLander` is a codename. The brand will swap at 1.0.0 — minimize
-  hardcoded "OpenLander" string references in user-facing code so the rename stays
-  a single-token change.
+- **Branding**: a rename may happen later. Avoid introducing unnecessary new hardcoded
+  "OpenLander" strings in user-facing code; reuse existing vocabulary and constants where
+  practical.
 - **Positioning**: this is an agent-first PaaS. The MCP surface is the primary
   interface; the web UI exists for humans to observe and intervene. Frame IA and
   feature decisions accordingly.

@@ -29,3 +29,21 @@ rewriting a long private history.
   package is intentionally published and supported.
 - Keep `SECURITY.md`, `LICENSE`, `CODE_OF_CONDUCT.md`, and `THIRD_PARTY_NOTICES.md` current before
   tagging a release.
+
+## Public Launch Checklist
+
+- Verify the latest GitHub Release, GHCR image, install script, and README quickstart all point to
+  the same supported version.
+- Add or refresh README screenshots and one short demo clip that shows the agent-driven flow:
+  connect MCP, deploy an app, inspect status, and diagnose logs.
+- Set the repository description, website URL, social preview image, topics, and pinned repository
+  state on the GitHub organization.
+- Keep issue templates, security reporting, contributing guidelines, and release notes visible before
+  inviting public feedback.
+- If a public domain is available, point it at the README/docs/landing page before posting on public
+  launch channels.
+- Prefer GitHub Discussions for early support unless maintainers can actively monitor a Discord
+  server. An empty chat server looks worse than no chat server.
+- Prepare short answers for common launch questions: how OpenLander differs from Coolify/Railway,
+  what MCP adds, what destructive actions agents cannot perform, and what the known 0.1 limitations
+  are.

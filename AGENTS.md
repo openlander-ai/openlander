@@ -3,6 +3,27 @@
 > OpenLander — Self-hosted deployment platform with MCP-native agent workflows.
 > TypeScript (strict ESM), Node.js >= 22, Hono backend, React 19 frontend, Docker + Traefik.
 
+## Agent Behavior Guardrails
+
+Use these rules before making code changes:
+
+- Prefer small, verifiable changes over broad rewrites.
+- If ambiguity affects correctness, data loss, security, public API, or user-visible behavior, ask
+  before implementing.
+- For low-risk implementation details, make a reasonable assumption, state it briefly, and proceed.
+- Do not add features, abstractions, configurability, or speculative error handling beyond the
+  requested scope.
+- Touch only files required by the task. Do not refactor adjacent code or clean up unrelated issues.
+- Match existing style, even when you would design it differently.
+- For behavior changes, define the expected outcome and add or update tests when practical.
+- For docs/copy/config-only changes, verify by reading the diff; do not run broad test suites unless
+  the changed path participates in them.
+- If you notice unrelated bugs or dead code, mention them instead of fixing them silently.
+- Check `git remote -v` before pushing. Use the public `openlander-ai/openlander` remote unless the
+  user explicitly instructs otherwise.
+- Keep internal planning, QA notes, local-machine paths, and `.omc/` scratch artifacts out of public
+  commits.
+
 ## Architecture Overview
 
 ```
