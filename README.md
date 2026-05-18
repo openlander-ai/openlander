@@ -56,7 +56,7 @@ API, but they often don't get the context they need to debug a failed build,
 inspect runtime state, or recover safely.
 
 OpenLander is a self-hosted control plane designed around MCP. It exposes
-deploys, logs, services, approvals, and recovery state in a shape coding
+deploys, logs, services, approvals, and runtime state in a shape coding
 agents can read, with risky actions held behind explicit human approval.
 
 <p align="center">
@@ -92,6 +92,8 @@ is the human surface on top.
 - A **Project** is a workspace / group.
 - A **Service** is the deployable unit. It owns repository or image, branch,
   Dockerfile, build config, runtime state, and deploy history.
+- A **Managed Service** is infrastructure attached to a project, such as
+  Postgres, MySQL, Redis, MongoDB, or MinIO.
 
 The dashboard and MCP both expose a one-step "deploy this repo" path for the
 common single-service case.
@@ -104,9 +106,9 @@ common single-service case.
 
 - Git → Docker → URL pipeline. Auto-detects ports, proxies, and containers
   before deploying.
-- Deploy from Git repos, public container images, or OpenLander-managed
-  service templates (Postgres, MySQL, Redis, MongoDB, MinIO). Private registry support is on the
-  roadmap.
+- Deploy apps from Git repos or public container images. Provision managed
+  Postgres, MySQL, Redis, MongoDB, and MinIO services alongside them. Private
+  registry support is on the roadmap.
 - Cancel a stuck build mid-flight. The cancel goes through the same SSE log
   channel agents are watching.
 
@@ -114,19 +116,17 @@ common single-service case.
 
 - Live SSE log stream with phase markers (`clone`, `image_pull`, `build`,
   `container_start`, `healthcheck_wait`).
-- Service health status (`running` / `stopped` / `crashed`) with last-seen
-  timestamps.
+- Service health and runtime status with last-seen timestamps.
 - Activity timeline filterable by actor (MCP / human / system).
 
 **Agent control**
 
 - MCP server bundled in. Org- and project-scoped tokens with cross-project
   scope checks. Per-project audit trail.
-- Conservative built-in safety policy. Destructive operations such as
-  `delete_service`, `remove_volume`, and `cleanup_docker` are blocked
-  from MCP and must be completed in the dashboard. `remove_secret_file`
-  and confirmed `bulk_delete_env_vars` calls (with `confirm=true`) are
-  held in an approval queue before execution.
+- Conservative built-in safety policy. Project and app archive/delete flows
+  are human UI-only. Destructive MCP actions that remain exposed are either
+  blocked at the MCP boundary or held in a human approval queue before
+  execution.
 
 **Self-hosted**
 
