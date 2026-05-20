@@ -40,6 +40,7 @@ export default defineConfig({
       'test/mcp/instance-identity.test.ts',
       'test/mcp/managed-service-rename.test.ts',
       'test/mcp/mode-switching.test.ts',
+      'test/mcp/response-contract.test.ts',
       'test/mcp/session-heartbeat.test.ts',
       'test/mcp/tool-registry-snapshot.test.ts',
       'test/monitor/ops-agent.test.ts',
