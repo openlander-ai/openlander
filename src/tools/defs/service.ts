@@ -191,7 +191,7 @@ export const serviceToolDefs: ToolDef[] = [
         }
       }
 
-      const suggestedEnv = appCtx.serviceManager.getSuggestedEnv(result);
+      const suggestedEnv = await appCtx.serviceManager.getSuggestedEnv(result);
 
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       const legacyPort = result.assigned_port ?? result.port;

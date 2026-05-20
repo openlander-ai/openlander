@@ -56,6 +56,11 @@ function createMockContext() {
     db: {
       getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
       getProjectByName: vi.fn().mockReturnValue(project),
+      getDeployableForProject: vi.fn((id: string) =>
+        id === project.id
+          ? { id: 'p1__svc', status: 'healthy', assigned_port: 10001 }
+          : undefined,
+      ),
       getLastDeployLog: vi.fn(),
       getDeployLogs: vi.fn().mockReturnValue([
         {
@@ -211,6 +216,67 @@ describe('registry critical tool behaviors', () => {
     });
   });
 
+  it('get_deploy_status prefers a newer deploy lock over stale completed job state', async () => {
+    const { ctx, jobManager } = createMockContext();
+    const tool = getTool(ctx, 'get_deploy_status');
+    const startedAt = new Date(Date.now() - 60_000);
+    const completedAt = new Date(Date.now() - 55_000);
+
+    jobManager.getStatus.mockReturnValue({
+      projectId: 'p1',
+      projectName: 'critical-app',
+      phase: 'done',
+      startedAt,
+      completedAt,
+    });
+    ctx.db.getDeployLockInfo.mockResolvedValue({
+      session: 'mcp-redeploy-app',
+      lockedAt: new Date().toISOString(),
+    });
+
+    const result = await tool.execute(
+      { project_name: 'critical-app', wait: true },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      active: 1,
+      locked: true,
+      lock_session: 'mcp-redeploy-app',
+      jobs: [expect.objectContaining({ name: 'critical-app', phase: 'queued' })],
+    });
+  });
+
+  it('get_deploy_status wait=false also prefers a newer deploy lock over stale completed job state', async () => {
+    const { ctx, jobManager } = createMockContext();
+    const tool = getTool(ctx, 'get_deploy_status');
+    const startedAt = new Date(Date.now() - 60_000);
+
+    jobManager.getStatus.mockReturnValue({
+      projectId: 'p1',
+      projectName: 'critical-app',
+      phase: 'done',
+      startedAt,
+      completedAt: new Date(Date.now() - 55_000),
+    });
+    ctx.db.getDeployLockInfo.mockResolvedValue({
+      session: 'mcp-redeploy-app',
+      lockedAt: new Date().toISOString(),
+    });
+
+    const result = await tool.execute(
+      { project_name: 'critical-app', wait: false },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      active: 1,
+      locked: true,
+      lock_session: 'mcp-redeploy-app',
+      jobs: [expect.objectContaining({ name: 'critical-app', phase: 'queued' })],
+    });
+  });
+
   it('get_deploy_status resolves completed deploy logs by deploy_id', async () => {
     const { ctx } = createMockContext();
     const tool = getTool(ctx, 'get_deploy_status');
@@ -228,6 +294,7 @@ describe('registry critical tool behaviors', () => {
           project_id: 'p1',
           name: 'critical-app',
           phase: 'failed',
+          health: 'healthy',
           build_log_tail: 'line 1\nline 2',
         },
       ],
