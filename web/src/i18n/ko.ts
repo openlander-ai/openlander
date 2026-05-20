@@ -807,6 +807,20 @@ export const translations = {
       'Managed Service는 데이터베이스, 캐시, 공유 인프라입니다. 앱은 환경 변수로 여기에 연결합니다.',
     mcpHint:
       '프로비저닝과 자격 증명은 openlander_managed_service를 사용하고, 앱 연결은 배포 가능한 서비스의 환경 변수로 설정하세요.',
+    projectScoped: {
+      title: '프로젝트 서비스',
+      description:
+        '프로젝트 그룹에 연결된 서비스입니다. 앱용 데이터베이스와 캐시는 이 경로가 기본입니다.',
+    },
+    global: {
+      title: '글로벌 서비스',
+      description:
+        '여러 프로젝트가 공유하거나 아직 연결하지 않은 인프라입니다. 의도적으로 공유할 때만 사용하세요.',
+    },
+    scope: {
+      globalHint: '글로벌 / 미연결',
+      attachedToProject: '{project}에 연결됨',
+    },
     noServices: '실행 중인 서비스 없음',
     getStarted: '템플릿에서 서비스를 생성하거나 Docker 이미지를 직접 실행하세요.',
     templates: '빠른 시작 템플릿',

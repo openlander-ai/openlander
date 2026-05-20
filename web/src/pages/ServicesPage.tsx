@@ -39,6 +39,10 @@ function formatUptime(seconds: number): string {
   return `${Math.max(mins, 0)}m`;
 }
 
+function isGlobalService(service: Service): boolean {
+  return service.scope === 'global' || service.project_id === '__orphan_managed';
+}
+
 export function ServicesPage() {
   const navigate = useNavigate();
   const { t } = useLanguage();
@@ -74,6 +78,123 @@ export function ServicesPage() {
     if (healthStatus === 'unhealthy') return t('services.health.unhealthy');
     if (healthStatus === 'starting') return t('services.health.starting');
     return '—';
+  };
+
+  const projectServices = services.filter((service) => !isGlobalService(service));
+  const globalServices = services.filter(isGlobalService);
+
+  const renderCreateCard = () => (
+    <button
+      onClick={openCreate}
+      className="rounded-xl border-2 border-dashed border-[hsl(var(--border))] bg-bg-panel/30 p-5 min-h-[144px] flex flex-col items-center justify-center gap-2 text-foreground/80 hover:border-foreground/40 hover:text-foreground hover:bg-bg-panel/60 transition-all cursor-pointer group"
+    >
+      <div className="h-10 w-10 rounded-full border-2 border-dashed border-current flex items-center justify-center group-hover:border-solid transition-all">
+        <Plus className="h-5 w-5" />
+      </div>
+      <span className="text-sm font-body font-medium">{t('services.createService')}</span>
+    </button>
+  );
+
+  const renderServiceCard = (service: Service) => {
+    const isRunning = service.status === 'running';
+    const isError = service.status === 'error';
+    const global = isGlobalService(service);
+
+    return (
+      <div
+        key={service.id}
+        onClick={() => navigate(`/managed-services/${service.id}`)}
+        className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 min-h-[176px] flex flex-col justify-between cursor-pointer hover:border-foreground/50 transition-colors card-hover"
+      >
+        <div className="space-y-3">
+          <div>
+            {/* `service` here is the lib/api Service wire shape, not a
+                DB row. `type`/`image`/`port` are wire-format fields the
+                backend hydrates from canonical kind/image_url/assigned_port
+                (see kindToLegacyType). The lint rule's name-based check
+                misfires on the wire-shape object. */}
+            {/* eslint-disable openlander-internal/no-dropped-columns */}
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <div
+                  className={cn(
+                    'w-2 h-2 rounded-full shrink-0',
+                    isRunning ? 'bg-success' : isError ? 'bg-error' : 'bg-muted-foreground/40',
+                  )}
+                />
+                <h3 className="text-sm font-display font-semibold text-foreground truncate">
+                  {service.name}
+                </h3>
+              </div>
+              {service.type && (
+                <Badge
+                  variant={getTypeVariant(service.type)}
+                  className="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider shrink-0 ml-2"
+                >
+                  {service.type.toLowerCase()}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs font-mono text-muted-foreground truncate">{service.image}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {global
+                ? t('services.scope.globalHint')
+                : t('services.scope.attachedToProject', {
+                    project: service.attached_project_id ?? service.project_id ?? 'project',
+                  })}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span
+              className={cn(
+                'font-body',
+                isRunning ? 'text-success' : isError ? 'text-error' : 'text-[var(--text-muted)]',
+              )}
+            >
+              {statusLabel(service.status)}
+            </span>
+            <span className="font-mono">:{service.port}</span>
+          </div>
+          {/* eslint-enable openlander-internal/no-dropped-columns */}
+
+          <div className="grid grid-cols-3 gap-2 text-[11px]">
+            <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {t('services.metrics.health')}
+              </div>
+              <div className="font-mono text-foreground">
+                {healthLabel(service.summary?.healthStatus ?? null)}
+              </div>
+            </div>
+            <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {t('services.metrics.uptime')}
+              </div>
+              <div className="font-mono text-foreground">
+                {service.summary?.uptimeSeconds != null
+                  ? formatUptime(service.summary.uptimeSeconds)
+                  : '—'}
+              </div>
+            </div>
+            <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {t('services.metrics.restarts')}
+              </div>
+              <div className="font-mono text-foreground">
+                {service.summary?.restartCount != null ? service.summary.restartCount : '—'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {service.updated_at && getRelativeTime(service.updated_at) && (
+          <div className="mt-3 pt-3 border-t border-[hsl(var(--border))]/50 flex items-center text-[11px] text-muted-foreground font-body">
+            {t('services.updatedAgo', { time: getRelativeTime(service.updated_at) })}
+          </div>
+        )}
+      </div>
+    );
   };
 
   if (loading) {
@@ -129,120 +250,35 @@ export function ServicesPage() {
         <AgentGuideDialog open={guideOpen} onOpenChange={setGuideOpen} kind="add-managed-db" />
         <ServicesIntro />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <button
-            onClick={openCreate}
-            className="rounded-xl border-2 border-dashed border-[hsl(var(--border))] bg-bg-panel/30 p-5 min-h-[144px] flex flex-col items-center justify-center gap-2 text-foreground/80 hover:border-foreground/40 hover:text-foreground hover:bg-bg-panel/60 transition-all cursor-pointer group"
-          >
-            <div className="h-10 w-10 rounded-full border-2 border-dashed border-current flex items-center justify-center group-hover:border-solid transition-all">
-              <Plus className="h-5 w-5" />
+        <div className="space-y-8">
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-sm font-display font-semibold text-foreground">
+                {t('services.projectScoped.title')}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {t('services.projectScoped.description')}
+              </p>
             </div>
-            <span className="text-sm font-body font-medium">{t('services.createService')}</span>
-          </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {renderCreateCard()}
+              {projectServices.map(renderServiceCard)}
+            </div>
+          </section>
 
-          {services.map((service) => {
-            const isRunning = service.status === 'running';
-            const isError = service.status === 'error';
-
-            return (
-              <div
-                key={service.id}
-                onClick={() => navigate(`/managed-services/${service.id}`)}
-                className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 min-h-[176px] flex flex-col justify-between cursor-pointer hover:border-foreground/50 transition-colors card-hover"
-              >
-                <div className="space-y-3">
-                  <div>
-                    {/* `service` here is the lib/api Service wire shape, not a
-                        DB row. `type`/`image`/`port` are wire-format fields the
-                        backend hydrates from canonical kind/image_url/assigned_port
-                        (see kindToLegacyType). The lint rule's name-based check
-                        misfires on the wire-shape object. */}
-                    {/* eslint-disable openlander-internal/no-dropped-columns */}
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div
-                          className={cn(
-                            'w-2 h-2 rounded-full shrink-0',
-                            isRunning
-                              ? 'bg-success'
-                              : isError
-                                ? 'bg-error'
-                                : 'bg-muted-foreground/40',
-                          )}
-                        />
-                        <h3 className="text-sm font-display font-semibold text-foreground truncate">
-                          {service.name}
-                        </h3>
-                      </div>
-                      {service.type && (
-                        <Badge
-                          variant={getTypeVariant(service.type)}
-                          className="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider shrink-0 ml-2"
-                        >
-                          {service.type.toLowerCase()}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs font-mono text-muted-foreground truncate">
-                      {service.image}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span
-                      className={cn(
-                        'font-body',
-                        isRunning
-                          ? 'text-success'
-                          : isError
-                            ? 'text-error'
-                            : 'text-[var(--text-muted)]',
-                      )}
-                    >
-                      {statusLabel(service.status)}
-                    </span>
-                    <span className="font-mono">:{service.port}</span>
-                  </div>
-                  {/* eslint-enable openlander-internal/no-dropped-columns */}
-
-                  <div className="grid grid-cols-3 gap-2 text-[11px]">
-                    <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        {t('services.metrics.health')}
-                      </div>
-                      <div className="font-mono text-foreground">
-                        {healthLabel(service.summary?.healthStatus ?? null)}
-                      </div>
-                    </div>
-                    <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        {t('services.metrics.uptime')}
-                      </div>
-                      <div className="font-mono text-foreground">
-                        {service.summary?.uptimeSeconds != null
-                          ? formatUptime(service.summary.uptimeSeconds)
-                          : '—'}
-                      </div>
-                    </div>
-                    <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        {t('services.metrics.restarts')}
-                      </div>
-                      <div className="font-mono text-foreground">
-                        {service.summary?.restartCount != null ? service.summary.restartCount : '—'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {service.updated_at && getRelativeTime(service.updated_at) && (
-                  <div className="mt-3 pt-3 border-t border-[hsl(var(--border))]/50 flex items-center text-[11px] text-muted-foreground font-body">
-                    {t('services.updatedAgo', { time: getRelativeTime(service.updated_at) })}
-                  </div>
-                )}
+          {globalServices.length > 0 && (
+            <section className="space-y-3">
+              <div>
+                <h2 className="text-sm font-display font-semibold text-foreground">
+                  {t('services.global.title')}
+                </h2>
+                <p className="text-xs text-muted-foreground">{t('services.global.description')}</p>
               </div>
-            );
-          })}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {globalServices.map(renderServiceCard)}
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </div>

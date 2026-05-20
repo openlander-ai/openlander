@@ -1,7 +1,54 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
+import { inferManagedKindAliasRepair, normalizeKind } from '../../src/db/repos/service.repo.js';
+
 describe('ServiceRepo.getDeployablesByGroup', () => {
+  it('normalizes legacy managed service type names before storing canonical kind', () => {
+    expect(normalizeKind('postgresql')).toBe('postgres');
+    expect(normalizeKind('mongodb')).toBe('mongo');
+    expect(normalizeKind('redis')).toBe('redis');
+    expect(normalizeKind('unexpected-custom-kind')).toBe('image');
+  });
+
+  it('infers repair kind only for ol-svc managed rows with DB/cache connection strings', () => {
+    expect(
+      inferManagedKindAliasRepair({
+        kind: 'image',
+        container_name: 'ol-svc-managed-pg',
+        credentials: '{"connectionString":"postgresql://u:p@ol-svc-managed-pg:5432/app"}',
+      }),
+    ).toBe('postgres');
+    expect(
+      inferManagedKindAliasRepair({
+        kind: 'image',
+        container_name: 'ol-svc-cache',
+        credentials: '{"connectionString":"redis://ol-svc-cache:6379"}',
+      }),
+    ).toBe('redis');
+    expect(
+      inferManagedKindAliasRepair({
+        kind: 'image',
+        container_name: 'ol-app-1',
+        credentials: '{"connectionString":"postgresql://u:p@external-db:5432/app"}',
+      }),
+    ).toBeNull();
+    expect(
+      inferManagedKindAliasRepair({
+        kind: 'image',
+        container_name: 'ol-svc-custom-http',
+        credentials: '{"connectionString":"https://example.com"}',
+      }),
+    ).toBeNull();
+  });
+
+  it('runs managed kind repair on database startup', () => {
+    const source = readFileSync('src/db/index.ts', 'utf8');
+
+    expect(source).toContain('repairManagedServiceKindAliases');
+    expect(source).toContain('Repaired managed service rows stored with legacy image kind');
+  });
+
   it('treats compose children as user-addressable deployables and excludes compose parent metadata', () => {
     const source = readFileSync('src/db/repos/service.repo.ts', 'utf8');
     const method = source.slice(
@@ -20,11 +67,14 @@ describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
     const source = readFileSync('src/db/repos/project.repo.ts', 'utf8');
     const method = source.slice(
       source.indexOf('async getDeployableServiceCountsByProjectIds'),
-      source.indexOf('\n  }\n\n  /**', source.indexOf('async getDeployableServiceCountsByProjectIds')),
+      source.indexOf(
+        '\n  }\n\n  /**',
+        source.indexOf('async getDeployableServiceCountsByProjectIds'),
+      ),
     );
 
     expect(method).toContain("${services.build_method} = 'compose'");
-    expect(method).toContain("${services.parent_service_id} IS NULL");
+    expect(method).toContain('${services.parent_service_id} IS NULL');
   });
 });
 

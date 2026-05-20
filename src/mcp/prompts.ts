@@ -46,8 +46,9 @@ const PROMPTS: PromptDef[] = [
 
 1. **Preflight** — Call \`get_system_stats\` to check disk/memory.
 2. **Create services first** — If the app needs a database or cache:
-    - \`create_service\` with template (postgresql/mysql/redis/mongodb).
+    - \`create_service\` with template (postgresql/mysql/redis/mongodb) and \`project_id\` or \`project_name\`.
     - The response includes \`suggested_env\` with the recommended env var key and connection string.
+    - Use \`scope: "global"\` only for intentionally shared/unassigned infrastructure.
     - Call \`set_env_vars\` on the deployable service with the suggested key/value to save the binding.
 3. **Deploy** — \`create_deploy_plan\` with the repo URL and optional \`name\`, then \`execute_deploy_plan\`. Add \`env_vars\` for any additional config.
 4. **Monitor** — \`get_deploy_status\` to poll build progress. \`get_build_log\` for raw output if it fails.
@@ -57,7 +58,7 @@ const PROMPTS: PromptDef[] = [
 
 \`\`\`
 // 1. Create service
-create_service({ name: "mydb", template: "postgresql" })
+create_service({ name: "mydb", template: "postgresql", project_name: "myapp" })
 // Returns: { suggested_env: [{ key: "DATABASE_URL", value: "postgresql://..." }] }
 
 // 2. Link to the deployable service

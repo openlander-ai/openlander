@@ -93,6 +93,48 @@ describe('ServiceManager extended DB/user operations', () => {
     vi.clearAllMocks();
   });
 
+  it('suggests standard env vars for canonical managed service kinds', async () => {
+    const postgres = createService({
+      id: 'svc-pg',
+      name: 'shared-pg',
+      kind: 'postgres',
+      credentials: JSON.stringify({
+        user: 'openlander',
+        password: 'rootpw',
+        database: 'openlander',
+        host: 'ol-svc-shared-pg',
+        port: 5432,
+        connectionString: 'postgresql://openlander:rootpw@ol-svc-shared-pg:5432/openlander',
+      }),
+    });
+    const redis = createService({
+      id: 'svc-redis',
+      name: 'shared-redis',
+      type: 'redis',
+      kind: 'redis',
+      credentials: JSON.stringify({
+        host: 'ol-svc-shared-redis',
+        port: 6379,
+        connectionString: 'redis://ol-svc-shared-redis:6379',
+      }),
+    });
+
+    const manager = new ServiceManager(
+      createMockDockerHarness().docker,
+      createDbMock([postgres, redis]),
+    );
+
+    await expect(manager.getSuggestedEnv(postgres)).resolves.toEqual([
+      {
+        key: 'DATABASE_URL',
+        value: 'postgresql://openlander:rootpw@ol-svc-shared-pg:5432/openlander',
+      },
+    ]);
+    await expect(manager.getSuggestedEnv(redis)).resolves.toEqual([
+      { key: 'REDIS_URL', value: 'redis://ol-svc-shared-redis:6379' },
+    ]);
+  });
+
   it('createDatabase() creates postgres DB via mocked docker exec', async () => {
     const postgres = createService({
       id: 'svc-pg',

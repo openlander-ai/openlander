@@ -92,8 +92,9 @@ is the human surface on top.
 - A **Project** is a workspace / group.
 - A **Service** is the deployable unit. It owns repository or image, branch,
   Dockerfile, build config, runtime state, and deploy history.
-- A **Managed Service** is infrastructure attached to a project, such as
-  Postgres, MySQL, Redis, MongoDB, or MinIO.
+- A **Managed Service** is infrastructure such as Postgres, MySQL, Redis,
+  MongoDB, or MinIO. Most are attached to one project; intentionally shared
+  services can live in the global managed pool.
 
 The dashboard and MCP both expose a one-step "deploy this repo" path for the
 common single-service case.

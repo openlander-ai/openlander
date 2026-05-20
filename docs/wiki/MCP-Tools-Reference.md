@@ -354,12 +354,19 @@ tunnel backend; it is not required for normal deploy/redeploy flows.
 
 ### `create_service`
 
-| Parameter  | Type   | Required | Description                                                    |
-| ---------- | ------ | -------- | -------------------------------------------------------------- |
-| `name`     | string | Yes      | Service name                                                   |
-| `template` | string | No       | `postgresql`, `mysql`, `redis`, `mongodb`, `rabbitmq`, `minio` |
-| `image`    | string | No       | Custom Docker image                                            |
-| `port`     | number | No       | Port number                                                    |
+| Parameter      | Type   | Required | Description                                                    |
+| -------------- | ------ | -------- | -------------------------------------------------------------- |
+| `name`         | string | Yes      | Service name                                                   |
+| `template`     | string | No       | `postgresql`, `mysql`, `redis`, `mongodb`, `rabbitmq`, `minio` |
+| `image`        | string | No       | Custom Docker image                                            |
+| `port`         | number | No       | Port number                                                    |
+| `project_id`   | string | No       | Attach to this project group id                                |
+| `project_name` | string | No       | Attach to this project group name                              |
+| `scope`        | string | No       | Use `global` only for intentionally shared/unassigned services |
+
+By default, `create_service` requires `project_id` or `project_name`. This keeps
+new databases/caches attached to the app that will use them. Pass
+`scope: "global"` only when the service is deliberately shared or unassigned.
 
 ### `list_services`
 

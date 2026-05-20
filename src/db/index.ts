@@ -299,6 +299,13 @@ export class Database implements AuthDatabase {
     log.info({ migrationsFolder }, 'Postgres migrations applied');
     const database = new Database(client, db);
     await database.actionRunRepo.markStaleAsFailedOnStartup();
+    const repairedManagedKinds = await database.serviceRepo.repairManagedServiceKindAliases();
+    if (repairedManagedKinds > 0) {
+      log.info(
+        { repairedManagedKinds },
+        'Repaired managed service rows stored with legacy image kind',
+      );
+    }
     return database;
   }
 
@@ -373,6 +380,7 @@ export class Database implements AuthDatabase {
   adoptService(service: Parameters<ServiceRepo['adoptService']>[0]) { return this.serviceRepo.adoptService(service); }
   getService(id: string) { return this.serviceRepo.getService(id); }
   listServices() { return this.serviceRepo.listServices(); }
+  repairManagedServiceKindAliases() { return this.serviceRepo.repairManagedServiceKindAliases(); }
   getServices(opts?: Parameters<ServiceRepo['getServices']>[0]) { return this.serviceRepo.getServices(opts); }
   updateService(id: string, updates: Parameters<ServiceRepo['updateService']>[1]) { return this.serviceRepo.updateService(id, updates); }
   deleteService(id: string) { return this.serviceRepo.deleteService(id); }

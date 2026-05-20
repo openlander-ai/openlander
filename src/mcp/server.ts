@@ -102,7 +102,7 @@ All actions: action="help"
 ## Usage
 Example: openlander_deploy({ action: "deploy_app", params: { repo_url: "https://github.com/user/repo", name: "my-app" } })
 Example: openlander_project({ action: "help" })
-Example: openlander_managed_service({ action: "create_service", params: { name: "pg", template: "postgresql" } })
+Example: openlander_managed_service({ action: "create_service", params: { name: "pg", template: "postgresql", project_name: "my-app" } })
 Example: openlander_service({ action: "set_env_vars", params: { service_name: "app-web", variables: '{"DATABASE_URL":"..."}' } })
 
 ## Environment Variable Changes

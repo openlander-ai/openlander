@@ -424,12 +424,24 @@ export const createServiceSchema = z.object({
     .max(65535)
     .optional()
     .describe('Port number (required when using image without template)'),
+  scope: z
+    .enum(['project', 'global'])
+    .optional()
+    .describe(
+      'Creation scope. Default is project-scoped; use global only for intentionally shared/unassigned infrastructure.',
+    ),
+  project_id: z
+    .string()
+    .optional()
+    .describe('Attach the new service to this project group id. Prefer this over global scope.'),
+  project_name: z
+    .string()
+    .optional()
+    .describe('Attach the new service to this project group name. Prefer project_id when known.'),
   target_project_id: z
     .string()
     .optional()
-    .describe(
-      'Attach the new service to an existing project group instead of the default __orphan_managed pool. When omitted, managed services land in the global managed pool (1.0 default).',
-    ),
+    .describe('Legacy alias for project_id. Attach the new service to an existing project group.'),
 });
 
 export const serviceNameSchema = z.object({

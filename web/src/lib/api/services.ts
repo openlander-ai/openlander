@@ -36,6 +36,9 @@ export interface Service {
   port: number;
   env_vars: string | null;
   credentials: string | null;
+  scope?: 'project' | 'global';
+  attached_project_id?: string | null;
+  project_id?: string | null;
   created_at: string;
   updated_at: string;
   summary?: {

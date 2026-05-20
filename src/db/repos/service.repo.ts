@@ -23,7 +23,14 @@ export const MANAGED_SERVICE_KINDS: readonly ServiceKind[] = [
  * Map a service `kind` value onto the canonical enum; unknown custom images
  * are stored as `image` so adopted containers do not masquerade as databases.
  */
-function normalizeKind(kind: string): ServiceKind {
+export function normalizeKind(kind: string): ServiceKind {
+  switch (kind) {
+    case 'postgresql':
+      return 'postgres';
+    case 'mongodb':
+      return 'mongo';
+  }
+
   const known: ServiceKind[] = [
     'git',
     'image',
@@ -36,6 +43,42 @@ function normalizeKind(kind: string): ServiceKind {
     'minio',
   ];
   return (known as string[]).includes(kind) ? (kind as ServiceKind) : 'image';
+}
+
+function inferManagedKindFromCredentials(raw: string | null): ServiceKind | null {
+  if (!raw) return null;
+
+  let credentials: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+    credentials = parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  const connectionString = credentials['connectionString'];
+  if (typeof connectionString !== 'string') {
+    return null;
+  }
+
+  if (/^postgres(?:ql)?:\/\//i.test(connectionString)) return 'postgres';
+  if (/^mysql:\/\//i.test(connectionString)) return 'mysql';
+  if (/^redis:\/\//i.test(connectionString)) return 'redis';
+  if (/^mongodb(?:\+srv)?:\/\//i.test(connectionString)) return 'mongo';
+  return null;
+}
+
+export function inferManagedKindAliasRepair(row: {
+  kind: ServiceKind;
+  container_name: string | null;
+  credentials: string | null;
+}): ServiceKind | null {
+  if (row.kind !== 'image') return null;
+  if (!row.container_name?.startsWith('ol-svc-')) return null;
+  return inferManagedKindFromCredentials(row.credentials);
 }
 
 /**
@@ -178,6 +221,49 @@ export class ServiceRepo {
     void _serverId;
     const rows = await this.db.select().from(services).orderBy(desc(services.updated_at));
     return rows as ServiceRow[];
+  }
+
+  /**
+   * Repairs managed-service rows created while legacy template names
+   * (`postgresql`, `mongodb`) were normalized as generic `image`. Limit the
+   * repair to ol-svc-* containers so custom image deployables with DB-looking
+   * env/credentials never get reclassified as managed infrastructure.
+   *
+   * RabbitMQ/MinIO are intentionally out of scope here: this startup repair
+   * only restores the DB/cache connection-string kinds that drive suggested_env.
+   */
+  async repairManagedServiceKindAliases(): Promise<number> {
+    const rows = await this.db
+      .select({
+        id: services.id,
+        kind: services.kind,
+        container_name: services.container_name,
+        credentials: services.credentials,
+      })
+      .from(services)
+      .where(
+        and(
+          eq(services.kind, 'image'),
+          sql`${services.container_name} LIKE 'ol-svc-%'`,
+          sql`${services.credentials} IS NOT NULL`,
+        ),
+      );
+
+    let repaired = 0;
+    for (const row of rows) {
+      const inferred = inferManagedKindAliasRepair(row);
+      if (!inferred || inferred === row.kind) {
+        continue;
+      }
+
+      await this.db
+        .update(services)
+        .set({ kind: inferred, updated_at: sql`now()::text` })
+        .where(eq(services.id, row.id));
+      repaired++;
+    }
+
+    return repaired;
   }
 
   /**

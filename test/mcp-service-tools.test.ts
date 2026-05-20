@@ -85,6 +85,18 @@ function createMockContext(
     serviceManager,
     db: {
       getService: vi.fn(async (id: string) => services.find((service) => service.id === id)),
+      getProject: vi.fn(async (id: string) =>
+        id === 'proj-1' ? { id: 'proj-1', name: 'myapp' } : undefined,
+      ),
+      getProjectByName: vi.fn(async (name: string) =>
+        name === 'myapp' ? { id: 'proj-1', name: 'myapp' } : undefined,
+      ),
+      attachServiceToProject: vi.fn(async (_serviceId: string, targetProjectId: string) => ({
+        sourceProjectId: '__orphan_managed',
+        targetProjectId,
+        droppedEnvVarKeys: [],
+        droppedSecretFiles: [],
+      })),
     },
     docker: {
       listManagedContainers: vi.fn(async () => containers),
@@ -192,10 +204,15 @@ describe('MCP service tools (Task 8)', () => {
       { key: 'DATABASE_URL', value: 'postgresql://openlander:pw@ol-svc-shared-pg:5432/app' },
     ]);
 
-    const ok = await tool.execute({ name: 'shared-pg', template: 'postgresql' }, { target: 'mcp' });
+    const ok = await tool.execute(
+      { name: 'shared-pg', template: 'postgresql', scope: 'global' },
+      { target: 'mcp' },
+    );
 
     expect(ok).toEqual({
       status: 'created',
+      scope: 'global',
+      attached_to: null,
       service: {
         id: 'svc-created',
         name: 'shared-pg',
@@ -218,16 +235,66 @@ describe('MCP service tools (Task 8)', () => {
       ],
       _agent_guidance: {
         next_steps: [
-          'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
-          'Then redeploy the project with create_deploy_plan + execute_deploy_plan for changes to take effect.',
+          'This service is global/unassigned. Attach or link it to a deployable project before expecting runtime env to be available.',
+          'Use get_service_credentials when you need the connection string manually.',
         ],
       },
     });
 
     serviceManager.create.mockRejectedValueOnce(new Error('Unsupported service template: bad'));
-    await expect(tool.execute({ name: 'bad', template: 'bad' }, { target: 'mcp' })).rejects.toThrow(
-      'Unsupported service template: bad',
+    await expect(
+      tool.execute({ name: 'bad', template: 'bad', scope: 'global' }, { target: 'mcp' }),
+    ).rejects.toThrow('Unsupported service template: bad');
+  });
+
+  it('create_service requires a project target unless global scope is explicit', async () => {
+    const { ctx, serviceManager } = createMockContext();
+    const tool = getTool(ctx, 'create_service');
+
+    await expect(
+      tool.execute({ name: 'shared-pg', template: 'postgresql' }, { target: 'mcp' }),
+    ).resolves.toMatchObject({
+      status: 'blocked',
+      code: 'PROJECT_TARGET_REQUIRED',
+      required_params: ['project_id | project_name | scope="global"'],
+    });
+    expect(serviceManager.create).not.toHaveBeenCalled();
+  });
+
+  it('create_service attaches to project_name and returns project scope', async () => {
+    const { ctx, serviceManager } = createMockContext();
+    const tool = getTool(ctx, 'create_service');
+
+    serviceManager.create.mockResolvedValueOnce(
+      createServiceRow({
+        id: 'svc-created',
+        name: 'myapp-pg',
+        credentials: '{"connectionString":"postgresql://openlander:pw@ol-svc-myapp-pg:5432/app"}',
+      }),
     );
+    serviceManager.getSuggestedEnv.mockResolvedValueOnce([
+      { key: 'DATABASE_URL', value: 'postgresql://openlander:pw@ol-svc-myapp-pg:5432/app' },
+    ]);
+
+    const result = await tool.execute(
+      { name: 'myapp-pg', template: 'postgresql', project_name: 'myapp' },
+      { target: 'mcp' },
+    );
+
+    expect(ctx.db.getProjectByName).toHaveBeenCalledWith('myapp');
+    expect(ctx.db.attachServiceToProject).toHaveBeenCalledWith('svc-created', 'proj-1');
+    expect(result).toMatchObject({
+      status: 'created',
+      scope: 'project',
+      attached_to: 'proj-1',
+      attached_project_name: 'myapp',
+      suggested_env: [
+        { key: 'DATABASE_URL', value: 'postgresql://openlander:pw@ol-svc-myapp-pg:5432/app' },
+      ],
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([expect.stringContaining('redeploy_app')]),
+      },
+    });
   });
 
   it('create_service returns retry-safe guidance after managed service rollback', async () => {
@@ -245,7 +312,7 @@ describe('MCP service tools (Task 8)', () => {
     );
 
     await expect(
-      tool.execute({ name: 'broken-redis', template: 'redis' }, { target: 'mcp' }),
+      tool.execute({ name: 'broken-redis', template: 'redis', scope: 'global' }, { target: 'mcp' }),
     ).resolves.toMatchObject({
       status: 'failed',
       error: 'MANAGED_SERVICE_PERSIST_FAILED_CLEANED',
@@ -278,12 +345,14 @@ describe('MCP service tools (Task 8)', () => {
     );
 
     const result = await tool.execute(
-      { name: 'shared-mysql', template: 'mysql' },
+      { name: 'shared-mysql', template: 'mysql', scope: 'global' },
       { target: 'mcp' },
     );
 
     expect(result).toEqual({
       status: 'created',
+      scope: 'global',
+      attached_to: null,
       service: {
         id: 'svc-mysql',
         name: 'shared-mysql',
@@ -304,8 +373,8 @@ describe('MCP service tools (Task 8)', () => {
       ],
       _agent_guidance: {
         next_steps: [
-          'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
-          'Then redeploy the project with create_deploy_plan + execute_deploy_plan for changes to take effect.',
+          'This service is global/unassigned. Attach or link it to a deployable project before expecting runtime env to be available.',
+          'Use get_service_credentials when you need the connection string manually.',
         ],
       },
     });
@@ -328,12 +397,14 @@ describe('MCP service tools (Task 8)', () => {
     );
 
     const result = await tool.execute(
-      { name: 'shared-redis', template: 'redis' },
+      { name: 'shared-redis', template: 'redis', scope: 'global' },
       { target: 'mcp' },
     );
 
     expect(result).toEqual({
       status: 'created',
+      scope: 'global',
+      attached_to: null,
       service: {
         id: 'svc-redis',
         name: 'shared-redis',
@@ -353,8 +424,8 @@ describe('MCP service tools (Task 8)', () => {
       ],
       _agent_guidance: {
         next_steps: [
-          'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
-          'Then redeploy the project with create_deploy_plan + execute_deploy_plan for changes to take effect.',
+          'This service is global/unassigned. Attach or link it to a deployable project before expecting runtime env to be available.',
+          'Use get_service_credentials when you need the connection string manually.',
         ],
       },
     });

@@ -691,6 +691,20 @@ export const translations = {
       'Managed services are databases, caches, and shared infrastructure. Apps connect to them through env vars.',
     mcpHint:
       'Use openlander_managed_service for provisioning and credentials, then set env vars on a deployable service.',
+    projectScoped: {
+      title: 'Project services',
+      description:
+        'Attached to a project group. This is the default path for app databases and caches.',
+    },
+    global: {
+      title: 'Global services',
+      description:
+        'Shared or unassigned infrastructure. Create these only when a service is intentionally reused across projects.',
+    },
+    scope: {
+      globalHint: 'Global / unassigned',
+      attachedToProject: 'Attached to {project}',
+    },
     noServices: 'No services running',
     getStarted: 'Create a service from a template or run any Docker image.',
     templates: 'Quick Start Templates',

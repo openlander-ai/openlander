@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { AppContext } from '../../app.js';
 import type { ServiceRow } from '../../db/types.js';
 import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import { ORPHAN_MANAGED_GROUP_ID } from '../../db/service-ids.js';
 import { createGitProvider } from '../../git-providers/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getSystemStats, formatStatsSummary } from '../../monitor/stats.js';
@@ -30,7 +31,14 @@ const log = createModuleLogger('api');
 function toServiceWire(
   service: ServiceRow,
   envVars: Record<string, string>,
-): ServiceRow & { type: string; image: string; env_vars: string | null } {
+): ServiceRow & {
+  type: string;
+  image: string;
+  env_vars: string | null;
+  scope: 'project' | 'global';
+  attached_project_id: string | null;
+} {
+  const isGlobal = service.project_id === ORPHAN_MANAGED_GROUP_ID;
   return {
     ...service,
     // v5.2: strip the internal `__svc` suffix so the wire-format name
@@ -49,6 +57,8 @@ function toServiceWire(
         : Object.keys(envVars).length > 0
           ? JSON.stringify(envVars)
           : null,
+    scope: isGlobal ? 'global' : 'project',
+    attached_project_id: isGlobal ? null : service.project_id,
   };
 }
 

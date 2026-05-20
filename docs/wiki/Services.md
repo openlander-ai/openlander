@@ -37,11 +37,15 @@ are usually connected to deployable services through environment variables such 
 ### Via MCP
 
 ```
-create_service(name: "my-postgres", template: "postgresql")
+create_service(name: "my-postgres", template: "postgresql", project_name: "my-app")
 ```
 
 This creates infrastructure. It does not deploy or redeploy your app. To use the new service from an
 app, read credentials and set env vars on the deployable service.
+
+By default, `create_service` requires `project_id` or `project_name` so the
+service is attached to the app that will use it. Use `scope: "global"` only for
+intentionally shared or currently unassigned infrastructure.
 
 ---
 
@@ -49,7 +53,7 @@ app, read credentials and set env vars on the deployable service.
 
 Container names follow the pattern: `ol-svc-{name}`
 
-Example: `create_service(name: "mydb")` → container `ol-svc-mydb`
+Example: `create_service(name: "mydb", template: "postgresql", project_name: "my-app")` → container `ol-svc-mydb`
 
 ---
 
@@ -191,7 +195,7 @@ with exactly one deployable service. Redeploy the app with `redeploy_app`, or pa
 Typical agent flow:
 
 ```
-create_service(name: "my-postgres", template: "postgresql")
+create_service(name: "my-postgres", template: "postgresql", project_name: "my-app")
 get_service_credentials(service_name: "my-postgres")
 set_env_vars(service_id: "my-app__svc", variables: { DATABASE_URL: "..." })
 redeploy_app(service_id: "my-app__svc")

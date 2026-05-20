@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking (MCP):** `openlander_managed_service.create_service` now requires
+  `project_id`/`project_name` by default. Pass `scope: "global"` explicitly for
+  intentionally shared or unassigned infrastructure.
+
 ### Fixed
 
 - Made MCP deploy status polling ignore stale completed in-memory jobs when a
@@ -14,7 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   completed project status checks while preserving deploy URLs and reading
   health from the deployable service row.
 - Fixed managed-service `create_service` responses so `suggested_env` contains
-  awaited connection-string recommendations instead of an empty object.
+  awaited connection-string recommendations instead of an empty object, and
+  legacy template names like `postgresql`/`mongodb` are stored with canonical
+  managed-service kinds so env recommendations are not skipped. Existing rows
+  in `ol-svc-*` managed-service containers with valid managed-service
+  connection strings but generic `image` kind are repaired on startup so they
+  reappear in managed-service lists.
 
 ## [0.1.1] - 2026-05-15
 
