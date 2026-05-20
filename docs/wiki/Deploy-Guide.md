@@ -26,7 +26,7 @@ There's also a convenience `deploy_app` tool that combines all 3 steps.
 
 After a deploy, call `list_projects` and keep `projects[].deployable_service.service_id`.
 Use that `service_id` for follow-up MCP actions such as `redeploy_app`, `set_env_vars`,
-`map_domain`, and `diagnose_service`.
+`add_domain_route`, and `diagnose_service`.
 
 ---
 
@@ -60,7 +60,7 @@ After a service deploy succeeds, the service gets a URL:
 
 - **Internal**: `http://your-server:assigned-port`
 - **Traefik**: `http://service-name.your-server`
-- **Public**: optional temporary share URL or a custom domain mapping
+- **Public**: optional temporary share URL or a custom domain route
 
 ---
 

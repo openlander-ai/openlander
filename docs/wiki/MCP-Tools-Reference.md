@@ -47,13 +47,13 @@ infrastructure services, not deployable apps).
 
 Composite catalog:
 
-| Composite                    | Action slots | Purpose                                                                      |
-| ---------------------------- | ------------ | ---------------------------------------------------------------------------- |
-| `openlander_deploy`          | 18           | Deploy plans, execution, previews, rollbacks, build logs, Git, domains       |
-| `openlander_project`         | 14           | Project groups, secrets, temporary share URLs; env actions route to services |
-| `openlander_service`         | 17           | Deployable app/worker lifecycle, config, and service env vocabulary          |
-| `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage   |
-| `openlander_monitor`         | 10           | Logs, alerts, system stats, host diagnosis, project stats, probes            |
+| Composite                    | Action slots | Purpose                                                                            |
+| ---------------------------- | ------------ | ---------------------------------------------------------------------------------- |
+| `openlander_deploy`          | 16           | Deploy plans, execution, previews, rollbacks, build logs, Git                      |
+| `openlander_project`         | 14           | Project groups, secrets, temporary share URLs; env actions route to services       |
+| `openlander_service`         | 19           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary |
+| `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage         |
+| `openlander_monitor`         | 10           | Logs, alerts, system stats, host diagnosis, project stats, probes                  |
 
 `openlander_project` owns group/config actions. `openlander_service` owns deployable runtime actions.
 
@@ -66,7 +66,7 @@ Composite catalog:
 | [Project Operations](#project-operations)                | 4     | Group listing and group-scoped config  |
 | [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files        |
 | [Services](#services--infrastructure)                    | 17    | Create databases, manage infra         |
-| [Domains](#domains)                                      | 2     | Map custom domains                     |
+| [Domains](#domains)                                      | 2     | Register Host/path domain routes       |
 | [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos          |
 | [Monitoring](#monitoring--logs)                          | 10    | Logs, stats, alerts, host diagnosis    |
 | [Debug](#debug--troubleshooting)                         | 1     | Build logs for external-agent analysis |
@@ -450,25 +450,32 @@ Provide either `service_id` or `service_name`.
 
 ## Domains
 
-### `map_domain`
+### `add_domain_route`
 
-| Parameter      | Type   | Required | Description                                                                |
-| -------------- | ------ | -------- | -------------------------------------------------------------------------- |
-| `service_id`   | string | No       | Preferred deployable service id                                            |
-| `service_name` | string | No       | Deployable service name                                                    |
-| `project_name` | string | No       | Optional group scope; legacy fallback only works for single-service groups |
-| `domain`       | string | Yes      | Domain name                                                                |
+| Parameter              | Type    | Required | Description                                              |
+| ---------------------- | ------- | -------- | -------------------------------------------------------- |
+| `service_id`           | string  | No       | Preferred deployable service id                          |
+| `service_name`         | string  | No       | Deployable service name                                  |
+| `project_id`           | string  | No       | Optional project group id for single-deployable groups   |
+| `project_name`         | string  | No       | Optional project group name for single-deployable groups |
+| `domain`               | string  | Yes      | Domain host that already points to OpenLander            |
+| `path_prefix`          | string  | No       | Public path prefix to match (default `/`)                |
+| `strip_prefix`         | boolean | No       | Strip `path_prefix` before forwarding                    |
+| `upstream_path_prefix` | string  | No       | Internal path prefix to add before forwarding            |
+| `target_port`          | number  | No       | Override the service container port for this route       |
 
-Provide `service_id`, `service_name`, or `project_name`. Multi-service groups require an explicit
-service target.
+Provide `service_id`, `service_name`, `project_id`, or `project_name`. Multi-service groups require
+an explicit service target.
 
-Domain mapping requires DNS to point at the OpenLander host or reverse proxy. v0.1 does not create
-Cloudflare records automatically. For path routing, set `path_prefix`; for service targeting, prefer
-`service_id`.
+Domain route = a Traefik Host/path route for a domain already pointed at OpenLander port 80.
+OpenLander v0.1 does not create DNS records, Cloudflare tunnels, ngrok endpoints, or TLS
+certificates. Docker labels are not the source of truth for custom domains; check
+`/api/traefik/config` and Traefik loaded routers when debugging.
 
-### `list_domains`
+### `list_domain_routes`
 
-No parameters.
+Optional `service_id`, `service_name`, `project_id`, or `project_name` filters. With no parameters,
+lists all registered domain routes.
 
 ---
 

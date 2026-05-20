@@ -21,7 +21,7 @@ const READ_ONLY_TOOLS = new Set([
   'list_projects',
   'list_env_vars',
   'list_services',
-  'list_domains',
+  'list_domain_routes',
   'get_project',
   'get_service',
   'get_system_info',

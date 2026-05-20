@@ -670,8 +670,9 @@ export const translations = {
         error: 'error',
       },
       toast: {
-        added: '도메인이 연결되었습니다. DNS 레코드를 OpenLander 서버로 설정하세요.',
-        removed: '도메인 연결이 해제되었습니다.',
+        added:
+          '도메인 라우트가 등록되었습니다. Traefik 반영에는 몇 초 걸릴 수 있으며 DNS/TLS는 외부에서 관리합니다.',
+        removed: '도메인 라우트가 제거되었습니다.',
         routingDisabled:
           'Infrastructure-only 모드에서는 도메인 라우팅을 OpenLander가 관리하지 않습니다.',
         addFailed: '도메인 추가에 실패했습니다.',

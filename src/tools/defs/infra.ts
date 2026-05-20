@@ -5,15 +5,28 @@ import {
   ServiceSelectionRequiredError,
 } from '../../errors.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import {
+  normalizeDomainHost,
+  normalizeDomainPathPrefix,
+} from '../../db/repos/domain-mapping.repo.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
 import { cloneRepo } from '../../pipeline/git.js';
 import type { ToolDef } from './types.js';
 import type { ToolContext } from './types.js';
-import { analyzeInfrastructureSchema, listDomainsSchema, mapDomainSchema } from './schemas.js';
+import {
+  addDomainRouteSchema,
+  analyzeInfrastructureSchema,
+  listDomainRoutesSchema,
+} from './schemas.js';
+import { nanoid } from 'nanoid';
+import { domainToASCII } from 'node:url';
 
 type AppCtx = ToolContext['appCtx'];
 type ServiceRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getService']>>>;
 type ProjectRow = NonNullable<Awaited<ReturnType<AppCtx['db']['getProject']>>>;
+
+const DOMAIN_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const IPV4_LITERAL_RE = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
 function isManagedService(kind: string): boolean {
   return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
@@ -32,7 +45,9 @@ function serviceSelectionCandidates(services: ServiceRow[]) {
 async function resolveProject(
   appCtx: AppCtx,
   projectName: string | undefined,
+  projectId?: string,
 ): Promise<ProjectRow | undefined> {
+  if (projectId) return (await appCtx.db.getProject(projectId)) ?? undefined;
   if (!projectName) return undefined;
   return (
     (await appCtx.db.getProject(projectName)) ?? (await appCtx.db.getProjectByName(projectName))
@@ -45,6 +60,7 @@ async function resolveDomainServiceTarget(
 ): Promise<{ service: ServiceRow; project: ProjectRow }> {
   const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
   const serviceName = typeof args['service_name'] === 'string' ? args['service_name'].trim() : '';
+  const projectId = typeof args['project_id'] === 'string' ? args['project_id'].trim() : '';
   const projectName = typeof args['project_name'] === 'string' ? args['project_name'].trim() : '';
 
   if (serviceId) {
@@ -59,9 +75,9 @@ async function resolveDomainServiceTarget(
     return { service, project };
   }
 
-  const project = await resolveProject(appCtx, projectName);
-  if (projectName && !project) {
-    throw new ProjectNotFoundError(projectName);
+  const project = await resolveProject(appCtx, projectName, projectId);
+  if ((projectId || projectName) && !project) {
+    throw new ProjectNotFoundError(projectId || projectName);
   }
 
   if (serviceName) {
@@ -111,55 +127,222 @@ async function resolveDomainServiceTarget(
   return { service, project };
 }
 
+function parseDomainHostForRoute(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new OpenLanderError('domain must be a string', 'INVALID_HOST', 400, { field: 'domain' });
+  }
+
+  const raw = value.trim().toLowerCase();
+  if (/^https?:\/\//i.test(raw) || raw.includes('/') || raw.includes('?') || raw.includes('#')) {
+    throw new OpenLanderError('domain must be a host name, not a URL', 'INVALID_HOST', 400, {
+      field: 'domain',
+    });
+  }
+  if (raw.includes('*')) {
+    throw new OpenLanderError('wildcard domains are not supported in v0.1', 'INVALID_HOST', 400, {
+      field: 'domain',
+    });
+  }
+  if (IPV4_LITERAL_RE.test(raw) || raw.includes(':')) {
+    throw new OpenLanderError(
+      'IP addresses and ports are not valid domain hosts',
+      'INVALID_HOST',
+      400,
+      {
+        field: 'domain',
+      },
+    );
+  }
+
+  const domain = normalizeDomainHost(domainToASCII(raw));
+  if (domain.length === 0 || domain.length > 253 || domain.includes('..')) {
+    throw new OpenLanderError('domain is invalid', 'INVALID_HOST', 400, { field: 'domain' });
+  }
+
+  const labels = domain.split('.');
+  if (labels.length < 2 || domain === 'localhost' || domain.endsWith('.localhost')) {
+    throw new OpenLanderError(
+      'domain must be a public DNS host, not localhost or a single-label name',
+      'INVALID_HOST',
+      400,
+      { field: 'domain' },
+    );
+  }
+  if (domain.endsWith('.local')) {
+    throw new OpenLanderError(
+      '.local is reserved for mDNS/Bonjour; use public DNS or sslip.io-style hostnames in v0.1',
+      'INVALID_HOST',
+      400,
+      { field: 'domain' },
+    );
+  }
+  if (labels.some((label) => !DOMAIN_LABEL_RE.test(label))) {
+    throw new OpenLanderError('domain contains an invalid label', 'INVALID_HOST', 400, {
+      field: 'domain',
+    });
+  }
+
+  return domain;
+}
+
+function parsePathPrefixForRoute(args: Record<string, unknown>, key: string): string {
+  const value = args[key];
+  if (value === undefined || value === null) return '/';
+  if (typeof value !== 'string') {
+    throw new OpenLanderError(`${key} must be a string`, 'INVALID_PATH', 400, { field: key });
+  }
+  if (value.includes('?') || value.includes('#')) {
+    throw new OpenLanderError(
+      `${key} must not include query or hash segments`,
+      'INVALID_PATH',
+      400,
+      {
+        field: key,
+      },
+    );
+  }
+  return normalizeDomainPathPrefix(value);
+}
+
+function parseNullablePathPrefixForRoute(
+  args: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = args[key];
+  if (value === undefined || value === null || value === '') return null;
+  return parsePathPrefixForRoute(args, key);
+}
+
+function mapRoute(mapping: Awaited<ReturnType<AppCtx['db']['createDomainMappingForService']>>) {
+  return {
+    id: mapping.id,
+    service_id: mapping.service_id,
+    domain: mapping.domain,
+    path_prefix: mapping.path_prefix,
+    strip_prefix: mapping.strip_prefix,
+    upstream_path_prefix: mapping.upstream_path_prefix ?? '/',
+    target_port: mapping.target_port ?? null,
+    status: mapping.status,
+    tls: {
+      managed_by_openlander: false,
+      enabled: mapping.tls_enabled,
+      resolver: mapping.tls_resolver ?? null,
+    },
+  };
+}
+
 export const infraToolDefs: ToolDef[] = [
   {
-    name: 'map_domain',
+    name: 'add_domain_route',
     riskLevel: 'medium',
     description:
-      'Map a custom domain to a deployable service using the configured domain routing backend. Use when the user wants their own stable domain (e.g., api.myapp.com). DNS must point at the OpenLander host or reverse proxy; v0.1 does not create Cloudflare records automatically. Routing takes effect immediately without redeploy. Only redeploy if the app needs build-time env changes (e.g., NEXT_PUBLIC_API_URL, CORS origins). Prefer service_id or service_name; legacy project_name works only when the group has exactly one deployable service. Returns { status, project, service, domain, url }. Errors: PROJECT_NOT_FOUND, SERVICE_NOT_FOUND, SERVICE_SELECTION_REQUIRED.',
+      'Register an internal Traefik Host/path route for a domain that already points to the OpenLander host or reverse proxy. This does not create DNS records, Cloudflare tunnels, ngrok endpoints, or TLS certificates. No redeploy is required. Prefer service_id; project_id/project_name works only when the group has exactly one deployable service. Returns { status: "route_registered", route, routing, urls }. Errors: DOMAIN_ROUTING_DISABLED, DOMAIN_ROUTE_EXISTS, PROJECT_NOT_FOUND, SERVICE_NOT_FOUND, SERVICE_SELECTION_REQUIRED.',
     mcpDescription:
-      'Map a custom domain to a deployable service. DNS must already point at OpenLander; v0.1 does not create DNS records automatically.',
-    inputSchema: mapDomainSchema,
+      'Register a Traefik Host/path route for a domain that already points at OpenLander. Does not manage DNS, tunnels, or TLS.',
+    inputSchema: addDomainRouteSchema,
     execute: async (args, { appCtx }) => {
-      const domain = args['domain'] as string;
+      if (appCtx.config.traefik.mode === 'external') {
+        throw new OpenLanderError(
+          'Domain routing writes are disabled while Traefik is in external mode.',
+          'DOMAIN_ROUTING_DISABLED',
+          409,
+        );
+      }
+
+      const domain = parseDomainHostForRoute(args['domain']);
+      const pathPrefix = parsePathPrefixForRoute(args, 'path_prefix');
+      const upstreamPathPrefix = parseNullablePathPrefixForRoute(args, 'upstream_path_prefix');
+      const stripPrefix = args['strip_prefix'] === true;
+      const targetPort =
+        typeof args['target_port'] === 'number' && Number.isInteger(args['target_port'])
+          ? args['target_port']
+          : null;
       const { project, service } = await resolveDomainServiceTarget(appCtx, args);
 
-      await appCtx.cloudflare.createTunnelForService(service.id, domain);
-      return {
-        status: 'mapped',
-        project: project.name,
-        service: service.name,
+      const existing = await appCtx.db.findDomainMappingByHostAndPath(domain, pathPrefix);
+      if (existing) {
+        throw new OpenLanderError(
+          `Domain route already exists for ${domain}${pathPrefix}`,
+          'DOMAIN_ROUTE_EXISTS',
+          409,
+          { id: existing.id, domain: existing.domain, pathPrefix: existing.path_prefix },
+        );
+      }
+
+      const mapping = await appCtx.db.createDomainMappingForService({
+        id: nanoid(16),
+        serviceId: service.id,
         domain,
-        url: `https://${domain}`,
+        status: 'active',
+        pathPrefix,
+        stripPrefix,
+        upstreamPathPrefix,
+        targetPort,
+        tlsEnabled: null,
+        tlsResolver: null,
+      });
+
+      return {
+        status: 'route_registered',
+        project: { id: project.id, name: project.name },
+        service: { id: service.id, name: service.name },
+        route: mapRoute(mapping),
+        routing: {
+          backend: 'traefik_http_provider',
+          config_endpoint: '/api/traefik/config',
+          expected_rule:
+            pathPrefix === '/'
+              ? `Host(\`${domain}\`)`
+              : `Host(\`${domain}\`) && PathPrefix(\`${pathPrefix}\`)`,
+          docker_labels_expected: false,
+          requires_redeploy: false,
+          expected_propagation_seconds: 5,
+        },
+        urls: {
+          http: `http://${domain}${pathPrefix === '/' ? '' : pathPrefix}`,
+          https: `https://${domain}${pathPrefix === '/' ? '' : pathPrefix}`,
+        },
         _agent_guidance: {
           next_steps: [
-            'Routing is live immediately — no redeploy needed for this service.',
+            'No redeploy is required; domain routing is dynamic.',
+            'DNS, Cloudflare Tunnel, ngrok, reverse proxy, and TLS must be configured outside OpenLander in v0.1.',
+            'Wait a few seconds for Traefik to poll /api/traefik/config before probing the domain.',
+            'Do not use Docker labels to verify custom domains; Docker labels only show automatic localhost routes.',
             'If OTHER services reference this service in NEXT_PUBLIC_* env vars (client-side/browser), update those vars to the new public URL and redeploy those services.',
             'Do NOT change server-side env vars like API_URL, DATABASE_URL, etc. — these use internal Docker DNS (http://ol-{name}:{port}) which is faster and must stay internal.',
           ],
           warning:
-            'NEVER replace internal Docker URLs (http://ol-*) with public URLs in server-side env vars. Internal DNS is for container-to-container communication. Only NEXT_PUBLIC_* or browser-facing vars should use the public domain.',
+            'This only registers an internal Traefik route for a Host/path already reaching OpenLander port 80. It does not create DNS records, Cloudflare routes, ngrok endpoints, or TLS certificates.',
         },
       };
     },
   },
   {
-    name: 'list_domains',
+    name: 'list_domain_routes',
     riskLevel: 'low',
     description:
-      'List all custom domain mappings across all projects with domain name, project ID, and status. Use to check existing domain configurations. Returns { count, domains[] }. Always available, no errors.',
-    mcpDescription: 'List all custom domain mappings across projects.',
-    inputSchema: listDomainsSchema,
-    execute: async (_args, { appCtx }) => {
-      const mappings = await appCtx.db.listDomainMappings();
+      'List registered domain routes. With no target, lists routes across all projects. With service_id/service_name/project_id/project_name, lists routes for that deployable service. These are internal Traefik routes; DNS/tunnel/TLS are external prerequisites.',
+    mcpDescription: 'List registered domain routes. These do not imply DNS/tunnel/TLS ownership.',
+    inputSchema: listDomainRoutesSchema,
+    execute: async (args, { appCtx }) => {
+      const hasTarget =
+        typeof args['service_id'] === 'string' ||
+        typeof args['service_name'] === 'string' ||
+        typeof args['project_id'] === 'string' ||
+        typeof args['project_name'] === 'string';
+      const mappings = hasTarget
+        ? await appCtx.db.listDomainMappingsForService(
+            (await resolveDomainServiceTarget(appCtx, args)).service.id,
+          )
+        : await appCtx.db.listDomainMappings();
       return Promise.resolve({
         count: mappings.length,
-        domains: mappings.map((mapping) => ({
-          domain: mapping.domain,
-          projectId: mapping.project_id,
-          serviceId: mapping.service_id,
-          status: mapping.status,
-        })),
+        routes: mappings.map(mapRoute),
+        routing: {
+          backend: 'traefik_http_provider',
+          config_endpoint: '/api/traefik/config',
+          docker_labels_expected: false,
+        },
       });
     },
   },

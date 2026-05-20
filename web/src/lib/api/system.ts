@@ -50,10 +50,9 @@ export async function getSetupStatus(): Promise<SetupStatus> {
 }
 
 // Cloudflare auto-DNS removed for v0.1.
-// Backend routes (`/api/setup/cloudflare*`, MCP `map_domain` tunnel path) stay
-// dormant. Domain attach is now: user adds A/CNAME at their own DNS provider,
-// then OpenLander registers the Traefik route. Restore in v0.2 when token UX
-// is sorted.
+// Backend routes (`/api/setup/cloudflare*`) stay dormant. Domain attach is now:
+// user adds A/CNAME at their own DNS provider, then OpenLander registers the
+// Traefik route. Restore auto-DNS in v0.2 when token UX is sorted.
 
 export async function startTraefik(): Promise<unknown> {
   return apiPost<unknown>('/api/setup/traefik');
