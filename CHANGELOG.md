@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Made MCP deploy status polling ignore stale completed in-memory jobs when a
+  newer redeploy lock exists, and return deploy-log revision details for
+  completed project status checks while preserving deploy URLs and reading
+  health from the deployable service row.
+- Fixed managed-service `create_service` responses so `suggested_env` contains
+  awaited connection-string recommendations instead of an empty object.
+
 ## [0.1.1] - 2026-05-15
 
 ### Added

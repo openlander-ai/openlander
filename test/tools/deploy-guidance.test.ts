@@ -62,6 +62,11 @@ describe('deploy MCP guidance', () => {
         service_id: 'app__svc',
         service_name: 'web',
       },
+      status_call: {
+        tool: 'openlander_deploy',
+        action: 'get_deploy_status',
+        params: { project_id: 'app' },
+      },
     });
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
     await vi.waitFor(() =>

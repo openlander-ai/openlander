@@ -222,9 +222,25 @@ export const deployToolDefs: ToolDef[] = [
         return value.split(/\r?\n/).slice(-lines).join('\n');
       };
 
+      const isTerminalPhase = (phase: string): boolean => phase === 'done' || phase === 'failed';
+
+      const terminalStatusPrecedesLock = (
+        status: { phase: string; startedAt: Date; completedAt?: Date } | undefined,
+        currentLockInfo: { lockedAt: string } | null,
+      ): boolean => {
+        if (!status || !currentLockInfo || !isTerminalPhase(status.phase)) {
+          return false;
+        }
+        const lockAtMs = parseDBTimestamp(currentLockInfo.lockedAt).getTime();
+        return status.startedAt.getTime() < lockAtMs;
+      };
+
       const formatDeployLogJob = async (log: DeployLogRow) => {
         const inferredProjectId = log.project_id ?? deployableServiceIdToProjectId(log.service_id);
         const project = await appCtx.db.getProject(inferredProjectId);
+        const deployable = await appCtx.db.getDeployableForProject(inferredProjectId);
+        const health = deployable?.status ?? 'unknown';
+        const assignedPort = deployable?.assigned_port ?? undefined;
         const phase =
           log.status === 'success' ? 'done' : log.status === 'failed' ? 'failed' : 'cancelled';
         return {
@@ -243,8 +259,21 @@ export const deployToolDefs: ToolDef[] = [
             typeof log.duration_ms === 'number'
               ? `${String(Math.round(log.duration_ms / 1000))}s`
               : null,
+          health,
           created_at: log.created_at,
           completed_at: log.created_at,
+          ...(phase === 'done'
+            ? {
+                preferred_url: getPreferredProjectUrl(
+                  project?.name ?? inferredProjectId,
+                  assignedPort,
+                ),
+                urls: getProjectUrls(project?.name ?? inferredProjectId, assignedPort),
+                internal_host: projectContainerName(project?.name ?? inferredProjectId),
+                docker_host: getDockerHostType(),
+              }
+            : {}),
+          ...(phase === 'failed' ? { docker_host: getDockerHostType() } : {}),
           ...(log.status === 'failed' && log.build_log
             ? { build_log_tail: tailLines(log.build_log, 30) }
             : {}),
@@ -328,7 +357,7 @@ export const deployToolDefs: ToolDef[] = [
 
         await primeAssignedPort(project.id);
 
-        const buildProjectResult = (status?: {
+        const buildProjectResult = async (status?: {
           projectId: string;
           projectName: string;
           phase: string;
@@ -341,6 +370,15 @@ export const deployToolDefs: ToolDef[] = [
           buildStepDesc?: string;
         }) => {
           const isActive = status && status.phase !== 'done' && status.phase !== 'failed';
+          if (status && !isActive) {
+            const lastLog = await appCtx.db.getLastDeployLog(project.id);
+            if (lastLog) {
+              return {
+                active: 0,
+                jobs: [await formatDeployLogJob(lastLog)],
+              };
+            }
+          }
           return {
             active: isActive ? 1 : 0,
             jobs: status ? [formatJob(status)] : [],
@@ -369,27 +407,27 @@ export const deployToolDefs: ToolDef[] = [
         const lockInfo = await appCtx.db.getDeployLockInfo(project.id);
 
         if (!wait) {
-          const result = buildProjectResult(status) as Record<string, unknown>;
+          const statusIsStaleForLock = terminalStatusPrecedesLock(status, lockInfo);
+          if (statusIsStaleForLock && lockInfo) {
+            return buildLockedQueuedResult(lockInfo);
+          }
+          const result = (await buildProjectResult(status)) as Record<string, unknown>;
           if (lockInfo) {
             result['locked'] = true;
             result['lock_session'] = lockInfo.session;
           }
           if (!status && lockInfo) {
-            result['active'] = 1;
-            result['jobs'] = [
-              formatJob({
-                projectId: project.id,
-                projectName: project.name,
-                phase: 'queued',
-                startedAt: parseDBTimestamp(lockInfo.lockedAt),
-              }),
-            ];
+            return buildLockedQueuedResult(lockInfo);
           }
           return result;
         }
 
+        if (terminalStatusPrecedesLock(status, lockInfo) && lockInfo) {
+          return buildLockedQueuedResult(lockInfo);
+        }
+
         if (status && (status.phase === 'done' || status.phase === 'failed')) {
-          return buildProjectResult(status);
+          return await buildProjectResult(status);
         }
 
         if (lockInfo && !status) {
@@ -408,24 +446,14 @@ export const deployToolDefs: ToolDef[] = [
             unsubFailed();
           };
 
-          const resolveFromDeployLog = async (lastLogCreatedAt: string): Promise<void> => {
+          const resolveFromDeployLog = async (lastLog: DeployLogRow): Promise<void> => {
             if (settled) return;
             settled = true;
             cleanup();
 
-            const dbProject = await appCtx.db.getProjectByName(project.name);
             resolve({
               active: 0,
-              jobs: [
-                formatJob({
-                  projectId: project.id,
-                  projectName: project.name,
-                  phase: 'done',
-                  startedAt: new Date(lastLogCreatedAt),
-                  completedAt: new Date(lastLogCreatedAt),
-                }),
-              ],
-              ...(dbProject ? { health: dbProject.status } : {}),
+              jobs: [await formatDeployLogJob(lastLog)],
             });
           };
 
@@ -450,25 +478,15 @@ export const deployToolDefs: ToolDef[] = [
                 lastLog.status === 'success' &&
                 (current.phase === 'failed' || current.phase === 'done')
               ) {
-                const freshProject = await appCtx.db.getProjectByName(project.name);
                 resolve({
                   active: 0,
-                  jobs: [
-                    formatJob({
-                      projectId: project.id,
-                      projectName: project.name,
-                      phase: 'done',
-                      startedAt: parseDBTimestamp(lastLog.created_at),
-                      completedAt: parseDBTimestamp(lastLog.created_at),
-                    }),
-                  ],
-                  ...(freshProject ? { health: freshProject.status } : {}),
+                  jobs: [await formatDeployLogJob(lastLog)],
                   ...(timedOut ? { timeout: true } : {}),
                 });
                 return;
               }
 
-              const payload = buildProjectResult(current) as Record<string, unknown>;
+              const payload = (await buildProjectResult(current)) as Record<string, unknown>;
               if (timedOut) payload['timeout'] = true;
               resolve(payload);
               return;
@@ -528,22 +546,12 @@ export const deployToolDefs: ToolDef[] = [
               if (lastLog.status === 'failed') {
                 settled = true;
                 cleanup();
-                const dbProject = await appCtx.db.getProjectByName(project.name);
                 resolve({
                   active: 0,
-                  jobs: [
-                    formatJob({
-                      projectId: project.id,
-                      projectName: project.name,
-                      phase: 'failed',
-                      startedAt: parseDBTimestamp(lastLog.created_at),
-                      completedAt: parseDBTimestamp(lastLog.created_at),
-                    }),
-                  ],
-                  ...(dbProject ? { health: dbProject.status } : {}),
+                  jobs: [await formatDeployLogJob(lastLog)],
                 });
               } else {
-                void resolveFromDeployLog(lastLog.created_at);
+                void resolveFromDeployLog(lastLog);
               }
             }
           };

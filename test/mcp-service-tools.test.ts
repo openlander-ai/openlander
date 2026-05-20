@@ -73,7 +73,7 @@ function createMockContext(
     remove: vi.fn(async () => ({})),
     createDatabase: vi.fn(),
     createUser: vi.fn(),
-    getSuggestedEnv: vi.fn(() => []),
+    getSuggestedEnv: vi.fn(async () => []),
   };
 
   const ctx = {
@@ -188,6 +188,9 @@ describe('MCP service tools (Task 8)', () => {
         credentials: '{"host":"ol-svc-shared-pg","port":5432,"user":"openlander","password":"pw"}',
       }),
     );
+    serviceManager.getSuggestedEnv.mockResolvedValueOnce([
+      { key: 'DATABASE_URL', value: 'postgresql://openlander:pw@ol-svc-shared-pg:5432/app' },
+    ]);
 
     const ok = await tool.execute({ name: 'shared-pg', template: 'postgresql' }, { target: 'mcp' });
 
@@ -206,7 +209,9 @@ describe('MCP service tools (Task 8)', () => {
           password: 'pw',
         },
       },
-      suggested_env: [],
+      suggested_env: [
+        { key: 'DATABASE_URL', value: 'postgresql://openlander:pw@ol-svc-shared-pg:5432/app' },
+      ],
       externalAccess: [
         { host: '10.0.0.10', port: 5432, type: 'lan' },
         { host: '100.100.100.10', port: 5432, type: 'vpn' },
