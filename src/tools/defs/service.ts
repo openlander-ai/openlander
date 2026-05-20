@@ -320,7 +320,10 @@ export const serviceToolDefs: ToolDef[] = [
         }
       }
 
-      const suggestedEnv = await appCtx.serviceManager.getSuggestedEnv(result);
+      const suggestedEnv = await appCtx.serviceManager.getSuggestedEnv(result, {
+        scope: target.scope,
+        targetProjectId: resolvedProjectId ?? null,
+      });
 
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       const legacyPort = result.assigned_port ?? result.port;
@@ -355,6 +358,7 @@ export const serviceToolDefs: ToolDef[] = [
             target.scope === 'global'
               ? [
                   'This service is global/unassigned. Attach or link it to a deployable project before expecting runtime env to be available.',
+                  'suggested_env uses namespaced keys for global services. If this is the primary DB/cache for an app, set the app convention key such as DATABASE_URL or REDIS_URL intentionally.',
                   'Use get_service_credentials when you need the connection string manually.',
                 ]
               : [

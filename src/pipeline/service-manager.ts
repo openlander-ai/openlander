@@ -230,10 +230,14 @@ export class ServiceManager {
    * can auto-link it to a project via set_env_vars.
    *
    * Rules:
-   *  - First service of a type → standard key (DATABASE_URL, REDIS_URL, …)
-   *  - Subsequent services of the same type → prefixed key (e.g. MYDB_DATABASE_URL)
+   *  - Project-scoped service + no target key collision → standard key.
+   *  - Project-scoped service + target already has that key → prefixed key.
+   *  - Global/unassigned service → prefixed key because no consumer app is known.
    */
-  async getSuggestedEnv(service: ServiceRow): Promise<Array<{ key: string; value: string }>> {
+  async getSuggestedEnv(
+    service: ServiceRow,
+    opts: { scope?: 'project' | 'global'; targetProjectId?: string | null } = {},
+  ): Promise<Array<{ key: string; value: string }>> {
     const serviceKind = service.kind;
     const baseKey = DEFAULT_ENV_KEYS[serviceKind];
     if (!baseKey) {
@@ -246,28 +250,60 @@ export class ServiceManager {
       return [];
     }
 
-    const existing = (await this.db.listServices()).filter(
-      (s) => s.kind === serviceKind && s.id !== service.id,
-    );
+    const prefix = this.serviceEnvPrefix(service.name);
 
     if (serviceKind === 'minio') {
       const user = (credentials?.['user'] as string | undefined) ?? '';
       const password = (credentials?.['password'] as string | undefined) ?? '';
-      const prefix =
-        existing.length === 0 ? '' : `${service.name.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_`;
+      const minioKeys = ['S3_ENDPOINT', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];
+      const shouldPrefix = await this.shouldPrefixSuggestedEnvKeys(service, minioKeys, opts);
       return [
-        { key: `${prefix}S3_ENDPOINT`, value: connectionString },
-        { key: `${prefix}AWS_ACCESS_KEY_ID`, value: user },
-        { key: `${prefix}AWS_SECRET_ACCESS_KEY`, value: password },
+        { key: `${shouldPrefix ? prefix : ''}S3_ENDPOINT`, value: connectionString },
+        { key: `${shouldPrefix ? prefix : ''}AWS_ACCESS_KEY_ID`, value: user },
+        { key: `${shouldPrefix ? prefix : ''}AWS_SECRET_ACCESS_KEY`, value: password },
       ];
     }
 
-    const key =
-      existing.length === 0
-        ? baseKey
-        : `${service.name.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_${baseKey}`;
+    const shouldPrefix = await this.shouldPrefixSuggestedEnvKeys(service, [baseKey], opts);
+    const key = shouldPrefix ? `${prefix}${baseKey}` : baseKey;
 
     return [{ key, value: connectionString }];
+  }
+
+  private serviceEnvPrefix(serviceName: string): string {
+    return `${serviceName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_`;
+  }
+
+  private async shouldPrefixSuggestedEnvKeys(
+    service: ServiceRow,
+    keys: string[],
+    opts: { scope?: 'project' | 'global'; targetProjectId?: string | null },
+  ): Promise<boolean> {
+    if (opts.scope === 'global') {
+      return true;
+    }
+
+    if (opts.scope === 'project' && opts.targetProjectId) {
+      const targetKeys = await this.getProjectRuntimeEnvKeys(opts.targetProjectId);
+      return keys.some((key) => targetKeys.has(key));
+    }
+
+    const existing = (await this.db.listServices()).filter(
+      (s) => s.kind === service.kind && s.id !== service.id,
+    );
+    return existing.length > 0;
+  }
+
+  private async getProjectRuntimeEnvKeys(projectId: string): Promise<Set<string>> {
+    const keys = new Set(Object.keys(await this.db.getEnvVars(projectId)));
+    const deployables = await this.db.getDeployablesByGroup(projectId);
+    for (const deployable of deployables) {
+      const serviceEnv = await this.db.getEnvVarsForService(projectId, deployable.id);
+      for (const key of Object.keys(serviceEnv)) {
+        keys.add(key);
+      }
+    }
+    return keys;
   }
 
   private tryParseCredentials(raw: string): Record<string, unknown> | null {

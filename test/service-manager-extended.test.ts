@@ -57,16 +57,25 @@ function createService(partial: Partial<ServiceRow>): ServiceRow {
 function createDbMock(
   services: ServiceRow[],
   projects: Array<{ id: string; name: string }> = [],
+  opts: {
+    projectEnv?: Record<string, Record<string, string>>;
+    serviceEnv?: Record<string, Record<string, string>>;
+    deployablesByProject?: Record<string, ServiceRow[]>;
+  } = {},
 ): Database {
   const byId = new Map(services.map((svc) => [svc.id, svc]));
   return {
     getService: vi.fn((id: string) => byId.get(id) ?? null),
     listServices: vi.fn(() => Array.from(byId.values())),
     listProjects: vi.fn(() => projects),
-    getEnvVars: vi.fn(() => ({})),
-    getEnvVarsForService: vi.fn(() => ({})),
+    getEnvVars: vi.fn((projectId: string) => opts.projectEnv?.[projectId] ?? {}),
+    getEnvVarsForService: vi.fn(
+      (_projectId: string, serviceId: string) => opts.serviceEnv?.[serviceId] ?? {},
+    ),
     getEnvironmentsByProject: vi.fn(() => []),
-    getDeployablesByGroup: vi.fn(() => []),
+    getDeployablesByGroup: vi.fn(
+      (projectId: string) => opts.deployablesByProject?.[projectId] ?? [],
+    ),
     recordServiceMetricSample: vi.fn(),
     updateService: vi.fn(
       (id: string, updates: { status?: ServiceRow['status']; containerId?: string | null }) => {
@@ -132,6 +141,83 @@ describe('ServiceManager extended DB/user operations', () => {
     ]);
     await expect(manager.getSuggestedEnv(redis)).resolves.toEqual([
       { key: 'REDIS_URL', value: 'redis://ol-svc-shared-redis:6379' },
+    ]);
+  });
+
+  it('suggests bare env keys for project-scoped services when target project has no collision', async () => {
+    const existingGlobalPg = createService({
+      id: 'svc-existing-pg',
+      name: 'existing-pg',
+      kind: 'postgres',
+      credentials: JSON.stringify({
+        connectionString: 'postgresql://openlander:pw@ol-svc-existing-pg:5432/app',
+      }),
+    });
+    const projectPg = createService({
+      id: 'svc-project-pg',
+      name: 'app-pg',
+      kind: 'postgres',
+      credentials: JSON.stringify({
+        connectionString: 'postgresql://openlander:pw@ol-svc-app-pg:5432/app',
+      }),
+    });
+
+    const manager = new ServiceManager(
+      createMockDockerHarness().docker,
+      createDbMock([existingGlobalPg, projectPg]),
+    );
+
+    await expect(
+      manager.getSuggestedEnv(projectPg, { scope: 'project', targetProjectId: 'proj-1' }),
+    ).resolves.toEqual([
+      { key: 'DATABASE_URL', value: 'postgresql://openlander:pw@ol-svc-app-pg:5432/app' },
+    ]);
+  });
+
+  it('prefixes project-scoped env keys when the target project already has the bare key', async () => {
+    const projectPg = createService({
+      id: 'svc-project-pg',
+      name: 'analytics-pg',
+      kind: 'postgres',
+      credentials: JSON.stringify({
+        connectionString: 'postgresql://openlander:pw@ol-svc-analytics-pg:5432/app',
+      }),
+    });
+
+    const manager = new ServiceManager(
+      createMockDockerHarness().docker,
+      createDbMock([projectPg], [], {
+        projectEnv: { 'proj-1': { DATABASE_URL: 'postgresql://existing' } },
+      }),
+    );
+
+    await expect(
+      manager.getSuggestedEnv(projectPg, { scope: 'project', targetProjectId: 'proj-1' }),
+    ).resolves.toEqual([
+      {
+        key: 'ANALYTICS_PG_DATABASE_URL',
+        value: 'postgresql://openlander:pw@ol-svc-analytics-pg:5432/app',
+      },
+    ]);
+  });
+
+  it('prefixes global service env keys because no consumer project is known', async () => {
+    const globalPg = createService({
+      id: 'svc-global-pg',
+      name: 'global-pg',
+      kind: 'postgres',
+      credentials: JSON.stringify({
+        connectionString: 'postgresql://openlander:pw@ol-svc-global-pg:5432/app',
+      }),
+    });
+
+    const manager = new ServiceManager(createMockDockerHarness().docker, createDbMock([globalPg]));
+
+    await expect(manager.getSuggestedEnv(globalPg, { scope: 'global' })).resolves.toEqual([
+      {
+        key: 'GLOBAL_PG_DATABASE_URL',
+        value: 'postgresql://openlander:pw@ol-svc-global-pg:5432/app',
+      },
     ]);
   });
 

@@ -236,6 +236,7 @@ describe('MCP service tools (Task 8)', () => {
       _agent_guidance: {
         next_steps: [
           'This service is global/unassigned. Attach or link it to a deployable project before expecting runtime env to be available.',
+          'suggested_env uses namespaced keys for global services. If this is the primary DB/cache for an app, set the app convention key such as DATABASE_URL or REDIS_URL intentionally.',
           'Use get_service_credentials when you need the connection string manually.',
         ],
       },
@@ -374,6 +375,7 @@ describe('MCP service tools (Task 8)', () => {
       _agent_guidance: {
         next_steps: [
           'This service is global/unassigned. Attach or link it to a deployable project before expecting runtime env to be available.',
+          'suggested_env uses namespaced keys for global services. If this is the primary DB/cache for an app, set the app convention key such as DATABASE_URL or REDIS_URL intentionally.',
           'Use get_service_credentials when you need the connection string manually.',
         ],
       },
@@ -425,6 +427,7 @@ describe('MCP service tools (Task 8)', () => {
       _agent_guidance: {
         next_steps: [
           'This service is global/unassigned. Attach or link it to a deployable project before expecting runtime env to be available.',
+          'suggested_env uses namespaced keys for global services. If this is the primary DB/cache for an app, set the app convention key such as DATABASE_URL or REDIS_URL intentionally.',
           'Use get_service_credentials when you need the connection string manually.',
         ],
       },

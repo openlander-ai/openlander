@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   in `ol-svc-*` managed-service containers with valid managed-service
   connection strings but generic `image` kind are repaired on startup so they
   reappear in managed-service lists.
+- Adjusted managed-service `suggested_env` so project-scoped services prefer
+  app-standard keys like `DATABASE_URL`/`REDIS_URL` unless the target project
+  already has that key; global services keep namespaced keys.
 
 ## [0.1.1] - 2026-05-15
 
