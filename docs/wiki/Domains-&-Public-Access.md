@@ -88,6 +88,10 @@ TLS certificates.
 POST /api/projects/:projectId/services/:serviceId/domains
 ```
 
+The REST endpoint remains `/domains`; "domain route" is the product vocabulary
+for the Host/path route that endpoint registers, not a separate
+`/domain-routes` API path.
+
 ### List Domain Routes
 
 Use Service Detail → **Domains** tab for day-to-day management. The API returns

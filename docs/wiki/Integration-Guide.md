@@ -181,9 +181,9 @@ Once connected, AI agents see **5 composite MCP tools** covering **66 unique def
 
 | Composite                    | Actions | Purpose                                               |
 | ---------------------------- | ------- | ----------------------------------------------------- |
-| `openlander_deploy`          | 18      | Deploy lifecycle: plans, execution, rollback, build   |
+| `openlander_deploy`          | 16      | Deploy lifecycle: plans, execution, rollback, build   |
 | `openlander_project`         | 14      | Project groups: metadata, secrets, exposure           |
-| `openlander_service`         | 17      | Deployable app/worker lifecycle and config vocabulary |
+| `openlander_service`         | 19      | Deployable app/worker lifecycle, config, domains      |
 | `openlander_managed_service` | 21      | Databases, caches, credentials, backups, volumes      |
 | `openlander_monitor`         | 10      | Monitoring & ops: logs, alerts, stats, host diagnosis |
 

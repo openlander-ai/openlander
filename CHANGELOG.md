@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking (MCP):** replaced `openlander_deploy.map_domain` and
+  `openlander_deploy.list_domains` with
+  `openlander_service.add_domain_route` and
+  `openlander_service.list_domain_routes`. The old `deploy_app(domain=...)`
+  shortcut is removed; agents must deploy the app first, then register a domain
+  route for a Host/path that already reaches OpenLander.
+
 ## [0.1.1] - 2026-05-15
 
 ### Added

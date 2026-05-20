@@ -4,7 +4,9 @@ import type { AppContext } from '../../src/app.js';
 import { OpenLanderError } from '../../src/errors.js';
 import { createSharedToolRegistry } from './shared-tool-registry.js';
 
-function createDuplicateServiceContext(): AppContext {
+function createDuplicateServiceContext(
+  options: { traefikMode?: 'managed' | 'external' } = {},
+): AppContext {
   const alpha = { id: 'alpha', name: 'alpha', status: 'running', archived_at: null };
   const beta = { id: 'beta', name: 'beta', status: 'running', archived_at: null };
   const alphaService = {
@@ -29,7 +31,7 @@ function createDuplicateServiceContext(): AppContext {
   const domainMappings: unknown[] = [];
 
   return {
-    config: { traefik: { mode: 'managed' } },
+    config: { traefik: { mode: options.traefikMode ?? 'managed' } },
     db: {
       getProject: vi.fn((id: string) => projects.get(id)),
       getProjectByName: vi.fn((name: string) =>
@@ -264,6 +266,49 @@ describe('deployable service target resolution', () => {
       }),
     );
     expect(ctx.cloudflare.createTunnelForService).not.toHaveBeenCalled();
+  });
+
+  it('rejects domain route writes when Traefik routing is externally managed', async () => {
+    const ctx = createDuplicateServiceContext({ traefikMode: 'external' });
+
+    await expect(
+      getTool(ctx, 'add_domain_route').execute(
+        { service_id: 'alpha__svc', domain: 'api.example.com' },
+        { target: 'mcp' },
+      ),
+    ).rejects.toMatchObject({
+      code: 'DOMAIN_ROUTING_DISABLED',
+      statusCode: 409,
+    });
+    expect(ctx.db.createDomainMappingForService).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['https://api.example.com'],
+    ['*.example.com'],
+    ['127.0.0.1'],
+    ['api.example.com:443'],
+    ['localhost'],
+    ['api.localhost'],
+    ['api.local'],
+    ['api'],
+    ['api..example.com'],
+    ['bad_label.example.com'],
+    [`${'a'.repeat(64)}.example.com`],
+    [`${'a'.repeat(250)}.com`],
+  ])('rejects invalid domain route host %s', async (domain) => {
+    const ctx = createDuplicateServiceContext();
+
+    await expect(
+      getTool(ctx, 'add_domain_route').execute(
+        { service_id: 'alpha__svc', domain },
+        { target: 'mcp' },
+      ),
+    ).rejects.toMatchObject({
+      code: 'INVALID_HOST',
+      statusCode: 400,
+    });
+    expect(ctx.db.createDomainMappingForService).not.toHaveBeenCalled();
   });
 
   it('preserves path route options when registering domain routes', async () => {

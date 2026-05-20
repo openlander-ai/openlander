@@ -225,8 +225,6 @@ function mapRoute(mapping: Awaited<ReturnType<AppCtx['db']['createDomainMappingF
     status: mapping.status,
     tls: {
       managed_by_openlander: false,
-      enabled: mapping.tls_enabled,
-      resolver: mapping.tls_resolver ?? null,
     },
   };
 }
@@ -253,10 +251,7 @@ export const infraToolDefs: ToolDef[] = [
       const pathPrefix = parsePathPrefixForRoute(args, 'path_prefix');
       const upstreamPathPrefix = parseNullablePathPrefixForRoute(args, 'upstream_path_prefix');
       const stripPrefix = args['strip_prefix'] === true;
-      const targetPort =
-        typeof args['target_port'] === 'number' && Number.isInteger(args['target_port'])
-          ? args['target_port']
-          : null;
+      const targetPort = (args['target_port'] as number | undefined) ?? null;
       const { project, service } = await resolveDomainServiceTarget(appCtx, args);
 
       const existing = await appCtx.db.findDomainMappingByHostAndPath(domain, pathPrefix);
