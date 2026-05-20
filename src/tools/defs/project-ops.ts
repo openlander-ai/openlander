@@ -1,7 +1,6 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
-import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import { emptySchema } from './schemas.js';
 import type { ToolDef } from './types.js';
 
@@ -87,7 +86,7 @@ export const projectOpsToolDefs: ToolDef[] = [
               visibility: project.visibility,
               port,
               containerName: containerId ? projectContainerName(project.name) : null,
-              network: SHARED_NETWORK_NAME,
+              network: projectContainerName(project.name),
               url: port ? getPreferredProjectUrl(project.name, port) : null,
               preferred_url: port ? getPreferredProjectUrl(project.name, port) : null,
               urls: port ? getProjectUrls(project.name, port) : [],
@@ -99,8 +98,8 @@ export const projectOpsToolDefs: ToolDef[] = [
           }),
           _agent_guidance: {
             networking: [
-              `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
-              'For deployable app containers, use http://ol-{project-name}:{port}. Managed service containers use http://ol-svc-{service-name}:{port}.',
+              'Project-scoped app and managed-service containers are isolated on the project Docker network. Global managed services stay on the shared OpenLander network.',
+              'For same-project inter-container traffic, use the service DNS name on that project network. Do not create Docker networks manually.',
               'Project groups are not deployable services. Use projects[].deployable_service.service_id with openlander_service actions such as set_env_vars, list_env_vars, redeploy_app, expose_public, restart_service, rollback_service, or update_service_config.',
             ],
           },

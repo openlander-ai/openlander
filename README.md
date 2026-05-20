@@ -94,7 +94,8 @@ is the human surface on top.
   Dockerfile, build config, runtime state, and deploy history.
 - A **Managed Service** is infrastructure such as Postgres, MySQL, Redis,
   MongoDB, or MinIO. Most are attached to one project; intentionally shared
-  services can live in the global managed pool.
+  services can live in the global managed pool. Project-scoped services are
+  placed on that project's Docker network.
 
 The dashboard and MCP both expose a one-step "deploy this repo" path for the
 common single-service case.

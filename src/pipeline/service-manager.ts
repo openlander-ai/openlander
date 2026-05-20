@@ -6,9 +6,11 @@ import { nanoid } from 'nanoid';
 
 import { DOCKER_LABELS, getDataDir, SHARED_NETWORK_NAME } from '../config/index.js';
 import type { Database, ServiceRow } from '../db/index.js';
+import { ORPHAN_MANAGED_GROUP_ID } from '../db/service-ids.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { sleep } from '../lib/sleep.js';
 import { serviceContainerName, serviceVolumeName } from './helpers.js';
+import { ensureManagedTraefikNetwork } from './traefik.js';
 import {
   getServiceAdapter,
   type BuiltInServiceType,
@@ -319,9 +321,10 @@ export class ServiceManager {
   }
 
   /**
-   * Reconcile all existing services to the shared network with aliases.
-   * Called at startup to ensure DNS resolution works for pre-existing services.
-   * Idempotent: skips services already connected with correct alias.
+   * Reconcile existing service containers to their owner network.
+   * Project-scoped services use the project network; global services stay on
+   * the shared OpenLander network. This keeps startup repair aligned with the
+   * v0.1.2 network-isolation model.
    */
   async reconcileServiceNetworks(): Promise<void> {
     const services = await this.db.listServices();
@@ -343,58 +346,85 @@ export class ServiceManager {
         if (!info.State.Running) {
           log.warn(
             { serviceId: service.id, serviceName: service.name, containerRef },
-            'Service container is stopped — skipping shared network reconciliation',
+            'Service container is stopped — skipping network reconciliation',
           );
           continue;
         }
 
+        const targetNetwork = await this.resolveServiceNetworkName(service);
+        if (!targetNetwork) {
+          log.warn(
+            { serviceId: service.id, serviceName: service.name, projectId: service.project_id },
+            'Service project missing — skipping network reconciliation',
+          );
+          continue;
+        }
+
+        if (targetNetwork !== SHARED_NETWORK_NAME) {
+          await ensureManagedTraefikNetwork(this.docker, targetNetwork);
+        }
+
         const networks = info.NetworkSettings.Networks;
-        const sharedNetwork = networks[SHARED_NETWORK_NAME];
-        const aliasesRaw: unknown = sharedNetwork?.Aliases;
+        const serviceNetwork = networks[targetNetwork];
+        const aliasesRaw: unknown = serviceNetwork?.Aliases;
         const aliases: string[] = Array.isArray(aliasesRaw)
           ? aliasesRaw.filter((alias): alias is string => typeof alias === 'string')
           : [];
         const hasAlias = aliases.includes(service.name);
 
-        if (!sharedNetwork) {
-          await this.docker.connectContainerToNetwork(info.Id, SHARED_NETWORK_NAME, [service.name]);
+        if (!serviceNetwork) {
+          await this.docker.connectContainerToNetwork(info.Id, targetNetwork, [service.name]);
           migrated += 1;
           log.info(
-            { serviceId: service.id, serviceName: service.name, containerId: info.Id },
-            'Service network reconciled (migrated to shared network)',
+            {
+              serviceId: service.id,
+              serviceName: service.name,
+              containerId: info.Id,
+              targetNetwork,
+            },
+            'Service network reconciled',
           );
-          continue;
-        }
-
-        if (hasAlias) {
+        } else if (hasAlias) {
           alreadyConnected += 1;
           log.info(
-            { serviceId: service.id, serviceName: service.name, containerId: info.Id },
-            'Service already connected to shared network with alias',
+            {
+              serviceId: service.id,
+              serviceName: service.name,
+              containerId: info.Id,
+              targetNetwork,
+            },
+            'Service already connected to target network with alias',
           );
-          continue;
+        } else {
+          await this.docker.disconnectContainerFromNetwork(info.Id, targetNetwork);
+          await this.docker.connectContainerToNetwork(info.Id, targetNetwork, [service.name]);
+          migrated += 1;
+          log.info(
+            {
+              serviceId: service.id,
+              serviceName: service.name,
+              containerId: info.Id,
+              targetNetwork,
+            },
+            'Service network alias reconciled',
+          );
         }
 
-        await this.docker.disconnectContainerFromNetwork(info.Id, SHARED_NETWORK_NAME);
-
-        await this.docker.connectContainerToNetwork(info.Id, SHARED_NETWORK_NAME, [service.name]);
-        migrated += 1;
-        log.info(
-          { serviceId: service.id, serviceName: service.name, containerId: info.Id },
-          'Service network reconciled (alias updated on shared network)',
-        );
+        if (targetNetwork !== SHARED_NETWORK_NAME && networks[SHARED_NETWORK_NAME]) {
+          await this.docker.disconnectContainerFromNetwork(info.Id, SHARED_NETWORK_NAME);
+        }
       } catch (err) {
         if (isDockerNotFoundError(err)) {
           log.warn(
             { err, serviceId: service.id, serviceName: service.name, containerRef },
-            'Service container not found — skipping shared network reconciliation',
+            'Service container not found — skipping network reconciliation',
           );
           continue;
         }
 
         log.warn(
           { err, serviceId: service.id, serviceName: service.name, containerRef },
-          'Failed to reconcile service shared network connection',
+          'Failed to reconcile service network connection',
         );
       }
     }
@@ -405,6 +435,18 @@ export class ServiceManager {
     );
   }
 
+  private async resolveServiceNetworkName(service: ServiceRow): Promise<string | null> {
+    if (service.project_id === ORPHAN_MANAGED_GROUP_ID) {
+      return SHARED_NETWORK_NAME;
+    }
+
+    const project = await this.db.getProject(service.project_id);
+    if (!project) {
+      return null;
+    }
+    return await this.docker.ensureProjectNetwork(project.name);
+  }
+
   async create(opts: {
     name: string;
     template?: string;
@@ -412,6 +454,8 @@ export class ServiceManager {
     port?: number;
     version?: string;
     envVars?: Array<{ key: string; value: string }>;
+    network?: string;
+    aliases?: string[];
   }): Promise<ServiceRow> {
     const hasTemplate = typeof opts.template === 'string';
     const hasImage = typeof opts.image === 'string';
@@ -552,25 +596,11 @@ export class ServiceManager {
         volumeBinds: [`${volumeName}:${dataMountPath}`],
         memoryLimitBytes: memLimits.memoryLimitBytes,
         cpuShares: memLimits.cpuShares,
+        network: opts.network,
+        aliases: opts.aliases,
         ...(containerHealthcheck ? { healthcheck: containerHealthcheck } : {}),
         ...(containerCmd ? { cmd: containerCmd } : {}),
       });
-
-      const primaryNetwork = this.docker.getNetworkName();
-      const additionalNetworks = [SHARED_NETWORK_NAME].filter(
-        (networkName) => networkName !== primaryNetwork,
-      );
-
-      for (const networkName of additionalNetworks) {
-        try {
-          await this.docker.connectContainerToNetwork(containerId, networkName, [opts.name]);
-        } catch (err) {
-          log.warn(
-            { err, networkName, containerName },
-            'Failed to connect service to additional network',
-          );
-        }
-      }
 
       persistenceStarted = true;
       await this.db.createService({

@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking (MCP):** `openlander_managed_service.create_service` now requires
   `project_id`/`project_name` by default. Pass `scope: "global"` explicitly for
   intentionally shared or unassigned infrastructure.
+- Project-scoped app and managed-service containers now run on per-project
+  Docker networks, with Traefik joined to those project networks for routing.
+  Global managed services remain on OpenLander's shared infrastructure network.
 
 ### Fixed
 

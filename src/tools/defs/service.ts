@@ -258,11 +258,16 @@ export const serviceToolDefs: ToolDef[] = [
 
       let result: Awaited<ReturnType<typeof appCtx.serviceManager.create>>;
       try {
+        const network =
+          target.scope === 'project' && target.projectName
+            ? await appCtx.docker.ensureProjectNetwork(target.projectName)
+            : undefined;
         result = await appCtx.serviceManager.create({
           name: args['name'] as string,
           template: args['template'] as string | undefined,
           image: args['image'] as string | undefined,
           port: args['port'] as number | undefined,
+          ...(network ? { network, aliases: [args['name'] as string] } : {}),
         });
       } catch (err) {
         if (err instanceof ManagedServicePersistenceCleanedError) {
@@ -414,7 +419,10 @@ export const serviceToolDefs: ToolDef[] = [
               scope: service.project_id === ORPHAN_MANAGED_GROUP_ID ? 'global' : 'project',
               attached_to:
                 service.project_id === ORPHAN_MANAGED_GROUP_ID ? null : service.project_id,
-              network: SHARED_NETWORK_NAME,
+              network:
+                service.project_id === ORPHAN_MANAGED_GROUP_ID
+                  ? SHARED_NETWORK_NAME
+                  : 'project-scoped',
               // Wire key preserved; canonical first, legacy fallback for pre-migration rows
               // eslint-disable-next-line @typescript-eslint/no-deprecated
               image: service.image_url ?? service.image ?? '',
@@ -440,8 +448,8 @@ export const serviceToolDefs: ToolDef[] = [
             : {}),
           _agent_guidance: {
             networking: [
-              `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
-              'For managed service containers, use http://ol-svc-{service-name}:{port} (DNS auto-resolved). Deployable app containers use http://ol-{project-name}:{port}.',
+              'Project-scoped managed services are attached only to their project Docker network. Global managed services stay on the shared OpenLander network.',
+              'Use project-scoped services as the default app database/cache path. Use scope="global" only for intentionally shared infrastructure.',
               'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
             ],
           },
@@ -670,7 +678,8 @@ export const serviceToolDefs: ToolDef[] = [
         ...(healthDetail ? { healthDetail } : {}),
         // Wire key preserved; canonical source: assigned_port
         port: svcPort,
-        network: SHARED_NETWORK_NAME,
+        network:
+          service.project_id === ORPHAN_MANAGED_GROUP_ID ? SHARED_NETWORK_NAME : 'project-scoped',
         // Wire key preserved; canonical first, legacy fallback for pre-migration rows
         // eslint-disable-next-line @typescript-eslint/no-deprecated
         image: service.image_url ?? service.image ?? '',
@@ -681,8 +690,8 @@ export const serviceToolDefs: ToolDef[] = [
         externalAccess: getServiceExternalAccess(svcPort ?? null),
         _agent_guidance: {
           networking: [
-            `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
-            'For managed service containers, use http://ol-svc-{service-name}:{port} (DNS auto-resolved). Deployable app containers use http://ol-{project-name}:{port}.',
+            'Project-scoped managed services are attached only to their project Docker network. Global managed services stay on the shared OpenLander network.',
+            'Use project-scoped services as the default app database/cache path. Use scope="global" only for intentionally shared infrastructure.',
             'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
           ],
         },

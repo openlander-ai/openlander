@@ -1,12 +1,11 @@
 import { nanoid } from 'nanoid';
 
 import type { Database, EnvironmentRow, ProjectRow } from '../../db/index.js';
-import { getPolicy } from '../../config/index.js';
 import type { OpenLanderEnv } from '../../config/index.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { allocatePort } from '../port.js';
-import { buildTraefikLabels, getProjectUrl } from '../traefik.js';
+import { buildTraefikLabels, ensureManagedTraefikNetwork, getProjectUrl } from '../traefik.js';
 import type { Docker } from '../docker.js';
 import { loadResourceLimitsForDeployTarget } from '../config-snapshot.js';
 import { getRouteName } from './helpers.js';
@@ -142,6 +141,8 @@ export class RollbackExecutor {
       const containerPort = (await this.docker.getImageExposedPort(rollbackImageTag)) ?? port;
 
       const envType: OpenLanderEnv = 'production';
+      const networkName = await this.docker.ensureProjectNetwork(project.name);
+      await ensureManagedTraefikNetwork(this.docker, networkName);
 
       const resourceLimits = await loadResourceLimitsForDeployTarget(this.db, {
         projectId,
@@ -154,8 +155,15 @@ export class RollbackExecutor {
         port,
         containerPort,
         envVars: await this.db.getEnvVars(projectId, productionEnvironment?.id),
-        traefikLabels: buildTraefikLabels(project.name, containerPort, undefined, envType),
-        network: getPolicy(envType).networkName,
+        traefikLabels: buildTraefikLabels(
+          project.name,
+          containerPort,
+          undefined,
+          envType,
+          networkName,
+        ),
+        network: networkName,
+        aliases: [project.name],
         resourceLimits: resourceLimits ?? undefined,
       });
 

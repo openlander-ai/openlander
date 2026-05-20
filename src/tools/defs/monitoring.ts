@@ -325,7 +325,12 @@ export const monitoringToolDefs: ToolDef[] = [
       const httpCheck = await probeServiceHttp(appCtx, service, probePath, timeoutMs, {
         internal,
       });
-      const dependencies = await probeEnvDependencies(appCtx, effectiveEnv, timeoutMs);
+      const dependencies = await probeEnvDependencies(
+        appCtx,
+        effectiveEnv,
+        timeoutMs,
+        service.container_id ?? undefined,
+      );
       const nextSteps = buildDiagnoseNextSteps({
         service,
         recentDeployment,
@@ -390,7 +395,37 @@ export const monitoringToolDefs: ToolDef[] = [
       const startedAt = Date.now();
 
       if (internal) {
-        return probeInternal(appCtx, protocol, host, port, pathArg, timeoutMs, targetResolved);
+        const hasContext = Boolean(
+          args['service_id'] ?? args['service_name'] ?? args['project_id'] ?? args['project_name'],
+        );
+        if (!hasContext) {
+          return {
+            reachable: false,
+            latency_ms: 0,
+            error: 'INTERNAL_PROBE_CONTEXT_REQUIRED',
+            protocol_used: protocol,
+            target_resolved: targetResolved,
+            _agent_guidance: {
+              message:
+                'Project network isolation is enabled. Pass service_id, service_name, project_id, or project_name so OpenLander can probe from the correct project container.',
+              next_steps: [
+                'Call list_projects and use projects[].deployable_service.service_id for the internal probe context.',
+                'Call diagnose_service for full service-aware diagnostics.',
+              ],
+            },
+          };
+        }
+        const { service } = await resolveDeployableServiceForMonitoring(args, context);
+        return probeInternal(
+          appCtx,
+          protocol,
+          host,
+          port,
+          pathArg,
+          timeoutMs,
+          targetResolved,
+          service.container_id ?? undefined,
+        );
       }
 
       if (protocol === 'tcp') {
@@ -1278,6 +1313,7 @@ async function probeServiceHttp(
       path,
       timeoutMs,
       internalUrl,
+      service.container_id ?? undefined,
     );
     if (
       internalResult['reachable'] === true ||
@@ -1364,6 +1400,7 @@ async function probeEnvDependencies(
   appCtx: AppCtx,
   env: Record<string, string>,
   timeoutMs: number,
+  preferredContainerId?: string,
 ): Promise<Record<string, unknown>> {
   const targets = envDependencyTargets(env);
   if (targets.length === 0) {
@@ -1382,6 +1419,7 @@ async function probeEnvDependencies(
               '/',
               timeoutMs,
               target.display,
+              preferredContainerId,
             )
           : await probeHttp(
               `${target.protocol}://${target.host}:${String(target.port)}/`,
@@ -1679,25 +1717,40 @@ async function probeInternal(
   path: string,
   timeoutMs: number,
   targetResolved: string,
+  preferredContainerId?: string,
 ): Promise<Record<string, unknown>> {
   const startedAt = Date.now();
   const containers = await appCtx.docker.listManagedContainers();
-  const runningContainer = containers.find((c) => c.status === 'running');
+  const preferredRunningContainer = preferredContainerId
+    ? containers.find((c) => c.id === preferredContainerId && c.status === 'running')
+    : undefined;
+  const runningContainer =
+    preferredRunningContainer ??
+    (preferredContainerId ? undefined : containers.find((c) => c.status === 'running'));
 
   if (!runningContainer) {
+    const hasPreferred = Boolean(preferredContainerId);
     return {
       reachable: false,
       latency_ms: 0,
-      error: 'No running managed containers available for internal probe',
+      error: hasPreferred
+        ? 'No running target project container available for internal probe'
+        : 'No running managed containers available for internal probe',
       protocol_used: protocol,
       target_resolved: targetResolved,
       _agent_guidance: {
-        message:
-          'No running managed containers to execute internal probe from. Deploy a project first.',
-        next_steps: [
-          'Deploy a project first to have a running container',
-          'Try without internal=true to probe from the host',
-        ],
+        message: hasPreferred
+          ? 'The target service container is not running, so OpenLander cannot probe from its isolated project network.'
+          : 'No running managed containers to execute internal probe from. Deploy a project first.',
+        next_steps: hasPreferred
+          ? [
+              'Call diagnose_service for the target service to inspect container state.',
+              'Redeploy or restart the target service, then retry the internal probe.',
+            ]
+          : [
+              'Deploy a project first to have a running container',
+              'Try without internal=true to probe from the host',
+            ],
       },
     };
   }

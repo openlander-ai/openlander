@@ -1,10 +1,13 @@
 import type { Database } from '../../db/index.js';
-import { getPolicy } from '../../config/index.js';
 import type { OpenLanderEnv } from '../../config/index.js';
 import type { Docker } from '../docker.js';
 import { containerName as projectContainerName } from '../helpers.js';
 import { allocatePort, clearPortScanCache, releasePortReservation } from '../port.js';
-import { buildTraefikLabels, getEnvironmentProjectHostname } from '../traefik.js';
+import {
+  buildTraefikLabels,
+  ensureManagedTraefikNetwork,
+  getEnvironmentProjectHostname,
+} from '../traefik.js';
 import {
   deserializeConfig,
   loadResourceLimitsForProject,
@@ -68,6 +71,8 @@ export class ContainerRunner {
 
     const containerName = projectContainerName(config.containerName ?? config.projectName);
     await this.docker.safeRemoveContainer(containerName);
+    const projectNetwork = await this.docker.ensureProjectNetwork(config.projectName);
+    await ensureManagedTraefikNetwork(this.docker, projectNetwork);
 
     for (let attempt = 0; attempt < 2; attempt++) {
       const configuredContainerPort = config.containerPort;
@@ -82,6 +87,7 @@ export class ContainerRunner {
         containerPort,
         undefined,
         envType,
+        projectNetwork,
       );
 
       try {
@@ -93,7 +99,8 @@ export class ContainerRunner {
           envVars: config.envVars,
           cmd: config.imageCmd,
           traefikLabels,
-          network: getPolicy(envType).networkName,
+          network: projectNetwork,
+          aliases: [config.projectName],
           secretFiles: config.secretFiles,
           restartPolicy: config.restartPolicy,
           resourceLimits: resourceLimits ?? undefined,

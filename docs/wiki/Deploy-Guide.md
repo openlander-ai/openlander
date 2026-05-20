@@ -18,15 +18,15 @@ There's also a convenience `deploy_app` tool that combines all 3 steps.
 
 ## Mental Model
 
-| Term               | Meaning                                                                    | Use it for                                                   |
-| ------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Project group      | A workspace that groups related services.                                  | Organization, settings, service list.                        |
-| Deployable service | An app, API, worker, or compose child that OpenLander builds/runs.         | Env vars, redeploys, domains, logs, diagnostics.             |
-| Managed service    | Shared infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, or MinIO. | Credentials, backups, databases, buckets, service lifecycle. |
+| Term               | Meaning                                                                                                                                       | Use it for                                                   |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Project group      | A workspace that groups related services.                                                                                                     | Organization, settings, service list.                        |
+| Deployable service | An app, API, worker, or compose child that OpenLander builds/runs.                                                                            | Env vars, redeploys, domains, logs, diagnostics.             |
+| Managed service    | Project-scoped infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, or MinIO. Global services are explicit shared/unassigned exceptions. | Credentials, backups, databases, buckets, service lifecycle. |
 
 After a deploy, call `list_projects` and keep `projects[].deployable_service.service_id`.
 Use that `service_id` for follow-up MCP actions such as `redeploy_app`, `set_env_vars`,
-`map_domain`, and `diagnose_service`.
+`add_domain_route`, and `diagnose_service`.
 
 ---
 

@@ -10,7 +10,7 @@ import type { Docker } from './docker.js';
 import type { CloudflareTunnelManager } from './cloudflare.js';
 import { cloneRepo } from './git.js';
 import { allocatePort, scanUsedPorts } from './port.js';
-import { getProjectUrl } from './traefik.js';
+import { ensureManagedTraefikNetwork, getProjectUrl } from './traefik.js';
 import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
@@ -35,7 +35,7 @@ import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
-import { getPolicy, type OpenLanderConfig } from '../config/index.js';
+import type { OpenLanderConfig } from '../config/index.js';
 import { withDeployLock } from '../db/repos/deploy-lock-helper.js';
 import { assertProjectMutable } from './mutation-policy.js';
 
@@ -1786,7 +1786,8 @@ export class DeployPipeline {
         { env: this.env },
       );
       const secretFiles = await this.env.getSecretFilesForDeploy(projectId);
-      const networkName = getPolicy('production').networkName;
+      const networkName = await this.docker.ensureProjectNetwork(projectName);
+      await ensureManagedTraefikNetwork(this.docker, networkName);
 
       const greenName = projectContainerName(`${projectName}-green`);
       await this.removeStaleGreenContainer(greenName);
@@ -1803,6 +1804,7 @@ export class DeployPipeline {
         envVars,
         traefikLabels: { 'traefik.enable': 'false' },
         network: networkName,
+        aliases: [projectName],
         secretFiles,
         resourceLimits: resourceLimits ?? undefined,
       });

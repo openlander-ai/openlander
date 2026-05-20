@@ -99,6 +99,7 @@ function createMockContext(
       })),
     },
     docker: {
+      ensureProjectNetwork: vi.fn(async (projectName: string) => `ol-${projectName}`),
       listManagedContainers: vi.fn(async () => containers),
       inspectContainer: vi.fn(async () => ({
         State: {},
@@ -283,6 +284,13 @@ describe('MCP service tools (Task 8)', () => {
     );
 
     expect(ctx.db.getProjectByName).toHaveBeenCalledWith('myapp');
+    expect(ctx.docker.ensureProjectNetwork).toHaveBeenCalledWith('myapp');
+    expect(serviceManager.create).toHaveBeenCalledWith({
+      name: 'myapp-pg',
+      template: 'postgresql',
+      network: 'ol-myapp',
+      aliases: ['myapp-pg'],
+    });
     expect(ctx.db.attachServiceToProject).toHaveBeenCalledWith('svc-created', 'proj-1');
     expect(result).toMatchObject({
       status: 'created',
@@ -465,8 +473,8 @@ describe('MCP service tools (Task 8)', () => {
       ]),
       _agent_guidance: {
         networking: [
-          'All containers are on the shared Docker network ("openlander"). Do NOT create Docker networks manually.',
-          'For managed service containers, use http://ol-svc-{service-name}:{port} (DNS auto-resolved). Deployable app containers use http://ol-{project-name}:{port}.',
+          'Project-scoped managed services are attached only to their project Docker network. Global managed services stay on the shared OpenLander network.',
+          'Use project-scoped services as the default app database/cache path. Use scope="global" only for intentionally shared infrastructure.',
           'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
         ],
       },

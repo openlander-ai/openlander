@@ -12,7 +12,7 @@ import { parse as parseYaml } from 'yaml';
 import { nanoid } from 'nanoid';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
-import { buildTraefikLabels } from './traefik.js';
+import { buildTraefikLabels, ensureManagedTraefikNetwork } from './traefik.js';
 import { getCommitSubject } from './git.js';
 import { getPolicy } from '../config/index.js';
 import type { OpenLanderEnv } from '../config/index.js';
@@ -766,6 +766,7 @@ export class ComposePipeline {
 
       projectNetwork = await this.docker.ensureProjectNetwork(projectName);
       const activeProjectNetwork = projectNetwork;
+      await ensureManagedTraefikNetwork(this.docker, activeProjectNetwork);
       const services: ServiceNode[] = filteredComposeProject.services.map((service) => {
         const parsedPort = this.resolveServicePortMapping(service);
         return {
@@ -868,7 +869,13 @@ export class ComposePipeline {
             allocatedHostPort = hostPort;
             const containerPort = parsedPort?.containerPort ?? hostPort;
             const routeName = sanitizeComposeProjectName(`${projectName}-${service.name}`);
-            const traefikLabels = buildTraefikLabels(routeName, containerPort, undefined, envType);
+            const traefikLabels = buildTraefikLabels(
+              routeName,
+              containerPort,
+              undefined,
+              envType,
+              activeProjectNetwork,
+            );
             const resolvedEnvVars = this.resolveComposeServiceEnvVars(composeService, envVars);
             const healthcheck = this.resolveDockerHealthcheck(composeService.healthcheck);
 
@@ -887,7 +894,7 @@ export class ComposePipeline {
                   entrypoint: composeService.entrypoint,
                   restart: composeService.restart,
                   healthcheck,
-                  networks: [activeProjectNetwork, getPolicy(envType).networkName],
+                  networks: [activeProjectNetwork],
                   aliases: [service.name],
                 });
                 break;

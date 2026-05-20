@@ -194,7 +194,7 @@ describe('Docker sandbox race prevention', () => {
     expect(disconnect).not.toHaveBeenCalled();
   });
 
-  it('runContainer calls ensureSharedNetworkAttachment when NetworkMode is not shared', async () => {
+  it('runContainer does not attach isolated containers back to the shared network', async () => {
     const container = { id: 'ctr-custom-net', start: vi.fn().mockResolvedValue(undefined) };
     mockCreateContainer.mockResolvedValueOnce(container);
 
@@ -216,11 +216,21 @@ describe('Docker sandbox race prevention', () => {
     });
 
     expect(container.start).toHaveBeenCalledOnce();
-    expect(connect).toHaveBeenCalledOnce();
-    expect(connect).toHaveBeenCalledWith({
-      Container: 'ctr-custom-net',
-      EndpointConfig: { Aliases: ['worker'] },
-    });
+    expect(connect).not.toHaveBeenCalled();
+    expect(mockCreateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        NetworkingConfig: {
+          EndpointsConfig: {
+            'traefik-web': {
+              Aliases: ['worker'],
+            },
+          },
+        },
+        HostConfig: expect.objectContaining({
+          NetworkMode: 'traefik-web',
+        }),
+      }),
+    );
   });
 
   it('runComposeService does not strictly reconnect the shared network after alias attach', async () => {
@@ -269,7 +279,6 @@ describe('Docker sandbox race prevention', () => {
     expect(connect).toHaveBeenCalledTimes(1);
     expect(connect).toHaveBeenCalledWith({
       Container: 'ctr-compose',
-      EndpointConfig: { Aliases: ['demo-stack-postgres'] },
     });
   });
 });

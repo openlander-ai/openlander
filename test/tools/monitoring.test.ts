@@ -24,9 +24,23 @@ function createMockContext(overrides?: {
   containers?: { id: string; status: string }[];
   execResult?: { exitCode: number; stdout: string; stderr: string };
 }) {
+  const containers = overrides?.containers ?? [];
+  const service = {
+    id: 'svc-1',
+    name: 'demo__svc',
+    project_id: 'p1',
+    kind: 'git',
+    container_id: containers[0]?.id ?? 'container-1',
+  };
   const ctx = {
+    db: {
+      getService: vi.fn(async (id: string) => (id === 'svc-1' ? service : undefined)),
+      getProject: vi.fn(async (id: string) =>
+        id === 'p1' ? { id: 'p1', name: 'demo' } : undefined,
+      ),
+    },
     docker: {
-      listManagedContainers: vi.fn(async () => overrides?.containers ?? []),
+      listManagedContainers: vi.fn(async () => containers),
       execSimple: vi.fn(
         async () => overrides?.execResult ?? { exitCode: 0, stdout: '', stderr: '' },
       ),
@@ -214,8 +228,10 @@ describe('probe_host tool', () => {
   });
 
   describe('internal probe', () => {
-    it('returns error when no running containers', async () => {
-      const ctx = createMockContext({ containers: [] });
+    it('requires project context for internal Docker DNS probes', async () => {
+      const ctx = createMockContext({
+        containers: [{ id: 'container-1', status: 'running' }],
+      });
       const tool = getProbeHostTool(ctx);
 
       const result = (await tool.execute(
@@ -224,7 +240,20 @@ describe('probe_host tool', () => {
       )) as Record<string, unknown>;
 
       expect(result.reachable).toBe(false);
-      expect(result.error).toContain('No running managed containers');
+      expect(result.error).toBe('INTERNAL_PROBE_CONTEXT_REQUIRED');
+    });
+
+    it('returns error when no running containers', async () => {
+      const ctx = createMockContext({ containers: [] });
+      const tool = getProbeHostTool(ctx);
+
+      const result = (await tool.execute(
+        { target: 'my-service', port: 5432, protocol: 'tcp', internal: true, service_id: 'svc-1' },
+        { target: 'mcp' },
+      )) as Record<string, unknown>;
+
+      expect(result.reachable).toBe(false);
+      expect(result.error).toContain('No running target project container');
     });
 
     it('executes TCP probe inside container', async () => {
@@ -235,7 +264,13 @@ describe('probe_host tool', () => {
       const tool = getProbeHostTool(ctx);
 
       const result = (await tool.execute(
-        { target: 'ol-svc-postgres', port: 5432, protocol: 'tcp', internal: true },
+        {
+          target: 'ol-svc-postgres',
+          port: 5432,
+          protocol: 'tcp',
+          internal: true,
+          service_id: 'svc-1',
+        },
         { target: 'mcp' },
       )) as Record<string, unknown>;
 
@@ -255,7 +290,7 @@ describe('probe_host tool', () => {
       const tool = getProbeHostTool(ctx);
 
       const result = (await tool.execute(
-        { target: 'http://my-app:3000', path: '/health', internal: true },
+        { target: 'http://my-app:3000', path: '/health', internal: true, service_id: 'svc-1' },
         { target: 'mcp' },
       )) as Record<string, unknown>;
 
@@ -277,7 +312,13 @@ describe('probe_host tool', () => {
       const tool = getProbeHostTool(ctx);
 
       const result = (await tool.execute(
-        { target: 'missing-service', port: 8080, protocol: 'tcp', internal: true },
+        {
+          target: 'missing-service',
+          port: 8080,
+          protocol: 'tcp',
+          internal: true,
+          service_id: 'svc-1',
+        },
         { target: 'mcp' },
       )) as Record<string, unknown>;
 
@@ -297,7 +338,13 @@ describe('probe_host tool', () => {
       const tool = getProbeHostTool(ctx);
 
       const result = (await tool.execute(
-        { target: 'ol-svc-postgres', port: 5432, protocol: 'tcp', internal: true },
+        {
+          target: 'ol-svc-postgres',
+          port: 5432,
+          protocol: 'tcp',
+          internal: true,
+          service_id: 'svc-1',
+        },
         { target: 'mcp' },
       )) as Record<string, unknown>;
 
@@ -316,7 +363,7 @@ describe('probe_host tool', () => {
       const tool = getProbeHostTool(ctx);
 
       const result = (await tool.execute(
-        { target: 'service', port: 80, protocol: 'tcp', internal: true },
+        { target: 'service', port: 80, protocol: 'tcp', internal: true, service_id: 'svc-1' },
         { target: 'mcp' },
       )) as Record<string, unknown>;
 
@@ -821,7 +868,7 @@ describe('diagnose_service tool', () => {
     } as unknown as AppContext;
 
     const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
-      { service_id: 'app__svc', internal: true },
+      { service_id: 'app__svc', internal: true, service_id: 'svc-1' },
       { target: 'mcp' },
     )) as Record<string, unknown>;
 
@@ -881,7 +928,7 @@ describe('diagnose_service tool', () => {
     } as unknown as AppContext;
 
     const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
-      { service_id: 'app__svc', internal: true },
+      { service_id: 'app__svc', internal: true, service_id: 'svc-1' },
       { target: 'mcp' },
     )) as Record<string, unknown>;
 

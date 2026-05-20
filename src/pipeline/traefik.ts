@@ -483,10 +483,10 @@ export function buildTraefikLabels(
   containerPort: number,
   hostname?: string,
   _environment: TraefikEnvironment = 'production',
+  networkName = getPolicy('production').networkName,
 ): Record<string, string> {
   const routerName = projectContainerName(projectName);
   const host = hostname ?? getEnvironmentProjectHostname(projectName, 'production');
-  const networkName = getPolicy('production').networkName;
 
   return {
     'traefik.enable': 'true',
@@ -496,6 +496,25 @@ export function buildTraefikLabels(
     [`traefik.http.services.${routerName}.loadbalancer.server.port`]: String(containerPort),
     'traefik.docker.network': networkName,
   };
+}
+
+export async function ensureManagedTraefikNetwork(
+  docker: Docker,
+  networkName: string,
+): Promise<void> {
+  try {
+    await docker.connectContainerToNetwork('traefik-ol', networkName);
+  } catch (error) {
+    if (isDockerNotFoundError(error)) {
+      log.warn(
+        { error, networkName },
+        'Managed Traefik container not found while connecting project network',
+      );
+      return;
+    }
+    log.warn({ error, networkName }, 'Failed to connect managed Traefik to project network');
+    throw error;
+  }
 }
 
 // --- Reverse Proxy Detection ---
@@ -676,9 +695,9 @@ export async function switchToExternalMode(docker: Docker, externalNetwork: stri
 }
 
 /**
- * Connect a container to the Traefik network.
- * In external mode, connects to the external network.
- * In managed mode, connects to OpenLander's shared network.
+ * Connect a container to the Traefik-facing network.
+ * v0.1.2 deploys apps onto project-scoped networks; managed Traefik must join
+ * those networks to route Docker-provider traffic.
  *
  * @param docker - Docker instance
  * @param containerId - Container ID to connect

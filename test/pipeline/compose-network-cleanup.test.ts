@@ -89,6 +89,7 @@ function createFakeDocker(overrides: Partial<Docker> = {}): Docker {
     waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
+    connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
     disconnectContainerFromNetwork: vi.fn().mockResolvedValue(undefined),
     getNetworkName: vi.fn().mockReturnValue(SHARED_NETWORK_NAME),
     ...overrides,
@@ -142,7 +143,7 @@ describe('compose network cleanup', () => {
     expect(runComposeService).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'ol-stack-web',
-        networks: ['stack-network', SHARED_NETWORK_NAME],
+        networks: ['stack-network'],
         aliases: ['web'],
       }),
     );
@@ -153,7 +154,7 @@ describe('compose network cleanup', () => {
       .fn()
       .mockRejectedValueOnce(
         new Error(
-          '(HTTP code 403) unexpected - endpoint with name ol-stack-web already exists in network openlander',
+          '(HTTP code 403) unexpected - endpoint with name ol-stack-web already exists in network stack-network',
         ),
       )
       .mockResolvedValueOnce('container-ol-stack-web');
@@ -174,10 +175,6 @@ describe('compose network cleanup', () => {
       'ol-stack-web',
       'stack-network',
     );
-    expect(docker.disconnectContainerFromNetwork as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'ol-stack-web',
-      SHARED_NETWORK_NAME,
-    );
   });
 
   it('cleans compose network endpoints when service startup fails', async () => {
@@ -197,10 +194,6 @@ describe('compose network cleanup', () => {
     expect(docker.disconnectContainerFromNetwork as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'ol-stack-web',
       'stack-network',
-    );
-    expect(docker.disconnectContainerFromNetwork as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'ol-stack-web',
-      SHARED_NETWORK_NAME,
     );
     expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'ol-stack-web',

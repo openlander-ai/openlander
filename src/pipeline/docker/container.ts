@@ -17,7 +17,7 @@ import {
 } from './helpers.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { stripContainerPrefix } from '../helpers.js';
-import { DOCKER_LABELS, SHARED_NETWORK_NAME } from '../../config/index.js';
+import { DOCKER_LABELS } from '../../config/index.js';
 import { ContainerNotFoundError, isDockerNotFoundError } from '../../errors.js';
 import { sleep } from '../../lib/sleep.js';
 
@@ -39,16 +39,14 @@ export class ContainerOps {
     const secretBinds = writeSecretFiles(options.name, options.secretFiles ?? []);
     const projectName = stripContainerPrefix(options.name);
     const networkMode = options.network ?? this.ctx.networkName;
-    const networkingConfig =
-      networkMode === SHARED_NETWORK_NAME
-        ? {
-            EndpointsConfig: {
-              [SHARED_NETWORK_NAME]: {
-                Aliases: [projectName],
-              },
-            },
-          }
-        : undefined;
+    const aliases = Array.from(new Set([projectName, ...(options.aliases ?? [])]));
+    const networkingConfig = {
+      EndpointsConfig: {
+        [networkMode]: {
+          Aliases: aliases,
+        },
+      },
+    };
     const volumeBinds = await getProjectVolumeBinds(this.ctx.client, projectName);
     const binds = [...secretBinds, ...volumeBinds, ...(options.extraBinds ?? [])];
 
@@ -109,10 +107,6 @@ export class ContainerOps {
     });
 
     await container.start();
-
-    if (networkMode !== SHARED_NETWORK_NAME) {
-      await this.deps.ensureSharedNetworkAttachment(container.id, projectName);
-    }
 
     return container.id;
   }
@@ -197,22 +191,10 @@ export class ContainerOps {
 
     await container.start();
 
-    if (networkMode !== SHARED_NETWORK_NAME) {
-      await this.deps.ensureSharedNetworkAttachment(container.id, projectName);
-    }
-
     const additionalNetworks =
       opts.networks?.slice(1).filter((networkName, index, arr) => {
         if (arr.indexOf(networkName) !== index) return false;
         if (networkName === networkMode) return false;
-        // Containers started on a project-scoped network are already
-        // attached to the shared OpenLander network above with the service
-        // DNS alias. Connecting it again in strict mode causes Docker's
-        // `endpoint already exists in network` failure on fresh compose
-        // deploys.
-        if (networkMode !== SHARED_NETWORK_NAME && networkName === SHARED_NETWORK_NAME) {
-          return false;
-        }
         return true;
       }) ?? [];
     try {
@@ -389,13 +371,17 @@ export class ContainerOps {
       startPeriod: number;
     };
     cmd?: string[];
+    network?: string;
+    aliases?: string[];
   }): Promise<string> {
     const envArray = Object.entries(opts.envVars).map(([k, v]) => `${k}=${v}`);
     const containerPort = opts.containerPort ?? opts.port;
     const hostPort = opts.hostPort ?? opts.port;
+    const networkMode = opts.network ?? this.ctx.networkName;
+    const aliases = Array.from(new Set([opts.serviceName, ...(opts.aliases ?? [])]));
     const networkingConfig = {
       EndpointsConfig: {
-        [SHARED_NETWORK_NAME]: { Aliases: [opts.serviceName] },
+        [networkMode]: { Aliases: aliases },
       },
     };
 
@@ -423,7 +409,7 @@ export class ContainerOps {
       ExposedPorts: { [`${String(containerPort)}/tcp`]: {} },
       NetworkingConfig: networkingConfig,
       HostConfig: {
-        NetworkMode: this.ctx.networkName,
+        NetworkMode: networkMode,
         RestartPolicy: { Name: 'unless-stopped' },
         Binds: opts.volumeBinds ?? [],
         PortBindings: {

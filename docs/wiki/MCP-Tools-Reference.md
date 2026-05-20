@@ -367,6 +367,9 @@ tunnel backend; it is not required for normal deploy/redeploy flows.
 By default, `create_service` requires `project_id` or `project_name`. This keeps
 new databases/caches attached to the app that will use them. Pass
 `scope: "global"` only when the service is deliberately shared or unassigned.
+Project-scoped managed services share the app's project Docker network; global
+services remain on OpenLander's shared infrastructure network and are not the
+default runtime DB/cache path.
 
 ### `list_services`
 
@@ -569,17 +572,23 @@ If `path` is omitted, OpenLander uses a configured base path env such as
 
 ### `probe_host`
 
-| Parameter    | Type    | Required | Description                                    |
-| ------------ | ------- | -------- | ---------------------------------------------- |
-| `target`     | string  | No       | Hostname, URL, IP, or `container-name:port`    |
-| `host`       | string  | No       | Alias for `target`                             |
-| `port`       | number  | No       | Port for TCP or host-only probes               |
-| `protocol`   | string  | No       | `http`, `https`, or `tcp`; default auto-detect |
-| `path`       | string  | No       | HTTP path                                      |
-| `internal`   | boolean | No       | Probe from inside Docker network when `true`   |
-| `timeout_ms` | number  | No       | Probe timeout                                  |
+| Parameter      | Type    | Required | Description                                         |
+| -------------- | ------- | -------- | --------------------------------------------------- |
+| `target`       | string  | No       | Hostname, URL, IP, or `container-name:port`         |
+| `host`         | string  | No       | Alias for `target`                                  |
+| `port`         | number  | No       | Port for TCP or host-only probes                    |
+| `protocol`     | string  | No       | `http`, `https`, or `tcp`; default auto-detect      |
+| `path`         | string  | No       | HTTP path                                           |
+| `internal`     | boolean | No       | Probe from the target project container when `true` |
+| `service_id`   | string  | No       | Deployable service context for internal probes      |
+| `service_name` | string  | No       | Deployable service name context for internal probes |
+| `project_id`   | string  | No       | Project context for internal probes                 |
+| `project_name` | string  | No       | Project context for internal probes                 |
+| `timeout_ms`   | number  | No       | Probe timeout                                       |
 
-Provide either `target` or `host`.
+Provide either `target` or `host`. When `internal=true`, also provide
+`service_id`, `service_name`, `project_id`, or `project_name` so OpenLander can
+probe from the correct isolated project network.
 
 ### `mcp_action_status`
 

@@ -8,7 +8,6 @@ import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
-import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import {
   buildDeployLockedResponse,
@@ -1281,8 +1280,8 @@ export const deployPlanToolDefs: ToolDef[] = [
         warnings: plan.warnings,
         _agent_guidance: {
           networking: [
-            `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
-            'For inter-container communication, use http://ol-{project-name}:{port} (DNS auto-resolved).',
+            'Project-scoped app and managed-service containers are isolated on the project Docker network. Do NOT create Docker networks manually.',
+            'Use project-scoped managed services as the default app DB/cache path. Global services are intentionally shared infrastructure and are not the default runtime connection path.',
             'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
           ],
         },

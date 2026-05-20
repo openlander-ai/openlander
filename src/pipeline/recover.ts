@@ -1,6 +1,7 @@
 import { DOCKER_LABELS, SHARED_NETWORK_NAME } from '../config/index.js';
 import type { AppContext } from '../app.js';
 import type { ProjectRow, ServiceRow } from '../db/index.js';
+import { ORPHAN_MANAGED_GROUP_ID } from '../db/service-ids.js';
 import {
   containerName as projectContainerName,
   serviceContainerName,
@@ -8,9 +9,8 @@ import {
 } from './helpers.js';
 import { SERVICE_MEMORY_LIMITS, SERVICE_TEMPLATES } from './service-manager.js';
 import { getServiceAdapter } from './service-adapters/index.js';
-import { buildTraefikLabels } from './traefik.js';
+import { buildTraefikLabels, ensureManagedTraefikNetwork } from './traefik.js';
 import { allocatePort } from './port.js';
-import { getPolicy } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { loadResourceLimitsForDeployTarget } from './config-snapshot.js';
 
@@ -168,6 +168,16 @@ async function recoverService(
     // Use canonical assigned_port; fall back to legacy port for pre-migration rows
     // eslint-disable-next-line @typescript-eslint/no-deprecated
     const hostPort = service.assigned_port ?? service.port ?? 0;
+    let network: string | undefined;
+    if (service.project_id === ORPHAN_MANAGED_GROUP_ID) {
+      network = SHARED_NETWORK_NAME;
+    } else {
+      const project = await ctx.db.getProject(service.project_id);
+      if (!project) {
+        throw new Error(`Service owner project not found: ${service.project_id}`);
+      }
+      network = await ctx.docker.ensureProjectNetwork(project.name);
+    }
     const containerId = await ctx.docker.runServiceContainer({
       imageTag: serviceImage,
       name: cName,
@@ -181,6 +191,7 @@ async function recoverService(
       healthcheck: template?.healthcheck,
       memoryLimitBytes: memLimits.memoryLimitBytes,
       cpuShares: memLimits.cpuShares,
+      network,
     });
 
     await ctx.db.updateService(service.id, { status: 'running', containerId });
@@ -269,7 +280,15 @@ async function recoverProject(
     }
 
     // Build traefik labels
-    const traefikLabels = buildTraefikLabels(project.name, containerPort, undefined, 'production');
+    const networkName = await ctx.docker.ensureProjectNetwork(project.name);
+    await ensureManagedTraefikNetwork(ctx.docker, networkName);
+    const traefikLabels = buildTraefikLabels(
+      project.name,
+      containerPort,
+      undefined,
+      'production',
+      networkName,
+    );
 
     // Remove any stale container with same name
     await ctx.docker.safeRemoveContainer(cName);
@@ -287,7 +306,8 @@ async function recoverProject(
       envVars,
       cmd: imageCmd,
       traefikLabels,
-      network: getPolicy('production').networkName,
+      network: networkName,
+      aliases: [project.name],
       secretFiles,
       restartPolicy: { Name: 'unless-stopped' },
       resourceLimits: resourceLimits ?? undefined,

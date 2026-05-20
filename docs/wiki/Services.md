@@ -7,9 +7,11 @@ OpenLander has two service concepts:
 | Deployable service | Your app, API, worker, or compose child.                            | `openlander_service`         |
 | Managed service    | Infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, or MinIO. | `openlander_managed_service` |
 
-This page covers **managed services**. They run as Docker containers on the OpenLander network and
-are usually connected to deployable services through environment variables such as `DATABASE_URL` or
-`REDIS_URL`.
+This page covers **managed services**. Project-scoped managed services run on
+the same project Docker network as the app that uses them and are usually
+connected through environment variables such as `DATABASE_URL` or `REDIS_URL`.
+Global services stay on the shared OpenLander network and are intended only for
+deliberately shared or currently unassigned infrastructure.
 
 ## Available Templates
 
@@ -167,14 +169,19 @@ restore_service(service_name: "my-postgres", backup_id: "backup_xxx")
 
 ## Connecting Projects to Services
 
-Managed services run on the `openlander` Docker network. Deployable services can connect using the
-managed service container name as hostname:
+Project-scoped managed services run on the same Docker network as their owning
+project. Deployable services in that project can connect using the managed
+service container name as hostname:
 
 ```
 # In the deployable service env vars:
 DATABASE_URL=postgresql://user:pass@ol-svc-my-postgres:5432/myapp
 REDIS_URL=redis://ol-svc-my-redis:6379
 ```
+
+Do not use `scope: "global"` as the default app database path. Global services
+are shared/unassigned infrastructure and are not joined to project networks in
+v0.1.2.
 
 Set via MCP on the deployable service:
 

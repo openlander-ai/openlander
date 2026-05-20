@@ -19,6 +19,7 @@ export interface RunContainerOptions {
   cmd?: string[];
   traefikLabels: Record<string, string>;
   network?: string;
+  aliases?: string[];
   secretFiles?: SecretFileMount[];
   restartPolicy?: { Name: string; MaximumRetryCount?: number };
   extraBinds?: string[];

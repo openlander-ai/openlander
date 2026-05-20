@@ -7,11 +7,11 @@ import type { Docker } from './docker.js';
 import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { allocatePort } from './port.js';
-import { buildTraefikLabels, getProjectUrl } from './traefik.js';
+import { buildTraefikLabels, ensureManagedTraefikNetwork, getProjectUrl } from './traefik.js';
 import { cloneRepo } from './git.js';
 import { ensureDockerfile } from './dockerfile-gen.js';
-import { getPolicy } from '../config/index.js';
 import { buildResourceLimitConfig } from './docker/types.js';
+import { getPolicy } from '../config/index.js';
 
 const DEFAULT_PREVIEW_TTL_MS = 86_400_000;
 
@@ -110,7 +110,15 @@ export class PreviewDeployer {
 
       const port = await this.allocatePreviewPort();
       const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? port;
-      const traefikLabels = buildTraefikLabels(previewName, containerPort);
+      const networkName = await this.docker.ensureProjectNetwork(previewName);
+      await ensureManagedTraefikNetwork(this.docker, networkName);
+      const traefikLabels = buildTraefikLabels(
+        previewName,
+        containerPort,
+        undefined,
+        'production',
+        networkName,
+      );
       const previewLimits = buildResourceLimitConfig('small', null);
 
       const containerId = await this.docker.runContainer({
@@ -120,7 +128,8 @@ export class PreviewDeployer {
         containerPort,
         envVars: {},
         traefikLabels,
-        network: getPolicy('production').networkName,
+        network: networkName,
+        aliases: [previewName],
         resourceLimits: previewLimits ?? undefined,
       });
 

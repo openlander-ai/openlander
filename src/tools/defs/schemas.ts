@@ -1060,8 +1060,28 @@ export const probeHostSchema = z
       .boolean()
       .optional()
       .describe(
-        'If true, probe from inside a running managed container (useful for container-to-container DNS). Default: false.',
+        'If true, probe from inside the target project service container. Provide service_id/service_name/project_id/project_name for isolated Docker DNS probes. Default: false.',
       ),
+    service_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Deployable service id for internal probe context'),
+    service_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Deployable service row name for internal probe context'),
+    project_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Project group id for internal probe context'),
+    project_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Project group name for internal probe context'),
   })
   .refine((value) => Boolean(value.target || value.host), {
     message: 'target or host is required',
