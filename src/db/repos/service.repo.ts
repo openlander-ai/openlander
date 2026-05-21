@@ -300,7 +300,11 @@ export class ServiceRepo {
     updates: Partial<{
       status: ServiceRow['status'];
       containerId: string | null;
+      containerName: string | null;
+      assignedPort: number | null;
       imageUrl: string | null;
+      imageTag: string | null;
+      previousImageTag: string | null;
       publicUrl: string | null;
       visibility: ServiceRow['visibility'];
       repoUrl: string | null;
@@ -322,8 +326,20 @@ export class ServiceRepo {
     if (updates.containerId !== undefined) {
       setValues.container_id = updates.containerId;
     }
+    if (updates.containerName !== undefined) {
+      setValues.container_name = updates.containerName;
+    }
+    if (updates.assignedPort !== undefined) {
+      setValues.assigned_port = updates.assignedPort;
+    }
     if (updates.imageUrl !== undefined) {
       setValues.image_url = updates.imageUrl;
+    }
+    if (updates.imageTag !== undefined) {
+      setValues.image_tag = updates.imageTag;
+    }
+    if (updates.previousImageTag !== undefined) {
+      setValues.previous_image_tag = updates.previousImageTag;
     }
     if (updates.publicUrl !== undefined) {
       setValues.public_url = updates.publicUrl;

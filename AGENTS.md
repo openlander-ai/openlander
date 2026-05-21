@@ -597,7 +597,9 @@ Common scopes: `web`, `agent`, `pipeline`, `mcp`, `cli`, `db`
 - **ToolDef names are immutable** — MCP clients cache tool names. Renaming breaks compatibility.
 - **Deploy is non-blocking** — `executePlan` returns immediately. Always poll `get_deploy_status`.
 - **Port ranges by environment** — production: 10001-10999, development: 20001-20999.
-- **Docker network** — All containers join `openlander` shared network.
+- **Docker network** — Project-scoped apps and managed services join an
+  isolated `ol-{project}` network; OpenLander/Traefik/global infra use the
+  shared `openlander` network.
 - **`_agent_guidance`** — Tool responses include this field to guide AI next steps. Preserve it.
 
 ### Frontend

@@ -317,6 +317,34 @@ export async function runDeployableServiceAction(
     return policyRejection;
   }
 
+  if (action === 'redeploy_app' && strategy === 'blue-green') {
+    const eligibility = await context.appCtx.pipeline.getBlueGreenEligibility(runtimeProject.id, {
+      healthCheckPath: healthCheckPath?.trim() || undefined,
+    });
+    if (!eligibility.supported) {
+      return {
+        status: 'blocked',
+        code: eligibility.code,
+        strategy: 'blue-green',
+        service: serviceSummary(service, project),
+        reasons: eligibility.reasons,
+        fallback_call: {
+          tool: 'openlander_service',
+          action: 'redeploy_app',
+          params: { service_id: service.id, strategy: 'force' },
+        },
+        _agent_guidance: {
+          message:
+            'Blue-green is only available for eligible git/image services behind managed OpenLander Traefik routes. No force deploy was started.',
+          next_steps: [
+            'If downtime is acceptable, call redeploy_app again with strategy="force".',
+            'If zero-downtime is required, add a health check and use an OpenLander domain route before retrying blue-green.',
+          ],
+        },
+      };
+    }
+  }
+
   const sessionId = `mcp-${action}-${nanoid(12)}`;
   const lockResult = await tryAcquireDeployLockOrResponse(runtimeProject.id, sessionId, context);
   if (lockResult) {

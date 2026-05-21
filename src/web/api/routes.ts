@@ -255,12 +255,19 @@ export function createApiRoutes(ctx: AppContext): Hono {
         deployable?.assigned_port ??
         project.assigned_port;
       if (!internalPort) continue;
+      if (!deployable) continue;
+      const containerName = resolveServiceContainerName(deployable, project);
+      if (!containerName) {
+        log.warn(
+          { projectId: project.id, projectName: project.name },
+          'Skipping auto route without a resolvable service container name',
+        );
+        continue;
+      }
       const svcName = `svc-${project.name}`;
       traefikServices[svcName] = {
         loadBalancer: {
-          servers: [
-            { url: `http://${projectContainerName(project.name)}:${String(internalPort)}` },
-          ],
+          servers: [{ url: `http://${containerName}:${String(internalPort)}` }],
         },
       };
     }

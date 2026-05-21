@@ -148,6 +148,29 @@ function findRouterForDomain(config: TraefikConfigResponse, domain: string) {
 }
 
 describe('GET /api/traefik/config domain routing', () => {
+  it('routes auto project hosts to the active service container_name', async () => {
+    const project = makeProject({ name: 'stack' });
+    const defaultService = makeService({
+      id: 'stack__svc',
+      project_id: 'stack',
+      name: 'stack__svc',
+      container_name: 'ol-stack-green-abc123',
+      container_port: 8080,
+      container_id: 'container-green',
+    });
+    const app = createTraefikConfigApp({
+      projects: [project],
+      services: [defaultService],
+      mappings: [],
+    }).app;
+
+    const config = await requestTraefikConfig(app);
+
+    expect(config.http.services['svc-stack']?.loadBalancer.servers[0]?.url).toBe(
+      'http://ol-stack-green-abc123:8080',
+    );
+  });
+
   it('routes custom domains through mapping.service_id, not the parent project container', async () => {
     const project = makeProject();
     const defaultService = makeService();

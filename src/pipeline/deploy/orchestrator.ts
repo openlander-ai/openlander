@@ -21,6 +21,7 @@ import { persistDeployConfig } from '../config-snapshot.js';
 import type { JobManager } from '../job-manager.js';
 import { JobManager as JobManagerClass } from '../job-manager.js';
 import { DockerfileNotFoundError } from '../../errors.js';
+import { containerName as projectContainerName } from '../helpers.js';
 import { resolveDockerfilePath } from './helpers.js';
 import { checkDeployConnectivity } from './connectivity-check.js';
 import type { BuildExecutor } from './build-step.js';
@@ -565,6 +566,7 @@ export async function runAndVerify(
       await transitionProjectState(deps, projectId, 'error', 'deploy-runtime-error', {
         assignedPort: port,
         containerId,
+        containerName: projectContainerName(routeName),
         imageTag,
         visibility: config.visibility ?? 'internal',
       });
@@ -627,6 +629,7 @@ export async function runAndVerify(
       assignedPort: port,
       ...(containerPort != null ? { containerPort } : {}),
       containerId,
+      containerName: projectContainerName(routeName),
       imageTag,
       ...(previousProjectImageTag != null ? { previousImageTag: previousProjectImageTag } : {}),
       visibility: config.visibility ?? 'internal',

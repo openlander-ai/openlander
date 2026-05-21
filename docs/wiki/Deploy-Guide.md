@@ -245,7 +245,7 @@ redeploy_app(service_id: "my-app__svc")
 redeploy_app(service_id: "my-app__svc", no_cache: true)
 ```
 
-### Blue-Green Deploy (Zero Downtime)
+### Blue-Green Deploy (Conditional Zero Downtime)
 
 ```
 redeploy_app(
@@ -255,7 +255,16 @@ redeploy_app(
 )
 ```
 
-Starts new container → health check passes → switches traffic → stops old container.
+Eligible git/image services only. Compose stacks, services without a health
+check, services outside managed OpenLander/Traefik routing, and direct
+`localhost:{assigned_port}` host-port access are not covered. OpenLander starts a
+green container, waits for health, flips the Traefik HTTP-provider route to the
+green container, probes the route, then removes the old blue container. If the
+green build/health/route probe fails, the old blue route stays active and the
+green container is cleaned up.
+
+The default redeploy strategy remains `force` in 0.1.3. Request
+`strategy: "blue-green"` explicitly after verifying the service is eligible.
 
 ---
 

@@ -228,16 +228,23 @@ List all projects with status, ports, URLs. No parameters.
 
 Deploy or restart a deployable app/worker service. Project-level runtime actions have been removed.
 
-| Parameter           | Type    | Required | Description                           |
-| ------------------- | ------- | -------- | ------------------------------------- |
-| `service_id`        | string  | No       | Deployable service id                 |
-| `service_name`      | string  | No       | Deployable service name               |
-| `project_name`      | string  | No       | Optional group scope for name lookups |
-| `no_cache`          | boolean | No       | Force fresh build                     |
-| `strategy`          | string  | No       | `'blue-green'` or `'force'`           |
-| `health_check_path` | string  | No       | Health check path                     |
+| Parameter           | Type    | Required | Description                                                                                      |
+| ------------------- | ------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `service_id`        | string  | No       | Deployable service id                                                                            |
+| `service_name`      | string  | No       | Deployable service name                                                                          |
+| `project_name`      | string  | No       | Optional group scope for name lookups                                                            |
+| `no_cache`          | boolean | No       | Force fresh build                                                                                |
+| `strategy`          | string  | No       | `'force'` by default; `'blue-green'` only for eligible git/image services behind managed Traefik |
+| `health_check_path` | string  | No       | Health check path                                                                                |
 
 Provide either `service_id` or `service_name`.
+
+`strategy="blue-green"` is conditional in v0.1.3. It is rejected with
+`BLUE_GREEN_UNSUPPORTED` for compose stacks, services without a current running
+container, services without a health check or explicit `health_check_path`, and
+installations not using managed OpenLander/Traefik HTTP-provider routes. The
+zero-downtime guarantee applies to OpenLander domain/Traefik routes only; direct
+`localhost:{assigned_port}` URLs may change during deploy.
 
 ### `expose_public` / `unexpose_public`
 

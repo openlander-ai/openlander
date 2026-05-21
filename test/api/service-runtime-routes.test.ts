@@ -110,6 +110,12 @@ function makeRuntimeContext(overrides: Partial<AppContext> = {}) {
     start: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
     redeploy: vi.fn(async () => ({ success: true, projectId: runtime.id })),
+    getBlueGreenEligibility: vi.fn(async () => ({
+      supported: true,
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      reasons: [],
+      fallback_strategy: 'force',
+    })),
     rollback: vi.fn(async () => ({ success: true, projectId: runtime.id })),
     archive: vi.fn(async () => undefined),
     unarchive: vi.fn(async () => undefined),
@@ -281,6 +287,35 @@ describe('createServiceRuntimeRoutes', () => {
       runtime.id,
       expect.objectContaining({ strategy: 'blue-green', healthCheckPath: '/' }),
     );
+  });
+
+  it('returns blocked for unsupported blue-green deploys without running force fallback', async () => {
+    const { app, db, pipeline } = makeRuntimeContext();
+    pipeline.getBlueGreenEligibility.mockResolvedValueOnce({
+      supported: false,
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      reasons: ['Compose stacks are not eligible for blue-green deploys in v0.1.3.'],
+      fallback_strategy: 'force',
+    });
+
+    const res = await app.request(
+      '/api/projects/group-1/services/api__svc/deploy?strategy=blue-green',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ health_check_path: '/' }),
+      },
+    );
+
+    expect(res.status).toBe(409);
+    expect(db.updateProject).not.toHaveBeenCalled();
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    await expect(res.json()).resolves.toMatchObject({
+      status: 'blocked',
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      strategy: 'blue-green',
+      fallback_strategy: 'force',
+    });
   });
 
   it('rolls back the selected service runtime project', async () => {

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Hardened `redeploy_app(strategy="blue-green")` as an explicit, conditional
+  strategy for eligible git/image services behind managed OpenLander/Traefik
+  routes. The default strategy remains `force`; compose stacks and services
+  without health checks are rejected with `BLUE_GREEN_UNSUPPORTED`.
+
 ## [0.1.2] - 2026-05-21
 
 ### Changed
