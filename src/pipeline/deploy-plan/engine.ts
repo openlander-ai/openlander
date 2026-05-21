@@ -103,7 +103,6 @@ export class PlanEngine {
   private db: Database;
   private pipeline: DeployPipeline;
   private env: EnvManager;
-  private serviceManager: ServiceManager;
   private events?: EventBus;
   private composePipeline?: ComposePipeline;
 
@@ -111,7 +110,6 @@ export class PlanEngine {
     this.db = deps.db;
     this.pipeline = deps.pipeline;
     this.env = deps.env;
-    this.serviceManager = deps.serviceManager;
     this.events = deps.events;
     this.composePipeline = deps.composePipeline;
   }
@@ -261,9 +259,28 @@ export class PlanEngine {
     };
   }
 
-  private async detectPlanServices(clonePath: string): Promise<PlanService[]> {
+  private async getReusableServicesForProject(
+    projectName: string,
+    projectId?: string,
+  ): Promise<ServiceRow[]> {
+    const project =
+      (projectId ? await this.db.getProject(projectId) : null) ??
+      (await this.db.getProjectByName(projectName));
+    if (!project) {
+      return [];
+    }
+
+    const services = await this.db.listServices();
+    return services.filter((service) => service.project_id === project.id);
+  }
+
+  private async detectPlanServices(
+    clonePath: string,
+    projectName: string,
+    projectId?: string,
+  ): Promise<PlanService[]> {
     log.info({ clonePath }, 'Analyzing infrastructure');
-    const existingServices = await this.db.listServices();
+    const existingServices = await this.getReusableServicesForProject(projectName, projectId);
     const infraAnalysis = analyzeInfrastructure(clonePath, existingServices);
 
     const services: PlanService[] = [];
@@ -383,7 +400,36 @@ export class PlanEngine {
   }
 
   private plannedServiceEnvKeys(services: PlanService[]): Set<string> {
-    return new Set(services.map((service) => service.connect_via).filter(Boolean));
+    return new Set(
+      services
+        .filter((service) => service.action === 'reuse')
+        .map((service) => service.connect_via)
+        .filter(Boolean),
+    );
+  }
+
+  private requiredEnvEntriesForServiceChoices(
+    services: PlanService[],
+    detectedEnv: PlanEnvEntry[],
+  ): PlanEnvEntry[] {
+    const seen = new Set(detectedEnv.map((entry) => entry.key));
+    const entries: PlanEnvEntry[] = [];
+    for (const planService of services) {
+      if (
+        planService.action !== 'create' ||
+        !planService.connect_via ||
+        seen.has(planService.connect_via)
+      ) {
+        continue;
+      }
+      seen.add(planService.connect_via);
+      entries.push({
+        key: planService.connect_via,
+        source: `detected ${planService.type} dependency`,
+        required: true,
+      });
+    }
+    return entries;
   }
 
   private serviceKindMatchesPlanType(service: ServiceRow, type: PlanService['type']): boolean {
@@ -397,10 +443,17 @@ export class PlanEngine {
     }
   }
 
-  private async resolveReusableService(planService: PlanService): Promise<ServiceRow> {
+  private async resolveReusableService(
+    planService: PlanService,
+    targetProjectId: string,
+  ): Promise<ServiceRow> {
     if (planService.service_id) {
       const service = await this.db.getService(planService.service_id);
-      if (service && this.serviceKindMatchesPlanType(service, planService.type)) {
+      if (
+        service &&
+        service.project_id === targetProjectId &&
+        this.serviceKindMatchesPlanType(service, planService.type)
+      ) {
         return service;
       }
     }
@@ -409,6 +462,7 @@ export class PlanEngine {
     const service = services.find(
       (candidate) =>
         candidate.name === planService.name &&
+        candidate.project_id === targetProjectId &&
         this.serviceKindMatchesPlanType(candidate, planService.type),
     );
     if (!service) {
@@ -719,7 +773,7 @@ export class PlanEngine {
       relativeDockerfiles,
     } = this.resolveBuildConfig(clonePath, opts, warnings, detectedEnv);
 
-    const detectedServices = await this.detectPlanServices(clonePath);
+    const detectedServices = await this.detectPlanServices(clonePath, projectName, projectId);
     this.detectEnvVars(clonePath, userDockerfile, detectedEnv);
     this.detectPersistenceWarnings(clonePath, warnings);
     this.detectServiceDependencies(envVars, warnings);
@@ -728,9 +782,13 @@ export class PlanEngine {
       providedEnv: envVars,
       warnings,
     });
+    const detectedEnvWithServiceRequirements = [
+      ...detectedEnv,
+      ...this.requiredEnvEntriesForServiceChoices(services, detectedEnv),
+    ];
 
     const requiredEnvVars = Array.from(
-      new Set(detectedEnv.filter((e) => e.required).map((e) => e.key)),
+      new Set(detectedEnvWithServiceRequirements.filter((e) => e.required).map((e) => e.key)),
     );
     const autoEnvVars = this.buildAutoEnvVars(services);
 
@@ -738,7 +796,7 @@ export class PlanEngine {
     const existingEnvVars = projectId ? await this.env.getAll(projectId) : {};
 
     const missingEntries = computeMissingEnvVars(
-      detectedEnv,
+      detectedEnvWithServiceRequirements,
       envVars,
       autoEnvVars,
       existingEnvVars,
@@ -776,7 +834,7 @@ export class PlanEngine {
       autoEnvVars,
       requiredEnvVars,
       envVars,
-      detectedEnv,
+      detectedEnv: detectedEnvWithServiceRequirements,
       missing,
       warnings,
     });
@@ -956,34 +1014,46 @@ export class PlanEngine {
         },
         { env: this.env },
       );
+      const targetProject =
+        (plan.project_id ? await this.db.getProject(plan.project_id) : null) ??
+        (await this.db.getProjectByName(plan.app.name));
 
-      for (const service of plan.services) {
-        // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not the legacy services.type DB column.
-        const envVarName = service.connect_via || SERVICE_ENV_VARS[service.type];
+      for (const planService of plan.services) {
+        const envVarName = planService.connect_via || SERVICE_ENV_VARS[planService.type];
         if (!envVarName || this.hasExplicitEnvValue(plan.env.provided, envVarName)) {
           if (envVarName) {
             log.info(
-              // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not the legacy services.type DB column.
-              { serviceType: service.type, envVarName },
+              { serviceType: planService.type, envVarName },
               'Skipping managed service env injection because explicit env var was provided',
             );
           }
           continue;
         }
 
-        if (service.action === 'create') {
-          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-          log.info({ serviceType: service.type }, 'Creating service');
-          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-          const serviceName = service.name || `${service.type}-${String(Date.now())}`;
-          const created = await this.serviceManager.create({
-            name: serviceName,
-            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-            template: service.type,
-          });
-          mergedEnv[envVarName] = this.getServiceConnectionString(created, envVarName);
+        if (planService.action === 'create') {
+          throw new ServiceConfigError(
+            `Managed service ${planService.type} requires an explicit ${envVarName} value before deploy.`,
+            {
+              serviceType: planService.type,
+              envVarName,
+              nextSteps: [
+                `Provide an external ${envVarName} value in env_vars.`,
+                'Or call openlander_managed_service.create_service for the target project, set its suggested_env on the deployable service, then redeploy.',
+              ],
+            },
+          );
         } else {
-          const reusable = await this.resolveReusableService(service);
+          if (!targetProject) {
+            throw new ServiceConfigError(
+              `Reusable managed service ${planService.name ?? planService.service_id ?? planService.type} requires an existing target project.`,
+              {
+                serviceType: planService.type,
+                serviceName: planService.name,
+                serviceId: planService.service_id,
+              },
+            );
+          }
+          const reusable = await this.resolveReusableService(planService, targetProject.id);
           mergedEnv[envVarName] = this.getServiceConnectionString(reusable, envVarName);
         }
       }

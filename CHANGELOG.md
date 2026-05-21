@@ -43,6 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Adjusted managed-service `suggested_env` so project services prefer
   app-standard keys like `DATABASE_URL`/`REDIS_URL` unless the target project
   already has that key.
+- Limited deploy-plan managed-service reuse to the target project only. Detected
+  database/cache dependencies now require explicit env input when no same-project
+  managed service exists, preventing cross-project connection strings from being
+  auto-wired into isolated project networks.
+- Fixed MCP env updates so changing env vars on deployed services with statuses
+  like `healthy`/`unhealthy` correctly reports that a redeploy is required.
 
 ## [0.1.1] - 2026-05-15
 

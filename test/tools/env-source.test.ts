@@ -132,6 +132,23 @@ describe('env MCP tools', () => {
     });
   });
 
+  it('set_env_vars marks healthy services as needing redeploy', async () => {
+    const { ctx, db, pipeline } = createEnvToolContext();
+    const healthyService = { ...service, status: 'healthy' };
+    db.getDeployablesByGroup = vi.fn().mockResolvedValue([healthyService]);
+
+    const result = await getEnvTool('set_env_vars').execute(
+      { project_name: 'my-app', variables: { DATABASE_URL: 'postgres://healthy' } },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      keys: ['DATABASE_URL'],
+      needs_redeploy: true,
+    });
+  });
+
   it('export_env_vars returns dotenv text and records an audit activity', async () => {
     const { ctx, db } = createEnvToolContext();
 

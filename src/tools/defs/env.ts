@@ -280,7 +280,12 @@ async function applyRedeployIfRequested(
 }> {
   const { project, service, runtimeProject } = target;
   const status = service.status;
-  const needsRedeploy = changed && status === 'running';
+  const hasRuntimeContainer =
+    typeof service.container_id === 'string' && service.container_id.trim().length > 0;
+  const statusImpliesRuntime = ['running', 'healthy', 'unhealthy', 'degraded'].includes(
+    String(status),
+  );
+  const needsRedeploy = changed && (hasRuntimeContainer || statusImpliesRuntime);
   if (!needsRedeploy || deferRedeploy) {
     return { redeployed: false, needsRedeploy };
   }

@@ -26,8 +26,9 @@ function createEngine() {
   const mockDb = {
     createDeployPlan: vi.fn(),
     getDeployPlan: vi.fn(),
-    updateDeployPlan: vi.fn(),
+    updateDeployPlan: vi.fn().mockResolvedValue(undefined),
     listServices: vi.fn().mockResolvedValue([]),
+    getProject: vi.fn((id: string) => (id === 'p1' ? { id: 'p1', name: 'test-app' } : null)),
     getProjectByName: vi.fn().mockResolvedValue(null),
     getLastDeployLog: vi.fn().mockResolvedValue(null),
     getService: vi.fn().mockResolvedValue(undefined),
@@ -161,7 +162,7 @@ describe('MCP agent UX rc6 regressions', () => {
     expect(updated.env.provided).toEqual({ DATABASE_URL: 'mysql://external.example.com/app' });
   });
 
-  it('treats a planned managed service as satisfying required env without localhost placeholders', async () => {
+  it('requires env input for detected managed services without localhost placeholders', async () => {
     const { engine } = createEngine();
 
     const plan = await engine.createPlan({
@@ -169,8 +170,8 @@ describe('MCP agent UX rc6 regressions', () => {
       branch: 'main',
     });
 
-    expect(plan.status).toBe('ready');
-    expect(plan.missing).toEqual([]);
+    expect(plan.status).toBe('needs_input');
+    expect(plan.missing).toEqual(['DATABASE_URL']);
     expect(plan.env.auto).toEqual({});
     expect(plan.services).toEqual([
       expect.objectContaining({
@@ -209,7 +210,7 @@ describe('MCP agent UX rc6 regressions', () => {
     );
   });
 
-  it('injects created managed service credentials during execute_deploy_plan', async () => {
+  it('rejects implicit managed service creation during execute_deploy_plan', async () => {
     const { engine, mockDb, mockPipeline, mockServiceManager } = createEngine();
     const plan = createMockDeployPlan({
       status: 'ready',
@@ -224,25 +225,21 @@ describe('MCP agent UX rc6 regressions', () => {
     });
     mockDb.getDeployPlan.mockResolvedValue({ plan_json: JSON.stringify(plan) });
 
-    await engine.executePlan(plan.plan_id);
+    const result = await engine.executePlan(plan.plan_id);
 
-    expect(mockServiceManager.create).toHaveBeenCalledWith({
-      name: expect.stringMatching(/^postgresql-/),
-      template: 'postgresql',
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('requires an explicit DATABASE_URL value'),
     });
-    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        envVars: expect.objectContaining({
-          DATABASE_URL: 'postgres://managed/db',
-        }),
-      }),
-    );
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
   });
 
   it('injects reused managed service credentials during execute_deploy_plan', async () => {
     const { engine, mockDb, mockPipeline, mockServiceManager } = createEngine();
     const plan = createMockDeployPlan({
       status: 'ready',
+      project_id: 'p1',
       services: [
         {
           type: 'postgresql',
@@ -262,6 +259,7 @@ describe('MCP agent UX rc6 regressions', () => {
     mockDb.getDeployPlan.mockResolvedValue({ plan_json: JSON.stringify(plan) });
     mockDb.getService.mockResolvedValue({
       id: 'svc-pg',
+      project_id: 'p1',
       kind: 'postgres',
       credentials: JSON.stringify({ connectionString: 'postgres://reused/db' }),
     });

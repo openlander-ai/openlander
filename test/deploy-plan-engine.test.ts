@@ -24,7 +24,7 @@ describe('PlanEngine.updatePlan', () => {
     mockDb = {
       createDeployPlan: vi.fn(),
       getDeployPlan: vi.fn(),
-      updateDeployPlan: vi.fn(),
+      updateDeployPlan: vi.fn().mockResolvedValue(undefined),
       listServices: vi.fn().mockReturnValue([]),
     };
 
@@ -61,7 +61,7 @@ describe('PlanEngine.updatePlan', () => {
     mockAnalyzeInfra.mockRestore();
   });
 
-  it('fills missing env var with flat format { env: { DATABASE_URL: "postgres://..." } }', () => {
+  it('fills missing env var with flat format { env: { DATABASE_URL: "postgres://..." } }', async () => {
     const plan = createMockDeployPlan({
       status: 'needs_input',
       env: {
@@ -77,7 +77,7 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    const updated = engine.updatePlan(plan.plan_id, {
+    const updated = await engine.updatePlan(plan.plan_id, {
       env: {
         DATABASE_URL: 'postgres://localhost/db',
       },
@@ -90,7 +90,7 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.status).toBe('ready');
   });
 
-  it('fills missing env var with structured format { env: { provided: { DATABASE_URL: "..." } } }', () => {
+  it('fills missing env var with structured format { env: { provided: { DATABASE_URL: "..." } } }', async () => {
     const plan = createMockDeployPlan({
       status: 'needs_input',
       env: {
@@ -106,7 +106,7 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    const updated = engine.updatePlan(plan.plan_id, {
+    const updated = await engine.updatePlan(plan.plan_id, {
       env: {
         provided: {
           DATABASE_URL: 'postgres://localhost/db',
@@ -121,7 +121,7 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.status).toBe('ready');
   });
 
-  it('throws error when updating plan in executing status', () => {
+  it('throws error when updating plan in executing status', async () => {
     const plan = createMockDeployPlan({
       status: 'executing',
     });
@@ -130,14 +130,14 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    expect(() => {
+    await expect(
       engine.updatePlan(plan.plan_id, {
         env: { TEST_VAR: 'value' },
-      });
-    }).toThrow('Cannot update plan in executing status');
+      }),
+    ).rejects.toThrow('Cannot update plan in executing status');
   });
 
-  it('throws error when updating plan in completed status', () => {
+  it('throws error when updating plan in completed status', async () => {
     const plan = createMockDeployPlan({
       status: 'completed',
     });
@@ -146,14 +146,14 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    expect(() => {
+    await expect(
       engine.updatePlan(plan.plan_id, {
         env: { TEST_VAR: 'value' },
-      });
-    }).toThrow('Cannot update plan in completed status');
+      }),
+    ).rejects.toThrow('Cannot update plan in completed status');
   });
 
-  it('preserves unchanged fields during partial update', () => {
+  it('preserves unchanged fields during partial update', async () => {
     const plan = createMockDeployPlan({
       status: 'needs_input',
       app: {
@@ -182,7 +182,7 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    const updated = engine.updatePlan(plan.plan_id, {
+    const updated = await engine.updatePlan(plan.plan_id, {
       env: { DATABASE_URL: 'postgres://localhost/db' },
     });
 
@@ -192,7 +192,7 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.build.context).toBe('.');
   });
 
-  it('handles invalid JSON in updates gracefully', () => {
+  it('handles invalid JSON in updates gracefully', async () => {
     const plan = createMockDeployPlan({
       status: 'needs_input',
       env: {
@@ -208,7 +208,7 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    const updated = engine.updatePlan(plan.plan_id, {
+    const updated = await engine.updatePlan(plan.plan_id, {
       env: { DATABASE_URL: 'postgres://localhost/db' },
     });
 
@@ -216,17 +216,17 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.env.provided.DATABASE_URL).toBe('postgres://localhost/db');
   });
 
-  it('throws error when plan not found', () => {
+  it('throws error when plan not found', async () => {
     mockDb.getDeployPlan.mockReturnValue(null);
 
-    expect(() => {
+    await expect(
       engine.updatePlan('plan_nonexistent', {
         env: { TEST_VAR: 'value' },
-      });
-    }).toThrow('Deploy plan not found: plan_nonexistent');
+      }),
+    ).rejects.toThrow('Deploy plan not found: plan_nonexistent');
   });
 
-  it('persists updated plan to database', () => {
+  it('persists updated plan to database', async () => {
     const plan = createMockDeployPlan({
       status: 'needs_input',
       env: {
@@ -242,7 +242,7 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    engine.updatePlan(plan.plan_id, {
+    await engine.updatePlan(plan.plan_id, {
       env: { DATABASE_URL: 'postgres://localhost/db' },
     });
 
@@ -256,7 +256,7 @@ describe('PlanEngine.updatePlan', () => {
     expect(savedPlan.missing).toHaveLength(0);
   });
 
-  it('updates multiple env vars at once', () => {
+  it('updates multiple env vars at once', async () => {
     const plan = createMockDeployPlan({
       status: 'needs_input',
       env: {
@@ -272,7 +272,7 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    const updated = engine.updatePlan(plan.plan_id, {
+    const updated = await engine.updatePlan(plan.plan_id, {
       env: {
         DATABASE_URL: 'postgres://localhost/db',
         API_KEY: 'key123',
@@ -289,7 +289,7 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.status).toBe('ready');
   });
 
-  it('merges env vars with existing provided vars', () => {
+  it('merges env vars with existing provided vars', async () => {
     const plan = createMockDeployPlan({
       status: 'needs_input',
       env: {
@@ -307,7 +307,7 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    const updated = engine.updatePlan(plan.plan_id, {
+    const updated = await engine.updatePlan(plan.plan_id, {
       env: { DATABASE_URL: 'postgres://localhost/db' },
     });
 
@@ -318,7 +318,7 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.missing).toHaveLength(0);
   });
 
-  it('updates build configuration', () => {
+  it('updates build configuration', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
       build: {
@@ -332,7 +332,7 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    const updated = engine.updatePlan(plan.plan_id, {
+    const updated = await engine.updatePlan(plan.plan_id, {
       build: {
         context: './app',
         target: 'production',
@@ -344,7 +344,7 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.build.dockerfile).toBe('Dockerfile');
   });
 
-  it('updates health check configuration', () => {
+  it('updates health check configuration', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
       health: {
@@ -358,7 +358,7 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    const updated = engine.updatePlan(plan.plan_id, {
+    const updated = await engine.updatePlan(plan.plan_id, {
       health: {
         path: '/health',
         retries: 5,
@@ -370,7 +370,7 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.health.interval_ms).toBe(2000);
   });
 
-  it('throws error when updating plan in failed status', () => {
+  it('throws error when updating plan in failed status', async () => {
     const plan = createMockDeployPlan({
       status: 'failed',
     });
@@ -379,14 +379,14 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    expect(() => {
+    await expect(
       engine.updatePlan(plan.plan_id, {
         env: { TEST_VAR: 'value' },
-      });
-    }).toThrow('Cannot update plan in failed status');
+      }),
+    ).rejects.toThrow('Cannot update plan in failed status');
   });
 
-  it('throws error when updating plan in rolled_back status', () => {
+  it('throws error when updating plan in rolled_back status', async () => {
     const plan = createMockDeployPlan({
       status: 'rolled_back',
     });
@@ -395,11 +395,11 @@ describe('PlanEngine.updatePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    expect(() => {
+    await expect(
       engine.updatePlan(plan.plan_id, {
         env: { TEST_VAR: 'value' },
-      });
-    }).toThrow('Cannot update plan in rolled_back status');
+      }),
+    ).rejects.toThrow('Cannot update plan in rolled_back status');
   });
 });
 
@@ -417,9 +417,11 @@ describe('PlanEngine.executePlan', () => {
     mockDb = {
       createDeployPlan: vi.fn(),
       getDeployPlan: vi.fn(),
-      updateDeployPlan: vi.fn(),
+      updateDeployPlan: vi.fn().mockResolvedValue(undefined),
       listServices: vi.fn().mockReturnValue([]),
+      getProject: vi.fn((id: string) => (id === 'p1' ? { id: 'p1', name: 'test-app' } : null)),
       getProjectByName: vi.fn().mockReturnValue(null),
+      getService: vi.fn().mockReturnValue(null),
       getLastDeployLog: vi.fn().mockReturnValue(null),
     };
 
@@ -619,7 +621,7 @@ describe('PlanEngine.executePlan', () => {
     );
   });
 
-  it('calls serviceManager.create with correct template for service provisioning', async () => {
+  it('fails implicit managed service creation and requires explicit env input', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
       services: [
@@ -641,21 +643,33 @@ describe('PlanEngine.executePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    await engine.executePlan(plan.plan_id);
+    const result = await engine.executePlan(plan.plan_id);
 
-    expect(mockServiceManager.create).toHaveBeenCalledWith({
-      name: expect.stringMatching(/^postgresql-\d+$/),
-      template: 'postgresql',
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('requires an explicit DATABASE_URL value'),
     });
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
   });
 
-  it('injects service credentials into environment variables', async () => {
+  it('injects same-project reusable service credentials into environment variables', async () => {
+    const reusableService = {
+      id: 'same-project-pg',
+      name: 'existing-postgres',
+      project_id: 'p1',
+      kind: 'postgres',
+      credentials: JSON.stringify({ connectionString: 'postgres://service-host/db' }),
+    };
     const plan = createMockDeployPlan({
       status: 'ready',
+      project_id: 'p1',
       services: [
         {
           type: 'postgresql',
-          action: 'create',
+          action: 'reuse',
+          service_id: reusableService.id,
+          name: reusableService.name,
           connect_via: 'DATABASE_URL',
         },
       ],
@@ -670,10 +684,7 @@ describe('PlanEngine.executePlan', () => {
     mockDb.getDeployPlan.mockReturnValue({
       plan_json: JSON.stringify(plan),
     });
-
-    mockServiceManager.create.mockResolvedValue({
-      credentials: JSON.stringify({ connectionString: 'postgres://service-host/db' }),
-    });
+    mockDb.getService.mockReturnValue(reusableService);
 
     await engine.executePlan(plan.plan_id);
 
@@ -684,6 +695,7 @@ describe('PlanEngine.executePlan', () => {
         }),
       }),
     );
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
   });
 
   it('registers deploy:success event listener on execution', async () => {
@@ -708,7 +720,7 @@ describe('PlanEngine.executePlan', () => {
     );
   });
 
-  it('handles service creation failure gracefully', async () => {
+  it('persists failure when implicit managed service creation is still present in an old plan', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
       services: [
@@ -730,12 +742,11 @@ describe('PlanEngine.executePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    mockServiceManager.create.mockRejectedValue(new Error('Service creation failed'));
-
     const result = await engine.executePlan(plan.plan_id);
 
     expect(result.status).toBe('failed');
-    expect(result.error).toContain('Service creation failed');
+    expect(result.error).toContain('requires an explicit DATABASE_URL value');
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
   });
 
   it('uses preferDockerfile: false when generated_dockerfile is set', async () => {
@@ -819,7 +830,7 @@ describe('PlanEngine.executePlan', () => {
     );
   });
 
-  it('handles multiple services with different types', async () => {
+  it('fails plans that still contain multiple implicit managed service creations', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
       services: [
@@ -846,26 +857,27 @@ describe('PlanEngine.executePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    mockServiceManager.create.mockResolvedValue({
-      credentials: JSON.stringify({ connectionString: 'service://localhost' }),
-    });
+    const result = await engine.executePlan(plan.plan_id);
 
-    await engine.executePlan(plan.plan_id);
-
-    expect(mockServiceManager.create).toHaveBeenCalledTimes(2);
-    expect(mockServiceManager.create).toHaveBeenNthCalledWith(1, {
-      name: expect.stringMatching(/^postgresql-\d+$/),
-      template: 'postgresql',
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('requires an explicit DATABASE_URL value'),
     });
-    expect(mockServiceManager.create).toHaveBeenNthCalledWith(2, {
-      name: expect.stringMatching(/^redis-\d+$/),
-      template: 'redis',
-    });
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
   });
 
   it('skips service creation for reuse action', async () => {
+    const reusableService = {
+      id: 'same-project-pg',
+      name: 'existing-postgres',
+      project_id: 'p1',
+      kind: 'postgres',
+      credentials: JSON.stringify({ connectionString: 'postgres://service-host/db' }),
+    };
     const plan = createMockDeployPlan({
       status: 'ready',
+      project_id: 'p1',
       services: [
         {
           type: 'postgresql',
@@ -885,6 +897,7 @@ describe('PlanEngine.executePlan', () => {
     mockDb.getDeployPlan.mockReturnValue({
       plan_json: JSON.stringify(plan),
     });
+    mockDb.listServices.mockReturnValue([reusableService]);
 
     await engine.executePlan(plan.plan_id);
 

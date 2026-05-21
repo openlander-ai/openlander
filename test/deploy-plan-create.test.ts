@@ -45,6 +45,8 @@ describe('PlanEngine.createPlan', () => {
       createDeployPlan: vi.fn(),
       getDeployPlan: vi.fn(),
       updateDeployPlan: vi.fn(),
+      getProject: vi.fn().mockResolvedValue(null),
+      getProjectByName: vi.fn().mockResolvedValue(null),
       listServices: vi.fn().mockReturnValue([]),
     };
 
@@ -290,7 +292,7 @@ describe('PlanEngine.createPlan', () => {
     rmSync(repoPath, { recursive: true, force: true });
   });
 
-  it('detects postgresql dependency and creates service', async () => {
+  it('requires DATABASE_URL input when postgresql is detected without a scoped service', async () => {
     mockCloneRepo.mockResolvedValue({
       path: '/tmp/test-repo',
       commitSha: 'def789ghi012',
@@ -314,7 +316,103 @@ describe('PlanEngine.createPlan', () => {
     expect(plan.services[0].type).toBe('postgresql');
     expect(plan.services[0].action).toBe('create');
     expect(plan.services[0].connect_via).toBe('DATABASE_URL');
+    expect(plan.status).toBe('needs_input');
+    expect(plan.missing).toContain('DATABASE_URL');
+  });
+
+  it('does not reuse managed services from other projects during plan creation', async () => {
+    const otherProjectService = {
+      id: 'other-pg',
+      project_id: 'other-project',
+      name: 'live-service-db',
+      kind: 'postgres',
+    };
+    mockDb.getProjectByName.mockResolvedValue({ id: 'babycup-project', name: 'babycup' });
+    mockDb.listServices.mockResolvedValue([otherProjectService]);
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'cross123',
+    });
+    mockAnalyzeInfra.mockImplementation((_repoPath, existingServices) => {
+      expect(existingServices).toEqual([]);
+      return {
+        needs: [{ type: 'postgresql', detectedFrom: 'pg' }],
+        available: [],
+        missing: [{ type: 'postgresql', suggestion: 'Create a postgresql service' }],
+      };
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('');
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/babycup',
+      branch: 'main',
+      name: 'babycup',
+    });
+
+    expect(plan.status).toBe('needs_input');
+    expect(plan.missing).toContain('DATABASE_URL');
+    expect(plan.services[0]).toMatchObject({
+      type: 'postgresql',
+      action: 'create',
+      connect_via: 'DATABASE_URL',
+    });
+  });
+
+  it('reuses only managed services from the target project during plan creation', async () => {
+    const sameProjectService = {
+      id: 'babycup-pg',
+      project_id: 'babycup-project',
+      name: 'babycup-pg',
+      kind: 'postgres',
+    };
+    const otherProjectService = {
+      id: 'other-pg',
+      project_id: 'other-project',
+      name: 'live-service-db',
+      kind: 'postgres',
+    };
+    mockDb.getProjectByName.mockResolvedValue({ id: 'babycup-project', name: 'babycup' });
+    mockDb.listServices.mockResolvedValue([sameProjectService, otherProjectService]);
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'same123',
+    });
+    mockAnalyzeInfra.mockImplementation((_repoPath, existingServices) => {
+      expect(existingServices).toEqual([sameProjectService]);
+      return {
+        needs: [{ type: 'postgresql', detectedFrom: 'pg' }],
+        available: [
+          {
+            type: 'postgresql',
+            name: sameProjectService.name,
+            id: sameProjectService.id,
+            connectVia: 'DATABASE_URL',
+          },
+        ],
+        missing: [],
+      };
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('');
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/babycup',
+      branch: 'main',
+      name: 'babycup',
+    });
+
     expect(plan.status).toBe('ready');
+    expect(plan.missing).not.toContain('DATABASE_URL');
+    expect(plan.services[0]).toMatchObject({
+      type: 'postgresql',
+      action: 'reuse',
+      service_id: sameProjectService.id,
+      name: sameProjectService.name,
+      connect_via: 'DATABASE_URL',
+    });
   });
 
   it('skips compose detection when dockerfilePath is explicitly provided', async () => {
