@@ -1,5 +1,6 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { getAllIps } from '../../pipeline/traefik.js';
+import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { DOCKER_LABELS, SHARED_NETWORK_NAME } from '../../config/index.js';
 import { ORPHAN_MANAGED_GROUP_ID } from '../../db/service-ids.js';
 import {
@@ -42,6 +43,39 @@ function getServiceExternalAccess(port: number | null) {
     port,
     type: ip.type,
   }));
+}
+
+async function buildServiceNetworkNameLookup(
+  appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
+  services: Array<{ project_id: string }>,
+) {
+  const projectIds = new Set(
+    services
+      .map((service) => service.project_id)
+      .filter((projectId) => projectId !== ORPHAN_MANAGED_GROUP_ID),
+  );
+  const projects = await appCtx.db.listProjects();
+  const projectNameById = new Map(
+    projects
+      .filter((project) => projectIds.has(project.id))
+      .map((project) => [project.id, project.name] as const),
+  );
+
+  return (service: { project_id: string }) => {
+    if (service.project_id === ORPHAN_MANAGED_GROUP_ID) {
+      return SHARED_NETWORK_NAME;
+    }
+    const projectName = projectNameById.get(service.project_id);
+    return projectName ? projectContainerName(projectName) : null;
+  };
+}
+
+async function resolveServiceNetworkName(
+  appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
+  service: { project_id: string },
+) {
+  const lookup = await buildServiceNetworkNameLookup(appCtx, [service]);
+  return lookup(service);
 }
 
 function getExternalConnectionStrings(
@@ -402,6 +436,7 @@ export const serviceToolDefs: ToolDef[] = [
         : [];
 
       if (target === 'mcp') {
+        const serviceNetworkName = await buildServiceNetworkNameLookup(appCtx, services);
         return {
           count: services.length,
           services: services.map((service) => {
@@ -419,10 +454,7 @@ export const serviceToolDefs: ToolDef[] = [
               scope: service.project_id === ORPHAN_MANAGED_GROUP_ID ? 'global' : 'project',
               attached_to:
                 service.project_id === ORPHAN_MANAGED_GROUP_ID ? null : service.project_id,
-              network:
-                service.project_id === ORPHAN_MANAGED_GROUP_ID
-                  ? SHARED_NETWORK_NAME
-                  : 'project-scoped',
+              network: serviceNetworkName(service),
               // Wire key preserved; canonical first, legacy fallback for pre-migration rows
               // eslint-disable-next-line @typescript-eslint/no-deprecated
               image: service.image_url ?? service.image ?? '',
@@ -667,6 +699,7 @@ export const serviceToolDefs: ToolDef[] = [
 
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       const svcPort = service.assigned_port ?? service.port;
+      const network = await resolveServiceNetworkName(appCtx, service);
       return {
         id: service.id,
         name: service.name,
@@ -678,8 +711,7 @@ export const serviceToolDefs: ToolDef[] = [
         ...(healthDetail ? { healthDetail } : {}),
         // Wire key preserved; canonical source: assigned_port
         port: svcPort,
-        network:
-          service.project_id === ORPHAN_MANAGED_GROUP_ID ? SHARED_NETWORK_NAME : 'project-scoped',
+        network,
         // Wire key preserved; canonical first, legacy fallback for pre-migration rows
         // eslint-disable-next-line @typescript-eslint/no-deprecated
         image: service.image_url ?? service.image ?? '',

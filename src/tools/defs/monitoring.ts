@@ -330,6 +330,7 @@ export const monitoringToolDefs: ToolDef[] = [
         effectiveEnv,
         timeoutMs,
         service.container_id ?? undefined,
+        true,
       );
       const nextSteps = buildDiagnoseNextSteps({
         service,
@@ -425,6 +426,7 @@ export const monitoringToolDefs: ToolDef[] = [
           timeoutMs,
           targetResolved,
           service.container_id ?? undefined,
+          true,
         );
       }
 
@@ -1314,6 +1316,7 @@ async function probeServiceHttp(
       timeoutMs,
       internalUrl,
       service.container_id ?? undefined,
+      true,
     );
     if (
       internalResult['reachable'] === true ||
@@ -1401,6 +1404,7 @@ async function probeEnvDependencies(
   env: Record<string, string>,
   timeoutMs: number,
   preferredContainerId?: string,
+  requirePreferredContainer = false,
 ): Promise<Record<string, unknown>> {
   const targets = envDependencyTargets(env);
   if (targets.length === 0) {
@@ -1420,6 +1424,7 @@ async function probeEnvDependencies(
               timeoutMs,
               target.display,
               preferredContainerId,
+              requirePreferredContainer,
             )
           : await probeHttp(
               `${target.protocol}://${target.host}:${String(target.port)}/`,
@@ -1718,6 +1723,7 @@ async function probeInternal(
   timeoutMs: number,
   targetResolved: string,
   preferredContainerId?: string,
+  requirePreferredContainer = false,
 ): Promise<Record<string, unknown>> {
   const startedAt = Date.now();
   const containers = await appCtx.docker.listManagedContainers();
@@ -1726,10 +1732,12 @@ async function probeInternal(
     : undefined;
   const runningContainer =
     preferredRunningContainer ??
-    (preferredContainerId ? undefined : containers.find((c) => c.status === 'running'));
+    (preferredContainerId || requirePreferredContainer
+      ? undefined
+      : containers.find((c) => c.status === 'running'));
 
   if (!runningContainer) {
-    const hasPreferred = Boolean(preferredContainerId);
+    const hasPreferred = Boolean(preferredContainerId) || requirePreferredContainer;
     return {
       reachable: false,
       latency_ms: 0,

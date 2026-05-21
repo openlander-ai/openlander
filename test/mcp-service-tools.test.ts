@@ -42,6 +42,7 @@ function createServiceRow(partial: Partial<ServiceRow>): ServiceRow {
     status: partial.status ?? 'running',
     container_id: partial.container_id ?? 'container-1',
     container_name: partial.container_name ?? 'ol-svc-shared-pg',
+    project_id: partial.project_id ?? 'proj-1',
     port: legacyPort,
     env_vars: partial.env_vars ?? null,
     credentials: partial.credentials ?? null,
@@ -88,6 +89,7 @@ function createMockContext(
       getProject: vi.fn(async (id: string) =>
         id === 'proj-1' ? { id: 'proj-1', name: 'myapp' } : undefined,
       ),
+      listProjects: vi.fn(async () => [{ id: 'proj-1', name: 'myapp' }]),
       getProjectByName: vi.fn(async (name: string) =>
         name === 'myapp' ? { id: 'proj-1', name: 'myapp' } : undefined,
       ),
@@ -469,6 +471,7 @@ describe('MCP service tools (Task 8)', () => {
           name: 'shared-redis',
           type: 'redis',
           port: 6379,
+          network: 'ol-myapp',
         }),
       ]),
       _agent_guidance: {
@@ -544,6 +547,7 @@ describe('MCP service tools (Task 8)', () => {
         name: 'shared-pg',
         status: 'running',
         port: 5432,
+        network: 'ol-myapp',
         externalAccess: [
           { host: '10.0.0.10', port: 5432, type: 'lan' },
           { host: '100.100.100.10', port: 5432, type: 'vpn' },

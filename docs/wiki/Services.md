@@ -183,6 +183,10 @@ Do not use `scope: "global"` as the default app database path. Global services
 are shared/unassigned infrastructure and are not joined to project networks in
 v0.1.2.
 
+If an app previously used a global managed service as its primary database or
+cache, recreate or move that managed service into the app's project, update the
+app env vars to the project-scoped connection string, and redeploy the app.
+
 Set via MCP on the deployable service:
 
 ```

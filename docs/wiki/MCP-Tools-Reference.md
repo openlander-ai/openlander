@@ -369,7 +369,9 @@ new databases/caches attached to the app that will use them. Pass
 `scope: "global"` only when the service is deliberately shared or unassigned.
 Project-scoped managed services share the app's project Docker network; global
 services remain on OpenLander's shared infrastructure network and are not the
-default runtime DB/cache path.
+default runtime DB/cache path. Do not use `scope: "global"` for an app's primary
+`DATABASE_URL`/`REDIS_URL`; create the service with `project_id` or
+`project_name` instead.
 
 ### `list_services`
 
