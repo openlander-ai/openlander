@@ -86,6 +86,8 @@ const FROZEN_DEPLOYABLE_SERVICE_ACTIONS = [
   'remove_secret_file',
   'expose_public',
   'unexpose_public',
+  'add_domain_route',
+  'list_domain_routes',
 ] as const;
 
 describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () => {

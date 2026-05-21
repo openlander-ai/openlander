@@ -150,6 +150,31 @@ describe('Composite Action Routing', () => {
       });
     });
 
+    it('rejects deploy_app domain shortcut so agents use add_domain_route', async () => {
+      const result = (await tool.execute(
+        {
+          action: 'deploy_app',
+          params: {
+            source: 'image',
+            image: 'httpd:latest',
+            name: 'qa-final-check',
+            domain: 'api.example.com',
+          },
+        },
+        mockContext,
+      )) as Record<string, unknown>;
+
+      expect(result).toMatchObject({
+        error: 'INVALID_PARAMS',
+        action: 'deploy_app',
+        composite: 'openlander_deploy',
+        unknown_params: ['domain'],
+        allowed_params: expect.not.arrayContaining(['domain']),
+      });
+      const guidance = result['_agent_guidance'] as Record<string, unknown>;
+      expect(guidance['message']).toContain('domain');
+    });
+
     it('returns UNKNOWN_ACTION for unknown action', async () => {
       const result = (await tool.execute({ action: 'nonexistent_action' }, mockContext)) as Record<
         string,

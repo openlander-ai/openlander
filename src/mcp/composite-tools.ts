@@ -21,7 +21,7 @@ import { maybeHandleMcpSafety } from './destructive-safety.js';
  * - Build logs & history
  * - Git integration (repo scanning)
  * - Infrastructure analysis
- * Total: 18 tools
+ * Total: 16 tools
  */
 export const DEPLOY_ACTIONS = [
   'create_deploy_plan',
@@ -40,8 +40,6 @@ export const DEPLOY_ACTIONS = [
   'search_github_repos',
   'scan_dockerfiles',
   'analyze_infrastructure',
-  'map_domain',
-  'list_domains',
 ] as const;
 
 /**
@@ -109,7 +107,7 @@ export const MANAGED_SERVICE_ACTIONS = [
 
 /**
  * openlander_service: Deployable services (apps + workers).
- * Total: 17 tools
+ * Total: 19 tools
  */
 export const SERVICE_ACTIONS = [
   'restart_service',
@@ -129,6 +127,8 @@ export const SERVICE_ACTIONS = [
   'remove_secret_file',
   'expose_public',
   'unexpose_public',
+  'add_domain_route',
+  'list_domain_routes',
 ] as const;
 
 /**
@@ -182,11 +182,11 @@ export const PLATFORM_ACTIONS = [
 
 /**
  * Verification: Total tool counts
- * - DEPLOY_ACTIONS: 18 tools
+ * - DEPLOY_ACTIONS: 16 tools
  * - PROJECT_ACTIONS: 14 tools
  * - MANAGED_SERVICE_ACTIONS: 21 tools
- * - SERVICE_ACTIONS: 17 tools
- * - MONITOR_ACTIONS: 9 tools
+ * - SERVICE_ACTIONS: 19 tools
+ * - MONITOR_ACTIONS: 10 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
  * - Platform tools: 13 direct tools (gated separately)
  */
@@ -497,7 +497,7 @@ function createCompositeTool(
 export function createOpenLanderDeployCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_deploy',
-    'Deploy front door for new apps plus plans, validation, execution, status, build logs, Git scans, previews, and domains.',
+    'Deploy front door for new apps plus plans, validation, execution, status, build logs, Git scans, and previews. Domain routes live under openlander_service.add_domain_route.',
     toolDefs,
   );
 }

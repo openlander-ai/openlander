@@ -560,7 +560,6 @@ export const deployPlanToolDefs: ToolDef[] = [
       const waitHealthy = (args['wait_healthy'] as boolean | undefined) ?? true;
       const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
       const expose = (args['expose'] as boolean | undefined) ?? false;
-      const domain = (args['domain'] as string | undefined) ?? undefined;
       const targetProjectId = (args['target_project_id'] as string | undefined) ?? undefined;
       const source = (args['source'] as 'git' | 'image' | undefined) ?? undefined;
       const image = (args['image'] as string | undefined) ?? undefined;
@@ -764,9 +763,9 @@ export const deployPlanToolDefs: ToolDef[] = [
 
       if (!wait) {
         const nextSteps = ['Poll get_deploy_status to monitor build progress'];
-        if (expose || domain) {
+        if (expose) {
           nextSteps.push(
-            'expose/domain require wait=true. After deploy completes, call expose_public or map_domain separately.',
+            'expose requires wait=true. After deploy completes, call expose_public separately.',
           );
         }
         return {
@@ -817,17 +816,6 @@ export const deployPlanToolDefs: ToolDef[] = [
               }
             } catch (err) {
               warnings.push(`expose failed: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          }
-          if (domain) {
-            try {
-              await appCtx.cloudflare.createTunnel(proj.id, domain);
-              extra.domain = domain;
-              extra.domain_url = `https://${domain}`;
-            } catch (err) {
-              warnings.push(
-                `domain mapping failed: ${err instanceof Error ? err.message : String(err)}`,
-              );
             }
           }
           let projectIdOverride: string | undefined;
@@ -1057,7 +1045,7 @@ export const deployPlanToolDefs: ToolDef[] = [
 
         const unsubSuccess = eventBus.on('deploy:success', (payload) => {
           if (!matchesProject(payload)) return;
-          if (expose || domain || targetProjectId) {
+          if (expose || targetProjectId) {
             void runPostDeploy()
               .then(({ extra, warnings, projectIdOverride }) => {
                 resolveSuccess(payload, false, extra, warnings, projectIdOverride);
@@ -1084,7 +1072,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         const currentJob = appCtx.jobManager.getStatus(projectId);
         if (currentJob && (currentJob.phase === 'done' || currentJob.phase === 'failed')) {
           if (currentJob.phase === 'done') {
-            if (expose || domain || targetProjectId) {
+            if (expose || targetProjectId) {
               void runPostDeploy()
                 .then(({ extra, warnings, projectIdOverride }) => {
                   resolveSuccess({}, false, extra, warnings, projectIdOverride);

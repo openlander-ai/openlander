@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `project_id`/`project_name`. Global managed-service creation is no longer
   exposed over MCP because project network isolation has no cross-project grant
   model in v0.1.2.
+- **Breaking (MCP):** replaced `openlander_deploy.map_domain` and
+  `openlander_deploy.list_domains` with
+  `openlander_service.add_domain_route` and
+  `openlander_service.list_domain_routes`. The old `deploy_app(domain=...)`
+  shortcut is removed; agents must deploy the app first, then register a domain
+  route for a Host/path that already reaches OpenLander.
 - **Breaking (Runtime):** Project-scoped app and managed-service containers now
   run on per-project Docker networks, with Traefik joined to those project
   networks for routing. Apps that used unassigned/global managed services as

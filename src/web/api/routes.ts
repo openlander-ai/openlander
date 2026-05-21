@@ -395,7 +395,12 @@ export function createApiRoutes(ctx: AppContext): Hono {
       }
     }
 
-    return c.json({ http: { routers, services: traefikServices, middlewares } });
+    const httpConfig =
+      Object.keys(middlewares).length > 0
+        ? { routers, services: traefikServices, middlewares }
+        : { routers, services: traefikServices };
+
+    return c.json({ http: httpConfig });
   });
 
   api.route('/', createActivityRoutes(ctx));

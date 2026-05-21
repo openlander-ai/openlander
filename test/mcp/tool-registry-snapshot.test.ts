@@ -14,6 +14,7 @@ import type { ToolDef } from '../../src/tools/defs/types.js';
 
 /** Snapshot of non-platform MCP ToolDefs. Project runtime aliases are removed. */
 const EXPECTED_TOOLS = [
+  'add_domain_route',
   'add_volume',
   'analyze_infrastructure',
   'backup_service',
@@ -48,7 +49,7 @@ const EXPECTED_TOOLS = [
   'get_service_status',
   'get_system_stats',
   'list_buckets',
-  'list_domains',
+  'list_domain_routes',
   'list_env_vars',
   'list_github_repos',
   'list_global_secrets',
@@ -58,7 +59,6 @@ const EXPECTED_TOOLS = [
   'list_service_backups',
   'list_services',
   'list_volumes',
-  'map_domain',
   'mcp_action_status',
   'preview_deploy',
   'probe_host',

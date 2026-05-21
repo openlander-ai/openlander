@@ -72,11 +72,15 @@ Create an `A`, `AAAA`, or `CNAME` record for your domain that points to the
 server running OpenLander. OpenLander does not manage DNS records automatically
 in v0.1.
 
-### Map Domain
+### Register Domain Route
 
 #### Via Web Dashboard
 
 Service Detail → **Domains** tab → Add Domain
+
+This registers a Host/path route inside OpenLander's managed Traefik config.
+It does not create DNS records, Cloudflare Tunnel routes, ngrok endpoints, or
+TLS certificates.
 
 #### Via API
 
@@ -84,16 +88,20 @@ Service Detail → **Domains** tab → Add Domain
 POST /api/projects/:projectId/services/:serviceId/domains
 ```
 
-### List Domains
+The REST endpoint remains `/domains`; "domain route" is the product vocabulary
+for the Host/path route that endpoint registers, not a separate
+`/domain-routes` API path.
+
+### List Domain Routes
 
 Use Service Detail → **Domains** tab for day-to-day management. The API returns
-the same service-scoped domain mappings used by the dashboard.
+the same service-scoped Host/path route registrations used by the dashboard.
 
 ---
 
 ## Multi-Domain
 
-A service can have multiple domains mapped:
+A service can have multiple domain routes registered:
 
 ```
 app.example.com

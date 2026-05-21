@@ -574,8 +574,9 @@ export const translations = {
         error: 'error',
       },
       toast: {
-        added: 'Domain mapped. Point your DNS to the server that runs OpenLander.',
-        removed: 'Domain unmapped.',
+        added:
+          'Domain route registered. Traefik may take a few seconds to pick it up; DNS/TLS stay external.',
+        removed: 'Domain route removed.',
         routingDisabled: 'Domain routing is disabled (Infrastructure-only mode).',
         addFailed: 'Could not add domain.',
         deleteFailed: 'Could not remove domain.',

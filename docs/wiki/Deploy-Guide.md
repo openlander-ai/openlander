@@ -60,7 +60,7 @@ After a service deploy succeeds, the service gets a URL:
 
 - **Internal**: `http://your-server:assigned-port`
 - **Traefik**: `http://service-name.your-server`
-- **Public**: optional temporary share URL or a custom domain mapping
+- **Public**: optional temporary share URL or a custom domain route
 
 ---
 

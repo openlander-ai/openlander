@@ -623,11 +623,62 @@ export const dismissAlertSchema = z.object({
 // List global secrets schema
 export const listGlobalSecretsSchema = z.object({}).strict();
 
-// Map domain schema (alias for domainSchema)
-export const mapDomainSchema = domainSchema;
+const domainRouteTargetFields = {
+  service_id: z.string().min(1).optional().describe('Deployable service id'),
+  service_name: z.string().min(1).optional().describe('Deployable service name'),
+  project_id: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Project group id. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+    ),
+  project_name: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Project group name. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+    ),
+} as const;
 
-// List domains schema
-export const listDomainsSchema = z.object({}).strict();
+export const addDomainRouteSchema = z
+  .object({
+    ...domainRouteTargetFields,
+    domain: z
+      .string()
+      .min(1)
+      .describe('Domain host that already points to the OpenLander host/reverse proxy'),
+    path_prefix: z
+      .string()
+      .optional()
+      .describe('Public path prefix to match (default: /, e.g. /api)'),
+    strip_prefix: z
+      .boolean()
+      .optional()
+      .describe('If true, strip path_prefix before forwarding to the service'),
+    upstream_path_prefix: z
+      .string()
+      .optional()
+      .describe('Internal path prefix to add before forwarding to the service (default: /)'),
+    target_port: z
+      .number()
+      .int()
+      .min(1)
+      .max(65535)
+      .optional()
+      .describe('Override service container port for this route'),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      Boolean(value.service_id || value.service_name || value.project_id || value.project_name),
+    {
+      message: 'service_id, service_name, project_id, or project_name is required',
+    },
+  );
+
+export const listDomainRoutesSchema = z.object({ ...domainRouteTargetFields }).strict();
 
 // Agent-specific schemas
 export const agentExecuteGoalSchema = z.object({
@@ -845,12 +896,6 @@ export const deploySchema = z
       .optional()
       .describe(
         'After deploy succeeds, create a temporary tunnel URL using the configured tunnel backend (default: false). Requires wait=true.',
-      ),
-    domain: z
-      .string()
-      .optional()
-      .describe(
-        'Map a custom domain after deploy succeeds using the configured domain routing backend. Example: api.myapp.com. Requires wait=true.',
       ),
     target_project_id: z
       .string()

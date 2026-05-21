@@ -12,7 +12,7 @@ interface TraefikConfigResponse {
       { rule: string; entryPoints: string[]; service: string; middlewares?: string[] }
     >;
     services: Record<string, { loadBalancer: { servers: Array<{ url: string }> } }>;
-    middlewares: Record<
+    middlewares?: Record<
       string,
       { stripPrefix?: { prefixes: string[] }; addPrefix?: { prefix: string } }
     >;
@@ -181,6 +181,32 @@ describe('GET /api/traefik/config domain routing', () => {
     expect(db.getProject).not.toHaveBeenCalled();
   });
 
+  it('omits empty middlewares so Traefik HTTP provider accepts host-only routes', async () => {
+    const project = makeProject();
+    const defaultService = makeService();
+    const apiService = makeService({
+      id: 'stack-api__svc',
+      project_id: 'stack',
+      name: 'stack/api__svc',
+      kind: 'compose-child',
+      parent_service_id: 'stack__svc',
+      assigned_port: 18080,
+      container_port: 3000,
+      container_id: 'container-stack-api',
+      container_name: 'ol-stack-api',
+    });
+    const app = createTraefikConfigApp({
+      projects: [project],
+      services: [defaultService, apiService],
+      mappings: [makeMapping()],
+    }).app;
+
+    const config = await requestTraefikConfig(app);
+
+    expect(findRouterForDomain(config, 'api.example.com')).toBeDefined();
+    expect(config.http.middlewares).toBeUndefined();
+  });
+
   it('does not depend on deprecated domain_mappings.project_id for custom routes', async () => {
     const project = makeProject();
     const defaultService = makeService();
@@ -305,10 +331,10 @@ describe('GET /api/traefik/config domain routing', () => {
       rule: 'Host(`api.example.com`) && PathPrefix(`/api`)',
       middlewares: ['domain-api-path-strip', 'domain-api-path-add'],
     });
-    expect(config.http.middlewares['domain-api-path-strip']).toEqual({
+    expect(config.http.middlewares?.['domain-api-path-strip']).toEqual({
       stripPrefix: { prefixes: ['/api'] },
     });
-    expect(config.http.middlewares['domain-api-path-add']).toEqual({
+    expect(config.http.middlewares?.['domain-api-path-add']).toEqual({
       addPrefix: { prefix: '/internal' },
     });
   });
