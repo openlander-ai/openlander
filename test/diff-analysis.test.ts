@@ -106,7 +106,7 @@ describe('analyzeBuildDiff', () => {
     expect(result?.dockerChanged).toBe(false);
     expect(result?.envTemplateChanged).toBe(false);
     expect(result?.buildImpactFiles).toEqual(['package.json']);
-    expect(result?.summary).toBe('2 files changed, 1 build-impacting');
+    expect(result?.summary).toBe('2 files changed, 1 build config/dependency file');
   });
 
   it('returns DiffAnalysis with correct flags for Docker changes', async () => {
@@ -147,7 +147,7 @@ describe('analyzeBuildDiff', () => {
     expect(result?.buildImpactFiles).toEqual(['.env.example']);
   });
 
-  it('filters build-impacting files from all changed files', async () => {
+  it('filters build config/dependency files from all changed files', async () => {
     const execFn = makeExecFn([
       { file: 'git', args: ['rev-parse', 'HEAD'], stdout: 'current-sha\n' },
       {
@@ -199,7 +199,7 @@ describe('analyzeBuildDiff', () => {
 
     expect(result).not.toBeNull();
     expect(result?.buildImpactFiles).toEqual(['vite.config.ts']);
-    expect(result?.summary).toBe('1 files changed, 1 build-impacting');
+    expect(result?.summary).toBe('1 files changed, 1 build config/dependency file');
   });
 
   it('returns null when both diff attempts fail', async () => {
@@ -232,7 +232,7 @@ describe('formatDiffForPrompt', () => {
     return {
       changedFiles: ['package.json', 'src/index.ts'],
       buildImpactFiles: ['package.json'],
-      summary: '2 files changed, 1 build-impacting',
+      summary: '2 files changed, 1 build config/dependency file',
       envTemplateChanged: false,
       dockerChanged: false,
       depsChanged: true,
@@ -243,12 +243,14 @@ describe('formatDiffForPrompt', () => {
     };
   }
 
-  it('formats output with build-impacting files and labels', () => {
+  it('formats output with build config/dependency files and labels', () => {
     const formatted = formatDiffForPrompt(makeAnalysis());
 
     expect(formatted).toContain('## Recent Changes (since last deploy)');
-    expect(formatted).toContain('Commits: abcdef1 -> 1234567 | 2 files changed, 1 build-impacting');
-    expect(formatted).toContain('Build-impacting changes:');
+    expect(formatted).toContain(
+      'Commits: abcdef1 -> 1234567 | 2 files changed, 1 build config/dependency file',
+    );
+    expect(formatted).toContain('Build config/dependency changes:');
     expect(formatted).toContain('- package.json (dependency change)');
   });
 
@@ -257,7 +259,7 @@ describe('formatDiffForPrompt', () => {
       makeAnalysis({
         changedFiles: ['src/index.ts', 'README.md'],
         buildImpactFiles: [],
-        summary: '2 files changed (none build-impacting)',
+        summary: '2 files changed (no build config/dependency changes)',
         depsChanged: false,
         totalChangedFiles: 2,
       }),
@@ -265,9 +267,9 @@ describe('formatDiffForPrompt', () => {
 
     expect(formatted).toContain('## Recent Changes (since last deploy)');
     expect(formatted).toContain(
-      'Commits: abcdef1 -> 1234567 | 2 files changed (none build-impacting)',
+      'Commits: abcdef1 -> 1234567 | 2 files changed (no build config/dependency changes)',
     );
-    expect(formatted).not.toContain('Build-impacting changes:');
+    expect(formatted).not.toContain('Build config/dependency changes:');
   });
 
   it('shows correct file labels: dependency, Docker, env template, config', () => {
@@ -278,7 +280,7 @@ describe('formatDiffForPrompt', () => {
         depsChanged: true,
         dockerChanged: true,
         envTemplateChanged: true,
-        summary: '4 files changed, 4 build-impacting',
+        summary: '4 files changed, 4 build config/dependency files',
         totalChangedFiles: 4,
       }),
     );

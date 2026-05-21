@@ -144,10 +144,14 @@ export async function analyzeBuildDiff(
   const depsChanged = fileBasenames.some((name) => DEPENDENCY_FILES.has(name));
 
   const totalChangedFiles = changedFiles.length;
+  const buildConfigLabel =
+    buildImpactFiles.length === 1
+      ? 'build config/dependency file'
+      : 'build config/dependency files';
   const summary =
     buildImpactFiles.length > 0
-      ? `${String(totalChangedFiles)} files changed, ${String(buildImpactFiles.length)} build-impacting`
-      : `${String(totalChangedFiles)} files changed (none build-impacting)`;
+      ? `${String(totalChangedFiles)} files changed, ${String(buildImpactFiles.length)} ${buildConfigLabel}`
+      : `${String(totalChangedFiles)} files changed (no build config/dependency changes)`;
 
   return {
     changedFiles,
@@ -169,7 +173,7 @@ export function formatDiffForPrompt(analysis: DiffAnalysis): string {
   if (analysis.buildImpactFiles.length === 0) {
     return [
       '## Recent Changes (since last deploy)',
-      `Commits: ${shortPrevSha} -> ${shortCurrentSha} | ${String(analysis.totalChangedFiles)} files changed (none build-impacting)`,
+      `Commits: ${shortPrevSha} -> ${shortCurrentSha} | ${String(analysis.totalChangedFiles)} files changed (no build config/dependency changes)`,
     ].join('\n');
   }
 
@@ -188,11 +192,16 @@ export function formatDiffForPrompt(analysis: DiffAnalysis): string {
     return `- ${file} ${label}`;
   });
 
+  const buildConfigLabel =
+    analysis.buildImpactFiles.length === 1
+      ? 'build config/dependency file'
+      : 'build config/dependency files';
+
   return [
     '## Recent Changes (since last deploy)',
-    `Commits: ${shortPrevSha} -> ${shortCurrentSha} | ${String(analysis.totalChangedFiles)} files changed, ${String(analysis.buildImpactFiles.length)} build-impacting`,
+    `Commits: ${shortPrevSha} -> ${shortCurrentSha} | ${String(analysis.totalChangedFiles)} files changed, ${String(analysis.buildImpactFiles.length)} ${buildConfigLabel}`,
     '',
-    'Build-impacting changes:',
+    'Build config/dependency changes:',
     ...impactLines,
   ].join('\n');
 }

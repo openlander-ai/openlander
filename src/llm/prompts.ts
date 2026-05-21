@@ -488,7 +488,7 @@ When recovering from a build failure, you may receive a "Recent Changes" section
 
 Use this information to:
 1. Correlate the error with specific changes (e.g., "package.json changed + Module not found = new dependency issue")
-2. Prioritize diagnosis: focus on changed build-impacting files first
+2. Prioritize diagnosis: focus on changed build config/dependency files first
 3. Give more specific advice: "You changed package.json — check if the new dependency requires additional system packages"
 4. If Dockerfile changed and build failed, the Dockerfile change is likely the cause
 5. If .env.example changed, check for new required environment variables
