@@ -40,9 +40,10 @@ import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
-import type { OpenLanderConfig } from '../config/index.js';
+import { DOCKER_LABELS, type OpenLanderConfig } from '../config/index.js';
 import { withDeployLock } from '../db/repos/deploy-lock-helper.js';
 import { assertProjectMutable } from './mutation-policy.js';
+import { sleep } from '../lib/sleep.js';
 
 import {
   extractProjectName,
@@ -108,12 +109,13 @@ function isProjectStateTransitioner(value: unknown): value is ProjectStateTransi
   );
 }
 
-function sleep(ms: number): Promise<void> {
-  if (ms <= 0) return Promise.resolve();
-  return new Promise((resolveSleep) => {
-    setTimeout(resolveSleep, ms);
-  });
-}
+const TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS = 5_000;
+const DEFAULT_BLUE_GREEN_ROUTE_SWITCH_DELAY_MS = TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS * 2 + 2_000;
+const BLUE_GREEN_LABELS = {
+  ROLE: 'openlander.blue_green.role',
+  PROJECT_ID: 'openlander.blue_green.project_id',
+  SERVICE_ID: 'openlander.blue_green.service_id',
+} as const;
 
 /**
  * Project configuration for a deployment.
@@ -204,6 +206,8 @@ export interface RedeployOptions {
   routeSwitchDelayMs?: number;
   /** @internal Timeout for the managed Traefik route probe. */
   routeProbeTimeoutMs?: number;
+  /** @internal Public route path used only to verify ingress reachability after a flip. */
+  routeProbePath?: string;
   cmd?: string[];
   lockSessionId?: string;
   trigger?: 'chat' | 'webhook' | 'api';
@@ -876,6 +880,21 @@ export class DeployPipeline {
     return projectContainerName(`${projectName}-green-${suffix}`);
   }
 
+  private makeGreenContainerLabels(params: {
+    projectName: string;
+    projectId: string;
+    serviceId: string;
+  }): Record<string, string> {
+    return {
+      [DOCKER_LABELS.MANAGED]: 'true',
+      [DOCKER_LABELS.PROJECT]: params.projectName,
+      [BLUE_GREEN_LABELS.ROLE]: 'green',
+      [BLUE_GREEN_LABELS.PROJECT_ID]: params.projectId,
+      [BLUE_GREEN_LABELS.SERVICE_ID]: params.serviceId,
+      'traefik.enable': 'false',
+    };
+  }
+
   private async restoreBlueState(params: {
     projectId: string;
     environmentId?: string;
@@ -913,7 +932,7 @@ export class DeployPipeline {
     projectName: string;
     path: string;
     timeoutMs: number;
-  }): Promise<{ ok: true } | { ok: false; error: string }> {
+  }): Promise<{ ok: true; status: number } | { ok: false; error: string }> {
     const host = getEnvironmentProjectHostname(params.projectName, 'production');
     const url = `${resolveContainerUrl(80)}${this.normalizeHealthCheckPath(params.path)}`;
     const controller = new AbortController();
@@ -927,7 +946,7 @@ export class DeployPipeline {
         signal: controller.signal,
       });
       if (response.ok) {
-        return { ok: true };
+        return { ok: true, status: response.status };
       }
       return { ok: false, error: `Route probe returned HTTP ${String(response.status)}` };
     } catch (err) {
@@ -1867,8 +1886,10 @@ export class DeployPipeline {
     const startTime = Date.now();
     const healthCheckRetries = options?.healthCheckRetries ?? 10;
     const healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 2_000;
-    const routeSwitchDelayMs = options?.routeSwitchDelayMs ?? 6_000;
+    const routeSwitchDelayMs =
+      options?.routeSwitchDelayMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_DELAY_MS;
     const routeProbeTimeoutMs = options?.routeProbeTimeoutMs ?? 5_000;
+    const routeProbePath = options?.routeProbePath ?? '/';
 
     let projectName = 'unknown';
     let imageTag: string | undefined;
@@ -1937,6 +1958,11 @@ export class DeployPipeline {
         imageTag: blueDeployable.image_tag ?? project.image_tag ?? null,
         previousImageTag: blueDeployable.previous_image_tag ?? project.previous_image_tag ?? null,
       };
+      await this.cleanupStaleGreenContainers({
+        projectName,
+        projectId,
+        activeContainerId: blueContainerId,
+      });
 
       const prodEnv = (await this.db.getEnvironmentsByProject(projectId)).find(
         (env) => env.type === 'production',
@@ -2022,6 +2048,11 @@ export class DeployPipeline {
         containerPort,
         envVars,
         traefikLabels: { 'traefik.enable': 'false' },
+        labels: this.makeGreenContainerLabels({
+          projectName,
+          projectId,
+          serviceId: blueDeployable.id,
+        }),
         network: networkName,
         aliases: [`${projectName}-green`],
         secretFiles,
@@ -2093,7 +2124,6 @@ export class DeployPipeline {
         buildLog += `[route] Waiting ${String(routeSwitchDelayMs)}ms for Traefik HTTP provider polling\n`;
         await sleep(routeSwitchDelayMs);
       }
-      const routeProbePath = probeConfig.path ?? '/';
       const routeProbe = await this.probeManagedTraefikRoute({
         projectName,
         path: routeProbePath,
@@ -2108,7 +2138,7 @@ export class DeployPipeline {
       }
       routeSwitched = true;
       shouldCleanupGreen = false;
-      buildLog += '[route] Passed\n';
+      buildLog += `[route] Passed (HTTP ${String(routeProbe.status)})\n`;
 
       try {
         await this.docker.stopContainer(blueContainerId);
@@ -2330,6 +2360,39 @@ export class DeployPipeline {
       await this.docker.safeRemoveContainer(containerId);
     } catch (err) {
       log.warn({ err }, 'Failed to remove green container during cleanup');
+    }
+  }
+
+  private async cleanupStaleGreenContainers(params: {
+    projectName: string;
+    projectId: string;
+    activeContainerId: string;
+  }): Promise<void> {
+    const greenNamePrefix = projectContainerName(`${params.projectName}-green-`);
+    try {
+      const containers = await this.docker.listManagedContainers();
+      const staleGreens = containers.filter((container) => {
+        if (container.id === params.activeContainerId) return false;
+        const labels = container.labels ?? {};
+        const labelMatch =
+          labels[BLUE_GREEN_LABELS.ROLE] === 'green' &&
+          labels[BLUE_GREEN_LABELS.PROJECT_ID] === params.projectId;
+        const legacyNameMatch = container.name.startsWith(greenNamePrefix);
+        return labelMatch || legacyNameMatch;
+      });
+
+      for (const container of staleGreens) {
+        log.info(
+          { id: container.id, name: container.name, projectId: params.projectId },
+          'Cleaning stale blue-green container before promotion',
+        );
+        await this.cleanupGreenContainer(container.id);
+      }
+    } catch (err) {
+      log.warn(
+        { err, projectId: params.projectId },
+        'Failed to clean stale blue-green containers before promotion',
+      );
     }
   }
 

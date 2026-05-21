@@ -162,7 +162,16 @@ function createMockDb(state: {
   } as unknown as Database;
 }
 
-function createMockDocker(options?: { blueRunning?: boolean; cleanupBlueFails?: boolean }): {
+function createMockDocker(options?: {
+  blueRunning?: boolean;
+  cleanupBlueFails?: boolean;
+  managedContainers?: Array<{
+    id: string;
+    name: string;
+    status: string;
+    labels?: Record<string, string>;
+  }>;
+}): {
   docker: Docker;
 } {
   const blueInspectMock = vi
@@ -189,6 +198,7 @@ function createMockDocker(options?: { blueRunning?: boolean; cleanupBlueFails?: 
     restartContainer: blueRestartMock,
     ensureProjectNetwork: vi.fn().mockResolvedValue('ol-demo-app'),
     connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
+    listManagedContainers: vi.fn().mockResolvedValue(options?.managedContainers ?? []),
   } as unknown as Docker;
 
   return { docker };
@@ -270,6 +280,14 @@ describe('blue-green route target flip', () => {
       expect.objectContaining({
         name: expect.stringMatching(/^ol-demo-app-green-/),
         aliases: ['demo-app-green'],
+        labels: expect.objectContaining({
+          'openlander.managed': 'true',
+          'openlander.project': 'demo-app',
+          'openlander.blue_green.role': 'green',
+          'openlander.blue_green.project_id': 'p1',
+          'openlander.blue_green.service_id': 'p1__svc',
+          'traefik.enable': 'false',
+        }),
       }),
     );
 
@@ -344,6 +362,29 @@ describe('blue-green route target flip', () => {
     );
   });
 
+  it('separates green health path from public route reachability probe', async () => {
+    state.service.health_check_path = '/internal-health';
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockRunProbe).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/internal-health' }),
+      expect.any(Object),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:80/',
+      expect.objectContaining({
+        headers: { Host: expect.stringMatching(/^demo-app\./) },
+      }),
+    );
+  });
+
   it('returns success with a warning when blue cleanup fails after route switch', async () => {
     const mockDocker = createMockDocker({ cleanupBlueFails: true });
     docker = mockDocker.docker;
@@ -361,6 +402,57 @@ describe('blue-green route target flip', () => {
       expect.stringContaining('failed to remove previous container'),
     ]);
     expect(state.service.container_id).toBe('container-green');
+  });
+
+  it('cleans stale green containers before starting a new promotion', async () => {
+    const mockDocker = createMockDocker({
+      managedContainers: [
+        {
+          id: 'container-blue',
+          name: 'ol-demo-app-green-active',
+          status: 'running',
+          labels: {
+            'openlander.managed': 'true',
+            'openlander.blue_green.role': 'green',
+            'openlander.blue_green.project_id': 'p1',
+          },
+        },
+        {
+          id: 'stale-green',
+          name: 'ol-demo-app-green-old',
+          status: 'running',
+          labels: {
+            'openlander.managed': 'true',
+            'openlander.blue_green.role': 'green',
+            'openlander.blue_green.project_id': 'p1',
+          },
+        },
+      ],
+    });
+    docker = mockDocker.docker;
+    pipeline = new DeployPipeline(docker, db, env as never, testConfig);
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+    });
+
+    expect(result.success).toBe(true);
+    expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('stale-green');
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'stale-green',
+    );
+    const stopContainerMock = docker.stopContainer as ReturnType<typeof vi.fn>;
+    const runContainerMock = docker.runContainer as ReturnType<typeof vi.fn>;
+    const staleStopIndex = stopContainerMock.mock.calls.findIndex(
+      ([containerId]) => containerId === 'stale-green',
+    );
+    expect(staleStopIndex).toBeGreaterThanOrEqual(0);
+    expect(stopContainerMock.mock.invocationCallOrder[staleStopIndex]).toBeLessThan(
+      runContainerMock.mock.invocationCallOrder[0],
+    );
   });
 
   it('blocks compose services before touching containers', async () => {
