@@ -17,7 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   networks for routing. Global managed services remain on OpenLander's shared
   infrastructure network, so apps that used a global service as their runtime
   database/cache must recreate or move that service into the target project and
-  update env vars before redeploying.
+  update env vars before redeploying. After upgrading, redeploy project apps
+  promptly so app containers and project-scoped managed services land on the same
+  project network.
 
 ### Fixed
 

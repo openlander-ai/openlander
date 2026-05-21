@@ -74,8 +74,11 @@ async function resolveServiceNetworkName(
   appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
   service: { project_id: string },
 ) {
-  const lookup = await buildServiceNetworkNameLookup(appCtx, [service]);
-  return lookup(service);
+  if (service.project_id === ORPHAN_MANAGED_GROUP_ID) {
+    return SHARED_NETWORK_NAME;
+  }
+  const project = await appCtx.db.getProject(service.project_id);
+  return project ? projectContainerName(project.name) : null;
 }
 
 function getExternalConnectionStrings(

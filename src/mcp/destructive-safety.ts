@@ -81,7 +81,9 @@ export async function resolveMcpTargetProjectId(
       .filter((service) => !projectScopeId || service.project_id === projectScopeId)
       .filter(
         (service) =>
-          !identityScopeProjectId || projectScopeId || service.project_id === identityScopeProjectId,
+          !identityScopeProjectId ||
+          projectScopeId ||
+          service.project_id === identityScopeProjectId,
       )
       .filter((service) => !isManagedKind(service.kind));
 
@@ -117,14 +119,17 @@ export function assertMcpActiveScope(
 
 function buildHumanUiOnlyResponse(toolName: string): SafetyResult {
   const error = new OperationRequiresHumanUiError(toolName);
+  const target =
+    toolName === 'cleanup_docker'
+      ? 'OpenLander web UI host cleanup or an operator-run maintenance workflow'
+      : 'the OpenLander web UI typed-confirm flow for that project, service, volume, or bucket';
   return {
     error: error.code,
     code: error.code,
     message: error.message,
     details: error.details,
     _agent_guidance: {
-      message:
-        'This destructive operation is intentionally blocked from MCP in OpenLander 0.1. Use the OpenLander UI typed-confirm flow.',
+      message: `This destructive operation is intentionally blocked from MCP in OpenLander 0.1. Tell the user to use ${target}; do not substitute another MCP cleanup or removal tool.`,
     },
   };
 }

@@ -1748,7 +1748,7 @@ async function probeInternal(
       target_resolved: targetResolved,
       _agent_guidance: {
         message: hasPreferred
-          ? 'The target service container is not running, so OpenLander cannot probe from its isolated project network.'
+          ? 'The target service container is not running or not deployed, so OpenLander cannot probe from its isolated project network.'
           : 'No running managed containers to execute internal probe from. Deploy a project first.',
         next_steps: hasPreferred
           ? [

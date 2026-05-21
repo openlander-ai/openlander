@@ -186,6 +186,9 @@ v0.1.2.
 If an app previously used a global managed service as its primary database or
 cache, recreate or move that managed service into the app's project, update the
 app env vars to the project-scoped connection string, and redeploy the app.
+After upgrading to v0.1.2, redeploy apps promptly so older app containers do not
+remain on the old shared network while managed services move to the project
+network.
 
 Set via MCP on the deployable service:
 
