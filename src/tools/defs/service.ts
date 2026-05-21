@@ -178,8 +178,8 @@ async function resolveCreateServiceScope(
       ok: false,
       response: {
         status: 'blocked',
-        error: 'GLOBAL_SCOPE_UNSUPPORTED',
-        code: 'GLOBAL_SCOPE_UNSUPPORTED',
+        error: 'SCOPE_NOT_ACCEPTED',
+        code: 'SCOPE_NOT_ACCEPTED',
         message:
           'create_service no longer accepts scope. Create managed services inside the project that will use them by passing project_id or project_name.',
         _agent_guidance: {
