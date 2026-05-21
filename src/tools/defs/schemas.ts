@@ -424,16 +424,7 @@ export const createServiceSchema = z.object({
     .max(65535)
     .optional()
     .describe('Port number (required when using image without template)'),
-  scope: z
-    .enum(['project', 'global'])
-    .optional()
-    .describe(
-      'Creation scope. Default is project-scoped; use global only for intentionally shared/unassigned infrastructure.',
-    ),
-  project_id: z
-    .string()
-    .optional()
-    .describe('Attach the new service to this project group id. Prefer this over global scope.'),
+  project_id: z.string().optional().describe('Attach the new service to this project group id.'),
   project_name: z
     .string()
     .optional()

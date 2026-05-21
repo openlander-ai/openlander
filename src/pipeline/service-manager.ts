@@ -232,13 +232,13 @@ export class ServiceManager {
    * can auto-link it to a project via set_env_vars.
    *
    * Rules:
-   *  - Project-scoped service + no target key collision → standard key.
-   *  - Project-scoped service + target already has that key → prefixed key.
-   *  - Global/unassigned service → prefixed key because no consumer app is known.
+   *  - Target project with no key collision → standard key.
+   *  - Target project already has that key → prefixed key.
+   *  - No target project → prefixed key because no consumer app is known.
    */
   async getSuggestedEnv(
     service: ServiceRow,
-    opts: { scope?: 'project' | 'global'; targetProjectId?: string | null } = {},
+    opts: { targetProjectId?: string | null } = {},
   ): Promise<Array<{ key: string; value: string }>> {
     const serviceKind = service.kind;
     const baseKey = DEFAULT_ENV_KEYS[serviceKind];
@@ -277,23 +277,16 @@ export class ServiceManager {
   }
 
   private async shouldPrefixSuggestedEnvKeys(
-    service: ServiceRow,
+    _service: ServiceRow,
     keys: string[],
-    opts: { scope?: 'project' | 'global'; targetProjectId?: string | null },
+    opts: { targetProjectId?: string | null },
   ): Promise<boolean> {
-    if (opts.scope === 'global') {
+    if (!opts.targetProjectId) {
       return true;
     }
 
-    if (opts.scope === 'project' && opts.targetProjectId) {
-      const targetKeys = await this.getProjectRuntimeEnvKeys(opts.targetProjectId);
-      return keys.some((key) => targetKeys.has(key));
-    }
-
-    const existing = (await this.db.listServices()).filter(
-      (s) => s.kind === service.kind && s.id !== service.id,
-    );
-    return existing.length > 0;
+    const targetKeys = await this.getProjectRuntimeEnvKeys(opts.targetProjectId);
+    return keys.some((key) => targetKeys.has(key));
   }
 
   private async getProjectRuntimeEnvKeys(projectId: string): Promise<Set<string>> {
@@ -322,9 +315,9 @@ export class ServiceManager {
 
   /**
    * Reconcile existing service containers to their owner network.
-   * Project-scoped services use the project network; global services stay on
-   * the shared OpenLander network. This keeps startup repair aligned with the
-   * v0.1.2 network-isolation model.
+   * Project services use the project network. Orphan/internal managed services
+   * stay on the shared OpenLander network. This keeps startup repair aligned
+   * with the v0.1.2 network-isolation model.
    */
   async reconcileServiceNetworks(): Promise<void> {
     const services = await this.db.listServices();

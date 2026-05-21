@@ -245,6 +245,29 @@ function serviceSummary(service: NonNullable<ServiceRow>, project: NonNullable<P
   };
 }
 
+function parseInternalRedeployEnvVars(args: Record<string, unknown>): Record<string, string> {
+  const value = args['env_vars'];
+  if (value === undefined || value === null) {
+    return {};
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new OpenLanderError(
+      'env_vars must be an object when redeploying an existing app',
+      'BAD_REQUEST',
+      400,
+    );
+  }
+
+  const vars: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw !== 'string') {
+      throw new OpenLanderError('env_vars values must be strings', 'BAD_REQUEST', 400, { key });
+    }
+    vars[key] = raw;
+  }
+  return vars;
+}
+
 function rollbackServiceGuidance(result: { success?: unknown }, serviceId: string) {
   const sharedLimit =
     'Rollback only switches the deployable service back to the stored previous Docker image. It does not restore databases, volumes, environment variables, secrets, or service configuration.';
@@ -281,6 +304,7 @@ export async function runDeployableServiceAction(
   const strategy = args.strategy as 'blue-green' | 'force' | undefined;
   const healthCheckPath = args.health_check_path as string | undefined;
   const cmd = args.cmd as string[] | undefined;
+  const envVars = parseInternalRedeployEnvVars(args);
 
   const groupPolicyRejection =
     runtimeProject.id === project.id ? undefined : await tryRejectIfNotMutable(project, context);
@@ -306,6 +330,46 @@ export async function runDeployableServiceAction(
         'Failed to release deploy lock',
       );
     });
+
+  const envKeys = Object.keys(envVars);
+  if (envKeys.length > 0) {
+    const changes = await context.appCtx.env.setBulkForServiceDetailed(
+      runtimeProject.id,
+      service.id,
+      envVars,
+    );
+    const mismatches = await context.appCtx.env.verifyRoundTripForService(
+      runtimeProject.id,
+      service.id,
+      envVars,
+    );
+
+    if (mismatches.length > 0) {
+      await releaseDbLock();
+      return {
+        status: 'error',
+        error: 'ENV_ROUNDTRIP_FAILED',
+        service: serviceSummary(service, project),
+        keys: envKeys,
+        mismatches,
+        _agent_guidance: {
+          next_steps: [
+            'Do not redeploy yet. Re-run set_env_vars for the mismatched keys or inspect env storage.',
+          ],
+        },
+      };
+    }
+
+    log.info(
+      {
+        projectId: runtimeProject.id,
+        serviceId: service.id,
+        keys: envKeys,
+        changed: changes.filter((change) => change.op !== 'noop').length,
+      },
+      'Applied env_vars before service redeploy',
+    );
+  }
 
   const execute = async () => {
     if (action === 'restart_service') {

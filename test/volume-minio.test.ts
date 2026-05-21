@@ -72,6 +72,9 @@ function createDbMock(services: ServiceRow[]): Database {
   return {
     getService: vi.fn((id: string) => byId.get(id) ?? null),
     listServices: vi.fn(() => Array.from(byId.values())),
+    getEnvVars: vi.fn(() => ({})),
+    getEnvVarsForService: vi.fn(() => ({})),
+    getDeployablesByGroup: vi.fn(() => []),
     updateService: vi.fn(),
   } as unknown as Database;
 }
@@ -150,7 +153,7 @@ describe('MinIO getSuggestedEnv', () => {
     });
 
     const manager = new ServiceManager(createMockDockerHarness().docker, createDbMock([service]));
-    await expect(manager.getSuggestedEnv(service)).resolves.toEqual([
+    await expect(manager.getSuggestedEnv(service, { targetProjectId: 'proj-1' })).resolves.toEqual([
       { key: 'S3_ENDPOINT', value: 'http://ol-svc-storage:9000' },
       { key: 'AWS_ACCESS_KEY_ID', value: 'openlander' },
       { key: 'AWS_SECRET_ACCESS_KEY', value: 'abc123' },

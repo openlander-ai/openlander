@@ -44,6 +44,10 @@ describe('deploy MCP guidance', () => {
       pipeline: {
         redeploy: vi.fn(async () => undefined),
       },
+      env: {
+        setBulkForServiceDetailed: vi.fn(async () => [{ key: 'DATABASE_URL', op: 'set' }]),
+        verifyRoundTripForService: vi.fn(async () => []),
+      },
       planEngine: {
         createPlan: vi.fn(),
         executePlan: vi.fn(),
@@ -51,7 +55,12 @@ describe('deploy MCP guidance', () => {
     } as unknown as AppContext;
 
     const result = (await getTool(ctx, 'deploy_app').execute(
-      { repo_url: 'https://github.com/acme/app', name: 'app', wait: false },
+      {
+        repo_url: 'https://github.com/acme/app',
+        name: 'app',
+        env_vars: { DATABASE_URL: 'postgresql://example' },
+        wait: false,
+      },
       { target: 'mcp' },
     )) as Record<string, unknown>;
 
@@ -69,6 +78,9 @@ describe('deploy MCP guidance', () => {
       },
     });
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
+    expect(ctx.env.setBulkForServiceDetailed).toHaveBeenCalledWith('app', 'app__svc', {
+      DATABASE_URL: 'postgresql://example',
+    });
     await vi.waitFor(() =>
       expect(ctx.pipeline.redeploy).toHaveBeenCalledWith(
         'app',

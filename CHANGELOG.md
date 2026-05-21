@@ -10,16 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - **Breaking (MCP):** `openlander_managed_service.create_service` now requires
-  `project_id`/`project_name` by default. Pass `scope: "global"` explicitly for
-  intentionally shared or unassigned infrastructure.
+  `project_id`/`project_name`. Global managed-service creation is no longer
+  exposed over MCP because project network isolation has no cross-project grant
+  model in v0.1.2.
 - **Breaking (Runtime):** Project-scoped app and managed-service containers now
   run on per-project Docker networks, with Traefik joined to those project
-  networks for routing. Global managed services remain on OpenLander's shared
-  infrastructure network, so apps that used a global service as their runtime
-  database/cache must recreate or move that service into the target project and
+  networks for routing. Apps that used unassigned/global managed services as
+  runtime databases/caches must recreate those services in the target project and
   update env vars before redeploying. After upgrading, redeploy project apps
-  promptly so app containers and project-scoped managed services land on the same
-  project network.
+  promptly so app containers and managed services land on the same project
+  network.
 
 ### Fixed
 
@@ -34,9 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   in `ol-svc-*` managed-service containers with valid managed-service
   connection strings but generic `image` kind are repaired on startup so they
   reappear in managed-service lists.
-- Adjusted managed-service `suggested_env` so project-scoped services prefer
+- Adjusted managed-service `suggested_env` so project services prefer
   app-standard keys like `DATABASE_URL`/`REDIS_URL` unless the target project
-  already has that key; global services keep namespaced keys.
+  already has that key.
 
 ## [0.1.1] - 2026-05-15
 

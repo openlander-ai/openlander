@@ -161,19 +161,36 @@ async function resolveCreateServiceScope(
 ): Promise<
   | {
       ok: true;
-      scope: 'project' | 'global';
-      projectId: string | null;
-      projectName: string | null;
+      projectId: string;
+      projectName: string;
     }
   | {
       ok: false;
       response: Record<string, unknown>;
     }
 > {
-  const scope = readStringArg(args, 'scope') as 'project' | 'global' | undefined;
   const projectId = readStringArg(args, 'project_id');
   const legacyTargetProjectId = readStringArg(args, 'target_project_id');
   const projectName = readStringArg(args, 'project_name');
+
+  if ('scope' in args) {
+    return {
+      ok: false,
+      response: {
+        status: 'blocked',
+        error: 'GLOBAL_SCOPE_UNSUPPORTED',
+        code: 'GLOBAL_SCOPE_UNSUPPORTED',
+        message:
+          'create_service no longer accepts scope. Create managed services inside the project that will use them by passing project_id or project_name.',
+        _agent_guidance: {
+          next_steps: [
+            'Call openlander_project.list_projects to get the target project id.',
+            'Retry create_service with project_id or project_name and without scope.',
+          ],
+        },
+      },
+    };
+  }
 
   if (projectId && legacyTargetProjectId && projectId !== legacyTargetProjectId) {
     return {
@@ -185,23 +202,6 @@ async function resolveCreateServiceScope(
         message: 'project_id and target_project_id refer to different projects.',
         _agent_guidance: {
           message: 'Use exactly one project target. Prefer project_id when known.',
-        },
-      },
-    };
-  }
-
-  if (scope === 'global' && (projectId || legacyTargetProjectId || projectName)) {
-    return {
-      ok: false,
-      response: {
-        status: 'blocked',
-        error: 'INVALID_SCOPE_TARGET',
-        code: 'INVALID_SCOPE_TARGET',
-        message:
-          'scope="global" cannot be combined with project_id, target_project_id, or project_name.',
-        _agent_guidance: {
-          message:
-            'Use scope="global" only for intentionally shared/unassigned infrastructure. Omit scope and pass project_id/project_name to attach the service to an app.',
         },
       },
     };
@@ -221,7 +221,7 @@ async function resolveCreateServiceScope(
         },
       };
     }
-    return { ok: true, scope: 'project', projectId: project.id, projectName: project.name };
+    return { ok: true, projectId: project.id, projectName: project.name };
   }
 
   if (projectName) {
@@ -237,11 +237,7 @@ async function resolveCreateServiceScope(
         },
       };
     }
-    return { ok: true, scope: 'project', projectId: project.id, projectName: project.name };
-  }
-
-  if (scope === 'global') {
-    return { ok: true, scope: 'global', projectId: null, projectName: null };
+    return { ok: true, projectId: project.id, projectName: project.name };
   }
 
   return {
@@ -251,12 +247,12 @@ async function resolveCreateServiceScope(
       error: 'PROJECT_TARGET_REQUIRED',
       code: 'PROJECT_TARGET_REQUIRED',
       message:
-        'create_service now requires a project target by default. Pass project_id or project_name, or explicitly pass scope="global" for shared/unassigned infrastructure.',
-      required_params: ['project_id | project_name | scope="global"'],
+        'create_service requires a project target. Pass project_id or project_name so the managed service is created on the same isolated network as the app that will use it.',
+      required_params: ['project_id | project_name'],
       _agent_guidance: {
         next_steps: [
           'Call openlander_project.list_projects to get a project id, then retry create_service with project_id.',
-          'Only use scope="global" when the service is intentionally shared across projects or not attached yet.',
+          'Create app databases/caches inside the target project. Cross-project shared services are not exposed in v0.1.2.',
         ],
       },
     },
@@ -285,9 +281,9 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_service',
     riskLevel: 'medium',
     description:
-      'Create a new managed infrastructure service (database, cache, message broker, object storage, or custom container). By default this requires project_id or project_name so the service is attached to the app that will use it. Use scope="global" only for intentionally shared/unassigned infrastructure. Provide template (postgresql/mysql/redis/mongodb/rabbitmq/minio), custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17"). Returns { service, scope, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, REDIS_URL, S3_ENDPOINT) for connecting a project. Call set_env_vars with the suggested key/value to save the binding, then redeploy the running project/service to apply it. Errors: PROJECT_TARGET_REQUIRED, INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+      'Create a new managed infrastructure service (database, cache, message broker, object storage, or custom container) inside a project. Requires project_id or project_name so the service is attached to the app network that will use it. Provide template (postgresql/mysql/redis/mongodb/rabbitmq/minio), custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17"). Returns { service, scope, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, REDIS_URL, S3_ENDPOINT) for connecting the project. Call set_env_vars with the suggested key/value to save the binding, then redeploy the running project/service to apply it. Errors: PROJECT_TARGET_REQUIRED, INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
     mcpDescription:
-      'Create a managed infrastructure service. Pass project_id/project_name by default; pass scope="global" only for intentionally shared/unassigned services.',
+      'Create a managed infrastructure service inside a project. Pass project_id or project_name.',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolveCreateServiceScope(appCtx, args);
@@ -295,10 +291,7 @@ export const serviceToolDefs: ToolDef[] = [
 
       let result: Awaited<ReturnType<typeof appCtx.serviceManager.create>>;
       try {
-        const network =
-          target.scope === 'project' && target.projectName
-            ? await appCtx.docker.ensureProjectNetwork(target.projectName)
-            : undefined;
+        const network = await appCtx.docker.ensureProjectNetwork(target.projectName);
         result = await appCtx.serviceManager.create({
           name: args['name'] as string,
           template: args['template'] as string | undefined,
@@ -326,54 +319,51 @@ export const serviceToolDefs: ToolDef[] = [
       let resolvedProjectId: string | undefined;
       let attachCleanupFailed: string | undefined;
       let droppedKeys: string[] | undefined;
-      if (target.projectId) {
-        try {
-          const moved = await appCtx.db.attachServiceToProject(result.id, target.projectId);
-          resolvedProjectId = moved.targetProjectId;
-          if (moved.droppedEnvVarKeys.length > 0 || moved.droppedSecretFiles.length > 0) {
-            droppedKeys = [...moved.droppedEnvVarKeys, ...moved.droppedSecretFiles];
-          }
-        } catch (err) {
-          const attachMessage = `attach to ${target.projectId} failed: ${err instanceof Error ? err.message : String(err)}`;
-          try {
-            await appCtx.serviceManager.remove(result.id, { force: true });
-          } catch (cleanupErr) {
-            attachCleanupFailed =
-              cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
-          }
-          return {
-            status: 'failed',
-            error: 'PROJECT_ATTACH_FAILED',
-            code: 'PROJECT_ATTACH_FAILED',
-            message: attachMessage,
-            service: { id: result.id, name: result.name },
-            cleanup: attachCleanupFailed
-              ? { attempted: true, success: false, error: attachCleanupFailed }
-              : { attempted: true, success: true },
-            _agent_guidance: {
-              next_steps: [
-                'Verify the project target with list_projects before retrying.',
-                ...(attachCleanupFailed
-                  ? [`Manual cleanup may be required for service_id="${result.id}".`]
-                  : ['The failed service was cleaned up; it is safe to retry.']),
-              ],
-            },
-          };
+      try {
+        const moved = await appCtx.db.attachServiceToProject(result.id, target.projectId);
+        resolvedProjectId = moved.targetProjectId;
+        if (moved.droppedEnvVarKeys.length > 0 || moved.droppedSecretFiles.length > 0) {
+          droppedKeys = [...moved.droppedEnvVarKeys, ...moved.droppedSecretFiles];
         }
+      } catch (err) {
+        const attachMessage = `attach to ${target.projectId} failed: ${err instanceof Error ? err.message : String(err)}`;
+        try {
+          await appCtx.serviceManager.remove(result.id, { force: true });
+        } catch (cleanupErr) {
+          attachCleanupFailed =
+            cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+        }
+        return {
+          status: 'failed',
+          error: 'PROJECT_ATTACH_FAILED',
+          code: 'PROJECT_ATTACH_FAILED',
+          message: attachMessage,
+          service: { id: result.id, name: result.name },
+          cleanup: attachCleanupFailed
+            ? { attempted: true, success: false, error: attachCleanupFailed }
+            : { attempted: true, success: true },
+          _agent_guidance: {
+            next_steps: [
+              'Verify the project target with list_projects before retrying.',
+              ...(attachCleanupFailed
+                ? [`Manual cleanup may be required for service_id="${result.id}".`]
+                : ['The failed service was cleaned up; it is safe to retry.']),
+            ],
+          },
+        };
       }
 
       const suggestedEnv = await appCtx.serviceManager.getSuggestedEnv(result, {
-        scope: target.scope,
-        targetProjectId: resolvedProjectId ?? null,
+        targetProjectId: resolvedProjectId,
       });
 
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       const legacyPort = result.assigned_port ?? result.port;
       return {
         status: 'created',
-        scope: target.scope,
-        attached_to: resolvedProjectId ?? null,
-        ...(target.projectName ? { attached_project_name: target.projectName } : {}),
+        scope: 'project',
+        attached_to: resolvedProjectId,
+        attached_project_name: target.projectName,
         service: {
           id: result.id,
           name: result.name,
@@ -396,17 +386,10 @@ export const serviceToolDefs: ToolDef[] = [
         suggested_env: suggestedEnv,
         externalAccess: getServiceExternalAccess(legacyPort ?? null),
         _agent_guidance: {
-          next_steps:
-            target.scope === 'global'
-              ? [
-                  'This service is global/unassigned. Attach or link it to a deployable project before expecting runtime env to be available.',
-                  'suggested_env uses namespaced keys for global services. If this is the primary DB/cache for an app, set the app convention key such as DATABASE_URL or REDIS_URL intentionally.',
-                  'Use get_service_credentials when you need the connection string manually.',
-                ]
-              : [
-                  'Call set_env_vars on the deployable service with suggested_env to save the binding.',
-                  'Then call redeploy_app for the target service/project to apply it.',
-                ],
+          next_steps: [
+            'Call set_env_vars on the deployable service with suggested_env to save the binding.',
+            'Then call redeploy_app for the target service/project to apply it.',
+          ],
         },
       };
     },
@@ -454,7 +437,7 @@ export const serviceToolDefs: ToolDef[] = [
               status: service.status,
               // Wire key preserved; canonical source: assigned_port
               port: svcPort,
-              scope: service.project_id === ORPHAN_MANAGED_GROUP_ID ? 'global' : 'project',
+              scope: service.project_id === ORPHAN_MANAGED_GROUP_ID ? 'unassigned' : 'project',
               attached_to:
                 service.project_id === ORPHAN_MANAGED_GROUP_ID ? null : service.project_id,
               network: serviceNetworkName(service),
@@ -483,8 +466,8 @@ export const serviceToolDefs: ToolDef[] = [
             : {}),
           _agent_guidance: {
             networking: [
-              'Project-scoped managed services are attached only to their project Docker network. Global managed services stay on the shared OpenLander network.',
-              'Use project-scoped services as the default app database/cache path. Use scope="global" only for intentionally shared infrastructure.',
+              'Managed services created through MCP are project-scoped and attached only to their project Docker network.',
+              'Create app databases/caches in the same project as the app that uses them. Cross-project shared services are not exposed in v0.1.2.',
               'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
             ],
           },
@@ -505,7 +488,7 @@ export const serviceToolDefs: ToolDef[] = [
             status: service.status,
             // Wire key preserved; canonical source: assigned_port
             port: svcPort,
-            scope: service.project_id === ORPHAN_MANAGED_GROUP_ID ? 'global' : 'project',
+            scope: service.project_id === ORPHAN_MANAGED_GROUP_ID ? 'unassigned' : 'project',
             attached_to: service.project_id === ORPHAN_MANAGED_GROUP_ID ? null : service.project_id,
             containerName: service.container_name,
             credentials: parseServiceCredentials(service.credentials),
@@ -725,8 +708,8 @@ export const serviceToolDefs: ToolDef[] = [
         externalAccess: getServiceExternalAccess(svcPort ?? null),
         _agent_guidance: {
           networking: [
-            'Project-scoped managed services are attached only to their project Docker network. Global managed services stay on the shared OpenLander network.',
-            'Use project-scoped services as the default app database/cache path. Use scope="global" only for intentionally shared infrastructure.',
+            'Managed services are attached to their project Docker network.',
+            'Use project services as the app database/cache path. Cross-project shared services are not exposed in v0.1.2.',
             'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
           ],
         },

@@ -98,7 +98,7 @@ export const projectOpsToolDefs: ToolDef[] = [
           }),
           _agent_guidance: {
             networking: [
-              'Project-scoped app and managed-service containers are isolated on the project Docker network. Global managed services stay on the shared OpenLander network.',
+              'Project app and managed-service containers are isolated on the project Docker network.',
               'For same-project inter-container traffic, use the service DNS name on that project network. Do not create Docker networks manually.',
               'Project groups are not deployable services. Use projects[].deployable_service.service_id with openlander_service actions such as set_env_vars, list_env_vars, redeploy_app, expose_public, restart_service, rollback_service, or update_service_config.',
             ],

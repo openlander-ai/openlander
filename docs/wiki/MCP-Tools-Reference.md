@@ -362,16 +362,11 @@ tunnel backend; it is not required for normal deploy/redeploy flows.
 | `port`         | number | No       | Port number                                                    |
 | `project_id`   | string | No       | Attach to this project group id                                |
 | `project_name` | string | No       | Attach to this project group name                              |
-| `scope`        | string | No       | Use `global` only for intentionally shared/unassigned services |
 
-By default, `create_service` requires `project_id` or `project_name`. This keeps
-new databases/caches attached to the app that will use them. Pass
-`scope: "global"` only when the service is deliberately shared or unassigned.
-Project-scoped managed services share the app's project Docker network; global
-services remain on OpenLander's shared infrastructure network and are not the
-default runtime DB/cache path. Do not use `scope: "global"` for an app's primary
-`DATABASE_URL`/`REDIS_URL`; create the service with `project_id` or
-`project_name` instead.
+`create_service` requires `project_id` or `project_name`. This keeps new
+databases/caches attached to the isolated project Docker network used by the app
+that will consume them. Cross-project shared managed services are not exposed in
+v0.1.2; create the service with the target app's `project_id` or `project_name`.
 
 ### `list_services`
 

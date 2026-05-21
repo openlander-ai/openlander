@@ -10,8 +10,8 @@ OpenLander has two service concepts:
 This page covers **managed services**. Project-scoped managed services run on
 the same project Docker network as the app that uses them and are usually
 connected through environment variables such as `DATABASE_URL` or `REDIS_URL`.
-Global services stay on the shared OpenLander network and are intended only for
-deliberately shared or currently unassigned infrastructure.
+MCP-created managed services require a target project in v0.1.2; cross-project
+shared managed services are not exposed.
 
 ## Available Templates
 
@@ -45,9 +45,8 @@ create_service(name: "my-postgres", template: "postgresql", project_name: "my-ap
 This creates infrastructure. It does not deploy or redeploy your app. To use the new service from an
 app, read credentials and set env vars on the deployable service.
 
-By default, `create_service` requires `project_id` or `project_name` so the
-service is attached to the app that will use it. Use `scope: "global"` only for
-intentionally shared or currently unassigned infrastructure.
+`create_service` requires `project_id` or `project_name` so the service is
+attached to the same isolated Docker network as the app that will use it.
 
 ---
 
@@ -179,15 +178,16 @@ DATABASE_URL=postgresql://user:pass@ol-svc-my-postgres:5432/myapp
 REDIS_URL=redis://ol-svc-my-redis:6379
 ```
 
-Do not use `scope: "global"` as the default app database path. Global services
-are shared/unassigned infrastructure and are not joined to project networks in
-v0.1.2.
+Use project-scoped managed services as the default app database/cache path.
+Unassigned/orphan managed services may appear in admin views, but creating
+cross-project shared services is not exposed in v0.1.2.
 
-If an app previously used a global managed service as its primary database or
-cache, recreate or move that managed service into the app's project, update the
-app env vars to the project-scoped connection string, and redeploy the app.
-After upgrading to v0.1.2, redeploy apps promptly so older app containers do not
-remain on the old shared network while managed services move to the project
+If an app previously used an unassigned/global managed service as its primary
+database or cache, recreate that managed service inside the app's project,
+update the app env vars to the project-scoped connection string, and redeploy
+the app. After upgrading to v0.1.2, redeploy apps promptly so older app
+containers do not remain on the old shared network while managed services move
+to the project network.
 network.
 
 Set via MCP on the deployable service:

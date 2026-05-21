@@ -354,7 +354,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     inputSchema: createDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
-      const envVars = parseEnvVarsInput(args['env_vars']);
+      const envVars = parseEnvVarsInput(args['env_vars']) ?? {};
 
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
@@ -555,7 +555,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     execute: async (args, context) => {
       const appCtx = context.appCtx;
       const toolSessionId = `mcp-deploy-${nanoid(12)}`;
-      const envVars = parseEnvVarsInput(args['env_vars']);
+      const envVars = parseEnvVarsInput(args['env_vars']) ?? {};
       const wait = (args['wait'] as boolean | undefined) ?? true;
       const waitHealthy = (args['wait_healthy'] as boolean | undefined) ?? true;
       const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
@@ -577,8 +577,12 @@ export const deployPlanToolDefs: ToolDef[] = [
         frontDoorTarget?.kind === 'service_target' ||
         frontDoorTarget?.kind === 'existing_project'
       ) {
+        const redeployParams =
+          Object.keys(envVars).length > 0
+            ? { ...frontDoorTarget.params, env_vars: envVars }
+            : frontDoorTarget.params;
         const redeployResult = await runDeployableServiceAction(
-          frontDoorTarget.params,
+          redeployParams,
           context,
           'redeploy_app',
         );
@@ -1281,7 +1285,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         _agent_guidance: {
           networking: [
             'Project-scoped app and managed-service containers are isolated on the project Docker network. Do NOT create Docker networks manually.',
-            'Use project-scoped managed services as the default app DB/cache path. Global services are intentionally shared infrastructure and are not the default runtime connection path.',
+            'Use managed services created in the same project as the default app DB/cache path.',
             'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
           ],
         },

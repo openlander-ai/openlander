@@ -133,13 +133,15 @@ describe('ServiceManager extended DB/user operations', () => {
       createDbMock([postgres, redis]),
     );
 
-    await expect(manager.getSuggestedEnv(postgres)).resolves.toEqual([
-      {
-        key: 'DATABASE_URL',
-        value: 'postgresql://openlander:rootpw@ol-svc-shared-pg:5432/openlander',
-      },
-    ]);
-    await expect(manager.getSuggestedEnv(redis)).resolves.toEqual([
+    await expect(manager.getSuggestedEnv(postgres, { targetProjectId: 'proj-1' })).resolves.toEqual(
+      [
+        {
+          key: 'DATABASE_URL',
+          value: 'postgresql://openlander:rootpw@ol-svc-shared-pg:5432/openlander',
+        },
+      ],
+    );
+    await expect(manager.getSuggestedEnv(redis, { targetProjectId: 'proj-1' })).resolves.toEqual([
       { key: 'REDIS_URL', value: 'redis://ol-svc-shared-redis:6379' },
     ]);
   });
@@ -168,7 +170,7 @@ describe('ServiceManager extended DB/user operations', () => {
     );
 
     await expect(
-      manager.getSuggestedEnv(projectPg, { scope: 'project', targetProjectId: 'proj-1' }),
+      manager.getSuggestedEnv(projectPg, { targetProjectId: 'proj-1' }),
     ).resolves.toEqual([
       { key: 'DATABASE_URL', value: 'postgresql://openlander:pw@ol-svc-app-pg:5432/app' },
     ]);
@@ -192,31 +194,11 @@ describe('ServiceManager extended DB/user operations', () => {
     );
 
     await expect(
-      manager.getSuggestedEnv(projectPg, { scope: 'project', targetProjectId: 'proj-1' }),
+      manager.getSuggestedEnv(projectPg, { targetProjectId: 'proj-1' }),
     ).resolves.toEqual([
       {
         key: 'ANALYTICS_PG_DATABASE_URL',
         value: 'postgresql://openlander:pw@ol-svc-analytics-pg:5432/app',
-      },
-    ]);
-  });
-
-  it('prefixes global service env keys because no consumer project is known', async () => {
-    const globalPg = createService({
-      id: 'svc-global-pg',
-      name: 'global-pg',
-      kind: 'postgres',
-      credentials: JSON.stringify({
-        connectionString: 'postgresql://openlander:pw@ol-svc-global-pg:5432/app',
-      }),
-    });
-
-    const manager = new ServiceManager(createMockDockerHarness().docker, createDbMock([globalPg]));
-
-    await expect(manager.getSuggestedEnv(globalPg, { scope: 'global' })).resolves.toEqual([
-      {
-        key: 'GLOBAL_PG_DATABASE_URL',
-        value: 'postgresql://openlander:pw@ol-svc-global-pg:5432/app',
       },
     ]);
   });
