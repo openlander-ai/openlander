@@ -765,8 +765,17 @@ Without `confirm=true`, this returns the service row that would be created and m
 
 ## Notes
 
-- All tools return structured JSON responses
-- Tool responses include `_agent_guidance` with suggested next steps
+- All tools return structured JSON responses.
+- Status responses stay intentionally small: current status, IDs, revision
+  fields such as `deploy_id`/`commit_sha`, and short guidance.
+- Tool responses may include `_agent_guidance` with suggested next steps.
+- Tool responses may include these call links:
+  - `status_call` for polling progress.
+  - `diagnostic_call` for service or host diagnosis.
+  - `suggested_call` for the primary next mutation/read action.
+- Logs, raw build output, Docker details, host resources, and full diagnostics
+  are fetched through dedicated actions such as `get_build_log`,
+  `diagnose_service`, and `diagnose_host_resources`.
 - `execute_deploy_plan` is non-blocking — always poll `get_deploy_status`
-- Timestamps are ISO 8601 format
-- Error responses include machine-readable codes
+- Timestamps are ISO 8601 format.
+- Error responses include machine-readable codes.

@@ -363,6 +363,27 @@ MCP exposes 5 composite tools, each accepting an `action` parameter (`action="he
 - `openlander_managed_service` — infrastructure services, databases, volumes
 - `openlander_monitor` — monitoring, host diagnostics, alerts, automation
 
+### MCP Response Contract
+
+Keep MCP responses small and action-oriented. The stable envelope is:
+
+1. **Result/status** — what happened now (`status`, `phase`, `deploy_id`,
+   `commit_sha`, `health`, timestamps).
+2. **Identifiers** — IDs needed for the next call (`project_id`, `service_id`,
+   `deploy_id`).
+3. **Call links** — use only these top-level call helper fields:
+   `status_call`, `diagnostic_call`, and `suggested_call`.
+4. **Guidance** — `_agent_guidance.message` and at most a few
+   `_agent_guidance.next_steps`.
+5. **Details** — logs, Docker inspect payloads, raw Traefik config, host
+   resource detail, and full build output belong in dedicated actions
+   (`get_build_log`, `diagnose_service`, `diagnose_host_resources`, etc.), not
+   in status responses.
+
+Do not add new one-off helper fields such as `retry_call`, `build_log_call`, or
+`next_call`. If a new next action is needed, use `suggested_call` for the
+primary recommendation or add a dedicated diagnostic/status action.
+
 ### Docker Abstraction Layer
 
 `src/pipeline/docker.ts` is a thin re-export shim pointing to `src/pipeline/docker/facade.ts`. The full implementation lives in the `src/pipeline/docker/` subdirectory (11 files):
