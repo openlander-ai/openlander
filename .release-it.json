@@ -12,7 +12,7 @@
   },
   "hooks": {
     "before:init": "npm run qa:release && npm run test:coverage && npm pack --dry-run --json --ignore-scripts",
-    "after:bump": "cd web && npm pkg set version=${version} && npm install --package-lock-only && cd .. && npm install --package-lock-only"
+    "after:bump": "node scripts/sync-release-version.mjs ${version}"
   },
   "plugins": {
     "@release-it/keep-a-changelog": {
