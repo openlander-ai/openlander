@@ -374,7 +374,7 @@ export class ProjectRepo {
         and(
           inArray(services.project_id, [...new Set(projectIds)]),
           notInArray(services.kind, ['postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose']),
-          sql`NOT (${services.parent_service_id} IS NULL AND ${services.build_method} = 'compose')`,
+          sql`NOT (${services.parent_service_id} IS NULL AND coalesce(${services.build_method}, '') = 'compose')`,
         ),
       )
       .groupBy(services.project_id);
