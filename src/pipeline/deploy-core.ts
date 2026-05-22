@@ -112,7 +112,9 @@ function isProjectStateTransitioner(value: unknown): value is ProjectStateTransi
 }
 
 const TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS = 5_000;
-const DEFAULT_BLUE_GREEN_ROUTE_SWITCH_DELAY_MS = TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS * 2 + 2_000;
+const DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS =
+  TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS * 2 + 2_000;
+const DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS = 500;
 const BLUE_GREEN_LABELS = {
   ROLE: 'openlander.blue_green.role',
   PROJECT_ID: 'openlander.blue_green.project_id',
@@ -218,8 +220,10 @@ export interface RedeployOptions {
   healthCheckPath?: string;
   healthCheckRetries?: number;
   healthCheckIntervalMs?: number;
-  /** @internal Wait for Traefik HTTP provider polling after route target flip. */
+  /** @internal Maximum wait for Traefik HTTP provider polling after route target flip. */
   routeSwitchDelayMs?: number;
+  /** @internal Poll interval while waiting for Traefik HTTP provider to expose the flipped route. */
+  routeProbeIntervalMs?: number;
   /** @internal Timeout for the managed Traefik route probe. */
   routeProbeTimeoutMs?: number;
   /** @internal Public route path used only to verify ingress reachability after a flip. */
@@ -993,6 +997,43 @@ export class DeployPipeline {
 
       req.end();
     });
+  }
+
+  private async waitForManagedTraefikRoute(params: {
+    projectName: string;
+    path: string;
+    probeTimeoutMs: number;
+    maxWaitMs: number;
+    intervalMs: number;
+  }): Promise<
+    | { ok: true; status: number; attempts: number; elapsedMs: number }
+    | { ok: false; error: string; attempts: number; elapsedMs: number }
+  > {
+    const startedAt = Date.now();
+    const deadline = startedAt + Math.max(0, params.maxWaitMs);
+    let attempts = 0;
+    let lastError = 'Route probe did not run';
+
+    for (;;) {
+      attempts += 1;
+      const probe = await this.probeManagedTraefikRoute({
+        projectName: params.projectName,
+        path: params.path,
+        timeoutMs: params.probeTimeoutMs,
+      });
+      const elapsedMs = Date.now() - startedAt;
+      if (probe.ok) {
+        return { ok: true, status: probe.status, attempts, elapsedMs };
+      }
+
+      lastError = probe.error;
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        return { ok: false, error: lastError, attempts, elapsedMs };
+      }
+
+      await sleep(Math.min(params.intervalMs, remainingMs));
+    }
   }
 
   private async deployInner(
@@ -1925,7 +1966,9 @@ export class DeployPipeline {
     const healthCheckRetries = options?.healthCheckRetries ?? 10;
     const healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 2_000;
     const routeSwitchDelayMs =
-      options?.routeSwitchDelayMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_DELAY_MS;
+      options?.routeSwitchDelayMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS;
+    const routeProbeIntervalMs =
+      options?.routeProbeIntervalMs ?? DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS;
     const routeProbeTimeoutMs = options?.routeProbeTimeoutMs ?? 5_000;
     let routeProbePath = options?.routeProbePath;
 
@@ -2181,14 +2224,13 @@ export class DeployPipeline {
       }
       routeTargetUpdated = true;
 
-      if (routeSwitchDelayMs > 0) {
-        buildLog += `[route] Waiting ${String(routeSwitchDelayMs)}ms for Traefik HTTP provider polling\n`;
-        await sleep(routeSwitchDelayMs);
-      }
-      const routeProbe = await this.probeManagedTraefikRoute({
+      buildLog += `[route] Waiting up to ${String(routeSwitchDelayMs)}ms for Traefik HTTP provider polling\n`;
+      const routeProbe = await this.waitForManagedTraefikRoute({
         projectName,
         path: routeProbePath,
-        timeoutMs: routeProbeTimeoutMs,
+        probeTimeoutMs: routeProbeTimeoutMs,
+        maxWaitMs: routeSwitchDelayMs,
+        intervalMs: routeProbeIntervalMs,
       });
       if (!routeProbe.ok) {
         buildLog += `[route] Failed after switch: ${routeProbe.error}\n`;
@@ -2199,7 +2241,7 @@ export class DeployPipeline {
       }
       routeSwitched = true;
       shouldCleanupGreen = false;
-      buildLog += `[route] Passed (HTTP ${String(routeProbe.status)})\n`;
+      buildLog += `[route] Passed (HTTP ${String(routeProbe.status)}) after ${String(routeProbe.elapsedMs)}ms (${String(routeProbe.attempts)} attempt(s))\n`;
 
       try {
         await this.docker.stopContainer(blueContainerId);

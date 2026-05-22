@@ -272,6 +272,11 @@ tracked as a follow-up.
 The default redeploy strategy remains `force` in 0.1.3. Request
 `strategy: "blue-green"` explicitly after verifying the service is eligible.
 
+Use a real readiness endpoint for `health_check_path`. If the app depends on a
+database, cache, object storage, or external service, that endpoint should verify
+those dependencies; a static 200 response can allow blue-green promotion while
+part of the app is still broken.
+
 ---
 
 ## Rollback
