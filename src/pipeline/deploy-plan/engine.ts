@@ -318,6 +318,7 @@ export class PlanEngine {
       const declaredInCompose =
         composeBuildServices !== undefined &&
         this.composeDeclaresServiceType(composeBuildServices, missingService.type);
+      const approval = SERVICE_APPROVAL[missingService.type];
       services.push({
         type: missingService.type,
         action: 'create',
@@ -325,9 +326,17 @@ export class PlanEngine {
           missingService.connectVia ??
           SERVICE_ENV_VARS[missingService.type] ??
           `${missingService.type.toUpperCase()}_URL`,
-        resolution: declaredInCompose ? 'compose_service' : 'proposed_project_service',
+        // resolution reconciles the legacy `action` with the routing policy:
+        // compose-declared deps are compose_service; types OpenLander cannot
+        // auto-create (not_auto_creatable, e.g. rabbitmq) route to
+        // needs_user_input instead of advertising a managed create it won't do.
+        resolution: declaredInCompose
+          ? 'compose_service'
+          : approval === 'not_auto_creatable'
+            ? 'needs_user_input'
+            : 'proposed_project_service',
         reason: missingService.detectedFrom,
-        approval: SERVICE_APPROVAL[missingService.type],
+        approval,
       });
     }
 

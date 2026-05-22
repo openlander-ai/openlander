@@ -33,7 +33,13 @@ export type DeployPlanComplexity = 'simple' | 'standard' | 'complex';
 export interface PlanService {
   /** Service type (postgresql, mysql, redis, mongodb) */
   type: DetectedServiceType;
-  /** Action to take: create new or reuse existing */
+  /**
+   * Legacy/advisory routing hint: 'create' = new dependency, 'reuse' = existing
+   * service. Do NOT route on `action` alone — read `resolution` and `approval`.
+   * An item can be action:'create' yet resolution:'compose_service' or
+   * 'needs_user_input' (e.g. a not_auto_creatable type), which OpenLander will
+   * not provision as a managed create.
+   */
   action: 'create' | 'reuse';
   /** Optional service name */
   name?: string;

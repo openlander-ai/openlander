@@ -451,9 +451,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'execute_deploy_plan',
     riskLevel: 'medium',
     description:
-      'Execute a deployment plan. Plan must be in "ready" status. Provisions services, injects env vars, and deploys the application.',
+      'Execute a deployment plan. Plan must be in "ready" status. Injects env vars and deploys the application. Managed dependencies (services[].resolution="proposed_project_service") are NOT auto-provisioned yet — supply their connection env (e.g. DATABASE_URL) or create the service first, otherwise the deploy fails fast.',
     mcpDescription:
-      'Execute a deployment plan asynchronously. Returns immediately with project_id and status. Use get_deploy_status to poll progress. Plan must be in "ready" status. Provisions services, injects env vars, and starts deployment.',
+      'Execute a deployment plan asynchronously. Returns immediately with project_id and status. Use get_deploy_status to poll progress. Plan must be in "ready" status. Injects env vars and starts deployment; managed dependencies are not auto-provisioned yet — provide their connection env first.',
     inputSchema: executeDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;

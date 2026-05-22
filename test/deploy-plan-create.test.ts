@@ -633,7 +633,7 @@ describe('PlanEngine.createPlan', () => {
     const mongo = plan.services.find((svc) => svc.type === 'mongodb');
     expect(rabbit).toMatchObject({
       action: 'create',
-      resolution: 'proposed_project_service',
+      resolution: 'needs_user_input',
       approval: 'not_auto_creatable',
     });
     expect(mongo).toMatchObject({
