@@ -19,7 +19,7 @@ import { resolveContainerUrl } from './url-resolver.js';
 import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
-import type { Database, EnvironmentRow, ProjectRow } from '../db/index.js';
+import type { Database, EnvironmentRow, ProjectRow, ServiceRow } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { resolveEnvVars } from './resolve-env.js';
 
@@ -116,6 +116,20 @@ const BLUE_GREEN_LABELS = {
   PROJECT_ID: 'openlander.blue_green.project_id',
   SERVICE_ID: 'openlander.blue_green.service_id',
 } as const;
+
+function explicitHealthCheckPath(
+  project: ProjectRow,
+  deployable: ServiceRow,
+  override?: string,
+): string | undefined {
+  const candidates = [
+    override,
+    deployable.health_check_path ?? undefined,
+    project.health_check_path ?? undefined,
+  ];
+  const found = candidates.find((candidate) => candidate?.trim());
+  return found ? (found.startsWith('/') ? found : `/${found}`) : undefined;
+}
 
 /**
  * Project configuration for a deployment.
@@ -826,12 +840,14 @@ export class DeployPipeline {
 
     if (project && deployable) {
       const profile = resolveMonitoringProfile(project, deployable);
-      const healthPath = options?.healthCheckPath?.trim();
+      const healthPath = explicitHealthCheckPath(project, deployable, options?.healthCheckPath);
       if (!profile.exposeViaTraefik) {
         reasons.push('The service is not exposed through OpenLander/Traefik routes.');
       }
-      if (profile.health.strategy === 'none' && !healthPath) {
-        reasons.push('A health check or explicit health_check_path is required.');
+      if (!healthPath) {
+        reasons.push(
+          'An explicit health_check_path is required; the default "/" probe is not enough for blue-green promotion.',
+        );
       }
     }
 
@@ -1889,7 +1905,7 @@ export class DeployPipeline {
     const routeSwitchDelayMs =
       options?.routeSwitchDelayMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_DELAY_MS;
     const routeProbeTimeoutMs = options?.routeProbeTimeoutMs ?? 5_000;
-    const routeProbePath = options?.routeProbePath ?? '/';
+    let routeProbePath = options?.routeProbePath;
 
     let projectName = 'unknown';
     let imageTag: string | undefined;
@@ -1930,6 +1946,10 @@ export class DeployPipeline {
       projectName = project.name;
       this.validateProjectName(projectName);
       const blueDeployable = await this.db.getDeployableForProject(projectId);
+      const storedHealthPath = blueDeployable
+        ? explicitHealthCheckPath(project, blueDeployable, options?.healthCheckPath)
+        : undefined;
+      routeProbePath ??= storedHealthPath ?? '/';
       const eligibility = await this.getBlueGreenEligibility(projectId, {
         healthCheckPath: options?.healthCheckPath,
       });
@@ -1984,36 +2004,55 @@ export class DeployPipeline {
         await this.db.updateEnvironment(prodEnv.id, { status: 'building' });
       }
 
+      const source: 'git' | 'image' =
+        deployConfig.source === 'image' || blueDeployable.source === 'image' ? 'image' : 'git';
       await eventBus.emit('deploy:start', { projectId, repoUrl: deployConfig.repoUrl });
 
-      this.jobManager?.updatePhase(projectId, 'cloning');
-      buildLog += '[clone] Cloning repository...\n';
-      const cloneResult = await cloneRepo({
-        repoUrl: deployConfig.repoUrl,
-        branch: deployConfig.branch,
-      });
-      clonePath = cloneResult.path;
-      commitSha = cloneResult.commitSha;
-      buildLog += `[clone] Done (${cloneResult.commitSha})\n`;
+      if (source === 'image') {
+        const imageUrl = deployConfig.imageUrl ?? blueDeployable.image_url;
+        if (!imageUrl) {
+          throw new MissingImageUrlError();
+        }
+        this.jobManager?.updatePhase(projectId, 'building');
+        buildLog += `[pull] Pulling image ${imageUrl}\n`;
+        try {
+          await this.docker.pullImage(imageUrl);
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          throw new ImagePullError(mapPullError(err));
+        }
+        buildLog += `[pull] Pulled image ${imageUrl}\n`;
+        imageTag = imageUrl;
+      } else {
+        this.jobManager?.updatePhase(projectId, 'cloning');
+        buildLog += '[clone] Cloning repository...\n';
+        const cloneResult = await cloneRepo({
+          repoUrl: deployConfig.repoUrl,
+          branch: deployConfig.branch,
+        });
+        clonePath = cloneResult.path;
+        commitSha = cloneResult.commitSha;
+        buildLog += `[clone] Done (${cloneResult.commitSha})\n`;
 
-      this.jobManager?.updatePhase(projectId, 'building');
-      imageTag = `openlander/${projectName}:${String(Date.now())}`;
-      buildLog += '[build] Building image...\n';
+        this.jobManager?.updatePhase(projectId, 'building');
+        imageTag = `openlander/${projectName}:${String(Date.now())}`;
+        buildLog += '[build] Building image...\n';
 
-      await this.buildExecutor.build(
-        {
-          clonePath: cloneResult.path,
-          projectId,
-          imageTag,
-          dockerfilePath: deployConfig.dockerfilePath,
-          buildContext: deployConfig.buildContext,
-          dockerTarget: deployConfig.dockerTarget,
-          noCache: options?.noCache,
-        },
-        (line) => {
-          buildLog += `${line}\n`;
-        },
-      );
+        await this.buildExecutor.build(
+          {
+            clonePath: cloneResult.path,
+            projectId,
+            imageTag,
+            dockerfilePath: deployConfig.dockerfilePath,
+            buildContext: deployConfig.buildContext,
+            dockerTarget: deployConfig.dockerTarget,
+            noCache: options?.noCache,
+          },
+          (line) => {
+            buildLog += `${line}\n`;
+          },
+        );
+      }
 
       const buildDuration = Date.now() - startTime;
       buildLog += `[build] Done (${String(Math.round(buildDuration / 1000))}s)\n`;
@@ -2115,7 +2154,7 @@ export class DeployPipeline {
           containerPort,
           imageTag,
           previousImageTag: prodEnv.image_tag,
-          branch: (deployConfig.source ?? 'git') === 'image' ? null : (deployConfig.branch ?? null),
+          branch: source === 'image' ? null : (deployConfig.branch ?? null),
         });
       }
       routeTargetUpdated = true;

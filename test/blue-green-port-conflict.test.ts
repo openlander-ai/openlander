@@ -181,6 +181,7 @@ function createMockDocker(options?: {
 
   const docker = {
     buildImage: vi.fn().mockResolvedValue(undefined),
+    pullImage: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
     runContainer: vi.fn().mockResolvedValue('container-green'),
     stopContainer: vi.fn().mockResolvedValue(undefined),
@@ -370,6 +371,7 @@ describe('blue-green route target flip', () => {
       strategy: 'blue-green',
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 0,
+      routeProbePath: '/',
     });
 
     expect(result.success).toBe(true);
@@ -381,6 +383,77 @@ describe('blue-green route target flip', () => {
       'http://localhost:80/',
       expect.objectContaining({
         headers: { Host: expect.stringMatching(/^demo-app\./) },
+      }),
+    );
+  });
+
+  it('uses the explicit health path as the default route probe path', async () => {
+    state.service.health_check_path = '/healthz';
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+    });
+
+    expect(result.success).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:80/healthz',
+      expect.objectContaining({
+        headers: { Host: expect.stringMatching(/^demo-app\./) },
+      }),
+    );
+  });
+
+  it('blocks blue-green when no explicit health check path exists', async () => {
+    state.service.health_check_path = null;
+    state.service.health_check_strategy = null;
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      strategy: 'blue-green',
+      readiness: 'blocked',
+    });
+    expect(result.error).toContain('explicit health_check_path is required');
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
+  it('redeploys image services without cloning a repository', async () => {
+    state.service.kind = 'image';
+    state.service.source = 'image';
+    state.service.repo_url = null;
+    state.service.image_url = 'nginx:alpine';
+    state.service.image_tag = 'nginx:old';
+    state.service.health_check_path = '/healthz';
+    state.environment.image_tag = 'nginx:old';
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      strategy: 'blue-green',
+      route_switched: true,
+    });
+    expect(gitPipeline.cloneRepo).not.toHaveBeenCalled();
+    expect(docker.buildImage as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+    expect(docker.pullImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('nginx:alpine');
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageTag: 'nginx:alpine',
       }),
     );
   });
