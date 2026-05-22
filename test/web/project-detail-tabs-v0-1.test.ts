@@ -9,6 +9,8 @@ function readRepoFile(relativePath: string): string {
 
 describe('Project detail v0.1 tabs', () => {
   const projectViewSource = readRepoFile('web/src/pages/ProjectView.tsx');
+  const servicesApiSource = readRepoFile('web/src/lib/api/services.ts');
+  const projectsApiSource = readRepoFile('web/src/lib/api/projects.ts');
   const enSource = readRepoFile('web/src/i18n/en.ts');
   const koSource = readRepoFile('web/src/i18n/ko.ts');
 
@@ -28,9 +30,21 @@ describe('Project detail v0.1 tabs', () => {
 
   it('drops the ProjectMcpTab component import and file (PR #188 revert)', () => {
     expect(projectViewSource).not.toMatch(/ProjectMcpTab/);
-    expect(existsSync(path.join(process.cwd(), 'web/src/components/project/ProjectMcpTab.tsx'))).toBe(
-      false,
+    expect(
+      existsSync(path.join(process.cwd(), 'web/src/components/project/ProjectMcpTab.tsx')),
+    ).toBe(false);
+  });
+
+  it('shows connected managed services in the project Services tab', () => {
+    expect(servicesApiSource).toContain(
+      'apiGet<ProjectManagedService[]>(`/api/projects/${groupId}/managed-services`)',
     );
+    expect(projectsApiSource).toContain('`/api/projects/${id}/managed-services${params}`');
+    expect(projectViewSource).toContain('managedServices.listForGroup(projectId)');
+    expect(projectViewSource).toContain('managedServiceToNode');
+    expect(projectViewSource).toContain('const projectServiceRows = useMemo');
+    expect(projectViewSource).toContain('services={projectServiceRows}');
+    expect(projectViewSource).toContain('navigate(`/managed-services/${service.id}`)');
   });
 
   it('drops the projectDetail.tabs.mcp i18n key from both locales', () => {

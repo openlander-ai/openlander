@@ -439,8 +439,8 @@ export interface ConnectedService {
   name: string;
   type: string;
   status: 'running' | 'stopped' | 'error';
-  port: number;
-  containerName: string;
+  port: number | null;
+  containerName: string | null;
   autoInjectedEnvKeys?: string[];
 }
 
@@ -449,7 +449,7 @@ export async function getProjectConnectedServices(
   environmentId?: string,
 ): Promise<ConnectedService[]> {
   const params = environmentId ? `?environmentId=${environmentId}` : '';
-  const res = await fetch(`/api/projects/${id}/services${params}`);
+  const res = await fetch(`/api/projects/${id}/managed-services${params}`);
   if (!res.ok) return [];
   return res.json();
 }

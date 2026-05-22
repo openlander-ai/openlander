@@ -48,6 +48,16 @@ export interface Service {
   };
 }
 
+export interface ProjectManagedService {
+  id: string;
+  name: string;
+  type: string;
+  status: 'running' | 'stopped' | 'error';
+  port: number | null;
+  containerName: string | null;
+  autoInjectedEnvKeys?: string[];
+}
+
 /**
  * Legacy global services list — backed by today's managed-only handler.
  * Prefer `managedServices.list()` (`/api/managed-services`) once P2 ships
@@ -83,8 +93,8 @@ export const managedServices = {
   /** Get a managed service by id. */
   get: (id: string): Promise<Service> => apiGet<Service>(`/api/services/${id}`),
   /** List managed services attached to a group via service_connections. */
-  listForGroup: (groupId: string): Promise<Service[]> =>
-    apiGet<Service[]>(`/api/projects/${groupId}/managed-services`),
+  listForGroup: (groupId: string): Promise<ProjectManagedService[]> =>
+    apiGet<ProjectManagedService[]>(`/api/projects/${groupId}/managed-services`),
 } as const;
 
 /**

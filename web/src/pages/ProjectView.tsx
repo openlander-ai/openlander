@@ -15,7 +15,7 @@
  * the user off to an external MCP agent; v0.1 spec puts the dialog
  * inside the product so the human path is self-contained.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Box, Database, ExternalLink, Plus, Settings as SettingsIcon } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
@@ -28,6 +28,7 @@ import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useIsBelowMd } from '@/hooks/use-viewport';
 import { useProjectTopology } from '@/hooks/use-project-topology';
 import { useLanguage } from '@/i18n/context';
+import { managedServices, type ProjectManagedService } from '@/lib/api/services';
 import { cn } from '@/lib/utils';
 
 type ProjectTabId = 'services' | 'settings';
@@ -35,6 +36,39 @@ type ProjectTabId = 'services' | 'settings';
 function hasRuntimeMetricValue(value: string): boolean {
   const normalized = value.trim();
   return normalized !== '' && normalized !== '—' && normalized !== '-';
+}
+
+function managedStatusToHealth(status: ProjectManagedService['status']): ServiceHealth {
+  return status === 'running' ? 'healthy' : 'crashed';
+}
+
+function managedServiceToNode(service: ProjectManagedService): ServiceNode {
+  return {
+    id: service.id,
+    name: service.name,
+    kind: 'Database',
+    // `service` is the connected managed-service API shape, not a DB service row.
+    // eslint-disable-next-line openlander-internal/no-dropped-columns
+    port: service.port,
+    // eslint-disable-next-line openlander-internal/no-dropped-columns
+    image: service.type,
+    health: managedStatusToHealth(service.status),
+    cpu: '—',
+    mem: '—',
+    url: null,
+    dependsOn: [],
+    source: 'managed',
+  };
+}
+
+function isManagedServiceNode(service: ServiceNode): boolean {
+  return service.source === 'managed';
+}
+
+function reportManagedServicesLoadFailure(err: unknown): void {
+  if (import.meta.env.DEV) {
+    console.warn('[ProjectView] Failed to load connected managed services', err);
+  }
 }
 
 export function ProjectView() {
@@ -63,8 +97,52 @@ export function ProjectView() {
     isMockFallback,
     refetch: refetchTopology,
   } = useProjectTopology(projectId || null);
+  const [managedServiceNodes, setManagedServiceNodes] = useState<ServiceNode[]>([]);
   const isBelowMd = useIsBelowMd();
   const [addServiceOpen, setAddServiceOpen] = useState(false);
+
+  const refetchManagedServices = useCallback(async () => {
+    if (!projectId) {
+      setManagedServiceNodes([]);
+      return;
+    }
+    try {
+      const rows = await managedServices.listForGroup(projectId);
+      setManagedServiceNodes(rows.map(managedServiceToNode));
+    } catch (err) {
+      reportManagedServicesLoadFailure(err);
+      setManagedServiceNodes([]);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    let active = true;
+    if (!projectId) {
+      return () => {
+        active = false;
+      };
+    }
+    managedServices
+      .listForGroup(projectId)
+      .then((rows) => {
+        if (active) setManagedServiceNodes(rows.map(managedServiceToNode));
+      })
+      .catch((err) => {
+        reportManagedServicesLoadFailure(err);
+        if (active) setManagedServiceNodes([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [projectId]);
+
+  const projectServiceRows = useMemo(() => {
+    const serviceIds = new Set(services.map((service) => service.id));
+    const connectedManagedServices = managedServiceNodes.filter(
+      (service) => !serviceIds.has(service.id),
+    );
+    return [...services, ...connectedManagedServices];
+  }, [managedServiceNodes, services]);
 
   useEffect(() => {
     if (tabParam === 'activity' && projectId) {
@@ -104,8 +182,12 @@ export function ProjectView() {
   // Avoids drift where some callers forget to attach `?project=` and the
   // service detail page falls back to a default.
   const openService = useCallback(
-    (serviceId: string) => {
-      navigate(`/services/${serviceId}?project=${projectId}`);
+    (service: ServiceNode) => {
+      if (isManagedServiceNode(service)) {
+        navigate(`/managed-services/${service.id}`);
+        return;
+      }
+      navigate(`/services/${service.id}?project=${projectId}`);
     },
     [navigate, projectId],
   );
@@ -140,7 +222,12 @@ export function ProjectView() {
   }
 
   const tabs: TabDef<ProjectTabId>[] = [
-    { id: 'services', label: t('projectDetail.tabs.services'), icon: Box, count: services.length },
+    {
+      id: 'services',
+      label: t('projectDetail.tabs.services'),
+      icon: Box,
+      count: projectServiceRows.length,
+    },
     { id: 'settings', label: t('projectDetail.tabs.settings'), icon: SettingsIcon },
   ];
 
@@ -156,7 +243,10 @@ export function ProjectView() {
         agentActivity={[]}
         forceDense={isBelowMd}
         isDemo={isMockFallback}
-        onSelectService={(_p, sid) => openService(sid)}
+        onSelectService={(_p, sid) => {
+          const selected = services.find((service) => service.id === sid);
+          if (selected) openService(selected);
+        }}
       />
 
       {/* Outer card with tabs */}
@@ -236,7 +326,7 @@ export function ProjectView() {
           className="p-0"
         >
           <ServicesPanel
-            services={services}
+            services={projectServiceRows}
             onOpen={openService}
             onAddService={() => setAddServiceOpen(true)}
           />
@@ -272,6 +362,7 @@ export function ProjectView() {
           displayName={projectDisplayName}
           onCreated={() => {
             refetchTopology();
+            void refetchManagedServices();
             void refetchProjects();
           }}
         />
@@ -288,7 +379,7 @@ function ServicesPanel({
   onAddService,
 }: {
   services: ServiceNode[];
-  onOpen: (id: string) => void;
+  onOpen: (service: ServiceNode) => void;
   onAddService: () => void;
 }) {
   const { t } = useLanguage();
@@ -321,7 +412,7 @@ function ServicesPanel({
       <ul className="divide-y divide-[color:var(--ol-border-subtle)]">
         {services.map((s) => {
           const KindIcon = s.kind === 'Database' ? Database : Box;
-          const open = () => onOpen(s.id);
+          const open = () => onOpen(s);
           return (
             <li key={s.id}>
               <div
