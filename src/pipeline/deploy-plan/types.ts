@@ -5,6 +5,8 @@ import type { DetectedServiceType } from '../../lib/infra-analyzer.js';
  * - draft: Initial state, plan created but not validated
  * - ready: Plan validated and ready for execution
  * - needs_input: Plan requires user input (e.g., missing secrets)
+ * - needs_approval: Plan proposes auto-provisioning safe managed resources and
+ *   requires explicit approval before execution
  * - executing: Plan is currently being executed
  * - completed: Plan executed successfully
  * - failed: Plan execution failed
@@ -14,6 +16,7 @@ export type DeployPlanStatus =
   | 'draft'
   | 'ready'
   | 'needs_input'
+  | 'needs_approval'
   | 'executing'
   | 'completed'
   | 'failed'
@@ -196,8 +199,12 @@ export const PlanStateMachine = {
   canTransition(from: DeployPlanStatus, to: DeployPlanStatus): boolean {
     // Valid transitions map
     const validTransitions: Record<DeployPlanStatus, DeployPlanStatus[]> = {
-      draft: ['ready', 'needs_input'],
+      draft: ['ready', 'needs_input', 'needs_approval'],
       needs_input: ['ready'],
+      // needs_approval -> ready only; the approval -> ready step is in-memory.
+      // needs_approval -> executing is intentionally NOT an edge so an
+      // unapproved plan can never be persisted as executing.
+      needs_approval: ['ready'],
       ready: ['executing'],
       executing: ['completed', 'failed', 'rolled_back'],
       completed: [],

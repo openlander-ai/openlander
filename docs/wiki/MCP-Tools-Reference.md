@@ -109,10 +109,27 @@ Update a deployment plan with missing values.
 
 Execute a deployment plan (non-blocking).
 
-| Parameter     | Type     | Required | Description                        |
-| ------------- | -------- | -------- | ---------------------------------- |
-| `plan_id`     | string   | Yes      | Plan ID                            |
-| `deploy_only` | string[] | No       | Service names for compose projects |
+| Parameter                    | Type     | Required | Description                                                          |
+| ---------------------------- | -------- | -------- | -------------------------------------------------------------------- |
+| `plan_id`                    | string   | Yes      | Plan ID                                                              |
+| `deploy_only`                | string[] | No       | Service names for compose projects                                   |
+| `approve_all_safe_resources` | boolean  | No       | Approve every proposed project-scoped managed service on the plan    |
+| `approvals.create_resources` | string[] | No       | Approve specific proposed services by identifier (e.g. `postgresql`) |
+
+When a plan is in **`needs_approval`** status it proposes project-scoped managed services
+(listed in `services[]` with `resolution="proposed_project_service"`) — for example a
+`postgresql` database OpenLander would auto-provision and wire to `DATABASE_URL`. The
+provisioning is gated: execute returns `needs_approval` with `approval_required.create_resources`
+(the identifiers to approve) and creates nothing until you approve. Re-run with
+`approve_all_safe_resources=true` to approve all, or `approvals.create_resources=[...]` to approve
+individually. Unapproved, compose, or not-auto-creatable services are never created — supply their
+connection env (e.g. an external `DATABASE_URL`) or create them first.
+
+Auto-provisioning is supported only for **existing** projects. Executing an approved plan for a
+brand-new app (no project row yet) returns `needs_target_project` and creates nothing. To deploy
+the new app now, pass an external connection URL (e.g. `DATABASE_URL`) in `env_vars` so no managed
+service needs provisioning; auto-provisioning becomes available when deploying under an existing
+project.
 
 ### `deploy_app`
 

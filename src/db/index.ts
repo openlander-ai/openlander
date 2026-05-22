@@ -410,6 +410,7 @@ export class Database implements AuthDatabase {
    */
   getDeployableForProject(projectId: string) { return this.serviceRepo.getService(`${projectId}__svc`); }
   createServiceConnection(opts: Parameters<ServiceConnectionRepo['createConnection']>[0]) { return this.serviceConnectionRepo.createConnection(opts); }
+  upsertServiceConnection(opts: Parameters<ServiceConnectionRepo['upsertConnection']>[0]) { return this.serviceConnectionRepo.upsertConnection(opts); }
   getServiceConnection(id: string) { return this.serviceConnectionRepo.getConnection(id); }
   getServiceConnectionByProjectAndService(projectId: string, serviceId: string) { return this.serviceConnectionRepo.getConnectionByProjectAndService(projectId, serviceId); }
   listServiceConnectionsByProject(projectId: string, environmentId?: string) { return this.serviceConnectionRepo.listConnectionsByProject(projectId, environmentId); }

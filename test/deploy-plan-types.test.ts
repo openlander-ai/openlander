@@ -12,12 +12,13 @@ describe('DeployPlanStatus type', () => {
       'draft',
       'ready',
       'needs_input',
+      'needs_approval',
       'executing',
       'completed',
       'failed',
       'rolled_back',
     ];
-    expect(statuses).toHaveLength(7);
+    expect(statuses).toHaveLength(8);
   });
 });
 
@@ -158,6 +159,14 @@ describe('PlanStateMachine.canTransition', () => {
 
   it('allows needs_input → ready', () => {
     expect(PlanStateMachine.canTransition('needs_input', 'ready')).toBe(true);
+  });
+
+  it('allows needs_approval → ready (approval flips to ready in memory)', () => {
+    expect(PlanStateMachine.canTransition('needs_approval', 'ready')).toBe(true);
+  });
+
+  it('rejects needs_approval → executing (an unapproved plan can never be persisted as executing)', () => {
+    expect(PlanStateMachine.canTransition('needs_approval', 'executing')).toBe(false);
   });
 
   it('allows ready → executing', () => {

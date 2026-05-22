@@ -802,13 +802,35 @@ export const updateDeployPlanSchema = z.object({
 });
 
 export const executeDeployPlanSchema = z.object({
-  plan_id: z.string().min(1).describe('Plan ID to execute. Plan must be in "ready" status.'),
+  plan_id: z
+    .string()
+    .min(1)
+    .describe(
+      'Plan ID to execute. Plan must be in "ready" status, or "needs_approval" when called with approve_all_safe_resources / approvals.create_resources.',
+    ),
   deploy_only: z
     .array(z.string())
     .optional()
     .describe(
       'For compose projects: deploy only these service names (e.g., ["backend", "worker"]). Omit to deploy all services.',
     ),
+  approve_all_safe_resources: z
+    .boolean()
+    .optional()
+    .describe(
+      'For "needs_approval" plans: approve auto-provisioning of ALL proposed safe managed resources (e.g. postgresql, redis). Equivalent to listing every proposed resource in approvals.create_resources.',
+    ),
+  approvals: z
+    .object({
+      create_resources: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Identifiers of proposed safe managed resources to approve, matched by service type (e.g. ["postgresql", "redis"]).',
+        ),
+    })
+    .optional()
+    .describe('Explicit per-resource approvals for "needs_approval" plans.'),
 });
 
 // One-call deploy schema (create plan + execute + optionally wait)

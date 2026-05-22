@@ -403,6 +403,17 @@ export const deployPlanToolDefs: ToolDef[] = [
           : {}),
         ...(context.target === 'agent' &&
         typeof context.appCtx.db.getProject === 'function' &&
+        plan.status === 'needs_approval'
+          ? {
+              _agent_guidance: {
+                next_steps: [
+                  'This plan proposes project-scoped managed services (see services[] with resolution="proposed_project_service"). Confirm with the user, then call execute_deploy_plan with approve_all_safe_resources=true or approvals.create_resources=[<identifiers>].',
+                ],
+              },
+            }
+          : {}),
+        ...(context.target === 'agent' &&
+        typeof context.appCtx.db.getProject === 'function' &&
         plan.status === 'ready'
           ? {
               _agent_guidance: {
@@ -451,9 +462,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'execute_deploy_plan',
     riskLevel: 'medium',
     description:
-      'Execute a deployment plan. Plan must be in "ready" status. Injects env vars and deploys the application. Managed dependencies (services[].resolution="proposed_project_service") are NOT auto-provisioned yet — supply their connection env (e.g. DATABASE_URL) or create the service first, otherwise the deploy fails fast.',
+      'Execute a deployment plan. A plan in "needs_approval" status lists proposed project-scoped managed services in services[] (resolution="proposed_project_service"); pass approve_all_safe_resources=true or approvals.create_resources=[...] to approve and OpenLander provisions the approved safe managed services (DB/cache), wires their connection env (e.g. DATABASE_URL), and deploys. Unapproved, compose, or not_auto_creatable services are never created — supply their env or create them first. Plans already in "ready" status execute directly.',
     mcpDescription:
-      'Execute a deployment plan asynchronously. Returns immediately with project_id and status. Use get_deploy_status to poll progress. Plan must be in "ready" status. Injects env vars and starts deployment; managed dependencies are not auto-provisioned yet — provide their connection env first.',
+      'Execute a deployment plan asynchronously. Returns immediately with project_id and status. Use get_deploy_status to poll progress. A "needs_approval" plan lists proposed managed services in services[]; pass approve_all_safe_resources=true or approvals.create_resources=[...] and OpenLander provisions the approved safe managed services (DB/cache), wires their connection env, and deploys. Unapproved/compose/not_auto_creatable services are not created. "ready" plans execute directly; injects env vars and starts deployment.',
     inputSchema: executeDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -461,6 +472,15 @@ export const deployPlanToolDefs: ToolDef[] = [
       const toolSessionId = `mcp-execute-plan-${nanoid(12)}`;
 
       const deployOnly = (args['deploy_only'] as string[] | undefined) ?? undefined;
+      const approveAllSafeResources = args['approve_all_safe_resources'] as boolean | undefined;
+      const approvalsArg = args['approvals'] as { create_resources?: string[] } | undefined;
+      const approval = {
+        ...(approveAllSafeResources !== undefined ? { approveAllSafeResources } : {}),
+        ...(approvalsArg?.create_resources
+          ? { createResources: approvalsArg.create_resources }
+          : {}),
+      };
+      let acquiredLockProjectId: string | null = null;
       const planRow =
         typeof appCtx.db.getDeployPlan === 'function'
           ? await appCtx.db.getDeployPlan(planId)
@@ -478,6 +498,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           if (lockResult) {
             return lockResult;
           }
+          acquiredLockProjectId = lockProjectId;
         }
         if (planData.project_id) {
           markMcpDeploy(planData.project_id);
@@ -490,6 +511,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           deployOnly,
           toolSessionId,
           deployTriggerForToolContext(context),
+          approval,
         );
       } catch (err) {
         if (err instanceof DeployLockedError) {
@@ -512,6 +534,37 @@ export const deployPlanToolDefs: ToolDef[] = [
           };
         }
         throw err;
+      }
+
+      if (result.status === 'needs_approval') {
+        // Engine started nothing. Release the pre-acquired lock so the agent
+        // can re-run with approvals.
+        if (acquiredLockProjectId) {
+          await appCtx.db.releaseDeployLock(acquiredLockProjectId, toolSessionId);
+        }
+        return {
+          plan_id: result.plan_id,
+          status: 'needs_approval',
+          approval_required: result.approval_required,
+          _agent_guidance: result._agent_guidance,
+        };
+      }
+
+      if (result.status === 'needs_target_project') {
+        // New-app guard: the engine created nothing because an approved managed
+        // service has no existing target project to provision on. Release the
+        // pre-acquired lock (none was created by the engine).
+        if (acquiredLockProjectId) {
+          await appCtx.db.releaseDeployLock(acquiredLockProjectId, toolSessionId);
+        }
+        return {
+          plan_id: result.plan_id,
+          status: 'needs_target_project',
+          project_name: result.project_name,
+          message: result.message,
+          approval_required: result.approval_required,
+          _agent_guidance: result._agent_guidance,
+        };
       }
 
       if (result.project_id) {
@@ -548,7 +601,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'deploy_app',
     riskLevel: 'medium',
     description:
-      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing project with exactly one deployable service, this redeploys that service. Otherwise it creates a new app from repo_url or image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list.',
+      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing project with exactly one deployable service, this redeploys that service. Otherwise it creates a new app from repo_url or image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list; if it proposes project-scoped managed services, returns status "needs_approval" with approval_required (approve via execute_deploy_plan using approve_all_safe_resources / approvals.create_resources).',
     mcpDescription:
       'App deploy front door. New app: pass repo_url/image and use name for the project group name. Existing app: prefer service_id, or use service_name/project_name/name lookup. Poll get_deploy_status; diagnose failures with diagnose_service.',
     inputSchema: deploySchema,
@@ -698,6 +751,32 @@ export const deployPlanToolDefs: ToolDef[] = [
               `Provide missing values: ${plan.missing.join(', ')}`,
               'Call update_deploy_plan with the values, then execute_deploy_plan',
               'Or call deploy_app again with env_vars including the missing keys',
+            ],
+          },
+        };
+      }
+
+      if (plan.status === 'needs_approval') {
+        // Surface the approval contract so the agent routes through
+        // execute_deploy_plan with approvals. Do NOT proceed to lock or execute —
+        // unapproved provisioning creates nothing and the caller must confirm.
+        const safeProposals = plan.services.filter(
+          (svc) =>
+            svc.resolution === 'proposed_project_service' && svc.approval === 'safe_resource',
+        );
+        return {
+          plan_id: plan.plan_id,
+          status: 'needs_approval',
+          services: plan.services,
+          approval_required: {
+            create_resources: safeProposals.map((svc) => svc.name ?? svc.type),
+          },
+          warnings: plan.warnings,
+          _agent_guidance: {
+            next_steps: [
+              'This plan proposes project-scoped managed services (see services[] with resolution="proposed_project_service"). Confirm with the user before proceeding.',
+              'Then call execute_deploy_plan with the plan_id and approve_all_safe_resources=true, or approvals.create_resources=[<identifiers>] to approve individually.',
+              'Note: for a NEW app, OpenLander cannot auto-provision a managed service yet — execute_deploy_plan returns needs_target_project. To deploy this app now, pass an external connection URL (e.g. DATABASE_URL) in env_vars so nothing needs provisioning; auto-provisioning is available under an existing project.',
             ],
           },
         };

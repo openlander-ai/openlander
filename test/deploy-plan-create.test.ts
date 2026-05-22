@@ -292,7 +292,7 @@ describe('PlanEngine.createPlan', () => {
     rmSync(repoPath, { recursive: true, force: true });
   });
 
-  it('requires DATABASE_URL input when postgresql is detected without a scoped service', async () => {
+  it('surfaces needs_approval when postgresql is detected without a scoped service', async () => {
     mockCloneRepo.mockResolvedValue({
       path: '/tmp/test-repo',
       commitSha: 'def789ghi012',
@@ -316,8 +316,10 @@ describe('PlanEngine.createPlan', () => {
     expect(plan.services[0].type).toBe('postgresql');
     expect(plan.services[0].action).toBe('create');
     expect(plan.services[0].connect_via).toBe('DATABASE_URL');
-    expect(plan.status).toBe('needs_input');
-    expect(plan.missing).toContain('DATABASE_URL');
+    // Proposed safe managed resource → auto-provisionable on approval, so the
+    // plan needs approval rather than manual DATABASE_URL input.
+    expect(plan.status).toBe('needs_approval');
+    expect(plan.missing).not.toContain('DATABASE_URL');
   });
 
   it('does not reuse managed services from other projects during plan creation', async () => {
@@ -351,8 +353,11 @@ describe('PlanEngine.createPlan', () => {
       name: 'babycup',
     });
 
-    expect(plan.status).toBe('needs_input');
-    expect(plan.missing).toContain('DATABASE_URL');
+    // A proposed safe managed resource (postgresql) is auto-provisionable on
+    // approval, so its DATABASE_URL is not "missing"; the plan surfaces as
+    // needs_approval rather than needs_input.
+    expect(plan.status).toBe('needs_approval');
+    expect(plan.missing).not.toContain('DATABASE_URL');
     expect(plan.services[0]).toMatchObject({
       type: 'postgresql',
       action: 'create',
@@ -808,5 +813,100 @@ describe('PlanEngine.createPlan', () => {
       expect(serialized).not.toContain(forbidden);
     }
     expect(plan).not.toHaveProperty('proposed_resources');
+  });
+
+  // P2 status-priority gate: needs_input (missing>0) > needs_approval (>=1 safe
+  // proposed resource) > ready. A missing user secret always wins, even when a
+  // safe proposed managed resource would otherwise surface needs_approval.
+  it('prioritizes needs_input over needs_approval when a required user secret is missing alongside a safe proposed resource', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'plan-priority-input-'));
+    writeFileSync(join(repoPath, '.env.example'), 'API_KEY=\n');
+    writeFileSync(join(repoPath, 'Dockerfile'), 'FROM node:22\n');
+
+    mockCloneRepo.mockResolvedValue({
+      path: repoPath,
+      commitSha: 'priority-input',
+    });
+
+    // A safe proposed postgresql dependency (would be needs_approval on its own)
+    // co-exists with a missing user secret (API_KEY) from .env.example.
+    mockAnalyzeInfra.mockReturnValue({
+      needs: [{ type: 'postgresql', detectedFrom: 'pg' }],
+      available: [],
+      missing: [{ type: 'postgresql', suggestion: 'Create a postgresql service', detectedFrom: 'pg' }],
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    mockReadFileSync.mockImplementation(actualFs.readFileSync);
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/priority-input-app',
+      branch: 'main',
+    });
+
+    expect(plan.status).toBe('needs_input');
+    expect(plan.missing).toContain('API_KEY');
+    // The proposed safe resource is still classified, but does not downgrade the
+    // status — the missing user secret takes priority.
+    expect(plan.services.find((svc) => svc.type === 'postgresql')).toMatchObject({
+      resolution: 'proposed_project_service',
+      approval: 'safe_resource',
+    });
+
+    rmSync(repoPath, { recursive: true, force: true });
+  });
+
+  it('yields needs_approval when only a safe proposed resource needs approval and no user input is missing', async () => {
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'priority-approval',
+    });
+
+    mockAnalyzeInfra.mockReturnValue({
+      needs: [{ type: 'postgresql', detectedFrom: 'pg' }],
+      available: [],
+      missing: [{ type: 'postgresql', suggestion: 'Create a postgresql service', detectedFrom: 'pg' }],
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('');
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/priority-approval-app',
+      branch: 'main',
+    });
+
+    expect(plan.status).toBe('needs_approval');
+    expect(plan.missing).toHaveLength(0);
+    expect(plan.services.find((svc) => svc.type === 'postgresql')).toMatchObject({
+      resolution: 'proposed_project_service',
+      approval: 'safe_resource',
+    });
+  });
+
+  it('yields ready when neither user input is missing nor a safe proposed resource needs approval', async () => {
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'priority-ready',
+    });
+
+    mockAnalyzeInfra.mockReturnValue({
+      needs: [],
+      available: [],
+      missing: [],
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('');
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/priority-ready-app',
+      branch: 'main',
+    });
+
+    expect(plan.status).toBe('ready');
+    expect(plan.missing).toHaveLength(0);
+    expect(plan.services).toHaveLength(0);
   });
 });

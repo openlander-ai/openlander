@@ -121,6 +121,50 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.status).toBe('ready');
   });
 
+  // P1-1 status-priority gate on updatePlan: a plan that starts needs_input
+  // (missing user secret) AND carries a safe proposed managed resource must
+  // become needs_approval (NOT ready) once the secret is filled — otherwise the
+  // approval gate is skipped and provisioning runs with no approved resources.
+  it('transitions needs_input → needs_approval (not ready) when a filled secret coexists with a safe proposed resource', async () => {
+    const plan = createMockDeployPlan({
+      status: 'needs_input',
+      services: [
+        {
+          type: 'postgresql',
+          action: 'create',
+          connect_via: 'DATABASE_URL',
+          resolution: 'proposed_project_service',
+          approval: 'safe_resource',
+          reason: 'pg',
+        },
+      ],
+      env: {
+        auto: {},
+        required: ['API_KEY'],
+        provided: {},
+        detected: [{ key: 'API_KEY', source: 'required', required: true }],
+      },
+      missing: ['API_KEY'],
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    const updated = await engine.updatePlan(plan.plan_id, {
+      env: { API_KEY: 'secret-value' },
+    });
+
+    expect(updated.missing).toHaveLength(0);
+    // The safe proposed postgresql resource still needs approval, so the plan
+    // must NOT downgrade to 'ready'.
+    expect(updated.status).toBe('needs_approval');
+    expect(updated.services.find((svc) => svc.type === 'postgresql')).toMatchObject({
+      resolution: 'proposed_project_service',
+      approval: 'safe_resource',
+    });
+  });
+
   it('throws error when updating plan in executing status', async () => {
     const plan = createMockDeployPlan({
       status: 'executing',
@@ -423,6 +467,13 @@ describe('PlanEngine.executePlan', () => {
       getProjectByName: vi.fn().mockReturnValue(null),
       getService: vi.fn().mockReturnValue(null),
       getLastDeployLog: vi.fn().mockReturnValue(null),
+      upsertServiceConnection: vi.fn().mockResolvedValue(undefined),
+      attachServiceToProject: vi.fn().mockResolvedValue({
+        sourceProjectId: 'orphan',
+        targetProjectId: 'p1',
+        droppedEnvVarKeys: [],
+        droppedSecretFiles: [],
+      }),
     };
 
     mockPipeline = {
@@ -1166,5 +1217,313 @@ describe('PlanEngine.executePlan', () => {
 
     expect(mockPipeline.startMonorepoDeploy).toHaveBeenCalled();
     expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
+  });
+});
+
+// P2 safety: the approval gate on a needs_approval plan. These verify the gate
+// fires BEFORE any provisioning, that an unapproved plan creates nothing, that
+// approved provisioning is conflict-safe (idempotent), that a lock failure
+// never persists 'ready', and that the reuse path backfills a connection row.
+describe('PlanEngine.executePlan — P2 approval gate', () => {
+  let engine: PlanEngine;
+  let mockDb: any;
+  let mockPipeline: any;
+  let mockEnv: any;
+  let mockServiceManager: any;
+  let mockDocker: any;
+  let mockEvents: any;
+
+  const SAFE_PG_PROPOSAL = {
+    type: 'postgresql' as const,
+    action: 'create' as const,
+    connect_via: 'DATABASE_URL',
+    resolution: 'proposed_project_service' as const,
+    approval: 'safe_resource' as const,
+    reason: 'pg',
+  };
+
+  // A needs_approval plan with one safe proposed postgresql managed resource.
+  // Proposed (action:'create') services carry no name, so the approval
+  // identifier is the service type, 'postgresql'.
+  const createNeedsApprovalPlan = (overrides?: Record<string, unknown>) =>
+    createMockDeployPlan({
+      status: 'needs_approval',
+      project_id: 'p1',
+      services: [SAFE_PG_PROPOSAL],
+      env: {
+        auto: {},
+        required: [],
+        provided: {},
+        detected: [],
+      },
+      ...overrides,
+    });
+
+  beforeEach(() => {
+    mockDb = {
+      createDeployPlan: vi.fn(),
+      getDeployPlan: vi.fn(),
+      updateDeployPlan: vi.fn().mockResolvedValue(undefined),
+      listServices: vi.fn().mockReturnValue([]),
+      getProject: vi.fn((id: string) => (id === 'p1' ? { id: 'p1', name: 'test-app' } : null)),
+      getProjectByName: vi.fn().mockReturnValue(null),
+      getService: vi.fn().mockReturnValue(null),
+      getLastDeployLog: vi.fn().mockReturnValue(null),
+      attachServiceToProject: vi.fn().mockResolvedValue(undefined),
+      // Mimics service-connection.repo onConflictDoNothing: a repeat upsert is a
+      // no-op that never throws a unique-violation.
+      upsertServiceConnection: vi.fn().mockResolvedValue(undefined),
+      acquireDeployLock: vi.fn().mockResolvedValue(true),
+      getDeployLockInfo: vi.fn().mockResolvedValue(null),
+      releaseDeployLock: vi.fn().mockResolvedValue(undefined),
+    };
+
+    mockPipeline = {
+      startDeploy: vi
+        .fn()
+        .mockResolvedValue({ status: 'building', projectId: 'p1', projectName: 'test-app' }),
+    };
+
+    mockEnv = {
+      getAll: vi.fn().mockReturnValue({}),
+      getGlobalSecrets: vi.fn().mockReturnValue({}),
+    };
+
+    mockServiceManager = {
+      create: vi.fn().mockResolvedValue({ id: 'svc-pg-1', name: 'test-app-postgresql' }),
+      getSuggestedEnv: vi
+        .fn()
+        .mockResolvedValue([{ key: 'DATABASE_URL', value: 'postgres://provisioned/db' }]),
+    };
+
+    mockDocker = {
+      ensureProjectNetwork: vi.fn().mockResolvedValue('ol-test-app-net'),
+    };
+
+    mockEvents = {
+      emit: vi.fn(),
+      on: vi.fn(() => vi.fn()),
+    };
+
+    const deps: PlanEngineDeps = {
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: {},
+      config: {},
+      events: mockEvents,
+      docker: mockDocker,
+    } as unknown as PlanEngineDeps;
+
+    engine = new PlanEngine(deps);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // (c) Gate fires before provisioning when no approval is supplied.
+  it('returns a structured needs_approval result (no throw) and never enters the provisioning loop when unapproved', async () => {
+    const plan = createNeedsApprovalPlan();
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+
+    const result = await engine.executePlan(plan.plan_id);
+
+    expect(result.status).toBe('needs_approval');
+    expect(result.approval_required).toEqual({ create_resources: ['postgresql'] });
+    expect(result._agent_guidance).toBeDefined();
+    // Loop not entered: no managed service created, no deploy started.
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
+  });
+
+  // (d) Zero-provisioning safety: an unapproved plan creates nothing — zero
+  // services and zero connection rows.
+  it('creates zero services and zero connection rows when an unapproved needs_approval plan is executed', async () => {
+    const plan = createNeedsApprovalPlan();
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+
+    await engine.executePlan(plan.plan_id);
+
+    expect(mockServiceManager.create).toHaveBeenCalledTimes(0);
+    expect(mockDb.upsertServiceConnection).toHaveBeenCalledTimes(0);
+    expect(mockDb.attachServiceToProject).toHaveBeenCalledTimes(0);
+  });
+
+  // (d2) Partial approval is all-or-fail-fast: approving a subset of the safe
+  // proposed resources does NOT clear the gate. The plan provisions nothing.
+  it('does not approve and provisions nothing when only some safe proposed resources are approved', async () => {
+    const SAFE_REDIS_PROPOSAL = {
+      type: 'redis' as const,
+      action: 'create' as const,
+      connect_via: 'REDIS_URL',
+      resolution: 'proposed_project_service' as const,
+      approval: 'safe_resource' as const,
+      reason: 'cache',
+    };
+    const plan = createNeedsApprovalPlan({
+      services: [SAFE_PG_PROPOSAL, SAFE_REDIS_PROPOSAL],
+    });
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+
+    // Approve only postgresql, leaving redis unapproved.
+    const result = await engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+      createResources: ['postgresql'],
+    });
+
+    expect(result.status).toBe('needs_approval');
+    expect(result.approval_required).toEqual({ create_resources: ['postgresql', 'redis'] });
+    // All-or-fail-fast: a partial approval provisions nothing.
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+    expect(mockDb.attachServiceToProject).not.toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
+  });
+
+  // (d3) New-app guard: an approved create has no target project to provision on
+  // for a brand-new app (no project_id, no project row by name). Execute returns
+  // 'needs_target_project' and creates NOTHING — no lock, no provisioning, no
+  // deploy. 'needs_target_project' is a response-only status.
+  it('returns needs_target_project and creates nothing when an approved new-app plan has no existing project', async () => {
+    // No project_id, and getProjectByName returns null (default) → new app.
+    const plan = createNeedsApprovalPlan({ project_id: undefined });
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+    mockDb.getProjectByName.mockReturnValue(null);
+
+    const result = await engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+      approveAllSafeResources: true,
+    });
+
+    expect(result.status).toBe('needs_target_project');
+    expect(result.approval_required).toEqual({ create_resources: ['postgresql'] });
+    expect(result._agent_guidance).toBeDefined();
+    // Nothing created: no managed service, no connection row, no deploy, and the
+    // status was never persisted (no executing write).
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+    expect(mockDb.upsertServiceConnection).not.toHaveBeenCalled();
+    expect(mockDb.attachServiceToProject).not.toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
+    const wroteExecuting = mockDb.updateDeployPlan.mock.calls.some(
+      (call: any) => call[1]?.status === 'executing',
+    );
+    expect(wroteExecuting).toBe(false);
+  });
+
+  // (e) Idempotency: approved provisioning upserts a connection row, and a
+  // repeat (onConflictDoNothing) never throws.
+  it('upserts a connection row on approved provisioning and is conflict-safe when provisioned twice', async () => {
+    const plan = createNeedsApprovalPlan();
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+
+    const first = await engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+      approveAllSafeResources: true,
+    });
+
+    expect(first.status).toBe('building');
+    expect(mockServiceManager.create).toHaveBeenCalledTimes(1);
+    expect(mockDb.upsertServiceConnection).toHaveBeenCalledWith({
+      projectId: 'p1',
+      serviceId: 'svc-pg-1',
+    });
+
+    // Re-running the same approved provisioning path must not throw — the
+    // connection upsert is idempotent (onConflictDoNothing semantics).
+    const second = await engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+      approveAllSafeResources: true,
+    });
+
+    expect(second.status).toBe('building');
+    expect(mockDb.upsertServiceConnection).toHaveBeenCalledTimes(2);
+    expect(mockDb.upsertServiceConnection.mock.results.every((r: any) => r.type === 'return')).toBe(
+      true,
+    );
+  });
+
+  // (f) Crash-window: with a valid approval, force the deploy lock to fail. The
+  // lock is acquired AFTER the in-memory ready flip but BEFORE the persisted
+  // 'executing' write, so a lock failure must leave the persisted status at
+  // 'needs_approval' — no updateDeployPlan call ever writes 'ready' (or
+  // 'executing').
+  it('never persists status ready when the deploy lock throws after approval', async () => {
+    const plan = createNeedsApprovalPlan();
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+    // An existing project means the engine acquires the deploy lock; make the
+    // acquire fail so acquireDeployLockOrThrow throws DeployLockedError.
+    mockDb.getProjectByName.mockReturnValue({ id: 'p1', name: 'test-app' });
+    mockDb.acquireDeployLock.mockResolvedValue(false);
+    mockDb.getDeployLockInfo.mockResolvedValue({ session: 'someone-else' });
+
+    await expect(
+      engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+        approveAllSafeResources: true,
+      }),
+    ).rejects.toThrow();
+
+    // The only persisted pre-deploy status would have been 'executing', which
+    // never happens because the lock threw first. Crucially, 'ready' is never
+    // persisted (the approval -> ready flip is in-memory only).
+    const wroteReady = mockDb.updateDeployPlan.mock.calls.some(
+      (call: any) => call[1]?.status === 'ready',
+    );
+    const wroteExecuting = mockDb.updateDeployPlan.mock.calls.some(
+      (call: any) => call[1]?.status === 'executing',
+    );
+    expect(wroteReady).toBe(false);
+    expect(wroteExecuting).toBe(false);
+    // Nothing was provisioned either — the lock guards provisioning.
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+  });
+
+  // (g) Reuse path backfill: an existing reusable managed service upserts a
+  // connection row for the reuse provider.
+  it('upserts a connection row for the reuse provider on the existing_project_service path', async () => {
+    const reusableService = {
+      id: 'reuse-pg-1',
+      name: 'existing-postgres',
+      project_id: 'p1',
+      kind: 'postgres',
+      credentials: JSON.stringify({ connectionString: 'postgres://reused-host/db' }),
+    };
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      project_id: 'p1',
+      services: [
+        {
+          type: 'postgresql',
+          action: 'reuse',
+          service_id: reusableService.id,
+          name: reusableService.name,
+          connect_via: 'DATABASE_URL',
+          resolution: 'existing_project_service',
+          approval: 'safe_resource',
+          reason: 'pg',
+        },
+      ],
+      env: {
+        auto: {},
+        required: [],
+        provided: {},
+        detected: [],
+      },
+    });
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+    mockDb.getService.mockReturnValue(reusableService);
+    mockDb.listServices.mockReturnValue([reusableService]);
+
+    const result = await engine.executePlan(plan.plan_id);
+
+    expect(result.status).toBe('building');
+    expect(mockDb.upsertServiceConnection).toHaveBeenCalledWith({
+      projectId: 'p1',
+      serviceId: reusableService.id,
+    });
+    // Reuse never creates a managed service.
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+    // The reused connection string is injected into the deploy env.
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envVars: expect.objectContaining({ DATABASE_URL: 'postgres://reused-host/db' }),
+      }),
+    );
   });
 });

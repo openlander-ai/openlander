@@ -13,6 +13,7 @@ export default defineConfig({
       'test/db-attach-service.test.ts',
       'test/deploy-plan-create.test.ts',
       'test/deploy-plan-engine.test.ts',
+      'test/deploy-plan-types.test.ts',
       'test/console-contract.test.ts',
       'test/github-oauth.test.ts',
       'test/mcp-service-tools.test.ts',

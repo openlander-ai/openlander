@@ -32,6 +32,13 @@ function createEngine() {
     getProjectByName: vi.fn().mockResolvedValue(null),
     getLastDeployLog: vi.fn().mockResolvedValue(null),
     getService: vi.fn().mockResolvedValue(undefined),
+    upsertServiceConnection: vi.fn().mockResolvedValue(undefined),
+    attachServiceToProject: vi.fn().mockResolvedValue({
+      sourceProjectId: 'orphan',
+      targetProjectId: 'p1',
+      droppedEnvVarKeys: [],
+      droppedSecretFiles: [],
+    }),
   };
   const mockPipeline = {
     startDeploy: vi
@@ -162,7 +169,7 @@ describe('MCP agent UX rc6 regressions', () => {
     expect(updated.env.provided).toEqual({ DATABASE_URL: 'mysql://external.example.com/app' });
   });
 
-  it('requires env input for detected managed services without localhost placeholders', async () => {
+  it('surfaces needs_approval for detected managed services without localhost placeholders', async () => {
     const { engine } = createEngine();
 
     const plan = await engine.createPlan({
@@ -170,8 +177,10 @@ describe('MCP agent UX rc6 regressions', () => {
       branch: 'main',
     });
 
-    expect(plan.status).toBe('needs_input');
-    expect(plan.missing).toEqual(['DATABASE_URL']);
+    // Proposed safe managed resource is auto-provisionable on approval, so its
+    // DATABASE_URL is not "missing" and the plan surfaces as needs_approval.
+    expect(plan.status).toBe('needs_approval');
+    expect(plan.missing).toEqual([]);
     expect(plan.env.auto).toEqual({});
     expect(plan.services).toEqual([
       expect.objectContaining({
