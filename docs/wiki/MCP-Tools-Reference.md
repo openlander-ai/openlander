@@ -246,6 +246,12 @@ installations not using managed OpenLander/Traefik HTTP-provider routes. The
 zero-downtime guarantee applies to OpenLander domain/Traefik routes only; direct
 `localhost:{assigned_port}` URLs may change during deploy.
 
+Blue-green in v0.1.3 is best-effort. OpenLander health-checks the green
+container directly, flips the active route target, waits for the managed Traefik
+HTTP provider polling window, and probes the public route before removing blue.
+It does not yet prove that the successful HTTP response came from green via a
+Traefik API resolved-target check or app version marker.
+
 ### `expose_public` / `unexpose_public`
 
 Create or remove a temporary public share URL for a project. This is an optional public-access

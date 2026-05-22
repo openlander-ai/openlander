@@ -263,6 +263,12 @@ green container, probes the route, then removes the old blue container. If the
 green build/health/route probe fails, the old blue route stays active and the
 green container is cleaned up.
 
+This is a best-effort zero-downtime path, not a hard guarantee. OpenLander waits
+for the managed Traefik HTTP provider to poll the updated route and probes the
+public route before removing blue. If Traefik polling is delayed beyond that
+window, a short blip is still possible. Stronger green-identity verification is
+tracked as a follow-up.
+
 The default redeploy strategy remains `force` in 0.1.3. Request
 `strategy: "blue-green"` explicitly after verifying the service is eligible.
 
