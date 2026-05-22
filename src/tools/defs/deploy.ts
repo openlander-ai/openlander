@@ -1,7 +1,10 @@
 import { ProjectNotFoundError } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { parseDBTimestamp } from '../../lib/parse-db-timestamp.js';
-import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
+import {
+  deployableServiceIdToProjectId,
+  projectIdToDeployableServiceId,
+} from '../../db/service-ids.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
@@ -79,9 +82,9 @@ export const deployToolDefs: ToolDef[] = [
     name: 'get_deploy_status',
     riskLevel: 'low',
     description:
-      'Get deployment status. Use project_id/project_name for current in-flight deploys, or deploy_id/job_id to look up a completed deploy log. Shows phase (queued/cloning/building/starting/done/failed/cancelled), timing, and progress details. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }. With wait=true: blocks until current deploy completion. Without a target, waits for ALL active deploys to finish.',
+      'Get deployment status. Use project_id/project_name for current in-flight deploys, or deploy_id/job_id to look up a completed deploy log. Shows phase (queued/cloning/building/starting/done/failed/cancelled), timing, and progress details. Each job carries a structured status, terminal flag, and elapsed_ms; non-terminal jobs include next_poll_after_ms (suggested poll delay) and a status_call re-lookup envelope. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }. With wait=true: blocks until current deploy completion. Without a target, waits for ALL active deploys to finish.',
     mcpDescription:
-      'Get current deploy progress by project_id/project_name, or completed history by deploy_id/job_id. In-flight jobs include build progress; completed jobs from deploy logs include status/duration/build_log_tail. Wait mode may return timeout=true. IMPORTANT: MCP transport timeout (~30s) overrides the timeout parameter. Prefer polling without wait=true over long waits.',
+      'Get current deploy progress by project_id/project_name, or completed history by deploy_id/job_id. Jobs expose status/terminal/elapsed_ms; non-terminal jobs add next_poll_after_ms for poll pacing. In-flight jobs include build progress; completed jobs from deploy logs include status/duration/build_log_tail. Wait mode may return timeout=true. IMPORTANT: MCP transport timeout (~30s) overrides the timeout parameter. Prefer polling without wait=true over long waits.',
     inputSchema: deployStatusSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -110,36 +113,81 @@ export const deployToolDefs: ToolDef[] = [
         }
       };
 
-      const formatJob = (job: {
-        projectId: string;
-        projectName: string;
-        phase: string;
-        startedAt: Date;
-        completedAt?: Date;
-        errorSummary?: string;
-        buildLogTail?: string;
-        autoDiagnosis?: {
-          category: string;
-          tier: number;
-          cause: string;
-          autoFixable: boolean;
-          suggestedAction?: string;
-        };
-        buildStep?: number;
-        buildStepTotal?: number;
-        buildStepDesc?: string;
-      }) => {
+      const isTerminalPhase = (phase: string): boolean => phase === 'done' || phase === 'failed';
+
+      const jobStatusString = (phase: string): string => {
+        if (phase === 'done') return 'success';
+        if (phase === 'failed') return 'failed';
+        if (phase === 'cancelled') return 'cancelled';
+        return 'running';
+      };
+
+      const nextPollAfterMs = (phase: string): number => {
+        if (phase === 'building') return 5000;
+        if (phase === 'starting') return 2000;
+        if (phase === 'queued' || phase === 'cloning') return 3000;
+        return 3000;
+      };
+
+      const formatJob = (
+        job: {
+          projectId: string;
+          projectName: string;
+          phase: string;
+          startedAt: Date;
+          completedAt?: Date;
+          errorSummary?: string;
+          buildLogTail?: string;
+          autoDiagnosis?: {
+            category: string;
+            tier: number;
+            cause: string;
+            autoFixable: boolean;
+            suggestedAction?: string;
+          };
+          buildStep?: number;
+          buildStepTotal?: number;
+          buildStepDesc?: string;
+        },
+        deployId?: string,
+      ) => {
         // Pull the cached port (populated by primeAssignedPort before each
         // formatJob call site). When the cache miss happens we still emit a
         // URL, just without the localhost:{port} hint — strictly better than
         // the pre-fix bridge-IP sslip URL.
         const assignedPort = portCache.get(job.projectId);
+        const serviceId = job.projectId ? projectIdToDeployableServiceId(job.projectId) : undefined;
+        const terminal = isTerminalPhase(job.phase);
         return {
+          ...(deployId ? { deploy_id: deployId } : {}),
           project_id: job.projectId,
+          ...(serviceId ? { service_id: serviceId } : {}),
           name: job.projectName,
           phase: job.phase,
+          status: jobStatusString(job.phase),
+          terminal,
           elapsed: `${String(Math.round((Date.now() - job.startedAt.getTime()) / 1000))}s`,
+          elapsed_ms: Date.now() - job.startedAt.getTime(),
           error: job.errorSummary,
+          ...(terminal ? {} : { next_poll_after_ms: nextPollAfterMs(job.phase) }),
+          ...(terminal
+            ? {}
+            : {
+                status_call: {
+                  tool: 'openlander_deploy',
+                  action: 'get_deploy_status',
+                  params: { project_id: job.projectId },
+                },
+              }),
+          ...(job.phase === 'failed' && serviceId
+            ? {
+                diagnostic_call: {
+                  tool: 'openlander_monitor',
+                  action: 'diagnose_service',
+                  params: { service_id: serviceId },
+                },
+              }
+            : {}),
           ...(job.phase === 'done'
             ? {
                 preferred_url: getPreferredProjectUrl(job.projectName, assignedPort),
@@ -222,8 +270,6 @@ export const deployToolDefs: ToolDef[] = [
         return value.split(/\r?\n/).slice(-lines).join('\n');
       };
 
-      const isTerminalPhase = (phase: string): boolean => phase === 'done' || phase === 'failed';
-
       const terminalStatusPrecedesLock = (
         status: { phase: string; startedAt: Date; completedAt?: Date } | undefined,
         currentLockInfo: { lockedAt: string } | null,
@@ -251,6 +297,7 @@ export const deployToolDefs: ToolDef[] = [
           name: project?.name ?? inferredProjectId,
           phase,
           status: log.status,
+          terminal: true,
           trigger: log.trigger,
           commit_sha: log.commit_sha,
           commit_message: log.commit_message,
@@ -277,6 +324,20 @@ export const deployToolDefs: ToolDef[] = [
           ...(log.status === 'failed' && log.build_log
             ? { build_log_tail: tailLines(log.build_log, 30) }
             : {}),
+          status_call: {
+            tool: 'openlander_deploy',
+            action: 'get_deploy_status',
+            params: { deploy_id: log.id },
+          },
+          ...(log.status === 'failed'
+            ? {
+                diagnostic_call: {
+                  tool: 'openlander_monitor',
+                  action: 'diagnose_service',
+                  params: { service_id: log.service_id },
+                },
+              }
+            : {}),
           _agent_guidance: {
             next_steps:
               log.status === 'failed'
@@ -293,7 +354,7 @@ export const deployToolDefs: ToolDef[] = [
         const activeStatus = appCtx.jobManager.getStatus(deployLookupId);
         if (activeStatus) {
           if (activeStatus.phase === 'done') await primeAssignedPort(activeStatus.projectId);
-          const job = formatJob(activeStatus);
+          const job = formatJob(activeStatus, deployLookupId);
           return {
             active: activeStatus.phase === 'done' || activeStatus.phase === 'failed' ? 0 : 1,
             jobs: [job],
@@ -580,7 +641,7 @@ export const deployToolDefs: ToolDef[] = [
         await Promise.all(
           recentJobs.filter((j) => j.phase === 'done').map((j) => primeAssignedPort(j.projectId)),
         );
-        return { active: activeCount, jobs: recentJobs.map(formatJob) };
+        return { active: activeCount, jobs: recentJobs.map((j) => formatJob(j)) };
       };
 
       if (!wait) {

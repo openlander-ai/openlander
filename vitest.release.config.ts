@@ -75,6 +75,7 @@ export default defineConfig({
       'test/service-manager-extended.test.ts',
       'test/tools/deploy-lock-mcp-tools.test.ts',
       'test/tools/deploy-guidance.test.ts',
+      'test/tools/deploy-status-structured.test.ts',
       'test/tools/deployable-service-resolution.test.ts',
       'test/tools/env-source.test.ts',
       'test/tools/image-schema.test.ts',
