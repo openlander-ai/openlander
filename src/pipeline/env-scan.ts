@@ -209,8 +209,11 @@ function detectNodeFallback(content: string, key: string, matchIndex: number): b
   const context = content.slice(contextStart, contextEnd);
 
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const envAccess = `(?:process\\.env\\.${escapedKey}|process\\.env\\[['"]${escapedKey}['"]\\])`;
+  const literalFallback = `(?:['"][^'"]*['"]|\\d+|true|false|null)`;
+  const pathFallback = `(?:(?:path\\.)?(?:join|resolve)|path\\.(?:posix|win32)\\.(?:join|resolve))\\s*\\(`;
   const fallbackRegex = new RegExp(
-    `process\\.env\\.${escapedKey}\\s*(?:\\|\\||\\?\\?)\\s*(?:['"][^'"]*['"]|\\d+|true|false|null)`,
+    `${envAccess}\\s*(?:\\|\\||\\?\\?)\\s*(?:${literalFallback}|${pathFallback})`,
   );
 
   return fallbackRegex.test(context);

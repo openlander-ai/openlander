@@ -292,6 +292,49 @@ describe('PlanEngine.createPlan', () => {
     rmSync(repoPath, { recursive: true, force: true });
   });
 
+  it('does not require PUBLIC_DIR when source code provides a path fallback', async () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'plan-public-dir-'));
+    writeFileSync(join(repoPath, 'Dockerfile'), 'FROM node:22\n');
+    writeFileSync(
+      join(repoPath, 'server.js'),
+      [
+        "import path from 'node:path';",
+        "const PUBLIC_DIR = process.env.PUBLIC_DIR || path.join(__dirname, '..', 'public');",
+      ].join('\n'),
+    );
+
+    mockCloneRepo.mockResolvedValue({
+      path: repoPath,
+      commitSha: 'public-dir-fallback',
+    });
+
+    mockAnalyzeInfra.mockReturnValue({
+      needs: [],
+      available: [],
+      missing: [],
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    mockReadFileSync.mockImplementation(actualFs.readFileSync);
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/public-dir-app',
+      branch: 'main',
+    });
+
+    expect(plan.status).toBe('ready');
+    expect(plan.missing).not.toContain('PUBLIC_DIR');
+    expect(plan.env.detected).toContainEqual(
+      expect.objectContaining({
+        key: 'PUBLIC_DIR',
+        required: false,
+      }),
+    );
+
+    rmSync(repoPath, { recursive: true, force: true });
+  });
+
   it('requires DATABASE_URL input when postgresql is detected without a scoped service', async () => {
     mockCloneRepo.mockResolvedValue({
       path: '/tmp/test-repo',
