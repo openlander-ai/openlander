@@ -1075,6 +1075,40 @@ describe('service-targeted monitoring tools', () => {
     });
   });
 
+  it('get_logs resolves deployable services by Docker container name', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    const result = (await getMonitoringTool(ctx, 'get_logs').execute(
+      { container_name: 'ol-app', lines: 9 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.db.listServices).toHaveBeenCalled();
+    expect(ctx.pipeline.getLogs).toHaveBeenCalledWith('app', 9);
+    expect(result).toMatchObject({
+      project: 'app',
+      service: {
+        id: service.id,
+        name: service.name,
+        container_name: 'ol-app',
+      },
+      logs: 'service logs',
+    });
+  });
+
+  it('get_logs accepts container names through service_name for CLI-style calls', async () => {
+    const { ctx, service } = createServiceTargetContext();
+    const result = (await getMonitoringTool(ctx, 'get_logs').execute(
+      { service_name: 'ol-app', lines: 8 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(ctx.pipeline.getLogs).toHaveBeenCalledWith('app', 8);
+    expect(result).toMatchObject({
+      service: { id: service.id },
+      logs: 'service logs',
+    });
+  });
+
   it('get_project_stats accepts deployable service_id from list_projects output', async () => {
     const { ctx, service } = createServiceTargetContext();
     const result = (await getMonitoringTool(ctx, 'get_project_stats').execute(

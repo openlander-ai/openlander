@@ -347,6 +347,15 @@ export const deployToolDefs: ToolDef[] = [
         const assignedPort = deployable?.assigned_port ?? undefined;
         const phase =
           log.status === 'success' ? 'done' : log.status === 'failed' ? 'failed' : 'cancelled';
+        const completedAt = parseDBTimestamp(log.created_at);
+        const durationMs =
+          typeof log.duration_ms === 'number' && Number.isFinite(log.duration_ms)
+            ? Math.max(0, log.duration_ms)
+            : undefined;
+        const startedAt =
+          durationMs === undefined
+            ? log.created_at
+            : new Date(completedAt.getTime() - durationMs).toISOString();
         return {
           id: log.id,
           deploy_id: log.id,
@@ -365,8 +374,8 @@ export const deployToolDefs: ToolDef[] = [
               ? `${String(Math.round(log.duration_ms / 1000))}s`
               : null,
           health,
-          created_at: log.created_at,
-          completed_at: log.created_at,
+          created_at: startedAt,
+          completed_at: completedAt.toISOString(),
           ...(phase === 'done'
             ? {
                 preferred_url: getPreferredProjectUrl(
