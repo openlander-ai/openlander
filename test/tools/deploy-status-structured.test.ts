@@ -114,4 +114,57 @@ describe('get_deploy_status structured fields (O1)', () => {
       expect(serialized).not.toContain(field);
     }
   });
+
+  it('active job found via project_id polling exposes structured fields with no deploy_id', async () => {
+    // The common active-poll path: JobManager is keyed by project id, so
+    // formatJob is called without a deploy id. status_call carries project_id
+    // as the re-poll handle and deploy_id is intentionally absent.
+    const ctx = {
+      jobManager: {
+        getStatus: vi.fn((id: string) =>
+          id === 'app'
+            ? {
+                projectId: 'app',
+                projectName: 'app',
+                phase: 'building',
+                startedAt: new Date(Date.now() - 3000),
+              }
+            : null,
+        ),
+      },
+      db: {
+        getProject: vi.fn(async (id: string) => (id === 'app' ? { id: 'app', name: 'app' } : undefined)),
+        getDeployableForProject: vi.fn(async () => ({ assigned_port: 10001, status: 'running' })),
+        getDeployLockInfo: vi.fn(async () => null),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { project_id: 'app', wait: false },
+      { target: 'mcp' },
+    )) as { active: number; jobs: Array<Record<string, unknown>> };
+
+    expect(result.active).toBe(1);
+    const job = result.jobs[0];
+    expect(job).toMatchObject({
+      project_id: 'app',
+      phase: 'building',
+      status: 'running',
+      terminal: false,
+      next_poll_after_ms: 5000,
+      status_call: {
+        tool: 'openlander_deploy',
+        action: 'get_deploy_status',
+        params: { project_id: 'app' },
+      },
+    });
+    expect(job['deploy_id']).toBeUndefined();
+    expect(job['service_id']).toBeTruthy();
+    expect(typeof job['elapsed_ms']).toBe('number');
+
+    const serialized = JSON.stringify(result);
+    for (const field of FORBIDDEN_FIELDS) {
+      expect(serialized).not.toContain(field);
+    }
+  });
 });
