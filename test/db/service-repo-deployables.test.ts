@@ -57,7 +57,7 @@ describe('ServiceRepo.getDeployablesByGroup', () => {
     );
 
     expect(method).toContain("notInArray(services.kind, [...MANAGED_SERVICE_KINDS, 'compose'])");
-    expect(method).toContain("${services.build_method} = 'compose'");
+    expect(method).toContain("coalesce(${services.build_method}, '') = 'compose'");
     expect(method).not.toContain("services.kind} != 'compose-child'");
   });
 });
@@ -73,7 +73,7 @@ describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
       ),
     );
 
-    expect(method).toContain("${services.build_method} = 'compose'");
+    expect(method).toContain("coalesce(${services.build_method}, '') = 'compose'");
     expect(method).toContain('${services.parent_service_id} IS NULL');
   });
 });
