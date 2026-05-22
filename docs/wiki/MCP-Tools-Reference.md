@@ -129,7 +129,8 @@ Auto-provisioning is supported only for **existing** projects. Executing an appr
 brand-new app (no project row yet) returns `needs_target_project` and creates nothing. To deploy
 the new app now, pass an external connection URL (e.g. `DATABASE_URL`) in `env_vars` so no managed
 service needs provisioning; auto-provisioning becomes available when deploying under an existing
-project.
+project. OpenLander-managed shared services and external TCP database/cache endpoints are not part
+of the v0.1 MCP surface.
 
 ### `deploy_app`
 
@@ -396,7 +397,8 @@ tunnel backend; it is not required for normal deploy/redeploy flows.
 `create_service` requires `project_id` or `project_name`. This keeps new
 databases/caches attached to the isolated project Docker network used by the app
 that will consume them. Cross-project shared managed services are not exposed in
-v0.1.2; create the service with the target app's `project_id` or `project_name`.
+v0.1, and OpenLander does not expose managed database/cache ports over external
+TCP. Create the service with the target app's `project_id` or `project_name`.
 
 ### `list_services`
 
