@@ -2,7 +2,9 @@ import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('deploy');
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { request as httpRequest } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
+import { URL } from 'node:url';
 import { nanoid } from 'nanoid';
 import { rm } from 'node:fs/promises';
 
@@ -950,27 +952,47 @@ export class DeployPipeline {
     timeoutMs: number;
   }): Promise<{ ok: true; status: number } | { ok: false; error: string }> {
     const host = getEnvironmentProjectHostname(params.projectName, 'production');
-    const url = `${resolveContainerUrl(80)}${this.normalizeHealthCheckPath(params.path)}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, params.timeoutMs);
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: { Host: host },
-        signal: controller.signal,
+    const url = new URL(`${resolveContainerUrl(80)}${this.normalizeHealthCheckPath(params.path)}`);
+
+    return await new Promise((resolveProbe) => {
+      let settled = false;
+      const settle = (result: { ok: true; status: number } | { ok: false; error: string }) => {
+        if (settled) return;
+        settled = true;
+        resolveProbe(result);
+      };
+
+      const req = httpRequest(
+        {
+          protocol: url.protocol,
+          hostname: url.hostname,
+          port: url.port || '80',
+          path: `${url.pathname}${url.search}`,
+          method: 'GET',
+          timeout: params.timeoutMs,
+          headers: { Host: host },
+        },
+        (response) => {
+          const status = response.statusCode ?? 0;
+          response.resume();
+          if (status >= 200 && status < 300) {
+            settle({ ok: true, status });
+            return;
+          }
+          settle({ ok: false, error: `Route probe returned HTTP ${String(status)}` });
+        },
+      );
+
+      req.on('timeout', () => {
+        req.destroy(new Error(`Route probe timed out after ${String(params.timeoutMs)}ms`));
       });
-      if (response.ok) {
-        return { ok: true, status: response.status };
-      }
-      return { ok: false, error: `Route probe returned HTTP ${String(response.status)}` };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { ok: false, error: `Route probe failed for Host(${host}): ${message}` };
-    } finally {
-      clearTimeout(timeout);
-    }
+
+      req.on('error', (err: Error) => {
+        settle({ ok: false, error: `Route probe failed for Host(${host}): ${err.message}` });
+      });
+
+      req.end();
+    });
   }
 
   private async deployInner(
