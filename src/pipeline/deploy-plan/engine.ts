@@ -90,6 +90,32 @@ const SERVICE_ENV_VARS: Record<string, string> = {
   rabbitmq: 'RABBITMQ_URL',
 };
 
+/**
+ * Approval classification by detected service type. Metadata only — does not
+ * gate execution. Standard managed datastores are safe to propose; minio
+ * (object storage) needs explicit opt-in; rabbitmq is not auto-creatable.
+ */
+const SERVICE_APPROVAL: Record<string, PlanService['approval']> = {
+  postgresql: 'safe_resource',
+  mysql: 'safe_resource',
+  redis: 'safe_resource',
+  mongodb: 'safe_resource',
+  rabbitmq: 'not_auto_creatable',
+  minio: 'explicit_resource',
+};
+
+/**
+ * Name/image tokens used to match a detected dependency type against a
+ * compose-declared service during the compose cross-check.
+ */
+const COMPOSE_TYPE_TOKENS: Record<string, string[]> = {
+  postgresql: ['postgres', 'postgresql'],
+  mysql: ['mysql', 'mariadb'],
+  redis: ['redis'],
+  mongodb: ['mongo'],
+  rabbitmq: ['rabbitmq', 'amqp'],
+};
+
 export interface ExecutePlanResult {
   status: 'building' | 'failed';
   plan_id: string;
@@ -278,6 +304,7 @@ export class PlanEngine {
     clonePath: string,
     projectName: string,
     projectId?: string,
+    composeBuildServices?: PlanBuildService[],
   ): Promise<PlanService[]> {
     log.info({ clonePath }, 'Analyzing infrastructure');
     const existingServices = await this.getReusableServicesForProject(projectName, projectId);
@@ -285,6 +312,13 @@ export class PlanEngine {
 
     const services: PlanService[] = [];
     for (const missingService of infraAnalysis.missing) {
+      // Compose cross-check: when building from a compose stack, a detected
+      // dependency that is already declared in compose must not be proposed as
+      // a managed create. Reclassify it as a compose_service instead.
+      const declaredInCompose =
+        composeBuildServices !== undefined &&
+        this.composeDeclaresServiceType(composeBuildServices, missingService.type);
+      const approval = SERVICE_APPROVAL[missingService.type];
       services.push({
         type: missingService.type,
         action: 'create',
@@ -292,6 +326,17 @@ export class PlanEngine {
           missingService.connectVia ??
           SERVICE_ENV_VARS[missingService.type] ??
           `${missingService.type.toUpperCase()}_URL`,
+        // resolution reconciles the legacy `action` with the routing policy:
+        // compose-declared deps are compose_service; types OpenLander cannot
+        // auto-create (not_auto_creatable, e.g. rabbitmq) route to
+        // needs_user_input instead of advertising a managed create it won't do.
+        resolution: declaredInCompose
+          ? 'compose_service'
+          : approval === 'not_auto_creatable'
+            ? 'needs_user_input'
+            : 'proposed_project_service',
+        reason: missingService.detectedFrom,
+        approval,
       });
     }
 
@@ -305,10 +350,30 @@ export class PlanEngine {
           availableService.connectVia ??
           SERVICE_ENV_VARS[availableService.type] ??
           `${availableService.type.toUpperCase()}_URL`,
+        resolution: 'existing_project_service',
+        reason: availableService.detectedFrom,
+        approval: SERVICE_APPROVAL[availableService.type],
       });
     }
 
     return services;
+  }
+
+  /**
+   * Whether the compose stack already declares a service that satisfies the
+   * given detected dependency type (by service name or image reference).
+   * Used by the compose cross-check to avoid proposing a managed create for a
+   * dependency the user already runs as a compose service.
+   */
+  private composeDeclaresServiceType(
+    composeBuildServices: PlanBuildService[],
+    type: PlanService['type'],
+  ): boolean {
+    const tokens = COMPOSE_TYPE_TOKENS[type] ?? [];
+    return composeBuildServices.some((svc) => {
+      const haystacks = [svc.name.toLowerCase(), (svc.image ?? '').toLowerCase()];
+      return tokens.some((token) => haystacks.some((value) => value.includes(token)));
+    });
   }
 
   private detectEnvVars(
@@ -773,7 +838,12 @@ export class PlanEngine {
       relativeDockerfiles,
     } = this.resolveBuildConfig(clonePath, opts, warnings, detectedEnv);
 
-    const detectedServices = await this.detectPlanServices(clonePath, projectName, projectId);
+    const detectedServices = await this.detectPlanServices(
+      clonePath,
+      projectName,
+      projectId,
+      buildMethod === 'compose' ? composeBuildServices : undefined,
+    );
     this.detectEnvVars(clonePath, userDockerfile, detectedEnv);
     this.detectPersistenceWarnings(clonePath, warnings);
     this.detectServiceDependencies(envVars, warnings);

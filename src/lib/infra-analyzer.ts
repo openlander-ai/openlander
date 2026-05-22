@@ -26,6 +26,8 @@ export interface AvailableService {
   name: string;
   id: string;
   connectVia?: string;
+  /** Detection evidence (dependency name, env var, schema.prisma:provider, etc.) */
+  detectedFrom?: string;
 }
 
 /**
@@ -35,6 +37,8 @@ export interface MissingService {
   type: DetectedServiceType;
   suggestion: string;
   connectVia?: string;
+  /** Detection evidence (dependency name, env var, schema.prisma:provider, etc.) */
+  detectedFrom?: string;
 }
 
 /**
@@ -419,6 +423,7 @@ export function analyzeInfrastructure(
         kindToDetectedType(s.kind) as DetectedServiceType,
         detectedTypes.get(kindToDetectedType(s.kind) as DetectedServiceType) ?? '',
       ),
+      detectedFrom: detectedTypes.get(kindToDetectedType(s.kind) as DetectedServiceType),
     }));
 
   const missing: MissingService[] = Array.from(detectedTypes.keys())
@@ -427,6 +432,7 @@ export function analyzeInfrastructure(
       type,
       suggestion: `Create a ${type} service to satisfy the detected dependency`,
       connectVia: connectViaForDetection(type, detectedTypes.get(type) ?? ''),
+      detectedFrom: detectedTypes.get(type),
     }));
 
   return {

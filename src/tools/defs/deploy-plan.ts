@@ -396,7 +396,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                 next_steps: [
                   `Plan has missing values. Call update_deploy_plan to provide: ${plan.missing.join(', ')}`,
                   'After updating, call execute_deploy_plan to start deployment',
-                  'If DATABASE_URL is missing, call create_service with template="postgresql" to provision a database with persistent volume.',
+                  "Proposed project-scoped services are listed in services[] with resolution='proposed_project_service'; confirm with the user, then call update_deploy_plan / execute_deploy_plan.",
                 ],
               },
             }
@@ -451,9 +451,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'execute_deploy_plan',
     riskLevel: 'medium',
     description:
-      'Execute a deployment plan. Plan must be in "ready" status. Provisions services, injects env vars, and deploys the application.',
+      'Execute a deployment plan. Plan must be in "ready" status. Injects env vars and deploys the application. Managed dependencies (services[].resolution="proposed_project_service") are NOT auto-provisioned yet — supply their connection env (e.g. DATABASE_URL) or create the service first, otherwise the deploy fails fast.',
     mcpDescription:
-      'Execute a deployment plan asynchronously. Returns immediately with project_id and status. Use get_deploy_status to poll progress. Plan must be in "ready" status. Provisions services, injects env vars, and starts deployment.',
+      'Execute a deployment plan asynchronously. Returns immediately with project_id and status. Use get_deploy_status to poll progress. Plan must be in "ready" status. Injects env vars and starts deployment; managed dependencies are not auto-provisioned yet — provide their connection env first.',
     inputSchema: executeDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;

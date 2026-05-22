@@ -162,6 +162,68 @@ describe('analyzeInfrastructure', () => {
     );
   });
 
+  it('populates detectedFrom on a missing service from the Prisma provider evidence', () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'openlander-infra-missing-from-'));
+    try {
+      mkdirSync(join(repoPath, 'prisma'));
+      writeFileSync(
+        join(repoPath, 'prisma', 'schema.prisma'),
+        'datasource db {\n  provider = "postgresql"\n  url = env("DATABASE_URL")\n}\n',
+      );
+
+      const result = analyzeInfrastructure(repoPath, []);
+
+      expect(result.missing[0]).toMatchObject({
+        type: 'postgresql',
+        detectedFrom: 'schema.prisma:postgresql',
+      });
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it('populates detectedFrom on a missing service from the dependency name', () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'openlander-infra-missing-dep-'));
+    try {
+      writeFileSync(
+        join(repoPath, 'package.json'),
+        JSON.stringify({ dependencies: { pg: '^8.11.0' } }),
+      );
+
+      const result = analyzeInfrastructure(repoPath, []);
+
+      expect(result.missing[0]).toMatchObject({
+        type: 'postgresql',
+        detectedFrom: 'pg',
+      });
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it('populates detectedFrom on an available service matched to an existing managed service', () => {
+    const repoPath = mkdtempSync(join(tmpdir(), 'openlander-infra-available-from-'));
+    try {
+      writeFileSync(
+        join(repoPath, 'package.json'),
+        JSON.stringify({ dependencies: { pg: '^8.11.0' } }),
+      );
+
+      const result = analyzeInfrastructure(repoPath, [
+        service({ id: 'svc-pg', name: 'shared-pg', type: 'postgresql' }),
+      ]);
+
+      expect(result.available[0]).toMatchObject({
+        type: 'postgresql',
+        id: 'svc-pg',
+        detectedFrom: 'pg',
+      });
+      expect(result.missing).toEqual([]);
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
+
   it('returns available and missing arrays with the required contract shape', () => {
     const fixturePath = join(fixturesRoot, 'node-multi-needs');
     const existingServices = [
