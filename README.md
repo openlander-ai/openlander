@@ -93,9 +93,9 @@ is the human surface on top.
 - A **Service** is the deployable unit. It owns repository or image, branch,
   Dockerfile, build config, runtime state, and deploy history.
 - A **Managed Service** is infrastructure such as Postgres, MySQL, Redis,
-  MongoDB, or MinIO. Most are attached to one project; intentionally shared
-  services can live in the global managed pool. Project-scoped services are
-  placed on that project's Docker network.
+  MongoDB, or MinIO. In v0.1 these are project-scoped: they attach to the
+  project that uses them and run on that project's Docker network. Cross-project
+  shared managed services and external TCP exposure are deferred.
 
 The dashboard and MCP both expose a one-step "deploy this repo" path for the
 common single-service case.
@@ -108,9 +108,9 @@ common single-service case.
 
 - Git → Docker → URL pipeline. Auto-detects ports, proxies, and containers
   before deploying.
-- Deploy apps from Git repos or public container images. Provision managed
-  Postgres, MySQL, Redis, MongoDB, and MinIO services alongside them. Private
-  registry support is on the roadmap.
+- Deploy apps from Git repos or public container images. With explicit approval,
+  provision project-scoped Postgres, MySQL, Redis, MongoDB, and MinIO services
+  alongside them. Private registry support is on the roadmap.
 - Cancel a stuck build mid-flight. The cancel goes through the same SSE log
   channel agents are watching.
 

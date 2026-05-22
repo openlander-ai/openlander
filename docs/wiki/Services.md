@@ -10,8 +10,8 @@ OpenLander has two service concepts:
 This page covers **managed services**. Project-scoped managed services run on
 the same project Docker network as the app that uses them and are usually
 connected through environment variables such as `DATABASE_URL` or `REDIS_URL`.
-MCP-created managed services require a target project in v0.1.2; cross-project
-shared managed services are not exposed.
+MCP-created managed services require a target project in v0.1. Cross-project
+shared managed services and external TCP exposure are deferred.
 
 ## Available Templates
 
@@ -180,15 +180,19 @@ REDIS_URL=redis://ol-svc-my-redis:6379
 
 Use project-scoped managed services as the default app database/cache path.
 Unassigned/orphan managed services may appear in admin views, but creating
-cross-project shared services is not exposed in v0.1.2.
+cross-project shared services is not exposed in v0.1.
 
 If an app previously used an unassigned/global managed service as its primary
 database or cache, recreate that managed service inside the app's project,
 update the app env vars to the project-scoped connection string, and redeploy
-the app. After upgrading to v0.1.2, redeploy apps promptly so older app
+the app. After upgrading to v0.1, redeploy apps promptly so older app
 containers do not remain on the old shared network while managed services move
 to the project network.
-network.
+
+OpenLander does not publish managed database/cache ports outside Docker in
+v0.1. If an app needs a database outside OpenLander, bring an external
+connection string and set it as an app env var; OpenLander will not create a
+shared managed service or public TCP endpoint for it.
 
 Set via MCP on the deployable service:
 

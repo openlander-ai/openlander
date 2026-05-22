@@ -149,7 +149,7 @@ Manage infrastructure services (databases, caches, etc.).
 | **Environment** | Service env vars (read/write).                                                |
 | **Domains**     | Host/path routes registered for the service. DNS/TLS remain external in v0.1. |
 
-The same surface is used for both deployable services (`/projects/:p/services/:s`) and managed services (`/managed-services/:id`). Managed services historically had Connection / Databases panels — those are folded into Overview in v0.1 and return as v0.2 spec work.
+The same surface is used for both deployable services (`/projects/:p/services/:s`) and managed services (`/managed-services/:id`). Managed services historically had Connection / Databases panels — those are folded into Overview in v0.1 and return as v0.2 spec work. Project detail shows connected project-scoped managed services in the Services tab; cross-project shared resources and external TCP endpoints are deferred.
 
 ---
 
