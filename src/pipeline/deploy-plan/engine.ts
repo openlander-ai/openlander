@@ -27,6 +27,7 @@ import type { ServiceRow } from '../../db/index.js';
 import type { DeployPipeline } from '../deploy.js';
 import type { EnvManager } from '../env.js';
 import type { ServiceManager } from '../service-manager.js';
+import type { Docker } from '../docker.js';
 import type { AutoDetector } from '../auto-detect.js';
 import type { OpenLanderConfig } from '../../config/index.js';
 import type { EventBus } from '../../events/index.js';
@@ -80,6 +81,7 @@ export interface PlanEngineDeps {
   config: OpenLanderConfig;
   events?: EventBus;
   composePipeline?: ComposePipeline;
+  docker?: Docker;
 }
 
 const SERVICE_ENV_VARS: Record<string, string> = {
@@ -116,13 +118,29 @@ const COMPOSE_TYPE_TOKENS: Record<string, string[]> = {
   rabbitmq: ['rabbitmq', 'amqp'],
 };
 
+export interface ProposedResource {
+  /** Stable identifier the agent approves (service type, e.g. "postgresql"). */
+  identifier: string;
+  type: PlanService['type'];
+  connect_via: string;
+  reason?: string;
+}
+
 export interface ExecutePlanResult {
-  status: 'building' | 'failed';
+  status: 'building' | 'failed' | 'needs_approval';
   plan_id: string;
   project_name: string;
   project_id?: string;
   estimated_seconds?: number;
   error?: string;
+  /** Populated only when status === 'needs_approval'. */
+  proposed_resources?: ProposedResource[];
+  _agent_guidance?: { next_steps: string[] };
+}
+
+export interface ExecutePlanApproval {
+  approveAllSafeResources?: boolean;
+  createResources?: string[];
 }
 
 export class PlanEngine {
@@ -131,6 +149,8 @@ export class PlanEngine {
   private env: EnvManager;
   private events?: EventBus;
   private composePipeline?: ComposePipeline;
+  private serviceManager: ServiceManager;
+  private docker?: Docker;
 
   constructor(deps: PlanEngineDeps) {
     this.db = deps.db;
@@ -138,6 +158,8 @@ export class PlanEngine {
     this.env = deps.env;
     this.events = deps.events;
     this.composePipeline = deps.composePipeline;
+    this.serviceManager = deps.serviceManager;
+    this.docker = deps.docker;
   }
 
   private preparePlanForStorage(plan: DeployPlan): DeployPlan {
@@ -464,10 +486,44 @@ export class PlanEngine {
     return {};
   }
 
+  /**
+   * Safe managed resources the plan proposes to auto-provision on approval:
+   * resolution === 'proposed_project_service' && approval === 'safe_resource'.
+   * compose_service / not_auto_creatable / explicit_resource are never in this
+   * set — they are not auto-provisioned by execute_deploy_plan.
+   */
+  private safeProposedResources(services: PlanService[]): PlanService[] {
+    return services.filter(
+      (service) =>
+        service.resolution === 'proposed_project_service' && service.approval === 'safe_resource',
+    );
+  }
+
+  private hasSafeProposedResources(services: PlanService[]): boolean {
+    return this.safeProposedResources(services).length > 0;
+  }
+
+  /**
+   * Stable identifier used to match a safe proposed resource against the
+   * caller's `approvals.create_resources` list. Proposed (action:'create')
+   * services carry no name, so the service `type` (e.g. "postgresql") is the
+   * stable identifier the agent approves.
+   */
+  private proposedResourceIdentifier(service: PlanService): string {
+    return service.name ?? service.type;
+  }
+
   private plannedServiceEnvKeys(services: PlanService[]): Set<string> {
     return new Set(
       services
-        .filter((service) => service.action === 'reuse')
+        .filter(
+          (service) =>
+            service.action === 'reuse' ||
+            // Safe proposed managed resources have their connect_via satisfied by
+            // auto-provisioning on approval, so they are not "missing" env.
+            (service.resolution === 'proposed_project_service' &&
+              service.approval === 'safe_resource'),
+        )
         .map((service) => service.connect_via)
         .filter(Boolean),
     );
@@ -541,6 +597,66 @@ export class PlanEngine {
       );
     }
     return service;
+  }
+
+  /**
+   * Provision an approved safe proposed_project_service managed resource and
+   * return its connection string for `envVarName`. Reuses the same sequence as
+   * the create_service tool: docker.ensureProjectNetwork -> serviceManager.create
+   * -> db.attachServiceToProject -> serviceManager.getSuggestedEnv. Also upserts
+   * a consumer/provider service_connections row (conflict-safe, idempotent).
+   */
+  private async provisionApprovedService(
+    planService: PlanService,
+    targetProject: { id: string; name: string },
+    envVarName: string,
+  ): Promise<string> {
+    if (!this.docker) {
+      throw new ServiceConfigError(
+        `Cannot provision managed service ${planService.type}: docker is unavailable.`,
+        { serviceType: planService.type, envVarName },
+      );
+    }
+
+    const serviceName = `${targetProject.name}-${planService.type}`;
+    const network = await this.docker.ensureProjectNetwork(targetProject.name);
+    const created = await this.serviceManager.create({
+      name: serviceName,
+      template: planService.type,
+      ...(network ? { network, aliases: [serviceName] } : {}),
+    });
+    try {
+      await this.db.attachServiceToProject(created.id, targetProject.id);
+    } catch (attachError) {
+      // Mirror create_service: a post-create attach failure would orphan the
+      // just-created container/volume/row, so best-effort tear it down and
+      // rethrow the original attach error.
+      try {
+        await this.serviceManager.remove(created.id, { force: true });
+      } catch {
+        // Swallow cleanup errors; surface the original attach failure.
+      }
+      throw attachError;
+    }
+
+    // Conflict-safe: provisioning the same approved plan twice yields exactly
+    // one connection row.
+    await this.db.upsertServiceConnection({
+      projectId: targetProject.id,
+      serviceId: created.id,
+    });
+
+    const suggestedEnv = await this.serviceManager.getSuggestedEnv(created, {
+      targetProjectId: targetProject.id,
+    });
+    const connectionString = suggestedEnv[0]?.value;
+    if (typeof connectionString !== 'string' || connectionString.trim().length === 0) {
+      throw new ServiceConfigError(
+        `Provisioned managed service ${serviceName} did not provide a connection string for ${envVarName}`,
+        { serviceId: created.id, envVarName },
+      );
+    }
+    return connectionString;
   }
 
   private getServiceConnectionString(service: ServiceRow, envVarName: string): string {
@@ -773,6 +889,8 @@ export class PlanEngine {
       const imageNameParts = parsedImage.name.split('/');
       const fallbackProjectName = imageNameParts[imageNameParts.length - 1] || parsedImage.name;
       const projectName = name || fallbackProjectName;
+      // Image-source plans carry no detected service dependencies (services: []),
+      // so there are never safe proposed resources to approve here.
       const initialStatus: DeployPlan['status'] = 'ready';
       const complexity: DeployPlanComplexity = 'simple';
 
@@ -882,7 +1000,12 @@ export class PlanEngine {
       isCompose,
     });
 
-    const initialStatus = missing.length > 0 ? 'needs_input' : 'ready';
+    const initialStatus: DeployPlan['status'] =
+      missing.length > 0
+        ? 'needs_input'
+        : this.hasSafeProposedResources(services)
+          ? 'needs_approval'
+          : 'ready';
 
     const planBranch = cloneResult.branch;
     const plan = this.assemblePlan({
@@ -1013,6 +1136,7 @@ export class PlanEngine {
     deployOnly?: string[],
     lockSessionId?: string,
     triggerOverride?: 'chat' | 'webhook' | 'api',
+    approval?: ExecutePlanApproval,
   ): Promise<ExecutePlanResult> {
     // Re-read from DB to prevent race condition
     const freshRow = await this.db.getDeployPlan(planId);
@@ -1027,7 +1151,50 @@ export class PlanEngine {
           `Call update_deploy_plan to provide them, then execute again.`,
       );
     }
-    if (freshPlan.status !== 'ready') {
+
+    // Approval gate. Runs BEFORE the deploy lock (acquired further below), so a
+    // throw past this point leaves the persisted status untouched at
+    // 'needs_approval'. When approved we flip the status IN MEMORY only via
+    // PlanStateMachine.transition(plan, 'ready') — it is never persisted, so the
+    // DB sequence stays needs_approval -> executing.
+    const approvedSafeResources = new Set<string>();
+    if (freshPlan.status === 'needs_approval') {
+      const safeProposals = this.safeProposedResources(freshPlan.services);
+      const approvedAll = approval?.approveAllSafeResources === true;
+      const approvedIds = new Set(approval?.createResources ?? []);
+      const allApproved = safeProposals.every(
+        (svc) => approvedAll || approvedIds.has(this.proposedResourceIdentifier(svc)),
+      );
+
+      if (!allApproved) {
+        // SAFETY: unapproved needs_approval plans create NOTHING and return a
+        // structured response (no throw, no DB write).
+        return {
+          status: 'needs_approval',
+          plan_id: planId,
+          project_name: freshPlan.app.name,
+          proposed_resources: safeProposals.map((svc) => ({
+            identifier: this.proposedResourceIdentifier(svc),
+            // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not services.type DB row access.
+            type: svc.type,
+            connect_via: svc.connect_via,
+            reason: svc.reason,
+          })),
+          _agent_guidance: {
+            next_steps: [
+              'Re-run execute_deploy_plan with approve_all_safe_resources=true to approve every proposed resource.',
+              'Or pass approvals.create_resources with the identifiers above to approve individually.',
+            ],
+          },
+        };
+      }
+
+      for (const svc of safeProposals) {
+        approvedSafeResources.add(this.proposedResourceIdentifier(svc));
+      }
+    }
+
+    if (freshPlan.status !== 'ready' && freshPlan.status !== 'needs_approval') {
       throw new Error(`Plan status is "${freshPlan.status}" — only "ready" plans can be executed.`);
     }
 
@@ -1038,7 +1205,12 @@ export class PlanEngine {
       );
     }
 
-    const plan = freshPlan;
+    // In-memory only: bring an approved needs_approval plan to 'ready'. Never
+    // persisted (no updateDeployPlan call here).
+    const plan =
+      freshPlan.status === 'needs_approval'
+        ? PlanStateMachine.transition(freshPlan, 'ready')
+        : freshPlan;
 
     const existingProject = await this.db.getProjectByName(plan.app.name);
     let lockProjectId: string | null = null;
@@ -1101,17 +1273,39 @@ export class PlanEngine {
         }
 
         if (planService.action === 'create') {
-          throw new ServiceConfigError(
-            `Managed service ${planService.type} requires an explicit ${envVarName} value before deploy.`,
-            {
-              serviceType: planService.type,
-              envVarName,
-              nextSteps: [
-                `Provide an external ${envVarName} value in env_vars.`,
-                'Or call openlander_managed_service.create_service for the target project, set its suggested_env on the deployable service, then redeploy.',
-              ],
-            },
+          const isApprovedSafeProposal =
+            planService.resolution === 'proposed_project_service' &&
+            planService.approval === 'safe_resource' &&
+            approvedSafeResources.has(this.proposedResourceIdentifier(planService));
+
+          if (!isApprovedSafeProposal) {
+            // compose_service / not_auto_creatable / unapproved: fail fast,
+            // create nothing.
+            throw new ServiceConfigError(
+              `Managed service ${planService.type} requires an explicit ${envVarName} value before deploy.`,
+              {
+                serviceType: planService.type,
+                envVarName,
+                nextSteps: [
+                  `Provide an external ${envVarName} value in env_vars.`,
+                  'Or call openlander_managed_service.create_service for the target project, set its suggested_env on the deployable service, then redeploy.',
+                ],
+              },
+            );
+          }
+
+          if (!targetProject) {
+            throw new ServiceConfigError(
+              `Provisioning managed service ${planService.type} requires an existing target project.`,
+              { serviceType: planService.type, envVarName },
+            );
+          }
+          const connectionString = await this.provisionApprovedService(
+            planService,
+            targetProject,
+            envVarName,
           );
+          mergedEnv[envVarName] = connectionString;
         } else {
           if (!targetProject) {
             throw new ServiceConfigError(
@@ -1125,6 +1319,11 @@ export class PlanEngine {
           }
           const reusable = await this.resolveReusableService(planService, targetProject.id);
           mergedEnv[envVarName] = this.getServiceConnectionString(reusable, envVarName);
+          // Backfill a connection row for the reused service (idempotent).
+          await this.db.upsertServiceConnection({
+            projectId: targetProject.id,
+            serviceId: reusable.id,
+          });
         }
       }
 

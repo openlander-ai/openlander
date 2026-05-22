@@ -431,6 +431,7 @@ export async function createAppContext(
     config,
     events: eventBus,
     composePipeline,
+    docker,
   });
 
   const rollbackWatcher = new RollbackWatcher(eventBus, db, pipeline);

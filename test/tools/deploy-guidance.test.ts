@@ -334,6 +334,7 @@ describe('deploy MCP guidance', () => {
       undefined,
       expect.stringMatching(/^mcp-execute-plan-/),
       'chat',
+      {},
     );
   });
 

@@ -61,6 +61,30 @@ export class ServiceConnectionRepo {
     return this.hydrateDeprecated(row);
   }
 
+  /**
+   * Conflict-safe create: inserts a consumer/provider connection row, or does
+   * nothing if one already exists for the (consumer, provider) pair. Uses the
+   * service_connections_consumer_provider_idx unique index. Idempotent — safe to
+   * call when provisioning the same approved plan twice.
+   */
+  async upsertConnection(opts: {
+    projectId: string;
+    serviceId: string;
+    environmentId?: string;
+  }): Promise<void> {
+    const consumerId = projectIdToServiceId(opts.projectId);
+    await this.db
+      .insert(serviceConnections)
+      .values({
+        service_id_consumer: consumerId,
+        service_id_provider: opts.serviceId,
+        environment_id: opts.environmentId ?? null,
+      })
+      .onConflictDoNothing({
+        target: [serviceConnections.service_id_consumer, serviceConnections.service_id_provider],
+      });
+  }
+
   async getConnection(id: string): Promise<ServiceConnectionRow | undefined> {
     const [selected] = await this.db
       .select()

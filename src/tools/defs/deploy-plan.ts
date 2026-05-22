@@ -451,9 +451,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'execute_deploy_plan',
     riskLevel: 'medium',
     description:
-      'Execute a deployment plan. Plan must be in "ready" status. Injects env vars and deploys the application. Managed dependencies (services[].resolution="proposed_project_service") are NOT auto-provisioned yet — supply their connection env (e.g. DATABASE_URL) or create the service first, otherwise the deploy fails fast.',
+      'Execute a deployment plan. A plan in "needs_approval" status lists proposed project-scoped managed services in services[] (resolution="proposed_project_service"); pass approve_all_safe_resources=true or approvals.create_resources=[...] to approve and OpenLander provisions the approved safe managed services (DB/cache), wires their connection env (e.g. DATABASE_URL), and deploys. Unapproved, compose, or not_auto_creatable services are never created — supply their env or create them first. Plans already in "ready" status execute directly.',
     mcpDescription:
-      'Execute a deployment plan asynchronously. Returns immediately with project_id and status. Use get_deploy_status to poll progress. Plan must be in "ready" status. Injects env vars and starts deployment; managed dependencies are not auto-provisioned yet — provide their connection env first.',
+      'Execute a deployment plan asynchronously. Returns immediately with project_id and status. Use get_deploy_status to poll progress. A "needs_approval" plan lists proposed managed services in services[]; pass approve_all_safe_resources=true or approvals.create_resources=[...] and OpenLander provisions the approved safe managed services (DB/cache), wires their connection env, and deploys. Unapproved/compose/not_auto_creatable services are not created. "ready" plans execute directly; injects env vars and starts deployment.',
     inputSchema: executeDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -461,6 +461,15 @@ export const deployPlanToolDefs: ToolDef[] = [
       const toolSessionId = `mcp-execute-plan-${nanoid(12)}`;
 
       const deployOnly = (args['deploy_only'] as string[] | undefined) ?? undefined;
+      const approveAllSafeResources = args['approve_all_safe_resources'] as boolean | undefined;
+      const approvalsArg = args['approvals'] as { create_resources?: string[] } | undefined;
+      const approval = {
+        ...(approveAllSafeResources !== undefined ? { approveAllSafeResources } : {}),
+        ...(approvalsArg?.create_resources
+          ? { createResources: approvalsArg.create_resources }
+          : {}),
+      };
+      let acquiredLockProjectId: string | null = null;
       const planRow =
         typeof appCtx.db.getDeployPlan === 'function'
           ? await appCtx.db.getDeployPlan(planId)
@@ -478,6 +487,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           if (lockResult) {
             return lockResult;
           }
+          acquiredLockProjectId = lockProjectId;
         }
         if (planData.project_id) {
           markMcpDeploy(planData.project_id);
@@ -490,6 +500,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           deployOnly,
           toolSessionId,
           deployTriggerForToolContext(context),
+          approval,
         );
       } catch (err) {
         if (err instanceof DeployLockedError) {
@@ -512,6 +523,20 @@ export const deployPlanToolDefs: ToolDef[] = [
           };
         }
         throw err;
+      }
+
+      if (result.status === 'needs_approval') {
+        // Engine started nothing. Release the pre-acquired lock so the agent
+        // can re-run with approvals.
+        if (acquiredLockProjectId) {
+          await appCtx.db.releaseDeployLock(acquiredLockProjectId, toolSessionId);
+        }
+        return {
+          plan_id: result.plan_id,
+          status: 'needs_approval',
+          proposed_resources: result.proposed_resources,
+          _agent_guidance: result._agent_guidance,
+        };
       }
 
       if (result.project_id) {
