@@ -10,7 +10,12 @@ import type { Docker } from './docker.js';
 import type { CloudflareTunnelManager } from './cloudflare.js';
 import { cloneRepo } from './git.js';
 import { allocatePort, scanUsedPorts } from './port.js';
-import { ensureManagedTraefikNetwork, getProjectUrl } from './traefik.js';
+import {
+  ensureManagedTraefikNetwork,
+  getEnvironmentProjectHostname,
+  getProjectUrl,
+} from './traefik.js';
+import { resolveContainerUrl } from './url-resolver.js';
 import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
@@ -35,9 +40,10 @@ import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
-import type { OpenLanderConfig } from '../config/index.js';
+import { DOCKER_LABELS, type OpenLanderConfig } from '../config/index.js';
 import { withDeployLock } from '../db/repos/deploy-lock-helper.js';
 import { assertProjectMutable } from './mutation-policy.js';
+import { sleep } from '../lib/sleep.js';
 
 import {
   extractProjectName,
@@ -103,6 +109,14 @@ function isProjectStateTransitioner(value: unknown): value is ProjectStateTransi
   );
 }
 
+const TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS = 5_000;
+const DEFAULT_BLUE_GREEN_ROUTE_SWITCH_DELAY_MS = TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS * 2 + 2_000;
+const BLUE_GREEN_LABELS = {
+  ROLE: 'openlander.blue_green.role',
+  PROJECT_ID: 'openlander.blue_green.project_id',
+  SERVICE_ID: 'openlander.blue_green.service_id',
+} as const;
+
 /**
  * Project configuration for a deployment.
  */
@@ -161,6 +175,12 @@ export interface DeployResult {
   success: boolean;
   projectId: string;
   projectName: string;
+  code?: string;
+  strategy?: RedeployStrategy;
+  readiness?: 'blocked' | 'healthy' | 'unhealthy' | 'unknown';
+  route_switched?: boolean;
+  previous_version_still_serving?: boolean;
+  warnings?: string[];
   previousImageTag?: string;
   containerId?: string;
   url?: string;
@@ -182,9 +202,30 @@ export interface RedeployOptions {
   healthCheckPath?: string;
   healthCheckRetries?: number;
   healthCheckIntervalMs?: number;
+  /** @internal Wait for Traefik HTTP provider polling after route target flip. */
+  routeSwitchDelayMs?: number;
+  /** @internal Timeout for the managed Traefik route probe. */
+  routeProbeTimeoutMs?: number;
+  /** @internal Public route path used only to verify ingress reachability after a flip. */
+  routeProbePath?: string;
   cmd?: string[];
   lockSessionId?: string;
   trigger?: 'chat' | 'webhook' | 'api';
+}
+
+export interface BlueGreenEligibility {
+  supported: boolean;
+  code: 'BLUE_GREEN_UNSUPPORTED';
+  reasons: string[];
+  fallback_strategy: 'force';
+  service?: {
+    id: string;
+    name: string;
+    kind: string;
+    source: string | null;
+    build_method: string | null;
+    status: string | null;
+  };
 }
 
 export interface MonorepoConfig {
@@ -746,6 +787,174 @@ export class DeployPipeline {
     }
     const sessionId = `deploy-${nanoid(12)}`;
     return withDeployLock(this.db, { projectId, sessionId }, () => fn(sessionId));
+  }
+
+  async getBlueGreenEligibility(
+    projectId: string,
+    options?: Pick<RedeployOptions, 'healthCheckPath'>,
+  ): Promise<BlueGreenEligibility> {
+    const reasons: string[] = [];
+    const project = await this.db.getProject(projectId);
+    const deployable = project ? await this.db.getDeployableForProject(project.id) : null;
+
+    if (!project) {
+      reasons.push('Project not found.');
+    }
+    if (!deployable) {
+      reasons.push('No deployable service found.');
+    }
+
+    if (deployable) {
+      if (deployable.kind === 'compose' || deployable.kind === 'compose-child') {
+        reasons.push('Compose stacks are not eligible for blue-green deploys in v0.1.3.');
+      }
+      if (deployable.source !== 'git' && deployable.source !== 'image') {
+        reasons.push('Blue-green deploys require a git or image deployable service.');
+      }
+      if (deployable.status !== 'running') {
+        reasons.push('The current service must be running before blue-green can preserve it.');
+      }
+      if (!deployable.container_id) {
+        reasons.push('The current service has no active container to keep serving as blue.');
+      }
+    }
+
+    const traefikMode = this.config.traefik.mode;
+    if (traefikMode !== 'managed') {
+      reasons.push('Managed Traefik HTTP-provider routing is required for route-target flips.');
+    }
+
+    if (project && deployable) {
+      const profile = resolveMonitoringProfile(project, deployable);
+      const healthPath = options?.healthCheckPath?.trim();
+      if (!profile.exposeViaTraefik) {
+        reasons.push('The service is not exposed through OpenLander/Traefik routes.');
+      }
+      if (profile.health.strategy === 'none' && !healthPath) {
+        reasons.push('A health check or explicit health_check_path is required.');
+      }
+    }
+
+    return {
+      supported: reasons.length === 0,
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      reasons,
+      fallback_strategy: 'force',
+      ...(deployable
+        ? {
+            service: {
+              id: deployable.id,
+              name: deployable.name,
+              kind: deployable.kind,
+              source: deployable.source,
+              build_method: deployable.build_method,
+              status: deployable.status,
+            },
+          }
+        : {}),
+    };
+  }
+
+  private buildBlueGreenUnsupportedResult(
+    projectId: string,
+    projectName: string,
+    eligibility: BlueGreenEligibility,
+    startTime: number,
+  ): DeployResult {
+    return {
+      success: false,
+      projectId,
+      projectName,
+      code: eligibility.code,
+      strategy: 'blue-green',
+      readiness: 'blocked',
+      route_switched: false,
+      previous_version_still_serving: eligibility.service?.status === 'running',
+      error: `Blue-green deploy unsupported: ${eligibility.reasons.join(' ')}`,
+      buildDurationMs: Date.now() - startTime,
+    };
+  }
+
+  private makeGreenContainerName(projectName: string): string {
+    const suffix = Date.now().toString(36);
+    return projectContainerName(`${projectName}-green-${suffix}`);
+  }
+
+  private makeGreenContainerLabels(params: {
+    projectName: string;
+    projectId: string;
+    serviceId: string;
+  }): Record<string, string> {
+    return {
+      [DOCKER_LABELS.MANAGED]: 'true',
+      [DOCKER_LABELS.PROJECT]: params.projectName,
+      [BLUE_GREEN_LABELS.ROLE]: 'green',
+      [BLUE_GREEN_LABELS.PROJECT_ID]: params.projectId,
+      [BLUE_GREEN_LABELS.SERVICE_ID]: params.serviceId,
+      'traefik.enable': 'false',
+    };
+  }
+
+  private async restoreBlueState(params: {
+    projectId: string;
+    environmentId?: string;
+    blue: {
+      containerId: string;
+      containerName: string | null;
+      assignedPort: number | null;
+      containerPort: number | null;
+      imageTag: string | null;
+      previousImageTag: string | null;
+    };
+  }): Promise<void> {
+    const { projectId, environmentId, blue } = params;
+    await this.transitionProjectState(projectId, 'running', 'deploy-running', {
+      containerId: blue.containerId,
+      containerName: blue.containerName,
+      assignedPort: blue.assignedPort,
+      containerPort: blue.containerPort,
+      imageTag: blue.imageTag,
+      previousImageTag: blue.previousImageTag,
+    });
+    if (environmentId) {
+      await this.db.updateEnvironment(environmentId, {
+        status: 'running',
+        containerId: blue.containerId,
+        assignedPort: blue.assignedPort,
+        containerPort: blue.containerPort,
+        imageTag: blue.imageTag,
+        previousImageTag: blue.previousImageTag,
+      });
+    }
+  }
+
+  private async probeManagedTraefikRoute(params: {
+    projectName: string;
+    path: string;
+    timeoutMs: number;
+  }): Promise<{ ok: true; status: number } | { ok: false; error: string }> {
+    const host = getEnvironmentProjectHostname(params.projectName, 'production');
+    const url = `${resolveContainerUrl(80)}${this.normalizeHealthCheckPath(params.path)}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, params.timeoutMs);
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { Host: host },
+        signal: controller.signal,
+      });
+      if (response.ok) {
+        return { ok: true, status: response.status };
+      }
+      return { ok: false, error: `Route probe returned HTTP ${String(response.status)}` };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: `Route probe failed for Host(${host}): ${message}` };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private async deployInner(
@@ -1677,17 +1886,34 @@ export class DeployPipeline {
     const startTime = Date.now();
     const healthCheckRetries = options?.healthCheckRetries ?? 10;
     const healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 2_000;
+    const routeSwitchDelayMs =
+      options?.routeSwitchDelayMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_DELAY_MS;
+    const routeProbeTimeoutMs = options?.routeProbeTimeoutMs ?? 5_000;
+    const routeProbePath = options?.routeProbePath ?? '/';
 
     let projectName = 'unknown';
     let imageTag: string | undefined;
     let newPort: number | undefined;
     let greenContainerId: string | undefined;
     let shouldCleanupGreen = false;
+    let routeTargetUpdated = false;
+    let routeSwitched = false;
     let buildLog = '';
     let clonePath: string | undefined;
     let commitSha: string | undefined;
     let blueContainerId: string | undefined;
     let environmentId: string | undefined;
+    let blueState:
+      | {
+          containerId: string;
+          containerName: string | null;
+          assignedPort: number | null;
+          containerPort: number | null;
+          imageTag: string | null;
+          previousImageTag: string | null;
+        }
+      | undefined;
+    const warnings: string[] = [];
 
     try {
       const project = await this.db.getProject(projectId);
@@ -1703,20 +1929,40 @@ export class DeployPipeline {
 
       projectName = project.name;
       this.validateProjectName(projectName);
-      // PR 4.5: canonical-first reads of deployable fields with `??` fallback.
       const blueDeployable = await this.db.getDeployableForProject(projectId);
-      const blueStatus = blueDeployable?.status ?? project.status;
-      blueContainerId = blueDeployable?.container_id ?? project.container_id ?? undefined;
-
-      if (blueStatus !== 'running' || !blueContainerId) {
-        return {
-          success: false,
+      const eligibility = await this.getBlueGreenEligibility(projectId, {
+        healthCheckPath: options?.healthCheckPath,
+      });
+      if (!eligibility.supported) {
+        return this.buildBlueGreenUnsupportedResult(projectId, projectName, eligibility, startTime);
+      }
+      if (!blueDeployable?.container_id) {
+        return this.buildBlueGreenUnsupportedResult(
           projectId,
           projectName,
-          error: `Project ${projectName} is not running`,
-          buildDurationMs: Date.now() - startTime,
-        };
+          {
+            supported: false,
+            code: 'BLUE_GREEN_UNSUPPORTED',
+            reasons: ['The current service has no active container to keep serving as blue.'],
+            fallback_strategy: 'force',
+          },
+          startTime,
+        );
       }
+      blueContainerId = blueDeployable.container_id;
+      blueState = {
+        containerId: blueContainerId,
+        containerName: blueDeployable.container_name ?? projectContainerName(projectName),
+        assignedPort: blueDeployable.assigned_port ?? project.assigned_port ?? null,
+        containerPort: blueDeployable.container_port ?? project.container_port ?? null,
+        imageTag: blueDeployable.image_tag ?? project.image_tag ?? null,
+        previousImageTag: blueDeployable.previous_image_tag ?? project.previous_image_tag ?? null,
+      };
+      await this.cleanupStaleGreenContainers({
+        projectName,
+        projectId,
+        activeContainerId: blueContainerId,
+      });
 
       const prodEnv = (await this.db.getEnvironmentsByProject(projectId)).find(
         (env) => env.type === 'production',
@@ -1789,8 +2035,7 @@ export class DeployPipeline {
       const networkName = await this.docker.ensureProjectNetwork(projectName);
       await ensureManagedTraefikNetwork(this.docker, networkName);
 
-      const greenName = projectContainerName(`${projectName}-green`);
-      await this.removeStaleGreenContainer(greenName);
+      const greenName = this.makeGreenContainerName(projectName);
       const resourceLimits = await loadResourceLimitsForDeployTarget(this.db, {
         projectId,
         serviceId: deployConfig._serviceId,
@@ -1803,8 +2048,13 @@ export class DeployPipeline {
         containerPort,
         envVars,
         traefikLabels: { 'traefik.enable': 'false' },
+        labels: this.makeGreenContainerLabels({
+          projectName,
+          projectId,
+          serviceId: blueDeployable.id,
+        }),
         network: networkName,
-        aliases: [projectName],
+        aliases: [`${projectName}-green`],
         secretFiles,
         resourceLimits: resourceLimits ?? undefined,
       });
@@ -1820,9 +2070,11 @@ export class DeployPipeline {
       const probeProfile = resolveMonitoringProfile(project, blueDeployable);
       const probeConfig = {
         ...probeProfile.health,
-        // Override path if explicitly provided in RedeployOptions
         ...(options?.healthCheckPath
-          ? { path: this.normalizeHealthCheckPath(options.healthCheckPath) }
+          ? {
+              strategy: 'http' as const,
+              path: this.normalizeHealthCheckPath(options.healthCheckPath),
+            }
           : {}),
         failureThreshold: healthCheckRetries,
         intervalMs: healthCheckIntervalMs,
@@ -1846,24 +2098,14 @@ export class DeployPipeline {
       }
       buildLog += '[health] Passed\n';
 
-      // Promote green container: stop old blue, rename green to canonical name.
-      // This avoids creating a new container (which caused port conflicts)
-      // and achieves zero-downtime promotion.
-      await this.docker.stopContainer(blueContainerId);
-      await this.docker.safeRemoveContainer(blueContainerId);
-
-      // Add Traefik labels to the green container so it receives traffic
-      const canonicalName = projectContainerName(projectName);
-      await this.docker.renameContainer(greenContainerId, canonicalName);
-      shouldCleanupGreen = false;
-
+      buildLog += `[route] Switching active Traefik target to ${greenName}\n`;
       await this.transitionProjectState(projectId, 'running', 'deploy-success', {
         containerId: greenContainerId,
+        containerName: greenName,
         assignedPort: newPort,
         containerPort,
         imageTag,
-        // PR 4.5: canonical-first read of previous image tag.
-        previousImageTag: blueDeployable?.image_tag ?? project.image_tag,
+        previousImageTag: blueState.imageTag,
       });
       if (prodEnv) {
         await this.db.updateEnvironment(prodEnv.id, {
@@ -1876,9 +2118,48 @@ export class DeployPipeline {
           branch: (deployConfig.source ?? 'git') === 'image' ? null : (deployConfig.branch ?? null),
         });
       }
+      routeTargetUpdated = true;
+
+      if (routeSwitchDelayMs > 0) {
+        buildLog += `[route] Waiting ${String(routeSwitchDelayMs)}ms for Traefik HTTP provider polling\n`;
+        await sleep(routeSwitchDelayMs);
+      }
+      const routeProbe = await this.probeManagedTraefikRoute({
+        projectName,
+        path: routeProbePath,
+        timeoutMs: routeProbeTimeoutMs,
+      });
+      if (!routeProbe.ok) {
+        buildLog += `[route] Failed after switch: ${routeProbe.error}\n`;
+        await this.restoreBlueState({ projectId, environmentId, blue: blueState });
+        routeTargetUpdated = false;
+        buildLog += '[route] Rolled active target back to blue\n';
+        throw new Error(routeProbe.error);
+      }
+      routeSwitched = true;
+      shouldCleanupGreen = false;
+      buildLog += `[route] Passed (HTTP ${String(routeProbe.status)})\n`;
+
+      try {
+        await this.docker.stopContainer(blueContainerId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        warnings.push(`Blue cleanup warning: failed to stop previous container: ${message}`);
+        log.warn({ err, projectId, blueContainerId }, 'Blue-green cleanup stop failed');
+      }
+      try {
+        await this.docker.safeRemoveContainer(blueContainerId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        warnings.push(`Blue cleanup warning: failed to remove previous container: ${message}`);
+        log.warn({ err, projectId, blueContainerId }, 'Blue-green cleanup remove failed');
+      }
 
       const durationMs = Date.now() - startTime;
       const projectUrl = getProjectUrl(projectName);
+      if (warnings.length > 0) {
+        buildLog += warnings.map((warning) => `[cleanup] ${warning}`).join('\n') + '\n';
+      }
 
       await this.db.createDeployLog({
         id: nanoid(12),
@@ -1903,7 +2184,12 @@ export class DeployPipeline {
         success: true,
         projectId,
         projectName,
-        previousImageTag: project.image_tag ?? undefined,
+        strategy: 'blue-green',
+        readiness: 'healthy',
+        route_switched: true,
+        previous_version_still_serving: false,
+        ...(warnings.length > 0 ? { warnings } : {}),
+        previousImageTag: blueState.imageTag ?? undefined,
         containerId: greenContainerId,
         url: projectUrl,
         port: newPort,
@@ -1916,19 +2202,29 @@ export class DeployPipeline {
       const cancelMessage = 'Build cancelled by user';
       buildLog += isCancelled ? `[cancelled] ${cancelMessage}\n` : `[error] ${errorMsg}\n`;
 
-      let blueStillServing = false;
-      if (blueContainerId) {
+      if (routeTargetUpdated && !routeSwitched && blueState) {
         try {
-          const info = await this.docker.inspectContainer(blueContainerId);
+          await this.restoreBlueState({ projectId, environmentId, blue: blueState });
+          routeTargetUpdated = false;
+          buildLog += '[route] Rolled active target back to blue\n';
+        } catch (restoreErr) {
+          buildLog += `[route] Failed to roll back active target: ${String(restoreErr)}\n`;
+        }
+      }
+
+      let blueStillServing = false;
+      if (blueState?.containerId) {
+        try {
+          const info = await this.docker.inspectContainer(blueState.containerId);
           blueStillServing = info.State.Running;
         } catch {
           blueStillServing = false;
         }
       }
 
-      if (!isCancelled && !blueStillServing && blueContainerId) {
+      if (!isCancelled && !blueStillServing && blueState?.containerId) {
         try {
-          await this.docker.restartContainer(blueContainerId);
+          await this.docker.restartContainer(blueState.containerId);
           blueStillServing = true;
           buildLog += '[recovery] Restarted blue container after failed promotion\n';
         } catch (restartErr) {
@@ -1937,14 +2233,8 @@ export class DeployPipeline {
       }
 
       if (isCancelled) {
-        if (blueStillServing) {
-          await this.transitionProjectState(projectId, 'running', 'deploy-running');
-          if (environmentId) {
-            const prodEnvCancel = await this.db.getEnvironment(environmentId);
-            if (prodEnvCancel) {
-              await this.db.updateEnvironment(environmentId, { status: 'running' });
-            }
-          }
+        if (blueStillServing && blueState) {
+          await this.restoreBlueState({ projectId, environmentId, blue: blueState });
         } else {
           await this.transitionProjectState(projectId, 'stopped', 'deploy-cancelled');
           if (environmentId) {
@@ -1984,21 +2274,21 @@ export class DeployPipeline {
           success: false,
           projectId,
           projectName,
-          ...(blueStillServing ? { url: getProjectUrl(projectName), port: newPort } : {}),
+          strategy: 'blue-green',
+          readiness: 'unknown',
+          route_switched: false,
+          previous_version_still_serving: blueStillServing,
+          ...(blueStillServing
+            ? { url: getProjectUrl(projectName), port: blueState?.assignedPort ?? newPort }
+            : {}),
           buildDurationMs: durationMs,
           error: cancelMessage,
           cancelled: true,
         };
       }
 
-      if (blueStillServing) {
-        await this.transitionProjectState(projectId, 'running', 'deploy-running');
-        if (environmentId) {
-          const prodEnvErr = await this.db.getEnvironment(environmentId);
-          if (prodEnvErr) {
-            await this.db.updateEnvironment(environmentId, { status: 'running' });
-          }
-        }
+      if (blueStillServing && blueState) {
+        await this.restoreBlueState({ projectId, environmentId, blue: blueState });
       } else {
         await this.transitionProjectState(projectId, 'error', 'deploy-runtime-error');
         if (environmentId) {
@@ -2034,8 +2324,12 @@ export class DeployPipeline {
         success: false,
         projectId,
         projectName,
+        strategy: 'blue-green',
+        readiness: 'unhealthy',
+        route_switched: routeSwitched,
+        previous_version_still_serving: blueStillServing,
         url: getProjectUrl(projectName),
-        port: newPort,
+        port: blueStillServing ? (blueState?.assignedPort ?? newPort) : newPort,
         buildDurationMs: Date.now() - startTime,
         error: blueStillServing
           ? `Blue-green deploy failed (previous version still serving): ${errorMsg}`
@@ -2055,16 +2349,6 @@ export class DeployPipeline {
     return path.startsWith('/') ? path : `/${path}`;
   }
 
-  private async removeStaleGreenContainer(greenName: string): Promise<void> {
-    try {
-      await this.docker.inspectContainer(greenName);
-      log.warn({ greenName }, 'Removing stale green container from previous failed deploy');
-      await this.docker.safeRemoveContainer(greenName);
-    } catch {
-      // Container doesn't exist — expected for first attempt
-    }
-  }
-
   private async cleanupGreenContainer(containerId: string): Promise<void> {
     try {
       await this.docker.stopContainer(containerId);
@@ -2076,6 +2360,39 @@ export class DeployPipeline {
       await this.docker.safeRemoveContainer(containerId);
     } catch (err) {
       log.warn({ err }, 'Failed to remove green container during cleanup');
+    }
+  }
+
+  private async cleanupStaleGreenContainers(params: {
+    projectName: string;
+    projectId: string;
+    activeContainerId: string;
+  }): Promise<void> {
+    const greenNamePrefix = projectContainerName(`${params.projectName}-green-`);
+    try {
+      const containers = await this.docker.listManagedContainers();
+      const staleGreens = containers.filter((container) => {
+        if (container.id === params.activeContainerId) return false;
+        const labels = container.labels ?? {};
+        const labelMatch =
+          labels[BLUE_GREEN_LABELS.ROLE] === 'green' &&
+          labels[BLUE_GREEN_LABELS.PROJECT_ID] === params.projectId;
+        const legacyNameMatch = container.name.startsWith(greenNamePrefix);
+        return labelMatch || legacyNameMatch;
+      });
+
+      for (const container of staleGreens) {
+        log.info(
+          { id: container.id, name: container.name, projectId: params.projectId },
+          'Cleaning stale blue-green container before promotion',
+        );
+        await this.cleanupGreenContainer(container.id);
+      }
+    } catch (err) {
+      log.warn(
+        { err, projectId: params.projectId },
+        'Failed to clean stale blue-green containers before promotion',
+      );
     }
   }
 

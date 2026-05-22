@@ -349,16 +349,38 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
         health_check_path?: string;
       }>()
       .catch(() => ({ env_vars: undefined, no_cache: undefined, health_check_path: undefined }));
-    if (body.env_vars && typeof body.env_vars === 'object') {
-      for (const [key, value] of Object.entries(body.env_vars)) {
-        if (value.trim()) await ctx.env.set(runtimeProject.id, key, value.trim());
-      }
-    }
     if (service.source === 'git' && !service.repo_url) {
       return c.json(
         { success: false, error: 'SERVICE_SOURCE_MISSING', code: 'SERVICE_SOURCE_MISSING' },
         400,
       );
+    }
+    if (strategy === 'blue-green') {
+      const eligibility = await ctx.pipeline.getBlueGreenEligibility(runtimeProject.id, {
+        healthCheckPath: body.health_check_path,
+      });
+      if (!eligibility.supported) {
+        return c.json(
+          {
+            success: false,
+            status: 'blocked',
+            code: eligibility.code,
+            strategy: 'blue-green',
+            reasons: eligibility.reasons,
+            fallback_strategy: eligibility.fallback_strategy,
+            fallback_call: {
+              method: 'POST',
+              path: `/api/projects/${project.id}/services/${service.id}/deploy?strategy=force`,
+            },
+          },
+          409,
+        );
+      }
+    }
+    if (body.env_vars && typeof body.env_vars === 'object') {
+      for (const [key, value] of Object.entries(body.env_vars)) {
+        if (value.trim()) await ctx.env.set(runtimeProject.id, key, value.trim());
+      }
     }
     const lockSessionId = `redeploy-${runtimeProject.id}-${Date.now().toString(36)}`;
     if (ctx.agentPool && !ctx.agentPool.acquireProjectLock(runtimeProject.id, lockSessionId)) {

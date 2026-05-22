@@ -76,6 +76,12 @@ function createDuplicateServiceContext(
       getDeployLockInfo: vi.fn(() => null),
     },
     pipeline: {
+      getBlueGreenEligibility: vi.fn().mockResolvedValue({
+        supported: true,
+        code: 'BLUE_GREEN_UNSUPPORTED',
+        reasons: [],
+        fallback_strategy: 'force',
+      }),
       redeploy: vi.fn().mockResolvedValue({ success: true }),
       rollback: vi.fn().mockResolvedValue({ success: true }),
       stop: vi.fn().mockResolvedValue(undefined),
@@ -191,6 +197,36 @@ describe('deployable service target resolution', () => {
         params: { service_id: 'alpha__svc' },
       },
     });
+  });
+
+  it('blocks unsupported blue-green redeploys before acquiring a deploy lock', async () => {
+    const ctx = createDuplicateServiceContext();
+    (
+      ctx.pipeline.getBlueGreenEligibility as ReturnType<typeof vi.fn>
+    ).mockResolvedValueOnce({
+      supported: false,
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      reasons: ['Compose stacks are not eligible for blue-green deploys in v0.1.3.'],
+      fallback_strategy: 'force',
+    });
+
+    const result = await getTool(ctx, 'redeploy_app').execute(
+      { service_name: 'api', project_name: 'alpha', strategy: 'blue-green' },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      strategy: 'blue-green',
+      fallback_call: {
+        tool: 'openlander_service',
+        action: 'redeploy_app',
+        params: { service_id: 'alpha__svc', strategy: 'force' },
+      },
+    });
+    expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
+    expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
   });
 
   it('requires service_id when service_name matches a multi-deployable project group', async () => {

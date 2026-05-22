@@ -495,6 +495,7 @@ export class ProjectRepo {
       status: string;
       visibility: string;
       containerId: string | null;
+      containerName: string | null;
       assignedPort: number | null;
       imageUrl: string | null;
       imageTag: string | null;
@@ -541,6 +542,7 @@ export class ProjectRepo {
       svcSetValues.status = updates.status as (typeof services.$inferInsert)['status'];
     if (updates.visibility !== undefined) svcSetValues.visibility = updates.visibility;
     if (updates.containerId !== undefined) svcSetValues.container_id = updates.containerId;
+    if (updates.containerName !== undefined) svcSetValues.container_name = updates.containerName;
     if (updates.assignedPort !== undefined) svcSetValues.assigned_port = updates.assignedPort;
     if (updates.imageUrl !== undefined) svcSetValues.image_url = updates.imageUrl;
     if (updates.imageTag !== undefined) svcSetValues.image_tag = updates.imageTag;
