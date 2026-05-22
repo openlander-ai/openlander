@@ -36,8 +36,11 @@ type EnvLike = {
   ) => Array<{ filename: string; content: string; mountPath: string }>;
 };
 
-function mockRouteProbe(statusCode: number): void {
+function mockRouteProbeSequence(statusCodes: number[]): void {
+  let index = 0;
   mockHttpRequest.mockImplementation((options, callback: (response: EventEmitter) => void) => {
+    const statusCode = statusCodes[Math.min(index, statusCodes.length - 1)] ?? 200;
+    index += 1;
     const response = new EventEmitter() as EventEmitter & {
       statusCode: number;
       resume: () => void;
@@ -57,6 +60,10 @@ function mockRouteProbe(statusCode: number): void {
     void options;
     return request;
   });
+}
+
+function mockRouteProbe(statusCode: number): void {
+  mockRouteProbeSequence([statusCode]);
 }
 
 function createProject(): ProjectRow {
@@ -172,7 +179,8 @@ function createMockDb(state: {
       applyRuntimeUpdates(updates);
     }),
     updateEnvironment: vi.fn(async (_id: string, updates: Record<string, unknown>) => {
-      if ('status' in updates) state.environment.status = updates.status as EnvironmentRow['status'];
+      if ('status' in updates)
+        state.environment.status = updates.status as EnvironmentRow['status'];
       if ('containerId' in updates)
         state.environment.container_id = updates.containerId as string | null;
       if ('assignedPort' in updates)
@@ -319,6 +327,10 @@ describe('blue-green route target flip', () => {
         }),
       }),
     );
+    expect(mockRunProbe).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ containerId: 'container-green', assignedPort: 12001 }),
+    );
 
     const updateProjectMock = db.updateProject as ReturnType<typeof vi.fn>;
     const stopContainerMock = docker.stopContainer as ReturnType<typeof vi.fn>;
@@ -342,6 +354,26 @@ describe('blue-green route target flip', () => {
       }),
       expect.any(Function),
     );
+  });
+
+  it('polls the managed route until Traefik serves the flipped target', async () => {
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+    mockRouteProbeSequence([404, 200]);
+    const previousProbeCalls = mockHttpRequest.mock.calls.length;
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 50,
+      routeProbeIntervalMs: 1,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      strategy: 'blue-green',
+      route_switched: true,
+    });
+    expect(mockHttpRequest.mock.calls.length - previousProbeCalls).toBe(2);
   });
 
   it('keeps blue serving when green health fails', async () => {
