@@ -113,7 +113,12 @@ function createTraefikConfigApp(params: {
   mappings: DomainMappingRow[];
 }): {
   app: Hono;
-  db: { getService: ReturnType<typeof vi.fn>; getProject: ReturnType<typeof vi.fn> };
+  db: {
+    getService: ReturnType<typeof vi.fn>;
+    getProject: ReturnType<typeof vi.fn>;
+    getDeployableForProject: ReturnType<typeof vi.fn>;
+    listServices: ReturnType<typeof vi.fn>;
+  };
 } {
   const projectsById = new Map(params.projects.map((project) => [project.id, project]));
   const servicesById = new Map(params.services.map((service) => [service.id, service]));
@@ -158,17 +163,19 @@ describe('GET /api/traefik/config domain routing', () => {
       container_port: 8080,
       container_id: 'container-green',
     });
-    const app = createTraefikConfigApp({
+    const harness = createTraefikConfigApp({
       projects: [project],
       services: [defaultService],
       mappings: [],
-    }).app;
+    });
 
-    const config = await requestTraefikConfig(app);
+    const config = await requestTraefikConfig(harness.app);
 
     expect(config.http.services['svc-stack']?.loadBalancer.servers[0]?.url).toBe(
       'http://ol-stack-green-abc123:8080',
     );
+    expect(harness.db.listServices).toHaveBeenCalledOnce();
+    expect(harness.db.getDeployableForProject).not.toHaveBeenCalled();
   });
 
   it('routes custom domains through mapping.service_id, not the parent project container', async () => {

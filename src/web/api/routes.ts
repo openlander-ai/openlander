@@ -235,11 +235,22 @@ export function createApiRoutes(ctx: AppContext): Hono {
     // PR 4 canonical-first: read status / container_id / container_port /
     // assigned_port via the deployable services row when available; fall
     // back to legacy projects columns through migration 0012.
-    const projects = await ctx.db.listProjects();
+    const [projects, serviceRows, mappings] = await Promise.all([
+      ctx.db.listProjects(),
+      ctx.db.listServices(),
+      ctx.db.listDomainMappings(),
+    ]);
     const projectsById = new Map(projects.map((project) => [project.id, project]));
-    const allProjects = [];
+    const servicesById = new Map(serviceRows.map((service) => [service.id, service]));
+    const deployablesByProjectId = new Map(
+      projects.map((project) => [
+        project.id,
+        servicesById.get(projectIdToDeployableServiceId(project.id)),
+      ]),
+    );
+    const allProjects: ProjectRow[] = [];
     for (const p of projects) {
-      const deployable = await ctx.db.getDeployableForProject(p.id);
+      const deployable = deployablesByProjectId.get(p.id);
       const status = deployable?.status ?? p.status;
       const containerId = deployable?.container_id ?? p.container_id;
       if (status === 'running' || (status === 'building' && containerId)) {
@@ -247,7 +258,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
       }
     }
     for (const project of allProjects) {
-      const deployable = await ctx.db.getDeployableForProject(project.id);
+      const deployable = deployablesByProjectId.get(project.id);
       // PR 4.5: canonical-first read with `??` fallback (joined to satisfy grep).
       const internalPort =
         deployable?.container_port ??
@@ -272,9 +283,6 @@ export function createApiRoutes(ctx: AppContext): Hono {
       };
     }
 
-    const serviceRows = await ctx.db.listServices();
-    const servicesById = new Map(serviceRows.map((service) => [service.id, service]));
-    const mappings = await ctx.db.listDomainMappings();
     for (const mapping of mappings) {
       if (mapping.status !== 'active') continue;
 
@@ -385,7 +393,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
       // PR 4 canonical-first: public_url + visibility from deployable
       // services row when available; fall back to legacy projects columns.
-      const deployable = await ctx.db.getDeployableForProject(project.id);
+      const deployable = deployablesByProjectId.get(project.id);
       const visibility = deployable?.visibility ?? project.visibility;
       const publicUrl = deployable?.public_url ?? project.public_url;
       if ((visibility === 'quick-share' || visibility === 'shared') && publicUrl) {
