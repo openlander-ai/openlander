@@ -25,9 +25,11 @@ import {
   envVars,
   projects,
   secretFiles,
+  serviceConnections,
   services,
   timelineEvents,
   webhookConfigs,
+  type ServiceKind,
 } from '../schema.drizzle.js';
 import {
   ORPHAN_MANAGED_GROUP_ID,
@@ -44,7 +46,7 @@ import type { EnvironmentRow, PendingFixRow, ProjectRow, ServiceRow } from '../t
 export interface ProjectWithMetadata {
   project: ProjectRow;
   environments: EnvironmentRow[];
-  /** Number of child services (compose-children) under this group. */
+  /** Number of services shown under this group, including connected managed services. */
   childCount: number;
   /** True when the group contains at least one `compose-child` or a `compose` parent service. */
   isCompose: boolean;
@@ -57,7 +59,8 @@ type ServiceSelectRow = typeof services.$inferSelect;
 type EnvironmentSelectRow = typeof environments.$inferSelect;
 type ProjectStatus = NonNullable<ProjectRow['status']>;
 
-const NON_DEPLOYABLE_SERVICE_KINDS = ['postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose'];
+const MANAGED_SERVICE_KINDS: ServiceKind[] = ['postgres', 'mysql', 'redis', 'mongo', 'minio'];
+const NON_DEPLOYABLE_SERVICE_KINDS: ServiceKind[] = [...MANAGED_SERVICE_KINDS, 'compose'];
 
 function toProjectRow(row: ProjectSelectRow): ProjectRow {
   return row as ProjectRow;
@@ -89,7 +92,7 @@ function excludesAttachedRuntimeProjectRows() {
 }
 
 function isDeployableStatusService(kind: string): boolean {
-  return !NON_DEPLOYABLE_SERVICE_KINDS.includes(kind);
+  return !(NON_DEPLOYABLE_SERVICE_KINDS as readonly string[]).includes(kind);
 }
 
 function deriveGroupStatusFromServices(
@@ -366,14 +369,15 @@ export class ProjectRepo {
     if (projectIds.length === 0) {
       return new Map();
     }
+    const uniqueProjectIds = [...new Set(projectIds)];
 
     const rows = await this.db
       .select({ parentId: services.project_id, cnt: count() })
       .from(services)
       .where(
         and(
-          inArray(services.project_id, [...new Set(projectIds)]),
-          notInArray(services.kind, ['postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose']),
+          inArray(services.project_id, uniqueProjectIds),
+          notInArray(services.kind, NON_DEPLOYABLE_SERVICE_KINDS),
           sql`NOT (${services.parent_service_id} IS NULL AND coalesce(${services.build_method}, '') = 'compose')`,
         ),
       )
@@ -384,6 +388,26 @@ export class ProjectRepo {
       if (row.parentId) {
         counts.set(row.parentId, row.cnt);
       }
+    }
+
+    const managedConnectionRows = await this.db
+      .select({ consumerId: serviceConnections.service_id_consumer, cnt: count() })
+      .from(serviceConnections)
+      .innerJoin(services, eq(serviceConnections.service_id_provider, services.id))
+      .where(
+        and(
+          inArray(
+            serviceConnections.service_id_consumer,
+            uniqueProjectIds.map(projectIdToDeployableServiceId),
+          ),
+          inArray(services.kind, MANAGED_SERVICE_KINDS),
+        ),
+      )
+      .groupBy(serviceConnections.service_id_consumer);
+
+    for (const row of managedConnectionRows) {
+      const projectId = deployableServiceIdToProjectId(row.consumerId);
+      counts.set(projectId, (counts.get(projectId) ?? 0) + row.cnt);
     }
     return counts;
   }
