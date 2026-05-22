@@ -44,12 +44,21 @@ describe('project-ops list_projects reconciliation', () => {
       container_name: null,
       public_url: null,
     };
+    const worker = {
+      ...deployable,
+      id: 'worker-1__svc',
+      name: 'demo-worker',
+      assigned_port: null,
+      container_id: 'worker-container',
+      container_name: 'ol-demo-worker',
+    };
 
     const ctx = {
       db: {
         listProjects: vi.fn(() => [project]),
         updateProject: vi.fn(),
         getDeployableForProject: vi.fn().mockReturnValue(deployable),
+        getDeployablesByGroup: vi.fn().mockReturnValue([deployable, worker]),
       },
       docker: {
         inspectContainer: vi.fn(async () => ({ Id: 'container-1', State: { Running: true } })),
@@ -70,13 +79,29 @@ describe('project-ops list_projects reconciliation', () => {
             source: 'git',
             container_name: 'ol-demo-app',
           },
+          deployable_services: [
+            {
+              service_id: 'project-1__svc',
+              service_name: 'demo-web',
+              kind: 'git',
+              source: 'git',
+              container_name: 'ol-demo-app',
+            },
+            {
+              service_id: 'worker-1__svc',
+              service_name: 'demo-worker',
+              kind: 'git',
+              source: 'git',
+              container_name: 'ol-demo-worker',
+            },
+          ],
         },
       ],
       _agent_guidance: {
         networking: [
           expect.any(String),
           expect.any(String),
-          expect.stringContaining('set_env_vars'),
+          expect.stringContaining('deployable_services'),
         ],
       },
     });

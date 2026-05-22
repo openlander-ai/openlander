@@ -77,21 +77,28 @@ function monitoringTargetSchema<T extends z.ZodRawShape>(shape: T) {
   return z
     .object({ ...monitoringTargetFields, ...shape })
     .refine(
-      (value: {
-        service_id?: unknown;
-        service_name?: unknown;
-        project_id?: unknown;
-        project_name?: unknown;
-      }) =>
-        Boolean(value.service_id || value.service_name || value.project_id || value.project_name),
+      (value: Record<string, unknown>) =>
+        Boolean(
+          value['service_id'] ||
+          value['service_name'] ||
+          value['project_id'] ||
+          value['project_name'] ||
+          value['container_name'],
+        ),
       {
-        message: 'service_id, service_name, project_id, or project_name is required',
+        message:
+          'service_id, service_name, project_id, project_name, or container_name is required',
       },
     );
 }
 
 export const getLogsSchema = monitoringTargetSchema({
   lines: z.number().int().positive().optional().describe('Number of log lines to retrieve'),
+  container_name: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Docker container name for a deployable service, e.g. ol-my-worker'),
 });
 
 export const getProjectStatsSchema = monitoringTargetSchema({});

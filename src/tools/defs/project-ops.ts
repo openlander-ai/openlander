@@ -1,6 +1,7 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
+import type { ServiceRow } from '../../db/types.js';
 import { emptySchema } from './schemas.js';
 import type { ToolDef } from './types.js';
 
@@ -37,9 +38,9 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'list_projects',
     riskLevel: 'low',
     description:
-      'List project groups with status, ports, container names, local URLs, public URLs, and deployable_service identifiers. Project groups organize deployable services; repo/image/build source lives on services. deployable_service is null for groups without a deployable service. Returns { count, projects[] }. Always available, no errors.',
+      'List project groups with status, ports, container names, local URLs, public URLs, and deployable service identifiers. Project groups organize deployable services; repo/image/build source lives on services. deployable_service is the primary service and deployable_services lists every app/worker service in the group. Returns { count, projects[] }. Always available, no errors.',
     mcpDescription:
-      'List project groups and deployable_service identifiers for follow-up service actions. deployable_service is null when a group has no deployable service.',
+      'List project groups and deployable service identifiers for follow-up service actions. deployable_service is the primary service; deployable_services includes app/worker siblings.',
     inputSchema: emptySchema,
     execute: async (_args, context) => {
       if (context.target === 'mcp') {
@@ -51,8 +52,17 @@ export const projectOpsToolDefs: ToolDef[] = [
         string,
         Awaited<ReturnType<typeof context.appCtx.db.getDeployableForProject>>
       >();
+      const deployableGroups = new Map<string, ServiceRow[]>();
       for (const p of projects) {
-        deployables.set(p.id, await context.appCtx.db.getDeployableForProject(p.id));
+        const primary = await context.appCtx.db.getDeployableForProject(p.id);
+        const groupDeployables =
+          typeof context.appCtx.db.getDeployablesByGroup === 'function'
+            ? await context.appCtx.db.getDeployablesByGroup(p.id)
+            : primary
+              ? [primary]
+              : [];
+        deployables.set(p.id, primary ?? groupDeployables[0]);
+        deployableGroups.set(p.id, groupDeployables);
       }
 
       if (context.target === 'mcp') {
@@ -78,6 +88,17 @@ export const projectOpsToolDefs: ToolDef[] = [
                   container_name: deployableContainerName,
                 }
               : null;
+            const deployableServices = (deployableGroups.get(project.id) ?? []).map((service) => ({
+              service_id: service.id,
+              service_name: service.name,
+              kind: service.kind,
+              source: service.source,
+              status: service.status,
+              port: service.assigned_port,
+              container_name:
+                service.container_name ??
+                (deployable?.id === service.id ? deployableContainerName : null),
+            }));
             return {
               id: project.id,
               name: project.name,
@@ -92,6 +113,7 @@ export const projectOpsToolDefs: ToolDef[] = [
               urls: port ? getProjectUrls(project.name, port) : [],
               publicUrl,
               deployable_service: deployableService,
+              deployable_services: deployableServices,
               createdAt: project.created_at,
               updatedAt: project.updated_at,
             };
@@ -100,7 +122,7 @@ export const projectOpsToolDefs: ToolDef[] = [
             networking: [
               'Project app and managed-service containers are isolated on the project Docker network.',
               'For same-project inter-container traffic, use the service DNS name on that project network. Do not create Docker networks manually.',
-              'Project groups are not deployable services. Use projects[].deployable_service.service_id with openlander_service actions such as set_env_vars, list_env_vars, redeploy_app, expose_public, restart_service, rollback_service, or update_service_config.',
+              'Project groups are not deployable services. Use projects[].deployable_services[].service_id with openlander_service/openlander_monitor actions when a group has app, API, and worker services.',
             ],
           },
         };

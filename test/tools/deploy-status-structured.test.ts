@@ -110,6 +110,9 @@ describe('get_deploy_status structured fields (O1)', () => {
     });
     expect(job['next_poll_after_ms']).toBeUndefined();
     expect(job['status_call']).toBeDefined();
+    expect(job['created_at']).toBe('2026-05-21T23:59:55.000Z');
+    expect(job['completed_at']).toBe('2026-05-22T00:00:00.000Z');
+    expect(job['created_at']).not.toBe(job['completed_at']);
 
     const serialized = JSON.stringify(result);
     for (const field of FORBIDDEN_FIELDS) {

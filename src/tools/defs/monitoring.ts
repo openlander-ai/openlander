@@ -67,8 +67,10 @@ export const monitoringToolDefs: ToolDef[] = [
       const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
       const serviceName =
         typeof args['service_name'] === 'string' ? args['service_name'].trim() : '';
+      const containerName =
+        typeof args['container_name'] === 'string' ? args['container_name'].trim() : '';
 
-      if (serviceId || serviceName) {
+      if (serviceId || serviceName || containerName) {
         const { service, project, runtimeProject } = await resolveDeployableServiceForMonitoring(
           args,
           context,
@@ -79,6 +81,7 @@ export const monitoringToolDefs: ToolDef[] = [
           service: {
             id: service.id,
             name: service.name,
+            container_name: service.container_name,
           },
           logs,
         };
@@ -827,6 +830,20 @@ function isManagedService(kind: string): boolean {
   return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
 }
 
+function normalizeContainerName(name: string): string {
+  return name.replace(/^\//, '').trim();
+}
+
+function matchesServiceAlias(service: ServiceRow, value: string): boolean {
+  const normalized = normalizeContainerName(value);
+  return (
+    service.name === value ||
+    service.id === value ||
+    service.container_name === normalized ||
+    service.container_id === value
+  );
+}
+
 async function resolveProjectScope(
   projectName: string,
   context: ToolContext,
@@ -890,6 +907,8 @@ async function resolveDeployableServiceForMonitoring(
 ): Promise<ResolvedDeployableService> {
   const serviceId = typeof args.service_id === 'string' ? args.service_id.trim() : '';
   const serviceName = typeof args.service_name === 'string' ? args.service_name.trim() : '';
+  const containerName =
+    typeof args.container_name === 'string' ? normalizeContainerName(args.container_name) : '';
   const projectId = typeof args.project_id === 'string' ? args.project_id.trim() : '';
   const projectName = typeof args.project_name === 'string' ? args.project_name.trim() : '';
   const projectIdentifier = projectId || projectName;
@@ -905,7 +924,7 @@ async function resolveDeployableServiceForMonitoring(
       throw new ProjectNotFoundError(projectIdentifier);
     }
     const services = await context.appCtx.db.listServices();
-    const named = services.filter((item) => item.name === serviceName);
+    const named = services.filter((item) => matchesServiceAlias(item, serviceName));
     const projectScopeId = projectScope?.id;
     const scoped = projectScopeId
       ? named.filter((item) => item.project_id === projectScopeId)
@@ -926,6 +945,31 @@ async function resolveDeployableServiceForMonitoring(
     if (!service && !projectIdentifier) {
       service = await resolveSingleDeployableProjectAlias(serviceName, context);
     }
+  } else if (containerName) {
+    projectScope = await resolveProjectScope(projectIdentifier, context);
+    if (projectIdentifier && !projectScope) {
+      throw new ProjectNotFoundError(projectIdentifier);
+    }
+    const services = await context.appCtx.db.listServices();
+    const projectScopeId = projectScope?.id;
+    const scoped = services.filter(
+      (item) =>
+        item.container_name === containerName &&
+        !isManagedService(item.kind) &&
+        (!projectScopeId || item.project_id === projectScopeId),
+    );
+    if (scoped.length > 1) {
+      throw new OpenLanderError(
+        `Multiple deployable services use container '${containerName}'. Specify project_name or service_id.`,
+        'SERVICE_SELECTION_REQUIRED',
+        400,
+        {
+          containerName,
+          candidates: await serviceSelectionCandidates(scoped, context),
+        },
+      );
+    }
+    service = scoped[0];
   } else if (projectIdentifier) {
     projectScope = await resolveProjectScope(projectIdentifier, context);
     if (!projectScope) {
@@ -953,7 +997,9 @@ async function resolveDeployableServiceForMonitoring(
   }
 
   if (!service) {
-    throw new ServiceNotFoundError(serviceId || serviceName || projectIdentifier || 'unknown');
+    throw new ServiceNotFoundError(
+      serviceId || serviceName || containerName || projectIdentifier || 'unknown',
+    );
   }
   if (isManagedService(service.kind)) {
     throw new ServiceOperationUnsupportedError('diagnose_service', service.kind);
