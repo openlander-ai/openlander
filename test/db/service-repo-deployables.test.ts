@@ -91,7 +91,9 @@ describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
     expect(method).toContain('service_id_consumer');
     expect(method).toContain('service_id_provider');
     expect(method).toContain('MANAGED_SERVICE_KINDS');
-    expect(method).toContain('counts.set(projectId, (counts.get(projectId) ?? 0) + row.cnt)');
+    expect(method).toContain('directManagedRows');
+    expect(method).toContain('managedServiceIdsByProject');
+    expect(method).toContain('serviceIds.size');
   });
 });
 
