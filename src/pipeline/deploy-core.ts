@@ -2,7 +2,9 @@ import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('deploy');
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { request as httpRequest } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
+import { URL } from 'node:url';
 import { nanoid } from 'nanoid';
 import { rm } from 'node:fs/promises';
 
@@ -19,7 +21,7 @@ import { resolveContainerUrl } from './url-resolver.js';
 import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
-import type { Database, EnvironmentRow, ProjectRow } from '../db/index.js';
+import type { Database, EnvironmentRow, ProjectRow, ServiceRow } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { resolveEnvVars } from './resolve-env.js';
 
@@ -110,12 +112,28 @@ function isProjectStateTransitioner(value: unknown): value is ProjectStateTransi
 }
 
 const TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS = 5_000;
-const DEFAULT_BLUE_GREEN_ROUTE_SWITCH_DELAY_MS = TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS * 2 + 2_000;
+const DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS =
+  TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS * 2 + 2_000;
+const DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS = 500;
 const BLUE_GREEN_LABELS = {
   ROLE: 'openlander.blue_green.role',
   PROJECT_ID: 'openlander.blue_green.project_id',
   SERVICE_ID: 'openlander.blue_green.service_id',
 } as const;
+
+function explicitHealthCheckPath(
+  project: ProjectRow,
+  deployable: ServiceRow,
+  override?: string,
+): string | undefined {
+  const candidates = [
+    override,
+    deployable.health_check_path ?? undefined,
+    project.health_check_path ?? undefined,
+  ];
+  const found = candidates.find((candidate) => candidate?.trim());
+  return found ? (found.startsWith('/') ? found : `/${found}`) : undefined;
+}
 
 /**
  * Project configuration for a deployment.
@@ -202,8 +220,10 @@ export interface RedeployOptions {
   healthCheckPath?: string;
   healthCheckRetries?: number;
   healthCheckIntervalMs?: number;
-  /** @internal Wait for Traefik HTTP provider polling after route target flip. */
+  /** @internal Maximum wait for Traefik HTTP provider polling after route target flip. */
   routeSwitchDelayMs?: number;
+  /** @internal Poll interval while waiting for Traefik HTTP provider to expose the flipped route. */
+  routeProbeIntervalMs?: number;
   /** @internal Timeout for the managed Traefik route probe. */
   routeProbeTimeoutMs?: number;
   /** @internal Public route path used only to verify ingress reachability after a flip. */
@@ -826,12 +846,14 @@ export class DeployPipeline {
 
     if (project && deployable) {
       const profile = resolveMonitoringProfile(project, deployable);
-      const healthPath = options?.healthCheckPath?.trim();
+      const healthPath = explicitHealthCheckPath(project, deployable, options?.healthCheckPath);
       if (!profile.exposeViaTraefik) {
         reasons.push('The service is not exposed through OpenLander/Traefik routes.');
       }
-      if (profile.health.strategy === 'none' && !healthPath) {
-        reasons.push('A health check or explicit health_check_path is required.');
+      if (!healthPath) {
+        reasons.push(
+          'An explicit health_check_path is required; the default "/" probe is not enough for blue-green promotion.',
+        );
       }
     }
 
@@ -934,26 +956,83 @@ export class DeployPipeline {
     timeoutMs: number;
   }): Promise<{ ok: true; status: number } | { ok: false; error: string }> {
     const host = getEnvironmentProjectHostname(params.projectName, 'production');
-    const url = `${resolveContainerUrl(80)}${this.normalizeHealthCheckPath(params.path)}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, params.timeoutMs);
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: { Host: host },
-        signal: controller.signal,
+    const url = new URL(`${resolveContainerUrl(80)}${this.normalizeHealthCheckPath(params.path)}`);
+
+    return await new Promise((resolveProbe) => {
+      let settled = false;
+      const settle = (result: { ok: true; status: number } | { ok: false; error: string }) => {
+        if (settled) return;
+        settled = true;
+        resolveProbe(result);
+      };
+
+      const req = httpRequest(
+        {
+          protocol: url.protocol,
+          hostname: url.hostname,
+          port: url.port || '80',
+          path: `${url.pathname}${url.search}`,
+          method: 'GET',
+          timeout: params.timeoutMs,
+          headers: { Host: host },
+        },
+        (response) => {
+          const status = response.statusCode ?? 0;
+          response.resume();
+          if (status >= 200 && status < 300) {
+            settle({ ok: true, status });
+            return;
+          }
+          settle({ ok: false, error: `Route probe returned HTTP ${String(status)}` });
+        },
+      );
+
+      req.on('timeout', () => {
+        req.destroy(new Error(`Route probe timed out after ${String(params.timeoutMs)}ms`));
       });
-      if (response.ok) {
-        return { ok: true, status: response.status };
+
+      req.on('error', (err: Error) => {
+        settle({ ok: false, error: `Route probe failed for Host(${host}): ${err.message}` });
+      });
+
+      req.end();
+    });
+  }
+
+  private async waitForManagedTraefikRoute(params: {
+    projectName: string;
+    path: string;
+    probeTimeoutMs: number;
+    maxWaitMs: number;
+    intervalMs: number;
+  }): Promise<
+    | { ok: true; status: number; attempts: number; elapsedMs: number }
+    | { ok: false; error: string; attempts: number; elapsedMs: number }
+  > {
+    const startedAt = Date.now();
+    const deadline = startedAt + Math.max(0, params.maxWaitMs);
+    let attempts = 0;
+    let lastError = 'Route probe did not run';
+
+    for (;;) {
+      attempts += 1;
+      const probe = await this.probeManagedTraefikRoute({
+        projectName: params.projectName,
+        path: params.path,
+        timeoutMs: params.probeTimeoutMs,
+      });
+      const elapsedMs = Date.now() - startedAt;
+      if (probe.ok) {
+        return { ok: true, status: probe.status, attempts, elapsedMs };
       }
-      return { ok: false, error: `Route probe returned HTTP ${String(response.status)}` };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { ok: false, error: `Route probe failed for Host(${host}): ${message}` };
-    } finally {
-      clearTimeout(timeout);
+
+      lastError = probe.error;
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        return { ok: false, error: lastError, attempts, elapsedMs };
+      }
+
+      await sleep(Math.min(params.intervalMs, remainingMs));
     }
   }
 
@@ -1887,9 +1966,11 @@ export class DeployPipeline {
     const healthCheckRetries = options?.healthCheckRetries ?? 10;
     const healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 2_000;
     const routeSwitchDelayMs =
-      options?.routeSwitchDelayMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_DELAY_MS;
+      options?.routeSwitchDelayMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS;
+    const routeProbeIntervalMs =
+      options?.routeProbeIntervalMs ?? DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS;
     const routeProbeTimeoutMs = options?.routeProbeTimeoutMs ?? 5_000;
-    const routeProbePath = options?.routeProbePath ?? '/';
+    let routeProbePath = options?.routeProbePath;
 
     let projectName = 'unknown';
     let imageTag: string | undefined;
@@ -1930,6 +2011,10 @@ export class DeployPipeline {
       projectName = project.name;
       this.validateProjectName(projectName);
       const blueDeployable = await this.db.getDeployableForProject(projectId);
+      const storedHealthPath = blueDeployable
+        ? explicitHealthCheckPath(project, blueDeployable, options?.healthCheckPath)
+        : undefined;
+      routeProbePath ??= storedHealthPath ?? '/';
       const eligibility = await this.getBlueGreenEligibility(projectId, {
         healthCheckPath: options?.healthCheckPath,
       });
@@ -1984,36 +2069,55 @@ export class DeployPipeline {
         await this.db.updateEnvironment(prodEnv.id, { status: 'building' });
       }
 
+      const source: 'git' | 'image' =
+        deployConfig.source === 'image' || blueDeployable.source === 'image' ? 'image' : 'git';
       await eventBus.emit('deploy:start', { projectId, repoUrl: deployConfig.repoUrl });
 
-      this.jobManager?.updatePhase(projectId, 'cloning');
-      buildLog += '[clone] Cloning repository...\n';
-      const cloneResult = await cloneRepo({
-        repoUrl: deployConfig.repoUrl,
-        branch: deployConfig.branch,
-      });
-      clonePath = cloneResult.path;
-      commitSha = cloneResult.commitSha;
-      buildLog += `[clone] Done (${cloneResult.commitSha})\n`;
+      if (source === 'image') {
+        const imageUrl = deployConfig.imageUrl ?? blueDeployable.image_url;
+        if (!imageUrl) {
+          throw new MissingImageUrlError();
+        }
+        this.jobManager?.updatePhase(projectId, 'building');
+        buildLog += `[pull] Pulling image ${imageUrl}\n`;
+        try {
+          await this.docker.pullImage(imageUrl);
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          throw new ImagePullError(mapPullError(err));
+        }
+        buildLog += `[pull] Pulled image ${imageUrl}\n`;
+        imageTag = imageUrl;
+      } else {
+        this.jobManager?.updatePhase(projectId, 'cloning');
+        buildLog += '[clone] Cloning repository...\n';
+        const cloneResult = await cloneRepo({
+          repoUrl: deployConfig.repoUrl,
+          branch: deployConfig.branch,
+        });
+        clonePath = cloneResult.path;
+        commitSha = cloneResult.commitSha;
+        buildLog += `[clone] Done (${cloneResult.commitSha})\n`;
 
-      this.jobManager?.updatePhase(projectId, 'building');
-      imageTag = `openlander/${projectName}:${String(Date.now())}`;
-      buildLog += '[build] Building image...\n';
+        this.jobManager?.updatePhase(projectId, 'building');
+        imageTag = `openlander/${projectName}:${String(Date.now())}`;
+        buildLog += '[build] Building image...\n';
 
-      await this.buildExecutor.build(
-        {
-          clonePath: cloneResult.path,
-          projectId,
-          imageTag,
-          dockerfilePath: deployConfig.dockerfilePath,
-          buildContext: deployConfig.buildContext,
-          dockerTarget: deployConfig.dockerTarget,
-          noCache: options?.noCache,
-        },
-        (line) => {
-          buildLog += `${line}\n`;
-        },
-      );
+        await this.buildExecutor.build(
+          {
+            clonePath: cloneResult.path,
+            projectId,
+            imageTag,
+            dockerfilePath: deployConfig.dockerfilePath,
+            buildContext: deployConfig.buildContext,
+            dockerTarget: deployConfig.dockerTarget,
+            noCache: options?.noCache,
+          },
+          (line) => {
+            buildLog += `${line}\n`;
+          },
+        );
+      }
 
       const buildDuration = Date.now() - startTime;
       buildLog += `[build] Done (${String(Math.round(buildDuration / 1000))}s)\n`;
@@ -2115,19 +2219,18 @@ export class DeployPipeline {
           containerPort,
           imageTag,
           previousImageTag: prodEnv.image_tag,
-          branch: (deployConfig.source ?? 'git') === 'image' ? null : (deployConfig.branch ?? null),
+          branch: source === 'image' ? null : (deployConfig.branch ?? null),
         });
       }
       routeTargetUpdated = true;
 
-      if (routeSwitchDelayMs > 0) {
-        buildLog += `[route] Waiting ${String(routeSwitchDelayMs)}ms for Traefik HTTP provider polling\n`;
-        await sleep(routeSwitchDelayMs);
-      }
-      const routeProbe = await this.probeManagedTraefikRoute({
+      buildLog += `[route] Waiting up to ${String(routeSwitchDelayMs)}ms for Traefik HTTP provider polling\n`;
+      const routeProbe = await this.waitForManagedTraefikRoute({
         projectName,
         path: routeProbePath,
-        timeoutMs: routeProbeTimeoutMs,
+        probeTimeoutMs: routeProbeTimeoutMs,
+        maxWaitMs: routeSwitchDelayMs,
+        intervalMs: routeProbeIntervalMs,
       });
       if (!routeProbe.ok) {
         buildLog += `[route] Failed after switch: ${routeProbe.error}\n`;
@@ -2138,7 +2241,7 @@ export class DeployPipeline {
       }
       routeSwitched = true;
       shouldCleanupGreen = false;
-      buildLog += `[route] Passed (HTTP ${String(routeProbe.status)})\n`;
+      buildLog += `[route] Passed (HTTP ${String(routeProbe.status)}) after ${String(routeProbe.elapsedMs)}ms (${String(routeProbe.attempts)} attempt(s))\n`;
 
       try {
         await this.docker.stopContainer(blueContainerId);

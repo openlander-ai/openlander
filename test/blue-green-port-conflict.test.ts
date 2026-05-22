@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,6 +13,11 @@ import * as portPipeline from '../src/pipeline/port.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
 
 const mockRunProbe = vi.fn();
+const mockHttpRequest = vi.hoisted(() => vi.fn());
+
+vi.mock('node:http', () => ({
+  request: mockHttpRequest,
+}));
 
 vi.mock('../src/health/probe-runner.js', () => ({
   createLocalProbeRunner: vi.fn(() => ({
@@ -29,6 +35,36 @@ type EnvLike = {
     projectId: string,
   ) => Array<{ filename: string; content: string; mountPath: string }>;
 };
+
+function mockRouteProbeSequence(statusCodes: number[]): void {
+  let index = 0;
+  mockHttpRequest.mockImplementation((options, callback: (response: EventEmitter) => void) => {
+    const statusCode = statusCodes[Math.min(index, statusCodes.length - 1)] ?? 200;
+    index += 1;
+    const response = new EventEmitter() as EventEmitter & {
+      statusCode: number;
+      resume: () => void;
+    };
+    response.statusCode = statusCode;
+    response.resume = vi.fn();
+    queueMicrotask(() => callback(response));
+
+    const request = new EventEmitter() as EventEmitter & {
+      end: () => void;
+      destroy: (error?: Error) => void;
+    };
+    request.end = vi.fn();
+    request.destroy = vi.fn((error?: Error) => {
+      if (error) request.emit('error', error);
+    });
+    void options;
+    return request;
+  });
+}
+
+function mockRouteProbe(statusCode: number): void {
+  mockRouteProbeSequence([statusCode]);
+}
 
 function createProject(): ProjectRow {
   return {
@@ -143,7 +179,8 @@ function createMockDb(state: {
       applyRuntimeUpdates(updates);
     }),
     updateEnvironment: vi.fn(async (_id: string, updates: Record<string, unknown>) => {
-      if ('status' in updates) state.environment.status = updates.status as EnvironmentRow['status'];
+      if ('status' in updates)
+        state.environment.status = updates.status as EnvironmentRow['status'];
       if ('containerId' in updates)
         state.environment.container_id = updates.containerId as string | null;
       if ('assignedPort' in updates)
@@ -181,6 +218,7 @@ function createMockDocker(options?: {
 
   const docker = {
     buildImage: vi.fn().mockResolvedValue(undefined),
+    pullImage: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
     runContainer: vi.fn().mockResolvedValue('container-green'),
     stopContainer: vi.fn().mockResolvedValue(undefined),
@@ -247,13 +285,12 @@ describe('blue-green route target flip', () => {
       commitSha: 'deadbeefcafebabe',
     });
     vi.spyOn(portPipeline, 'allocatePort').mockResolvedValue(12001);
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
+    mockRouteProbe(200);
   });
 
   afterEach(() => {
     clearPortScanCache();
     rmSync(tmpDir, { recursive: true, force: true });
-    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -290,6 +327,10 @@ describe('blue-green route target flip', () => {
         }),
       }),
     );
+    expect(mockRunProbe).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ containerId: 'container-green', assignedPort: 12001 }),
+    );
 
     const updateProjectMock = db.updateProject as ReturnType<typeof vi.fn>;
     const stopContainerMock = docker.stopContainer as ReturnType<typeof vi.fn>;
@@ -304,12 +345,35 @@ describe('blue-green route target flip', () => {
     expect(updateProjectMock.mock.invocationCallOrder[greenUpdateCallIndex]).toBeLessThan(
       stopContainerMock.mock.invocationCallOrder[stopBlueCallIndex],
     );
-    expect(fetch).toHaveBeenCalledWith(
-      'http://localhost:80/',
+    expect(mockHttpRequest).toHaveBeenCalledWith(
       expect.objectContaining({
+        hostname: 'localhost',
+        port: '80',
+        path: '/',
         headers: { Host: expect.stringMatching(/^demo-app\./) },
       }),
+      expect.any(Function),
     );
+  });
+
+  it('polls the managed route until Traefik serves the flipped target', async () => {
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+    mockRouteProbeSequence([404, 200]);
+    const previousProbeCalls = mockHttpRequest.mock.calls.length;
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 50,
+      routeProbeIntervalMs: 1,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      strategy: 'blue-green',
+      route_switched: true,
+    });
+    expect(mockHttpRequest.mock.calls.length - previousProbeCalls).toBe(2);
   });
 
   it('keeps blue serving when green health fails', async () => {
@@ -338,7 +402,7 @@ describe('blue-green route target flip', () => {
 
   it('rolls the DB target back to blue when route probe fails', async () => {
     mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('bad gateway', { status: 502 })));
+    mockRouteProbe(502);
 
     const result = await pipeline.redeploy('p1', {
       strategy: 'blue-green',
@@ -370,6 +434,7 @@ describe('blue-green route target flip', () => {
       strategy: 'blue-green',
       lockSessionId: 'test-lock',
       routeSwitchDelayMs: 0,
+      routeProbePath: '/',
     });
 
     expect(result.success).toBe(true);
@@ -377,10 +442,87 @@ describe('blue-green route target flip', () => {
       expect.objectContaining({ path: '/internal-health' }),
       expect.any(Object),
     );
-    expect(fetch).toHaveBeenCalledWith(
-      'http://localhost:80/',
+    expect(mockHttpRequest).toHaveBeenCalledWith(
       expect.objectContaining({
+        hostname: 'localhost',
+        port: '80',
+        path: '/',
         headers: { Host: expect.stringMatching(/^demo-app\./) },
+      }),
+      expect.any(Function),
+    );
+  });
+
+  it('uses the explicit health path as the default route probe path', async () => {
+    state.service.health_check_path = '/healthz';
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockHttpRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostname: 'localhost',
+        port: '80',
+        path: '/healthz',
+        headers: { Host: expect.stringMatching(/^demo-app\./) },
+      }),
+      expect.any(Function),
+    );
+  });
+
+  it('blocks blue-green when no explicit health check path exists', async () => {
+    state.service.health_check_path = null;
+    state.service.health_check_strategy = null;
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      code: 'BLUE_GREEN_UNSUPPORTED',
+      strategy: 'blue-green',
+      readiness: 'blocked',
+    });
+    expect(result.error).toContain('explicit health_check_path is required');
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
+  it('redeploys image services without cloning a repository', async () => {
+    state.service.kind = 'image';
+    state.service.source = 'image';
+    state.service.repo_url = null;
+    state.service.image_url = 'nginx:alpine';
+    state.service.image_tag = 'nginx:old';
+    state.service.health_check_path = '/healthz';
+    state.environment.image_tag = 'nginx:old';
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      strategy: 'blue-green',
+      route_switched: true,
+    });
+    expect(gitPipeline.cloneRepo).not.toHaveBeenCalled();
+    expect(docker.buildImage as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+    expect(docker.pullImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('nginx:alpine');
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageTag: 'nginx:alpine',
       }),
     );
   });

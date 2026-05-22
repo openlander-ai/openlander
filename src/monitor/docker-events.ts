@@ -250,6 +250,14 @@ export class DockerEventListener {
     if (!project) return;
     // PR 4.5: canonical-first status read with `??` fallback.
     const dieDeployable = await this.db.getDeployableForProject(projectId);
+    const activeContainerId = dieDeployable?.container_id ?? project.container_id;
+    if (activeContainerId && activeContainerId !== containerId) {
+      log.debug(
+        { projectId, containerId, activeContainerId },
+        'Ignoring die event for non-active project container',
+      );
+      return;
+    }
     const dieStatus = dieDeployable?.status ?? project.status;
     if (dieStatus !== 'running') return;
     if (project.archived_at) return;

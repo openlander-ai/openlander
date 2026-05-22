@@ -270,6 +270,11 @@ HTTP provider polling window, and probes the public route before removing blue.
 It does not yet prove that the successful HTTP response came from green via a
 Traefik API resolved-target check or app version marker.
 
+For blue-green, make `health_check_path` a readiness endpoint, not a static page.
+If the service needs a database, cache, storage bucket, or other dependency to
+serve real traffic, the readiness endpoint should check those dependencies before
+returning 2xx.
+
 ### `expose_public` / `unexpose_public`
 
 Create or remove a temporary public share URL for a project. This is an optional public-access
