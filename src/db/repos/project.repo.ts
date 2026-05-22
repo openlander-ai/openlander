@@ -390,8 +390,32 @@ export class ProjectRepo {
       }
     }
 
+    const managedServiceIdsByProject = new Map<string, Set<string>>();
+    const addManagedService = (projectId: string | null, serviceId: string): void => {
+      if (!projectId) return;
+      const serviceIds = managedServiceIdsByProject.get(projectId) ?? new Set<string>();
+      serviceIds.add(serviceId);
+      managedServiceIdsByProject.set(projectId, serviceIds);
+    };
+
+    const directManagedRows = await this.db
+      .select({ projectId: services.project_id, serviceId: services.id })
+      .from(services)
+      .where(
+        and(
+          inArray(services.project_id, uniqueProjectIds),
+          inArray(services.kind, MANAGED_SERVICE_KINDS),
+        ),
+      );
+    for (const row of directManagedRows) {
+      addManagedService(row.projectId, row.serviceId);
+    }
+
     const managedConnectionRows = await this.db
-      .select({ consumerId: serviceConnections.service_id_consumer, cnt: count() })
+      .select({
+        consumerId: serviceConnections.service_id_consumer,
+        serviceId: serviceConnections.service_id_provider,
+      })
       .from(serviceConnections)
       .innerJoin(services, eq(serviceConnections.service_id_provider, services.id))
       .where(
@@ -403,11 +427,15 @@ export class ProjectRepo {
           inArray(services.kind, MANAGED_SERVICE_KINDS),
         ),
       )
-      .groupBy(serviceConnections.service_id_consumer);
+      .groupBy(serviceConnections.service_id_consumer, serviceConnections.service_id_provider);
 
     for (const row of managedConnectionRows) {
       const projectId = deployableServiceIdToProjectId(row.consumerId);
-      counts.set(projectId, (counts.get(projectId) ?? 0) + row.cnt);
+      addManagedService(projectId, row.serviceId);
+    }
+
+    for (const [projectId, serviceIds] of managedServiceIdsByProject.entries()) {
+      counts.set(projectId, (counts.get(projectId) ?? 0) + serviceIds.size);
     }
     return counts;
   }
