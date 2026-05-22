@@ -82,9 +82,9 @@ export const deployToolDefs: ToolDef[] = [
     name: 'get_deploy_status',
     riskLevel: 'low',
     description:
-      'Get deployment status. Use project_id/project_name for current in-flight deploys, or deploy_id/job_id to look up a completed deploy log. Shows phase (queued/cloning/building/starting/done/failed/cancelled), timing, and progress details. Each job carries a structured status, terminal flag, and elapsed_ms; non-terminal jobs include next_poll_after_ms (suggested poll delay) and a status_call re-lookup envelope. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }. With wait=true: blocks until current deploy completion. Without a target, waits for ALL active deploys to finish.',
+      'Get deployment status. Use project_id/project_name for current in-flight deploys, or deploy_id/job_id to look up a completed deploy log. Shows phase (queued/cloning/building/starting/done/failed/cancelled), timing, and progress details. Each job carries a structured status, terminal flag, and elapsed_ms; non-terminal jobs include next_poll_after_ms (suggested poll delay) and a status_call re-lookup envelope. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }. With watch_ms: briefly waits for a change, then returns status=still_running on timeout. With wait=true: blocks until current deploy completion. Without a target, waits for ALL active deploys to finish.',
     mcpDescription:
-      'Get current deploy progress by project_id/project_name, or completed history by deploy_id/job_id. Jobs expose status/terminal/elapsed_ms; non-terminal jobs add next_poll_after_ms for poll pacing. In-flight jobs include build progress; completed jobs from deploy logs include status/duration/build_log_tail. Wait mode may return timeout=true. IMPORTANT: MCP transport timeout (~30s) overrides the timeout parameter. Prefer polling without wait=true over long waits.',
+      'Get current deploy progress by project_id/project_name, or completed history by deploy_id/job_id. Jobs expose status/terminal/elapsed_ms; non-terminal jobs add next_poll_after_ms for poll pacing. In-flight jobs include build progress; completed jobs from deploy logs include status/duration/build_log_tail. Prefer watch_ms for short waits; it returns status=still_running plus status_call on timeout. Wait mode may return timeout=true. IMPORTANT: MCP transport timeout (~30s) overrides the timeout parameter. Prefer polling or watch_ms over long wait=true calls.',
     inputSchema: deployStatusSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -94,6 +94,13 @@ export const deployToolDefs: ToolDef[] = [
         (args['deploy_id'] as string | undefined) ?? (args['job_id'] as string | undefined);
       const wait = args['wait'] as boolean | undefined;
       const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
+      const rawWatchMs = args['watch_ms'] as number | undefined;
+      const watchMs =
+        typeof rawWatchMs === 'number' && Number.isFinite(rawWatchMs)
+          ? Math.min(25000, Math.max(1, Math.trunc(rawWatchMs)))
+          : undefined;
+      const shouldWait = Boolean(wait) || watchMs !== undefined;
+      const waitTimeoutMs = watchMs ?? Math.max(1, timeoutSec) * 1000;
 
       // Cache of project_id → assigned_port so formatJob can include
       // localhost:{port} in the 'done' URL without going async. Populated
@@ -127,6 +134,57 @@ export const deployToolDefs: ToolDef[] = [
         if (phase === 'starting') return 2000;
         if (phase === 'queued' || phase === 'cloning') return 3000;
         return 3000;
+      };
+
+      const isRecord = (value: unknown): value is Record<string, unknown> =>
+        typeof value === 'object' && value !== null && !Array.isArray(value);
+
+      const hasInFlightJobs = (payload: Record<string, unknown>): boolean => {
+        const active = payload['active'];
+        if (typeof active === 'number' && active > 0) {
+          return true;
+        }
+
+        const jobs = payload['jobs'];
+        return (
+          Array.isArray(jobs) && jobs.some((job) => isRecord(job) && job['terminal'] === false)
+        );
+      };
+
+      const inferNextPollMs = (payload: Record<string, unknown>): number => {
+        const jobs = payload['jobs'];
+        if (!Array.isArray(jobs)) {
+          return 3000;
+        }
+
+        for (const job of jobs) {
+          if (isRecord(job) && typeof job['next_poll_after_ms'] === 'number') {
+            return job['next_poll_after_ms'];
+          }
+        }
+
+        return 3000;
+      };
+
+      const addWatchTimeoutMetadata = (
+        payload: Record<string, unknown>,
+        params: { project_id?: string; project_name?: string },
+      ): Record<string, unknown> => {
+        if (watchMs === undefined || payload['timeout'] !== true || !hasInFlightJobs(payload)) {
+          return payload;
+        }
+
+        payload['status'] = 'still_running';
+        payload['next_poll_after_ms'] = inferNextPollMs(payload);
+        payload['status_call'] = {
+          tool: 'openlander_deploy',
+          action: 'get_deploy_status',
+          params: {
+            ...params,
+            watch_ms: watchMs,
+          },
+        };
+        return payload;
       };
 
       const formatJob = (
@@ -467,7 +525,7 @@ export const deployToolDefs: ToolDef[] = [
         let status = appCtx.jobManager.getStatus(project.id);
         const lockInfo = await appCtx.db.getDeployLockInfo(project.id);
 
-        if (!wait) {
+        if (!shouldWait) {
           const statusIsStaleForLock = terminalStatusPrecedesLock(status, lockInfo);
           if (statusIsStaleForLock && lockInfo) {
             return buildLockedQueuedResult(lockInfo);
@@ -539,33 +597,36 @@ export const deployToolDefs: ToolDef[] = [
                 lastLog.status === 'success' &&
                 (current.phase === 'failed' || current.phase === 'done')
               ) {
-                resolve({
+                const payload = {
                   active: 0,
                   jobs: [await formatDeployLogJob(lastLog)],
                   ...(timedOut ? { timeout: true } : {}),
-                });
+                };
+                resolve(addWatchTimeoutMetadata(payload, { project_id: project.id }));
                 return;
               }
 
               const payload = (await buildProjectResult(current)) as Record<string, unknown>;
               if (timedOut) payload['timeout'] = true;
-              resolve(payload);
+              resolve(addWatchTimeoutMetadata(payload, { project_id: project.id }));
               return;
             }
 
             const currentLockInfo = await appCtx.db.getDeployLockInfo(project.id);
             if (currentLockInfo) {
-              resolve(buildLockedQueuedResult(currentLockInfo, timedOut));
+              const payload = buildLockedQueuedResult(currentLockInfo, timedOut);
+              resolve(addWatchTimeoutMetadata(payload, { project_id: project.id }));
               return;
             }
 
             const dbProject = await appCtx.db.getProjectByName(project.name);
-            resolve({
+            const payload = {
               project: project.name,
               status: dbProject?.status ?? 'unknown',
               phase: 'none',
               ...(timedOut ? { timeout: true } : {}),
-            });
+            };
+            resolve(addWatchTimeoutMetadata(payload, { project_id: project.id }));
           };
 
           const unsubSuccess = eventBus.on('deploy:success', (payload) => {
@@ -576,12 +637,9 @@ export const deployToolDefs: ToolDef[] = [
             if (matchesProject(payload)) void resolveWithCurrent(false);
           });
 
-          const timer = setTimeout(
-            () => {
-              void resolveWithCurrent(true);
-            },
-            Math.max(1, timeoutSec) * 1000,
-          );
+          const timer = setTimeout(() => {
+            void resolveWithCurrent(true);
+          }, waitTimeoutMs);
 
           const pollDeployLog = async (): Promise<void> => {
             if (settled) {
@@ -644,7 +702,7 @@ export const deployToolDefs: ToolDef[] = [
         return { active: activeCount, jobs: recentJobs.map((j) => formatJob(j)) };
       };
 
-      if (!wait) {
+      if (!shouldWait) {
         return await buildAllResult();
       }
 
@@ -675,7 +733,7 @@ export const deployToolDefs: ToolDef[] = [
           void buildAllResult().then((payload) => {
             const out = payload as Record<string, unknown>;
             if (timedOut) out['timeout'] = true;
-            resolve(out);
+            resolve(addWatchTimeoutMetadata(out, {}));
           });
         };
 
@@ -686,21 +744,18 @@ export const deployToolDefs: ToolDef[] = [
           resolveIfAllDone(false);
         });
 
-        const timer = setTimeout(
-          () => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            unsubSuccess();
-            unsubFailed();
-            void buildAllResult().then((payload) => {
-              const out = payload as Record<string, unknown>;
-              out['timeout'] = true;
-              resolve(out);
-            });
-          },
-          Math.max(1, timeoutSec) * 1000,
-        );
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          unsubSuccess();
+          unsubFailed();
+          void buildAllResult().then((payload) => {
+            const out = payload as Record<string, unknown>;
+            out['timeout'] = true;
+            resolve(addWatchTimeoutMetadata(out, {}));
+          });
+        }, waitTimeoutMs);
 
         resolveIfAllDone(false);
       });

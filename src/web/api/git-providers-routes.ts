@@ -163,70 +163,76 @@ function persistGitHubSuccessfulSync(
   }
 }
 
+async function readGitHubProviderStatus(ctx: AppContext): Promise<GitHubProviderStatus> {
+  const ghConfig = ctx.config.gitProviders.github;
+  const token = ghConfig.token;
+
+  if (!token) {
+    return {
+      connected: false,
+      tokenValid: null,
+      login: null,
+      authMethod: null,
+      scopes: [],
+      reposLinked: 0,
+      connectedAt: null,
+      lastSyncAt: null,
+      validationError: null,
+    };
+  }
+
+  let scopes: string[] = [];
+  let tokenValid: boolean | null = null;
+  let validationError: string | null = null;
+  try {
+    const provider = createGitProvider('github', ghConfig);
+    const validation = await provider.validateToken();
+    scopes = validation.scopes;
+    if (validation.valid) {
+      tokenValid = true;
+      persistGitHubSuccessfulSync(ctx, {
+        username: validation.user?.username ?? ghConfig.username,
+        syncedAt: new Date().toISOString(),
+      });
+    } else {
+      const errMsg = validation.error ?? 'Token validation failed';
+      validationError = errMsg;
+      // Discriminate "GitHub said no" from "we couldn't ask GitHub".
+      // The GitHubProvider wrapper swallows network errors and returns
+      // valid=false, so without this classifier a DNS / 5xx outage
+      // would render as a revoked-token state (Codex CCG round 1 P1).
+      tokenValid = classifyValidationError(errMsg) === 'rejected' ? false : null;
+    }
+  } catch (err) {
+    tokenValid = null;
+    validationError = err instanceof Error ? err.message : 'Validation failed';
+    log.debug({ err }, 'GitHub validateToken threw');
+  }
+
+  const reposLinked = await countGitHubLinkedRepos(ctx);
+
+  return {
+    connected: true,
+    tokenValid,
+    login: ctx.config.gitProviders.github.username || null,
+    authMethod: ctx.config.gitProviders.github.authMethod ?? null,
+    scopes,
+    reposLinked,
+    connectedAt: ctx.config.gitProviders.github.connectedAt ?? null,
+    lastSyncAt: ctx.config.gitProviders.github.lastSyncAt ?? null,
+    validationError,
+  };
+}
+
 export function createGitProvidersRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   api.get('/git-providers/github', async (c) => {
-    const ghConfig = ctx.config.gitProviders.github;
-    const token = ghConfig.token;
+    return c.json(await readGitHubProviderStatus(ctx));
+  });
 
-    if (!token) {
-      const empty: GitHubProviderStatus = {
-        connected: false,
-        tokenValid: null,
-        login: null,
-        authMethod: null,
-        scopes: [],
-        reposLinked: 0,
-        connectedAt: null,
-        lastSyncAt: null,
-        validationError: null,
-      };
-      return c.json(empty);
-    }
-
-    let scopes: string[] = [];
-    let tokenValid: boolean | null = null;
-    let validationError: string | null = null;
-    try {
-      const provider = createGitProvider('github', ghConfig);
-      const validation = await provider.validateToken();
-      scopes = validation.scopes;
-      if (validation.valid) {
-        tokenValid = true;
-        persistGitHubSuccessfulSync(ctx, {
-          username: validation.user?.username ?? ghConfig.username,
-          syncedAt: new Date().toISOString(),
-        });
-      } else {
-        const errMsg = validation.error ?? 'Token validation failed';
-        validationError = errMsg;
-        // Discriminate "GitHub said no" from "we couldn't ask GitHub".
-        // The GitHubProvider wrapper swallows network errors and returns
-        // valid=false, so without this classifier a DNS / 5xx outage
-        // would render as a revoked-token state (Codex CCG round 1 P1).
-        tokenValid = classifyValidationError(errMsg) === 'rejected' ? false : null;
-      }
-    } catch (err) {
-      tokenValid = null;
-      validationError = err instanceof Error ? err.message : 'Validation failed';
-      log.debug({ err }, 'GitHub validateToken threw');
-    }
-
-    const reposLinked = await countGitHubLinkedRepos(ctx);
-
-    const status: GitHubProviderStatus = {
-      connected: true,
-      tokenValid,
-      login: ctx.config.gitProviders.github.username || null,
-      authMethod: ctx.config.gitProviders.github.authMethod ?? null,
-      scopes,
-      reposLinked,
-      connectedAt: ctx.config.gitProviders.github.connectedAt ?? null,
-      lastSyncAt: ctx.config.gitProviders.github.lastSyncAt ?? null,
-      validationError,
-    };
-    return c.json(status);
+  api.post('/git-providers/github/refresh', async (c) => {
+    return c.json(await readGitHubProviderStatus(ctx));
   });
 
   return api;

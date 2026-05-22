@@ -82,7 +82,9 @@ describe('get_deploy_status structured fields (O1)', () => {
               }
             : undefined,
         ),
-        getProject: vi.fn(async (id: string) => (id === 'app' ? { id: 'app', name: 'app' } : undefined)),
+        getProject: vi.fn(async (id: string) =>
+          id === 'app' ? { id: 'app', name: 'app' } : undefined,
+        ),
         getDeployableForProject: vi.fn(async () => ({ status: 'crashed', assigned_port: 10001 })),
       },
     } as unknown as AppContext;
@@ -133,7 +135,9 @@ describe('get_deploy_status structured fields (O1)', () => {
         ),
       },
       db: {
-        getProject: vi.fn(async (id: string) => (id === 'app' ? { id: 'app', name: 'app' } : undefined)),
+        getProject: vi.fn(async (id: string) =>
+          id === 'app' ? { id: 'app', name: 'app' } : undefined,
+        ),
         getDeployableForProject: vi.fn(async () => ({ assigned_port: 10001, status: 'running' })),
         getDeployLockInfo: vi.fn(async () => null),
       },
@@ -161,6 +165,68 @@ describe('get_deploy_status structured fields (O1)', () => {
     expect(job['deploy_id']).toBeUndefined();
     expect(job['service_id']).toBeTruthy();
     expect(typeof job['elapsed_ms']).toBe('number');
+
+    const serialized = JSON.stringify(result);
+    for (const field of FORBIDDEN_FIELDS) {
+      expect(serialized).not.toContain(field);
+    }
+  });
+
+  it('watch_ms short-polls an active project and returns a re-poll envelope on timeout', async () => {
+    const ctx = {
+      jobManager: {
+        getStatus: vi.fn((id: string) =>
+          id === 'app'
+            ? {
+                projectId: 'app',
+                projectName: 'app',
+                phase: 'building',
+                startedAt: new Date(Date.now() - 3000),
+              }
+            : null,
+        ),
+      },
+      db: {
+        getProject: vi.fn(async (id: string) =>
+          id === 'app' ? { id: 'app', name: 'app' } : undefined,
+        ),
+        getDeployableForProject: vi.fn(async () => ({ assigned_port: 10001, status: 'running' })),
+        getDeployLockInfo: vi.fn(async () => null),
+        getLastDeployLog: vi.fn(async () => undefined),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { project_id: 'app', watch_ms: 5 },
+      { target: 'mcp' },
+    )) as {
+      active: number;
+      timeout?: boolean;
+      status?: string;
+      next_poll_after_ms?: number;
+      status_call?: Record<string, unknown>;
+      jobs: Array<Record<string, unknown>>;
+    };
+
+    expect(result).toMatchObject({
+      active: 1,
+      timeout: true,
+      status: 'still_running',
+      next_poll_after_ms: 5000,
+      status_call: {
+        tool: 'openlander_deploy',
+        action: 'get_deploy_status',
+        params: { project_id: 'app', watch_ms: 5 },
+      },
+    });
+
+    expect(result.jobs[0]).toMatchObject({
+      project_id: 'app',
+      phase: 'building',
+      status: 'running',
+      terminal: false,
+      next_poll_after_ms: 5000,
+    });
 
     const serialized = JSON.stringify(result);
     for (const field of FORBIDDEN_FIELDS) {

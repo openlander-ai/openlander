@@ -91,6 +91,49 @@ describe('createGitProvidersRoutes', () => {
     });
   });
 
+  it('refreshes GitHub provider status through the explicit refresh action', async () => {
+    const ctx = createCtx();
+    vi.mocked(ctx.db.listServices).mockResolvedValueOnce([
+      {
+        id: 'svc-1',
+        name: 'app',
+        source: 'git',
+        repo_url: 'https://github.com/openlander-ai/openlander.git',
+        archived_at: null,
+      },
+    ] as never);
+    vi.mocked(createGitProvider).mockReturnValue({
+      validateToken: vi.fn(async () => ({
+        valid: true,
+        user: {
+          username: 'octocat',
+          displayName: 'Octo Cat',
+          avatarUrl: 'https://github.com/images/error/octocat_happy.gif',
+          publicRepoCount: 10,
+          privateRepoCount: 2,
+        },
+        scopes: ['repo', 'read:user'],
+      })),
+    } as unknown as ReturnType<typeof createGitProvider>);
+
+    const app = createGitProvidersRoutes(ctx);
+    const res = await app.request('/git-providers/github/refresh', { method: 'POST' });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      connected: true,
+      tokenValid: true,
+      login: 'octocat',
+      reposLinked: 1,
+      lastSyncAt: '2026-05-08T01:02:03.000Z',
+    });
+    expect(createGitProvider).toHaveBeenCalledWith(
+      'github',
+      expect.objectContaining({ token: 'ghp_test', username: 'old-user' }),
+    );
+    expect(updateConfig).toHaveBeenCalledOnce();
+  });
+
   it('does not overwrite timestamps when GitHub rejects the token', async () => {
     const ctx = createCtx();
     ctx.config.gitProviders.github.connectedAt = '2026-05-01T00:00:00.000Z';

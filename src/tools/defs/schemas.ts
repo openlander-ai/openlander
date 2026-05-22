@@ -367,6 +367,15 @@ export const deployStatusSchema = z.object({
     .number()
     .optional()
     .describe('Max wait time in seconds (default 300, only used with wait=true)'),
+  watch_ms: z
+    .number()
+    .int()
+    .positive()
+    .max(25000)
+    .optional()
+    .describe(
+      'Short long-poll window in milliseconds for MCP agents. Returns current status after the window, capped at 25s.',
+    ),
 });
 
 // Git & repository schemas
