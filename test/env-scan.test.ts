@@ -129,6 +129,28 @@ describe('scanForEnvUsage', () => {
     expect(v?.optional).toBe(true);
   });
 
+  it('detects optional: true for process.env.KEY || path.join(...)', () => {
+    writeFileSync(
+      join(tmp, 'app.ts'),
+      "const PUBLIC_DIR = process.env.PUBLIC_DIR || path.join(__dirname, '..', 'public');",
+    );
+    const r = scanForEnvUsage(tmp);
+    const v = r.vars.find((v) => v.key === 'PUBLIC_DIR');
+    expect(v).toBeDefined();
+    expect(v?.optional).toBe(true);
+  });
+
+  it('detects optional: true for bracket env access with path.resolve fallback', () => {
+    writeFileSync(
+      join(tmp, 'app.ts'),
+      "const PUBLIC_ROOT = process.env['PUBLIC_ROOT'] ?? path.resolve('public');",
+    );
+    const r = scanForEnvUsage(tmp);
+    const v = r.vars.find((v) => v.key === 'PUBLIC_ROOT');
+    expect(v).toBeDefined();
+    expect(v?.optional).toBe(true);
+  });
+
   it('detects optional: false for bare process.env.KEY', () => {
     writeFileSync(join(tmp, 'app.ts'), 'const x = process.env.REQUIRED_VAR;');
     const r = scanForEnvUsage(tmp);
