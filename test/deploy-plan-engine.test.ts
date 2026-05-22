@@ -121,6 +121,50 @@ describe('PlanEngine.updatePlan', () => {
     expect(updated.status).toBe('ready');
   });
 
+  // P1-1 status-priority gate on updatePlan: a plan that starts needs_input
+  // (missing user secret) AND carries a safe proposed managed resource must
+  // become needs_approval (NOT ready) once the secret is filled — otherwise the
+  // approval gate is skipped and provisioning runs with no approved resources.
+  it('transitions needs_input → needs_approval (not ready) when a filled secret coexists with a safe proposed resource', async () => {
+    const plan = createMockDeployPlan({
+      status: 'needs_input',
+      services: [
+        {
+          type: 'postgresql',
+          action: 'create',
+          connect_via: 'DATABASE_URL',
+          resolution: 'proposed_project_service',
+          approval: 'safe_resource',
+          reason: 'pg',
+        },
+      ],
+      env: {
+        auto: {},
+        required: ['API_KEY'],
+        provided: {},
+        detected: [{ key: 'API_KEY', source: 'required', required: true }],
+      },
+      missing: ['API_KEY'],
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    const updated = await engine.updatePlan(plan.plan_id, {
+      env: { API_KEY: 'secret-value' },
+    });
+
+    expect(updated.missing).toHaveLength(0);
+    // The safe proposed postgresql resource still needs approval, so the plan
+    // must NOT downgrade to 'ready'.
+    expect(updated.status).toBe('needs_approval');
+    expect(updated.services.find((svc) => svc.type === 'postgresql')).toMatchObject({
+      resolution: 'proposed_project_service',
+      approval: 'safe_resource',
+    });
+  });
+
   it('throws error when updating plan in executing status', async () => {
     const plan = createMockDeployPlan({
       status: 'executing',
@@ -1287,13 +1331,7 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     const result = await engine.executePlan(plan.plan_id);
 
     expect(result.status).toBe('needs_approval');
-    expect(result.proposed_resources).toEqual([
-      expect.objectContaining({
-        identifier: 'postgresql',
-        type: 'postgresql',
-        connect_via: 'DATABASE_URL',
-      }),
-    ]);
+    expect(result.approval_required).toEqual({ create_resources: ['postgresql'] });
     expect(result._agent_guidance).toBeDefined();
     // Loop not entered: no managed service created, no deploy started.
     expect(mockServiceManager.create).not.toHaveBeenCalled();
@@ -1335,14 +1373,40 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     });
 
     expect(result.status).toBe('needs_approval');
-    expect(result.proposed_resources).toEqual([
-      expect.objectContaining({ identifier: 'postgresql', type: 'postgresql' }),
-      expect.objectContaining({ identifier: 'redis', type: 'redis' }),
-    ]);
+    expect(result.approval_required).toEqual({ create_resources: ['postgresql', 'redis'] });
     // All-or-fail-fast: a partial approval provisions nothing.
     expect(mockServiceManager.create).not.toHaveBeenCalled();
     expect(mockDb.attachServiceToProject).not.toHaveBeenCalled();
     expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
+  });
+
+  // (d3) New-app guard: an approved create has no target project to provision on
+  // for a brand-new app (no project_id, no project row by name). Execute returns
+  // 'needs_target_project' and creates NOTHING — no lock, no provisioning, no
+  // deploy. 'needs_target_project' is a response-only status.
+  it('returns needs_target_project and creates nothing when an approved new-app plan has no existing project', async () => {
+    // No project_id, and getProjectByName returns null (default) → new app.
+    const plan = createNeedsApprovalPlan({ project_id: undefined });
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+    mockDb.getProjectByName.mockReturnValue(null);
+
+    const result = await engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+      approveAllSafeResources: true,
+    });
+
+    expect(result.status).toBe('needs_target_project');
+    expect(result.approval_required).toEqual({ create_resources: ['postgresql'] });
+    expect(result._agent_guidance).toBeDefined();
+    // Nothing created: no managed service, no connection row, no deploy, and the
+    // status was never persisted (no executing write).
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+    expect(mockDb.upsertServiceConnection).not.toHaveBeenCalled();
+    expect(mockDb.attachServiceToProject).not.toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
+    const wroteExecuting = mockDb.updateDeployPlan.mock.calls.some(
+      (call: any) => call[1]?.status === 'executing',
+    );
+    expect(wroteExecuting).toBe(false);
   });
 
   // (e) Idempotency: approved provisioning upserts a connection row, and a

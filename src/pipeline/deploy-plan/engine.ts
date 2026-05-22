@@ -15,6 +15,7 @@ import {
 import { parseImageUrl } from '../image-utils.js';
 import type {
   DeployPlan,
+  DeployPlanStatus,
   PlanService,
   PlanEnvEntry,
   PlanBuildService,
@@ -118,23 +119,21 @@ const COMPOSE_TYPE_TOKENS: Record<string, string[]> = {
   rabbitmq: ['rabbitmq', 'amqp'],
 };
 
-export interface ProposedResource {
-  /** Stable identifier the agent approves (service type, e.g. "postgresql"). */
-  identifier: string;
-  type: PlanService['type'];
-  connect_via: string;
-  reason?: string;
-}
-
 export interface ExecutePlanResult {
-  status: 'building' | 'failed' | 'needs_approval';
+  status: 'building' | 'failed' | 'needs_approval' | 'needs_target_project';
   plan_id: string;
   project_name: string;
   project_id?: string;
   estimated_seconds?: number;
   error?: string;
-  /** Populated only when status === 'needs_approval'. */
-  proposed_resources?: ProposedResource[];
+  message?: string;
+  /**
+   * Populated only when status === 'needs_approval'. Lists the identifiers to
+   * pass into approvals.create_resources (or approve via approve_all_safe_resources).
+   * Identifiers reference services[] (resolution='proposed_project_service'); the
+   * full service objects are not duplicated here.
+   */
+  approval_required?: { create_resources: string[] };
   _agent_guidance?: { next_steps: string[] };
 }
 
@@ -501,6 +500,20 @@ export class PlanEngine {
 
   private hasSafeProposedResources(services: PlanService[]): boolean {
     return this.safeProposedResources(services).length > 0;
+  }
+
+  /**
+   * Status priority: needs_input (missing>0) > needs_approval (>=1 safe proposed
+   * resource) > ready. A missing user secret always wins; a safe proposed
+   * managed resource never downgrades a plan to 'ready' (which would skip the
+   * approval gate and provision with empty approvedSafeResources).
+   */
+  private computePlanStatus(missing: string[], services: PlanService[]): DeployPlanStatus {
+    return missing.length > 0
+      ? 'needs_input'
+      : this.hasSafeProposedResources(services)
+        ? 'needs_approval'
+        : 'ready';
   }
 
   /**
@@ -890,8 +903,8 @@ export class PlanEngine {
       const fallbackProjectName = imageNameParts[imageNameParts.length - 1] || parsedImage.name;
       const projectName = name || fallbackProjectName;
       // Image-source plans carry no detected service dependencies (services: []),
-      // so there are never safe proposed resources to approve here.
-      const initialStatus: DeployPlan['status'] = 'ready';
+      // so computePlanStatus resolves to 'ready' here.
+      const initialStatus: DeployPlan['status'] = this.computePlanStatus([], []);
       const complexity: DeployPlanComplexity = 'simple';
 
       const plan = this.assemblePlan({
@@ -1000,12 +1013,7 @@ export class PlanEngine {
       isCompose,
     });
 
-    const initialStatus: DeployPlan['status'] =
-      missing.length > 0
-        ? 'needs_input'
-        : this.hasSafeProposedResources(services)
-          ? 'needs_approval'
-          : 'ready';
+    const initialStatus: DeployPlan['status'] = this.computePlanStatus(missing, services);
 
     const planBranch = cloneResult.branch;
     const plan = this.assemblePlan({
@@ -1119,7 +1127,7 @@ export class PlanEngine {
     const missing = missingEntries.map((entry) => entry.key);
     merged.missing = missing;
 
-    merged.status = missing.length === 0 ? 'ready' : 'needs_input';
+    merged.status = this.computePlanStatus(missing, merged.services);
     merged.updated_at = new Date().toISOString();
 
     log.info({ planId, status: merged.status }, 'Updating deploy plan');
@@ -1173,17 +1181,13 @@ export class PlanEngine {
           status: 'needs_approval',
           plan_id: planId,
           project_name: freshPlan.app.name,
-          proposed_resources: safeProposals.map((svc) => ({
-            identifier: this.proposedResourceIdentifier(svc),
-            // eslint-disable-next-line openlander-internal/no-dropped-columns -- PlanService.type is deploy-plan metadata, not services.type DB row access.
-            type: svc.type,
-            connect_via: svc.connect_via,
-            reason: svc.reason,
-          })),
+          approval_required: {
+            create_resources: safeProposals.map((svc) => this.proposedResourceIdentifier(svc)),
+          },
           _agent_guidance: {
             next_steps: [
               'Re-run execute_deploy_plan with approve_all_safe_resources=true to approve every proposed resource.',
-              'Or pass approvals.create_resources with the identifiers above to approve individually.',
+              'Or pass approvals.create_resources with the identifiers above to approve individually. The identifiers are listed in approval_required.create_resources and in services[] (resolution="proposed_project_service").',
             ],
           },
         };
@@ -1211,6 +1215,42 @@ export class PlanEngine {
       freshPlan.status === 'needs_approval'
         ? PlanStateMachine.transition(freshPlan, 'ready')
         : freshPlan;
+
+    // New-app guard: an approved create of a safe proposed managed service needs
+    // an existing target project to provision against, but for a NEW app the
+    // project row is only created later inside the pipeline. Block here BEFORE the
+    // deploy lock and provisioning loop, creating nothing. 'needs_target_project'
+    // is a response-only status (not a DeployPlanStatus / validTransitions edge).
+    const targetProject =
+      (plan.project_id ? await this.db.getProject(plan.project_id) : null) ??
+      (await this.db.getProjectByName(plan.app.name));
+    const hasApprovedCreate = plan.services.some(
+      (svc) =>
+        svc.action === 'create' &&
+        svc.resolution === 'proposed_project_service' &&
+        svc.approval === 'safe_resource' &&
+        approvedSafeResources.has(this.proposedResourceIdentifier(svc)),
+    );
+    if (hasApprovedCreate && !targetProject) {
+      return {
+        plan_id: planId,
+        status: 'needs_target_project',
+        project_name: plan.app.name,
+        message:
+          'Managed auto-provisioning is supported only for existing projects. This is a new app, so there is no target project to provision the managed service on yet.',
+        approval_required: {
+          create_resources: this.safeProposedResources(plan.services)
+            .filter((svc) => approvedSafeResources.has(this.proposedResourceIdentifier(svc)))
+            .map((svc) => this.proposedResourceIdentifier(svc)),
+        },
+        _agent_guidance: {
+          next_steps: [
+            'Managed auto-provisioning is supported only for existing projects.',
+            'Deploy the app first (creates the project), then approve/create the managed service on it; or pass an external <ENV>_URL in env_vars.',
+          ],
+        },
+      };
+    }
 
     const existingProject = await this.db.getProjectByName(plan.app.name);
     let lockProjectId: string | null = null;
@@ -1256,9 +1296,6 @@ export class PlanEngine {
         },
         { env: this.env },
       );
-      const targetProject =
-        (plan.project_id ? await this.db.getProject(plan.project_id) : null) ??
-        (await this.db.getProjectByName(plan.app.name));
 
       for (const planService of plan.services) {
         const envVarName = planService.connect_via || SERVICE_ENV_VARS[planService.type];

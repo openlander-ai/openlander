@@ -403,6 +403,17 @@ export const deployPlanToolDefs: ToolDef[] = [
           : {}),
         ...(context.target === 'agent' &&
         typeof context.appCtx.db.getProject === 'function' &&
+        plan.status === 'needs_approval'
+          ? {
+              _agent_guidance: {
+                next_steps: [
+                  'This plan proposes project-scoped managed services (see services[] with resolution="proposed_project_service"). Confirm with the user, then call execute_deploy_plan with approve_all_safe_resources=true or approvals.create_resources=[<identifiers>].',
+                ],
+              },
+            }
+          : {}),
+        ...(context.target === 'agent' &&
+        typeof context.appCtx.db.getProject === 'function' &&
         plan.status === 'ready'
           ? {
               _agent_guidance: {
@@ -534,7 +545,24 @@ export const deployPlanToolDefs: ToolDef[] = [
         return {
           plan_id: result.plan_id,
           status: 'needs_approval',
-          proposed_resources: result.proposed_resources,
+          approval_required: result.approval_required,
+          _agent_guidance: result._agent_guidance,
+        };
+      }
+
+      if (result.status === 'needs_target_project') {
+        // New-app guard: the engine created nothing because an approved managed
+        // service has no existing target project to provision on. Release the
+        // pre-acquired lock (none was created by the engine).
+        if (acquiredLockProjectId) {
+          await appCtx.db.releaseDeployLock(acquiredLockProjectId, toolSessionId);
+        }
+        return {
+          plan_id: result.plan_id,
+          status: 'needs_target_project',
+          project_name: result.project_name,
+          message: result.message,
+          approval_required: result.approval_required,
           _agent_guidance: result._agent_guidance,
         };
       }
@@ -723,6 +751,32 @@ export const deployPlanToolDefs: ToolDef[] = [
               `Provide missing values: ${plan.missing.join(', ')}`,
               'Call update_deploy_plan with the values, then execute_deploy_plan',
               'Or call deploy_app again with env_vars including the missing keys',
+            ],
+          },
+        };
+      }
+
+      if (plan.status === 'needs_approval') {
+        // Surface the approval contract so the agent routes through
+        // execute_deploy_plan with approvals. Do NOT proceed to lock or execute —
+        // unapproved provisioning creates nothing and the caller must confirm.
+        const safeProposals = plan.services.filter(
+          (svc) =>
+            svc.resolution === 'proposed_project_service' && svc.approval === 'safe_resource',
+        );
+        return {
+          plan_id: plan.plan_id,
+          status: 'needs_approval',
+          services: plan.services,
+          approval_required: {
+            create_resources: safeProposals.map((svc) => svc.name ?? svc.type),
+          },
+          warnings: plan.warnings,
+          _agent_guidance: {
+            next_steps: [
+              'This plan proposes project-scoped managed services (see services[] with resolution="proposed_project_service"). Confirm with the user before proceeding.',
+              'Then call execute_deploy_plan with the plan_id and approve_all_safe_resources=true, or approvals.create_resources=[<identifiers>] to approve individually.',
+              'Note: for a NEW app, managed auto-provisioning requires an existing project — execute_deploy_plan may return needs_target_project. In that case deploy the app first (creates the project), then approve the managed service on it; or pass an external connection URL in env_vars.',
             ],
           },
         };

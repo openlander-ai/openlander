@@ -520,4 +520,55 @@ describe('deploy MCP guidance', () => {
       },
     });
   });
+
+  // deploy_app needs_approval gate: a new-app plan that proposes a safe managed
+  // resource must return needs_approval with the approval contract and must NOT
+  // call executePlan — the caller must confirm with the user first.
+  it('returns needs_approval with approval_required and never calls executePlan when createPlan yields needs_approval', async () => {
+    const ctx = {
+      db: {
+        getProject: vi.fn(() => undefined),
+        getProjectByName: vi.fn(() => undefined),
+      },
+      planEngine: {
+        createPlan: vi.fn(async () => ({
+          plan_id: 'plan-needs-approval',
+          status: 'needs_approval',
+          services: [
+            {
+              type: 'postgresql',
+              action: 'create',
+              connect_via: 'DATABASE_URL',
+              resolution: 'proposed_project_service',
+              approval: 'safe_resource',
+              reason: 'pg detected',
+            },
+          ],
+          missing: [],
+          warnings: [],
+        })),
+        executePlan: vi.fn(),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      {
+        repo_url: 'https://github.com/acme/new-app',
+        name: 'new-app',
+        wait: false,
+      },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      plan_id: 'plan-needs-approval',
+      status: 'needs_approval',
+      approval_required: { create_resources: ['postgresql'] },
+    });
+    expect(result.services).toBeDefined();
+    expect((result.services as unknown[]).length).toBeGreaterThan(0);
+    expect(result._agent_guidance).toBeDefined();
+    // Must NOT proceed to execute — approval has not been given.
+    expect(ctx.planEngine.executePlan).not.toHaveBeenCalled();
+  });
 });
