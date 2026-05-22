@@ -396,7 +396,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                 next_steps: [
                   `Plan has missing values. Call update_deploy_plan to provide: ${plan.missing.join(', ')}`,
                   'After updating, call execute_deploy_plan to start deployment',
-                  'If DATABASE_URL is missing, call create_service with template="postgresql" to provision a database with persistent volume.',
+                  "Proposed project-scoped services are listed in services[] with resolution='proposed_project_service'; confirm with the user, then call update_deploy_plan / execute_deploy_plan.",
                 ],
               },
             }

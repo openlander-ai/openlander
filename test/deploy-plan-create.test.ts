@@ -566,4 +566,247 @@ describe('PlanEngine.createPlan', () => {
 
     rmSync(repoPath, { recursive: true, force: true });
   });
+
+  it('classifies a proposed managed postgres dependency as proposed_project_service / safe_resource with a reason', async () => {
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'resolution-pg',
+    });
+
+    mockAnalyzeInfra.mockReturnValue({
+      needs: [{ type: 'postgresql', detectedFrom: 'schema.prisma:postgresql' }],
+      available: [],
+      missing: [
+        {
+          type: 'postgresql',
+          suggestion: 'Create a postgresql service',
+          detectedFrom: 'schema.prisma:postgresql',
+        },
+      ],
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('');
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/resolution-pg-app',
+      branch: 'main',
+    });
+
+    expect(plan.services).toHaveLength(1);
+    expect(plan.services[0]).toMatchObject({
+      type: 'postgresql',
+      action: 'create',
+      resolution: 'proposed_project_service',
+      approval: 'safe_resource',
+      reason: 'schema.prisma:postgresql',
+    });
+  });
+
+  it('classifies rabbitmq as not_auto_creatable and mongodb as safe_resource on proposed services', async () => {
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'resolution-approval',
+    });
+
+    mockAnalyzeInfra.mockReturnValue({
+      needs: [
+        { type: 'rabbitmq', detectedFrom: 'amqplib' },
+        { type: 'mongodb', detectedFrom: 'mongoose' },
+      ],
+      available: [],
+      missing: [
+        { type: 'rabbitmq', suggestion: 'Create a rabbitmq service', detectedFrom: 'amqplib' },
+        { type: 'mongodb', suggestion: 'Create a mongodb service', detectedFrom: 'mongoose' },
+      ],
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('');
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/approval-app',
+      branch: 'main',
+    });
+
+    const rabbit = plan.services.find((svc) => svc.type === 'rabbitmq');
+    const mongo = plan.services.find((svc) => svc.type === 'mongodb');
+    expect(rabbit).toMatchObject({
+      action: 'create',
+      resolution: 'proposed_project_service',
+      approval: 'not_auto_creatable',
+    });
+    expect(mongo).toMatchObject({
+      action: 'create',
+      resolution: 'proposed_project_service',
+      approval: 'safe_resource',
+    });
+  });
+
+  it('classifies a reused existing service as existing_project_service with a reason', async () => {
+    const sameProjectService = {
+      id: 'babycup-pg',
+      project_id: 'babycup-project',
+      name: 'babycup-pg',
+      kind: 'postgres',
+    };
+    mockDb.getProjectByName.mockResolvedValue({ id: 'babycup-project', name: 'babycup' });
+    mockDb.listServices.mockResolvedValue([sameProjectService]);
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'reuse-resolution',
+    });
+    mockAnalyzeInfra.mockReturnValue({
+      needs: [{ type: 'postgresql', detectedFrom: 'pg' }],
+      available: [
+        {
+          type: 'postgresql',
+          name: sameProjectService.name,
+          id: sameProjectService.id,
+          connectVia: 'DATABASE_URL',
+          detectedFrom: 'pg',
+        },
+      ],
+      missing: [],
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('');
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/babycup',
+      branch: 'main',
+      name: 'babycup',
+    });
+
+    expect(plan.services[0]).toMatchObject({
+      type: 'postgresql',
+      action: 'reuse',
+      service_id: sameProjectService.id,
+      resolution: 'existing_project_service',
+      approval: 'safe_resource',
+      reason: 'pg',
+    });
+  });
+
+  it('reclassifies a compose-declared postgres dependency as compose_service, not a proposed managed create', async () => {
+    const mockComposePipeline = {
+      detectComposeFile: vi.fn().mockReturnValue('/tmp/test-repo/docker-compose.yml'),
+      parseComposeFile: vi.fn().mockReturnValue({
+        services: [
+          { name: 'web', build: '.', ports: ['3000:3000'] },
+          { name: 'db', image: 'postgres:16-alpine' },
+        ],
+      }),
+    };
+
+    const depsWithCompose: PlanEngineDeps = {
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: mockAutoDetector,
+      config: mockConfig,
+      composePipeline: mockComposePipeline as unknown as PlanEngineDeps['composePipeline'],
+    };
+    const engineWithCompose = new PlanEngine(depsWithCompose);
+
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'compose-crosscheck',
+    });
+
+    mockAnalyzeInfra.mockReturnValue({
+      needs: [{ type: 'postgresql', detectedFrom: 'schema.prisma:postgresql' }],
+      available: [],
+      missing: [
+        {
+          type: 'postgresql',
+          suggestion: 'Create a postgresql service',
+          detectedFrom: 'schema.prisma:postgresql',
+        },
+      ],
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('FROM node:22\n');
+
+    const plan = await engineWithCompose.createPlan({
+      repoUrl: 'https://github.com/test/compose-pg-app',
+      branch: 'main',
+    });
+
+    expect(plan.build.method).toBe('compose');
+    const pg = plan.services.find((svc) => svc.type === 'postgresql');
+    expect(pg).toMatchObject({
+      type: 'postgresql',
+      resolution: 'compose_service',
+    });
+    expect(pg?.resolution).not.toBe('proposed_project_service');
+    expect(
+      plan.services.some(
+        (svc) => svc.type === 'postgresql' && svc.resolution === 'proposed_project_service',
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps a compose-detected postgres dependency as proposed_project_service for a dockerfile build', async () => {
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'dockerfile-not-compose',
+    });
+
+    mockAnalyzeInfra.mockReturnValue({
+      needs: [{ type: 'postgresql', detectedFrom: 'schema.prisma:postgresql' }],
+      available: [],
+      missing: [
+        {
+          type: 'postgresql',
+          suggestion: 'Create a postgresql service',
+          detectedFrom: 'schema.prisma:postgresql',
+        },
+      ],
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('FROM node:22\n');
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/dockerfile-pg-app',
+      branch: 'main',
+      dockerfilePath: 'Dockerfile',
+    });
+
+    expect(plan.build.method).toBe('dockerfile');
+    expect(plan.services.find((svc) => svc.type === 'postgresql')).toMatchObject({
+      resolution: 'proposed_project_service',
+    });
+  });
+
+  it('does not emit forbidden next-action fields or a proposed_resources key on the created plan', async () => {
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'no-forbidden-fields',
+    });
+
+    mockAnalyzeInfra.mockReturnValue({
+      needs: [{ type: 'postgresql', detectedFrom: 'pg' }],
+      available: [],
+      missing: [{ type: 'postgresql', suggestion: 'Create a postgresql service', detectedFrom: 'pg' }],
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('');
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/forbidden-app',
+      branch: 'main',
+    });
+
+    const serialized = JSON.stringify(plan);
+    for (const forbidden of ['build_log_call', 'retry_call', 'next_call', 'proposed_resources']) {
+      expect(serialized).not.toContain(forbidden);
+    }
+    expect(plan).not.toHaveProperty('proposed_resources');
+  });
 });

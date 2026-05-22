@@ -41,6 +41,29 @@ export interface PlanService {
   service_id?: string;
   /** Environment variable or connection string name */
   connect_via: string;
+  /**
+   * How this service is satisfied. Metadata classification only — does not
+   * change execution behavior.
+   * - existing_project_service: a reusable managed service already in the project
+   * - proposed_project_service: a managed service the plan proposes creating
+   * - compose_service: the dependency is declared in the compose stack
+   * - needs_user_input: requires the user to supply the connection
+   */
+  resolution?:
+    | 'existing_project_service'
+    | 'proposed_project_service'
+    | 'compose_service'
+    | 'needs_user_input';
+  /** Detection evidence (dependency name, env var, schema.prisma:provider, etc.) */
+  reason?: string;
+  /**
+   * Approval classification for this resource type. Metadata only — does not
+   * gate execution.
+   * - safe_resource: stateless/standard managed datastore (postgres, mysql, redis, mongo)
+   * - explicit_resource: requires explicit user opt-in (e.g. object storage)
+   * - not_auto_creatable: cannot be auto-provisioned by the plan engine
+   */
+  approval?: 'safe_resource' | 'explicit_resource' | 'not_auto_creatable';
 }
 
 /**
