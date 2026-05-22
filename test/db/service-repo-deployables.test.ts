@@ -76,6 +76,23 @@ describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
     expect(method).toContain("coalesce(${services.build_method}, '') = 'compose'");
     expect(method).toContain('${services.parent_service_id} IS NULL');
   });
+
+  it('adds connected managed services to project list service counts', () => {
+    const source = readFileSync('src/db/repos/project.repo.ts', 'utf8');
+    const method = source.slice(
+      source.indexOf('async getDeployableServiceCountsByProjectIds'),
+      source.indexOf(
+        '\n  }\n\n  /**',
+        source.indexOf('async getDeployableServiceCountsByProjectIds'),
+      ),
+    );
+
+    expect(method).toContain('serviceConnections');
+    expect(method).toContain('service_id_consumer');
+    expect(method).toContain('service_id_provider');
+    expect(method).toContain('MANAGED_SERVICE_KINDS');
+    expect(method).toContain('counts.set(projectId, (counts.get(projectId) ?? 0) + row.cnt)');
+  });
 });
 
 describe('ProjectRepo.listProjectsWithMetadata', () => {
