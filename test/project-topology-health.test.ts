@@ -28,6 +28,8 @@ interface ServiceNode {
   health: 'healthy' | 'crashed' | 'deploying';
   cpu: string;
   mem: string;
+  dependsOn: string[];
+  source?: string | null;
 }
 
 interface TopologyResponse {
@@ -37,6 +39,13 @@ interface TopologyResponse {
 function createCtx(opts: {
   inspectResult: { healthStatus: string | null } | 'throw';
   status?: 'running' | 'building' | 'stopped';
+  managedServices?: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    status: 'running' | 'building' | 'stopped';
+    container_id?: string | null;
+  }>;
 }) {
   const project = {
     id: 'p1',
@@ -66,7 +75,11 @@ function createCtx(opts: {
     build_method: null,
   };
 
-  const inspectContainer = vi.fn(() => {
+  const managedServices = opts.managedServices ?? [];
+  const inspectContainer = vi.fn((containerId: string) => {
+    if (managedServices.some((managed) => managed.container_id === containerId)) {
+      return Promise.reject(new Error('managed services should not be inspected'));
+    }
     if (opts.inspectResult === 'throw') {
       return Promise.reject(new Error('docker daemon unavailable'));
     }
@@ -90,6 +103,34 @@ function createCtx(opts: {
       getEnvironmentsByProject: vi.fn(() => []),
       findDependenciesByProject: vi.fn(() => []),
       getDeployableForProject: vi.fn().mockReturnValue(service),
+      listServiceConnectionsByProject: vi.fn(() =>
+        managedServices.map((managed) => ({
+          id: `conn-${managed.id}`,
+          service_id_consumer: 'p1__svc',
+          service_id_provider: managed.id,
+        })),
+      ),
+      listServices: vi.fn(() => [
+        service,
+        ...managedServices.map((managed) => ({
+          ...managed,
+          project_id: 'p1',
+          parent_service_id: null,
+          source: 'managed',
+          assigned_port: null,
+          container_name: `ol-svc-${managed.name}`,
+          container_port: managed.kind === 'postgres' ? 5432 : null,
+          image_tag: `${managed.kind}:latest`,
+          image_url: null,
+          repo_url: null,
+          branch: null,
+          dockerfile_path: null,
+          docker_target: null,
+          build_context: null,
+          build_method: null,
+          image_cmd: null,
+        })),
+      ]),
     },
     docker: {
       inspectContainer,
@@ -112,9 +153,7 @@ function createCtx(opts: {
   return ctx;
 }
 
-async function fetchTopologyHealth(
-  ctx: AppContext,
-): Promise<'healthy' | 'crashed' | 'deploying'> {
+async function fetchTopologyHealth(ctx: AppContext): Promise<'healthy' | 'crashed' | 'deploying'> {
   const app = new Hono();
   app.route('/api', createProjectRoutes(ctx));
   const res = await app.request('/api/projects/p1/topology');
@@ -169,5 +208,39 @@ describe('project topology — health projection (Blocker 3)', () => {
       status: 'stopped',
     });
     expect(await fetchTopologyHealth(ctx)).toBe('crashed');
+  });
+
+  it('includes connected managed services as render-only topology nodes', async () => {
+    const ctx = createCtx({
+      inspectResult: { healthStatus: 'healthy' },
+      managedServices: [
+        {
+          id: 'svc-postgres',
+          name: 'postgres',
+          kind: 'postgres',
+          status: 'running',
+          container_id: 'managed-container-id',
+        },
+      ],
+    });
+    const app = new Hono();
+    app.route('/api', createProjectRoutes(ctx));
+
+    const res = await app.request('/api/projects/p1/topology');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as TopologyResponse;
+
+    expect(body.services.map((service) => service.id)).toEqual(['p1__svc', 'svc-postgres']);
+    expect(body.services[0]?.dependsOn).toEqual(['svc-postgres']);
+    expect(body.services[1]).toMatchObject({
+      id: 'svc-postgres',
+      name: 'postgres',
+      health: 'healthy',
+      cpu: '—',
+      mem: '—',
+      dependsOn: [],
+      source: 'managed',
+    });
+    expect(ctx.docker.inspectContainer).not.toHaveBeenCalledWith('managed-container-id');
   });
 });
