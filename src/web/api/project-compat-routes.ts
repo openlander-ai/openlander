@@ -26,6 +26,7 @@ import {
   deployableServiceIdToProjectId,
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
+import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import type { ServiceRow } from '../../db/types.js';
 
 const log = createModuleLogger('api');
@@ -34,6 +35,8 @@ type TopologyServiceForEnvInference = Pick<
   ServiceRow,
   'id' | 'name' | 'container_id' | 'container_name'
 >;
+
+type TopologyHealth = 'healthy' | 'crashed' | 'deploying';
 
 function addAlias(
   aliases: Map<string, string>,
@@ -128,6 +131,16 @@ function mergeDependsOn(
     target.set(serviceId, [...merged]);
   }
   return target;
+}
+
+function isManagedServiceKind(kind: string): boolean {
+  return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
+}
+
+function storedServiceStatusToTopologyHealth(status: string | null | undefined): TopologyHealth {
+  if (status === 'running') return 'healthy';
+  if (status === 'building') return 'deploying';
+  return 'crashed';
 }
 
 export function createProjectCompatRoutes(ctx: AppContext): Hono {
@@ -237,9 +250,32 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
           : null;
       const legacyTopologyNodes =
         childProjects.length > 0 ? childProjects : legacyStandaloneDeployable ? [project] : [];
+      const serviceConnections = useServices
+        ? await ctx.db.listServiceConnectionsByProject(project.id)
+        : [];
+      const allServices =
+        useServices && serviceConnections.length > 0 ? await ctx.db.listServices() : [];
+      const connectedManagedServices = useServices
+        ? (() => {
+            const servicesById = new Map(allServices.map((service) => [service.id, service]));
+            const seen = new Set(groupServices.map((service) => service.id));
+            const managed: ServiceRow[] = [];
+            for (const connection of serviceConnections) {
+              const service = servicesById.get(connection.service_id_provider);
+              if (!service || seen.has(service.id) || !isManagedServiceKind(service.kind)) {
+                continue;
+              }
+              seen.add(service.id);
+              managed.push(service);
+            }
+            return managed;
+          })()
+        : [];
 
       const nodeIds = new Set(
-        useServices ? groupServices.map((s) => s.id) : legacyTopologyNodes.map((n) => n.id),
+        useServices
+          ? [...groupServices, ...connectedManagedServices].map((s) => s.id)
+          : legacyTopologyNodes.map((n) => n.id),
       );
 
       // Build dependsOn map: for each node, find its project_dependencies
@@ -257,6 +293,21 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
         dependsOnMap.set(nodeId, siblingDeps);
       }
       if (useServices) {
+        const connectionDependsOn = new Map<string, string[]>();
+        for (const connection of serviceConnections) {
+          if (
+            !nodeIds.has(connection.service_id_consumer) ||
+            !nodeIds.has(connection.service_id_provider)
+          ) {
+            continue;
+          }
+          const existing = connectionDependsOn.get(connection.service_id_consumer) ?? [];
+          connectionDependsOn.set(connection.service_id_consumer, [
+            ...existing,
+            connection.service_id_provider,
+          ]);
+        }
+        mergeDependsOn(dependsOnMap, connectionDependsOn);
         mergeDependsOn(dependsOnMap, await inferRuntimeEnvDependencies(ctx, groupServices));
       }
 
@@ -273,43 +324,77 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
       // TTL cache + in-flight dedupe + a 6-wide concurrency limiter so a
       // 30-node group doesn't open 60 simultaneous Docker calls.
       const serviceNodes = useServices
-        ? await mapWithConcurrency(groupServices, TOPOLOGY_INSPECT_CONCURRENCY, async (svc) => {
-            const port = svc.assigned_port ?? null;
-            // Display name strips __svc suffix and group-name prefix.
-            const displayName = deployableServiceIdToProjectId(svc.name);
-            const url = getDeployableServiceUrl(svc);
-            const image = svc.image_url ?? svc.image_tag ?? `${displayName}:latest`;
-            const kind = resolveKind(`${displayName} ${image}`);
-            const runtime = await getTopologyNodeRuntime(ctx, {
-              id: svc.id,
-              container_id: svc.container_id,
-              status: svc.status ?? null,
-            });
-            return {
-              id: svc.id,
-              name: displayName,
-              kind,
-              image,
-              health: runtime.health,
-              port,
-              url,
-              cpu: runtime.cpuDisplay,
-              mem: runtime.memDisplay,
-              dependsOn: dependsOnMap.get(svc.id) ?? [],
-              source: svc.source,
-              repoUrl: svc.repo_url,
-              branch: svc.branch,
-              deployedBranch:
-                groupEnvironments.find(
-                  (env) => env.service_id === svc.id && env.type === 'production',
-                )?.branch ?? null,
-              dockerfilePath: svc.dockerfile_path,
-              dockerTarget: svc.docker_target,
-              buildContext: svc.build_context,
-              buildMethod: svc.build_method,
-              routeName: getDeployableServiceRouteName(svc),
-            };
-          })
+        ? [
+            ...(await mapWithConcurrency(
+              groupServices,
+              TOPOLOGY_INSPECT_CONCURRENCY,
+              async (svc) => {
+                const port = svc.assigned_port ?? null;
+                // Display name strips __svc suffix and group-name prefix.
+                const displayName = deployableServiceIdToProjectId(svc.name);
+                const url = getDeployableServiceUrl(svc);
+                const image = svc.image_url ?? svc.image_tag ?? `${displayName}:latest`;
+                const kind = resolveKind(`${displayName} ${image}`);
+                const runtime = await getTopologyNodeRuntime(ctx, {
+                  id: svc.id,
+                  container_id: svc.container_id,
+                  status: svc.status ?? null,
+                });
+                return {
+                  id: svc.id,
+                  name: displayName,
+                  kind,
+                  image,
+                  health: runtime.health,
+                  port,
+                  url,
+                  cpu: runtime.cpuDisplay,
+                  mem: runtime.memDisplay,
+                  dependsOn: dependsOnMap.get(svc.id) ?? [],
+                  source: svc.source,
+                  repoUrl: svc.repo_url,
+                  branch: svc.branch,
+                  deployedBranch:
+                    groupEnvironments.find(
+                      (env) => env.service_id === svc.id && env.type === 'production',
+                    )?.branch ?? null,
+                  dockerfilePath: svc.dockerfile_path,
+                  dockerTarget: svc.docker_target,
+                  buildContext: svc.build_context,
+                  buildMethod: svc.build_method,
+                  routeName: getDeployableServiceRouteName(svc),
+                };
+              },
+            )),
+            ...connectedManagedServices.map((svc) => {
+              const port = svc.assigned_port ?? null;
+              const image = svc.image_url ?? svc.image_tag ?? `${svc.name}:latest`;
+              return {
+                id: svc.id,
+                name: svc.name,
+                kind: resolveKind(`${svc.kind} ${svc.name} ${image}`),
+                image,
+                health: storedServiceStatusToTopologyHealth(svc.status ?? null),
+                port,
+                url: null,
+                cpu: '—',
+                mem: '—',
+                dependsOn: [],
+                source: 'managed',
+                repoUrl: svc.repo_url,
+                branch: svc.branch,
+                deployedBranch: null,
+                dockerfilePath: svc.dockerfile_path,
+                dockerTarget: svc.docker_target,
+                buildContext: svc.build_context,
+                buildMethod: svc.build_method,
+                routeName: svc.name,
+                containerPort: svc.container_port,
+                imageUrl: svc.image_url,
+                imageCmd: svc.image_cmd,
+              };
+            }),
+          ]
         : await mapWithConcurrency(
             legacyTopologyNodes,
             TOPOLOGY_INSPECT_CONCURRENCY,
