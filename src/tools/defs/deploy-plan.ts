@@ -601,7 +601,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'deploy_app',
     riskLevel: 'medium',
     description:
-      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing project with exactly one deployable service, this redeploys that service. Otherwise it creates a new app from repo_url or image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list.',
+      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing project with exactly one deployable service, this redeploys that service. Otherwise it creates a new app from repo_url or image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list; if it proposes project-scoped managed services, returns status "needs_approval" with approval_required (approve via execute_deploy_plan using approve_all_safe_resources / approvals.create_resources).',
     mcpDescription:
       'App deploy front door. New app: pass repo_url/image and use name for the project group name. Existing app: prefer service_id, or use service_name/project_name/name lookup. Poll get_deploy_status; diagnose failures with diagnose_service.',
     inputSchema: deploySchema,
@@ -776,7 +776,7 @@ export const deployPlanToolDefs: ToolDef[] = [
             next_steps: [
               'This plan proposes project-scoped managed services (see services[] with resolution="proposed_project_service"). Confirm with the user before proceeding.',
               'Then call execute_deploy_plan with the plan_id and approve_all_safe_resources=true, or approvals.create_resources=[<identifiers>] to approve individually.',
-              'Note: for a NEW app, managed auto-provisioning requires an existing project — execute_deploy_plan may return needs_target_project. In that case deploy the app first (creates the project), then approve the managed service on it; or pass an external connection URL in env_vars.',
+              'Note: for a NEW app, OpenLander cannot auto-provision a managed service yet — execute_deploy_plan returns needs_target_project. To deploy this app now, pass an external connection URL (e.g. DATABASE_URL) in env_vars so nothing needs provisioning; auto-provisioning is available under an existing project.',
             ],
           },
         };

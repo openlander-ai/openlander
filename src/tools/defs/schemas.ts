@@ -802,7 +802,12 @@ export const updateDeployPlanSchema = z.object({
 });
 
 export const executeDeployPlanSchema = z.object({
-  plan_id: z.string().min(1).describe('Plan ID to execute. Plan must be in "ready" status.'),
+  plan_id: z
+    .string()
+    .min(1)
+    .describe(
+      'Plan ID to execute. Plan must be in "ready" status, or "needs_approval" when called with approve_all_safe_resources / approvals.create_resources.',
+    ),
   deploy_only: z
     .array(z.string())
     .optional()

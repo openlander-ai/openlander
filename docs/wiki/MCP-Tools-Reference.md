@@ -126,9 +126,10 @@ individually. Unapproved, compose, or not-auto-creatable services are never crea
 connection env (e.g. an external `DATABASE_URL`) or create them first.
 
 Auto-provisioning is supported only for **existing** projects. Executing an approved plan for a
-brand-new app (no project row yet) returns `needs_target_project` and creates nothing — deploy the
-app first to create the project, then approve the managed service on it, or pass an external
-`<ENV>_URL` in `env_vars`.
+brand-new app (no project row yet) returns `needs_target_project` and creates nothing. To deploy
+the new app now, pass an external connection URL (e.g. `DATABASE_URL`) in `env_vars` so no managed
+service needs provisioning; auto-provisioning becomes available when deploying under an existing
+project.
 
 ### `deploy_app`
 

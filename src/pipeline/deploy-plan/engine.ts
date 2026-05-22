@@ -646,8 +646,13 @@ export class PlanEngine {
       // rethrow the original attach error.
       try {
         await this.serviceManager.remove(created.id, { force: true });
-      } catch {
-        // Swallow cleanup errors; surface the original attach failure.
+      } catch (cleanupError) {
+        // Surface the original attach failure as the thrown error, but do not
+        // silently swallow the cleanup failure (AGENTS.md: no silent swallow).
+        log.warn(
+          { err: cleanupError, serviceId: created.id, serviceType: planService.type },
+          'Failed to roll back orphaned managed service after attach failure',
+        );
       }
       throw attachError;
     }
@@ -1245,8 +1250,9 @@ export class PlanEngine {
         },
         _agent_guidance: {
           next_steps: [
-            'Managed auto-provisioning is supported only for existing projects.',
-            'Deploy the app first (creates the project), then approve/create the managed service on it; or pass an external <ENV>_URL in env_vars.',
+            'Managed auto-provisioning is supported only for existing projects; a brand-new app has no project to provision onto.',
+            'To deploy this new app now, pass an external connection URL (e.g. DATABASE_URL) in env_vars so no managed service needs provisioning.',
+            'Auto-provisioning becomes available once the app is deployed under an existing project group.',
           ],
         },
       };
