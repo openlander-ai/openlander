@@ -730,13 +730,13 @@ export const translations = {
       error: 'Error',
     },
     managedDetail: {
-      notFound: 'Managed service not found',
-      loadFailed: 'Failed to load managed service',
+      notFound: 'Service not found',
+      loadFailed: 'Failed to load service',
       notFoundSubtitle: 'No service with id "{id}"',
-      backToList: '← Back to Managed Services',
-      backToListShort: '← Managed Services',
+      backToProjects: '← Back to Projects',
+      backToProject: '← Back to project',
       tabs: {
-        aria: 'Managed service sections',
+        aria: 'Service sections',
         overview: 'Overview',
         logs: 'Logs',
         connections: 'Connections',
@@ -744,7 +744,7 @@ export const translations = {
       },
       logs: {
         title: 'Container logs',
-        description: 'Runtime logs from the managed service container.',
+        description: 'Runtime logs from the service container.',
         refresh: 'Refresh',
         loading: 'Loading…',
         empty: 'No logs returned.',
@@ -752,7 +752,7 @@ export const translations = {
       },
       connections: {
         title: 'Connected projects',
-        description: 'Projects that reference this managed service.',
+        description: 'Projects that reference this service.',
         refresh: 'Refresh',
         loading: 'Loading…',
         empty: 'No projects are connected to this service.',
@@ -768,7 +768,7 @@ export const translations = {
         updated: 'Service state updated.',
         actionError: 'Service action failed',
         danger: 'Danger zone',
-        dangerDescription: 'Delete this managed service container and its persistent volume.',
+        dangerDescription: 'Delete this service container and its persistent volume.',
         delete: 'Delete service',
         deleting: 'Deleting…',
         confirmLabel: 'Type this service name to delete:',
@@ -779,6 +779,8 @@ export const translations = {
         connectionCheckFailed: 'Delete is blocked because connection status could not be verified.',
       },
       field: {
+        type: 'Type',
+        status: 'Status',
         image: 'Image',
         port: 'Port',
         container: 'Container',
@@ -1424,6 +1426,7 @@ export const translations = {
     projectGroup: 'Project group',
     deployableService: 'Deployable service',
     managedService: 'Managed service',
+    infrastructureService: 'Infrastructure service',
   },
   serviceDetail: {
     runtime: {
