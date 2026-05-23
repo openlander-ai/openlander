@@ -31,10 +31,10 @@ shared managed services and external TCP exposure are deferred.
 
 ### Via Web Dashboard
 
-1. Go to **Services** → **Create New**
-2. Select a template (or custom image)
-3. Name the service
-4. Click Create
+The web dashboard does not create managed services in v0.1. Use the project
+Services tab to inspect connected infrastructure services and open their
+project-scoped detail pages for logs, connections, start/stop, and typed-confirm
+delete.
 
 ### Via MCP
 
@@ -62,7 +62,7 @@ Example: `create_service(name: "mydb", template: "postgresql", project_name: "my
 
 ### Via Web Dashboard
 
-Service Detail → **Connection** tab → copy host, port, credentials
+Project → Services → infrastructure service detail → **Connections**.
 
 ### Via MCP
 
@@ -179,8 +179,7 @@ REDIS_URL=redis://ol-svc-my-redis:6379
 ```
 
 Use project-scoped managed services as the default app database/cache path.
-Unassigned/orphan managed services may appear in admin views, but creating
-cross-project shared services is not exposed in v0.1.
+Creating cross-project shared services is not exposed in v0.1.
 
 If an app previously used an unassigned/global managed service as its primary
 database or cache, recreate that managed service inside the app's project,
