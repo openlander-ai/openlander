@@ -4,7 +4,7 @@ import type { AppContext } from '../../app.js';
 import type { ServiceRow } from '../../db/types.js';
 import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { ORPHAN_MANAGED_GROUP_ID } from '../../db/service-ids.js';
-import { ServiceInUseError } from '../../errors.js';
+import { ServiceInUseError, ServiceNotFoundError } from '../../errors.js';
 import { createGitProvider } from '../../git-providers/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getSystemStats, formatStatsSummary } from '../../monitor/stats.js';
@@ -12,6 +12,11 @@ import { detectReverseProxy, getProxyStatus, getLanIp, getAllIps } from '../../p
 import { SERVICE_TEMPLATES, AVAILABLE_VERSIONS } from '../../pipeline/service-manager.js';
 
 const log = createModuleLogger('api');
+const MAX_SERVICE_LOG_LINES = 1_000;
+
+function serviceNotFoundBody(id: string): { error: 'NOT_FOUND'; message: string } {
+  return { error: 'NOT_FOUND', message: `Service not found: ${id}` };
+}
 
 /**
  * Map a canonical ServiceRow to the legacy wire shape expected by the
@@ -274,9 +279,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       return c.json(toServiceWire(service, envVars));
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Get service detail failed');
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
       }
       return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch service detail' }, 500);
     }
@@ -289,15 +293,23 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     if (!Number.isInteger(lines) || lines <= 0) {
       return c.json({ error: 'INVALID_FIELD', message: 'lines must be a positive integer' }, 400);
     }
+    if (lines > MAX_SERVICE_LOG_LINES) {
+      return c.json(
+        {
+          error: 'INVALID_FIELD',
+          message: `lines must be at most ${String(MAX_SERVICE_LOG_LINES)}`,
+        },
+        400,
+      );
+    }
 
     try {
       const logs = await ctx.serviceManager.getLogs(id, lines);
       return c.json({ logs });
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Get service logs failed');
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
       }
       return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch service logs' }, 500);
     }
@@ -310,9 +322,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       return c.json(stats);
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Get service stats failed');
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
       }
       return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch service stats' }, 500);
     }
@@ -351,7 +362,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     try {
       const service = await ctx.db.getService(id);
       if (!service) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+        return c.json(serviceNotFoundBody(id), 404);
       }
 
       if (!(await ctx.db.hasAnyServiceMetrics(id))) {
@@ -415,9 +426,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       });
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Get service metrics failed');
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
       }
       return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch service metrics' }, 500);
     }
@@ -472,9 +482,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       return c.json({ health });
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Get service health failed');
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
       }
       return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch service health' }, 500);
     }
@@ -487,9 +496,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       return c.json(projects);
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Get connected projects failed');
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
       }
       return c.json(
         { error: 'INTERNAL_ERROR', message: 'Failed to fetch connected projects' },
@@ -506,8 +514,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     } catch (err) {
       log.debug({ err, serviceId: id }, 'List service databases failed');
       const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
       }
       if (message.includes('not supported')) {
         return c.json({ error: 'UNSUPPORTED_SERVICE_TYPE', message }, 400);
@@ -532,8 +540,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Create service database failed');
       const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
       }
       if (message.includes('not supported')) {
         return c.json({ error: 'UNSUPPORTED_SERVICE_TYPE', message }, 400);
@@ -556,8 +564,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     } catch (err) {
       log.debug({ err, serviceId: id }, 'List service users failed');
       const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
       }
       if (message.includes('not supported')) {
         return c.json({ error: 'UNSUPPORTED_SERVICE_TYPE', message }, 400);
@@ -587,8 +595,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Create service user failed');
       const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
       }
       if (message.includes('not supported')) {
         return c.json({ error: 'UNSUPPORTED_SERVICE_TYPE', message }, 400);
@@ -627,8 +635,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
           409,
         );
       }
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
+      if (err instanceof ServiceNotFoundError) {
         return c.json(
           { error: 'NOT_FOUND', code: 'NOT_FOUND', message: `Service not found: ${id}` },
           404,
@@ -652,9 +659,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       return c.json({ status: 'started' });
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Start service failed');
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
       }
       return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to start service' }, 500);
     }
@@ -667,9 +673,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       return c.json({ status: 'stopped' });
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Stop service failed');
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      if (err instanceof ServiceNotFoundError) {
+        return c.json(serviceNotFoundBody(id), 404);
       }
       return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to stop service' }, 500);
     }

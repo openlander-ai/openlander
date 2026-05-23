@@ -707,19 +707,21 @@ export class ServiceManager {
       warning = `Service "${service.name}" is connected to ${count} project(s): ${projectNames}. These projects may fail to start if they depend on this service.`;
     }
 
-    const containerId = service.container_id ?? service.container_name ?? '';
-    try {
-      await this.docker.stopContainer(containerId);
-    } catch (error) {
-      if (!isDockerNotFoundError(error)) {
-        throw error;
+    const containerId = service.container_id ?? service.container_name;
+    if (containerId) {
+      try {
+        await this.docker.stopContainer(containerId);
+      } catch (error) {
+        if (!isDockerNotFoundError(error)) {
+          throw error;
+        }
       }
-    }
-    try {
-      await this.docker.safeRemoveContainer(containerId);
-    } catch (error) {
-      if (!isDockerNotFoundError(error)) {
-        throw error;
+      try {
+        await this.docker.safeRemoveContainer(containerId);
+      } catch (error) {
+        if (!isDockerNotFoundError(error)) {
+          throw error;
+        }
       }
     }
 
@@ -1353,21 +1355,44 @@ export class ServiceManager {
   }
 
   async getConnectedProjects(serviceId: string): Promise<Array<{ id: string; name: string }>> {
-    const service = await this.getRequiredService(serviceId);
-    const containerName = service.container_name;
-    const projects = await this.db.listProjects();
-    const connected: Array<{ id: string; name: string }> = [];
+    await this.getRequiredService(serviceId);
+    const connections = await this.db.listServiceConsumersForProvider(serviceId);
+    if (connections.length === 0) return [];
 
-    for (const project of projects) {
-      const allEnvValues = await this.collectEnvValuesForProject(project.id);
-      const hasConnection =
-        containerName != null &&
-        allEnvValues.some((value) => typeof value === 'string' && value.includes(containerName));
-      if (hasConnection) {
-        connected.push({ id: project.id, name: project.name });
+    const consumerIds = new Set(connections.map((connection) => connection.service_id_consumer));
+    const projectIds = new Set<string>();
+    const unresolvedConsumerIds = new Set<string>();
+
+    for (const consumerId of consumerIds) {
+      if (consumerId.endsWith('__svc')) {
+        projectIds.add(consumerId.replace(/__svc$/, ''));
+      } else {
+        unresolvedConsumerIds.add(consumerId);
       }
     }
 
+    if (unresolvedConsumerIds.size > 0) {
+      const services = await this.db.listServices();
+      for (const service of services) {
+        if (unresolvedConsumerIds.has(service.id)) {
+          projectIds.add(service.project_id);
+          unresolvedConsumerIds.delete(service.id);
+        }
+      }
+      for (const consumerId of unresolvedConsumerIds) {
+        projectIds.add(consumerId);
+      }
+    }
+
+    const projects = await this.db.listProjects(null, { includeArchived: true });
+    const projectsById = new Map(projects.map((project) => [project.id, project]));
+    const connected: Array<{ id: string; name: string }> = [];
+    for (const projectId of projectIds) {
+      const project = projectsById.get(projectId);
+      if (project) {
+        connected.push({ id: project.id, name: project.name });
+      }
+    }
     return connected;
   }
 

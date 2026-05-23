@@ -13,7 +13,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import { testClient } from 'hono/testing';
-import { ServiceInUseError } from '../../src/errors.js';
+import { ServiceInUseError, ServiceNotFoundError } from '../../src/errors.js';
 
 // Minimal ServiceRow shape post-0012 Phase C (storage cols dropped)
 const makeCanonicalServiceRow = (overrides: Record<string, unknown> = {}) => ({
@@ -244,6 +244,74 @@ describe('system-routes /api/services wire shape contract', () => {
     expect(mockCtx.serviceManager.getConnectedProjects).toHaveBeenCalledWith('svc-pg');
   });
 
+  it('GET /services/:id/connected-projects returns typed 404 for missing services', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+
+    const mockCtx = {
+      serviceManager: {
+        getConnectedProjects: vi.fn().mockRejectedValue(new ServiceNotFoundError('svc-missing')),
+      },
+      db: {},
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services/svc-missing/connected-projects');
+
+    expect(res.status).toBe(404);
+    await expect(res.json()).resolves.toEqual({
+      error: 'NOT_FOUND',
+      message: 'Service not found: svc-missing',
+    });
+  });
+
+  it('GET /services/:id/logs caps requested line count', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+
+    const mockCtx = {
+      serviceManager: {
+        getLogs: vi.fn(),
+      },
+      db: {},
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services/svc-pg/logs?lines=1001');
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({
+      error: 'INVALID_FIELD',
+      message: 'lines must be at most 1000',
+    });
+    expect(mockCtx.serviceManager.getLogs).not.toHaveBeenCalled();
+  });
+
+  it('DELETE /services/:id removes services without connected projects', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+
+    const mockCtx = {
+      serviceManager: {
+        remove: vi.fn().mockResolvedValue({}),
+      },
+      db: {},
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services/svc-redis', { method: 'DELETE' });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ status: 'removed' });
+    expect(mockCtx.serviceManager.remove).toHaveBeenCalledWith('svc-redis');
+  });
+
   it('DELETE /services/:id returns SERVICE_IN_USE with connected_projects', async () => {
     const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
     const app = new Hono();
@@ -276,7 +344,7 @@ describe('system-routes /api/services wire shape contract', () => {
 
     const mockCtx = {
       serviceManager: {
-        remove: vi.fn().mockRejectedValue(new Error('Service not found: svc-missing')),
+        remove: vi.fn().mockRejectedValue(new ServiceNotFoundError('svc-missing')),
       },
       db: {},
       config: { gitProviders: { github: {} } },
