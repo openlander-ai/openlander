@@ -36,6 +36,7 @@ import {
   Eye,
   EyeOff,
   Globe,
+  Info,
   Loader2,
   Plus,
   Rocket,
@@ -60,13 +61,8 @@ import { useServiceDeployments } from '@/hooks/use-deployments';
 import { useLanguage } from '@/i18n/context';
 import {
   getGroupService,
-  getService,
-  getConnectedProjects,
-  getServiceLogs,
-  removeService,
   deleteGroupService,
-  startService,
-  stopService,
+  managedServices,
   type ConnectedProject,
   type GroupService,
   type MetricsRange,
@@ -2031,7 +2027,7 @@ function ManagedServiceDetail({ id }: { id: string }) {
     setLoading(true);
     setError(null);
     try {
-      setService(await getService(id));
+      setService(await managedServices.get(id));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load service');
     } finally {
@@ -2043,7 +2039,7 @@ function ManagedServiceDetail({ id }: { id: string }) {
     setConnectionsLoading(true);
     setConnectionsError(null);
     try {
-      setConnections(await getConnectedProjects(id));
+      setConnections(await managedServices.connectedProjects(id));
     } catch (e: unknown) {
       setConnections([]);
       setConnectionsError(e instanceof Error ? e.message : 'Failed to load connections');
@@ -2058,7 +2054,7 @@ function ManagedServiceDetail({ id }: { id: string }) {
       setLoading(true);
       setError(null);
       try {
-        const nextService = await getService(id);
+        const nextService = await managedServices.get(id);
         if (!cancelled) setService(nextService);
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load service');
@@ -2077,7 +2073,7 @@ function ManagedServiceDetail({ id }: { id: string }) {
       setConnectionsLoading(true);
       setConnectionsError(null);
       try {
-        const nextConnections = await getConnectedProjects(id);
+        const nextConnections = await managedServices.connectedProjects(id);
         if (!cancelled) setConnections(nextConnections);
       } catch (e: unknown) {
         if (!cancelled) {
@@ -2127,7 +2123,7 @@ function ManagedServiceDetail({ id }: { id: string }) {
   }
 
   const tabs: TabDef<ManagedServiceTabId>[] = [
-    { id: 'overview', label: t('services.managedDetail.tabs.overview'), icon: SettingsIcon },
+    { id: 'overview', label: t('services.managedDetail.tabs.overview'), icon: Info },
     { id: 'logs', label: t('services.managedDetail.tabs.logs'), icon: ScrollText },
     {
       id: 'connections',
@@ -2286,7 +2282,7 @@ function ManagedLogsTab({ serviceId }: { serviceId: string }) {
     setLoading(true);
     setError(null);
     try {
-      setLogs(await getServiceLogs(serviceId, 300));
+      setLogs(await managedServices.logs(serviceId, 300));
     } catch (e: unknown) {
       setLogs('');
       setError(e instanceof Error ? e.message : t('services.managedDetail.logs.error'));
@@ -2446,9 +2442,9 @@ function ManagedSettingsTab({
     setFeedback(null);
     try {
       if (action === 'start') {
-        await startService(service.id);
+        await managedServices.start(service.id);
       } else {
-        await stopService(service.id);
+        await managedServices.stop(service.id);
       }
       onServiceChanged();
       setFeedback(t('services.managedDetail.settings.updated'));
@@ -2466,7 +2462,7 @@ function ManagedSettingsTab({
     setBusyAction('delete');
     setFeedback(null);
     try {
-      await removeService(service.id);
+      await managedServices.remove(service.id);
       onDeleted();
     } catch (e: unknown) {
       onConnectionsChanged();
