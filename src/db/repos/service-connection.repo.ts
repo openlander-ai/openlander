@@ -2,6 +2,7 @@ import { and, desc, eq, or } from 'drizzle-orm';
 
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { serviceConnections } from '../schema.drizzle.js';
+import { projectIdToDeployableServiceId } from '../service-ids.js';
 import type { ServiceConnectionRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
 
@@ -9,13 +10,9 @@ import { RepoPersistenceError } from '../../errors.js';
  * Post-0012: service_connections uses consumer/provider model. Callers
  * historically pass `projectId` (the consumer group) and `serviceId` (the
  * provider managed-service id); the repo maps:
- *   - projectId  -> service_id_consumer = `${projectId}__svc`
+ *   - projectId  -> service_id_consumer = projectIdToDeployableServiceId(projectId)
  *   - serviceId  -> service_id_provider (no transform)
  */
-function projectIdToServiceId(projectId: string): string {
-  return projectId.endsWith('__svc') ? projectId : `${projectId}__svc`;
-}
-
 export class ServiceConnectionRepo {
   constructor(
     private readonly db: DrizzleClient,
@@ -44,7 +41,7 @@ export class ServiceConnectionRepo {
     serviceId: string;
     environmentId?: string;
   }): Promise<ServiceConnectionRow> {
-    const consumerId = projectIdToServiceId(opts.projectId);
+    const consumerId = projectIdToDeployableServiceId(opts.projectId);
     const [created] = await this.db
       .insert(serviceConnections)
       .values({
@@ -72,7 +69,7 @@ export class ServiceConnectionRepo {
     serviceId: string;
     environmentId?: string;
   }): Promise<void> {
-    const consumerId = projectIdToServiceId(opts.projectId);
+    const consumerId = projectIdToDeployableServiceId(opts.projectId);
     await this.db
       .insert(serviceConnections)
       .values({
@@ -104,7 +101,7 @@ export class ServiceConnectionRepo {
       .from(serviceConnections)
       .where(
         and(
-          eq(serviceConnections.service_id_consumer, projectIdToServiceId(projectId)),
+          eq(serviceConnections.service_id_consumer, projectIdToDeployableServiceId(projectId)),
           eq(serviceConnections.service_id_provider, serviceId),
         ),
       )
@@ -119,10 +116,10 @@ export class ServiceConnectionRepo {
   ): Promise<ServiceConnectionRow[]> {
     const whereClause = environmentId
       ? and(
-          eq(serviceConnections.service_id_consumer, projectIdToServiceId(projectId)),
+          eq(serviceConnections.service_id_consumer, projectIdToDeployableServiceId(projectId)),
           eq(serviceConnections.environment_id, environmentId),
         )
-      : eq(serviceConnections.service_id_consumer, projectIdToServiceId(projectId));
+      : eq(serviceConnections.service_id_consumer, projectIdToDeployableServiceId(projectId));
     const rows = (await this.db
       .select()
       .from(serviceConnections)
@@ -189,7 +186,7 @@ export class ServiceConnectionRepo {
       .delete(serviceConnections)
       .where(
         and(
-          eq(serviceConnections.service_id_consumer, projectIdToServiceId(projectId)),
+          eq(serviceConnections.service_id_consumer, projectIdToDeployableServiceId(projectId)),
           eq(serviceConnections.service_id_provider, serviceId),
         ),
       );
