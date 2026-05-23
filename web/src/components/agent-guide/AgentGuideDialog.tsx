@@ -14,7 +14,7 @@
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Cable, Check, Copy, Lock, X } from 'lucide-react';
+import { ArrowRight, Cable, Check, Copy, Lock } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useMcpStatus } from '@/hooks/use-mcp-status';
 import { useLanguage } from '@/i18n/context';
@@ -70,7 +70,7 @@ export function AgentGuideDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[560px] gap-0 border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] p-0">
         <header className="flex items-start gap-2 border-b border-[color:var(--ol-border-subtle)] px-5 py-4">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 pr-8">
             <DialogTitle className="text-[17px] font-semibold leading-tight text-[color:var(--ol-fg)]">
               {content.heading}
             </DialogTitle>
@@ -78,14 +78,6 @@ export function AgentGuideDialog({
               {content.lead}
             </DialogDescription>
           </div>
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            aria-label={t('agentGuide.closeDialogLabel')}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[color:var(--ol-fg-subtle)] transition-colors hover:bg-[color:var(--ol-panel-2)] hover:text-[color:var(--ol-fg)]"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
         </header>
 
         <div className="flex flex-col gap-3 px-5 py-4">
