@@ -23,6 +23,7 @@ import { InfraMap } from '@/components/Shell/InfraMap';
 import { ProjectTabs, TabPanel, type TabDef } from '@/components/Shell/ProjectTabs';
 import { SettingsTab } from '@/components/project/SettingsTab';
 import { AddServiceDialog } from '@/components/project/AddServiceDialog';
+import { AgentGuideDialog } from '@/components/agent-guide';
 import { type ServiceHealth, type ServiceNode } from '@/lib/projectTopology';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useIsBelowMd } from '@/hooks/use-viewport';
@@ -100,6 +101,10 @@ export function ProjectView() {
   const [managedServiceNodes, setManagedServiceNodes] = useState<ServiceNode[]>([]);
   const isBelowMd = useIsBelowMd();
   const [addServiceOpen, setAddServiceOpen] = useState(false);
+  // Managed databases/caches are agent-provisioned, not built here — this
+  // secondary action hands the user to the MCP guide instead of a native DB
+  // wizard (kind="add-managed-db", never "add-service").
+  const [agentGuideOpen, setAgentGuideOpen] = useState(false);
 
   const refetchManagedServices = useCallback(async () => {
     if (!projectId) {
@@ -302,6 +307,14 @@ export function ProjectView() {
             </span>
             <button
               type="button"
+              onClick={() => setAgentGuideOpen(true)}
+              className="flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] px-3 py-1.5 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+            >
+              <Database className="h-3.5 w-3.5" />
+              Ask Agent
+            </button>
+            <button
+              type="button"
               onClick={() => setAddServiceOpen(true)}
               className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:opacity-90"
             >
@@ -367,6 +380,13 @@ export function ProjectView() {
           }}
         />
       )}
+
+      <AgentGuideDialog
+        open={agentGuideOpen}
+        onOpenChange={setAgentGuideOpen}
+        kind="add-managed-db"
+        projectName={realProject?.name}
+      />
     </div>
   );
 }
