@@ -614,6 +614,9 @@ export function createSystemRoutes(ctx: AppContext): Hono {
         const connectedProjects = Array.isArray(err.details?.['connectedProjects'])
           ? err.details['connectedProjects']
           : [];
+        // Match the typed-error envelope while promoting connected_projects
+        // to the top level so the web UI can disable destructive deletion
+        // without parsing error details.
         return c.json(
           {
             error: err.code,
@@ -626,9 +629,19 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       }
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes('Service not found')) {
-        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+        return c.json(
+          { error: 'NOT_FOUND', code: 'NOT_FOUND', message: `Service not found: ${id}` },
+          404,
+        );
       }
-      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to remove service' }, 500);
+      return c.json(
+        {
+          error: 'INTERNAL_ERROR',
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to remove service',
+        },
+        500,
+      );
     }
   });
 
