@@ -112,29 +112,22 @@ Detailed view for a specific deployment.
 
 ---
 
-### Managed Services (`/managed-services`)
+### Infrastructure Services
 
-> **0.1 routing change**: list URL is now `/managed-services`. The old
-> `/services` redirects here for bookmark continuity. Detail page is
-> at `/managed-services/:id`. See the "Data model alignment" section
-> in `RELEASE-NOTES-0.1.0.md` for the why.
+Infrastructure services are shown inside each project, alongside deployable
+services. Open a project and use the Services tab to inspect project-scoped
+databases, caches, and storage containers wired to that project.
 
-Manage infrastructure services (databases, caches, etc.).
-
-**Features**:
-
-- Create new service from templates:
-  - PostgreSQL, MySQL, Redis, MongoDB, RabbitMQ, MinIO
-- Service cards: name, type, status, port, health, uptime, restarts
-- Click to view service detail
+There is no global `/managed-services` web page in v0.1. Infrastructure service
+creation stays on the MCP/agent path; the web UI is for visibility and
+operations on services already connected to a project.
 
 ---
 
 ### Service Detail
 
-> **0.1 routing**: managed-service detail is `/managed-services/:id`.
-> Deployable service detail is `/projects/:p/services/:s`.
-> See `RELEASE-NOTES-0.1.0.md` "Data model alignment".
+> **0.1 routing**: deployable service detail is `/projects/:p/services/:s`.
+> Infrastructure service detail is `/projects/:p/infrastructure/:s`.
 
 **Actions**: Deploy (header button), Delete (typed-confirm flow inside Overview).
 
@@ -149,7 +142,11 @@ Manage infrastructure services (databases, caches, etc.).
 | **Environment** | Service env vars (read/write).                                                |
 | **Domains**     | Host/path routes registered for the service. DNS/TLS remain external in v0.1. |
 
-The same surface is used for both deployable services (`/projects/:p/services/:s`) and managed services (`/managed-services/:id`). Managed services historically had Connection / Databases panels — those are folded into Overview in v0.1 and return as v0.2 spec work. Project detail shows connected project-scoped managed services in the Services tab; cross-project shared resources and external TCP endpoints are deferred.
+Deployable services use the full service detail surface. Infrastructure services
+use a narrower project-scoped detail surface with Overview, Logs, Connections,
+and Settings. Project detail shows connected project-scoped infrastructure
+services in the Services tab; cross-project shared resources and external TCP
+endpoints are deferred.
 
 ---
 
