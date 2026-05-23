@@ -34,16 +34,16 @@ function serviceNotFoundBody(id: string): { error: 'NOT_FOUND'; message: string 
  *   assigned_port → port
  *   env_vars repo (JSON.stringify) → env_vars
  */
-function toServiceWire(
-  service: ServiceRow,
-  envVars: Record<string, string>,
-): ServiceRow & {
+type ServiceWire = Omit<ServiceRow, 'env_vars' | 'image' | 'port' | 'type'> & {
   type: string;
   image: string;
+  port: number | null;
   env_vars: string | null;
   scope: 'project' | 'global';
   attached_project_id: string | null;
-} {
+};
+
+function toServiceWire(service: ServiceRow, envVars: Record<string, string>): ServiceWire {
   const isGlobal = service.project_id === ORPHAN_MANAGED_GROUP_ID;
   return {
     ...service,
@@ -54,7 +54,7 @@ function toServiceWire(
     name: service.name.replace(/__svc$/, ''),
     type: service.type ?? kindToLegacyType(service.kind),
     image: service.image ?? service.image_url ?? '',
-    port: service.port ?? service.assigned_port ?? undefined,
+    port: service.port ?? service.assigned_port ?? null,
     env_vars:
       // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
       service.env_vars !== undefined
