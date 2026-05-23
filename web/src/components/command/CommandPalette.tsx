@@ -14,7 +14,6 @@ import {
   Plus,
   Code2,
   Command,
-  Database,
   Server,
   Terminal,
   LayoutDashboard,
@@ -108,16 +107,6 @@ export function CommandPalette() {
           close();
         },
         keywords: 'home projects overview',
-      },
-      {
-        id: 'nav-services',
-        label: 'Managed Services',
-        icon: <Database className="h-4 w-4" />,
-        action: () => {
-          navigate('/managed-services');
-          close();
-        },
-        keywords: 'database redis postgres mysql mongo managed services',
       },
       // The legacy `Settings` quick-link was retired in PR #244 when the
       // multi-tab `/settings` host was narrowed to a GitHub-only handoff.
