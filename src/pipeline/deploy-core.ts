@@ -1980,6 +1980,7 @@ export class DeployPipeline {
       options?.routeProbeIntervalMs ?? DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS;
     const routeProbeTimeoutMs = options?.routeProbeTimeoutMs ?? 5_000;
     let routeProbePath = options?.routeProbePath;
+    const trigger = options?.trigger ?? 'api';
 
     let projectName = 'unknown';
     let imageTag: string | undefined;
@@ -2068,6 +2069,7 @@ export class DeployPipeline {
         runtimeOverrides: {
           _projectId: projectId,
           _noCacheBuild: options?.noCache,
+          trigger,
         },
         db: this.db,
       });
@@ -2278,7 +2280,7 @@ export class DeployPipeline {
         projectId,
         environmentId,
         status: 'success',
-        trigger: 'api',
+        trigger,
         commitSha,
         buildLog,
         durationMs,
@@ -2363,7 +2365,7 @@ export class DeployPipeline {
           projectId,
           environmentId,
           status: 'cancelled',
-          trigger: 'api',
+          trigger,
           commitSha,
           buildLog,
           durationMs,
@@ -2416,7 +2418,7 @@ export class DeployPipeline {
         projectId,
         environmentId,
         status: 'failed',
-        trigger: 'api',
+        trigger,
         commitSha,
         buildLog,
         durationMs: Date.now() - startTime,

@@ -527,6 +527,25 @@ describe('blue-green route target flip', () => {
     );
   });
 
+  it('persists the caller trigger for blue-green deploy logs', async () => {
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http' });
+
+    const result = await pipeline.redeploy('p1', {
+      strategy: 'blue-green',
+      lockSessionId: 'test-lock',
+      routeSwitchDelayMs: 0,
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(true);
+    expect(db.createDeployLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'success',
+        trigger: 'chat',
+      }),
+    );
+  });
+
   it('returns success with a warning when blue cleanup fails after route switch', async () => {
     const mockDocker = createMockDocker({ cleanupBlueFails: true });
     docker = mockDocker.docker;
