@@ -351,13 +351,17 @@ export class ProjectHasActiveServicesError extends OpenLanderError {
 }
 
 export class ServiceSourceMissingError extends OpenLanderError {
-  constructor(serviceId: string) {
+  constructor(serviceId: string, missingField?: 'repo_url' | 'image_url', source?: string) {
     super(
-      `Service ${serviceId} is missing required source configuration`,
+      `Service ${serviceId} is missing required source configuration${
+        missingField ? ` (${missingField}${source ? ` for ${source} source` : ''})` : ''
+      }`,
       'SERVICE_SOURCE_MISSING',
       400,
       {
         serviceId,
+        ...(missingField ? { missingField } : {}),
+        ...(source ? { source } : {}),
       },
     );
     this.name = 'ServiceSourceMissingError';

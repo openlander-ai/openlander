@@ -696,7 +696,7 @@ export async function switchToExternalMode(docker: Docker, externalNetwork: stri
 
 /**
  * Connect a container to the Traefik-facing network.
- * v0.1.2 deploys apps onto project-scoped networks; managed Traefik must join
+ * OpenLander 0.1 deploys apps onto project-scoped networks; managed Traefik must join
  * those networks to route Docker-provider traffic.
  *
  * @param docker - Docker instance

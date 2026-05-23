@@ -26,6 +26,8 @@ describe('deploy MCP guidance', () => {
       project_id: 'app',
       kind: 'git',
       source: 'git',
+      repo_url: 'https://github.com/acme/app',
+      image_url: null,
       status: 'running',
     };
     const ctx = {
@@ -97,6 +99,8 @@ describe('deploy MCP guidance', () => {
       project_id: 'app',
       kind: 'git',
       source: 'git',
+      repo_url: 'https://github.com/acme/app',
+      image_url: null,
       status: 'running',
     };
     const ctx = {
@@ -152,6 +156,8 @@ describe('deploy MCP guidance', () => {
         project_id: 'app',
         kind: 'git',
         source: 'git',
+        repo_url: 'https://github.com/acme/app',
+        image_url: null,
         status: 'running',
       },
       {
@@ -160,6 +166,8 @@ describe('deploy MCP guidance', () => {
         project_id: 'app',
         kind: 'git',
         source: 'git',
+        repo_url: 'https://github.com/acme/app',
+        image_url: null,
         status: 'running',
       },
     ];

@@ -13,6 +13,7 @@ import {
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { getRedeploySourceMissingError } from '../../pipeline/redeploy-source.js';
 import {
   buildDeployLockedResponse,
   buildPolicyRejectionResponse,
@@ -315,6 +316,23 @@ export async function runDeployableServiceAction(
   const policyRejection = await tryRejectIfNotMutable(runtimeProject, context);
   if (policyRejection) {
     return policyRejection;
+  }
+
+  const sourceMissingError = getRedeploySourceMissingError(service);
+  if (sourceMissingError) {
+    return {
+      status: 'blocked',
+      ...sourceMissingError.toJSON(),
+      service: serviceSummary(service, project),
+      _agent_guidance: {
+        message:
+          'This service has no reproducible deploy source, so redeploy/restart was not started and the existing container was left untouched.',
+        next_steps: [
+          'Use the web UI to inspect the live container before making changes.',
+          'Create a new deployable service from GitHub or an image if you need a reproducible redeploy path.',
+        ],
+      },
+    };
   }
 
   if (action === 'redeploy_app' && strategy === 'blue-green') {

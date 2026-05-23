@@ -490,7 +490,7 @@ describe('MCP service tools (Task 8)', () => {
       _agent_guidance: {
         networking: [
           'Managed services created through MCP are project-scoped and attached only to their project Docker network.',
-          'Create app databases/caches in the same project as the app that uses them. Cross-project shared services are not exposed in v0.1.2.',
+          'Create app databases/caches in the same project as the app that uses them. Cross-project shared services are not exposed in OpenLander 0.1.',
           'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
         ],
       },

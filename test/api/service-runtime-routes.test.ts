@@ -269,6 +269,29 @@ describe('createServiceRuntimeRoutes', () => {
     });
   });
 
+  it('rejects image services without image_url before marking the project building', async () => {
+    const { app, db, pipeline, service, runtime } = makeRuntimeContext();
+    service.kind = 'image';
+    service.source = 'image';
+    service.repo_url = null;
+    service.image_url = null;
+
+    const res = await app.request('/api/projects/group-1/services/api__svc/deploy?strategy=force', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ no_cache: true }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(db.updateProject).not.toHaveBeenCalledWith(runtime.id, { status: 'building' });
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    await expect(res.json()).resolves.toMatchObject({
+      success: false,
+      code: 'SERVICE_SOURCE_MISSING',
+      details: { missingField: 'image_url', source: 'image' },
+    });
+  });
+
   it('does not pre-mark blue-green deploys as building before pipeline validation', async () => {
     const { app, db, pipeline, runtime } = makeRuntimeContext();
 

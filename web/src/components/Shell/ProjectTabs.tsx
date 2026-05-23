@@ -75,8 +75,9 @@ export function ProjectTabs<Id extends string>({
       onKeyDown={onKeyDown}
       className={cn(
         'flex items-center gap-1 border-b border-[color:var(--ol-border-subtle)] px-4',
-        // Mobile: horizontal scroll with hidden scrollbar so all tabs reach
-        'overflow-x-auto scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+        // Mobile: horizontal scroll with a visible thin scrollbar so clipped
+        // tabs are discoverable on narrow screens.
+        'overflow-x-auto scroll-smooth pb-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5',
         className,
       )}
     >

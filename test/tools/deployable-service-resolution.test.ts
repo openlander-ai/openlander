@@ -5,7 +5,11 @@ import { OpenLanderError } from '../../src/errors.js';
 import { createSharedToolRegistry } from './shared-tool-registry.js';
 
 function createDuplicateServiceContext(
-  options: { traefikMode?: 'managed' | 'external' } = {},
+  options: {
+    traefikMode?: 'managed' | 'external';
+    alphaService?: Record<string, unknown>;
+    betaService?: Record<string, unknown>;
+  } = {},
 ): AppContext {
   const alpha = { id: 'alpha', name: 'alpha', status: 'running', archived_at: null };
   const beta = { id: 'beta', name: 'beta', status: 'running', archived_at: null };
@@ -15,6 +19,9 @@ function createDuplicateServiceContext(
     project_id: alpha.id,
     kind: 'git',
     source: 'git',
+    repo_url: 'https://github.com/acme/alpha.git',
+    image_url: null,
+    ...options.alphaService,
   };
   const betaService = {
     id: 'beta__svc',
@@ -22,6 +29,9 @@ function createDuplicateServiceContext(
     project_id: beta.id,
     kind: 'git',
     source: 'git',
+    repo_url: 'https://github.com/acme/beta.git',
+    image_url: null,
+    ...options.betaService,
   };
   const projects = new Map([
     [alpha.id, alpha],
@@ -103,6 +113,8 @@ function createMultiDeployableProjectContext(): AppContext {
     project_id: alpha.id,
     kind: 'git',
     source: 'git',
+    repo_url: 'https://github.com/acme/alpha-api.git',
+    image_url: null,
   };
   const alphaWeb = {
     id: 'alpha-web__svc',
@@ -110,6 +122,8 @@ function createMultiDeployableProjectContext(): AppContext {
     project_id: alpha.id,
     kind: 'git',
     source: 'git',
+    repo_url: 'https://github.com/acme/alpha-web.git',
+    image_url: null,
   };
   const services = [alphaApi, alphaWeb];
 
@@ -201,9 +215,7 @@ describe('deployable service target resolution', () => {
 
   it('blocks unsupported blue-green redeploys before acquiring a deploy lock', async () => {
     const ctx = createDuplicateServiceContext();
-    (
-      ctx.pipeline.getBlueGreenEligibility as ReturnType<typeof vi.fn>
-    ).mockResolvedValueOnce({
+    (ctx.pipeline.getBlueGreenEligibility as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       supported: false,
       code: 'BLUE_GREEN_UNSUPPORTED',
       reasons: ['Compose stacks are not eligible for blue-green deploys in v0.1.3.'],
@@ -223,6 +235,29 @@ describe('deployable service target resolution', () => {
         tool: 'openlander_service',
         action: 'redeploy_app',
         params: { service_id: 'alpha__svc', strategy: 'force' },
+      },
+    });
+    expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
+    expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+  });
+
+  it('blocks image/manual-restore redeploys without an image source before acquiring a deploy lock', async () => {
+    const ctx = createDuplicateServiceContext({
+      alphaService: { kind: 'image', source: 'image', repo_url: null, image_url: null },
+    });
+
+    const result = await getTool(ctx, 'redeploy_app').execute(
+      { service_id: 'alpha__svc' },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      code: 'SERVICE_SOURCE_MISSING',
+      details: { missingField: 'image_url', source: 'image' },
+      service: { id: 'alpha__svc', projectId: 'alpha' },
+      _agent_guidance: {
+        message: expect.stringContaining('existing container was left untouched'),
       },
     });
     expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();

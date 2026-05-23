@@ -19,6 +19,7 @@ import {
 } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import type { LifecycleAction } from '../../pipeline/mutation-policy.js';
+import { getRedeploySourceMissingError } from '../../pipeline/redeploy-source.js';
 import { resolveEnvironmentByType } from './helpers/project-helpers.js';
 import {
   assertProjectLifecycleMutableForRoute,
@@ -349,11 +350,9 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
         health_check_path?: string;
       }>()
       .catch(() => ({ env_vars: undefined, no_cache: undefined, health_check_path: undefined }));
-    if (service.source === 'git' && !service.repo_url) {
-      return c.json(
-        { success: false, error: 'SERVICE_SOURCE_MISSING', code: 'SERVICE_SOURCE_MISSING' },
-        400,
-      );
+    const sourceMissingError = getRedeploySourceMissingError(service);
+    if (sourceMissingError) {
+      return c.json({ success: false, ...sourceMissingError.toJSON() }, 400);
     }
     if (strategy === 'blue-green') {
       const eligibility = await ctx.pipeline.getBlueGreenEligibility(runtimeProject.id, {

@@ -301,6 +301,7 @@ export const infraToolDefs: ToolDef[] = [
           next_steps: [
             'No redeploy is required; domain routing is dynamic.',
             'DNS, Cloudflare Tunnel, ngrok, reverse proxy, and TLS must be configured outside OpenLander in v0.1.',
+            'If this hostname is served through Cloudflare Zero Trust Tunnel, add the same hostname as a Public Hostname in the Cloudflare dashboard and point it at the OpenLander Traefik entrypoint.',
             'Wait a few seconds for Traefik to poll /api/traefik/config before probing the domain.',
             'Do not use Docker labels to verify custom domains; Docker labels only show automatic localhost routes.',
             'If OTHER services reference this service in NEXT_PUBLIC_* env vars (client-side/browser), update those vars to the new public URL and redeploy those services.',

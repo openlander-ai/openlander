@@ -1,7 +1,7 @@
 import type { Database } from '../db/index.js';
-import { ServiceSourceMissingError } from '../errors.js';
 import { validateStoredConfig } from './config-snapshot.js';
 import type { ProjectConfig } from './deploy-core.js';
+import { getRedeploySourceMissingError } from './redeploy-source.js';
 
 export interface BuildDeployConfigParams {
   projectId: string;
@@ -60,8 +60,14 @@ export async function buildDeployConfig(params: BuildDeployConfigParams): Promis
   const assignedPort = deployable?.assigned_port ?? project.assigned_port;
 
   const isCompose = buildMethod === 'compose';
-  if ((source ?? 'git') === 'git' && !repoUrl) {
-    throw new ServiceSourceMissingError(deployable?.id ?? `${projectId}__svc`);
+  const sourceMissingError = getRedeploySourceMissingError({
+    id: deployable?.id ?? `${projectId}__svc`,
+    source: source ?? 'git',
+    repo_url: repoUrl,
+    image_url: imageUrl ?? null,
+  });
+  if (sourceMissingError) {
+    throw sourceMissingError;
   }
 
   const imageCmd = parseImageCmd(imageCmdRaw ?? null);

@@ -74,9 +74,9 @@ function createMockDb(existingProject: ReturnType<typeof makeExistingProjectRow>
 
 const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
 
-function buildPipeline(db: Database): DeployPipeline {
+function buildPipeline(db: Database, docker: Docker = createMockDocker()): DeployPipeline {
   return new DeployPipeline(
-    createMockDocker(),
+    docker,
     db,
     {
       getGlobalSecrets: vi.fn().mockReturnValue({}),
@@ -200,5 +200,42 @@ describe('BUG: plan-engine deploy-lock session propagation through startDeploy',
 
     expect(deployCalls).toHaveLength(1);
     expect(deployCalls[0]?._lockSessionId).toBeUndefined();
+  });
+
+  it('rejects image/manual-restore redeploys without image_url before tearing down the live container', async () => {
+    const project = {
+      ...makeExistingProjectRow('p-manual-restore', 'manual-restore-app'),
+      source: 'image',
+      image_url: null,
+      image_tag: 'local/manual-restore-app:latest',
+    };
+    const db = createMockDb(project);
+    const docker = createMockDocker();
+    const deployable = {
+      id: 'p-manual-restore__svc',
+      project_id: 'p-manual-restore',
+      name: 'app',
+      kind: 'image',
+      source: 'image',
+      status: 'running',
+      repo_url: null,
+      image_url: null,
+      image_tag: 'local/manual-restore-app:latest',
+      assigned_port: 10001,
+    };
+    (db.getDeployableForProject as ReturnType<typeof vi.fn>).mockResolvedValue(deployable);
+    (db.getEnvironmentsByProject as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'p-manual-restore-production', type: 'production' },
+    ]);
+    const pipeline = buildPipeline(db, docker);
+
+    await expect(pipeline.redeploy('p-manual-restore')).rejects.toMatchObject({
+      code: 'SERVICE_SOURCE_MISSING',
+      details: { missingField: 'image_url', source: 'image' },
+    });
+
+    expect(docker.safeRemoveContainer).not.toHaveBeenCalled();
+    expect(docker.removeContainer).not.toHaveBeenCalled();
+    expect(db.updateProject).not.toHaveBeenCalled();
   });
 });
