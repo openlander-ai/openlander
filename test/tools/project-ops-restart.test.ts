@@ -24,6 +24,8 @@ function createContext() {
     project_id: project.id,
     kind: 'git',
     source: 'git',
+    repo_url: 'https://github.com/acme/demo-app',
+    image_url: null,
   };
 
   const stop = vi.fn(async () => undefined);

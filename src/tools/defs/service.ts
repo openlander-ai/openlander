@@ -252,7 +252,7 @@ async function resolveCreateServiceScope(
       _agent_guidance: {
         next_steps: [
           'Call openlander_project.list_projects to get a project id, then retry create_service with project_id.',
-          'Create app databases/caches inside the target project. Cross-project shared services are not exposed in v0.1.2.',
+          'Create app databases/caches inside the target project. Cross-project shared services are not exposed in OpenLander 0.1.',
         ],
       },
     },
@@ -467,7 +467,7 @@ export const serviceToolDefs: ToolDef[] = [
           _agent_guidance: {
             networking: [
               'Managed services created through MCP are project-scoped and attached only to their project Docker network.',
-              'Create app databases/caches in the same project as the app that uses them. Cross-project shared services are not exposed in v0.1.2.',
+              'Create app databases/caches in the same project as the app that uses them. Cross-project shared services are not exposed in OpenLander 0.1.',
               'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
             ],
           },
@@ -709,7 +709,7 @@ export const serviceToolDefs: ToolDef[] = [
         _agent_guidance: {
           networking: [
             'Managed services are attached to their project Docker network.',
-            'Use project services as the app database/cache path. Cross-project shared services are not exposed in v0.1.2.',
+            'Use project services as the app database/cache path. Cross-project shared services are not exposed in OpenLander 0.1.',
             'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
           ],
         },

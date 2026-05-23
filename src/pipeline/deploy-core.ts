@@ -1879,6 +1879,20 @@ export class DeployPipeline {
       const redeployImageTag = redeployDeployable?.image_tag ?? project.image_tag;
       const redeploySource = redeployDeployable?.source ?? project.source;
       const redeployAssignedPort = redeployDeployable?.assigned_port ?? project.assigned_port;
+      const previousPort = redeployAssignedPort ?? undefined;
+      const config = await buildDeployConfig({
+        projectId,
+        runtimeOverrides: {
+          _projectId: projectId,
+          _preferredPort: previousPort,
+          _lockSessionId: lockSession,
+          _noCacheBuild: redeploySource === 'image' ? true : options?.noCache,
+          environment: 'production',
+          trigger: options?.trigger,
+          ...(options?.cmd && { imageCmd: options.cmd }),
+        },
+        db: this.db,
+      });
       const currentRunningTag = redeployImageTag;
       let redeployPreviousTag: string | null = currentRunningTag ?? null;
       if (redeploySource !== 'image' && currentRunningTag) {
@@ -1907,8 +1921,6 @@ export class DeployPipeline {
 
       await this.db.updateProject(projectId, { previousImageTag: redeployPreviousTag });
 
-      const previousPort = redeployAssignedPort ?? undefined;
-
       await this.transitionProjectState(projectId, 'building', 'deploy-started', {
         containerId: null,
         imageTag: null,
@@ -1924,20 +1936,6 @@ export class DeployPipeline {
         });
       }
       this.jobManager?.trackJob(projectId, project.name);
-
-      const config = await buildDeployConfig({
-        projectId,
-        runtimeOverrides: {
-          _projectId: projectId,
-          _preferredPort: previousPort,
-          _lockSessionId: lockSession,
-          _noCacheBuild: redeploySource === 'image' ? true : options?.noCache,
-          environment: 'production',
-          trigger: options?.trigger,
-          ...(options?.cmd && { imageCmd: options.cmd }),
-        },
-        db: this.db,
-      });
 
       return await this.deploy(config);
     });

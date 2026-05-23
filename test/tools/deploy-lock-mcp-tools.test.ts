@@ -11,6 +11,8 @@ function createLockedContext(): AppContext {
     project_id: project.id,
     kind: 'git',
     source: 'git',
+    repo_url: 'https://github.com/test/locked-app',
+    image_url: null,
   };
   return {
     db: {
@@ -64,6 +66,8 @@ function createMemoryLockedContext(): AppContext {
     project_id: project.id,
     kind: 'git',
     source: 'git',
+    repo_url: 'https://github.com/test/locked-app',
+    image_url: null,
   };
   return {
     db: {

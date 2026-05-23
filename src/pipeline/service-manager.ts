@@ -317,7 +317,7 @@ export class ServiceManager {
    * Reconcile existing service containers to their owner network.
    * Project services use the project network. Orphan/internal managed services
    * stay on the shared OpenLander network. This keeps startup repair aligned
-   * with the v0.1.2 network-isolation model.
+   * with the OpenLander 0.1 network-isolation model.
    */
   async reconcileServiceNetworks(): Promise<void> {
     const services = await this.db.listServices();
