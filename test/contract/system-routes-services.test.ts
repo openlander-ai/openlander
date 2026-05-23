@@ -270,6 +270,31 @@ describe('system-routes /api/services wire shape contract', () => {
     expect(mockCtx.serviceManager.remove).toHaveBeenCalledWith('svc-pg');
   });
 
+  it('DELETE /services/:id keeps sibling errors on the typed error envelope', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+
+    const mockCtx = {
+      serviceManager: {
+        remove: vi.fn().mockRejectedValue(new Error('Service not found: svc-missing')),
+      },
+      db: {},
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services/svc-missing', { method: 'DELETE' });
+
+    expect(res.status).toBe(404);
+    await expect(res.json()).resolves.toEqual({
+      error: 'NOT_FOUND',
+      code: 'NOT_FOUND',
+      message: 'Service not found: svc-missing',
+    });
+    expect(mockCtx.serviceManager.remove).toHaveBeenCalledWith('svc-missing');
+  });
+
   it('GET /services: kind=postgres + type=NULL → wire emits postgresql (CCG regression)', async () => {
     const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
     const app = new Hono();

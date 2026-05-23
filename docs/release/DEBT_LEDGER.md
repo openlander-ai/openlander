@@ -3,6 +3,25 @@
 Small compatibility or vocabulary decisions that were intentionally accepted for
 a release should be recorded here so follow-up work is explicit.
 
+## v0.1.4
+
+- **Managed service delete conflict REST contract:** `DELETE /api/services/:id`
+  returns HTTP 409 with `{ error, code, message, connected_projects }` when a
+  managed service is still referenced by projects.
+- **Why accepted:** the web UI needs a direct project list to block destructive
+  deletes and tell the operator what must be disconnected first. MCP keeps the
+  `remove_service force=true` escape hatch; web REST does not expose force
+  delete in v0.1.4.
+- **Vocab review:** `connected_projects` means project groups that currently
+  reference the managed service; the field intentionally stays top-level rather
+  than nested in `details` for simple UI consumption.
+- **Envelope review:** route-local `NOT_FOUND` and `INTERNAL_ERROR` delete
+  failures also include `code` so sibling responses match the typed-error
+  `{ error, code, message }` envelope.
+- **Follow-up:** if REST errors are normalized in v0.2, decide whether to keep
+  both `error` and `code` or migrate public clients to a single machine-readable
+  field.
+
 ## v0.1.3
 
 - **Conditional blue-green deploy green-identity proof:** v0.1.3 treats
