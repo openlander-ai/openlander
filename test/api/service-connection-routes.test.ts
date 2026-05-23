@@ -247,7 +247,7 @@ describe('createServiceConnectionRoutes', () => {
     ]);
   });
 
-  it('redirects legacy service detail aliases to canonical project service paths', async () => {
+  it('redirects legacy deployable detail aliases to canonical project service paths', async () => {
     const project = makeProjectRow();
     const db = {
       getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
@@ -256,11 +256,8 @@ describe('createServiceConnectionRoutes', () => {
     const app = createApp({ db } as Partial<AppContext>);
 
     const serviceRes = await app.request('/api/services/group-1', { redirect: 'manual' });
-    const managedRes = await app.request('/api/managed-services/svc-pg', { redirect: 'manual' });
 
     expect(serviceRes.status).toBe(308);
     expect(serviceRes.headers.get('location')).toBe('/api/projects/group-1/services/group-1');
-    expect(managedRes.status).toBe(308);
-    expect(managedRes.headers.get('location')).toBe('/api/projects/svc-pg/services/svc-pg');
   });
 });

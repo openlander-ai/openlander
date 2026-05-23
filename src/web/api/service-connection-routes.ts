@@ -161,13 +161,6 @@ export function createServiceConnectionRoutes(ctx: AppContext): Hono {
     await next();
   });
 
-  api.get('/managed-services/:id', async (c) => {
-    const id = c.req.param('id');
-    const project = (await ctx.db.getProject(id)) ?? (await ctx.db.getProjectByName(id));
-    const projectId = project?.id ?? id;
-    return c.redirect(`/api/projects/${projectId}/services/${id}`, 308);
-  });
-
   api.get('/projects/:p/managed-services', async (c) => {
     const projectId = c.req.param('p');
     const project =

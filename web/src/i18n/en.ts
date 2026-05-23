@@ -686,44 +686,6 @@ export const translations = {
     },
   },
   services: {
-    title: 'Managed Services',
-    createService: 'Create with Agent',
-    subtitle:
-      'Managed services are databases, caches, and shared infrastructure. Apps connect to them through env vars.',
-    mcpHint:
-      'Use openlander_managed_service for provisioning and credentials, then set env vars on a deployable service.',
-    projectScoped: {
-      title: 'Project services',
-      description:
-        'Attached to a project group. This is the default path for app databases and caches.',
-    },
-    global: {
-      title: 'Global services',
-      description:
-        'Shared or unassigned infrastructure. Create these only when a service is intentionally reused across projects.',
-    },
-    scope: {
-      globalHint: 'Global / unassigned',
-      attachedToProject: 'Attached to {project}',
-    },
-    noServices: 'No services running',
-    getStarted: 'Create a service from a template or run any Docker image.',
-    templates: 'Quick Start Templates',
-    customImage: 'Custom Docker Image',
-    imagePlaceholder: 'ghcr.io/berriai/litellm:latest',
-    orCustom: 'Or run any Docker image:',
-    createdAgo: '{time} ago',
-    updatedAgo: 'Updated {time} ago',
-    metrics: {
-      health: 'Health',
-      uptime: 'Uptime',
-      restarts: 'Restarts',
-    },
-    health: {
-      healthy: 'Healthy',
-      unhealthy: 'Unhealthy',
-      starting: 'Starting',
-    },
     status: {
       running: 'Running',
       stopped: 'Stopped',

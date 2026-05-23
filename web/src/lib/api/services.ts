@@ -60,8 +60,8 @@ export interface ProjectManagedService {
 
 /**
  * Legacy global services list — backed by today's managed-only handler.
- * Prefer `managedServices.list()` (`/api/managed-services`) once P2 ships
- * the canonical alias; this helper stays for backward-compat through 1.x.
+ * Legacy global managed-service list. Project-scoped infrastructure cards
+ * should use `managedServices.listForGroup(groupId)`.
  */
 export async function getServices(): Promise<Service[]> {
   return apiGet<Service[]>('/api/services');
@@ -77,7 +77,7 @@ export async function getService(id: string): Promise<Service> {
   return apiGet<Service>(`/api/services/${id}`);
 }
 
-// ─── 1.0-rc.2: managed-services namespace ─────────────────────────────────
+// ─── 1.0-rc.2: infrastructure-service namespace ───────────────────────────
 //
 // Per ralplan-data-model-full-migration §6.8: managed-service helpers
 // split into a dedicated namespace so the deployable-vocab `getService(id)`

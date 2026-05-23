@@ -133,9 +133,8 @@ export function ServiceDetailV2() {
   // Canonical (rc.1+):  /projects/:p/services/:s        → params { p, s }
   // Infrastructure:     /projects/:p/infrastructure/:id → params { p, id }
   // Legacy   (rc.0):    /services/:id?project=:p        → params { id }
-  // Legacy managed:     /managed-services/:id           → params { id }
   //
-  // The `id` field covers both legacy shapes; `s` covers canonical.
+  // The `id` field covers legacy deployables and infrastructure; `s` covers canonical.
   // rc.2 will deprecate the legacy deployable URL once all internal
   // callers emit `/projects/:p/services/:s`.
   const { id, p, s } = useParams<{ id?: string; p?: string; s?: string }>();
@@ -143,17 +142,6 @@ export function ServiceDetailV2() {
 
   if (location.pathname.includes('/infrastructure/') && id) {
     return <ManagedServiceDetail key={id} id={id} routeProjectId={p ?? null} />;
-  }
-
-  // Legacy managed-service path takes priority — check by prefix before
-  // inspecting params so stale bookmarks can be replaced after load.
-  if (location.pathname.startsWith('/managed-services/') && id) {
-    // `key={id}` forces remount on managed-service navigation. Without
-    // it, React reuses the instance and ManagedServiceDetail's stale
-    // state (previous service object) would render for one commit
-    // before the id-change useEffect fires its setState — flagged by
-    // Codex CCG on PR #77.
-    return <ManagedServiceDetail key={id} id={id} routeProjectId={null} />;
   }
 
   // Canonical path: /projects/:p/services/:s
@@ -2025,7 +2013,6 @@ function ManagedServiceDetail({
 }) {
   const { t } = useLanguage();
   const navigate = useNavigate();
-  const location = useLocation();
   const [service, setService] = useState<Service | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2107,23 +2094,6 @@ function ManagedServiceDetail({
   const backLabel = owningProjectId
     ? t('services.managedDetail.backToProject')
     : t('services.managedDetail.backToProjects');
-  const canonicalPath =
-    service != null && owningProjectId != null
-      ? `/projects/${owningProjectId}/infrastructure/${service.id}`
-      : null;
-
-  useEffect(() => {
-    if (
-      !canonicalPath ||
-      location.pathname === canonicalPath ||
-      (!location.pathname.startsWith('/managed-services/') &&
-        !location.pathname.includes('/infrastructure/'))
-    ) {
-      return;
-    }
-    navigate(canonicalPath, { replace: true });
-  }, [canonicalPath, location.pathname, navigate]);
-
   if (loading) {
     return (
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
