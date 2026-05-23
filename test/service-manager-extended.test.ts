@@ -13,7 +13,7 @@ vi.mock('../src/lib/logger.js', () => ({
   createModuleLogger: vi.fn(() => mockServiceManagerLogger),
 }));
 
-import type { Database, ServiceRow } from '../src/db/index.js';
+import type { Database, ServiceConnectionRow, ServiceRow } from '../src/db/index.js';
 import { ServiceManager } from '../src/pipeline/service-manager.js';
 import { createMockDockerHarness } from './helpers/docker-mocks.js';
 
@@ -35,8 +35,9 @@ function createService(partial: Partial<ServiceRow>): ServiceRow {
     type: legacyType,
     image: partial.image ?? 'postgres:16-alpine',
     status: partial.status ?? 'running',
-    container_id: partial.container_id ?? 'svc-1-container',
-    container_name: partial.container_name ?? 'ol-svc-shared-pg',
+    container_id: partial.container_id !== undefined ? partial.container_id : 'svc-1-container',
+    container_name:
+      partial.container_name !== undefined ? partial.container_name : 'ol-svc-shared-pg',
     port: partial.port ?? 5432,
     env_vars: partial.env_vars ?? null,
     credentials:
@@ -54,6 +55,18 @@ function createService(partial: Partial<ServiceRow>): ServiceRow {
   };
 }
 
+function createServiceConnection(partial: Partial<ServiceConnectionRow>): ServiceConnectionRow {
+  return {
+    id: partial.id ?? 'conn-1',
+    service_id_consumer: partial.service_id_consumer ?? 'proj-1__svc',
+    service_id_provider: partial.service_id_provider ?? 'svc-pg',
+    environment_id: partial.environment_id ?? null,
+    auto_injected_env_keys: partial.auto_injected_env_keys ?? null,
+    created_at: partial.created_at ?? '2026-01-01T00:00:00.000Z',
+    ...partial,
+  };
+}
+
 function createDbMock(
   services: ServiceRow[],
   projects: Array<{ id: string; name: string }> = [],
@@ -61,6 +74,7 @@ function createDbMock(
     projectEnv?: Record<string, Record<string, string>>;
     serviceEnv?: Record<string, Record<string, string>>;
     deployablesByProject?: Record<string, ServiceRow[]>;
+    serviceConnections?: ServiceConnectionRow[];
   } = {},
 ): Database {
   const byId = new Map(services.map((svc) => [svc.id, svc]));
@@ -75,6 +89,11 @@ function createDbMock(
     getEnvironmentsByProject: vi.fn(() => []),
     getDeployablesByGroup: vi.fn(
       (projectId: string) => opts.deployablesByProject?.[projectId] ?? [],
+    ),
+    listServiceConsumersForProvider: vi.fn((serviceId: string) =>
+      (opts.serviceConnections ?? []).filter(
+        (connection) => connection.service_id_provider === serviceId,
+      ),
     ),
     recordServiceMetricSample: vi.fn(),
     updateService: vi.fn(
@@ -701,15 +720,19 @@ describe('ServiceManager remove with connected projects warning', () => {
       { id: 'proj-1', name: 'my-app' },
       { id: 'proj-2', name: 'api-server' },
     ];
-    const db = createDbMock([service], projects);
-    vi.mocked(db.getEnvVars).mockImplementation((projectId: string) => {
-      if (projectId === 'proj-1') {
-        return { DATABASE_URL: 'postgresql://ol-svc-shared-pg:5432/db' } as Record<string, string>;
-      }
-      if (projectId === 'proj-2') {
-        return { DB_HOST: 'ol-svc-shared-pg' } as Record<string, string>;
-      }
-      return {} as Record<string, string>;
+    const db = createDbMock([service], projects, {
+      serviceConnections: [
+        createServiceConnection({
+          id: 'conn-1',
+          service_id_consumer: 'proj-1__svc',
+          service_id_provider: 'svc-pg',
+        }),
+        createServiceConnection({
+          id: 'conn-2',
+          service_id_consumer: 'proj-2__svc',
+          service_id_provider: 'svc-pg',
+        }),
+      ],
     });
 
     const dockerHarness = createMockDockerHarness();
@@ -718,31 +741,25 @@ describe('ServiceManager remove with connected projects warning', () => {
     await expect(manager.remove('svc-pg')).rejects.toThrow(
       'Service "shared-pg" is referenced by 2 project(s): my-app, api-server.',
     );
+    expect(db.getEnvVars).not.toHaveBeenCalled();
     expect(db.deleteService).not.toHaveBeenCalled();
   });
 
-  it('detects connected projects through service-scoped env vars', async () => {
+  it('detects connected projects through service_connections rows', async () => {
     const database = createService({
       id: 'svc-pg',
       name: 'shared-pg',
       container_name: 'ol-svc-shared-pg',
     });
-    const deployable = createService({
-      id: 'web-svc',
-      name: 'web',
-      kind: 'git',
-      container_name: 'ol-web',
-    });
     const projects = [{ id: 'proj-1', name: 'my-app' }];
-    const db = createDbMock([database, deployable], projects);
-    vi.mocked(db.getDeployablesByGroup).mockImplementation((projectId: string) =>
-      projectId === 'proj-1' ? [deployable] : [],
-    );
-    vi.mocked(db.getEnvVarsForService).mockImplementation((projectId: string, serviceId: string) =>
-      projectId === 'proj-1' && serviceId === 'web-svc'
-        ? ({ DATABASE_URL: 'postgresql://ol-svc-shared-pg:5432/db' } as Record<string, string>)
-        : {},
-    );
+    const db = createDbMock([database], projects, {
+      serviceConnections: [
+        createServiceConnection({
+          service_id_consumer: 'proj-1__svc',
+          service_id_provider: 'svc-pg',
+        }),
+      ],
+    });
 
     const dockerHarness = createMockDockerHarness();
     const manager = new ServiceManager(dockerHarness.docker, db);
@@ -750,7 +767,35 @@ describe('ServiceManager remove with connected projects warning', () => {
     await expect(manager.remove('svc-pg')).rejects.toThrow(
       'Service "shared-pg" is referenced by 1 project(s): my-app.',
     );
+    expect(db.listServiceConsumersForProvider).toHaveBeenCalledWith('svc-pg');
+    expect(db.getEnvVars).not.toHaveBeenCalled();
+    expect(db.getEnvVarsForService).not.toHaveBeenCalled();
     expect(db.deleteService).not.toHaveBeenCalled();
+  });
+
+  it('does not infer connected projects from env substrings without service_connections rows', async () => {
+    const database = createService({
+      id: 'svc-pg',
+      name: 'shared-pg',
+      container_name: 'ol-svc-shared-pg',
+    });
+    const deployable = createService({
+      id: 'proj-1__svc',
+      name: 'web',
+      kind: 'git',
+      container_name: 'ol-web',
+    });
+    const db = createDbMock([database, deployable], [{ id: 'proj-1', name: 'my-app' }], {
+      projectEnv: { 'proj-1': { DATABASE_URL: 'postgresql://ol-svc-shared-pg:5432/db' } },
+      deployablesByProject: { 'proj-1': [deployable] },
+    });
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    await expect(manager.getConnectedProjects('svc-pg')).resolves.toEqual([]);
+    expect(db.listServiceConsumersForProvider).toHaveBeenCalledWith('svc-pg');
+    expect(db.getEnvVars).not.toHaveBeenCalled();
+    expect(db.getDeployablesByGroup).not.toHaveBeenCalled();
   });
 
   it('remove() returns no warning when service has no connected projects', async () => {
@@ -767,7 +812,27 @@ describe('ServiceManager remove with connected projects warning', () => {
 
     expect(result.warning).toBeUndefined();
     expect(result.connected_projects).toBeUndefined();
+    expect(db.listServiceConsumersForProvider).toHaveBeenCalledWith('svc-redis');
     expect(db.deleteService).toHaveBeenCalledWith('svc-redis');
+  });
+
+  it('remove() skips Docker container operations when a service row has no container identity', async () => {
+    const service = createService({
+      id: 'svc-orphan',
+      name: 'orphan',
+      container_id: null,
+      container_name: null,
+    });
+    const db = createDbMock([service], []);
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    await expect(manager.remove('svc-orphan')).resolves.toEqual({});
+
+    expect(dockerHarness.docker.stopContainer).not.toHaveBeenCalled();
+    expect(dockerHarness.docker.safeRemoveContainer).not.toHaveBeenCalled();
+    expect(dockerHarness.docker.removeVolume).toHaveBeenCalledWith('ol-svc-data-orphan');
+    expect(db.deleteService).toHaveBeenCalledWith('svc-orphan');
   });
 });
 
@@ -805,8 +870,14 @@ describe('ServiceManager typed error contract (Day 8 Bug #6)', () => {
       name: 'shared-pg',
       container_name: 'ol-svc-shared-pg',
     });
-    const db = createDbMock([service], [{ id: 'proj-1', name: 'my-app' }]);
-    db.getEnvVars = vi.fn(() => ({ DATABASE_URL: 'postgresql://ol-svc-shared-pg:5432/db' }));
+    const db = createDbMock([service], [{ id: 'proj-1', name: 'my-app' }], {
+      serviceConnections: [
+        createServiceConnection({
+          service_id_consumer: 'proj-1__svc',
+          service_id_provider: 'svc-pg',
+        }),
+      ],
+    });
 
     const dockerHarness = createMockDockerHarness();
     const manager = new ServiceManager(dockerHarness.docker, db);

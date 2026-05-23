@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 
 import type { AppContext } from '../src/app.js';
 import { Database } from '../src/db/index.js';
+import { ServiceNotFoundError } from '../src/errors.js';
 import { eventBus } from '../src/events/index.js';
 import { createApiRoutes } from '../src/web/api/routes.js';
 import { createMockContext } from './helpers/web-route-mocks.js';
@@ -779,7 +780,7 @@ describe.skip('Web API Routes — legacy monolith superseded by focused route su
 
   it('GET /api/services/:id returns 404 when service does not exist', async () => {
     (ctx.serviceManager.getDetail as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-      new Error('Service not found: missing-svc'),
+      new ServiceNotFoundError('missing-svc'),
     );
 
     const res = await app.request('/api/services/missing-svc');
@@ -824,7 +825,7 @@ describe.skip('Web API Routes — legacy monolith superseded by focused route su
 
   it('GET /api/services/:id/stats returns 404 when service does not exist', async () => {
     (ctx.serviceManager.getStats as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-      new Error('Service not found: missing-svc'),
+      new ServiceNotFoundError('missing-svc'),
     );
 
     const res = await app.request('/api/services/missing-svc/stats');
@@ -850,7 +851,7 @@ describe.skip('Web API Routes — legacy monolith superseded by focused route su
 
   it('GET /api/services/:id/databases returns 404 when service does not exist', async () => {
     (ctx.serviceManager.listDatabases as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-      new Error('Service not found: missing-svc'),
+      new ServiceNotFoundError('missing-svc'),
     );
 
     const res = await app.request('/api/services/missing-svc/databases');
@@ -990,7 +991,7 @@ describe.skip('Web API Routes — legacy monolith superseded by focused route su
 
   it('POST /api/services/:id/users returns 404 when service does not exist', async () => {
     (ctx.serviceManager.createUser as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-      new Error('Service not found: missing-svc'),
+      new ServiceNotFoundError('missing-svc'),
     );
 
     const res = await app.request('/api/services/missing-svc/users', {
