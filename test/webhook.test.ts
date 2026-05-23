@@ -431,7 +431,7 @@ describe('webhook push environment routing', () => {
 
     expect(result.accepted).toBe(true);
     expect(deployEnvironment).not.toHaveBeenCalled();
-    expect(redeploy).toHaveBeenCalledWith('project-1');
+    expect(redeploy).toHaveBeenCalledWith('project-1', { trigger: 'webhook' });
   });
 
   it('preserves branch filter behavior when no environment matches', async () => {
@@ -646,7 +646,7 @@ describe('webhook deploy:start ordering (Day 8 Bug #4)', () => {
     );
 
     expect(result.accepted).toBe(true);
-    expect(redeploy).toHaveBeenCalledWith('project-1');
+    expect(redeploy).toHaveBeenCalledWith('project-1', { trigger: 'webhook' });
     const startEmits = emit.mock.calls.filter(([eventName]) => eventName === 'deploy:start');
     expect(startEmits).toHaveLength(0);
   });

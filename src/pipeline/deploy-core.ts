@@ -2558,6 +2558,7 @@ export class DeployPipeline {
     projectId: string,
     environmentId?: string,
     lockSessionId?: string,
+    trigger: 'chat' | 'webhook' | 'api' = 'api',
   ): Promise<DeployResult> {
     const project = await this.db.getProject(projectId);
     if (!project) {
@@ -2571,7 +2572,7 @@ export class DeployPipeline {
 
     const lockSession = lockSessionId ?? nanoid(12);
     return withDeployLock(this.db, { projectId, sessionId: lockSession }, () =>
-      this.rollbackExecutor.rollbackToImage(projectId, environmentId),
+      this.rollbackExecutor.rollbackToImage(projectId, environmentId, trigger),
     );
   }
 

@@ -351,7 +351,7 @@ describe('Tool Registry', () => {
       },
       { target: 'agent' },
     );
-    expect(pipeline.redeploy).toHaveBeenCalledWith('p1');
+    expect(pipeline.redeploy).toHaveBeenCalledWith('p1', { trigger: 'chat' });
     expect(applied).toEqual({
       status: 'updated_and_redeployed',
       project: 'my-app',

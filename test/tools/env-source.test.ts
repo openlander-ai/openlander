@@ -149,6 +149,25 @@ describe('env MCP tools', () => {
     });
   });
 
+  it('set_env_vars immediate redeploy preserves MCP trigger attribution', async () => {
+    const { ctx, pipeline } = createEnvToolContext();
+
+    const result = await getEnvTool('set_env_vars').execute(
+      {
+        project_name: 'my-app',
+        variables: { DATABASE_URL: 'postgres://applied' },
+        defer_redeploy: false,
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(pipeline.redeploy).toHaveBeenCalledWith('p1', { trigger: 'chat' });
+    expect(result).toMatchObject({
+      status: 'updated_and_redeployed',
+      needs_redeploy: false,
+    });
+  });
+
   it('export_env_vars returns dotenv text and records an audit activity', async () => {
     const { ctx, db } = createEnvToolContext();
 

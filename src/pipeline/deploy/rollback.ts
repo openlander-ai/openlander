@@ -32,6 +32,7 @@ type RollbackTarget =
   | { project: ProjectRow; environment: EnvironmentRow }
   | { project: ProjectRow; environment?: undefined };
 type ProjectDeployable = Awaited<ReturnType<Database['getDeployableForProject']>>;
+type DeployTrigger = 'chat' | 'webhook' | 'api';
 
 function createFallbackStateManager(db: Database): {
   transition: (
@@ -74,7 +75,11 @@ export class RollbackExecutor {
     ) => Promise<boolean>;
   };
 
-  async rollbackToImage(projectId: string, environmentId?: string): Promise<RollbackResult> {
+  async rollbackToImage(
+    projectId: string,
+    environmentId?: string,
+    trigger: DeployTrigger = 'api',
+  ): Promise<RollbackResult> {
     const startTime = Date.now();
     const project = await this.db.getProject(projectId);
     if (!project) {
@@ -199,7 +204,7 @@ export class RollbackExecutor {
         projectId,
         environmentId: productionEnvironment?.id,
         status: 'success',
-        trigger: 'api',
+        trigger,
         commitMessage: undefined,
         buildLog: `[rollback] ${currentImageTag} → ${rollbackImageTag}\n`,
         durationMs: totalDuration,
