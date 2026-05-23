@@ -52,7 +52,7 @@ export function getAgentGuideContent(
           },
           {
             text: `Add a PostgreSQL managed service, then wire DATABASE_URL into project ${projectName}.`,
-            hint: 'Managed services are infrastructure; the agent provisions one, sets env vars on the deployable service, then redeploys.',
+            hint: 'Infrastructure services are provisioned by the agent, then wired into deployable services through env vars.',
           },
           {
             text: `Connect the existing redis-prod managed service to the deployable service in ${projectName}.`,
@@ -62,7 +62,7 @@ export function getAgentGuideContent(
     case 'add-managed-db':
       return {
         heading: 'Tell your agent what to provision',
-        lead: 'Managed services are databases, caches, and shared infrastructure. They are provisioned first, then wired into deployable services as env vars.',
+        lead: 'Infrastructure services are databases, caches, and shared resources. They are provisioned first, then wired into deployable services as env vars.',
         prompts: [
           {
             text: 'Provision a managed postgres named cache.',
@@ -72,7 +72,7 @@ export function getAgentGuideContent(
             text: 'Provision a managed redis named sessions, then wire it into my app as `REDIS_URL`.',
           },
           {
-            text: 'List existing managed services and tell me which ones are unwired.',
+            text: 'List existing infrastructure services and tell me which ones are unwired.',
           },
         ],
       };

@@ -118,11 +118,11 @@ describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () =
     ]);
   });
 
-  it('App.tsx exposes deployable, infrastructure, and legacy managed-service routes', () => {
+  it('App.tsx exposes deployable and project-scoped infrastructure routes', () => {
     const source = readFileSync(resolve(REPO_ROOT, 'web', 'src', 'App.tsx'), 'utf8');
     expect(/<Route\s+path="\/services\/:id"/.test(source)).toBe(true);
     expect(/<Route\s+path="\/projects\/:p\/infrastructure\/:id"/.test(source)).toBe(true);
-    expect(/<Route\s+path="\/managed-services\/:id"/.test(source)).toBe(true);
+    expect(/<Route\s+path="\/managed-services/.test(source)).toBe(false);
     expect(/path="\/services"\s+element=\{<Navigate\s+to="\/projects"/.test(source)).toBe(true);
   });
 

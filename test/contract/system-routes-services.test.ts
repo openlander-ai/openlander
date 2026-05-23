@@ -6,8 +6,8 @@
  * populated from canonical ServiceRow fields after migration 0012 Phase C
  * drops the storage columns.
  *
- * This test pins the wire contract so the frontend (ServicesPage.tsx,
- * ServiceDetailV2.tsx, ServiceConnectionTab.tsx) continues to receive
+ * This test pins the wire contract so the frontend (ServiceDetailV2.tsx,
+ * ServiceConnectionTab.tsx) continues to receive
  * the shape it expects through 1.x.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';

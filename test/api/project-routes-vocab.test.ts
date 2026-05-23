@@ -54,8 +54,8 @@ describe('project-routes vocabulary aliases (rc.1)', () => {
     expect(legacyRes.status).toBe(200);
     expect(canonicalRes.status).toBe(200);
 
-    const legacy = await legacyRes.json() as Record<string, unknown>;
-    const canonical = await canonicalRes.json() as Record<string, unknown>;
+    const legacy = (await legacyRes.json()) as Record<string, unknown>;
+    const canonical = (await canonicalRes.json()) as Record<string, unknown>;
 
     expect(canonical).toHaveProperty('id', legacy['id']);
     expect(canonical).toHaveProperty('name', legacy['name']);
@@ -81,15 +81,13 @@ describe('project-routes vocabulary aliases (rc.1)', () => {
 
   it('GET /projects/:id/env and GET /projects/:p/services/:s/env return same shape', async () => {
     const legacyRes = await app.request(`/api/projects/${projectId}/env`);
-    const canonicalRes = await app.request(
-      `/api/projects/${projectId}/services/${projectId}/env`,
-    );
+    const canonicalRes = await app.request(`/api/projects/${projectId}/services/${projectId}/env`);
 
     expect(legacyRes.status).toBe(200);
     expect(canonicalRes.status).toBe(200);
 
-    const legacy = await legacyRes.json() as Record<string, unknown>;
-    const canonical = await canonicalRes.json() as Record<string, unknown>;
+    const legacy = (await legacyRes.json()) as Record<string, unknown>;
+    const canonical = (await canonicalRes.json()) as Record<string, unknown>;
 
     expect(canonical).toHaveProperty('project', legacy['project']);
     expect(canonical).toHaveProperty('envVars');
@@ -119,8 +117,8 @@ describe('project-routes vocabulary aliases (rc.1)', () => {
     expect(legacyRes.status).toBe(200);
     expect(canonicalRes.status).toBe(200);
 
-    const legacy = await legacyRes.json() as Record<string, unknown>;
-    const canonical = await canonicalRes.json() as Record<string, unknown>;
+    const legacy = (await legacyRes.json()) as Record<string, unknown>;
+    const canonical = (await canonicalRes.json()) as Record<string, unknown>;
 
     expect(canonical).toHaveProperty('count', legacy['count']);
     expect(canonical).toHaveProperty('deployments');
@@ -160,13 +158,11 @@ describe('project-routes vocabulary aliases (rc.1)', () => {
     expect(legacyRes.status).toBe(200);
     expect(canonicalRes.status).toBe(200);
 
-    const legacy = await legacyRes.json() as Record<string, unknown>;
-    const canonical = await canonicalRes.json() as Record<string, unknown>;
+    const legacy = (await legacyRes.json()) as Record<string, unknown>;
+    const canonical = (await canonicalRes.json()) as Record<string, unknown>;
 
     expect(canonical).toHaveProperty('previews');
-    expect(Array.isArray(canonical['previews'])).toBe(
-      Array.isArray(legacy['previews']),
-    );
+    expect(Array.isArray(canonical['previews'])).toBe(Array.isArray(legacy['previews']));
   });
 
   // ---------------------------------------------------------------------------
@@ -181,16 +177,6 @@ describe('project-routes vocabulary aliases (rc.1)', () => {
     const location = res.headers.get('location');
     expect(location).toBeTruthy();
     // Redirects to a canonical /api/projects/.../services/... path
-    expect(location).toMatch(/\/api\/projects\/.+\/services\//);
-  });
-
-  it('GET /api/managed-services/:id issues 308 redirect to canonical path', async () => {
-    const res = await app.request(`/api/managed-services/some-service-id`, {
-      redirect: 'manual',
-    });
-    expect(res.status).toBe(308);
-    const location = res.headers.get('location');
-    expect(location).toBeTruthy();
     expect(location).toMatch(/\/api\/projects\/.+\/services\//);
   });
 

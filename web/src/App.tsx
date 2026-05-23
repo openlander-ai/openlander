@@ -284,17 +284,6 @@ function App() {
                       </RouteSuspense>
                     }
                   />
-                  {/* Legacy managed-service URLs are kept for bookmarks, but
-                      the global inventory page is no longer a primary surface. */}
-                  <Route path="/managed-services" element={<Navigate to="/projects" replace />} />
-                  <Route
-                    path="/managed-services/:id"
-                    element={
-                      <RouteSuspense>
-                        <ServiceDetailV2 />
-                      </RouteSuspense>
-                    }
-                  />
                   <Route path="/settings/web-server" element={<WebServerSettings />} />
                   <Route path="/settings/git-providers" element={<GitProvidersSettings />} />
                   {/* SSH Keys + Notifications are hidden in the v0.1

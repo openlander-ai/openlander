@@ -1077,7 +1077,7 @@ export class ServiceManager {
    *
    * `kindIn`: when provided, filter services BEFORE the Docker fan-out so we
    * don't waste inspect work on rows the caller will discard. Backs the
-   * /managed-services page (~10 managed rows) instead of all 30+ services
+   * managed-service API (~10 infrastructure rows) instead of all 30+ services
    * (CCG perf finding #1, Codex 2026-04-30).
    *
    * The cache is keyed on the filter so a future "all services" caller

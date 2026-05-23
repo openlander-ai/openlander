@@ -24,7 +24,7 @@ function serviceNotFoundBody(id: string): { error: 'NOT_FOUND'; message: string 
  *
  * After Phase C of migration 0012 drops `type`, `image`, `port`, `env_vars`
  * from the services table, those fields are undefined on the row. The frontend
- * still reads them for managed-service cards (ServicesPage, ServiceDetailV2,
+ * still reads them for infrastructure cards (ServiceDetailV2,
  * ServiceConnectionTab). This mapper fills the legacy fields from the canonical
  * post-0012 equivalents so the wire contract stays stable through 1.x.
  *
@@ -182,8 +182,8 @@ export function createSystemRoutes(ctx: AppContext): Hono {
 
   api.get('/services', async (c) => {
     try {
-      // /managed-services UI surface. Pass kindIn into listWithCardSummary so
-      // the Docker inspect+health fan-out only runs for the ~10 managed rows
+      // Managed-service API surface. Pass kindIn into listWithCardSummary so
+      // the Docker inspect+health fan-out only runs for the ~10 infrastructure rows
       // instead of 30+ services (the post-filter approach in v5.2 still
       // inspected every container before discarding deployables — Codex perf
       // finding #1, 2026-04-30).
