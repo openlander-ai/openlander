@@ -687,7 +687,7 @@ export const translations = {
   },
   services: {
     title: 'Managed Services',
-    createService: 'Create Service',
+    createService: 'Create with Agent',
     subtitle:
       'Managed services are databases, caches, and shared infrastructure. Apps connect to them through env vars.',
     mcpHint:
@@ -735,6 +735,49 @@ export const translations = {
       notFoundSubtitle: 'No service with id "{id}"',
       backToList: '← Back to Managed Services',
       backToListShort: '← Managed Services',
+      tabs: {
+        aria: 'Managed service sections',
+        overview: 'Overview',
+        logs: 'Logs',
+        connections: 'Connections',
+        settings: 'Settings',
+      },
+      logs: {
+        title: 'Container logs',
+        description: 'Runtime logs from the managed service container.',
+        refresh: 'Refresh',
+        loading: 'Loading…',
+        empty: 'No logs returned.',
+        error: 'Failed to load logs',
+      },
+      connections: {
+        title: 'Connected projects',
+        description: 'Projects that reference this managed service.',
+        refresh: 'Refresh',
+        loading: 'Loading…',
+        empty: 'No projects are connected to this service.',
+        openProject: 'Open project',
+      },
+      settings: {
+        lifecycle: 'Lifecycle',
+        lifecycleDescription: 'Start or stop the container without changing stored data.',
+        start: 'Start',
+        starting: 'Starting…',
+        stop: 'Stop',
+        stopping: 'Stopping…',
+        updated: 'Service state updated.',
+        actionError: 'Service action failed',
+        danger: 'Danger zone',
+        dangerDescription: 'Delete this managed service container and its persistent volume.',
+        delete: 'Delete service',
+        deleting: 'Deleting…',
+        confirmLabel: 'Type this service name to delete:',
+        confirmDelete: 'Delete permanently',
+        deleteError: 'Failed to delete service',
+        deleteBlocked:
+          'Delete is blocked because {count} project(s) still reference this service. Disconnect them first.',
+        connectionCheckFailed: 'Delete is blocked because connection status could not be verified.',
+      },
       field: {
         image: 'Image',
         port: 'Port',
@@ -850,7 +893,7 @@ export const translations = {
     },
     empty: {
       title: 'No services yet',
-      description: 'Create a database, cache, or other infrastructure service',
+      description: 'Ask your agent to create a database, cache, or other infrastructure service.',
     },
     create: {
       toasts: {
