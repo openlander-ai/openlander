@@ -65,7 +65,7 @@ describe('deployable restart_service non-blocking', () => {
     ]);
 
     expect(result).not.toBe('timeout');
-    expect(stop).toHaveBeenCalledWith('project-1');
+    expect(stop).not.toHaveBeenCalled();
     expect(redeploy).toHaveBeenCalledWith('project-1', {
       noCache: false,
       strategy: undefined,
@@ -74,6 +74,21 @@ describe('deployable restart_service non-blocking', () => {
       lockSessionId: expect.any(String),
       trigger: 'chat',
     });
+  });
+
+  it('does not stop the live container before redeploy source validation', async () => {
+    const { ctx, stop, redeploy } = createContext();
+
+    await getRestartServiceTool(ctx).execute({ service_name: 'demo-app' }, { target: 'mcp' });
+
+    expect(stop).not.toHaveBeenCalled();
+    expect(redeploy).toHaveBeenCalledWith(
+      'project-1',
+      expect.objectContaining({
+        lockSessionId: expect.any(String),
+        trigger: 'chat',
+      }),
+    );
   });
 
   it('returns status restarting with polling message', async () => {
