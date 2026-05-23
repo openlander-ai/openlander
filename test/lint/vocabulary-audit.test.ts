@@ -126,6 +126,15 @@ describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () =
     expect(/path="\/services"\s+element=\{<Navigate\s+to="\/projects"/.test(source)).toBe(true);
   });
 
+  it('frontend API does not keep a global managed-services list helper', () => {
+    const source = readFileSync(
+      resolve(REPO_ROOT, 'web', 'src', 'lib', 'api', 'services.ts'),
+      'utf8',
+    );
+    expect(/export\s+async\s+function\s+getServices/.test(source)).toBe(false);
+    expect(/managedServices\s*=\s*\{[\s\S]*?\blist\s*:/.test(source)).toBe(false);
+  });
+
   it('i18n key services.detail.header.backToServices still exists', () => {
     const en = readFileSync(resolve(REPO_ROOT, 'web', 'src', 'i18n', 'en.ts'), 'utf8');
     expect(/backToServices\s*:/.test(en)).toBe(true);
