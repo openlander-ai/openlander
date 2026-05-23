@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BRAND } from '@/lib/brand';
+import { APP_VERSION_LABEL } from '@/lib/version';
 import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useMcpStatus } from '@/hooks/use-mcp-status';
 import { useLanguage } from '@/i18n/context';
@@ -162,13 +163,12 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
       style={{ width: collapsed ? 'var(--ol-sidebar-w-collapsed)' : 'var(--ol-sidebar-w)' }}
       aria-label={t('sidebar.primaryNavAria')}
     >
-      {/* Brand chip — `OpenLander v0.1`. Replaces the bare brand wordmark and
+      {/* Brand chip — `OpenLander vX.Y.Z`. Replaces the bare brand wordmark and
           drops the legacy `self-hosted` footer per design rev3. The version
-          pin uses a stable integer font-size (11px) and lowercase to keep
-          the "v0.1" canonical form — half-pixel sizes (9.5px) plus the
-          uppercase transform produced inconsistent rendering across
-          browsers and made the pin read as a status badge instead of a
-          version stamp. */}
+          pin uses a stable integer font-size (11px) and lowercase; half-pixel
+          sizes (9.5px) plus the uppercase transform produced inconsistent
+          rendering across browsers and made the pin read as a status badge
+          instead of a version stamp. */}
       <div className="flex h-[var(--ol-topbar-h)] items-center gap-2.5 border-b border-[color:var(--ol-border-subtle)] px-4">
         <span
           aria-hidden
@@ -181,9 +181,9 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
             <span className="truncate text-[15px] font-semibold tracking-tight">{BRAND.name}</span>
             <span
               className="text-[11px] font-medium tracking-tight text-[color:var(--ol-fg-muted)]"
-              aria-label={t('sidebar.versionAria')}
+              aria-label={`${t('sidebar.versionAria')} ${APP_VERSION_LABEL}`}
             >
-              v0.1
+              {APP_VERSION_LABEL}
             </span>
           </span>
         )}
