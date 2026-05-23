@@ -3,8 +3,7 @@
  *
  * v0.1 final design lock (post-tab fold):
  *
- *   Workspace (7):  Home · Your Agent · Projects · Managed Services ·
- *                   Activity · Monitoring · Web Server
+ *   Workspace (6):  Home · Your Agent · Projects · Activity · Monitoring · Web Server
  *   Settings (1):   Git Providers
  *   Account footer: admin → popover (Change password · Sign out)
  *
@@ -21,7 +20,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Home,
   Folder,
-  Database,
   Activity,
   BarChart3,
   Server,
@@ -87,13 +85,6 @@ const SECTIONS: NavSection[] = [
         to: '/projects',
         matches: startsWith('/projects'),
         // badge filled in per-render from useProjects() — see component body
-      },
-      {
-        id: 'managed-services',
-        label: 'Managed Services',
-        icon: Database,
-        to: '/managed-services',
-        matches: startsWith('/managed-services'),
       },
       {
         id: 'activity',
