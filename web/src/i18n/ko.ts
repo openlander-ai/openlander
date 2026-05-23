@@ -850,14 +850,14 @@ export const translations = {
     },
     managedDetail: {
       // Content — error titles + subtitle.
-      notFound: '관리형 서비스를 찾을 수 없습니다',
-      loadFailed: '관리형 서비스를 불러오지 못했습니다',
+      notFound: '서비스를 찾을 수 없습니다',
+      loadFailed: '서비스를 불러오지 못했습니다',
       notFoundSubtitle: 'id "{id}"에 해당하는 서비스가 없습니다',
       // Chrome — back-navigation links.
-      backToList: '← Back to Managed Services',
-      backToListShort: '← Managed Services',
+      backToProjects: '← Back to Projects',
+      backToProject: '← Back to project',
       tabs: {
-        aria: '관리형 서비스 섹션',
+        aria: '서비스 섹션',
         overview: 'Overview',
         logs: 'Logs',
         connections: 'Connections',
@@ -865,7 +865,7 @@ export const translations = {
       },
       logs: {
         title: 'Container logs',
-        description: '관리형 서비스 컨테이너의 런타임 로그입니다.',
+        description: '서비스 컨테이너의 런타임 로그입니다.',
         refresh: 'Refresh',
         loading: 'Loading…',
         empty: '반환된 로그가 없습니다.',
@@ -873,7 +873,7 @@ export const translations = {
       },
       connections: {
         title: 'Connected projects',
-        description: '이 관리형 서비스를 참조하는 프로젝트입니다.',
+        description: '이 서비스를 참조하는 프로젝트입니다.',
         refresh: 'Refresh',
         loading: 'Loading…',
         empty: '이 서비스에 연결된 프로젝트가 없습니다.',
@@ -889,7 +889,7 @@ export const translations = {
         updated: '서비스 상태가 업데이트되었습니다.',
         actionError: '서비스 작업에 실패했습니다',
         danger: 'Danger zone',
-        dangerDescription: '이 관리형 서비스 컨테이너와 영구 볼륨을 삭제합니다.',
+        dangerDescription: '이 서비스 컨테이너와 영구 볼륨을 삭제합니다.',
         delete: 'Delete service',
         deleting: 'Deleting…',
         confirmLabel: '삭제하려면 이 서비스 이름을 입력하세요:',
@@ -902,6 +902,8 @@ export const translations = {
       // Chrome — field labels match the services.detail.overview.*
       // convention (English in both files for metric / field labels).
       field: {
+        type: 'Type',
+        status: 'Status',
         image: 'Image',
         port: 'Port',
         container: 'Container',
@@ -1653,6 +1655,7 @@ export const translations = {
     projectGroup: 'Project group',
     deployableService: 'Deployable service',
     managedService: 'Managed service',
+    infrastructureService: 'Infrastructure service',
   },
   serviceDetail: {
     runtime: {

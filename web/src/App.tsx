@@ -13,7 +13,6 @@ import { AppShell } from '@/components/Shell/AppShell';
 import { SetupScreen } from '@/components/setup/SetupScreen';
 import { ProjectsGrid } from '@/pages/ProjectsGrid';
 import { SettingsPage } from '@/pages/SettingsPage';
-import { ServicesPage } from '@/pages/ServicesPage';
 import { Home } from '@/pages/Home';
 import { Activity } from '@/pages/Activity';
 import { MCPServer } from '@/pages/MCPServer';
@@ -264,6 +263,14 @@ function App() {
                       </RouteSuspense>
                     }
                   />
+                  <Route
+                    path="/projects/:p/infrastructure/:id"
+                    element={
+                      <RouteSuspense>
+                        <ServiceDetailV2 />
+                      </RouteSuspense>
+                    }
+                  />
                   {/* Legacy deployable-detail URL — kept live in rc.1 for
                       bookmark continuity. ServiceDetailV2 accepts ?project=
                       query param as a fallback. Deprecation: rc.2 will add
@@ -277,14 +284,9 @@ function App() {
                       </RouteSuspense>
                     }
                   />
-                  {/* Managed services (postgres / mysql / redis / mongo) —
-                      separate from `/services/:id` (deployable detail) so
-                      `services.id` and `projects.id` no longer share a
-                      route prefix. Canonical replacement (`/projects/:p/
-                      services/:s` with kind=database discriminator) lands
-                      in rc.2 once managed services merge into the `services`
-                      table per the schema-split migration. */}
-                  <Route path="/managed-services" element={<ServicesPage />} />
+                  {/* Legacy managed-service URLs are kept for bookmarks, but
+                      the global inventory page is no longer a primary surface. */}
+                  <Route path="/managed-services" element={<Navigate to="/projects" replace />} />
                   <Route
                     path="/managed-services/:id"
                     element={
@@ -325,11 +327,7 @@ function App() {
                       </RouteSuspense>
                     }
                   />
-                  {/* /services list → /managed-services for vocabulary
-                      alignment (1.0 routing fix). The list page is
-                      managed-services-only; deployables are reached via
-                      a project's Services tab, not a top-level list. */}
-                  <Route path="/services" element={<Navigate to="/managed-services" replace />} />
+                  <Route path="/services" element={<Navigate to="/projects" replace />} />
                   {/* /operations + /ops-v1 retired in Phase 1 hardening.
                       Built-in AI Ops surfaces are disabled in 0.1; passive
                       backend ops history can remain for activity/status data.

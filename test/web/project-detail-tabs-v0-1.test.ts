@@ -44,7 +44,9 @@ describe('Project detail v0.1 tabs', () => {
     expect(projectViewSource).toContain('managedServiceToNode');
     expect(projectViewSource).toContain('const projectServiceRows = useMemo');
     expect(projectViewSource).toContain('services={projectServiceRows}');
-    expect(projectViewSource).toContain('navigate(`/managed-services/${service.id}`)');
+    expect(projectViewSource).toContain(
+      'navigate(`/projects/${projectId}/infrastructure/${service.id}`)',
+    );
   });
 
   it('drops the projectDetail.tabs.mcp i18n key from both locales', () => {

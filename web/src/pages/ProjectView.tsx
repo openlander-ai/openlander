@@ -189,7 +189,7 @@ export function ProjectView() {
   const openService = useCallback(
     (service: ServiceNode) => {
       if (isManagedServiceNode(service)) {
-        navigate(`/managed-services/${service.id}`);
+        navigate(`/projects/${projectId}/infrastructure/${service.id}`);
         return;
       }
       navigate(`/services/${service.id}?project=${projectId}`);

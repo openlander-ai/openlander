@@ -118,7 +118,7 @@ function isServiceTabId(value: string | null): value is ServiceTabId {
 /**
  * Top-level dispatcher. Same route slot serves two different ID spaces:
  *   /services/:id (deployable; :id is a projects.id) vs
- *   /managed-services/:id (managed services row; :id is a services.id).
+ *   /projects/:p/infrastructure/:id (infrastructure row; :id is a services.id).
  *
  * Each child component has its own hook order — keeping the dispatch
  * here lets us avoid violating rules-of-hooks while still reusing the
@@ -130,26 +130,30 @@ function isServiceTabId(value: string | null): value is ServiceTabId {
 export function ServiceDetailV2() {
   // 1.0-rc.1: two URL shapes are supported simultaneously.
   //
-  // Canonical (rc.1+):  /projects/:p/services/:s  → params { p, s }
-  // Legacy   (rc.0):    /services/:id?project=:p  → params { id }
-  // Managed  (rc.0+):   /managed-services/:id     → params { id }
+  // Canonical (rc.1+):  /projects/:p/services/:s        → params { p, s }
+  // Infrastructure:     /projects/:p/infrastructure/:id → params { p, id }
+  // Legacy   (rc.0):    /services/:id?project=:p        → params { id }
+  // Legacy managed:     /managed-services/:id           → params { id }
   //
   // The `id` field covers both legacy shapes; `s` covers canonical.
   // rc.2 will deprecate the legacy deployable URL once all internal
   // callers emit `/projects/:p/services/:s`.
-  const { id, s } = useParams<{ id?: string; p?: string; s?: string }>();
+  const { id, p, s } = useParams<{ id?: string; p?: string; s?: string }>();
   const location = useLocation();
 
-  // Managed-service path takes priority — check by prefix before
-  // inspecting params so that a future managed-service canonical URL
-  // (/projects/:p/services/:s with kind=database) can be gated separately.
+  if (location.pathname.includes('/infrastructure/') && id) {
+    return <ManagedServiceDetail key={id} id={id} routeProjectId={p ?? null} />;
+  }
+
+  // Legacy managed-service path takes priority — check by prefix before
+  // inspecting params so stale bookmarks can be replaced after load.
   if (location.pathname.startsWith('/managed-services/') && id) {
     // `key={id}` forces remount on managed-service navigation. Without
     // it, React reuses the instance and ManagedServiceDetail's stale
     // state (previous service object) would render for one commit
     // before the id-change useEffect fires its setState — flagged by
     // Codex CCG on PR #77.
-    return <ManagedServiceDetail key={id} id={id} />;
+    return <ManagedServiceDetail key={id} id={id} routeProjectId={null} />;
   }
 
   // Canonical path: /projects/:p/services/:s
@@ -2004,17 +2008,24 @@ function RangeToggle<T extends string>({
 }
 
 /**
- * ManagedServiceDetail — operational detail surface for managed services
+ * ManagedServiceDetail — operational detail surface for infrastructure services
  * (postgres / mysql / redis / mongo etc).
  *
- * Mounted at `/managed-services/:id` via the route-prefix gate at the
- * top of `ServiceDetailV2`. v0.1.4 keeps native creation out of the
- * web UI but exposes Overview / Logs / Connections / Settings so
+ * Mounted at `/projects/:p/infrastructure/:id` via the route-prefix gate
+ * at the top of `ServiceDetailV2`. v0.1.4 keeps native creation out of
+ * the web UI but exposes Overview / Logs / Connections / Settings so
  * existing MCP-created infrastructure can be inspected and operated.
  */
-function ManagedServiceDetail({ id }: { id: string }) {
+function ManagedServiceDetail({
+  id,
+  routeProjectId,
+}: {
+  id: string;
+  routeProjectId: string | null;
+}) {
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
   const [service, setService] = useState<Service | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2089,6 +2100,30 @@ function ManagedServiceDetail({ id }: { id: string }) {
     };
   }, [id]);
 
+  const owningProjectId = service
+    ? getInfrastructureProjectId(service, connections, routeProjectId)
+    : routeProjectId;
+  const backTarget = owningProjectId ? `/projects/${owningProjectId}` : '/projects';
+  const backLabel = owningProjectId
+    ? t('services.managedDetail.backToProject')
+    : t('services.managedDetail.backToProjects');
+  const canonicalPath =
+    service != null && owningProjectId != null
+      ? `/projects/${owningProjectId}/infrastructure/${service.id}`
+      : null;
+
+  useEffect(() => {
+    if (
+      !canonicalPath ||
+      location.pathname === canonicalPath ||
+      (!location.pathname.startsWith('/managed-services/') &&
+        !location.pathname.includes('/infrastructure/'))
+    ) {
+      return;
+    }
+    navigate(canonicalPath, { replace: true });
+  }, [canonicalPath, location.pathname, navigate]);
+
   if (loading) {
     return (
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
@@ -2112,10 +2147,10 @@ function ManagedServiceDetail({ id }: { id: string }) {
         <OuterCard title={title} subtitle={subtitle}>
           <button
             type="button"
-            onClick={() => navigate('/managed-services')}
+            onClick={() => navigate('/projects')}
             className="text-[13px] text-[color:var(--ol-primary)] hover:underline"
           >
-            {t('services.managedDetail.backToList')}
+            {t('services.managedDetail.backToProjects')}
           </button>
         </OuterCard>
       </div>
@@ -2149,28 +2184,24 @@ function ManagedServiceDetail({ id }: { id: string }) {
             <ManagedHealthBadge status={service.status} />
           </span>
         }
-        // 1.0-rc.2 (data-model fullsplit): prefer the canonical `kind`
-        // discriminator when the row carries it (P1 additive schema);
-        // fall back to legacy `type` to keep older response shapes
-        // rendering during the transition.
-        //
-        // PR #59 follow-up: prefix the subtitle with the canonical
-        // "Managed service" label so the page identity stays clear when a
-        // user lands here from a deep link or from a shared MCP reference.
         subtitle={
-          <span>
-            <span className="text-[color:var(--ol-fg-subtle)]">{t('vocab.managedService')}</span>
-            {' · '}
-            {service.kind ?? service.type}
+          <span className="text-[12px]">
+            <span className="text-[color:var(--ol-fg-subtle)]">
+              {t('vocab.infrastructureService')}
+            </span>
+            <span className="ol-mono">
+              {' · '}
+              {service.kind ?? service.type} · {service.image}
+            </span>
           </span>
         }
         actions={
           <button
             type="button"
-            onClick={() => navigate('/managed-services')}
+            onClick={() => navigate(backTarget)}
             className="text-[12px] text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-fg)]"
           >
-            {t('services.managedDetail.backToListShort')}
+            {backLabel}
           </button>
         }
         bodyClassName="p-0"
@@ -2228,7 +2259,7 @@ function ManagedServiceDetail({ id }: { id: string }) {
             connectionsError={connectionsError}
             onServiceChanged={() => void loadService()}
             onConnectionsChanged={() => void loadConnections()}
-            onDeleted={() => navigate('/managed-services')}
+            onDeleted={() => navigate(backTarget)}
           />
         </TabPanel>
       </OuterCard>
@@ -2236,39 +2267,58 @@ function ManagedServiceDetail({ id }: { id: string }) {
   );
 }
 
+function getInfrastructureProjectId(
+  service: Service,
+  connections: ConnectedProject[],
+  routeProjectId: string | null,
+): string | null {
+  if (service.project_id && service.project_id !== '__orphan_managed') return service.project_id;
+  if (service.attached_project_id && service.attached_project_id !== '__orphan_managed') {
+    return service.attached_project_id;
+  }
+  if (routeProjectId) return routeProjectId;
+  return connections[0]?.id ?? null;
+}
+
 function ManagedOverviewTab({ service }: { service: Service }) {
   const { t } = useLanguage();
+  const kind = service.kind ?? service.type ?? '—';
+  const image = service.image || '—';
+  const port = getManagedServicePortLabel(service);
+  const status =
+    service.status === 'running'
+      ? t('services.status.running')
+      : service.status === 'error'
+        ? t('services.status.error')
+        : t('services.status.stopped');
+  const sourceRows: [string, string][] = [
+    [t('services.managedDetail.field.type'), kind],
+    [t('services.managedDetail.field.image'), image],
+    [t('services.managedDetail.field.port'), port],
+  ];
+  const runtimeRows: [string, string][] = [
+    [t('services.managedDetail.field.status'), status],
+    [t('services.managedDetail.field.container'), service.container_name || '—'],
+    [
+      t('services.managedDetail.field.containerId'),
+      service.container_id ? service.container_id.slice(0, 12) : '—',
+    ],
+    [t('services.managedDetail.field.created'), new Date(service.created_at).toLocaleString()],
+    [t('services.managedDetail.field.updated'), new Date(service.updated_at).toLocaleString()],
+  ];
+
   return (
-    <dl className="grid grid-cols-1 gap-3 text-[13px] sm:grid-cols-2">
-      <ManagedDetailField
-        label={t('services.managedDetail.field.image')}
-        value={service.image}
-        mono
-      />
-      <ManagedDetailField
-        label={t('services.managedDetail.field.port')}
-        value={getManagedServicePortLabel(service)}
-        mono
-      />
-      <ManagedDetailField
-        label={t('services.managedDetail.field.container')}
-        value={service.container_name}
-        mono
-      />
-      <ManagedDetailField
-        label={t('services.managedDetail.field.containerId')}
-        value={service.container_id ? service.container_id.slice(0, 12) : '—'}
-        mono
-      />
-      <ManagedDetailField
-        label={t('services.managedDetail.field.created')}
-        value={new Date(service.created_at).toLocaleString()}
-      />
-      <ManagedDetailField
-        label={t('services.managedDetail.field.updated')}
-        value={new Date(service.updated_at).toLocaleString()}
-      />
-    </dl>
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <SubCard title={t('services.detail.section.source')}>
+        <KvList rows={sourceRows} valueClassName="ol-mono break-all text-[12px]" />
+      </SubCard>
+      <SubCard
+        title={t('services.detail.section.runtime')}
+        badge={<ManagedHealthBadge status={service.status} />}
+      >
+        <KvList rows={runtimeRows} valueClassName="ol-mono break-all text-[12px]" />
+      </SubCard>
+    </div>
   );
 }
 
@@ -2607,29 +2657,6 @@ function ManagedSettingsTab({
           {feedback}
         </div>
       )}
-    </div>
-  );
-}
-
-function ManagedDetailField({
-  label,
-  value,
-  mono = false,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div>
-      <dt className="text-[11px] uppercase tracking-[0.06em] text-[color:var(--ol-fg-subtle)]">
-        {label}
-      </dt>
-      <dd
-        className={cn('mt-0.5 truncate text-[color:var(--ol-fg)]', mono && 'ol-mono text-[12.5px]')}
-      >
-        {value}
-      </dd>
     </div>
   );
 }

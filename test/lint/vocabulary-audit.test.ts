@@ -118,13 +118,12 @@ describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () =
     ]);
   });
 
-  it('App.tsx exposes both /services/:id (deployable) and /managed-services/:id (managed) routes', () => {
+  it('App.tsx exposes deployable, infrastructure, and legacy managed-service routes', () => {
     const source = readFileSync(resolve(REPO_ROOT, 'web', 'src', 'App.tsx'), 'utf8');
     expect(/<Route\s+path="\/services\/:id"/.test(source)).toBe(true);
+    expect(/<Route\s+path="\/projects\/:p\/infrastructure\/:id"/.test(source)).toBe(true);
     expect(/<Route\s+path="\/managed-services\/:id"/.test(source)).toBe(true);
-    expect(/path="\/services"\s+element=\{<Navigate\s+to="\/managed-services"/.test(source)).toBe(
-      true,
-    );
+    expect(/path="\/services"\s+element=\{<Navigate\s+to="\/projects"/.test(source)).toBe(true);
   });
 
   it('i18n key services.detail.header.backToServices still exists', () => {

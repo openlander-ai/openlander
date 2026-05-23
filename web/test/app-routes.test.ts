@@ -6,8 +6,9 @@
  * or jsdom installed). Tests the pure-logic layer of the dispatcher:
  *
  *   /projects/:p/services/:s  → canonical, params { p, s }
+ *   /projects/:p/infrastructure/:id → infrastructure service, params { p, id }
  *   /services/:id?project=:p  → legacy deployable, params { id }
- *   /managed-services/:id     → managed service, params { id }
+ *   /managed-services/:id     → legacy infrastructure service, params { id }
  *
  * These mirror the three route shapes registered in App.tsx.
  */
@@ -23,8 +24,14 @@ import { describe, it, expect } from 'vitest';
 function dispatchRouteVariant(
   pathname: string,
   params: { id?: string; p?: string; s?: string },
-): 'ManagedServiceDetail' | 'DeployableServiceDetail(canonical)' | 'DeployableServiceDetail(legacy)' {
+):
+  | 'ManagedServiceDetail'
+  | 'DeployableServiceDetail(canonical)'
+  | 'DeployableServiceDetail(legacy)' {
   const { id, s } = params;
+  if (pathname.includes('/infrastructure/') && id) {
+    return 'ManagedServiceDetail';
+  }
   if (pathname.startsWith('/managed-services/') && id) {
     return 'ManagedServiceDetail';
   }
@@ -70,6 +77,14 @@ describe('ServiceDetailV2 dispatcher — URL shape routing', () => {
     // React Router produces { id: 'xyz' } for this path (no p, no s)
     const result = dispatchRouteVariant('/services/xyz', { id: 'xyz' });
     expect(result).toBe('DeployableServiceDetail(legacy)');
+  });
+
+  it('/projects/:p/infrastructure/:id → ManagedServiceDetail', () => {
+    const result = dispatchRouteVariant('/projects/abc/infrastructure/xyz', {
+      p: 'abc',
+      id: 'xyz',
+    });
+    expect(result).toBe('ManagedServiceDetail');
   });
 
   it('/managed-services/:id → ManagedServiceDetail', () => {
@@ -149,6 +164,7 @@ describe('App.tsx route registration — three URL shapes coexist in rc.1', () =
   // These tests document (not render) the three registered route paths
   // to catch accidental removal or path-string typos at review time.
   const CANONICAL_PATTERN = '/projects/:p/services/:s';
+  const INFRASTRUCTURE_PATTERN = '/projects/:p/infrastructure/:id';
   const LEGACY_PATTERN = '/services/:id';
   const MANAGED_PATTERN = '/managed-services/:id';
 
@@ -163,7 +179,13 @@ describe('App.tsx route registration — three URL shapes coexist in rc.1', () =
     expect(LEGACY_PATTERN).not.toContain(':s');
   });
 
-  it('managed pattern is prefix-distinct from canonical and legacy', () => {
+  it('infrastructure pattern keeps project context and service id', () => {
+    expect(INFRASTRUCTURE_PATTERN).toContain(':p');
+    expect(INFRASTRUCTURE_PATTERN).toContain(':id');
+    expect(INFRASTRUCTURE_PATTERN).not.toContain('managed-services');
+  });
+
+  it('legacy managed pattern is prefix-distinct from canonical and legacy deployable', () => {
     expect(MANAGED_PATTERN.startsWith('/managed-services')).toBe(true);
     expect(CANONICAL_PATTERN.startsWith('/managed-services')).toBe(false);
     expect(LEGACY_PATTERN.startsWith('/managed-services')).toBe(false);
