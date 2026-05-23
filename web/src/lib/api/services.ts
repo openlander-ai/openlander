@@ -33,7 +33,7 @@ export interface Service {
   status: 'running' | 'stopped' | 'error';
   container_id: string | null;
   container_name: string;
-  port: number;
+  port: number | null;
   env_vars: string | null;
   credentials: string | null;
   scope?: 'project' | 'global';

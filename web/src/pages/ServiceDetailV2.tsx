@@ -2247,7 +2247,7 @@ function ManagedOverviewTab({ service }: { service: Service }) {
       />
       <ManagedDetailField
         label={t('services.managedDetail.field.port')}
-        value={String(service.port)}
+        value={getManagedServicePortLabel(service)}
         mono
       />
       <ManagedDetailField
@@ -2270,6 +2270,23 @@ function ManagedOverviewTab({ service }: { service: Service }) {
       />
     </dl>
   );
+}
+
+function getManagedServicePortLabel(service: Pick<Service, 'credentials' | 'port'>): string {
+  const port = service.port ?? getManagedServiceCredentialsPort(service.credentials);
+  return port == null ? '—' : String(port);
+}
+
+function getManagedServiceCredentialsPort(credentials: string | null): number | null {
+  if (!credentials) return null;
+  try {
+    const parsed: unknown = JSON.parse(credentials);
+    if (!parsed || typeof parsed !== 'object' || !('port' in parsed)) return null;
+    const port = (parsed as { port?: unknown }).port;
+    return typeof port === 'number' && Number.isInteger(port) && port > 0 ? port : null;
+  } catch {
+    return null;
+  }
 }
 
 function ManagedLogsTab({ serviceId }: { serviceId: string }) {

@@ -84,6 +84,11 @@ describe('Service detail v0.1 tabs', () => {
     expect(source).toContain('panelId="managed-servicepanel-settings"');
   });
 
+  it('does not render missing managed-service ports as undefined', () => {
+    expect(source).toContain('getManagedServicePortLabel(service)');
+    expect(source).not.toContain('value={String(service.port)}');
+  });
+
   it('falls legacy ?tab={general|resources|advanced|settings} through to overview', () => {
     expect(source).toContain('isServiceTabId(tabParam) ? tabParam : ');
     expect(source).toContain("'overview'");
