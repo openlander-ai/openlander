@@ -54,6 +54,34 @@ describe('GET /api/activity v4 feed', () => {
     });
   });
 
+  it('maps chat deploy logs to the MCP actor', async () => {
+    const app = createApp(
+      baseDb({
+        listRecentDeployLogsAcrossProjects: async () => [
+          {
+            id: 'deploy-1',
+            service_id: 'svc-1',
+            status: 'success',
+            trigger: 'chat',
+            trigger_detail: null,
+            commit_sha: 'abcdef123456',
+            commit_message: 'agent redeploy',
+            created_at: new Date().toISOString(),
+          },
+        ],
+      }),
+    );
+
+    const res = await app.request('/api/activity?limit=5');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.activities[0]).toMatchObject({
+      id: 'deploy-deploy-1',
+      actor: 'mcp',
+      kind: 'deploy_completed',
+    });
+  });
+
   it('includes config activity_log rows in the dashboard feed', async () => {
     const app = createApp(
       baseDb({
