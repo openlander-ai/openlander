@@ -84,6 +84,9 @@ describe('Service detail v0.1 tabs', () => {
     expect(source).not.toContain('panelId="managed-servicepanel-settings"');
     expect(source).toContain('<ManagedOperationsSection');
     expect(source).toContain('panelId="managed-servicepanel-overview"');
+    expect(source).toContain("t('projectDetail.serviceDelete.title')");
+    expect(source).toContain("t('services.managedDetail.settings.deleteBody')");
+    expect(source).not.toContain("t('services.managedDetail.settings.danger')");
   });
 
   it('does not render missing managed-service ports as undefined', () => {

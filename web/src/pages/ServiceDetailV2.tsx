@@ -2565,14 +2565,36 @@ function ManagedOperationsSection({
       </section>
 
       <section className="flex flex-col gap-3 border-t border-[color:var(--ol-border-subtle)] pt-5">
-        <div>
-          <h3 className="text-[13px] font-semibold text-[color:var(--ol-error)]">
-            {t('services.managedDetail.settings.danger')}
-          </h3>
-          <p className="text-[12px] text-[color:var(--ol-fg-muted)]">
-            {t('services.managedDetail.settings.dangerDescription')}
-          </p>
-        </div>
+        <h3 className="text-[13px] font-semibold text-[color:var(--ol-error)]">
+          {t('projectDetail.serviceDelete.title')}
+        </h3>
+        <button
+          type="button"
+          onClick={() => setDeleteOpen(true)}
+          disabled={deleteBlocked || busyAction !== null}
+          className={cn(
+            'flex items-start gap-3 rounded-md border border-[color:var(--ol-border-subtle)]',
+            'bg-[color:var(--ol-panel)] px-4 py-3 text-left transition-colors',
+            deleteBlocked || busyAction !== null
+              ? 'cursor-not-allowed opacity-60'
+              : 'hover:border-[color:var(--ol-error)] hover:bg-[color-mix(in_oklch,var(--ol-error)_6%,transparent)]',
+          )}
+        >
+          <span
+            aria-hidden
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[color-mix(in_oklch,var(--ol-error)_10%,transparent)] text-[color:var(--ol-error)]"
+          >
+            <Trash2 className="h-4 w-4" />
+          </span>
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-medium text-[color:var(--ol-error)]">
+              {t('projectDetail.serviceDelete.title')}
+            </span>
+            <span className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
+              {t('services.managedDetail.settings.deleteBody')}
+            </span>
+          </span>
+        </button>
 
         {hasConnections && (
           <div className="rounded-md border border-[color:var(--ol-warning)] bg-[color:var(--ol-warning-soft)] px-3 py-2 text-[12px] text-[color:var(--ol-warning)]">
@@ -2587,18 +2609,16 @@ function ManagedOperationsSection({
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={() => setDeleteOpen((open) => !open)}
-          disabled={deleteBlocked || busyAction !== null}
-          className="inline-flex w-fit items-center gap-2 rounded-md border border-[color:var(--ol-error)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--ol-error)] transition-colors hover:bg-[color-mix(in_oklch,var(--ol-error)_6%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          {t('services.managedDetail.settings.delete')}
-        </button>
-
         {deleteOpen && (
           <div className="rounded-md border border-[color:var(--ol-error)] bg-[color-mix(in_oklch,var(--ol-error)_5%,transparent)] p-4">
+            <div className="mb-3">
+              <h3 className="text-[13px] font-semibold text-[color:var(--ol-error)]">
+                {t('services.managedDetail.settings.confirmTitle')}
+              </h3>
+              <p className="mt-1 text-[12px] text-[color:var(--ol-fg-muted)]">
+                {t('services.managedDetail.settings.confirmDescription')}
+              </p>
+            </div>
             <label className="text-[12px] font-medium text-[color:var(--ol-fg-muted)]">
               {t('services.managedDetail.settings.confirmLabel')}
               <span className="ol-mono ml-1 text-[color:var(--ol-fg)]">{service.name}</span>
