@@ -29,7 +29,6 @@ import {
   services,
   timelineEvents,
   webhookConfigs,
-  type ServiceKind,
 } from '../schema.drizzle.js';
 import {
   ORPHAN_MANAGED_GROUP_ID,
@@ -37,6 +36,7 @@ import {
   projectIdToDeployableServiceId,
 } from '../service-ids.js';
 import type { EnvironmentRow, PendingFixRow, ProjectRow, ServiceRow } from '../types.js';
+import { MANAGED_SERVICE_KINDS } from './service.repo.js';
 
 /**
  * Project row plus pre-fetched derived metadata, to let callers render lists
@@ -59,8 +59,7 @@ type ServiceSelectRow = typeof services.$inferSelect;
 type EnvironmentSelectRow = typeof environments.$inferSelect;
 type ProjectStatus = NonNullable<ProjectRow['status']>;
 
-const MANAGED_SERVICE_KINDS: ServiceKind[] = ['postgres', 'mysql', 'redis', 'mongo', 'minio'];
-const NON_DEPLOYABLE_SERVICE_KINDS: ServiceKind[] = [...MANAGED_SERVICE_KINDS, 'compose'];
+const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;
 
 function toProjectRow(row: ProjectSelectRow): ProjectRow {
   return row as ProjectRow;
@@ -377,7 +376,7 @@ export class ProjectRepo {
       .where(
         and(
           inArray(services.project_id, uniqueProjectIds),
-          notInArray(services.kind, NON_DEPLOYABLE_SERVICE_KINDS),
+          notInArray(services.kind, [...NON_DEPLOYABLE_SERVICE_KINDS]),
           sql`NOT (${services.parent_service_id} IS NULL AND coalesce(${services.build_method}, '') = 'compose')`,
         ),
       )
@@ -404,7 +403,7 @@ export class ProjectRepo {
       .where(
         and(
           inArray(services.project_id, uniqueProjectIds),
-          inArray(services.kind, MANAGED_SERVICE_KINDS),
+          inArray(services.kind, [...MANAGED_SERVICE_KINDS]),
         ),
       );
     for (const row of directManagedRows) {
@@ -424,7 +423,7 @@ export class ProjectRepo {
             serviceConnections.service_id_consumer,
             uniqueProjectIds.map(projectIdToDeployableServiceId),
           ),
-          inArray(services.kind, MANAGED_SERVICE_KINDS),
+          inArray(services.kind, [...MANAGED_SERVICE_KINDS]),
         ),
       )
       .groupBy(serviceConnections.service_id_consumer, serviceConnections.service_id_provider);

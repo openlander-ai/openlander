@@ -2,15 +2,13 @@ import { and, desc, eq } from 'drizzle-orm';
 
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { deployLogs } from '../schema.drizzle.js';
+import { projectIdToDeployableServiceId } from '../service-ids.js';
 import type { DeployLogRow } from '../types.js';
 
 /**
  * Post-0012: deploy_logs is service-scoped. Callers still pass `projectId`
  * for vocabulary continuity; the repo translates to the canonical service id.
  */
-export function projectIdToServiceId(projectId: string): string {
-  return projectId.endsWith('__svc') ? projectId : `${projectId}__svc`;
-}
 
 export class DeployLogRepo {
   constructor(
@@ -34,7 +32,7 @@ export class DeployLogRepo {
   }): Promise<void> {
     await this.db.insert(deployLogs).values({
       id: log.id,
-      service_id: projectIdToServiceId(log.projectId),
+      service_id: projectIdToDeployableServiceId(log.projectId),
       environment_id: log.environmentId ?? null,
       status: log.status,
       trigger: log.trigger,
@@ -53,7 +51,7 @@ export class DeployLogRepo {
     environmentId?: string,
     _serverId?: string,
   ): Promise<DeployLogRow[]> {
-    const serviceId = projectIdToServiceId(projectId);
+    const serviceId = projectIdToDeployableServiceId(projectId);
     const whereClause = environmentId
       ? and(eq(deployLogs.service_id, serviceId), eq(deployLogs.environment_id, environmentId))
       : eq(deployLogs.service_id, serviceId);
@@ -71,7 +69,7 @@ export class DeployLogRepo {
     projectId: string,
     environmentId?: string,
   ): Promise<DeployLogRow | undefined> {
-    const serviceId = projectIdToServiceId(projectId);
+    const serviceId = projectIdToDeployableServiceId(projectId);
     const whereClause = environmentId
       ? and(eq(deployLogs.service_id, serviceId), eq(deployLogs.environment_id, environmentId))
       : eq(deployLogs.service_id, serviceId);

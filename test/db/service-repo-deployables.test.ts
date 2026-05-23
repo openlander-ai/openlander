@@ -90,6 +90,8 @@ describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
     expect(method).toContain('serviceConnections');
     expect(method).toContain('service_id_consumer');
     expect(method).toContain('service_id_provider');
+    expect(source).toContain("import { MANAGED_SERVICE_KINDS } from './service.repo.js'");
+    expect(source).not.toContain("const MANAGED_SERVICE_KINDS: ServiceKind[] = ['postgres'");
     expect(method).toContain('MANAGED_SERVICE_KINDS');
     expect(method).toContain('directManagedRows');
     expect(method).toContain('managedServiceIdsByProject');
@@ -111,5 +113,21 @@ describe('ProjectRepo.listProjectsWithMetadata', () => {
     expect(source).toContain(
       "s.kind NOT IN ('postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose')",
     );
+  });
+});
+
+describe('service-scoped project id helpers', () => {
+  it('uses the canonical deployable service id helper for connection and deploy log rows', () => {
+    const serviceConnectionSource = readFileSync('src/db/repos/service-connection.repo.ts', 'utf8');
+    const deployLogSource = readFileSync('src/db/repos/deploy-log.repo.ts', 'utf8');
+
+    expect(serviceConnectionSource).toContain(
+      "import { projectIdToDeployableServiceId } from '../service-ids.js'",
+    );
+    expect(deployLogSource).toContain(
+      "import { projectIdToDeployableServiceId } from '../service-ids.js'",
+    );
+    expect(serviceConnectionSource).not.toContain('function projectIdToServiceId');
+    expect(deployLogSource).not.toContain('function projectIdToServiceId');
   });
 });
