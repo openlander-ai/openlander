@@ -74,7 +74,7 @@ export const translations = {
     collapse: '사이드바 접기',
     expand: '사이드바 펼치기',
     primaryNavAria: '주요 탐색',
-    versionAria: '버전 v0.1',
+    versionAria: '버전',
   },
   topBar: {
     // Chrome — short prefix label + status sentinel match agent-chip parallel

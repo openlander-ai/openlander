@@ -7,7 +7,7 @@ function readRepoFile(relativePath: string): string {
   return readFileSync(path.join(process.cwd(), relativePath), 'utf8');
 }
 
-// Sidebar brand chip — top-left "OpenLander v0.1" stamp.
+// Sidebar brand chip — top-left "OpenLander vX.Y.Z" stamp.
 // The pre-polish chip used 9.5px half-pixel font, an
 // uppercase transform, and a 24px glyph that read as a status badge
 // instead of a version stamp. This suite pins the polish so a future
@@ -21,25 +21,22 @@ describe('Sidebar brand chip — version pin polish', () => {
     // Half-pixel sizes round inconsistently across browsers (9 in some,
     // 10 in others), making the pin look heavier on Firefox vs Chrome.
     expect(sidebarSource).not.toMatch(/text-\[9\.5px\]/);
-    expect(sidebarSource).toMatch(/text-\[11px\][\s\S]*?aria-label=\{t\('sidebar\.versionAria'\)\}/);
-    expect(enSource).toContain("versionAria: 'Version v0.1'");
-    expect(koSource).toContain("versionAria: '버전 v0.1'");
+    expect(sidebarSource).toMatch(/text-\[11px\][\s\S]*?APP_VERSION_LABEL/);
+    expect(sidebarSource).toContain('APP_VERSION_LABEL');
+    expect(enSource).toContain("versionAria: 'Version'");
+    expect(koSource).toContain("versionAria: '버전'");
   });
 
-  it('keeps the version label lowercase ("v0.1", not "V0.1")', () => {
-    // The uppercase utility on a `v0.1` literal produces "V0.1", which
+  it('keeps the version label lowercase ("vX.Y.Z", not "VX.Y.Z")', () => {
+    // The uppercase utility on a `vX.Y.Z` label produces "VX.Y.Z", which
     // breaks the canonical product version form. Drop the transform.
-    const versionPinBlock = sidebarSource.match(
-      /<span\b[^>]*aria-label=\{t\('sidebar\.versionAria'\)\}[^>]*>[\s\S]*?<\/span>/,
-    );
+    const versionPinBlock = sidebarSource.match(/<span\b[^>]*APP_VERSION_LABEL[\s\S]*?<\/span>/);
     expect(versionPinBlock).not.toBeNull();
     expect(versionPinBlock![0]).not.toMatch(/uppercase/);
   });
 
   it('drops the rounded-full border pill so the pin reads as text, not a status badge', () => {
-    const versionPinBlock = sidebarSource.match(
-      /<span\b[^>]*aria-label=\{t\('sidebar\.versionAria'\)\}[^>]*>[\s\S]*?<\/span>/,
-    );
+    const versionPinBlock = sidebarSource.match(/<span\b[^>]*APP_VERSION_LABEL[\s\S]*?<\/span>/);
     expect(versionPinBlock).not.toBeNull();
     expect(versionPinBlock![0]).not.toMatch(/rounded-full/);
     expect(versionPinBlock![0]).not.toMatch(/border-\[/);

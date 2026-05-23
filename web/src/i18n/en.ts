@@ -69,7 +69,7 @@ export const translations = {
     collapse: 'Collapse sidebar',
     expand: 'Expand sidebar',
     primaryNavAria: 'Primary navigation',
-    versionAria: 'Version v0.1',
+    versionAria: 'Version',
   },
   topBar: {
     sidebarToggleLabel: 'Toggle sidebar',
