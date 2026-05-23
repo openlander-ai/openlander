@@ -819,7 +819,6 @@ export const translations = {
         overview: 'Overview',
         logs: 'Logs',
         connections: 'Connections',
-        settings: 'Settings',
       },
       logs: {
         title: 'Container logs',
