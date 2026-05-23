@@ -418,9 +418,6 @@ export async function runDeployableServiceAction(
   }
 
   const execute = async () => {
-    if (action === 'restart_service') {
-      await context.appCtx.pipeline.stop(runtimeProject.id);
-    }
     await context.appCtx.pipeline.redeploy(runtimeProject.id, {
       noCache,
       strategy,
