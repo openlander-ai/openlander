@@ -802,7 +802,7 @@ export const translations = {
   services: {
     // Chrome — page title + primary action.
     title: 'Managed Services',
-    createService: 'Create service',
+    createService: 'Agent에게 요청',
     // Content — descriptive copy + empty states + format strings.
     subtitle:
       'Managed Service는 데이터베이스, 캐시, 공유 인프라입니다. 앱은 환경 변수로 여기에 연결합니다.',
@@ -856,6 +856,49 @@ export const translations = {
       // Chrome — back-navigation links.
       backToList: '← Back to Managed Services',
       backToListShort: '← Managed Services',
+      tabs: {
+        aria: '관리형 서비스 섹션',
+        overview: 'Overview',
+        logs: 'Logs',
+        connections: 'Connections',
+        settings: 'Settings',
+      },
+      logs: {
+        title: 'Container logs',
+        description: '관리형 서비스 컨테이너의 런타임 로그입니다.',
+        refresh: 'Refresh',
+        loading: 'Loading…',
+        empty: '반환된 로그가 없습니다.',
+        error: '로그를 불러오지 못했습니다',
+      },
+      connections: {
+        title: 'Connected projects',
+        description: '이 관리형 서비스를 참조하는 프로젝트입니다.',
+        refresh: 'Refresh',
+        loading: 'Loading…',
+        empty: '이 서비스에 연결된 프로젝트가 없습니다.',
+        openProject: 'Open project',
+      },
+      settings: {
+        lifecycle: 'Lifecycle',
+        lifecycleDescription: '저장된 데이터는 유지한 채 컨테이너를 시작하거나 중지합니다.',
+        start: 'Start',
+        starting: 'Starting…',
+        stop: 'Stop',
+        stopping: 'Stopping…',
+        updated: '서비스 상태가 업데이트되었습니다.',
+        actionError: '서비스 작업에 실패했습니다',
+        danger: 'Danger zone',
+        dangerDescription: '이 관리형 서비스 컨테이너와 영구 볼륨을 삭제합니다.',
+        delete: 'Delete service',
+        deleting: 'Deleting…',
+        confirmLabel: '삭제하려면 이 서비스 이름을 입력하세요:',
+        confirmDelete: 'Delete permanently',
+        deleteError: '서비스를 삭제하지 못했습니다',
+        deleteBlocked:
+          '{count}개 프로젝트가 이 서비스를 참조하고 있어 삭제할 수 없습니다. 먼저 연결을 해제하세요.',
+        connectionCheckFailed: '연결 상태를 확인하지 못해 삭제가 차단되었습니다.',
+      },
       // Chrome — field labels match the services.detail.overview.*
       // convention (English in both files for metric / field labels).
       field: {
@@ -999,7 +1042,7 @@ export const translations = {
     empty: {
       // Content — empty state.
       title: '서비스가 없습니다',
-      description: '데이터베이스, 캐시 또는 기타 인프라 서비스를 생성하세요',
+      description: '데이터베이스, 캐시 또는 기타 인프라 서비스 생성을 에이전트에게 요청하세요.',
     },
     create: {
       toasts: {

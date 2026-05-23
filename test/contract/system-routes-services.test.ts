@@ -13,6 +13,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import { testClient } from 'hono/testing';
+import { ServiceInUseError } from '../../src/errors.js';
 
 // Minimal ServiceRow shape post-0012 Phase C (storage cols dropped)
 const makeCanonicalServiceRow = (overrides: Record<string, unknown> = {}) => ({
@@ -61,7 +62,10 @@ const makeCardSummary = (overrides: Record<string, unknown> = {}) => ({
   summary: { healthStatus: 'healthy', uptimeSeconds: 3600, restartCount: 0 },
 });
 
-function buildMockRoutes(serviceRow = makeCanonicalServiceRow(), envVarsRecord: Record<string, string> = {}) {
+function buildMockRoutes(
+  serviceRow = makeCanonicalServiceRow(),
+  envVarsRecord: Record<string, string> = {},
+) {
   const app = new Hono();
 
   const mockCtx = {
@@ -120,7 +124,7 @@ describe('system-routes /api/services wire shape contract', () => {
     const res = await app.request('/api/services');
     expect(res.status).toBe(200);
 
-    const body = await res.json() as Array<Record<string, unknown>>;
+    const body = (await res.json()) as Array<Record<string, unknown>>;
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThan(0);
 
@@ -143,15 +147,27 @@ describe('system-routes /api/services wire shape contract', () => {
     const mockCtx = {
       serviceManager: {
         listWithCardSummary: vi.fn().mockResolvedValue([makeCardSummary()]),
-        create: vi.fn(), getDetail: vi.fn(), getLogs: vi.fn(), getStats: vi.fn(),
-        getInspectionHealth: vi.fn(), getConnectedProjects: vi.fn(),
-        listDatabases: vi.fn(), createDatabase: vi.fn(), listUsers: vi.fn(),
-        createUser: vi.fn(), remove: vi.fn(), start: vi.fn(), stop: vi.fn(), restart: vi.fn(),
+        create: vi.fn(),
+        getDetail: vi.fn(),
+        getLogs: vi.fn(),
+        getStats: vi.fn(),
+        getInspectionHealth: vi.fn(),
+        getConnectedProjects: vi.fn(),
+        listDatabases: vi.fn(),
+        createDatabase: vi.fn(),
+        listUsers: vi.fn(),
+        createUser: vi.fn(),
+        remove: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        restart: vi.fn(),
       },
       db: {
         getEnvVars: vi.fn().mockReturnValue({}), // no env vars
         getEnvVarsForService: vi.fn().mockReturnValue({}),
-        getService: vi.fn(), hasAnyServiceMetrics: vi.fn(), listServiceMetricsSince: vi.fn(),
+        getService: vi.fn(),
+        hasAnyServiceMetrics: vi.fn(),
+        listServiceMetricsSince: vi.fn(),
       },
       config: { gitProviders: { github: {} } },
       docker: {},
@@ -159,7 +175,7 @@ describe('system-routes /api/services wire shape contract', () => {
 
     app.route('/api', createSystemRoutes(mockCtx));
     const res = await app.request('/api/services');
-    const body = await res.json() as Array<Record<string, unknown>>;
+    const body = (await res.json()) as Array<Record<string, unknown>>;
     expect(body[0].env_vars).toBeNull();
   });
 
@@ -172,15 +188,25 @@ describe('system-routes /api/services wire shape contract', () => {
         listWithCardSummary: vi.fn(),
         create: vi.fn(),
         getDetail: vi.fn().mockResolvedValue(makeCanonicalServiceRow()),
-        getLogs: vi.fn(), getStats: vi.fn(), getInspectionHealth: vi.fn(),
-        getConnectedProjects: vi.fn(), listDatabases: vi.fn(), createDatabase: vi.fn(),
-        listUsers: vi.fn(), createUser: vi.fn(), remove: vi.fn(), start: vi.fn(),
-        stop: vi.fn(), restart: vi.fn(),
+        getLogs: vi.fn(),
+        getStats: vi.fn(),
+        getInspectionHealth: vi.fn(),
+        getConnectedProjects: vi.fn(),
+        listDatabases: vi.fn(),
+        createDatabase: vi.fn(),
+        listUsers: vi.fn(),
+        createUser: vi.fn(),
+        remove: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        restart: vi.fn(),
       },
       db: {
         getEnvVars: vi.fn().mockReturnValue({}),
         getEnvVarsForService: vi.fn().mockReturnValue({}),
-        getService: vi.fn(), hasAnyServiceMetrics: vi.fn(), listServiceMetricsSince: vi.fn(),
+        getService: vi.fn(),
+        hasAnyServiceMetrics: vi.fn(),
+        listServiceMetricsSince: vi.fn(),
       },
       config: { gitProviders: { github: {} } },
       docker: {},
@@ -190,10 +216,58 @@ describe('system-routes /api/services wire shape contract', () => {
     const res = await app.request('/api/services/svc-test-001');
     expect(res.status).toBe(200);
 
-    const svc = await res.json() as Record<string, unknown>;
+    const svc = (await res.json()) as Record<string, unknown>;
     expect(svc.type).toBe('redis');
     expect(svc.image).toBe('redis:7-alpine');
     expect(svc.port).toBe(6379);
+  });
+
+  it('GET /services/:id/connected-projects resolves and returns connected projects', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+    const connectedProjects = [{ id: 'proj-1', name: 'baby-worldcup' }];
+
+    const mockCtx = {
+      serviceManager: {
+        getConnectedProjects: vi.fn().mockResolvedValue(connectedProjects),
+      },
+      db: {},
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services/svc-pg/connected-projects');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(connectedProjects);
+    expect(mockCtx.serviceManager.getConnectedProjects).toHaveBeenCalledWith('svc-pg');
+  });
+
+  it('DELETE /services/:id returns SERVICE_IN_USE with connected_projects', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+    const connectedProjects = [{ id: 'proj-1', name: 'baby-worldcup' }];
+
+    const mockCtx = {
+      serviceManager: {
+        remove: vi.fn().mockRejectedValue(new ServiceInUseError('postgres', connectedProjects)),
+      },
+      db: {},
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services/svc-pg', { method: 'DELETE' });
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: 'SERVICE_IN_USE',
+      code: 'SERVICE_IN_USE',
+      connected_projects: connectedProjects,
+    });
+    expect(mockCtx.serviceManager.remove).toHaveBeenCalledWith('svc-pg');
   });
 
   it('GET /services: kind=postgres + type=NULL → wire emits postgresql (CCG regression)', async () => {
@@ -210,15 +284,27 @@ describe('system-routes /api/services wire shape contract', () => {
     const mockCtx = {
       serviceManager: {
         listWithCardSummary: vi.fn().mockResolvedValue([postgresRow]),
-        create: vi.fn(), getDetail: vi.fn(), getLogs: vi.fn(), getStats: vi.fn(),
-        getInspectionHealth: vi.fn(), getConnectedProjects: vi.fn(),
-        listDatabases: vi.fn(), createDatabase: vi.fn(), listUsers: vi.fn(),
-        createUser: vi.fn(), remove: vi.fn(), start: vi.fn(), stop: vi.fn(), restart: vi.fn(),
+        create: vi.fn(),
+        getDetail: vi.fn(),
+        getLogs: vi.fn(),
+        getStats: vi.fn(),
+        getInspectionHealth: vi.fn(),
+        getConnectedProjects: vi.fn(),
+        listDatabases: vi.fn(),
+        createDatabase: vi.fn(),
+        listUsers: vi.fn(),
+        createUser: vi.fn(),
+        remove: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        restart: vi.fn(),
       },
       db: {
         getEnvVars: vi.fn().mockReturnValue({}),
         getEnvVarsForService: vi.fn().mockReturnValue({}),
-        getService: vi.fn(), hasAnyServiceMetrics: vi.fn(), listServiceMetricsSince: vi.fn(),
+        getService: vi.fn(),
+        hasAnyServiceMetrics: vi.fn(),
+        listServiceMetricsSince: vi.fn(),
       },
       config: { gitProviders: { github: {} } },
       docker: {},
@@ -228,7 +314,7 @@ describe('system-routes /api/services wire shape contract', () => {
     const res = await app.request('/api/services');
     expect(res.status).toBe(200);
 
-    const body = await res.json() as Array<Record<string, unknown>>;
+    const body = (await res.json()) as Array<Record<string, unknown>>;
     // kind='postgres' + type=NULL → kindToLegacyType → 'postgresql'
     expect(body[0].type).toBe('postgresql');
     expect(body[0].type).not.toBe('postgres');
@@ -251,15 +337,25 @@ describe('system-routes /api/services wire shape contract', () => {
         listWithCardSummary: vi.fn(),
         create: vi.fn(),
         getDetail: vi.fn().mockResolvedValue(postgresRow),
-        getLogs: vi.fn(), getStats: vi.fn(), getInspectionHealth: vi.fn(),
-        getConnectedProjects: vi.fn(), listDatabases: vi.fn(), createDatabase: vi.fn(),
-        listUsers: vi.fn(), createUser: vi.fn(), remove: vi.fn(), start: vi.fn(),
-        stop: vi.fn(), restart: vi.fn(),
+        getLogs: vi.fn(),
+        getStats: vi.fn(),
+        getInspectionHealth: vi.fn(),
+        getConnectedProjects: vi.fn(),
+        listDatabases: vi.fn(),
+        createDatabase: vi.fn(),
+        listUsers: vi.fn(),
+        createUser: vi.fn(),
+        remove: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        restart: vi.fn(),
       },
       db: {
         getEnvVars: vi.fn().mockReturnValue({}),
         getEnvVarsForService: vi.fn().mockReturnValue({}),
-        getService: vi.fn(), hasAnyServiceMetrics: vi.fn(), listServiceMetricsSince: vi.fn(),
+        getService: vi.fn(),
+        hasAnyServiceMetrics: vi.fn(),
+        listServiceMetricsSince: vi.fn(),
       },
       config: { gitProviders: { github: {} } },
       docker: {},
@@ -269,7 +365,7 @@ describe('system-routes /api/services wire shape contract', () => {
     const res = await app.request('/api/services/svc-pg-001');
     expect(res.status).toBe(200);
 
-    const svc = await res.json() as Record<string, unknown>;
+    const svc = (await res.json()) as Record<string, unknown>;
     // kind='postgres' + type=NULL → kindToLegacyType → 'postgresql'
     expect(svc.type).toBe('postgresql');
     expect(svc.type).not.toBe('postgres');
@@ -290,15 +386,27 @@ describe('system-routes /api/services wire shape contract', () => {
     const mockCtx = {
       serviceManager: {
         listWithCardSummary: vi.fn().mockResolvedValue([mongoRow]),
-        create: vi.fn(), getDetail: vi.fn(), getLogs: vi.fn(), getStats: vi.fn(),
-        getInspectionHealth: vi.fn(), getConnectedProjects: vi.fn(),
-        listDatabases: vi.fn(), createDatabase: vi.fn(), listUsers: vi.fn(),
-        createUser: vi.fn(), remove: vi.fn(), start: vi.fn(), stop: vi.fn(), restart: vi.fn(),
+        create: vi.fn(),
+        getDetail: vi.fn(),
+        getLogs: vi.fn(),
+        getStats: vi.fn(),
+        getInspectionHealth: vi.fn(),
+        getConnectedProjects: vi.fn(),
+        listDatabases: vi.fn(),
+        createDatabase: vi.fn(),
+        listUsers: vi.fn(),
+        createUser: vi.fn(),
+        remove: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        restart: vi.fn(),
       },
       db: {
         getEnvVars: vi.fn().mockReturnValue({}),
         getEnvVarsForService: vi.fn().mockReturnValue({}),
-        getService: vi.fn(), hasAnyServiceMetrics: vi.fn(), listServiceMetricsSince: vi.fn(),
+        getService: vi.fn(),
+        hasAnyServiceMetrics: vi.fn(),
+        listServiceMetricsSince: vi.fn(),
       },
       config: { gitProviders: { github: {} } },
       docker: {},
@@ -308,7 +416,7 @@ describe('system-routes /api/services wire shape contract', () => {
     const res = await app.request('/api/services');
     expect(res.status).toBe(200);
 
-    const body = await res.json() as Array<Record<string, unknown>>;
+    const body = (await res.json()) as Array<Record<string, unknown>>;
     // kind='mongo' + type=NULL → kindToLegacyType → 'mongodb'
     expect(body[0].type).toBe('mongodb');
     expect(body[0].type).not.toBe('mongo');
@@ -328,16 +436,33 @@ describe('system-routes /api/services wire shape contract', () => {
 
     const mockCtx = {
       serviceManager: {
-        listWithCardSummary: vi.fn().mockResolvedValue([{ ...legacyRow, summary: { healthStatus: null, uptimeSeconds: null, restartCount: null } }]),
-        create: vi.fn(), getDetail: vi.fn(), getLogs: vi.fn(), getStats: vi.fn(),
-        getInspectionHealth: vi.fn(), getConnectedProjects: vi.fn(),
-        listDatabases: vi.fn(), createDatabase: vi.fn(), listUsers: vi.fn(),
-        createUser: vi.fn(), remove: vi.fn(), start: vi.fn(), stop: vi.fn(), restart: vi.fn(),
+        listWithCardSummary: vi.fn().mockResolvedValue([
+          {
+            ...legacyRow,
+            summary: { healthStatus: null, uptimeSeconds: null, restartCount: null },
+          },
+        ]),
+        create: vi.fn(),
+        getDetail: vi.fn(),
+        getLogs: vi.fn(),
+        getStats: vi.fn(),
+        getInspectionHealth: vi.fn(),
+        getConnectedProjects: vi.fn(),
+        listDatabases: vi.fn(),
+        createDatabase: vi.fn(),
+        listUsers: vi.fn(),
+        createUser: vi.fn(),
+        remove: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        restart: vi.fn(),
       },
       db: {
         getEnvVars: vi.fn().mockReturnValue({ PG_PASSWORD: 'secret' }),
         getEnvVarsForService: vi.fn().mockReturnValue({ PG_PASSWORD: 'secret' }),
-        getService: vi.fn(), hasAnyServiceMetrics: vi.fn(), listServiceMetricsSince: vi.fn(),
+        getService: vi.fn(),
+        hasAnyServiceMetrics: vi.fn(),
+        listServiceMetricsSince: vi.fn(),
       },
       config: { gitProviders: { github: {} } },
       docker: {},
@@ -345,7 +470,7 @@ describe('system-routes /api/services wire shape contract', () => {
 
     app.route('/api', createSystemRoutes(mockCtx));
     const res = await app.request('/api/services');
-    const body = await res.json() as Array<Record<string, unknown>>;
+    const body = (await res.json()) as Array<Record<string, unknown>>;
     // Legacy values take precedence via `??`
     expect(body[0].type).toBe('postgres');
     expect(body[0].image).toBe('postgres:16-alpine');

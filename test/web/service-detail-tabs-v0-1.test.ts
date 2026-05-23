@@ -7,30 +7,47 @@ function readRepoFile(relativePath: string): string {
   return readFileSync(path.join(process.cwd(), relativePath), 'utf8');
 }
 
+function extractServiceTabUnion(source: string): string {
+  const match = source.match(/type ServiceTabId =([^;]+);/);
+  expect(match?.[1]).toBeDefined();
+  return match![1];
+}
+
+function extractDeployableTabsBlock(source: string): string {
+  // Scope the regex to the `const tabs = useMemo(() => [ ... ], …)`
+  // block so managed-service detail tabs cannot false-match this
+  // deployable-service contract.
+  const match = source.match(/const tabs = useMemo<TabDef[\s\S]*?\(\) => \[([\s\S]*?)\]/);
+  expect(match?.[1]).toBeDefined();
+  return match![1];
+}
+
 describe('Service detail v0.1 tabs', () => {
   const source = readRepoFile('web/src/pages/ServiceDetailV2.tsx');
 
   it('exposes the v0.1 6-tab set (Overview/Logs/Deployments/Monitoring/Environment/Domains)', () => {
     // Accept both single-line and multi-line union formatting — prettier
     // chooses based on width, so we shouldn't lock the test to either.
-    expect(source).toMatch(/type ServiceTabId =\s*[\n ]*(?:\| )?['"]overview['"]/);
-    expect(source).toMatch(/['"]environment['"]/);
-    expect(source).toMatch(/['"]domains['"]/);
-    expect(source).toMatch(/['"]deployments['"]/);
-    expect(source).toMatch(/['"]logs['"]/);
-    expect(source).toMatch(/['"]monitoring['"]/);
-    expect(source).not.toMatch(/\|\s*'resources'/);
-    expect(source).not.toMatch(/\|\s*'advanced'/);
-    expect(source).not.toMatch(/\|\s*'general'/);
-    expect(source).not.toMatch(/\|\s*'settings'/);
+    const serviceTabUnion = extractServiceTabUnion(source);
+    expect(serviceTabUnion).toMatch(/(?:\| )?['"]overview['"]/);
+    expect(serviceTabUnion).toMatch(/['"]environment['"]/);
+    expect(serviceTabUnion).toMatch(/['"]domains['"]/);
+    expect(serviceTabUnion).toMatch(/['"]deployments['"]/);
+    expect(serviceTabUnion).toMatch(/['"]logs['"]/);
+    expect(serviceTabUnion).toMatch(/['"]monitoring['"]/);
+    expect(serviceTabUnion).not.toMatch(/\|\s*'resources'/);
+    expect(serviceTabUnion).not.toMatch(/\|\s*'advanced'/);
+    expect(serviceTabUnion).not.toMatch(/\|\s*'general'/);
+    expect(serviceTabUnion).not.toMatch(/\|\s*'settings'/);
   });
 
-  it('drops the standalone Resources, Advanced and Settings tabs from the tabs array', () => {
-    expect(source).toContain("id: 'overview'");
-    expect(source).not.toMatch(/id:\s*'resources'/);
-    expect(source).not.toMatch(/id:\s*'advanced'/);
-    expect(source).not.toMatch(/id:\s*'general'/);
-    expect(source).not.toMatch(/id:\s*'settings'/);
+  it('drops the standalone Resources, Advanced and Settings tabs from the deployable tabs array', () => {
+    const tabsBlock = extractDeployableTabsBlock(source);
+    expect(tabsBlock).toContain("id: 'overview'");
+    expect(tabsBlock).not.toMatch(/id:\s*'resources'/);
+    expect(tabsBlock).not.toMatch(/id:\s*'advanced'/);
+    expect(tabsBlock).not.toMatch(/id:\s*'general'/);
+    expect(tabsBlock).not.toMatch(/id:\s*'settings'/);
     expect(source).not.toContain("label: 'General'");
     expect(source).not.toContain("label: 'Resources'");
     expect(source).not.toContain("label: 'Advanced'");
@@ -42,16 +59,7 @@ describe('Service detail v0.1 tabs', () => {
     // first because OpenLander is agent-first — humans hit Service
     // Detail mostly to diagnose, not to configure.
     //
-    // Scope the regex to the `const tabs = useMemo(() => [ ... ], …)`
-    // block so it cannot false-match `id: '<word>'` from helper
-    // objects, comments, or future code outside the tabs array (Codex
-    // CCG round-1 P2). Anchor on the literal `useMemo<TabDef` opener
-    // we own and stop at the first `]` that closes the array literal.
-    const tabsBlockMatch = source.match(
-      /const tabs = useMemo<TabDef[\s\S]*?\(\) => \[([\s\S]*?)\]/,
-    );
-    expect(tabsBlockMatch?.[1]).toBeDefined();
-    const tabsBlock = tabsBlockMatch![1];
+    const tabsBlock = extractDeployableTabsBlock(source);
     const ids: string[] = [];
     const re = /id:\s*'([a-z]+)'/g;
     let match: RegExpExecArray | null;
@@ -66,6 +74,14 @@ describe('Service detail v0.1 tabs', () => {
       'environment',
       'domains',
     ]);
+  });
+
+  it('keeps managed-service operations on a separate detail tab set', () => {
+    expect(source).toContain(
+      "type ManagedServiceTabId = 'overview' | 'logs' | 'connections' | 'settings'",
+    );
+    expect(source).toContain("{ id: 'settings', label: t('services.managedDetail.tabs.settings')");
+    expect(source).toContain('panelId="managed-servicepanel-settings"');
   });
 
   it('falls legacy ?tab={general|resources|advanced|settings} through to overview', () => {
@@ -142,13 +158,17 @@ describe('Service detail v0.1 tabs', () => {
 
   it('starts service deploys asynchronously and opens the live deployment log page', () => {
     expect(source).toMatch(/redeployService\(projectId,\s*id,\s*\{\s*async:\s*true\s*\}\)/);
-    expect(source).toMatch(/const deploymentId = result\.deploymentId \?\? result\.serviceId \?\? id/);
-    expect(source).toMatch(/navigate\(`\/projects\/\$\{projectId\}\/deployments\/\$\{deploymentId\}`\)/);
+    expect(source).toMatch(
+      /const deploymentId = result\.deploymentId \?\? result\.serviceId \?\? id/,
+    );
+    expect(source).toMatch(
+      /navigate\(`\/projects\/\$\{projectId\}\/deployments\/\$\{deploymentId\}`\)/,
+    );
   });
 
   it('keeps service deletion typed-confirm (Group A defensive UI path)', () => {
     expect(source).toContain('expectedDeleteSlug');
-    expect(source).toContain("`${projectName}/${service.name}`");
+    expect(source).toContain('`${projectName}/${service.name}`');
     expect(source).toContain('deleteVolumes');
     expect(source).toContain('deleteGroupService');
   });

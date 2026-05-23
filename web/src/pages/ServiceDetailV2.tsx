@@ -61,7 +61,13 @@ import { useLanguage } from '@/i18n/context';
 import {
   getGroupService,
   getService,
+  getConnectedProjects,
+  getServiceLogs,
+  removeService,
   deleteGroupService,
+  startService,
+  stopService,
+  type ConnectedProject,
   type GroupService,
   type MetricsRange,
   type Service,
@@ -98,6 +104,7 @@ import { isValidEnvKey } from '@/lib/env-key';
 import { parseEnvContent } from '@/lib/parse-env';
 
 type ServiceTabId = 'overview' | 'environment' | 'domains' | 'deployments' | 'logs' | 'monitoring';
+type ManagedServiceTabId = 'overview' | 'logs' | 'connections' | 'settings';
 
 const SERVICE_TAB_IDS = new Set<ServiceTabId>([
   'overview',
@@ -2001,15 +2008,13 @@ function RangeToggle<T extends string>({
 }
 
 /**
- * ManagedServiceDetail — minimal detail surface for managed services
+ * ManagedServiceDetail — operational detail surface for managed services
  * (postgres / mysql / redis / mongo etc).
  *
  * Mounted at `/managed-services/:id` via the route-prefix gate at the
- * top of `ServiceDetailV2`. Intentionally simple for 1.0 — image / port /
- * container ID + a back link. The richer experience (Connection /
- * Logs / Settings tabs) is staged for 1.1 alongside the API compat
- * layer; the legacy `web/src/components/service/Service*Tab.tsx`
- * components are dead today and will be revived or deleted then.
+ * top of `ServiceDetailV2`. v0.1.4 keeps native creation out of the
+ * web UI but exposes Overview / Logs / Connections / Settings so
+ * existing MCP-created infrastructure can be inspected and operated.
  */
 function ManagedServiceDetail({ id }: { id: string }) {
   const { t } = useLanguage();
@@ -2017,21 +2022,72 @@ function ManagedServiceDetail({ id }: { id: string }) {
   const [service, setService] = useState<Service | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<ManagedServiceTabId>('overview');
+  const [connections, setConnections] = useState<ConnectedProject[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+  const [connectionsError, setConnectionsError] = useState<string | null>(null);
+
+  const loadService = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setService(await getService(id));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load service');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  const loadConnections = useCallback(async () => {
+    setConnectionsLoading(true);
+    setConnectionsError(null);
+    try {
+      setConnections(await getConnectedProjects(id));
+    } catch (e: unknown) {
+      setConnections([]);
+      setConnectionsError(e instanceof Error ? e.message : 'Failed to load connections');
+    } finally {
+      setConnectionsLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    getService(id)
-      .then((s) => {
-        if (!cancelled) setService(s);
-      })
-      .catch((e: unknown) => {
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const nextService = await getService(id);
+        if (!cancelled) setService(nextService);
+      } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load service');
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setConnectionsLoading(true);
+      setConnectionsError(null);
+      try {
+        const nextConnections = await getConnectedProjects(id);
+        if (!cancelled) setConnections(nextConnections);
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setConnections([]);
+          setConnectionsError(e instanceof Error ? e.message : 'Failed to load connections');
+        }
+      } finally {
+        if (!cancelled) setConnectionsLoading(false);
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -2069,6 +2125,18 @@ function ManagedServiceDetail({ id }: { id: string }) {
       </div>
     );
   }
+
+  const tabs: TabDef<ManagedServiceTabId>[] = [
+    { id: 'overview', label: t('services.managedDetail.tabs.overview'), icon: SettingsIcon },
+    { id: 'logs', label: t('services.managedDetail.tabs.logs'), icon: ScrollText },
+    {
+      id: 'connections',
+      label: t('services.managedDetail.tabs.connections'),
+      icon: Box,
+      count: connections.length || undefined,
+    },
+    { id: 'settings', label: t('services.managedDetail.tabs.settings'), icon: SettingsIcon },
+  ];
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
@@ -2109,38 +2177,423 @@ function ManagedServiceDetail({ id }: { id: string }) {
             {t('services.managedDetail.backToListShort')}
           </button>
         }
+        bodyClassName="p-0"
       >
-        <dl className="grid grid-cols-1 gap-3 text-[13px] sm:grid-cols-2">
-          <ManagedDetailField
-            label={t('services.managedDetail.field.image')}
-            value={service.image}
-            mono
+        <ProjectTabs
+          tabs={tabs}
+          active={activeTab}
+          onChange={setActiveTab}
+          idPrefix="managed-service"
+          ariaLabel={t('services.managedDetail.tabs.aria')}
+        />
+
+        <TabPanel
+          active={activeTab === 'overview'}
+          panelId="managed-servicepanel-overview"
+          labelledBy="managed-service-overview"
+          className="p-5"
+        >
+          <ManagedOverviewTab service={service} />
+        </TabPanel>
+
+        <TabPanel
+          active={activeTab === 'logs'}
+          panelId="managed-servicepanel-logs"
+          labelledBy="managed-service-logs"
+          className="p-0"
+        >
+          <ManagedLogsTab serviceId={service.id} />
+        </TabPanel>
+
+        <TabPanel
+          active={activeTab === 'connections'}
+          panelId="managed-servicepanel-connections"
+          labelledBy="managed-service-connections"
+          className="p-5"
+        >
+          <ManagedConnectionsTab
+            connections={connections}
+            loading={connectionsLoading}
+            error={connectionsError}
+            onRefresh={() => void loadConnections()}
           />
-          <ManagedDetailField
-            label={t('services.managedDetail.field.port')}
-            value={String(service.port)}
-            mono
+        </TabPanel>
+
+        <TabPanel
+          active={activeTab === 'settings'}
+          panelId="managed-servicepanel-settings"
+          labelledBy="managed-service-settings"
+          className="p-5"
+        >
+          <ManagedSettingsTab
+            service={service}
+            connections={connections}
+            connectionsLoading={connectionsLoading}
+            connectionsError={connectionsError}
+            onServiceChanged={() => void loadService()}
+            onConnectionsChanged={() => void loadConnections()}
+            onDeleted={() => navigate('/managed-services')}
           />
-          <ManagedDetailField
-            label={t('services.managedDetail.field.container')}
-            value={service.container_name}
-            mono
-          />
-          <ManagedDetailField
-            label={t('services.managedDetail.field.containerId')}
-            value={service.container_id ? service.container_id.slice(0, 12) : '—'}
-            mono
-          />
-          <ManagedDetailField
-            label={t('services.managedDetail.field.created')}
-            value={new Date(service.created_at).toLocaleString()}
-          />
-          <ManagedDetailField
-            label={t('services.managedDetail.field.updated')}
-            value={new Date(service.updated_at).toLocaleString()}
-          />
-        </dl>
+        </TabPanel>
       </OuterCard>
+    </div>
+  );
+}
+
+function ManagedOverviewTab({ service }: { service: Service }) {
+  const { t } = useLanguage();
+  return (
+    <dl className="grid grid-cols-1 gap-3 text-[13px] sm:grid-cols-2">
+      <ManagedDetailField
+        label={t('services.managedDetail.field.image')}
+        value={service.image}
+        mono
+      />
+      <ManagedDetailField
+        label={t('services.managedDetail.field.port')}
+        value={String(service.port)}
+        mono
+      />
+      <ManagedDetailField
+        label={t('services.managedDetail.field.container')}
+        value={service.container_name}
+        mono
+      />
+      <ManagedDetailField
+        label={t('services.managedDetail.field.containerId')}
+        value={service.container_id ? service.container_id.slice(0, 12) : '—'}
+        mono
+      />
+      <ManagedDetailField
+        label={t('services.managedDetail.field.created')}
+        value={new Date(service.created_at).toLocaleString()}
+      />
+      <ManagedDetailField
+        label={t('services.managedDetail.field.updated')}
+        value={new Date(service.updated_at).toLocaleString()}
+      />
+    </dl>
+  );
+}
+
+function ManagedLogsTab({ serviceId }: { serviceId: string }) {
+  const { t } = useLanguage();
+  const [logs, setLogs] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadLogs = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setLogs(await getServiceLogs(serviceId, 300));
+    } catch (e: unknown) {
+      setLogs('');
+      setError(e instanceof Error ? e.message : t('services.managedDetail.logs.error'));
+    } finally {
+      setLoading(false);
+    }
+  }, [serviceId, t]);
+
+  useEffect(() => {
+    void (async () => {
+      await loadLogs();
+    })();
+  }, [loadLogs]);
+
+  return (
+    <div className="flex min-h-[420px] flex-col">
+      <div className="flex items-center justify-between gap-3 border-b border-[color:var(--ol-border-subtle)] px-5 py-3">
+        <div>
+          <h3 className="text-[13px] font-semibold text-[color:var(--ol-fg)]">
+            {t('services.managedDetail.logs.title')}
+          </h3>
+          <p className="text-[12px] text-[color:var(--ol-fg-muted)]">
+            {t('services.managedDetail.logs.description')}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void loadLogs()}
+          disabled={loading}
+          className="shrink-0 rounded-md border border-[color:var(--ol-border)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-fg)] disabled:opacity-50"
+        >
+          {loading
+            ? t('services.managedDetail.logs.loading')
+            : t('services.managedDetail.logs.refresh')}
+        </button>
+      </div>
+      {error ? (
+        <div className="m-5 rounded-md border border-[color:var(--ol-error)] bg-[color-mix(in_oklch,var(--ol-error)_6%,transparent)] px-3 py-2 text-[12px] text-[color:var(--ol-error)]">
+          {error}
+        </div>
+      ) : (
+        <pre className="ol-mono min-h-[360px] flex-1 overflow-auto whitespace-pre-wrap bg-[color:var(--ol-bg)] p-5 text-[12px] leading-relaxed text-[color:var(--ol-fg-muted)]">
+          {logs.trim().length > 0
+            ? logs
+            : loading
+              ? t('services.managedDetail.logs.loading')
+              : t('services.managedDetail.logs.empty')}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+function ManagedConnectionsTab({
+  connections,
+  loading,
+  error,
+  onRefresh,
+}: {
+  connections: ConnectedProject[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  const { t } = useLanguage();
+  const navigate = useNavigate();
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-[13px] font-semibold text-[color:var(--ol-fg)]">
+            {t('services.managedDetail.connections.title')}
+          </h3>
+          <p className="text-[12px] text-[color:var(--ol-fg-muted)]">
+            {t('services.managedDetail.connections.description')}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="shrink-0 rounded-md border border-[color:var(--ol-border)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-fg)] disabled:opacity-50"
+        >
+          {loading
+            ? t('services.managedDetail.connections.loading')
+            : t('services.managedDetail.connections.refresh')}
+        </button>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-[color:var(--ol-error)] bg-[color-mix(in_oklch,var(--ol-error)_6%,transparent)] px-3 py-2 text-[12px] text-[color:var(--ol-error)]">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && connections.length === 0 && (
+        <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-3 py-4 text-[12.5px] text-[color:var(--ol-fg-muted)]">
+          {t('services.managedDetail.connections.empty')}
+        </div>
+      )}
+
+      {connections.length > 0 && (
+        <ul className="divide-y divide-[color:var(--ol-border-subtle)] rounded-md border border-[color:var(--ol-border-subtle)]">
+          {connections.map((project) => (
+            <li key={project.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] font-medium text-[color:var(--ol-fg)]">
+                  {project.name}
+                </span>
+                <span className="ol-mono block truncate text-[11.5px] text-[color:var(--ol-fg-subtle)]">
+                  {project.id}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate(`/projects/${project.id}`)}
+                className="shrink-0 rounded-md border border-[color:var(--ol-border)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-fg)]"
+              >
+                {t('services.managedDetail.connections.openProject')}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ManagedSettingsTab({
+  service,
+  connections,
+  connectionsLoading,
+  connectionsError,
+  onServiceChanged,
+  onConnectionsChanged,
+  onDeleted,
+}: {
+  service: Service;
+  connections: ConnectedProject[];
+  connectionsLoading: boolean;
+  connectionsError: string | null;
+  onServiceChanged: () => void;
+  onConnectionsChanged: () => void;
+  onDeleted: () => void;
+}) {
+  const { t } = useLanguage();
+  const [busyAction, setBusyAction] = useState<'start' | 'stop' | 'delete' | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const hasConnections = connections.length > 0;
+  const deleteBlocked = hasConnections || connectionsLoading || connectionsError !== null;
+
+  const runLifecycle = async (action: 'start' | 'stop') => {
+    setBusyAction(action);
+    setFeedback(null);
+    try {
+      if (action === 'start') {
+        await startService(service.id);
+      } else {
+        await stopService(service.id);
+      }
+      onServiceChanged();
+      setFeedback(t('services.managedDetail.settings.updated'));
+    } catch (e: unknown) {
+      setFeedback(
+        e instanceof Error ? e.message : t('services.managedDetail.settings.actionError'),
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const submitDelete = async () => {
+    if (deleteConfirmation.trim() !== service.name || deleteBlocked) return;
+    setBusyAction('delete');
+    setFeedback(null);
+    try {
+      await removeService(service.id);
+      onDeleted();
+    } catch (e: unknown) {
+      onConnectionsChanged();
+      setFeedback(
+        e instanceof Error ? e.message : t('services.managedDetail.settings.deleteError'),
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <section className="flex flex-col gap-3">
+        <div>
+          <h3 className="text-[13px] font-semibold text-[color:var(--ol-fg)]">
+            {t('services.managedDetail.settings.lifecycle')}
+          </h3>
+          <p className="text-[12px] text-[color:var(--ol-fg-muted)]">
+            {t('services.managedDetail.settings.lifecycleDescription')}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void runLifecycle('start')}
+            disabled={busyAction !== null || service.status === 'running'}
+            className="rounded-md border border-[color:var(--ol-border)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busyAction === 'start'
+              ? t('services.managedDetail.settings.starting')
+              : t('services.managedDetail.settings.start')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void runLifecycle('stop')}
+            disabled={busyAction !== null || service.status === 'stopped'}
+            className="rounded-md border border-[color:var(--ol-border)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busyAction === 'stop'
+              ? t('services.managedDetail.settings.stopping')
+              : t('services.managedDetail.settings.stop')}
+          </button>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3 border-t border-[color:var(--ol-border-subtle)] pt-5">
+        <div>
+          <h3 className="text-[13px] font-semibold text-[color:var(--ol-error)]">
+            {t('services.managedDetail.settings.danger')}
+          </h3>
+          <p className="text-[12px] text-[color:var(--ol-fg-muted)]">
+            {t('services.managedDetail.settings.dangerDescription')}
+          </p>
+        </div>
+
+        {hasConnections && (
+          <div className="rounded-md border border-[color:var(--ol-warning)] bg-[color:var(--ol-warning-soft)] px-3 py-2 text-[12px] text-[color:var(--ol-warning)]">
+            {t('services.managedDetail.settings.deleteBlocked', {
+              count: String(connections.length),
+            })}
+          </div>
+        )}
+        {connectionsError && (
+          <div className="rounded-md border border-[color:var(--ol-error)] bg-[color-mix(in_oklch,var(--ol-error)_6%,transparent)] px-3 py-2 text-[12px] text-[color:var(--ol-error)]">
+            {t('services.managedDetail.settings.connectionCheckFailed')} {connectionsError}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setDeleteOpen((open) => !open)}
+          disabled={deleteBlocked || busyAction !== null}
+          className="inline-flex w-fit items-center gap-2 rounded-md border border-[color:var(--ol-error)] px-3 py-1.5 text-[12px] font-medium text-[color:var(--ol-error)] transition-colors hover:bg-[color-mix(in_oklch,var(--ol-error)_6%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          {t('services.managedDetail.settings.delete')}
+        </button>
+
+        {deleteOpen && (
+          <div className="rounded-md border border-[color:var(--ol-error)] bg-[color-mix(in_oklch,var(--ol-error)_5%,transparent)] p-4">
+            <label className="text-[12px] font-medium text-[color:var(--ol-fg-muted)]">
+              {t('services.managedDetail.settings.confirmLabel')}
+              <span className="ol-mono ml-1 text-[color:var(--ol-fg)]">{service.name}</span>
+              <input
+                value={deleteConfirmation}
+                onChange={(event) => setDeleteConfirmation(event.target.value)}
+                className="ol-mono mt-1 w-full rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-2 text-[12.5px] text-[color:var(--ol-fg)] outline-none transition-colors focus:border-[color:var(--ol-error)]"
+                placeholder={service.name}
+              />
+            </label>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteOpen(false);
+                  setDeleteConfirmation('');
+                }}
+                disabled={busyAction === 'delete'}
+                className="rounded-md border border-[color:var(--ol-border)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] hover:text-[color:var(--ol-fg)] disabled:opacity-50"
+              >
+                {t('projectDetail.env.cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitDelete()}
+                disabled={
+                  busyAction === 'delete' ||
+                  deleteBlocked ||
+                  deleteConfirmation.trim() !== service.name
+                }
+                className="rounded-md bg-[color:var(--ol-error)] px-3 py-1.5 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busyAction === 'delete'
+                  ? t('services.managedDetail.settings.deleting')
+                  : t('services.managedDetail.settings.confirmDelete')}
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {feedback && (
+        <div className="rounded-md border border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-3 py-2 text-[12px] text-[color:var(--ol-fg-muted)]">
+          {feedback}
+        </div>
+      )}
     </div>
   );
 }

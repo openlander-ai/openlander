@@ -95,6 +95,11 @@ export const managedServices = {
   /** List managed services attached to a group via service_connections. */
   listForGroup: (groupId: string): Promise<ProjectManagedService[]> =>
     apiGet<ProjectManagedService[]>(`/api/projects/${groupId}/managed-services`),
+  logs: (id: string, lines?: number): Promise<string> => getServiceLogs(id, lines),
+  connectedProjects: (id: string): Promise<ConnectedProject[]> => getConnectedProjects(id),
+  start: (id: string): Promise<void> => startService(id),
+  stop: (id: string): Promise<void> => stopService(id),
+  remove: (id: string): Promise<void> => removeService(id),
 } as const;
 
 /**

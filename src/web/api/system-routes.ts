@@ -4,6 +4,7 @@ import type { AppContext } from '../../app.js';
 import type { ServiceRow } from '../../db/types.js';
 import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { ORPHAN_MANAGED_GROUP_ID } from '../../db/service-ids.js';
+import { ServiceInUseError } from '../../errors.js';
 import { createGitProvider } from '../../git-providers/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getSystemStats, formatStatsSummary } from '../../monitor/stats.js';
@@ -479,10 +480,10 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     }
   });
 
-  api.get('/services/:id/connected-projects', (c) => {
+  api.get('/services/:id/connected-projects', async (c) => {
     const id = c.req.param('id');
     try {
-      const projects = ctx.serviceManager.getConnectedProjects(id);
+      const projects = await ctx.serviceManager.getConnectedProjects(id);
       return c.json(projects);
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Get connected projects failed');
@@ -609,6 +610,20 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       return c.json({ status: 'removed', ...result });
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Remove service failed');
+      if (err instanceof ServiceInUseError) {
+        const connectedProjects = Array.isArray(err.details?.['connectedProjects'])
+          ? err.details['connectedProjects']
+          : [];
+        return c.json(
+          {
+            error: err.code,
+            code: err.code,
+            message: err.message,
+            connected_projects: connectedProjects,
+          },
+          409,
+        );
+      }
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes('Service not found')) {
         return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
