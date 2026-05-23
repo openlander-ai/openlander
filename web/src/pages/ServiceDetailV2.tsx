@@ -100,7 +100,7 @@ import { isValidEnvKey } from '@/lib/env-key';
 import { parseEnvContent } from '@/lib/parse-env';
 
 type ServiceTabId = 'overview' | 'environment' | 'domains' | 'deployments' | 'logs' | 'monitoring';
-type ManagedServiceTabId = 'overview' | 'logs' | 'connections' | 'settings';
+type ManagedServiceTabId = 'overview' | 'logs' | 'connections';
 
 const SERVICE_TAB_IDS = new Set<ServiceTabId>([
   'overview',
@@ -2001,8 +2001,9 @@ function RangeToggle<T extends string>({
  *
  * Mounted at `/projects/:p/infrastructure/:id` via the route-prefix gate
  * at the top of `ServiceDetailV2`. v0.1.4 keeps native creation out of
- * the web UI but exposes Overview / Logs / Connections / Settings so
- * existing MCP-created infrastructure can be inspected and operated.
+ * the web UI but exposes Overview / Logs / Connections so existing
+ * MCP-created infrastructure can be inspected and operated. Mutations live
+ * in Overview to match deployable service detail.
  */
 function ManagedServiceDetail({
   id,
@@ -2136,7 +2137,6 @@ function ManagedServiceDetail({
       icon: Box,
       count: connections.length || undefined,
     },
-    { id: 'settings', label: t('services.managedDetail.tabs.settings'), icon: SettingsIcon },
   ];
 
   return (
@@ -2190,7 +2190,15 @@ function ManagedServiceDetail({
           labelledBy="managed-service-overview"
           className="p-5"
         >
-          <ManagedOverviewTab service={service} />
+          <ManagedOverviewTab
+            service={service}
+            connections={connections}
+            connectionsLoading={connectionsLoading}
+            connectionsError={connectionsError}
+            onServiceChanged={() => void loadService()}
+            onConnectionsChanged={() => void loadConnections()}
+            onDeleted={() => navigate(backTarget)}
+          />
         </TabPanel>
 
         <TabPanel
@@ -2215,23 +2223,6 @@ function ManagedServiceDetail({
             onRefresh={() => void loadConnections()}
           />
         </TabPanel>
-
-        <TabPanel
-          active={activeTab === 'settings'}
-          panelId="managed-servicepanel-settings"
-          labelledBy="managed-service-settings"
-          className="p-5"
-        >
-          <ManagedSettingsTab
-            service={service}
-            connections={connections}
-            connectionsLoading={connectionsLoading}
-            connectionsError={connectionsError}
-            onServiceChanged={() => void loadService()}
-            onConnectionsChanged={() => void loadConnections()}
-            onDeleted={() => navigate(backTarget)}
-          />
-        </TabPanel>
       </OuterCard>
     </div>
   );
@@ -2250,7 +2241,23 @@ function getInfrastructureProjectId(
   return connections[0]?.id ?? null;
 }
 
-function ManagedOverviewTab({ service }: { service: Service }) {
+function ManagedOverviewTab({
+  service,
+  connections,
+  connectionsLoading,
+  connectionsError,
+  onServiceChanged,
+  onConnectionsChanged,
+  onDeleted,
+}: {
+  service: Service;
+  connections: ConnectedProject[];
+  connectionsLoading: boolean;
+  connectionsError: string | null;
+  onServiceChanged: () => void;
+  onConnectionsChanged: () => void;
+  onDeleted: () => void;
+}) {
   const { t } = useLanguage();
   const kind = service.kind ?? service.type ?? '—';
   const image = service.image || '—';
@@ -2278,16 +2285,27 @@ function ManagedOverviewTab({ service }: { service: Service }) {
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-      <SubCard title={t('services.detail.section.source')}>
-        <KvList rows={sourceRows} valueClassName="ol-mono break-all text-[12px]" />
-      </SubCard>
-      <SubCard
-        title={t('services.detail.section.runtime')}
-        badge={<ManagedHealthBadge status={service.status} />}
-      >
-        <KvList rows={runtimeRows} valueClassName="ol-mono break-all text-[12px]" />
-      </SubCard>
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <SubCard title={t('services.detail.section.source')}>
+          <KvList rows={sourceRows} valueClassName="ol-mono break-all text-[12px]" />
+        </SubCard>
+        <SubCard
+          title={t('services.detail.section.runtime')}
+          badge={<ManagedHealthBadge status={service.status} />}
+        >
+          <KvList rows={runtimeRows} valueClassName="ol-mono break-all text-[12px]" />
+        </SubCard>
+      </div>
+      <ManagedOperationsSection
+        service={service}
+        connections={connections}
+        connectionsLoading={connectionsLoading}
+        connectionsError={connectionsError}
+        onServiceChanged={onServiceChanged}
+        onConnectionsChanged={onConnectionsChanged}
+        onDeleted={onDeleted}
+      />
     </div>
   );
 }
@@ -2449,7 +2467,7 @@ function ManagedConnectionsTab({
   );
 }
 
-function ManagedSettingsTab({
+function ManagedOperationsSection({
   service,
   connections,
   connectionsLoading,

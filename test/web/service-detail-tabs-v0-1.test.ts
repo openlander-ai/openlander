@@ -76,12 +76,14 @@ describe('Service detail v0.1 tabs', () => {
     ]);
   });
 
-  it('keeps managed-service operations on a separate detail tab set', () => {
-    expect(source).toContain(
-      "type ManagedServiceTabId = 'overview' | 'logs' | 'connections' | 'settings'",
+  it('keeps managed-service operations in Overview instead of a Settings tab', () => {
+    expect(source).toContain("type ManagedServiceTabId = 'overview' | 'logs' | 'connections'");
+    expect(source).not.toContain(
+      "{ id: 'settings', label: t('services.managedDetail.tabs.settings')",
     );
-    expect(source).toContain("{ id: 'settings', label: t('services.managedDetail.tabs.settings')");
-    expect(source).toContain('panelId="managed-servicepanel-settings"');
+    expect(source).not.toContain('panelId="managed-servicepanel-settings"');
+    expect(source).toContain('<ManagedOperationsSection');
+    expect(source).toContain('panelId="managed-servicepanel-overview"');
   });
 
   it('does not render missing managed-service ports as undefined', () => {

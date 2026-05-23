@@ -143,8 +143,9 @@ operations on services already connected to a project.
 | **Domains**     | Host/path routes registered for the service. DNS/TLS remain external in v0.1. |
 
 Deployable services use the full service detail surface. Infrastructure services
-use a narrower project-scoped detail surface with Overview, Logs, Connections,
-and Settings. Project detail shows connected project-scoped infrastructure
+use a narrower project-scoped detail surface with Overview, Logs, and
+Connections. Lifecycle and danger actions live in Overview to match deployable
+service detail. Project detail shows connected project-scoped infrastructure
 services in the Services tab; cross-project shared resources and external TCP
 endpoints are deferred.
 
