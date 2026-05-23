@@ -28,6 +28,8 @@ function createPolicyContext(opts: ProjectFixtureOpts = {}): AppContext {
     project_id: project.id,
     kind: 'git',
     source: 'git',
+    repo_url: 'https://github.com/openlander/rejected-api.git',
+    image_url: null,
   };
   return {
     db: {
@@ -88,6 +90,12 @@ describe('MCP service runtime mutation policy rejections', () => {
         },
       });
       expect(JSON.stringify(result)).toContain('does not restore databases');
+      expect(ctx.pipeline.rollback).toHaveBeenCalledWith(
+        'proj-1',
+        undefined,
+        expect.stringMatching(/^mcp-rollback-service-/),
+        'chat',
+      );
     });
 
     it('rejects archived project with PROJECT_ARCHIVED', async () => {
@@ -113,7 +121,9 @@ describe('MCP service runtime mutation policy rejections', () => {
 
     it('returns typed rejection when pipeline rejects mid-flight', async () => {
       const ctx = createPolicyContext();
-      ctx.pipeline.rollback = vi.fn().mockRejectedValue(new ProjectArchivedError('proj-1')) as never;
+      ctx.pipeline.rollback = vi
+        .fn()
+        .mockRejectedValue(new ProjectArchivedError('proj-1')) as never;
       const result = await getTool(ctx, 'rollback_service').execute(serviceArgs, { target: 'mcp' });
       expectPolicyRejection(result, 'PROJECT_ARCHIVED');
     });

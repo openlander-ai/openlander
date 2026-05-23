@@ -570,6 +570,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
           runtimeProject.id,
           undefined,
           sessionId,
+          deployTriggerForToolContext(context),
         );
         return {
           ...result,

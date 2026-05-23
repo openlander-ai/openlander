@@ -24,6 +24,8 @@ import {
   setGlobalSecretSchema,
   uploadSecretFileSchema,
 } from './schemas.js';
+import { deployTriggerForToolContext } from './helpers.js';
+import type { ToolDeployTrigger } from './helpers.js';
 
 type AppCtx = Parameters<ToolDef['execute']>[1]['appCtx'];
 type ServiceRow = Awaited<ReturnType<AppCtx['db']['getService']>>;
@@ -273,6 +275,7 @@ async function applyRedeployIfRequested(
   target: EnvTarget,
   changed: boolean,
   deferRedeploy: boolean,
+  trigger: ToolDeployTrigger,
 ): Promise<{
   redeployed: boolean;
   needsRedeploy: boolean;
@@ -307,7 +310,7 @@ async function applyRedeployIfRequested(
   }
 
   try {
-    await appCtx.pipeline.redeploy(runtimeProject.id);
+    await appCtx.pipeline.redeploy(runtimeProject.id, { trigger });
     return { redeployed: true, needsRedeploy: false };
   } catch (err) {
     if (
@@ -388,7 +391,8 @@ export const envToolDefs: ToolDef[] = [
     mcpDescription:
       'Set service-scoped env vars. Default saves only; call redeploy_app to apply, or pass defer_redeploy=false.',
     inputSchema: setEnvVarsSchema,
-    execute: async (args, { appCtx }) => {
+    execute: async (args, context) => {
+      const { appCtx } = context;
       const target = await resolveEnvTarget(args, appCtx);
       const vars = parseEnvVariables(args['variables']);
       const deferRedeploy = (args['defer_redeploy'] as boolean | undefined) ?? true;
@@ -416,7 +420,13 @@ export const envToolDefs: ToolDef[] = [
         };
       }
 
-      const redeploy = await applyRedeployIfRequested(appCtx, target, changed, deferRedeploy);
+      const redeploy = await applyRedeployIfRequested(
+        appCtx,
+        target,
+        changed,
+        deferRedeploy,
+        deployTriggerForToolContext(context),
+      );
       await recordEnvActivity(appCtx, target.project.id, 'set', Object.keys(vars), {
         service_id: target.service.id,
         service_name: target.service.name,
@@ -496,13 +506,20 @@ export const envToolDefs: ToolDef[] = [
       'Delete one service environment variable. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false.',
     mcpDescription: 'Delete one service env var. Default saves only; call redeploy_app to apply.',
     inputSchema: deleteEnvVarSchema,
-    execute: async (args, { appCtx }) => {
+    execute: async (args, context) => {
+      const { appCtx } = context;
       const key = args['key'] as string;
       const deferRedeploy = (args['defer_redeploy'] as boolean | undefined) ?? true;
       const target = await resolveEnvTarget(args, appCtx);
       await appCtx.db.assertEnvToolSchemaReady();
       const deleted = await appCtx.env.deleteForService(target.project.id, target.service.id, key);
-      const redeploy = await applyRedeployIfRequested(appCtx, target, deleted, deferRedeploy);
+      const redeploy = await applyRedeployIfRequested(
+        appCtx,
+        target,
+        deleted,
+        deferRedeploy,
+        deployTriggerForToolContext(context),
+      );
       if (deleted) {
         await recordEnvActivity(appCtx, target.project.id, 'delete', [key], {
           service_id: target.service.id,
@@ -527,7 +544,8 @@ export const envToolDefs: ToolDef[] = [
       'Delete multiple service environment variables. Omitting confirm=true returns a dry-run preview only. By default confirmed deletes do NOT redeploy; call redeploy_app separately to apply, or pass defer_redeploy=false.',
     mcpDescription: 'Bulk delete service env vars with confirm-gated dry-run behavior.',
     inputSchema: bulkDeleteEnvVarsSchema,
-    execute: async (args, { appCtx }) => {
+    execute: async (args, context) => {
+      const { appCtx } = context;
       const keys = args['keys'] as string[];
       const confirm = (args['confirm'] as boolean | undefined) ?? false;
       const deferRedeploy = (args['defer_redeploy'] as boolean | undefined) ?? true;
@@ -556,6 +574,7 @@ export const envToolDefs: ToolDef[] = [
         target,
         result.changed,
         deferRedeploy,
+        deployTriggerForToolContext(context),
       );
       if (result.deleted.length > 0) {
         await recordEnvActivity(appCtx, target.project.id, 'bulk_delete', result.deleted, {

@@ -239,7 +239,7 @@ export const composeToolDefs: ToolDef[] = [
           if (!service.projectId) {
             return;
           }
-          await appCtx.pipeline.rollback(service.projectId);
+          await appCtx.pipeline.rollback(service.projectId, undefined, undefined, 'chat');
         },
       });
     },
