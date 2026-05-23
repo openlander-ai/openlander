@@ -58,38 +58,14 @@ export interface ProjectManagedService {
   autoInjectedEnvKeys?: string[];
 }
 
-/**
- * Legacy global services list — backed by today's managed-only handler.
- * Legacy global managed-service list. Project-scoped infrastructure cards
- * should use `managedServices.listForGroup(groupId)`.
- */
-export async function getServices(): Promise<Service[]> {
-  return apiGet<Service[]>('/api/services');
-}
-
-/**
- * Legacy service-by-id fetch. Post-fullsplit, callers should use
- * `managedServices.get()` for managed rows or rely on the canonical
- * deployable detail under `/api/projects/:p/services/:s`. The legacy
- * URL stays callable through 1.x to avoid breaking older bookmarks.
- */
-export async function getService(id: string): Promise<Service> {
-  return apiGet<Service>(`/api/services/${id}`);
-}
-
 // ─── 1.0-rc.2: infrastructure-service namespace ───────────────────────────
 //
 // Per ralplan-data-model-full-migration §6.8: managed-service helpers
 // split into a dedicated namespace so the deployable-vocab `getService(id)`
 // (which will live under `/api/projects/:p/services/:s` once P2 lands the
 // canonical handler) doesn't collide with managed-service callers.
-//
-// The legacy free functions above remain re-exported as-is so existing
-// imports keep working through 1.x.
 
 export const managedServices = {
-  /** List managed services (postgres / mysql / redis / mongo / minio). */
-  list: (): Promise<Service[]> => apiGet<Service[]>('/api/services'),
   /** Get a managed service by id. */
   get: (id: string): Promise<Service> => apiGet<Service>(`/api/services/${id}`),
   /** List managed services attached to a group via service_connections. */
