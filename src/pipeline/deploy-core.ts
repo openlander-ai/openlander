@@ -1893,6 +1893,17 @@ export class DeployPipeline {
         },
         db: this.db,
       });
+      if (config.source === 'image') {
+        if (!config.imageUrl) {
+          throw new MissingImageUrlError();
+        }
+        try {
+          await this.docker.pullImage(config.imageUrl);
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          throw new ImagePullError(mapPullError(err));
+        }
+      }
       const currentRunningTag = redeployImageTag;
       let redeployPreviousTag: string | null = currentRunningTag ?? null;
       if (redeploySource !== 'image' && currentRunningTag) {

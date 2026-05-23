@@ -264,6 +264,35 @@ describe('deployable service target resolution', () => {
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
   });
 
+  it('blocks local OpenLander image tags before acquiring a deploy lock', async () => {
+    const ctx = createDuplicateServiceContext({
+      alphaService: {
+        kind: 'image',
+        source: 'image',
+        repo_url: null,
+        image_url: 'openlander/home-menu:latest',
+      },
+    });
+
+    const result = await getTool(ctx, 'restart_service').execute(
+      { service_id: 'alpha__svc' },
+      { target: 'mcp' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      code: 'SERVICE_SOURCE_MISSING',
+      details: { missingField: 'image_url', source: 'image' },
+      service: { id: 'alpha__svc', projectId: 'alpha' },
+      _agent_guidance: {
+        message: expect.stringContaining('existing container was left untouched'),
+      },
+    });
+    expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
+    expect(ctx.pipeline.stop).not.toHaveBeenCalled();
+    expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+  });
+
   it('requires service_id when service_name matches a multi-deployable project group', async () => {
     const ctx = createMultiDeployableProjectContext();
 

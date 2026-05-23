@@ -33,6 +33,7 @@ function createMockDocker(): Docker {
     getLogs: vi.fn().mockResolvedValue(''),
     cleanupSecretFiles: vi.fn(),
     buildImage: vi.fn().mockResolvedValue(undefined),
+    pullImage: vi.fn().mockResolvedValue(undefined),
     tagImage: vi.fn().mockResolvedValue(undefined),
   } as unknown as Docker;
 }
@@ -66,6 +67,8 @@ function createMockDb(existingProject: ReturnType<typeof makeExistingProjectRow>
     getDeployLockInfo: vi.fn().mockReturnValue(null),
     isCircuitBreakerOpen: vi.fn().mockReturnValue(false),
     getDeployableForProject: vi.fn().mockReturnValue(undefined),
+    loadDeployConfig: vi.fn().mockResolvedValue(null),
+    loadDeployConfigForService: vi.fn().mockResolvedValue(null),
     getEnvironmentsByProject: vi.fn().mockResolvedValue([]),
     getLastDeployLog: vi.fn().mockResolvedValue(null),
     cleanExpiredDeployLocks: vi.fn().mockResolvedValue(0),
@@ -234,6 +237,84 @@ describe('BUG: plan-engine deploy-lock session propagation through startDeploy',
       details: { missingField: 'image_url', source: 'image' },
     });
 
+    expect(docker.safeRemoveContainer).not.toHaveBeenCalled();
+    expect(docker.removeContainer).not.toHaveBeenCalled();
+    expect(db.updateProject).not.toHaveBeenCalled();
+  });
+
+  it('rejects local OpenLander image tags before tearing down the live container', async () => {
+    const project = {
+      ...makeExistingProjectRow('p-local-image', 'home-menu'),
+      source: 'image',
+      image_url: 'openlander/home-menu:latest',
+      image_tag: 'openlander/home-menu:latest',
+    };
+    const db = createMockDb(project);
+    const docker = createMockDocker();
+    const deployable = {
+      id: 'p-local-image__svc',
+      project_id: 'p-local-image',
+      name: 'app',
+      kind: 'image',
+      source: 'image',
+      status: 'running',
+      repo_url: null,
+      image_url: 'openlander/home-menu:latest',
+      image_tag: 'openlander/home-menu:latest',
+      assigned_port: 10001,
+    };
+    (db.getDeployableForProject as ReturnType<typeof vi.fn>).mockResolvedValue(deployable);
+    (db.getEnvironmentsByProject as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'p-local-image-production', type: 'production', container_id: 'container-1' },
+    ]);
+    const pipeline = buildPipeline(db, docker);
+
+    await expect(pipeline.redeploy('p-local-image')).rejects.toMatchObject({
+      code: 'SERVICE_SOURCE_MISSING',
+      details: { missingField: 'image_url', source: 'image' },
+    });
+
+    expect(docker.pullImage).not.toHaveBeenCalled();
+    expect(docker.safeRemoveContainer).not.toHaveBeenCalled();
+    expect(docker.removeContainer).not.toHaveBeenCalled();
+    expect(db.updateProject).not.toHaveBeenCalled();
+  });
+
+  it('pull-checks remote image redeploys before tearing down the live container', async () => {
+    const project = {
+      ...makeExistingProjectRow('p-remote-image', 'remote-image-app'),
+      source: 'image',
+      image_url: 'ghcr.io/acme/missing:latest',
+      image_tag: 'ghcr.io/acme/current:latest',
+    };
+    const db = createMockDb(project);
+    const docker = createMockDocker();
+    (docker.pullImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('repository does not exist'),
+    );
+    const deployable = {
+      id: 'p-remote-image__svc',
+      project_id: 'p-remote-image',
+      name: 'app',
+      kind: 'image',
+      source: 'image',
+      status: 'running',
+      repo_url: null,
+      image_url: 'ghcr.io/acme/missing:latest',
+      image_tag: 'ghcr.io/acme/current:latest',
+      assigned_port: 10001,
+    };
+    (db.getDeployableForProject as ReturnType<typeof vi.fn>).mockResolvedValue(deployable);
+    (db.getEnvironmentsByProject as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'p-remote-image-production', type: 'production', container_id: 'container-1' },
+    ]);
+    const pipeline = buildPipeline(db, docker);
+
+    await expect(pipeline.redeploy('p-remote-image')).rejects.toMatchObject({
+      code: 'IMAGE_PULL_FAILED',
+    });
+
+    expect(docker.pullImage).toHaveBeenCalledWith('ghcr.io/acme/missing:latest');
     expect(docker.safeRemoveContainer).not.toHaveBeenCalled();
     expect(docker.removeContainer).not.toHaveBeenCalled();
     expect(db.updateProject).not.toHaveBeenCalled();

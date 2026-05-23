@@ -7,8 +7,21 @@ interface RedeploySourceFields {
   image_url?: string | null;
 }
 
-function hasText(value: string | null | undefined): boolean {
+function hasText(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isLocalOpenLanderImage(imageUrl: string | null | undefined): boolean {
+  if (!hasText(imageUrl)) {
+    return false;
+  }
+
+  const normalized = imageUrl.trim().toLowerCase();
+  return (
+    normalized === 'openlander' ||
+    normalized.startsWith('openlander:') ||
+    normalized.startsWith('openlander/')
+  );
 }
 
 export function getRedeploySourceMissingError(
@@ -16,7 +29,7 @@ export function getRedeploySourceMissingError(
 ): ServiceSourceMissingError | undefined {
   const source = service.source ?? 'git';
   if (source === 'image') {
-    return hasText(service.image_url)
+    return hasText(service.image_url) && !isLocalOpenLanderImage(service.image_url)
       ? undefined
       : new ServiceSourceMissingError(service.id, 'image_url', 'image');
   }
