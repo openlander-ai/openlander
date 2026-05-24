@@ -109,84 +109,98 @@ describe('auth-service', () => {
     expect(decrypted).toBe(plaintext);
   });
 
-  it('createSession + validateSession works, and deleteSession removes it', () => {
+  it('createSession + validateSession works, and deleteSession removes it', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000);
 
-    const { token, expiresAt } = createSession(db);
+    const { token, expiresAt } = await createSession(db);
     expect(expiresAt).toBe(604_801_000);
-    expect(validateSession(db, token)).toBe(true);
+    await expect(validateSession(db, token)).resolves.toBe(true);
 
-    deleteSession(db, token);
-    expect(validateSession(db, token)).toBe(false);
+    await deleteSession(db, token);
+    await expect(validateSession(db, token)).resolves.toBe(false);
 
     nowSpy.mockRestore();
   });
 
-  it('validateSession expires and deletes stale sessions (mock Date.now)', () => {
+  it('validateSession expires and deletes stale sessions (mock Date.now)', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(10_000);
-    const { token } = createSession(db);
+    const { token } = await createSession(db);
 
     nowSpy.mockReturnValue(10_000 + 604_800_000 + 1);
-    expect(validateSession(db, token)).toBe(false);
+    await expect(validateSession(db, token)).resolves.toBe(false);
     expect(db.getSession()).toBeNull();
 
     nowSpy.mockRestore();
   });
 
-  it('setupPassword stores hash and token; validateApiToken checks plaintext token', () => {
-    const { apiToken } = setupPassword(db, 'start-password');
+  it('setupPassword stores hash and token; validateApiToken checks plaintext token', async () => {
+    const { apiToken } = await setupPassword(db, 'start-password');
 
     expect(db.isPasswordSet()).toBe(true);
     expect(apiToken.startsWith('ol_')).toBe(true);
-    expect(validateApiToken(db, apiToken)).toBe(true);
-    expect(validateApiToken(db, 'ol_invalid')).toBe(false);
+    await expect(validateApiToken(db, apiToken)).resolves.toBe(true);
+    await expect(validateApiToken(db, 'ol_invalid')).resolves.toBe(false);
   });
 
-  it('changePassword verifies current password and keeps API token unchanged', () => {
-    const { apiToken } = setupPassword(db, 'old-password');
+  it('rejects setup, change, and reset passwords shorter than 8 characters', async () => {
+    await expect(setupPassword(db, '1234567')).rejects.toMatchObject({
+      code: 'PASSWORD_TOO_SHORT',
+    });
+
+    await setupPassword(db, 'old-pass');
+    await expect(changePassword(db, 'old-pass', '1234567')).rejects.toMatchObject({
+      code: 'PASSWORD_TOO_SHORT',
+    });
+    await expect(resetPassword(db, '1234567')).rejects.toMatchObject({
+      code: 'PASSWORD_TOO_SHORT',
+    });
+  });
+
+  it('changePassword verifies current password and keeps API token unchanged', async () => {
+    const { apiToken } = await setupPassword(db, 'old-password');
     const before = db.getApiToken();
 
-    changePassword(db, 'old-password', 'new-password');
+    await changePassword(db, 'old-password', 'new-password');
 
     const auth = db.getAuth();
     expect(auth.password_hash).not.toBe('new-password');
     expect(verifyPassword('new-password', auth.password_hash)).toBe(true);
     const after = db.getApiToken();
     expect(after).toEqual(before);
-    expect(validateApiToken(db, apiToken)).toBe(true);
+    await expect(validateApiToken(db, apiToken)).resolves.toBe(true);
   });
 
-  it('regenerateToken replaces token and resetPassword updates hash without current password', () => {
-    const initial = setupPassword(db, 'initial-password').apiToken;
-    const regenerated = regenerateToken(db).apiToken;
+  it('regenerateToken replaces token and resetPassword updates hash without current password', async () => {
+    const initial = (await setupPassword(db, 'initial-password')).apiToken;
+    const regenerated = (await regenerateToken(db)).apiToken;
 
     expect(regenerated).not.toBe(initial);
-    expect(validateApiToken(db, initial)).toBe(false);
-    expect(validateApiToken(db, regenerated)).toBe(true);
+    await expect(validateApiToken(db, initial)).resolves.toBe(false);
+    await expect(validateApiToken(db, regenerated)).resolves.toBe(true);
 
-    resetPassword(db, 'reset-password');
+    await resetPassword(db, 'reset-password');
     expect(verifyPassword('reset-password', db.getAuth().password_hash)).toBe(true);
   });
 
-  it('AuthService instance methods provide end-to-end auth flow', () => {
+  it('AuthService instance methods provide end-to-end auth flow', async () => {
     const service = new AuthService(db);
 
-    const setup = service.setupPassword('service-password');
-    expect(service.validateApiToken(setup.apiToken)).toBe(true);
+    const setup = await service.setupPassword('service-password');
+    await expect(service.validateApiToken(setup.apiToken)).resolves.toBe(true);
 
-    const session = service.createSession();
-    expect(service.validateSession(session.token)).toBe(true);
+    const session = await service.createSession();
+    await expect(service.validateSession(session.token)).resolves.toBe(true);
 
-    service.deleteSession(session.token);
-    expect(service.validateSession(session.token)).toBe(false);
+    await service.deleteSession(session.token);
+    await expect(service.validateSession(session.token)).resolves.toBe(false);
 
-    service.changePassword('service-password', 'service-password-2');
+    await service.changePassword('service-password', 'service-password-2');
     expect(service.verifyPassword('service-password-2', db.getAuth().password_hash)).toBe(true);
 
-    const freshToken = service.regenerateToken().apiToken;
-    expect(service.validateApiToken(freshToken)).toBe(true);
+    const freshToken = (await service.regenerateToken()).apiToken;
+    await expect(service.validateApiToken(freshToken)).resolves.toBe(true);
 
-    service.resetPassword('service-password-3');
+    await service.resetPassword('service-password-3');
     expect(service.verifyPassword('service-password-3', db.getAuth().password_hash)).toBe(true);
   });
 });

@@ -9,6 +9,7 @@ const AUTH_SALT_ROUNDS = 10;
 const SESSION_TTL_MS = Number(process.env['OPENLANDER_SESSION_TTL_HOURS'] || 168) * 60 * 60 * 1000;
 const PAT_LAST_USED_TOUCH_INTERVAL_MS = 60_000;
 const log = createModuleLogger('auth-service');
+export const MIN_PASSWORD_LENGTH = 8;
 
 export interface AuthDatabase {
   isPasswordSet(): Promise<boolean>;
@@ -99,6 +100,17 @@ export function hashPassword(plain: string): string {
  */
 export function verifyPassword(plain: string, hash: string): boolean {
   return compareSync(plain, hash);
+}
+
+export function assertPasswordMeetsPolicy(password: unknown): asserts password is string {
+  if (typeof password !== 'string' || password.trim().length < MIN_PASSWORD_LENGTH) {
+    throw new OpenLanderError(
+      `Password must be at least ${String(MIN_PASSWORD_LENGTH)} characters.`,
+      'PASSWORD_TOO_SHORT',
+      400,
+      { minLength: MIN_PASSWORD_LENGTH },
+    );
+  }
 }
 
 /**
@@ -299,6 +311,7 @@ export async function setupPassword(
   db: AuthDatabase,
   password: string,
 ): Promise<{ apiToken: string }> {
+  assertPasswordMeetsPolicy(password);
   const passwordHash = hashPassword(password);
   await db.setPassword(passwordHash);
 
@@ -325,6 +338,7 @@ export async function changePassword(
     throw new Error('Current password is incorrect.');
   }
 
+  assertPasswordMeetsPolicy(newPassword);
   await db.setPassword(hashPassword(newPassword));
 }
 
@@ -341,6 +355,7 @@ export async function regenerateToken(db: AuthDatabase): Promise<{ apiToken: str
  * Reset password without verifying old password (CLI recovery flow).
  */
 export async function resetPassword(db: AuthDatabase, newPassword: string): Promise<void> {
+  assertPasswordMeetsPolicy(newPassword);
   await db.setPassword(hashPassword(newPassword));
 }
 

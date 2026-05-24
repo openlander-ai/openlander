@@ -25,15 +25,11 @@ describe('ChangePasswordModal — inline error UX', () => {
   // regression checks below operate on JUST the predicate, not the
   // whole file (the submit-handler still mentions `next.length` and
   // `next !== confirm` for the inline-error path — those are correct).
-  const submitDisabledMatch = modalSource.match(
-    /type="submit"[\s\S]*?disabled=\{([^}]+)\}/,
-  );
+  const submitDisabledMatch = modalSource.match(/type="submit"[\s\S]*?disabled=\{([^}]+)\}/);
   const submitDisabledExpr = submitDisabledMatch?.[1] ?? '';
 
   it('disables Save only when a field is empty or the request is in flight', () => {
-    expect(submitDisabledExpr).toMatch(
-      /^submitting \|\| !current \|\| !next \|\| !confirm$/,
-    );
+    expect(submitDisabledExpr).toMatch(/^submitting \|\| !current \|\| !next \|\| !confirm$/);
   });
 
   it('does not gate the Save button on the password length (regression guard)', () => {
@@ -42,6 +38,11 @@ describe('ChangePasswordModal — inline error UX', () => {
     // now a submit-handler error, not a button-disable predicate.
     expect(submitDisabledExpr).not.toMatch(/next\.length/);
     expect(submitDisabledExpr).not.toMatch(/MIN_LENGTH/);
+  });
+
+  it('uses the same 8 character minimum as first-run setup', () => {
+    expect(modalSource).toMatch(/const MIN_LENGTH = 8;/);
+    expect(modalSource).not.toMatch(/const MIN_LENGTH = 12;/);
   });
 
   it('does not gate the Save button on the confirmation match (regression guard)', () => {
