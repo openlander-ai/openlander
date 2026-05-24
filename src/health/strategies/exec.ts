@@ -1,17 +1,17 @@
-import type { Docker } from '../../pipeline/docker.js';
+import type { RuntimeBackend } from '../../pipeline/runtime/index.js';
 import type { HealthCheckConfig, ProbeResult } from '../types.js';
 
 /**
  * Execute a command inside a container to check its health.
  * @param containerId Container ID to probe
  * @param config Health check configuration
- * @param docker Docker abstraction layer
+ * @param runtime Runtime backend
  * @returns Promise resolving to probe result
  */
 export async function execProbe(
   containerId: string,
   config: HealthCheckConfig,
-  docker: Docker,
+  runtime: RuntimeBackend,
 ): Promise<ProbeResult> {
   // Skip if no command is configured
   if (!config.command || config.command.length === 0) {
@@ -24,7 +24,7 @@ export async function execProbe(
   const startTime = Date.now();
 
   try {
-    const result = await docker.execSimple(containerId, config.command);
+    const result = await runtime.execSimple(containerId, config.command);
     const responseTimeMs = Date.now() - startTime;
 
     if (result.exitCode === 0) {

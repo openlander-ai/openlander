@@ -1,5 +1,5 @@
 import type { ServiceRow } from '../../db/index.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 
 export type BuiltInServiceType =
   | 'postgresql'
@@ -60,18 +60,18 @@ export interface ServiceAdapter {
   readonly type: BuiltInServiceType;
   getDataMountPath(): string;
   getConnectionString(containerName: string, port: number, creds?: ServiceCredentials): string;
-  waitForReady(service: ServiceRow, docker: Docker): Promise<void>;
-  getConnectionStats(service: ServiceRow, docker: Docker): Promise<ConnectionStats>;
-  listDatabases(service: ServiceRow, docker: Docker): Promise<ListedDatabase[]>;
-  listUsers(service: ServiceRow, docker: Docker): Promise<ListedUser[]>;
+  waitForReady(service: ServiceRow, runtime: RuntimeBackend): Promise<void>;
+  getConnectionStats(service: ServiceRow, runtime: RuntimeBackend): Promise<ConnectionStats>;
+  listDatabases(service: ServiceRow, runtime: RuntimeBackend): Promise<ListedDatabase[]>;
+  listUsers(service: ServiceRow, runtime: RuntimeBackend): Promise<ListedUser[]>;
   createDatabase(
     service: ServiceRow,
     dbName: string,
-    docker: Docker,
+    runtime: RuntimeBackend,
   ): Promise<CreateDatabaseResult>;
   createUser(
     service: ServiceRow,
     options: CreateUserOptions,
-    docker: Docker,
+    runtime: RuntimeBackend,
   ): Promise<CreateUserResult>;
 }

@@ -1,4 +1,4 @@
-import type { Docker } from './docker.js';
+import type { RuntimeBackend } from './runtime/index.js';
 import { isDockerNotFoundError } from '../errors.js';
 
 /**
@@ -18,7 +18,7 @@ export interface ParsedImageUrl {
  * - `nginx:latest` → `{ name: 'nginx', tag: 'latest' }`
  * - `nginx:1.25-alpine` → `{ name: 'nginx', tag: '1.25-alpine' }`
  * - `ghcr.io/user/app:v1.0` → `{ registry: 'ghcr.io', name: 'user/app', tag: 'v1.0' }`
- * - `docker.io/library/nginx:latest` → `{ registry: 'docker.io', name: 'library/nginx', tag: 'latest' }`
+ * - `runtime.io/library/nginx:latest` → `{ registry: 'runtime.io', name: 'library/nginx', tag: 'latest' }`
  *
  * @param url - Docker image URL to parse
  * @returns Parsed image components or null if invalid
@@ -108,11 +108,11 @@ export function parseImageUrl(url: string): ParsedImageUrl | null {
  * @returns Exposed port number or null
  */
 export async function getImageExposedPort(
-  docker: Docker,
+  runtime: RuntimeBackend,
   imageTag: string,
 ): Promise<number | null> {
   try {
-    const inspectData = await docker.inspectImage(imageTag);
+    const inspectData = await runtime.inspectImage(imageTag);
 
     // ExposedPorts format: { "80/tcp": {}, "443/tcp": {} }
     const exposedPorts = inspectData.Config.ExposedPorts as

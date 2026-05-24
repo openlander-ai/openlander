@@ -1,5 +1,5 @@
 import type { ServiceRow } from '../../db/index.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import { ServiceConfigError, ServiceOperationUnsupportedError } from '../../errors.js';
 import { waitUntilReady } from '../lib/retry.js';
 import { resolveContainerUrl } from '../url-resolver.js';
@@ -51,7 +51,7 @@ export class MinioAdapter implements ServiceAdapter {
     return `http://${containerName}:${String(port)}`;
   }
 
-  async waitForReady(service: ServiceRow, _docker: Docker): Promise<void> {
+  async waitForReady(service: ServiceRow, _runtime: RuntimeBackend): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-deprecated
     const hostPort = service.assigned_port ?? service.port;
     await waitUntilReady(
@@ -71,22 +71,22 @@ export class MinioAdapter implements ServiceAdapter {
     );
   }
 
-  getConnectionStats(_service: ServiceRow, _docker: Docker): Promise<ConnectionStats> {
+  getConnectionStats(_service: ServiceRow, _runtime: RuntimeBackend): Promise<ConnectionStats> {
     return Promise.resolve({ activeConnections: null, maxConnections: null });
   }
 
-  listDatabases(_service: ServiceRow, _docker: Docker): Promise<ListedDatabase[]> {
+  listDatabases(_service: ServiceRow, _runtime: RuntimeBackend): Promise<ListedDatabase[]> {
     return Promise.reject(new ServiceOperationUnsupportedError('Database listing', 'minio'));
   }
 
-  listUsers(_service: ServiceRow, _docker: Docker): Promise<ListedUser[]> {
+  listUsers(_service: ServiceRow, _runtime: RuntimeBackend): Promise<ListedUser[]> {
     return Promise.reject(new ServiceOperationUnsupportedError('User listing', 'minio'));
   }
 
   createDatabase(
     _service: ServiceRow,
     _dbName: string,
-    _docker: Docker,
+    _runtime: RuntimeBackend,
   ): Promise<CreateDatabaseResult> {
     return Promise.reject(new ServiceOperationUnsupportedError('Database creation', 'minio'));
   }
@@ -94,14 +94,14 @@ export class MinioAdapter implements ServiceAdapter {
   createUser(
     _service: ServiceRow,
     _options: CreateUserOptions,
-    _docker: Docker,
+    _runtime: RuntimeBackend,
   ): Promise<CreateUserResult> {
     return Promise.reject(new ServiceOperationUnsupportedError('User creation', 'minio'));
   }
 
-  async setupAlias(service: ServiceRow, docker: Docker): Promise<void> {
+  async setupAlias(service: ServiceRow, runtime: RuntimeBackend): Promise<void> {
     const creds = parseMinioCredentials(service);
-    await execInServiceContainer(docker, service, [
+    await execInServiceContainer(runtime, service, [
       'mc',
       'alias',
       'set',
@@ -114,10 +114,10 @@ export class MinioAdapter implements ServiceAdapter {
 
   async listBuckets(
     service: ServiceRow,
-    docker: Docker,
+    runtime: RuntimeBackend,
   ): Promise<Array<{ name: string; createdAt: string }>> {
-    await this.setupAlias(service, docker);
-    const result = await execInServiceContainer(docker, service, ['mc', 'ls', 'local', '--json']);
+    await this.setupAlias(service, runtime);
+    const result = await execInServiceContainer(runtime, service, ['mc', 'ls', 'local', '--json']);
 
     const buckets: Array<{ name: string; createdAt: string }> = [];
     for (const line of result.stdout.split('\n')) {
@@ -149,16 +149,24 @@ export class MinioAdapter implements ServiceAdapter {
     return buckets;
   }
 
-  async createBucket(service: ServiceRow, docker: Docker, bucketName: string): Promise<void> {
-    await this.setupAlias(service, docker);
-    await execInServiceContainer(docker, service, ['mc', 'mb', `local/${bucketName}`], {
+  async createBucket(
+    service: ServiceRow,
+    runtime: RuntimeBackend,
+    bucketName: string,
+  ): Promise<void> {
+    await this.setupAlias(service, runtime);
+    await execInServiceContainer(runtime, service, ['mc', 'mb', `local/${bucketName}`], {
       throwOnNonZeroExit: true,
     });
   }
 
-  async deleteBucket(service: ServiceRow, docker: Docker, bucketName: string): Promise<void> {
-    await this.setupAlias(service, docker);
-    await execInServiceContainer(docker, service, ['mc', 'rb', `local/${bucketName}`], {
+  async deleteBucket(
+    service: ServiceRow,
+    runtime: RuntimeBackend,
+    bucketName: string,
+  ): Promise<void> {
+    await this.setupAlias(service, runtime);
+    await execInServiceContainer(runtime, service, ['mc', 'rb', `local/${bucketName}`], {
       throwOnNonZeroExit: true,
     });
   }

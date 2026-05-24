@@ -9,7 +9,7 @@ import { filterBuildTimeVars } from '../build-args.js';
 import { getCommitSubject } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { JobManager as JobManagerClass } from '../job-manager.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import type { EnvManager } from '../env.js';
 import type { JobManager } from '../job-manager.js';
 import type { BuildExecutor } from './build-step.js';
@@ -22,7 +22,7 @@ import { isDockerBuildCancelledError } from '../../errors.js';
 const log = createModuleLogger('deploy');
 
 export interface MonorepoOrchestrationDeps {
-  docker: Docker;
+  runtime: RuntimeBackend;
   db: Database;
   env: EnvManager;
   stateManager: {
@@ -334,8 +334,8 @@ export async function rollbackMonorepoService(
   const containerId = deployable?.container_id ?? project.container_id;
   if (containerId) {
     try {
-      await deps.docker.stopContainer(containerId);
-      await deps.docker.safeRemoveContainer(containerId);
+      await deps.runtime.stopContainer(containerId);
+      await deps.runtime.safeRemoveContainer(containerId);
     } catch (error) {
       log.warn({ err: error, service: service.name }, 'Monorepo rollback container cleanup failed');
     }

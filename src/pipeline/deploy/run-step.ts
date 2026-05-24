@@ -1,6 +1,6 @@
 import type { Database } from '../../db/index.js';
 import type { OpenLanderEnv } from '../../config/index.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import { containerName as projectContainerName } from '../helpers.js';
 import { allocatePort, clearPortScanCache, releasePortReservation } from '../port.js';
 import {
@@ -35,7 +35,7 @@ export interface RunConfig {
 
 export class ContainerRunner {
   constructor(
-    private readonly docker: Docker,
+    private readonly runtime: RuntimeBackend,
     private readonly db: Database,
   ) {}
 
@@ -43,7 +43,7 @@ export class ContainerRunner {
     const envType: OpenLanderEnv = 'production';
     let port = await allocatePort(
       this.db,
-      this.docker,
+      this.runtime,
       {
         preferredPort: config.preferredPort,
       },
@@ -70,9 +70,9 @@ export class ContainerRunner {
     }
 
     const containerName = projectContainerName(config.containerName ?? config.projectName);
-    await this.docker.safeRemoveContainer(containerName);
-    const projectNetwork = await this.docker.ensureProjectNetwork(config.projectName);
-    await ensureManagedTraefikNetwork(this.docker, projectNetwork);
+    await this.runtime.safeRemoveContainer(containerName);
+    const projectNetwork = await this.runtime.ensureProjectNetwork(config.projectName);
+    await ensureManagedTraefikNetwork(this.runtime, projectNetwork);
 
     for (let attempt = 0; attempt < 2; attempt++) {
       const configuredContainerPort = config.containerPort;
@@ -91,7 +91,7 @@ export class ContainerRunner {
       );
 
       try {
-        const containerId = await this.docker.runContainer({
+        const containerId = await this.runtime.runContainer({
           imageTag: config.imageTag,
           name: containerName,
           port,
@@ -121,7 +121,7 @@ export class ContainerRunner {
         if (attempt === 0 && isPortConflict) {
           releasePortReservation(port);
           clearPortScanCache();
-          port = await allocatePort(this.db, this.docker, {}, envType);
+          port = await allocatePort(this.db, this.runtime, {}, envType);
           continue;
         }
         releasePortReservation(port);

@@ -1,5 +1,5 @@
 import type { ServiceRow } from '../../db/index.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import { ServiceConfigError, ServiceOperationError } from '../../errors.js';
 import type { ContainerExecResult, ServiceCredentials } from './types.js';
 
@@ -13,7 +13,7 @@ export interface ExecOptions {
 }
 
 export async function execInServiceContainer(
-  docker: Docker,
+  runtime: RuntimeBackend,
   service: ServiceRow,
   command: string[],
   options?: ExecOptions,
@@ -34,7 +34,7 @@ export async function execInServiceContainer(
     });
 
     try {
-      execResult = await Promise.race([docker.execSimple(containerId, command), timeoutPromise]);
+      execResult = await Promise.race([runtime.execSimple(containerId, command), timeoutPromise]);
     } finally {
       if (timer !== undefined) clearTimeout(timer);
     }

@@ -6,7 +6,7 @@ import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { allocatePort } from '../port.js';
 import { buildTraefikLabels, ensureManagedTraefikNetwork, getProjectUrl } from '../traefik.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import { loadResourceLimitsForDeployTarget } from '../config-snapshot.js';
 import { getRouteName } from './helpers.js';
 import { containerName as projectContainerName } from '../helpers.js';
@@ -52,7 +52,7 @@ function createFallbackStateManager(db: Database): {
 
 export class RollbackExecutor {
   constructor(
-    private readonly docker: Docker,
+    private readonly runtime: RuntimeBackend,
     private readonly db: Database,
     stateManager?: {
       transition: (
@@ -118,7 +118,7 @@ export class RollbackExecutor {
       productionEnvironment?.image_tag ?? target.target.project.image_tag ?? '';
 
     try {
-      await this.docker.inspectImage(rollbackImageTag);
+      await this.runtime.inspectImage(rollbackImageTag);
     } catch {
       return {
         success: false,
@@ -143,18 +143,18 @@ export class RollbackExecutor {
         projectDeployable,
         containerName,
       );
-      const containerPort = (await this.docker.getImageExposedPort(rollbackImageTag)) ?? port;
+      const containerPort = (await this.runtime.getImageExposedPort(rollbackImageTag)) ?? port;
 
       const envType: OpenLanderEnv = 'production';
-      const networkName = await this.docker.ensureProjectNetwork(project.name);
-      await ensureManagedTraefikNetwork(this.docker, networkName);
+      const networkName = await this.runtime.ensureProjectNetwork(project.name);
+      await ensureManagedTraefikNetwork(this.runtime, networkName);
 
       const resourceLimits = await loadResourceLimitsForDeployTarget(this.db, {
         projectId,
         serviceId: projectDeployable?.id,
       });
 
-      const containerId = await this.docker.runContainer({
+      const containerId = await this.runtime.runContainer({
         imageTag: rollbackImageTag,
         name: containerName,
         port,
@@ -304,14 +304,14 @@ export class RollbackExecutor {
     for (const ref of refs) {
       if (runningRefs.has(ref)) {
         try {
-          await this.docker.stopContainer(ref);
+          await this.runtime.stopContainer(ref);
         } catch (err) {
           if (!isDockerNotFoundError(err)) {
             log.warn({ err, containerId: ref }, 'Container stop during rollback cleanup failed');
           }
         }
       }
-      await this.docker.safeRemoveContainer(ref);
+      await this.runtime.safeRemoveContainer(ref);
     }
   }
 
@@ -325,7 +325,7 @@ export class RollbackExecutor {
     const port =
       environment?.assigned_port ??
       projectDeployable?.assigned_port ??
-      (await allocatePort(this.db, this.docker, {}, 'production'));
+      (await allocatePort(this.db, this.runtime, {}, 'production'));
 
     return {
       port,

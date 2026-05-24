@@ -1,5 +1,5 @@
 import type { ServiceRow } from '../../db/index.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import { ServiceOperationUnsupportedError } from '../../errors.js';
 import { waitUntilReady } from '../lib/retry.js';
 import { execInServiceContainer } from './shared.js';
@@ -24,11 +24,11 @@ export class RedisAdapter implements ServiceAdapter {
     return `redis://${containerName}:${String(port)}`;
   }
 
-  async waitForReady(service: ServiceRow, docker: Docker): Promise<void> {
+  async waitForReady(service: ServiceRow, runtime: RuntimeBackend): Promise<void> {
     const containerId = service.container_id ?? service.container_name ?? '';
     await waitUntilReady(
       async () => {
-        const logs = await docker.getLogs(containerId, 200);
+        const logs = await runtime.getLogs(containerId, 200);
         if (!logs.includes('Ready to accept connections')) {
           throw new Error('Readiness log line not found yet');
         }
@@ -41,8 +41,8 @@ export class RedisAdapter implements ServiceAdapter {
     );
   }
 
-  async getConnectionStats(service: ServiceRow, docker: Docker): Promise<ConnectionStats> {
-    const infoResult = await execInServiceContainer(docker, service, [
+  async getConnectionStats(service: ServiceRow, runtime: RuntimeBackend): Promise<ConnectionStats> {
+    const infoResult = await execInServiceContainer(runtime, service, [
       'redis-cli',
       'INFO',
       'clients',
@@ -55,18 +55,18 @@ export class RedisAdapter implements ServiceAdapter {
     };
   }
 
-  listDatabases(_service: ServiceRow, _docker: Docker): Promise<ListedDatabase[]> {
+  listDatabases(_service: ServiceRow, _runtime: RuntimeBackend): Promise<ListedDatabase[]> {
     return Promise.reject(new ServiceOperationUnsupportedError('Database listing', 'redis'));
   }
 
-  listUsers(_service: ServiceRow, _docker: Docker): Promise<ListedUser[]> {
+  listUsers(_service: ServiceRow, _runtime: RuntimeBackend): Promise<ListedUser[]> {
     return Promise.reject(new ServiceOperationUnsupportedError('User listing', 'redis'));
   }
 
   createDatabase(
     _service: ServiceRow,
     _dbName: string,
-    _docker: Docker,
+    _runtime: RuntimeBackend,
   ): Promise<CreateDatabaseResult> {
     return Promise.reject(new ServiceOperationUnsupportedError('Database creation', 'redis'));
   }
@@ -74,7 +74,7 @@ export class RedisAdapter implements ServiceAdapter {
   createUser(
     _service: ServiceRow,
     _options: CreateUserOptions,
-    _docker: Docker,
+    _runtime: RuntimeBackend,
   ): Promise<CreateUserResult> {
     return Promise.reject(new ServiceOperationUnsupportedError('User creation', 'redis'));
   }

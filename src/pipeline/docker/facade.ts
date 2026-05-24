@@ -8,8 +8,12 @@ import { NetworkOps } from './network.js';
 import { StreamOps } from './stream.js';
 import type { DockerStatus } from './types.js';
 import { VolumeOps } from './volume.js';
+import type { RuntimeBackend } from '../runtime/backend.js';
 
-export class Docker {
+export class Docker implements RuntimeBackend {
+  readonly kind = 'docker';
+  readonly backendName = 'docker';
+
   private readonly ctx: DockerContext;
   private readonly containerOps: ContainerOps;
   private readonly imageOps: ImageOps;

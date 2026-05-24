@@ -1,4 +1,4 @@
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 
 export interface ConnectivityResult {
   hostname: string;
@@ -116,12 +116,12 @@ function extractEndpointTargets(envVars: Record<string, string>): EndpointTarget
 }
 
 async function runInContainer(
-  docker: Docker,
+  runtime: RuntimeBackend,
   containerId: string,
   command: string[],
 ): Promise<ProbeRunResult> {
   try {
-    const result = await docker.execSimple(containerId, command);
+    const result = await runtime.execSimple(containerId, command);
     return {
       stdout: result.stdout,
       stderr: result.stderr,
@@ -186,24 +186,24 @@ function compactErrorText(stderr: string, stdout: string): string | undefined {
 }
 
 export async function checkDeployConnectivity(params: {
-  docker: Docker;
+  runtime: RuntimeBackend;
   containerId: string;
   envVars: Record<string, string>;
 }): Promise<ConnectivityResult[]> {
-  const { docker, containerId, envVars } = params;
+  const { runtime, containerId, envVars } = params;
   const targets = extractEndpointTargets(envVars);
   if (targets.length === 0) return [];
 
-  const dnsProbe = await runInContainer(docker, containerId, dnsProbeCommand('localhost'));
+  const dnsProbe = await runInContainer(runtime, containerId, dnsProbeCommand('localhost'));
   if (unavailableProbeResult(dnsProbe)) return [];
 
-  const tcpProbe = await runInContainer(docker, containerId, tcpProbeCommand('127.0.0.1', 1));
+  const tcpProbe = await runInContainer(runtime, containerId, tcpProbeCommand('127.0.0.1', 1));
   if (unavailableProbeResult(tcpProbe)) return [];
 
   const results: ConnectivityResult[] = [];
 
   for (const target of targets) {
-    const dnsCheck = await runInContainer(docker, containerId, dnsProbeCommand(target.hostname));
+    const dnsCheck = await runInContainer(runtime, containerId, dnsProbeCommand(target.hostname));
     if (unavailableProbeResult(dnsCheck)) return [];
     const dnsResolved = dnsCheck.exitCode === 0;
 
@@ -229,7 +229,7 @@ export async function checkDeployConnectivity(params: {
     }
 
     const tcpCheck = await runInContainer(
-      docker,
+      runtime,
       containerId,
       tcpProbeCommand(target.hostname, target.port),
     );
