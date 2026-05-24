@@ -1,4 +1,4 @@
-# AI Auto-Recovery
+# Internal AI Ops
 
 > Archived future-design note.
 
