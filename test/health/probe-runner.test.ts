@@ -43,15 +43,21 @@ function createContext(overrides: Partial<ProbeContext> = {}): ProbeContext {
   };
 }
 
-function createInspectResult(status?: 'healthy' | 'unhealthy' | 'starting' | 'none') {
+function createInspectResult(
+  status?: 'healthy' | 'unhealthy' | 'starting' | 'none',
+  running = true,
+) {
   if (status === undefined) {
     return {
-      State: {},
+      State: {
+        Running: running,
+      },
     } as Awaited<ReturnType<Docker['inspectContainer']>>;
   }
 
   return {
     State: {
+      Running: running,
       Health: {
         Status: status,
       },
@@ -128,6 +134,55 @@ describe('LocalProbeRunner', () => {
     expect(result).toEqual({ healthy: true, source: 'http', responseTimeMs: 12 });
     expect(mockDocker.inspectContainer).toHaveBeenCalledWith('container-123');
     expect(httpProbe).toHaveBeenCalledWith(expect.objectContaining({ strategy: 'http' }), 8080);
+  });
+
+  it('falls back to container running state when an HTTP probe has no port', async () => {
+    (mockDocker.inspectContainer as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      createInspectResult(undefined, true),
+    );
+
+    const result = await runner.runProbe(
+      createConfig({ dockerHealthPolicy: 'prefer', strategy: 'http', failureThreshold: 1 }),
+      createContext({ assignedPort: undefined }),
+    );
+
+    expect(result).toEqual({ healthy: true, source: 'docker' });
+    expect(mockDocker.inspectContainer).toHaveBeenCalledWith('container-123');
+    expect(httpProbe).not.toHaveBeenCalled();
+    expect(tcpProbe).not.toHaveBeenCalled();
+  });
+
+  it('returns container-state failure when a portless HTTP target is not running', async () => {
+    (mockDocker.inspectContainer as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      createInspectResult(undefined, false),
+    );
+
+    const result = await runner.runProbe(
+      createConfig({ dockerHealthPolicy: 'prefer', strategy: 'http', failureThreshold: 1 }),
+      createContext({ assignedPort: undefined }),
+    );
+
+    expect(result).toEqual({
+      healthy: false,
+      source: 'docker',
+      error: 'Container is not running',
+    });
+    expect(httpProbe).not.toHaveBeenCalled();
+  });
+
+  it('does not call HTTP probe with port 0 when no port or Docker state is available', async () => {
+    const result = await runner.runProbe(
+      createConfig({ dockerHealthPolicy: 'ignore', strategy: 'http', failureThreshold: 1 }),
+      createContext({ assignedPort: undefined }),
+    );
+
+    expect(result).toEqual({
+      healthy: false,
+      source: 'http',
+      error: 'No assigned port available for HTTP health probe',
+    });
+    expect(mockDocker.inspectContainer).not.toHaveBeenCalled();
+    expect(httpProbe).not.toHaveBeenCalled();
   });
 
   it('skips Docker inspection when dockerHealthPolicy is ignore', async () => {
