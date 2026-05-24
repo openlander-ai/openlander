@@ -205,13 +205,14 @@ export class ProjectStateManager {
 
     // PR 4.5: canonical-first reads of container_id/status with `??` fallback.
     const deployable = await this.ctx.db.getDeployableForProject(project.id);
-    const projectContainerId = deployable?.container_id ?? project.container_id;
+    const projectContainerRef =
+      deployable?.container_id ?? deployable?.container_name ?? project.container_id;
     const projectStatus = deployable?.status ?? project.status;
 
     const container = this.findProjectContainer(
       project.id,
       project.name,
-      projectContainerId,
+      projectContainerRef,
       containers,
     );
     const dockerRunning = container?.status === 'running';
@@ -270,6 +271,8 @@ export class ProjectStateManager {
       if (labeledProject) {
         index.set(`project:${labeledProject}`, container);
       }
+
+      index.set(`name:${container.name}`, container);
     }
 
     return index;
@@ -278,13 +281,18 @@ export class ProjectStateManager {
   private findProjectContainer(
     projectId: string,
     projectName: string,
-    containerId: string | null,
+    containerRef: string | null,
     containers: Map<string, ContainerInfo>,
   ): ContainerInfo | undefined {
-    if (containerId) {
-      const byId = containers.get(`id:${containerId}`);
+    if (containerRef) {
+      const byId = containers.get(`id:${containerRef}`);
       if (byId) {
         return byId;
+      }
+
+      const byName = containers.get(`name:${containerRef}`);
+      if (byName) {
+        return byName;
       }
     }
 

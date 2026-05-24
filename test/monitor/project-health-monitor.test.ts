@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectHealthMonitor } from '../../src/monitor/project-health-monitor.js';
-import type { Database, ProjectRow } from '../../src/db/index.js';
+import type { Database, ProjectRow, ServiceRow } from '../../src/db/index.js';
 import type { Docker } from '../../src/pipeline/docker.js';
 import type { EventBus } from '../../src/events/index.js';
 
@@ -168,6 +168,51 @@ describe('ProjectHealthMonitor', () => {
       healthy: false,
       responseTimeMs: 5000,
     });
+  });
+
+  it('uses container_name as the probe target when restored image services have no container_id', async () => {
+    const project = createProject({
+      id: 'home-menu',
+      name: 'home-menu',
+      status: 'error',
+      container_id: null,
+    });
+    project.assigned_port = null;
+    const deployable = {
+      id: 'home-menu__svc',
+      project_id: 'home-menu',
+      name: 'home-menu__svc',
+      status: 'error',
+      assigned_port: null,
+      container_id: null,
+      container_name: 'ol-home-menu',
+      project_type: 'web',
+      health_check_strategy: null,
+      health_check_path: null,
+    } as ServiceRow;
+    const getDeployableForProject = vi.fn().mockReturnValue(deployable);
+    const db = {
+      getProject: vi.fn().mockReturnValue(project),
+      listProjects,
+      listServices,
+      getDeployableForProject,
+    } as unknown as Database;
+    monitor = new ProjectHealthMonitor({} as Docker, db, { emit } as unknown as EventBus);
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'docker', responseTimeMs: 0 });
+
+    await (monitor as unknown as MonitorInternals).runCheck('home-menu');
+
+    expect(mockRunProbe).toHaveBeenCalledWith(expect.objectContaining({ strategy: 'http' }), {
+      projectId: 'home-menu',
+      containerId: 'ol-home-menu',
+      assignedPort: undefined,
+    });
+    expect(emit).toHaveBeenCalledWith('monitor:healthcheck', {
+      projectId: 'home-menu',
+      healthy: true,
+      responseTimeMs: 0,
+    });
+    expect(emit).not.toHaveBeenCalledWith('health:degraded', expect.anything());
   });
 
   it('emits health:degraded after the failure threshold is reached', async () => {

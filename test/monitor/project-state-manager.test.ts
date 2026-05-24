@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../../src/app.js';
-import type { ProjectRow } from '../../src/db/index.js';
+import type { ProjectRow, ServiceRow } from '../../src/db/index.js';
 import { EventBus } from '../../src/events/index.js';
 import { ProjectStateManager } from '../../src/monitor/project-state-manager.js';
 
@@ -49,6 +49,7 @@ describe('ProjectStateManager', () => {
   let listProjects: ReturnType<typeof vi.fn>;
   let updateProject: ReturnType<typeof vi.fn>;
   let listManagedContainers: ReturnType<typeof vi.fn>;
+  let getDeployableForProject: ReturnType<typeof vi.fn>;
   let manager: ProjectStateManager;
   let capturedEvents: Array<{ event: string; payload: unknown }>;
 
@@ -63,6 +64,7 @@ describe('ProjectStateManager', () => {
     listProjects = vi.fn();
     updateProject = vi.fn();
     listManagedContainers = vi.fn();
+    getDeployableForProject = vi.fn().mockReturnValue(undefined);
 
     const ctx = {
       db: {
@@ -70,7 +72,7 @@ describe('ProjectStateManager', () => {
         listProjects,
         updateProject,
         // PR 4.5: canonical-first reads need this helper.
-        getDeployableForProject: vi.fn().mockReturnValue(undefined),
+        getDeployableForProject,
       },
       docker: {
         listManagedContainers,
@@ -176,6 +178,44 @@ describe('ProjectStateManager', () => {
       2,
       'project-running',
       expect.objectContaining({ status: 'stopped' }),
+    );
+    expect(capturedEvents).toEqual([]);
+  });
+
+  it('reconciles restored image services by container_name when container_id is empty', async () => {
+    const restoredProject = createProject({
+      id: 'home-menu',
+      name: 'home-menu',
+      status: 'error',
+      container_id: null,
+    });
+    const restoredDeployable = {
+      id: 'home-menu__svc',
+      project_id: 'home-menu',
+      name: 'home-menu__svc',
+      status: 'error',
+      container_id: null,
+      container_name: 'ol-home-menu',
+    } as ServiceRow;
+
+    listProjects.mockReturnValue([restoredProject]);
+    getProject.mockReturnValue(restoredProject);
+    getDeployableForProject.mockReturnValue(restoredDeployable);
+    listManagedContainers.mockResolvedValue([
+      {
+        id: 'container-home-menu',
+        name: 'ol-home-menu',
+        status: 'running',
+        labels: {},
+      },
+    ]);
+
+    const result = await manager.reconcileAll();
+
+    expect(result).toEqual({ reconciled: 1, skipped: 0 });
+    expect(updateProject).toHaveBeenCalledWith(
+      'home-menu',
+      expect.objectContaining({ status: 'running' }),
     );
     expect(capturedEvents).toEqual([]);
   });
