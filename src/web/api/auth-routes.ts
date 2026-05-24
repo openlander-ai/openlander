@@ -2,11 +2,12 @@ import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { AppContext } from '../../app.js';
-import type { AuthService } from '../../auth/auth-service.js';
+import { assertPasswordMeetsPolicy, type AuthService } from '../../auth/auth-service.js';
 import { saveConfig } from '../../config/index.js';
 import { generatePkce, getGoogleAuthUrl, exchangeGoogleCode } from '../../auth/google-oauth.js';
 import { encryptAndStoreToken, loadDecryptedToken } from '../../auth/token-store.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { OpenLanderError } from '../../errors.js';
 import {
   getMcpEndpointFromRequestUrl,
   getMcpInstancePublicInfo,
@@ -17,6 +18,24 @@ const log = createModuleLogger('auth-routes');
 
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60;
 const DEFAULT_PAT_EXPIRY_DAYS = 90;
+
+function passwordPolicyError(err: unknown): Response | null {
+  if (err instanceof OpenLanderError && err.code === 'PASSWORD_TOO_SHORT') {
+    return new Response(
+      JSON.stringify({
+        error: err.message,
+        code: err.code,
+        message: err.message,
+        details: err.details ?? {},
+      }),
+      {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+      },
+    );
+  }
+  return null;
+}
 
 interface PatTokenRequestBody {
   name?: unknown;
@@ -190,7 +209,15 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       return c.json({ error: 'Password is required' }, 400);
     }
 
-    const { apiToken } = await authService.setupPassword(body.password);
+    let apiToken: string;
+    try {
+      assertPasswordMeetsPolicy(body.password);
+      ({ apiToken } = await authService.setupPassword(body.password));
+    } catch (err) {
+      const response = passwordPolicyError(err);
+      if (response) return response;
+      throw err;
+    }
 
     // Auto-login: create session so subsequent setup API calls work
     const session = await authService.createSession();
@@ -254,9 +281,12 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
 
     const body = await c.req.json<{ currentPassword: string; newPassword: string }>();
     try {
+      assertPasswordMeetsPolicy(body.newPassword);
       await authService.changePassword(body.currentPassword, body.newPassword);
       return c.json({ success: true });
     } catch (err) {
+      const response = passwordPolicyError(err);
+      if (response) return response;
       const message = err instanceof Error ? err.message : 'Failed to change password';
       return c.json({ error: message }, 401);
     }

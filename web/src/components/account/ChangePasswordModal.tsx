@@ -18,7 +18,7 @@ interface ChangePasswordModalProps {
   onClose: () => void;
 }
 
-const MIN_LENGTH = 12;
+const MIN_LENGTH = 8;
 
 export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps) {
   const { t } = useLanguage();

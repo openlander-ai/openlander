@@ -33,6 +33,25 @@ describe('auth setup password route', () => {
     expect(authService.createSession).toHaveBeenCalledOnce();
   });
 
+  it('rejects setup passwords shorter than 8 characters before persisting', async () => {
+    const { app, authService } = createHarness();
+
+    const res = await app.request('/auth/setup-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: '1234567' }),
+    });
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      code: 'PASSWORD_TOO_SHORT',
+      message: 'Password must be at least 8 characters.',
+      details: { minLength: 8 },
+    });
+    expect(authService.setupPassword).not.toHaveBeenCalled();
+    expect(authService.createSession).not.toHaveBeenCalled();
+  });
+
   it('ignores legacy setupSecret payloads instead of requiring them', async () => {
     const { app, authService } = createHarness();
 
