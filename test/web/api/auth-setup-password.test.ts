@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../../src/app.js';
 import type { AuthService } from '../../../src/auth/auth-service.js';
+import { OpenLanderError } from '../../../src/errors.js';
 import { createAuthRoutes } from '../../../src/web/api/auth-routes.js';
 
 function createHarness(opts: { passwordSet?: boolean } = {}) {
@@ -33,8 +34,13 @@ describe('auth setup password route', () => {
     expect(authService.createSession).toHaveBeenCalledOnce();
   });
 
-  it('rejects setup passwords shorter than 8 characters before persisting', async () => {
+  it('maps backend password policy errors to 400', async () => {
     const { app, authService } = createHarness();
+    vi.mocked(authService.setupPassword).mockRejectedValueOnce(
+      new OpenLanderError('Password must be at least 8 characters.', 'PASSWORD_TOO_SHORT', 400, {
+        minLength: 8,
+      }),
+    );
 
     const res = await app.request('/auth/setup-password', {
       method: 'POST',
@@ -48,7 +54,7 @@ describe('auth setup password route', () => {
       message: 'Password must be at least 8 characters.',
       details: { minLength: 8 },
     });
-    expect(authService.setupPassword).not.toHaveBeenCalled();
+    expect(authService.setupPassword).toHaveBeenCalledWith('1234567');
     expect(authService.createSession).not.toHaveBeenCalled();
   });
 

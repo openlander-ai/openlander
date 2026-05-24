@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../../src/app.js';
 import type { AuthService } from '../../../src/auth/auth-service.js';
+import { OpenLanderError } from '../../../src/errors.js';
 import { createAuthRoutes } from '../../../src/web/api/auth-routes.js';
 
 function createHarness() {
@@ -30,8 +31,13 @@ describe('auth change password route', () => {
     expect(authService.changePassword).toHaveBeenCalledWith('old-pass', '12345678');
   });
 
-  it('rejects shorter new passwords before changing the stored password', async () => {
+  it('maps backend password policy errors to 400', async () => {
     const { app, authService } = createHarness();
+    vi.mocked(authService.changePassword).mockRejectedValueOnce(
+      new OpenLanderError('Password must be at least 8 characters.', 'PASSWORD_TOO_SHORT', 400, {
+        minLength: 8,
+      }),
+    );
 
     const res = await app.request('/auth/change-password', {
       method: 'POST',
@@ -48,6 +54,6 @@ describe('auth change password route', () => {
       message: 'Password must be at least 8 characters.',
       details: { minLength: 8 },
     });
-    expect(authService.changePassword).not.toHaveBeenCalled();
+    expect(authService.changePassword).toHaveBeenCalledWith('old-pass', '1234567');
   });
 });

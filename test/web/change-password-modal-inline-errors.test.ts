@@ -41,8 +41,11 @@ describe('ChangePasswordModal — inline error UX', () => {
   });
 
   it('uses the same 8 character minimum as first-run setup', () => {
-    expect(modalSource).toMatch(/const MIN_LENGTH = 8;/);
+    const policySource = readRepoFile('web/src/lib/auth/password-policy.ts');
+    expect(policySource).toMatch(/MIN_PASSWORD_LENGTH = 8/);
+    expect(modalSource).toContain("from '@/lib/auth/password-policy'");
     expect(modalSource).not.toMatch(/const MIN_LENGTH = 12;/);
+    expect(modalSource).not.toMatch(/const MIN_LENGTH = 8;/);
   });
 
   it('does not gate the Save button on the confirmation match (regression guard)', () => {
@@ -59,11 +62,11 @@ describe('ChangePasswordModal — inline error UX', () => {
     // The native attribute would short-circuit submit before our
     // handler runs (browser focuses the input + shows a popover
     // instead of letting React render the inline error banner).
-    expect(modalSource).not.toMatch(/minLength=\{MIN_LENGTH\}/);
+    expect(modalSource).not.toMatch(/minLength=\{MIN_PASSWORD_LENGTH\}/);
   });
 
   it('still validates length + mismatch in the submit handler with the existing i18n keys', () => {
-    expect(modalSource).toMatch(/next\.length < MIN_LENGTH/);
+    expect(modalSource).toMatch(/isPasswordTooShort\(next\)/);
     expect(modalSource).toMatch(/account\.changePassword\.tooShort/);
     expect(modalSource).toMatch(/next !== confirm/);
     expect(modalSource).toMatch(/account\.changePassword\.mismatch/);

@@ -30,10 +30,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getSetupStatus } from '@/lib/api';
 import { setupPassword } from '@/lib/api/auth';
+import { isPasswordTooShort } from '@/lib/auth/password-policy';
 
 type Mode = 'signin' | 'setup';
-
-const MIN_LENGTH = 8;
 
 export function LoginPage() {
   const [mode, setMode] = useState<Mode | null>(null);
@@ -90,11 +89,7 @@ export function LoginPage() {
   const handleSetup = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    // Trim only for the length check — bcrypt happily hashes whitespace,
-    // so a whitespace-only password should not be accepted as
-    // meaningful entropy.
-    const trimmed = password.trim();
-    if (trimmed.length < MIN_LENGTH) {
+    if (isPasswordTooShort(password)) {
       setError(t('setup.password.tooShort'));
       return;
     }
