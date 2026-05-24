@@ -1,6 +1,6 @@
 # OpenLander
 
-**Self-hosted deployment platform for AI coding agents.**
+**Self-hosted deployment control plane for coding agents.**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
@@ -58,6 +58,11 @@ inspect runtime state, or recover safely.
 OpenLander is a self-hosted control plane designed around MCP. It exposes
 deploys, logs, services, approvals, and runtime state in a shape coding
 agents can read, with risky actions held behind explicit human approval.
+
+OpenLander 0.1 does not run an internal self-healing agent. It gives external
+MCP-capable coding agents structured tools and context to deploy, inspect,
+diagnose, and recover services explicitly. It assumes a trusted self-hosted
+environment, not a multi-tenant sandbox for arbitrary untrusted code.
 
 <p align="center">
   <img src="docs/assets/your-agent-setup.png" alt="OpenLander MCP agent setup — connect Claude, Cursor, Windsurf, and more" width="920" />
@@ -174,9 +179,9 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 
 **Next**
 
-- **AI Ops** — agent-driven incident response inside a sandboxed policy you
-  set. Today the platform records failures and surfaces them; the next step
-  is letting the agent remediate.
+- **Internal AI Ops** — optional incident response inside a policy you set.
+  Today the platform records failures and exposes structured MCP diagnostics;
+  external agents decide and call each remediation step explicitly.
 - **Private container registries** — AWS ECR, Google Artifact Registry, and
   any OCI registry behind cloud-provider auth.
 - **Service templates** — beyond Postgres / Redis. Object storage, message

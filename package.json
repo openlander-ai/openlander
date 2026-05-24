@@ -1,7 +1,7 @@
 {
   "name": "openlander",
   "version": "0.1.4",
-  "description": "Self-hosted deployment platform that fixes its own failures",
+  "description": "Self-hosted deployment control plane for coding agents",
   "type": "module",
   "bin": {
     "openlander": "dist/cli/index.js"
