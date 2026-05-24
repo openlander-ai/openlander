@@ -32,7 +32,7 @@ describe('AuthScreen v0.1 — single page, two modes', () => {
 
   it('uses the dedicated tooShort key (not empty) for sub-8-char passwords', () => {
     expect(source).toContain("t('setup.password.tooShort')");
-    expect(source).toMatch(/password\.trim\(\)/);
+    expect(source).toMatch(/isPasswordTooShort\(password\)/);
   });
 
   it('does not require a setup secret on first-run password setup', () => {

@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { AppContext } from '../../app.js';
-import { assertPasswordMeetsPolicy, type AuthService } from '../../auth/auth-service.js';
+import type { AuthService } from '../../auth/auth-service.js';
 import { saveConfig } from '../../config/index.js';
 import { generatePkce, getGoogleAuthUrl, exchangeGoogleCode } from '../../auth/google-oauth.js';
 import { encryptAndStoreToken, loadDecryptedToken } from '../../auth/token-store.js';
@@ -209,24 +209,21 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       return c.json({ error: 'Password is required' }, 400);
     }
 
-    let apiToken: string;
     try {
-      assertPasswordMeetsPolicy(body.password);
-      ({ apiToken } = await authService.setupPassword(body.password));
+      const { apiToken } = await authService.setupPassword(body.password);
+      // Auto-login: create session so subsequent setup API calls work
+      const session = await authService.createSession();
+      c.header(
+        'Set-Cookie',
+        `ol_session=${session.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${String(SESSION_MAX_AGE)}`,
+      );
+
+      return c.json({ success: true, apiToken });
     } catch (err) {
       const response = passwordPolicyError(err);
       if (response) return response;
       throw err;
     }
-
-    // Auto-login: create session so subsequent setup API calls work
-    const session = await authService.createSession();
-    c.header(
-      'Set-Cookie',
-      `ol_session=${session.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${String(SESSION_MAX_AGE)}`,
-    );
-
-    return c.json({ success: true, apiToken });
   });
 
   api.post('/auth/login', async (c) => {
@@ -281,7 +278,6 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
 
     const body = await c.req.json<{ currentPassword: string; newPassword: string }>();
     try {
-      assertPasswordMeetsPolicy(body.newPassword);
       await authService.changePassword(body.currentPassword, body.newPassword);
       return c.json({ success: true });
     } catch (err) {

@@ -12,13 +12,12 @@ import { Loader2, X } from 'lucide-react';
 import { changePassword } from '@/lib/api/auth';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
+import { MIN_PASSWORD_LENGTH, isPasswordTooShort } from '@/lib/auth/password-policy';
 
 interface ChangePasswordModalProps {
   open: boolean;
   onClose: () => void;
 }
-
-const MIN_LENGTH = 8;
 
 export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps) {
   const { t } = useLanguage();
@@ -47,8 +46,8 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps)
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (submitting) return;
-    if (next.length < MIN_LENGTH) {
-      setError(t('account.changePassword.tooShort', { count: String(MIN_LENGTH) }));
+    if (isPasswordTooShort(next)) {
+      setError(t('account.changePassword.tooShort', { count: String(MIN_PASSWORD_LENGTH) }));
       return;
     }
     if (next !== confirm) {
@@ -128,7 +127,7 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps)
               className="rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-2 text-[13px] text-[color:var(--ol-fg)] outline-none focus:border-[color:var(--ol-primary)]"
             />
             <span className="text-[10.5px] text-[color:var(--ol-fg-subtle)]">
-              {t('account.changePassword.minHint', { count: String(MIN_LENGTH) })}
+              {t('account.changePassword.minHint', { count: String(MIN_PASSWORD_LENGTH) })}
             </span>
           </label>
 
