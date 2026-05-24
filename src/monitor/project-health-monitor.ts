@@ -115,7 +115,8 @@ export class ProjectHealthMonitor {
     // PR 4.5: canonical-first read of runtime columns with `??` fallback.
     const probeContext: ProbeContext = {
       projectId,
-      containerId: deployable?.container_id ?? project.container_id ?? '',
+      containerId:
+        deployable?.container_id ?? deployable?.container_name ?? project.container_id ?? '',
       assignedPort: deployable?.assigned_port ?? project.assigned_port ?? undefined,
     };
 

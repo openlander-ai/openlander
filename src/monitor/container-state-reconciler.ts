@@ -131,24 +131,24 @@ export class ContainerStateReconciler {
   ): Promise<void> {
     const projects = allProjects.filter((project) => {
       const d = deployablesByProject.get(project.id);
-      const containerId = d?.container_id ?? project.container_id;
+      const containerRef = d?.container_id ?? d?.container_name ?? project.container_id;
       const status = d?.status ?? project.status;
-      return Boolean(containerId) && RECONCILE_ELIGIBLE_STATUSES.has(status);
+      return Boolean(containerRef) && RECONCILE_ELIGIBLE_STATUSES.has(status);
     });
 
     for (const project of projects) {
       const d = deployablesByProject.get(project.id);
-      const containerId = d?.container_id ?? project.container_id;
-      if (!containerId) {
+      const containerRef = d?.container_id ?? d?.container_name ?? project.container_id;
+      if (!containerRef) {
         continue;
       }
 
       try {
-        await this.docker.inspectContainer(containerId);
+        await this.docker.inspectContainer(containerRef);
       } catch (error) {
         if (!isDockerNotFoundError(error)) {
           log.debug(
-            { err: error, containerId, projectId: project.id },
+            { err: error, containerRef, projectId: project.id },
             'Failed to inspect container during reconciliation',
           );
           continue;
@@ -157,7 +157,7 @@ export class ContainerStateReconciler {
         await this.events.emit('container:missing', {
           projectId: project.id,
           projectName: project.name,
-          containerId,
+          containerId: containerRef,
           suggestion: MISSING_CONTAINER_SUGGESTION,
         });
 
@@ -166,7 +166,7 @@ export class ContainerStateReconciler {
         }
 
         log.warn(
-          { err: error, containerId, projectId: project.id },
+          { err: error, containerRef, projectId: project.id },
           'Detected project container missing from Docker',
         );
       }
@@ -233,26 +233,37 @@ export class ContainerStateReconciler {
     try {
       const containers = await this.docker.listAllContainers();
 
-      const knownContainerIds = new Set<string>();
+      const knownContainerRefs = new Set<string>();
       for (const project of projects) {
         // PR 4.5: canonical-first read of container_id with `??` fallback.
         const deployable = deployablesByProject.get(project.id);
         const containerId = deployable?.container_id ?? project.container_id;
+        const containerName = deployable?.container_name;
         if (containerId) {
-          knownContainerIds.add(containerId);
+          knownContainerRefs.add(containerId);
+        }
+        if (containerName) {
+          knownContainerRefs.add(containerName);
         }
       }
 
       for (const service of services) {
         if (service.container_id) {
-          knownContainerIds.add(service.container_id);
+          knownContainerRefs.add(service.container_id);
+        }
+        if (service.container_name) {
+          knownContainerRefs.add(service.container_name);
         }
       }
 
       const orphans = containers.filter((container) => {
         const isOpenLanderContainer =
           container.name.startsWith('ol-') || container.name.startsWith('openlander');
-        return isOpenLanderContainer && !knownContainerIds.has(container.id);
+        return (
+          isOpenLanderContainer &&
+          !knownContainerRefs.has(container.id) &&
+          !knownContainerRefs.has(container.name)
+        );
       });
 
       this.orphanCount = orphans.length;

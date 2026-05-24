@@ -144,6 +144,25 @@ describe('ContainerStateReconciler', () => {
     expect(emit).not.toHaveBeenCalledWith('container:missing', expect.anything());
   });
 
+  it('inspects restored project services by container_name when container_id is empty', async () => {
+    const project = createProject({ id: 'home-menu', name: 'home-menu' });
+    project.container_id = null;
+    const service = createService({
+      id: 'home-menu__svc',
+      container_name: 'ol-home-menu',
+    });
+    service.project_id = 'home-menu';
+    service.container_id = null;
+    listProjects.mockReturnValue([project]);
+    listServices.mockReturnValue([service]);
+    const reconciler = new ContainerStateReconciler(docker, db, events);
+
+    await reconciler.reconcile();
+
+    expect(inspectContainer).toHaveBeenCalledWith('ol-home-menu');
+    expect(emit).not.toHaveBeenCalledWith('container:missing', expect.anything());
+  });
+
   it('skips stopped projects during missing container detection', async () => {
     listProjects.mockReturnValue([
       createProject({ id: 'project-1', status: 'stopped', container_id: 'container-1' }),
@@ -202,6 +221,38 @@ describe('ContainerStateReconciler', () => {
     await reconciler.reconcile();
 
     expect(reconciler.getOrphanCount()).toBe(1);
+  });
+
+  it('does not count restored project services with known container_name as orphans', async () => {
+    const project = createProject({ id: 'home-menu', name: 'home-menu' });
+    project.container_id = null;
+    const service = createService({
+      id: 'home-menu__svc',
+      container_name: 'ol-home-menu',
+    });
+    service.project_id = 'home-menu';
+    service.container_id = null;
+    listProjects.mockReturnValue([project]);
+    listServices.mockReturnValue([service]);
+    listAllContainers.mockResolvedValue([
+      {
+        id: 'container-home-menu',
+        name: 'ol-home-menu',
+        image: 'openlander/home-menu:latest',
+        state: 'running',
+        status: 'Up 10s',
+        ports: [],
+        labels: {},
+        managedByOpenLander: true,
+        composeProject: null,
+        created: 1,
+      },
+    ]);
+    const reconciler = new ContainerStateReconciler(docker, db, events);
+
+    await reconciler.reconcile();
+
+    expect(reconciler.getOrphanCount()).toBe(0);
   });
 
   it('ignores non-OpenLander containers when counting orphans', async () => {
