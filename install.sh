@@ -296,8 +296,35 @@ gcp_public_ipv4() {
   print_valid_ipv4 "${ip}"
 }
 
+azure_public_ipv4() {
+  local ip
+
+  command_exists curl || return 1
+
+  ip="$(
+    curl -fsS --max-time 1 --noproxy '*' \
+      -H 'Metadata: true' \
+      'http://169.254.169.254/metadata/instance/network/interface/0/ipv4/ipAddress/0/publicIpAddress?api-version=2021-02-01&format=text' 2>/dev/null || true
+  )"
+
+  print_valid_ipv4 "${ip}"
+}
+
+digitalocean_public_ipv4() {
+  local ip
+
+  command_exists curl || return 1
+
+  ip="$(
+    curl -fsS --max-time 1 \
+      http://169.254.169.254/metadata/v1/interfaces/public/0/ipv4/address 2>/dev/null || true
+  )"
+
+  print_valid_ipv4 "${ip}"
+}
+
 cloud_public_ipv4() {
-  aws_public_ipv4 || gcp_public_ipv4 || return 1
+  aws_public_ipv4 || gcp_public_ipv4 || azure_public_ipv4 || digitalocean_public_ipv4 || return 1
 }
 
 server_host() {
