@@ -243,7 +243,20 @@ normalize_public_host() {
   printf '%s' "${host}"
 }
 
-cloud_public_ipv4() {
+print_valid_ipv4() {
+  local ip
+  ip="$1"
+  case "${ip}" in
+    *.*.*.*)
+      printf '%s' "${ip}"
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+aws_public_ipv4() {
   local ip token
 
   command_exists curl || return 1
@@ -266,14 +279,25 @@ cloud_public_ipv4() {
     )"
   fi
 
-  case "${ip}" in
-    *.*.*.*)
-      printf '%s' "${ip}"
-      return 0
-      ;;
-  esac
+  print_valid_ipv4 "${ip}"
+}
 
-  return 1
+gcp_public_ipv4() {
+  local ip
+
+  command_exists curl || return 1
+
+  ip="$(
+    curl -fsS --max-time 1 \
+      -H 'Metadata-Flavor: Google' \
+      http://169.254.169.254/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip 2>/dev/null || true
+  )"
+
+  print_valid_ipv4 "${ip}"
+}
+
+cloud_public_ipv4() {
+  aws_public_ipv4 || gcp_public_ipv4 || return 1
 }
 
 server_host() {
