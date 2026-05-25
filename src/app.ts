@@ -13,6 +13,7 @@ import { ModelRegistry } from './llm/model-registry.js';
 import { LlmCircuitBreaker } from './llm/llm-circuit-breaker.js';
 import { ProviderHealthMonitor } from './llm/provider-health-monitor.js';
 import { CloudflareTunnelManager } from './pipeline/cloudflare.js';
+import type { RuntimeBackend } from './pipeline/runtime/index.js';
 
 import { ServiceManager } from './pipeline/service-manager.js';
 import type { BuildDebugger } from './pipeline/build-debugger.js';
@@ -163,6 +164,7 @@ export interface AppContext {
   db: Database;
   eventBus: EventBus;
   docker: Docker;
+  runtime: RuntimeBackend;
   serverContext: ServerContext;
   pipeline: DeployPipeline;
   composePipeline: ComposePipeline;
@@ -257,12 +259,13 @@ export async function createAppContext(
   const db = await Database.connect(databaseUrl);
   await migrateDefaultResourceProfile(db);
   const docker = new Docker(config.docker.socketPath || undefined, config.docker.networkName);
+  const runtime: RuntimeBackend = docker;
   const serverContext = createLocalServerContext(docker);
 
   const jobManager = new JobManager();
   const env = new EnvManager(db);
   const composePipeline = new ComposePipeline(docker, db, eventBus, jobManager, env);
-  const traefik = new TraefikManager(docker, config.server.port, {
+  const traefik = new TraefikManager(runtime, config.server.port, {
     networkName: config.docker.networkName,
   });
 
@@ -288,7 +291,7 @@ export async function createAppContext(
   let pipelineCtx: AppContext | null = null;
 
   const pipeline = new DeployPipeline(
-    docker,
+    runtime,
     db,
     env,
     config,
@@ -384,7 +387,7 @@ export async function createAppContext(
   // v0.2: Cloudflare production tunnels
   const cloudflare = new CloudflareTunnelManager(config.cloudflare, db, eventBus);
 
-  const serviceManager = new ServiceManager(docker, db);
+  const serviceManager = new ServiceManager(runtime, db);
 
   // ServiceHealthMonitor depends on serviceManager for the v4 sparkline
   // recorder hook (Phase E_NEW Task 5). Construct after serviceManager so
@@ -447,6 +450,7 @@ export async function createAppContext(
     db,
     eventBus,
     docker,
+    runtime,
     serverContext,
     pipeline,
     composePipeline,

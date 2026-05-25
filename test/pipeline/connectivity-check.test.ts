@@ -4,7 +4,10 @@ import { checkDeployConnectivity } from '../../src/pipeline/deploy/connectivity-
 import type { Docker } from '../../src/pipeline/docker.js';
 
 function createDockerMock(
-  execSimple: (containerId: string, command: string[]) => Promise<{
+  execSimple: (
+    containerId: string,
+    command: string[],
+  ) => Promise<{
     stdout: string;
     stderr: string;
     exitCode: number;
@@ -20,7 +23,7 @@ describe('checkDeployConnectivity', () => {
     });
 
     const result = await checkDeployConnectivity({
-      docker,
+      runtime: docker,
       containerId: 'c1',
       envVars: { DATABASE_URL: 'postgres://db:5432/app' },
     });
@@ -32,7 +35,7 @@ describe('checkDeployConnectivity', () => {
     const docker = createDockerMock(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
 
     const result = await checkDeployConnectivity({
-      docker,
+      runtime: docker,
       containerId: 'c1',
       envVars: { DATABASE_URL: 'postgres://db:5432/app' },
     });
@@ -63,14 +66,16 @@ describe('checkDeployConnectivity', () => {
     });
 
     const result = await checkDeployConnectivity({
-      docker,
+      runtime: docker,
       containerId: 'c1',
       envVars: { DATABASE_URL: 'postgres://db:5432/app' },
     });
 
     expect(result).toEqual([]);
-    expect(vi.mocked(docker.execSimple).mock.calls.every(([, command]) => {
-      return !command.join(' ').includes(' nc ');
-    })).toBe(true);
+    expect(
+      vi.mocked(docker.execSimple).mock.calls.every(([, command]) => {
+        return !command.join(' ').includes(' nc ');
+      }),
+    ).toBe(true);
   });
 });

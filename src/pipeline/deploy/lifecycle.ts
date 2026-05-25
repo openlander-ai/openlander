@@ -6,7 +6,7 @@ import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
 import { ContainerNotFoundError, OpenLanderError } from '../../errors.js';
 import type { ProjectStatus, StateTransitionOptions } from '../../monitor/project-state-manager.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import { allocatePort, clearPortScanCache } from '../port.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import type { TunnelManager } from './tunnel.js';
@@ -39,7 +39,7 @@ export class ContainerLifecycle {
   private readonly stateManager: ProjectStateTransitioner;
 
   constructor(
-    private readonly docker: Docker,
+    private readonly runtime: RuntimeBackend,
     private readonly db: Database,
     stateManagerOrCoordinator?: ProjectStateTransitioner | CoordinatorSuppressor,
     private readonly coordinator?: CoordinatorSuppressor,
@@ -81,7 +81,7 @@ export class ContainerLifecycle {
     }
 
     try {
-      await this.docker.startContainer(startContainerId);
+      await this.runtime.startContainer(startContainerId);
     } catch (err) {
       if (err instanceof ContainerNotFoundError) {
         log.warn(
@@ -125,7 +125,7 @@ export class ContainerLifecycle {
     }
 
     try {
-      await this.docker.stopContainer(stopContainerId);
+      await this.runtime.stopContainer(stopContainerId);
     } catch (err) {
       if (!(err instanceof ContainerNotFoundError)) {
         throw err;
@@ -134,7 +134,7 @@ export class ContainerLifecycle {
 
     // Remove container after stop so Docker events can no longer fire for this project
     try {
-      await this.docker.removeContainer(stopContainerId);
+      await this.runtime.removeContainer(stopContainerId);
     } catch (err) {
       log.debug({ err, projectId }, 'Stop remove container skipped (already removed)');
     }
@@ -160,7 +160,7 @@ export class ContainerLifecycle {
     await this.cleanupProjectContainers(projectId);
 
     try {
-      await this.docker.removeProjectNetwork(project.name);
+      await this.runtime.removeProjectNetwork(project.name);
     } catch (err) {
       log.warn(
         { err, projectId, projectName: project.name },
@@ -210,13 +210,13 @@ export class ContainerLifecycle {
 
     if (archiveContainerId) {
       try {
-        await this.docker.stopContainer(archiveContainerId);
+        await this.runtime.stopContainer(archiveContainerId);
       } catch (err) {
         log.debug({ err, projectId }, 'Archive stop skipped');
       }
 
       try {
-        await this.docker.removeContainer(archiveContainerId);
+        await this.runtime.removeContainer(archiveContainerId);
       } catch (err) {
         log.debug({ err, projectId }, 'Archive remove container skipped');
       }
@@ -224,7 +224,7 @@ export class ContainerLifecycle {
 
     if (archiveImageTag) {
       try {
-        await this.docker.removeImage(archiveImageTag);
+        await this.runtime.removeImage(archiveImageTag);
       } catch (err) {
         log.debug({ err, projectId, imageTag: archiveImageTag }, 'Archive remove image skipped');
       }
@@ -240,7 +240,7 @@ export class ContainerLifecycle {
     if (!project) return;
 
     await this.db.unarchiveProject(projectId);
-    const port = await allocatePort(this.db, this.docker, {}, 'production');
+    const port = await allocatePort(this.db, this.runtime, {}, 'production');
     await this.db.updateProject(projectId, { assignedPort: port });
     await eventBus.emit('project:unarchive', { projectId, port });
   }
@@ -273,8 +273,8 @@ export class ContainerLifecycle {
     }
 
     const managed =
-      typeof this.docker.listManagedContainers === 'function'
-        ? await this.docker.listManagedContainers()
+      typeof this.runtime.listManagedContainers === 'function'
+        ? await this.runtime.listManagedContainers()
         : [];
     const matches = managed.filter(
       (container) => ids.has(container.id) || names.has(container.name),
@@ -295,29 +295,29 @@ export class ContainerLifecycle {
 
     for (const identifier of identifiers) {
       try {
-        await this.docker.disconnectContainerFromNetwork(identifier, SHARED_NETWORK_NAME);
+        await this.runtime.disconnectContainerFromNetwork(identifier, SHARED_NETWORK_NAME);
       } catch (err) {
         log.warn({ err, identifier }, 'Network disconnect during cleanup failed');
       }
 
       try {
-        await this.docker.stopContainer(identifier);
+        await this.runtime.stopContainer(identifier);
       } catch (err) {
         log.warn({ err, identifier }, 'Container stop during cleanup failed');
       }
 
       try {
-        await this.docker.removeContainer(identifier);
+        await this.runtime.removeContainer(identifier);
       } catch (err) {
         log.warn({ err, identifier }, 'Container removal during cleanup failed');
       }
     }
 
-    if (identifiers.size > 0 && typeof this.docker.listManagedContainers === 'function') {
+    if (identifiers.size > 0 && typeof this.runtime.listManagedContainers === 'function') {
       const maxAttempts = 5;
       const intervalMs = 200;
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const managed = await this.docker.listManagedContainers();
+        const managed = await this.runtime.listManagedContainers();
         const remaining = managed.some((c) => ids.has(c.id) || names.has(c.name));
         if (!remaining) break;
         await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -327,30 +327,30 @@ export class ContainerLifecycle {
     clearPortScanCache();
 
     for (const name of secretNames) {
-      this.docker.cleanupSecretFiles(name);
+      this.runtime.cleanupSecretFiles(name);
     }
   }
 
   async forceCleanConflicts(containerName: string): Promise<void> {
-    const managed = await this.docker.listManagedContainers();
+    const managed = await this.runtime.listManagedContainers();
     const conflicts = managed.filter((container) => container.name === containerName);
 
     if (conflicts.length > 0) {
       for (const conflict of conflicts) {
         try {
-          await this.docker.disconnectContainerFromNetwork(conflict.id, SHARED_NETWORK_NAME);
+          await this.runtime.disconnectContainerFromNetwork(conflict.id, SHARED_NETWORK_NAME);
         } catch (err) {
           log.debug({ err, container: conflict.name }, 'Conflict network disconnect failed');
         }
 
         try {
-          await this.docker.stopContainer(conflict.id);
+          await this.runtime.stopContainer(conflict.id);
         } catch (err) {
           log.debug({ err, container: conflict.name }, 'Conflict stop failed');
         }
 
         try {
-          await this.docker.removeContainer(conflict.id);
+          await this.runtime.removeContainer(conflict.id);
         } catch (err) {
           log.debug({ err, container: conflict.name }, 'Conflict removal failed');
         }
@@ -359,19 +359,19 @@ export class ContainerLifecycle {
     }
 
     try {
-      await this.docker.disconnectContainerFromNetwork(containerName, SHARED_NETWORK_NAME);
+      await this.runtime.disconnectContainerFromNetwork(containerName, SHARED_NETWORK_NAME);
     } catch (err) {
       log.debug({ err, container: containerName }, 'Conflict network disconnect by name failed');
     }
 
     try {
-      await this.docker.stopContainer(containerName);
+      await this.runtime.stopContainer(containerName);
     } catch (err) {
       log.debug({ err, container: containerName }, 'Conflict stop by name failed');
     }
 
     try {
-      await this.docker.removeContainer(containerName);
+      await this.runtime.removeContainer(containerName);
     } catch (err) {
       log.debug({ err, container: containerName }, 'Conflict removal by name failed');
     }
@@ -390,7 +390,7 @@ export class ContainerLifecycle {
     }
 
     return opts
-      ? this.docker.getLogs(logsContainerId, tail, opts)
-      : this.docker.getLogs(logsContainerId, tail);
+      ? this.runtime.getLogs(logsContainerId, tail, opts)
+      : this.runtime.getLogs(logsContainerId, tail);
   }
 }

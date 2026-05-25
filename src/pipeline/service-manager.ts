@@ -27,7 +27,7 @@ import {
   type ExecOptions,
 } from './service-adapters/shared.js';
 import type { ContainerExecResult } from './service-adapters/types.js';
-import type { Docker } from './docker.js';
+import type { RuntimeBackend } from './runtime/index.js';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
 import {
   isDockerContainerNameConflictError,
@@ -217,7 +217,7 @@ export class ServiceManager {
   private serviceCardSummaryEpoch = 0;
 
   constructor(
-    private readonly docker: Docker,
+    private readonly runtime: RuntimeBackend,
     private readonly db: Database,
     private readonly dataDir: string = getDataDir(),
   ) {}
@@ -334,7 +334,7 @@ export class ServiceManager {
       reconciled += 1;
 
       try {
-        const info = await this.docker.inspectContainer(containerRef);
+        const info = await this.runtime.inspectContainer(containerRef);
 
         if (!info.State.Running) {
           log.warn(
@@ -354,7 +354,7 @@ export class ServiceManager {
         }
 
         if (targetNetwork !== SHARED_NETWORK_NAME) {
-          await ensureManagedTraefikNetwork(this.docker, targetNetwork);
+          await ensureManagedTraefikNetwork(this.runtime, targetNetwork);
         }
 
         const networks = info.NetworkSettings.Networks;
@@ -366,7 +366,7 @@ export class ServiceManager {
         const hasAlias = aliases.includes(service.name);
 
         if (!serviceNetwork) {
-          await this.docker.connectContainerToNetwork(info.Id, targetNetwork, [service.name]);
+          await this.runtime.connectContainerToNetwork(info.Id, targetNetwork, [service.name]);
           migrated += 1;
           log.info(
             {
@@ -389,8 +389,8 @@ export class ServiceManager {
             'Service already connected to target network with alias',
           );
         } else {
-          await this.docker.disconnectContainerFromNetwork(info.Id, targetNetwork);
-          await this.docker.connectContainerToNetwork(info.Id, targetNetwork, [service.name]);
+          await this.runtime.disconnectContainerFromNetwork(info.Id, targetNetwork);
+          await this.runtime.connectContainerToNetwork(info.Id, targetNetwork, [service.name]);
           migrated += 1;
           log.info(
             {
@@ -404,7 +404,7 @@ export class ServiceManager {
         }
 
         if (targetNetwork !== SHARED_NETWORK_NAME && networks[SHARED_NETWORK_NAME]) {
-          await this.docker.disconnectContainerFromNetwork(info.Id, SHARED_NETWORK_NAME);
+          await this.runtime.disconnectContainerFromNetwork(info.Id, SHARED_NETWORK_NAME);
         }
       } catch (err) {
         if (isDockerNotFoundError(err)) {
@@ -437,7 +437,7 @@ export class ServiceManager {
     if (!project) {
       return null;
     }
-    return await this.docker.ensureProjectNetwork(project.name);
+    return await this.runtime.ensureProjectNetwork(project.name);
   }
 
   async create(opts: {
@@ -544,7 +544,7 @@ export class ServiceManager {
 
     const containerPort = port;
     // Given no explicit env context, use production port policy for services.
-    const hostPort = await allocatePort(this.db, this.docker, {}, 'production');
+    const hostPort = await allocatePort(this.db, this.runtime, {}, 'production');
 
     const id = nanoid(12);
     const containerName = this.getContainerName(opts.name);
@@ -555,9 +555,9 @@ export class ServiceManager {
     let persistenceStarted = false;
     let rollbackClean = true;
     try {
-      await this.docker.pullImage(image);
+      await this.runtime.pullImage(image);
 
-      await this.docker.createVolume({
+      await this.runtime.createVolume({
         name: volumeName,
         labels: {
           [DOCKER_LABELS.ROLE]: 'service',
@@ -579,7 +579,7 @@ export class ServiceManager {
         cpuShares: 512,
       };
 
-      containerId = await this.docker.runServiceContainer({
+      containerId = await this.runtime.runServiceContainer({
         imageTag: image,
         name: containerName,
         port: containerPort,
@@ -622,7 +622,7 @@ export class ServiceManager {
       }
       if (containerId) {
         try {
-          await this.docker.safeRemoveContainer(containerId);
+          await this.runtime.safeRemoveContainer(containerId);
         } catch (cleanupErr) {
           rollbackClean = false;
           log.warn(
@@ -633,7 +633,7 @@ export class ServiceManager {
       }
       if (volumeCreated) {
         try {
-          await this.docker.removeVolume(volumeName);
+          await this.runtime.removeVolume(volumeName);
         } catch (cleanupErr) {
           rollbackClean = false;
           log.warn({ err: cleanupErr, volumeName }, 'Failed to roll back managed service volume');
@@ -669,7 +669,7 @@ export class ServiceManager {
     }
 
     const containerId = service.container_id ?? service.container_name ?? '';
-    await this.docker.startContainer(containerId);
+    await this.runtime.startContainer(containerId);
     await this.db.updateService(id, { status: 'running' });
     this.invalidateServiceCardSummaryCache();
   }
@@ -681,7 +681,7 @@ export class ServiceManager {
     }
 
     const containerId = service.container_id ?? service.container_name ?? '';
-    await this.docker.stopContainer(containerId);
+    await this.runtime.stopContainer(containerId);
     await this.db.updateService(id, { status: 'stopped' });
     this.invalidateServiceCardSummaryCache();
   }
@@ -710,14 +710,14 @@ export class ServiceManager {
     const containerId = service.container_id ?? service.container_name;
     if (containerId) {
       try {
-        await this.docker.stopContainer(containerId);
+        await this.runtime.stopContainer(containerId);
       } catch (error) {
         if (!isDockerNotFoundError(error)) {
           throw error;
         }
       }
       try {
-        await this.docker.safeRemoveContainer(containerId);
+        await this.runtime.safeRemoveContainer(containerId);
       } catch (error) {
         if (!isDockerNotFoundError(error)) {
           throw error;
@@ -726,7 +726,7 @@ export class ServiceManager {
     }
 
     const volumeName = this.getVolumeName(service.name);
-    await this.docker.removeVolume(volumeName);
+    await this.runtime.removeVolume(volumeName);
 
     await this.db.deleteService(id);
     this.invalidateServiceCardSummaryCache();
@@ -753,18 +753,18 @@ export class ServiceManager {
     const isRedis = service.kind === 'redis' || (service.image_url ?? '').includes('redis');
     if (isRedis) {
       try {
-        const initialResult = await execInServiceContainer(this.docker, service, [
+        const initialResult = await execInServiceContainer(this.runtime, service, [
           'redis-cli',
           'LASTSAVE',
         ]);
         const initialTimestamp = initialResult.stdout.trim();
 
-        await execInServiceContainer(this.docker, service, ['redis-cli', 'BGSAVE']);
+        await execInServiceContainer(this.runtime, service, ['redis-cli', 'BGSAVE']);
 
         // Poll LASTSAVE until timestamp changes (max 30s, 1s interval)
         for (let attempt = 0; attempt < 30; attempt += 1) {
           await sleep(1000);
-          const currentResult = await execInServiceContainer(this.docker, service, [
+          const currentResult = await execInServiceContainer(this.runtime, service, [
             'redis-cli',
             'LASTSAVE',
           ]);
@@ -785,9 +785,9 @@ export class ServiceManager {
       }
     }
 
-    await this.docker.pullImage('alpine');
+    await this.runtime.pullImage('alpine');
 
-    const backupContainerId = await this.docker.runInfraContainer({
+    const backupContainerId = await this.runtime.runInfraContainer({
       Image: 'alpine',
       Cmd: ['tar', 'czf', `${backupMount.containerDir}/${backupFilename}`, '-C', '/data', '.'],
       HostConfig: {
@@ -796,7 +796,7 @@ export class ServiceManager {
       },
     });
 
-    const { StatusCode: backupExitCode } = await this.docker.waitForContainer(backupContainerId);
+    const { StatusCode: backupExitCode } = await this.runtime.waitForContainer(backupContainerId);
     if (backupExitCode !== 0) {
       throw new ServiceOperationError(
         'backup',
@@ -834,9 +834,9 @@ export class ServiceManager {
     await this.stop(id);
 
     try {
-      await this.docker.pullImage('alpine');
+      await this.runtime.pullImage('alpine');
 
-      const restoreContainerId = await this.docker.runInfraContainer({
+      const restoreContainerId = await this.runtime.runInfraContainer({
         Image: 'alpine',
         Cmd: [
           'sh',
@@ -850,7 +850,7 @@ export class ServiceManager {
       });
 
       const { StatusCode: restoreExitCode } =
-        await this.docker.waitForContainer(restoreContainerId);
+        await this.runtime.waitForContainer(restoreContainerId);
       if (restoreExitCode !== 0) {
         throw new ServiceOperationError(
           'restore',
@@ -921,7 +921,7 @@ export class ServiceManager {
 
     const containerId = service.container_id ?? service.container_name ?? '';
     try {
-      const info = await this.docker.inspectContainer(containerId);
+      const info = await this.runtime.inspectContainer(containerId);
       const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
       const containerIdFromDocker = info.Id;
 
@@ -946,13 +946,13 @@ export class ServiceManager {
     const service = await this.getRequiredService(id);
     const tail = Number.isInteger(lines) && lines > 0 ? lines : 100;
     const containerId = service.container_id ?? service.container_name ?? '';
-    return this.docker.getLogs(containerId, tail);
+    return this.runtime.getLogs(containerId, tail);
   }
 
   async exec(id: string, command: string[], options?: ExecOptions): Promise<ContainerExecResult> {
     const service = await this.getRequiredService(id);
     await this.ensureServiceContainerRunning(service);
-    return execInServiceContainer(this.docker, service, command, {
+    return execInServiceContainer(this.runtime, service, command, {
       throwOnNonZeroExit: false,
       ...options,
     });
@@ -1165,7 +1165,7 @@ export class ServiceManager {
 
     const containerRef = service.container_id ?? service.container_name ?? '';
     try {
-      const info = await this.docker.inspectContainer(containerRef);
+      const info = await this.runtime.inspectContainer(containerRef);
       const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
       const healthRaw: unknown = info.State.Health?.Status;
       const startedAtRaw: unknown = info.State.StartedAt;
@@ -1242,7 +1242,7 @@ export class ServiceManager {
     let diskUsageBytes: number | null = null;
     try {
       const dataMountPath = this.getDataMountPath(service.kind);
-      const result = await execInServiceContainer(this.docker, service, [
+      const result = await execInServiceContainer(this.runtime, service, [
         'du',
         '-sb',
         dataMountPath,
@@ -1269,7 +1269,7 @@ export class ServiceManager {
     try {
       const adapter = getServiceAdapter(service.kind);
       if (adapter) {
-        const connectionStats = await adapter.getConnectionStats(service, this.docker);
+        const connectionStats = await adapter.getConnectionStats(service, this.runtime);
         activeConnections = connectionStats.activeConnections;
         maxConnections = connectionStats.maxConnections;
       }
@@ -1297,7 +1297,7 @@ export class ServiceManager {
       if (!containerId) {
         return { cpuPercent: null, memoryUsageBytes: null, memoryLimitBytes: null };
       }
-      const rawStats = (await this.docker.getContainerStats(containerId)) as {
+      const rawStats = (await this.runtime.getContainerStats(containerId)) as {
         cpu_stats?: {
           cpu_usage?: { total_usage?: number; percpu_usage?: number[] };
           system_cpu_usage?: number;
@@ -1405,7 +1405,7 @@ export class ServiceManager {
       throw new ServiceOperationUnsupportedError('Database listing', serviceKind);
     }
 
-    return adapter.listDatabases(service, this.docker);
+    return adapter.listDatabases(service, this.runtime);
   }
 
   async listUsers(serviceId: string): Promise<ListedUser[]> {
@@ -1417,7 +1417,7 @@ export class ServiceManager {
       throw new ServiceOperationUnsupportedError('User listing', serviceKind);
     }
 
-    return adapter.listUsers(service, this.docker);
+    return adapter.listUsers(service, this.runtime);
   }
 
   async createDatabase(serviceId: string, dbName: string): Promise<CreateDatabaseResult> {
@@ -1431,7 +1431,7 @@ export class ServiceManager {
       throw new ServiceOperationUnsupportedError('Database creation', serviceKind);
     }
 
-    return adapter.createDatabase(service, dbName, this.docker);
+    return adapter.createDatabase(service, dbName, this.runtime);
   }
 
   async createUser(
@@ -1455,7 +1455,7 @@ export class ServiceManager {
       throw new ServiceOperationUnsupportedError('User creation', serviceKind);
     }
 
-    return adapter.createUser(service, { username, password: userPassword, grants }, this.docker);
+    return adapter.createUser(service, { username, password: userPassword, grants }, this.runtime);
   }
 
   async listBuckets(serviceId: string): Promise<Array<{ name: string; createdAt: string }>> {
@@ -1467,7 +1467,7 @@ export class ServiceManager {
     }
 
     const adapter = new MinioAdapter();
-    return adapter.listBuckets(service, this.docker);
+    return adapter.listBuckets(service, this.runtime);
   }
 
   async createBucket(serviceId: string, bucketName: string): Promise<void> {
@@ -1479,7 +1479,7 @@ export class ServiceManager {
     }
 
     const adapter = new MinioAdapter();
-    return adapter.createBucket(service, this.docker, bucketName);
+    return adapter.createBucket(service, this.runtime, bucketName);
   }
 
   async deleteBucket(serviceId: string, bucketName: string): Promise<void> {
@@ -1491,7 +1491,7 @@ export class ServiceManager {
     }
 
     const adapter = new MinioAdapter();
-    return adapter.deleteBucket(service, this.docker, bucketName);
+    return adapter.deleteBucket(service, this.runtime, bucketName);
   }
 
   private getContainerName(name: string): string {
@@ -1613,7 +1613,7 @@ export class ServiceManager {
   private async ensureServiceContainerRunning(service: ServiceRow): Promise<void> {
     const containerId = service.container_id ?? service.container_name ?? '';
     try {
-      const info = await this.docker.inspectContainer(containerId);
+      const info = await this.runtime.inspectContainer(containerId);
       if (!info.State.Running) {
         throw new ServiceContainerStateError(
           service.id,

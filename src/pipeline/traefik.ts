@@ -3,7 +3,7 @@ import { networkInterfaces, platform } from 'node:os';
 import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('traefik');
 
-import type { Docker } from './docker.js';
+import type { RuntimeBackend } from './runtime/index.js';
 import { DOCKER_LABELS, getDataDir, getPolicy, SHARED_NETWORK_NAME } from '../config/index.js';
 import { containerName as projectContainerName } from './helpers.js';
 import { join } from 'node:path';
@@ -39,7 +39,7 @@ export class TraefikManager {
   private readonly dashboardPort: number;
 
   constructor(
-    private readonly docker: Docker,
+    private readonly runtime: RuntimeBackend,
     private readonly openLanderPort: number = 3000,
     options?: TraefikManagerOptions,
   ) {
@@ -52,7 +52,7 @@ export class TraefikManager {
 
   async isRunning(): Promise<boolean> {
     try {
-      const containers = await this.docker.listAllContainers();
+      const containers = await this.runtime.listAllContainers();
       return containers.some(
         (c) => c.labels[DOCKER_LABELS.ROLE] === 'traefik' && c.state === 'running',
       );
@@ -64,7 +64,7 @@ export class TraefikManager {
 
   private async hasCurrentConfig(): Promise<boolean> {
     try {
-      const info = await this.docker.inspectContainer(this.containerName);
+      const info = await this.runtime.inspectContainer(this.containerName);
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       const cmd: string[] = info.Config.Cmd ?? [];
       const hasHttpProvider = cmd.some((arg: string) => arg.includes('providers.http.endpoint'));
@@ -99,7 +99,7 @@ export class TraefikManager {
     networkName: string,
   ): Promise<boolean> {
     try {
-      await this.docker.connectContainerToNetwork(containerName, networkName);
+      await this.runtime.connectContainerToNetwork(containerName, networkName);
       log.info({ containerName, networkName }, 'Traefik connected to network');
       return true;
     } catch (err) {
@@ -109,7 +109,7 @@ export class TraefikManager {
   }
 
   private async tryAdoptExistingTraefik(): Promise<boolean> {
-    const containers = await this.docker.listAllContainers();
+    const containers = await this.runtime.listAllContainers();
     const running = containers.filter(
       (c) => c.labels[DOCKER_LABELS.ROLE] === 'traefik' && c.state === 'running',
     );
@@ -137,7 +137,7 @@ export class TraefikManager {
     }
 
     try {
-      await this.docker.removeContainer(this.containerName);
+      await this.runtime.removeContainer(this.containerName);
       log.debug({ containerName: this.containerName }, 'Removed stale managed Traefik container');
     } catch {
       // Container doesn't exist — expected
@@ -148,7 +148,7 @@ export class TraefikManager {
 
   private async ensureNetworkByName(name: string): Promise<void> {
     try {
-      await this.docker.getNetworkInfo(name);
+      await this.runtime.getNetworkInfo(name);
       return;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -157,7 +157,7 @@ export class TraefikManager {
       }
     }
 
-    await this.docker.ensureNetwork(name);
+    await this.runtime.ensureNetwork(name);
   }
 
   async start(): Promise<void> {
@@ -176,10 +176,10 @@ export class TraefikManager {
     }
 
     try {
-      const existing = await this.docker.listAllContainers();
+      const existing = await this.runtime.listAllContainers();
       const traefikContainers = existing.filter((c) => c.labels[DOCKER_LABELS.ROLE] === 'traefik');
       for (const c of traefikContainers) {
-        await this.docker.removeContainer(c.id);
+        await this.runtime.removeContainer(c.id);
       }
       if (traefikContainers.length > 0) {
         log.debug(
@@ -191,7 +191,7 @@ export class TraefikManager {
     }
 
     try {
-      await this.docker.pullImage(TRAEFIK_IMAGE);
+      await this.runtime.pullImage(TRAEFIK_IMAGE);
     } catch (err) {
       log.debug({ err }, 'Traefik image pull failed — may already exist locally');
     }
@@ -199,7 +199,7 @@ export class TraefikManager {
     const httpPortStr = String(this.httpPort);
     const dashboardPortStr = String(this.dashboardPort);
 
-    await this.docker.runInfraContainer({
+    await this.runtime.runInfraContainer({
       Image: TRAEFIK_IMAGE,
       name: this.containerName,
       Cmd: [
@@ -241,7 +241,7 @@ export class TraefikManager {
 
   async stop(): Promise<void> {
     try {
-      await this.docker.safeRemoveContainer(this.containerName);
+      await this.runtime.safeRemoveContainer(this.containerName);
     } catch (err) {
       log.warn({ err }, 'Failed to remove Traefik container — may already be removed');
     }
@@ -499,11 +499,11 @@ export function buildTraefikLabels(
 }
 
 export async function ensureManagedTraefikNetwork(
-  docker: Docker,
+  runtime: RuntimeBackend,
   networkName: string,
 ): Promise<void> {
   try {
-    await docker.connectContainerToNetwork('traefik-ol', networkName);
+    await runtime.connectContainerToNetwork('traefik-ol', networkName);
   } catch (error) {
     if (isDockerNotFoundError(error)) {
       log.warn(
@@ -558,12 +558,12 @@ const PROXY_PATTERNS: Array<{
  * Scans all Docker containers and identifies known reverse proxy images.
  * When multiple proxies exist, returns the one with highest priority.
  *
- * @param docker - Docker instance to query containers
+ * @param runtime - Runtime backend to query containers
  * @returns Proxy detection result with type, container name, ports, and version
  */
-export async function detectReverseProxy(docker: Docker): Promise<ProxyDetection> {
+export async function detectReverseProxy(runtime: RuntimeBackend): Promise<ProxyDetection> {
   try {
-    const containers = await docker.listAllContainers();
+    const containers = await runtime.listAllContainers();
 
     // Find all proxy containers
     const detectedProxies: Array<ProxyDetection & { priority: number }> = [];
@@ -681,14 +681,17 @@ function isTraefikDockerProviderKey(key: string): boolean {
  * Safely stops the OpenLander-managed Traefik container.
  * Does NOT modify config — caller should update traefik.mode and traefik.externalNetwork.
  *
- * @param docker - Docker instance
+ * @param runtime - Runtime backend
  * @param externalNetwork - Name of the external Traefik's Docker network
  */
-export async function switchToExternalMode(docker: Docker, externalNetwork: string): Promise<void> {
+export async function switchToExternalMode(
+  runtime: RuntimeBackend,
+  externalNetwork: string,
+): Promise<void> {
   log.info({ externalNetwork }, 'Switching to external Traefik mode');
 
   // Stop managed Traefik if running
-  const manager = new TraefikManager(docker);
+  const manager = new TraefikManager(runtime);
   await manager.stop();
 
   log.info('Managed Traefik stopped (if it was running)');
@@ -699,17 +702,17 @@ export async function switchToExternalMode(docker: Docker, externalNetwork: stri
  * OpenLander 0.1 deploys apps onto project-scoped networks; managed Traefik must join
  * those networks to route Docker-provider traffic.
  *
- * @param docker - Docker instance
+ * @param runtime - Runtime backend
  * @param containerId - Container ID to connect
  * @param networkName - Network name (from traefik.externalNetwork or config.docker.networkName)
  */
 export async function connectToTraefikNetwork(
-  docker: Docker,
+  runtime: RuntimeBackend,
   containerId: string,
   networkName: string,
 ): Promise<void> {
   try {
-    await docker.connectContainerToNetwork(containerId, networkName);
+    await runtime.connectContainerToNetwork(containerId, networkName);
     log.debug({ containerId, networkName }, 'Container connected to Traefik network');
   } catch (error) {
     log.warn({ error, containerId, networkName }, 'Failed to connect container to Traefik network');

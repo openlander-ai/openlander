@@ -1,5 +1,5 @@
 import type { ServiceRow } from '../../db/index.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import { ServiceOperationUnsupportedError } from '../../errors.js';
 import { waitUntilReady } from '../lib/retry.js';
 import { execInServiceContainer } from './shared.js';
@@ -28,10 +28,10 @@ export class RabbitMqAdapter implements ServiceAdapter {
     return `amqp://${containerName}:${String(port)}`;
   }
 
-  async waitForReady(service: ServiceRow, docker: Docker): Promise<void> {
+  async waitForReady(service: ServiceRow, runtime: RuntimeBackend): Promise<void> {
     await waitUntilReady(
       async () => {
-        await execInServiceContainer(docker, service, ['rabbitmq-diagnostics', 'check_running']);
+        await execInServiceContainer(runtime, service, ['rabbitmq-diagnostics', 'check_running']);
       },
       {
         maxAttempts: 15,
@@ -41,9 +41,9 @@ export class RabbitMqAdapter implements ServiceAdapter {
     );
   }
 
-  async getConnectionStats(service: ServiceRow, docker: Docker): Promise<ConnectionStats> {
+  async getConnectionStats(service: ServiceRow, runtime: RuntimeBackend): Promise<ConnectionStats> {
     try {
-      const result = await execInServiceContainer(docker, service, [
+      const result = await execInServiceContainer(runtime, service, [
         'rabbitmqctl',
         'list_connections',
         '--no-table-headers',
@@ -58,18 +58,18 @@ export class RabbitMqAdapter implements ServiceAdapter {
     }
   }
 
-  listDatabases(_service: ServiceRow, _docker: Docker): Promise<ListedDatabase[]> {
+  listDatabases(_service: ServiceRow, _runtime: RuntimeBackend): Promise<ListedDatabase[]> {
     return Promise.reject(new ServiceOperationUnsupportedError('Database listing', 'rabbitmq'));
   }
 
-  listUsers(_service: ServiceRow, _docker: Docker): Promise<ListedUser[]> {
+  listUsers(_service: ServiceRow, _runtime: RuntimeBackend): Promise<ListedUser[]> {
     return Promise.reject(new ServiceOperationUnsupportedError('User listing', 'rabbitmq'));
   }
 
   createDatabase(
     _service: ServiceRow,
     _dbName: string,
-    _docker: Docker,
+    _runtime: RuntimeBackend,
   ): Promise<CreateDatabaseResult> {
     return Promise.reject(new ServiceOperationUnsupportedError('Database creation', 'rabbitmq'));
   }
@@ -77,7 +77,7 @@ export class RabbitMqAdapter implements ServiceAdapter {
   createUser(
     _service: ServiceRow,
     _options: CreateUserOptions,
-    _docker: Docker,
+    _runtime: RuntimeBackend,
   ): Promise<CreateUserResult> {
     return Promise.reject(new ServiceOperationUnsupportedError('User creation', 'rabbitmq'));
   }

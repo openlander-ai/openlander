@@ -1,5 +1,5 @@
 import type { ServiceRow } from '../../db/index.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import { waitUntilReady } from '../lib/retry.js';
 import { execInServiceContainer, parseServiceCredentials, quoteSqlLiteral } from './shared.js';
 import type {
@@ -31,12 +31,12 @@ export class PostgresAdapter implements ServiceAdapter {
     return `postgresql://${user}:${password}@${containerName}:${String(port)}/${database}`;
   }
 
-  async waitForReady(service: ServiceRow, docker: Docker): Promise<void> {
+  async waitForReady(service: ServiceRow, runtime: RuntimeBackend): Promise<void> {
     const credentials = parseServiceCredentials(service);
     await waitUntilReady(
       async () => {
         const result = await execInServiceContainer(
-          docker,
+          runtime,
           service,
           ['pg_isready', '-U', credentials.user, '-d', 'postgres'],
           { throwOnNonZeroExit: false },
@@ -53,9 +53,9 @@ export class PostgresAdapter implements ServiceAdapter {
     );
   }
 
-  async getConnectionStats(service: ServiceRow, docker: Docker): Promise<ConnectionStats> {
+  async getConnectionStats(service: ServiceRow, runtime: RuntimeBackend): Promise<ConnectionStats> {
     const credentials = parseServiceCredentials(service);
-    const connResult = await execInServiceContainer(docker, service, [
+    const connResult = await execInServiceContainer(runtime, service, [
       'psql',
       '-t',
       '-A',
@@ -66,7 +66,7 @@ export class PostgresAdapter implements ServiceAdapter {
       '-c',
       'SELECT count(*) FROM pg_stat_activity WHERE state IS NOT NULL',
     ]);
-    const maxResult = await execInServiceContainer(docker, service, [
+    const maxResult = await execInServiceContainer(runtime, service, [
       'psql',
       '-t',
       '-A',
@@ -84,11 +84,11 @@ export class PostgresAdapter implements ServiceAdapter {
     };
   }
 
-  async listDatabases(service: ServiceRow, docker: Docker): Promise<ListedDatabase[]> {
+  async listDatabases(service: ServiceRow, runtime: RuntimeBackend): Promise<ListedDatabase[]> {
     const credentials = parseServiceCredentials(service);
-    await this.waitForReady(service, docker);
+    await this.waitForReady(service, runtime);
 
-    const result = await execInServiceContainer(docker, service, [
+    const result = await execInServiceContainer(runtime, service, [
       'psql',
       '-t',
       '-A',
@@ -126,11 +126,11 @@ export class PostgresAdapter implements ServiceAdapter {
       .filter((database) => database.name.length > 0);
   }
 
-  async listUsers(service: ServiceRow, docker: Docker): Promise<ListedUser[]> {
+  async listUsers(service: ServiceRow, runtime: RuntimeBackend): Promise<ListedUser[]> {
     const credentials = parseServiceCredentials(service);
-    await this.waitForReady(service, docker);
+    await this.waitForReady(service, runtime);
 
-    const result = await execInServiceContainer(docker, service, [
+    const result = await execInServiceContainer(runtime, service, [
       'psql',
       '-t',
       '-A',
@@ -159,14 +159,14 @@ export class PostgresAdapter implements ServiceAdapter {
   async createDatabase(
     service: ServiceRow,
     dbName: string,
-    docker: Docker,
+    runtime: RuntimeBackend,
   ): Promise<CreateDatabaseResult> {
     const credentials = parseServiceCredentials(service);
-    await this.waitForReady(service, docker);
+    await this.waitForReady(service, runtime);
     // eslint-disable-next-line @typescript-eslint/no-deprecated
     const hostPort = service.assigned_port ?? service.port;
 
-    await execInServiceContainer(docker, service, [
+    await execInServiceContainer(runtime, service, [
       'psql',
       '-v',
       'ON_ERROR_STOP=1',
@@ -193,14 +193,14 @@ export class PostgresAdapter implements ServiceAdapter {
   async createUser(
     service: ServiceRow,
     options: CreateUserOptions,
-    docker: Docker,
+    runtime: RuntimeBackend,
   ): Promise<CreateUserResult> {
     const credentials = parseServiceCredentials(service);
-    await this.waitForReady(service, docker);
+    await this.waitForReady(service, runtime);
     // eslint-disable-next-line @typescript-eslint/no-deprecated
     const hostPort = service.assigned_port ?? service.port;
 
-    await execInServiceContainer(docker, service, [
+    await execInServiceContainer(runtime, service, [
       'psql',
       '-v',
       'ON_ERROR_STOP=1',
@@ -214,7 +214,7 @@ export class PostgresAdapter implements ServiceAdapter {
 
     const grantDatabase = options.grants?.database;
     if (grantDatabase) {
-      await execInServiceContainer(docker, service, [
+      await execInServiceContainer(runtime, service, [
         'psql',
         '-v',
         'ON_ERROR_STOP=1',

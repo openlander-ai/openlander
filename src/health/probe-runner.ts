@@ -1,4 +1,4 @@
-import type { Docker } from '../pipeline/docker.js';
+import type { RuntimeBackend } from '../pipeline/runtime/index.js';
 import { execProbe } from './strategies/exec.js';
 import { httpProbe } from './strategies/http.js';
 import { tcpProbe } from './strategies/tcp.js';
@@ -6,7 +6,7 @@ import type { HealthCheckConfig, ProbeContext, ProbeResult, ProbeRunner } from '
 
 const RETRY_DELAY_MS = 200;
 
-type DockerInspectState = Awaited<ReturnType<Docker['inspectContainer']>>['State'];
+type RuntimeInspectState = Awaited<ReturnType<RuntimeBackend['inspectContainer']>>['State'];
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -22,7 +22,7 @@ function isValidProbePort(port: number | undefined): port is number {
   return typeof port === 'number' && Number.isInteger(port) && port > 0 && port <= 65535;
 }
 
-function containerStateProbeResult(state: DockerInspectState): ProbeResult {
+function containerStateProbeResult(state: RuntimeInspectState): ProbeResult {
   if (state.Running) {
     return { healthy: true, source: 'docker' };
   }
@@ -35,7 +35,7 @@ function containerStateProbeResult(state: DockerInspectState): ProbeResult {
 }
 
 export class LocalProbeRunner implements ProbeRunner {
-  constructor(private readonly docker: Docker) {}
+  constructor(private readonly runtime: RuntimeBackend) {}
 
   async runProbe(config: HealthCheckConfig, context: ProbeContext): Promise<ProbeResult> {
     const attempts = Math.max(config.failureThreshold, 1);
@@ -60,10 +60,10 @@ export class LocalProbeRunner implements ProbeRunner {
     config: HealthCheckConfig,
     context: ProbeContext,
   ): Promise<ProbeResult> {
-    let inspectedState: DockerInspectState | undefined;
+    let inspectedState: RuntimeInspectState | undefined;
 
     if (config.dockerHealthPolicy === 'prefer' && context.containerId) {
-      const info = await this.docker.inspectContainer(context.containerId);
+      const info = await this.runtime.inspectContainer(context.containerId);
       inspectedState = info.State;
 
       if (inspectedState.Health) {
@@ -94,7 +94,7 @@ export class LocalProbeRunner implements ProbeRunner {
         }
         return tcpProbe(config, port);
       case 'exec':
-        return execProbe(context.containerId, config, this.docker);
+        return execProbe(context.containerId, config, this.runtime);
       case 'none':
         return { healthy: true, source: 'none' };
     }
@@ -102,7 +102,7 @@ export class LocalProbeRunner implements ProbeRunner {
 
   private portlessProbeResult(
     strategy: 'http' | 'tcp',
-    inspectedState: DockerInspectState | undefined,
+    inspectedState: RuntimeInspectState | undefined,
   ): ProbeResult {
     if (inspectedState) {
       return containerStateProbeResult(inspectedState);
@@ -116,6 +116,6 @@ export class LocalProbeRunner implements ProbeRunner {
   }
 }
 
-export function createLocalProbeRunner(docker: Docker): LocalProbeRunner {
-  return new LocalProbeRunner(docker);
+export function createLocalProbeRunner(runtime: RuntimeBackend): LocalProbeRunner {
+  return new LocalProbeRunner(runtime);
 }

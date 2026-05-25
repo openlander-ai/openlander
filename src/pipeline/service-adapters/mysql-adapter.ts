@@ -1,5 +1,5 @@
 import type { ServiceRow } from '../../db/index.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import { waitUntilReady } from '../lib/retry.js';
 import { execInServiceContainer, parseServiceCredentials, quoteSqlLiteral } from './shared.js';
 import type {
@@ -31,12 +31,12 @@ export class MySqlAdapter implements ServiceAdapter {
     return `mysql://${user}:${password}@${containerName}:${String(port)}/${database}`;
   }
 
-  async waitForReady(service: ServiceRow, docker: Docker): Promise<void> {
+  async waitForReady(service: ServiceRow, runtime: RuntimeBackend): Promise<void> {
     const credentials = parseServiceCredentials(service);
     await waitUntilReady(
       async () => {
         const result = await execInServiceContainer(
-          docker,
+          runtime,
           service,
           [
             'mysqladmin',
@@ -61,9 +61,9 @@ export class MySqlAdapter implements ServiceAdapter {
     );
   }
 
-  async getConnectionStats(service: ServiceRow, docker: Docker): Promise<ConnectionStats> {
+  async getConnectionStats(service: ServiceRow, runtime: RuntimeBackend): Promise<ConnectionStats> {
     const credentials = parseServiceCredentials(service);
-    const connResult = await execInServiceContainer(docker, service, [
+    const connResult = await execInServiceContainer(runtime, service, [
       'mysql',
       '-N',
       '-uroot',
@@ -71,7 +71,7 @@ export class MySqlAdapter implements ServiceAdapter {
       '-e',
       'SELECT COUNT(*) FROM information_schema.processlist',
     ]);
-    const maxResult = await execInServiceContainer(docker, service, [
+    const maxResult = await execInServiceContainer(runtime, service, [
       'mysql',
       '-N',
       '-uroot',
@@ -87,11 +87,11 @@ export class MySqlAdapter implements ServiceAdapter {
     };
   }
 
-  async listDatabases(service: ServiceRow, docker: Docker): Promise<ListedDatabase[]> {
+  async listDatabases(service: ServiceRow, runtime: RuntimeBackend): Promise<ListedDatabase[]> {
     const credentials = parseServiceCredentials(service);
-    await this.waitForReady(service, docker);
+    await this.waitForReady(service, runtime);
 
-    const result = await execInServiceContainer(docker, service, [
+    const result = await execInServiceContainer(runtime, service, [
       'mysql',
       '-N',
       '-uroot',
@@ -110,11 +110,11 @@ export class MySqlAdapter implements ServiceAdapter {
       }));
   }
 
-  async listUsers(service: ServiceRow, docker: Docker): Promise<ListedUser[]> {
+  async listUsers(service: ServiceRow, runtime: RuntimeBackend): Promise<ListedUser[]> {
     const credentials = parseServiceCredentials(service);
-    await this.waitForReady(service, docker);
+    await this.waitForReady(service, runtime);
 
-    const result = await execInServiceContainer(docker, service, [
+    const result = await execInServiceContainer(runtime, service, [
       'mysql',
       '-N',
       '-uroot',
@@ -133,14 +133,14 @@ export class MySqlAdapter implements ServiceAdapter {
   async createDatabase(
     service: ServiceRow,
     dbName: string,
-    docker: Docker,
+    runtime: RuntimeBackend,
   ): Promise<CreateDatabaseResult> {
     const credentials = parseServiceCredentials(service);
-    await this.waitForReady(service, docker);
+    await this.waitForReady(service, runtime);
     // eslint-disable-next-line @typescript-eslint/no-deprecated
     const hostPort = service.assigned_port ?? service.port;
 
-    await execInServiceContainer(docker, service, [
+    await execInServiceContainer(runtime, service, [
       'mysql',
       '-uroot',
       `-p${credentials.password}`,
@@ -163,14 +163,14 @@ export class MySqlAdapter implements ServiceAdapter {
   async createUser(
     service: ServiceRow,
     options: CreateUserOptions,
-    docker: Docker,
+    runtime: RuntimeBackend,
   ): Promise<CreateUserResult> {
     const credentials = parseServiceCredentials(service);
-    await this.waitForReady(service, docker);
+    await this.waitForReady(service, runtime);
     // eslint-disable-next-line @typescript-eslint/no-deprecated
     const hostPort = service.assigned_port ?? service.port;
 
-    await execInServiceContainer(docker, service, [
+    await execInServiceContainer(runtime, service, [
       'mysql',
       '-uroot',
       `-p${credentials.password}`,
@@ -180,7 +180,7 @@ export class MySqlAdapter implements ServiceAdapter {
 
     const grantDatabase = options.grants?.database;
     if (grantDatabase) {
-      await execInServiceContainer(docker, service, [
+      await execInServiceContainer(runtime, service, [
         'mysql',
         '-uroot',
         `-p${credentials.password}`,

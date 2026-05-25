@@ -1,6 +1,6 @@
 import { createModuleLogger } from '../lib/logger.js';
 import type { Database } from '../db/index.js';
-import type { Docker } from './docker.js';
+import type { RuntimeBackend } from './runtime/index.js';
 import { checkEnvRequirements } from './env-inject.js';
 import { scanUsedPorts, clearPortScanCache } from './port.js';
 import { detectReverseProxy, getProxyStatus } from './traefik.js';
@@ -145,7 +145,7 @@ function runDockerfileSyntaxSanityCheck(
 
 export async function preflightCheck(
   db: Database,
-  docker: Docker,
+  runtime: RuntimeBackend,
   projectName: string,
   targetPort?: number,
   options: PreflightOptions = {},
@@ -159,9 +159,9 @@ export async function preflightCheck(
     clearPortScanCache();
 
     const [portScanResult, allContainers, proxyDetection, systemStats] = await Promise.all([
-      scanUsedPorts(db, docker),
-      docker.listAllContainers(),
-      detectReverseProxy(docker),
+      scanUsedPorts(db, runtime),
+      runtime.listAllContainers(),
+      detectReverseProxy(runtime),
       Promise.resolve(getSystemStats()).catch(() => null),
     ]);
 
@@ -330,12 +330,12 @@ export async function preflightCheck(
 
 export async function preflightCheckOrThrow(
   db: Database,
-  docker: Docker,
+  runtime: RuntimeBackend,
   projectName: string,
   targetPort?: number,
   options: PreflightOptions = {},
 ): Promise<PreflightResult> {
-  const result = await preflightCheck(db, docker, projectName, targetPort, options);
+  const result = await preflightCheck(db, runtime, projectName, targetPort, options);
 
   if (!result.pass) {
     throw new PreflightCheckError(result);

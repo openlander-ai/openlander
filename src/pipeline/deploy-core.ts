@@ -8,8 +8,8 @@ import { URL } from 'node:url';
 import { nanoid } from 'nanoid';
 import { rm } from 'node:fs/promises';
 
-import type { Docker } from './docker.js';
 import type { CloudflareTunnelManager } from './cloudflare.js';
+import type { RuntimeBackend } from './runtime/index.js';
 import { cloneRepo } from './git.js';
 import { allocatePort, scanUsedPorts } from './port.js';
 import {
@@ -343,7 +343,7 @@ export class DeployPipeline {
   }
 
   constructor(
-    private readonly docker: Docker,
+    private readonly runtime: RuntimeBackend,
     private readonly db: Database,
     private readonly env: EnvManager,
     private readonly config: OpenLanderConfig,
@@ -372,14 +372,14 @@ export class DeployPipeline {
 
     this.tunnelManager = new TunnelManager(this.db);
     this.lifecycle = new ContainerLifecycle(
-      this.docker,
+      this.runtime,
       this.db,
       this.stateManager,
       this.coordinator,
     );
-    this.rollbackExecutor = new RollbackExecutor(this.docker, this.db, this.stateManager);
-    this.buildExecutor = new BuildExecutor(this.docker);
-    this.containerRunner = new ContainerRunner(this.docker, this.db);
+    this.rollbackExecutor = new RollbackExecutor(this.runtime, this.db, this.stateManager);
+    this.buildExecutor = new BuildExecutor(this.runtime);
+    this.containerRunner = new ContainerRunner(this.runtime, this.db);
     void this.cleanupStaleTunnels().catch((err: unknown) => {
       log.debug({ err }, 'Stale tunnel cleanup failed');
     });
@@ -396,7 +396,7 @@ export class DeployPipeline {
 
   private async cleanupOrphanContainers(): Promise<void> {
     try {
-      const managed = await this.docker.listManagedContainers();
+      const managed = await this.runtime.listManagedContainers();
       const projects = await this.db.listProjects();
       const services = await this.db.listServices();
       const environmentsByProject = new Map<string, EnvironmentRow[]>(
@@ -423,7 +423,7 @@ export class DeployPipeline {
 
         log.info({ id: container.id, name: container.name }, 'Removing orphan container');
         try {
-          await this.docker.safeRemoveContainer(container.id);
+          await this.runtime.safeRemoveContainer(container.id);
         } catch (err) {
           log.debug({ err, container: container.name }, 'Orphan container removal failed');
         }
@@ -478,12 +478,12 @@ export class DeployPipeline {
     const projectId = nanoid(12);
 
     try {
-      await preflightCheckOrThrow(this.db, this.docker, projectName);
+      await preflightCheckOrThrow(this.db, this.runtime, projectName);
     } catch (error) {
       if (error instanceof PreflightCheckError && config.force) {
         await this.forceCleanConflicts(projectName, error);
         try {
-          await preflightCheckOrThrow(this.db, this.docker, projectName);
+          await preflightCheckOrThrow(this.db, this.runtime, projectName);
         } catch (retryError) {
           if (retryError instanceof PreflightCheckError) {
             return {
@@ -1073,7 +1073,7 @@ export class DeployPipeline {
     let preflightWarnings: string[] | undefined;
     if (!config._projectId) {
       try {
-        const preflightResult = await preflightCheckOrThrow(this.db, this.docker, projectName);
+        const preflightResult = await preflightCheckOrThrow(this.db, this.runtime, projectName);
         preflightWarnings =
           preflightResult.warnings.length > 0 ? preflightResult.warnings : undefined;
       } catch (error) {
@@ -1222,7 +1222,7 @@ export class DeployPipeline {
     }
     if (environment.container_id) {
       try {
-        const runtimeLog = await this.docker.getLogs(environment.container_id, 500);
+        const runtimeLog = await this.runtime.getLogs(environment.container_id, 500);
         if (runtimeLog) {
           const lastLog = await this.db.getLastDeployLog(projectId, environmentId);
           if (lastLog) {
@@ -1234,7 +1234,7 @@ export class DeployPipeline {
       }
 
       try {
-        await this.docker.safeRemoveContainer(environment.container_id);
+        await this.runtime.safeRemoveContainer(environment.container_id);
       } catch {
         // container may already be removed
       }
@@ -1264,7 +1264,7 @@ export class DeployPipeline {
       const currentRunningTag = environment.image_tag ?? project.image_tag;
       if (currentRunningTag && currentRunningTag !== previousTag) {
         try {
-          await this.docker.tagImage(currentRunningTag, `openlander/${routeName}`, 'previous');
+          await this.runtime.tagImage(currentRunningTag, `openlander/${routeName}`, 'previous');
 
           preservedPreviousTag = currentRunningTag;
         } catch (err) {
@@ -1297,7 +1297,7 @@ export class DeployPipeline {
         ).emit('deploy:image-pull', { projectId, image: imageUrl });
         buildLog += `[pull] Pulling image ${imageUrl}\n`;
         try {
-          await this.docker.pullImage(imageUrl);
+          await this.runtime.pullImage(imageUrl);
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
           throw new ImagePullError(mapPullError(err));
@@ -1311,7 +1311,7 @@ export class DeployPipeline {
 
         imageTag = imageUrl;
         if (!deployConfig.containerPort) {
-          const exposedPort = await getImageExposedPort(this.docker, imageTag);
+          const exposedPort = await getImageExposedPort(this.runtime, imageTag);
           if (exposedPort) {
             deployConfig.containerPort = exposedPort;
             buildLog += `[image] Detected EXPOSE port ${String(exposedPort)}\n`;
@@ -1446,7 +1446,7 @@ export class DeployPipeline {
 
       try {
         const containerName = projectContainerName(routeName);
-        await this.docker.safeRemoveContainer(containerName);
+        await this.runtime.safeRemoveContainer(containerName);
         log.info({ projectId, containerName }, 'Cleaned up orphan container after failed deploy');
       } catch {
         // container may not exist — that's fine
@@ -1519,7 +1519,7 @@ export class DeployPipeline {
 
   private createOrchestrationDeps(): DeployOrchestrationDeps {
     return {
-      docker: this.docker,
+      runtime: this.runtime,
       db: this.db,
       env: this.env,
       stateManager: this.stateManager,
@@ -1537,7 +1537,7 @@ export class DeployPipeline {
 
   private createMonorepoDeps(): MonorepoOrchestrationDeps {
     return {
-      docker: this.docker,
+      runtime: this.runtime,
       db: this.db,
       env: this.env,
       stateManager: this.stateManager,
@@ -1629,7 +1629,7 @@ export class DeployPipeline {
       for (const child of legacyChildren) {
         if (child.container_id) {
           try {
-            await this.docker.safeRemoveContainer(child.container_id);
+            await this.runtime.safeRemoveContainer(child.container_id);
           } catch {
             /* best effort */
           }
@@ -1683,7 +1683,7 @@ export class DeployPipeline {
       };
     }
 
-    const usedPorts = (await scanUsedPorts(this.db, this.docker)).all;
+    const usedPorts = (await scanUsedPorts(this.db, this.runtime)).all;
     const validation = orchestrator.validateTopology(topology, usedPorts);
     if (!validation.valid) {
       const validationError = validation.errors.join('; ');
@@ -1758,7 +1758,7 @@ export class DeployPipeline {
         );
 
         try {
-          const healthResult = await this.docker.waitForHealthy(containerId, 60000);
+          const healthResult = await this.runtime.waitForHealthy(containerId, 60000);
           if (healthResult.healthy) {
             return { healthy: true };
           }
@@ -1898,7 +1898,7 @@ export class DeployPipeline {
           throw new MissingImageUrlError();
         }
         try {
-          await this.docker.pullImage(config.imageUrl);
+          await this.runtime.pullImage(config.imageUrl);
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
           throw new ImagePullError(mapPullError(err));
@@ -1909,7 +1909,7 @@ export class DeployPipeline {
       if (redeploySource !== 'image' && currentRunningTag) {
         if (currentRunningTag !== redeployPreviousLabel) {
           try {
-            await this.docker.tagImage(
+            await this.runtime.tagImage(
               currentRunningTag,
               `openlander/${redeployRouteName}`,
               'previous',
@@ -2092,7 +2092,7 @@ export class DeployPipeline {
         this.jobManager?.updatePhase(projectId, 'building');
         buildLog += `[pull] Pulling image ${imageUrl}\n`;
         try {
-          await this.docker.pullImage(imageUrl);
+          await this.runtime.pullImage(imageUrl);
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
           throw new ImagePullError(mapPullError(err));
@@ -2140,15 +2140,15 @@ export class DeployPipeline {
       });
 
       this.jobManager?.updatePhase(projectId, 'starting');
-      newPort = await allocatePort(this.db, this.docker, {}, 'production');
-      const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? newPort;
+      newPort = await allocatePort(this.db, this.runtime, {}, 'production');
+      const containerPort = (await this.runtime.getImageExposedPort(imageTag)) ?? newPort;
       const envVars = await resolveEnvVars(
         { projectId, serviceId: deployConfig._serviceId ?? undefined, environmentId },
         { env: this.env },
       );
       const secretFiles = await this.env.getSecretFilesForDeploy(projectId);
-      const networkName = await this.docker.ensureProjectNetwork(projectName);
-      await ensureManagedTraefikNetwork(this.docker, networkName);
+      const networkName = await this.runtime.ensureProjectNetwork(projectName);
+      await ensureManagedTraefikNetwork(this.runtime, networkName);
 
       const greenName = this.makeGreenContainerName(projectName);
       const resourceLimits = await loadResourceLimitsForDeployTarget(this.db, {
@@ -2156,7 +2156,7 @@ export class DeployPipeline {
         serviceId: deployConfig._serviceId,
       });
 
-      greenContainerId = await this.docker.runContainer({
+      greenContainerId = await this.runtime.runContainer({
         imageTag,
         name: greenName,
         port: newPort,
@@ -2201,7 +2201,7 @@ export class DeployPipeline {
         assignedPort: newPort,
       };
 
-      const probeRunner = createLocalProbeRunner(this.docker);
+      const probeRunner = createLocalProbeRunner(this.runtime);
 
       buildLog += `[health] Checking ${probeConfig.strategy} on port ${String(newPort)}${probeConfig.path ?? ''}\n`;
       const probeResult = await probeRunner.runProbe(probeConfig, probeContext);
@@ -2255,14 +2255,14 @@ export class DeployPipeline {
       buildLog += `[route] Passed (HTTP ${String(routeProbe.status)}) after ${String(routeProbe.elapsedMs)}ms (${String(routeProbe.attempts)} attempt(s))\n`;
 
       try {
-        await this.docker.stopContainer(blueContainerId);
+        await this.runtime.stopContainer(blueContainerId);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         warnings.push(`Blue cleanup warning: failed to stop previous container: ${message}`);
         log.warn({ err, projectId, blueContainerId }, 'Blue-green cleanup stop failed');
       }
       try {
-        await this.docker.safeRemoveContainer(blueContainerId);
+        await this.runtime.safeRemoveContainer(blueContainerId);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         warnings.push(`Blue cleanup warning: failed to remove previous container: ${message}`);
@@ -2329,7 +2329,7 @@ export class DeployPipeline {
       let blueStillServing = false;
       if (blueState?.containerId) {
         try {
-          const info = await this.docker.inspectContainer(blueState.containerId);
+          const info = await this.runtime.inspectContainer(blueState.containerId);
           blueStillServing = info.State.Running;
         } catch {
           blueStillServing = false;
@@ -2338,7 +2338,7 @@ export class DeployPipeline {
 
       if (!isCancelled && !blueStillServing && blueState?.containerId) {
         try {
-          await this.docker.restartContainer(blueState.containerId);
+          await this.runtime.restartContainer(blueState.containerId);
           blueStillServing = true;
           buildLog += '[recovery] Restarted blue container after failed promotion\n';
         } catch (restartErr) {
@@ -2465,13 +2465,13 @@ export class DeployPipeline {
 
   private async cleanupGreenContainer(containerId: string): Promise<void> {
     try {
-      await this.docker.stopContainer(containerId);
+      await this.runtime.stopContainer(containerId);
     } catch (err) {
       log.warn({ err }, 'Failed to stop green container during cleanup');
     }
 
     try {
-      await this.docker.safeRemoveContainer(containerId);
+      await this.runtime.safeRemoveContainer(containerId);
     } catch (err) {
       log.warn({ err }, 'Failed to remove green container during cleanup');
     }
@@ -2484,7 +2484,7 @@ export class DeployPipeline {
   }): Promise<void> {
     const greenNamePrefix = projectContainerName(`${params.projectName}-green-`);
     try {
-      const containers = await this.docker.listManagedContainers();
+      const containers = await this.runtime.listManagedContainers();
       const staleGreens = containers.filter((container) => {
         if (container.id === params.activeContainerId) return false;
         const labels = container.labels ?? {};
@@ -2607,7 +2607,7 @@ export class DeployPipeline {
       if (!environment?.container_id) return;
 
       try {
-        await this.docker.stopContainer(environment.container_id);
+        await this.runtime.stopContainer(environment.container_id);
       } catch (err) {
         if (!(err instanceof ContainerNotFoundError)) throw err;
       }
@@ -2635,7 +2635,7 @@ export class DeployPipeline {
       if (!environment?.container_id) return;
 
       try {
-        await this.docker.startContainer(environment.container_id);
+        await this.runtime.startContainer(environment.container_id);
       } catch (err) {
         if (err instanceof ContainerNotFoundError) {
           log.debug(

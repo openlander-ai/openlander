@@ -7,7 +7,7 @@ import { PortExhaustedError } from '../errors.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { getPolicy } from '../config/index.js';
 import type { OpenLanderEnv } from '../config/index.js';
-import type { Docker } from './docker.js';
+import type { RuntimeBackend } from './runtime/index.js';
 
 const log = createModuleLogger('port');
 const execAsync = promisify(exec);
@@ -147,7 +147,10 @@ function parseLsofOutput(output: string): number[] {
  * Scan all port sources: DB, Docker, and OS.
  * Results are cached for 1 second to avoid redundant scans.
  */
-export async function scanUsedPorts(db: Database, docker: Docker): Promise<PortScanResult> {
+export async function scanUsedPorts(
+  db: Database,
+  runtime: RuntimeBackend,
+): Promise<PortScanResult> {
   // Check cache
   const now = Date.now();
   if (portScanCache && now - portScanCache.timestamp < PORT_SCAN_CACHE_TTL_MS) {
@@ -160,7 +163,7 @@ export async function scanUsedPorts(db: Database, docker: Docker): Promise<PortS
   // 2. Docker ports (all containers)
   let dockerPorts: number[] = [];
   try {
-    const containers = await docker.listAllContainers();
+    const containers = await runtime.listAllContainers();
     // Include ports from running AND restarting containers
     dockerPorts = containers
       .filter((c) => c.state === 'running' || c.state === 'restarting')
@@ -216,7 +219,7 @@ export interface AllocatePortOptions {
 /** @param _serverId - Reserved for multi-server port allocation. Currently ignored. */
 export async function allocatePort(
   db: Database,
-  docker: Docker,
+  runtime: RuntimeBackend,
   options: AllocatePortOptions = {},
   _envType: OpenLanderEnv = 'production',
   _serverId?: string,
@@ -227,7 +230,7 @@ export async function allocatePort(
     rangeStart = policy.portRangeStart,
     rangeEnd = policy.portRangeEnd,
   } = options;
-  const usedPorts = await scanUsedPorts(db, docker);
+  const usedPorts = await scanUsedPorts(db, runtime);
   const usedSet = new Set(usedPorts.all);
 
   // Also exclude ports reserved by concurrent deployments

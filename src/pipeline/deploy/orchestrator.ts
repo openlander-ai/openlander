@@ -6,7 +6,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import type { OpenLanderEnv } from '../../config/index.js';
 import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import type { AutoDetector } from '../auto-detect.js';
 import type { ComposePipeline } from '../compose.js';
 import type { EnvManager } from '../env.js';
@@ -32,7 +32,7 @@ import type { ProjectStatus, StateTransitionOptions } from '../../monitor/projec
 const log = createModuleLogger('deploy');
 
 export interface DeployOrchestrationDeps {
-  docker: Docker;
+  runtime: RuntimeBackend;
   db: Database;
   env: EnvManager;
   stateManager: {
@@ -442,7 +442,7 @@ export async function buildProject(
 
   const buildDuration = Date.now() - buildStart;
   const latestAlias = `openlander/${routeName}:latest`;
-  const dockerWithTag = deps.docker as unknown as {
+  const dockerWithTag = deps.runtime as unknown as {
     tagImage?: (sourceTag: string, repo: string, newTag: string) => Promise<void>;
   };
   if (imageTag !== latestAlias && typeof dockerWithTag.tagImage === 'function') {
@@ -539,7 +539,7 @@ export async function runAndVerify(
 
   buildLog += `[run] ${containerId.slice(0, 12)} on port ${String(port)}\n`;
 
-  const healthResult = await deps.docker.waitForHealthy(containerId, 20000);
+  const healthResult = await deps.runtime.waitForHealthy(containerId, 20000);
   await eventBus.emit('monitor:healthcheck', {
     projectId,
     healthy: healthResult.healthy,
@@ -547,7 +547,7 @@ export async function runAndVerify(
   });
 
   if (!healthResult.healthy) {
-    const containerLogs = await deps.docker
+    const containerLogs = await deps.runtime
       .getLogs(containerId, 50)
       .catch(() => '(no logs available)');
     log.error(
@@ -586,7 +586,7 @@ export async function runAndVerify(
 
   try {
     const connectivityResults = await checkDeployConnectivity({
-      docker: deps.docker,
+      runtime: deps.runtime,
       containerId,
       envVars,
     });

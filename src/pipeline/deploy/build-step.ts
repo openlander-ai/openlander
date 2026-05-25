@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import { injectBuildArgs } from '../build-args.js';
 import { ensureDockerfile } from '../dockerfile-gen.js';
 import { DockerfileNotFoundError } from '../../errors.js';
@@ -19,7 +19,7 @@ export interface BuildContext {
 }
 
 export class BuildExecutor {
-  constructor(private readonly docker: Docker) {}
+  constructor(private readonly runtime: RuntimeBackend) {}
 
   async build(context: BuildContext, onProgress?: (line: string) => void): Promise<void> {
     const dockerfilePath = resolveDockerfilePath(context.clonePath, context.dockerfilePath);
@@ -48,7 +48,7 @@ export class BuildExecutor {
       : context.clonePath;
     const relativeDockerfile = relative(buildContextPath, dockerfilePath);
 
-    await this.docker.buildImage(buildContextPath, context.imageTag, {
+    await this.runtime.buildImage(buildContextPath, context.imageTag, {
       noCache: context.noCache === true,
       buildArgs: context.buildArgs,
       target: context.dockerTarget,

@@ -1,5 +1,5 @@
 import type { ServiceRow } from '../../db/index.js';
-import type { Docker } from '../docker.js';
+import type { RuntimeBackend } from '../runtime/index.js';
 import { waitUntilReady } from '../lib/retry.js';
 import { execInServiceContainer } from './shared.js';
 import type {
@@ -30,11 +30,11 @@ export class MongoAdapter implements ServiceAdapter {
     return `mongodb://${user}:${password}@${containerName}:${String(port)}/admin`;
   }
 
-  async waitForReady(service: ServiceRow, docker: Docker): Promise<void> {
+  async waitForReady(service: ServiceRow, runtime: RuntimeBackend): Promise<void> {
     const containerId = service.container_id ?? service.container_name ?? '';
     await waitUntilReady(
       async () => {
-        const logs = await docker.getLogs(containerId, 200);
+        const logs = await runtime.getLogs(containerId, 200);
         if (!logs.includes('Waiting for connections')) {
           throw new Error('Readiness log line not found yet');
         }
@@ -47,8 +47,8 @@ export class MongoAdapter implements ServiceAdapter {
     );
   }
 
-  async getConnectionStats(service: ServiceRow, docker: Docker): Promise<ConnectionStats> {
-    const connResult = await execInServiceContainer(docker, service, [
+  async getConnectionStats(service: ServiceRow, runtime: RuntimeBackend): Promise<ConnectionStats> {
+    const connResult = await execInServiceContainer(runtime, service, [
       'mongosh',
       '--quiet',
       '--eval',
@@ -67,8 +67,8 @@ export class MongoAdapter implements ServiceAdapter {
     };
   }
 
-  async listDatabases(service: ServiceRow, docker: Docker): Promise<ListedDatabase[]> {
-    const result = await execInServiceContainer(docker, service, [
+  async listDatabases(service: ServiceRow, runtime: RuntimeBackend): Promise<ListedDatabase[]> {
+    const result = await execInServiceContainer(runtime, service, [
       'mongosh',
       '--quiet',
       '--eval',
@@ -92,8 +92,8 @@ export class MongoAdapter implements ServiceAdapter {
       .filter((db) => db.name.length > 0);
   }
 
-  async listUsers(service: ServiceRow, docker: Docker): Promise<ListedUser[]> {
-    const result = await execInServiceContainer(docker, service, [
+  async listUsers(service: ServiceRow, runtime: RuntimeBackend): Promise<ListedUser[]> {
+    const result = await execInServiceContainer(runtime, service, [
       'mongosh',
       '--quiet',
       '--eval',
@@ -110,7 +110,7 @@ export class MongoAdapter implements ServiceAdapter {
   createDatabase(
     service: ServiceRow,
     _dbName: string,
-    _docker: Docker,
+    _runtime: RuntimeBackend,
   ): Promise<CreateDatabaseResult> {
     return Promise.reject(
       new Error(`Database creation is not supported for service type: ${service.kind}`),
@@ -120,7 +120,7 @@ export class MongoAdapter implements ServiceAdapter {
   createUser(
     service: ServiceRow,
     _options: CreateUserOptions,
-    _docker: Docker,
+    _runtime: RuntimeBackend,
   ): Promise<CreateUserResult> {
     return Promise.reject(
       new Error(`User creation is not supported for service type: ${service.kind}`),
