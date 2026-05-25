@@ -42,10 +42,18 @@ function createMockDb(services: ServiceRow[]): Database {
   } as unknown as Database;
 }
 
-function createMockDocker(running: boolean): Docker {
+function createMockDocker(
+  running: boolean,
+  opts: { restarting?: boolean; exitCode?: number } = {},
+): Docker {
   return {
     inspectContainer: vi.fn().mockResolvedValue({
-      State: { Running: running, Health: { Status: 'healthy' } },
+      State: {
+        Running: running,
+        Restarting: opts.restarting ?? false,
+        ExitCode: opts.exitCode ?? 0,
+        Health: { Status: 'healthy' },
+      },
     }),
   } as unknown as Docker;
 }
@@ -191,6 +199,39 @@ describe('ServiceHealthMonitor — recordMetricSample wiring (Blocker 1)', () =>
     await monitor.checkAllServices();
 
     expect(recordMetricSample).not.toHaveBeenCalled();
+  });
+
+  it('marks a restarting container as error and skips metric recording', async () => {
+    const service = createService({ status: 'running' });
+    const db = createMockDb([service]);
+    const docker = createMockDocker(true, { restarting: true, exitCode: 1 });
+    const events = createMockEvents();
+
+    const recordMetricSample = vi.fn().mockResolvedValue(undefined);
+    const serviceManager = { recordMetricSample } as unknown as ServiceManager;
+
+    const monitor = new ServiceHealthMonitor(docker, db, events, { serviceManager });
+    await monitor.checkAllServices();
+
+    expect(db.updateService).toHaveBeenCalledOnce();
+    expect(db.updateService).toHaveBeenCalledWith('svc-1', { status: 'error' });
+    expect(db.createRuntimeIncident).toHaveBeenCalledOnce();
+    expect(recordMetricSample).not.toHaveBeenCalled();
+  });
+
+  it('reports a restarting container as unhealthy from checkService', async () => {
+    const service = createService({ status: 'running' });
+    const db = createMockDb([service]);
+    const docker = createMockDocker(true, { restarting: true, exitCode: 1 });
+    const events = createMockEvents();
+
+    const monitor = new ServiceHealthMonitor(docker, db, events);
+    const result = await monitor.checkService(service);
+
+    expect(result).toEqual({
+      healthy: false,
+      error: 'Container is restarting (exit code: 1)',
+    });
   });
 
   it('runs without a serviceManager option (back-compat)', async () => {

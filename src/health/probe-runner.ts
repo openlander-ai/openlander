@@ -23,6 +23,14 @@ function isValidProbePort(port: number | undefined): port is number {
 }
 
 function containerStateProbeResult(state: RuntimeInspectState): ProbeResult {
+  if (state.Restarting) {
+    return {
+      healthy: false,
+      source: 'docker',
+      error: `Container is restarting (exit code: ${String(state.ExitCode)})`,
+    };
+  }
+
   if (state.Running) {
     return { healthy: true, source: 'docker' };
   }
@@ -65,6 +73,11 @@ export class LocalProbeRunner implements ProbeRunner {
     if (config.dockerHealthPolicy === 'prefer' && context.containerId) {
       const info = await this.runtime.inspectContainer(context.containerId);
       inspectedState = info.State;
+
+      const stateResult = containerStateProbeResult(inspectedState);
+      if (!stateResult.healthy) {
+        return stateResult;
+      }
 
       if (inspectedState.Health) {
         const status = inspectedState.Health.Status;

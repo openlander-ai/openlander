@@ -218,6 +218,8 @@ export class ProjectHealthMonitor {
       responseTimeMs: result.responseTimeMs,
     });
 
+    await this.syncStatusFromHealth(projectId, status, result, deployable);
+
     if (!result.healthy && result.consecutiveFailures >= this.options.failureThreshold) {
       log.warn(
         {
@@ -234,6 +236,52 @@ export class ProjectHealthMonitor {
         lastError: result.error ?? null,
       });
     }
+  }
+
+  private async syncStatusFromHealth(
+    projectId: string,
+    currentStatus: ProjectRow['status'] | ServiceRow['status'],
+    result: ProjectCheckResult,
+    deployable: ServiceRow | undefined,
+  ): Promise<void> {
+    if (result.healthy) {
+      if (currentStatus === 'error') {
+        await this.updateProjectRuntimeStatus(projectId, deployable, 'running');
+        await this.events.emit('project:status-changed', {
+          projectId,
+          from: 'error',
+          to: 'running',
+          reason: 'health check recovered',
+        });
+      }
+      return;
+    }
+
+    if (
+      currentStatus === 'running' &&
+      result.consecutiveFailures >= this.options.failureThreshold
+    ) {
+      await this.updateProjectRuntimeStatus(projectId, deployable, 'error');
+      await this.events.emit('project:status-changed', {
+        projectId,
+        from: 'running',
+        to: 'error',
+        reason: result.error ?? 'health check failed',
+      });
+    }
+  }
+
+  private async updateProjectRuntimeStatus(
+    projectId: string,
+    deployable: ServiceRow | undefined,
+    status: NonNullable<ServiceRow['status']>,
+  ): Promise<void> {
+    if (deployable) {
+      await this.db.updateService(deployable.id, { status });
+      return;
+    }
+
+    await this.db.updateProject(projectId, { status });
   }
 }
 

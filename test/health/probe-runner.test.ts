@@ -46,11 +46,14 @@ function createContext(overrides: Partial<ProbeContext> = {}): ProbeContext {
 function createInspectResult(
   status?: 'healthy' | 'unhealthy' | 'starting' | 'none',
   running = true,
+  restarting = false,
 ) {
   if (status === undefined) {
     return {
       State: {
         Running: running,
+        Restarting: restarting,
+        ExitCode: restarting ? 1 : 0,
       },
     } as Awaited<ReturnType<Docker['inspectContainer']>>;
   }
@@ -58,6 +61,8 @@ function createInspectResult(
   return {
     State: {
       Running: running,
+      Restarting: restarting,
+      ExitCode: restarting ? 1 : 0,
       Health: {
         Status: status,
       },
@@ -134,6 +139,26 @@ describe('LocalProbeRunner', () => {
     expect(result).toEqual({ healthy: true, source: 'http', responseTimeMs: 12 });
     expect(mockDocker.inspectContainer).toHaveBeenCalledWith('container-123');
     expect(httpProbe).toHaveBeenCalledWith(expect.objectContaining({ strategy: 'http' }), 8080);
+  });
+
+  it('returns unhealthy Docker state when the container is restarting', async () => {
+    (mockDocker.inspectContainer as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      createInspectResult(undefined, true, true),
+    );
+
+    const result = await runner.runProbe(
+      createConfig({ dockerHealthPolicy: 'prefer', strategy: 'http', failureThreshold: 1 }),
+      createContext({ assignedPort: 8080 }),
+    );
+
+    expect(result).toEqual({
+      healthy: false,
+      source: 'docker',
+      error: 'Container is restarting (exit code: 1)',
+    });
+    expect(mockDocker.inspectContainer).toHaveBeenCalledWith('container-123');
+    expect(httpProbe).not.toHaveBeenCalled();
+    expect(tcpProbe).not.toHaveBeenCalled();
   });
 
   it('falls back to container running state when an HTTP probe has no port', async () => {
