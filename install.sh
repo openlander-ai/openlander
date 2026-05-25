@@ -65,9 +65,37 @@ ensure_curl() {
   command_exists curl || fail "curl is required to download OpenLander."
 }
 
+linux_os_id() {
+  awk -F= '$1 == "ID" { gsub(/"/, "", $2); print $2 }' /etc/os-release 2>/dev/null || true
+}
+
+install_docker_with_package_manager() {
+  local os_id
+  os_id="$(linux_os_id)"
+
+  case "${os_id}" in
+    amzn)
+      if command_exists dnf; then
+        log "Installing Docker with dnf..."
+        dnf install -y docker && return 0
+      fi
+      if command_exists yum; then
+        log "Installing Docker with yum..."
+        yum install -y docker && return 0
+      fi
+      ;;
+  esac
+
+  return 1
+}
+
 install_docker() {
   if command_exists docker; then
     log "Docker is already installed."
+    return
+  fi
+
+  if install_docker_with_package_manager; then
     return
   fi
 
@@ -215,11 +243,47 @@ normalize_public_host() {
   printf '%s' "${host}"
 }
 
+cloud_public_ipv4() {
+  local ip token
+
+  command_exists curl || return 1
+
+  token="$(
+    curl -fsS --max-time 1 -X PUT \
+      -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' \
+      http://169.254.169.254/latest/api/token 2>/dev/null || true
+  )"
+  if [ -n "${token}" ]; then
+    ip="$(
+      curl -fsS --max-time 1 \
+        -H "X-aws-ec2-metadata-token: ${token}" \
+        http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || true
+    )"
+  else
+    ip="$(
+      curl -fsS --max-time 1 \
+        http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || true
+    )"
+  fi
+
+  case "${ip}" in
+    *.*.*.*)
+      printf '%s' "${ip}"
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 server_host() {
   local host
   host="${OPENLANDER_PUBLIC_HOST:-}"
   if [ -n "${host}" ]; then
     host="$(normalize_public_host "${host}")"
+  fi
+  if [ -z "${host}" ]; then
+    host="$(cloud_public_ipv4 || true)"
   fi
   if [ -z "${host}" ] && command_exists hostname; then
     host="$(hostname -I 2>/dev/null | awk '{print $1}')"
