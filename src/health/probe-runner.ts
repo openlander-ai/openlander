@@ -78,21 +78,14 @@ export class LocalProbeRunner implements ProbeRunner {
     }
 
     const port = config.port ?? context.assignedPort;
-    if (needsPort(config.strategy) && !isValidProbePort(port)) {
-      return this.portlessProbeResult(config.strategy, inspectedState);
+    if (needsPort(config.strategy)) {
+      if (!isValidProbePort(port)) {
+        return this.portlessProbeResult(config.strategy, inspectedState);
+      }
+      return config.strategy === 'http' ? httpProbe(config, port) : tcpProbe(config, port);
     }
 
     switch (config.strategy) {
-      case 'http':
-        if (!isValidProbePort(port)) {
-          return this.portlessProbeResult('http', inspectedState);
-        }
-        return httpProbe(config, port);
-      case 'tcp':
-        if (!isValidProbePort(port)) {
-          return this.portlessProbeResult('tcp', inspectedState);
-        }
-        return tcpProbe(config, port);
       case 'exec':
         return execProbe(context.containerId, config, this.runtime);
       case 'none':

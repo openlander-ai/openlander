@@ -185,6 +185,21 @@ describe('LocalProbeRunner', () => {
     expect(httpProbe).not.toHaveBeenCalled();
   });
 
+  it('does not call TCP probe with port 0 when no port or Docker state is available', async () => {
+    const result = await runner.runProbe(
+      createConfig({ dockerHealthPolicy: 'ignore', strategy: 'tcp', failureThreshold: 1 }),
+      createContext({ assignedPort: undefined }),
+    );
+
+    expect(result).toEqual({
+      healthy: false,
+      source: 'tcp',
+      error: 'No assigned port available for TCP health probe',
+    });
+    expect(mockDocker.inspectContainer).not.toHaveBeenCalled();
+    expect(tcpProbe).not.toHaveBeenCalled();
+  });
+
   it('skips Docker inspection when dockerHealthPolicy is ignore', async () => {
     mockHttpProbe.mockResolvedValueOnce({
       healthy: true,
