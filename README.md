@@ -21,6 +21,17 @@ The installer sets up Docker/Compose if needed, starts the published
 dashboard URL. Open it, create the admin password, then copy the MCP token into
 your coding agent.
 
+Try a small public demo app after connecting your agent:
+
+```text
+Deploy https://github.com/openlander-ai/openlander-demo-app to OpenLander.
+Use the default branch and health check path /health.
+```
+
+OpenLander should build the Dockerfile, start the app, and return a URL like
+`http://openlander-demo.<server-ip>.sslip.io` without requiring a custom
+domain.
+
 If your server has a public domain or a preferred LAN IP, set it before
 installing so OpenLander advertises reachable app URLs:
 
@@ -58,6 +69,8 @@ inspect runtime state, or recover safely.
 OpenLander is a self-hosted control plane designed around MCP. It exposes
 deploys, logs, services, approvals, and runtime state in a shape coding
 agents can read, with risky actions held behind explicit human approval.
+Environment variables and secrets are masked by default in MCP responses; raw
+values are only returned through explicit reveal operations.
 
 OpenLander 0.1 does not run an internal self-healing agent. It gives external
 MCP-capable coding agents structured tools and context to deploy, inspect,
@@ -130,6 +143,8 @@ common single-service case.
 
 - MCP server bundled in. Org- and project-scoped tokens with cross-project
   scope checks. Per-project audit trail.
+- Env vars and secrets are masked by default in MCP responses, so agents can
+  inspect configuration shape without automatically receiving raw secret values.
 - Conservative built-in safety policy. Project and app archive/delete flows
   are human UI-only. Destructive MCP actions that remain exposed are either
   blocked at the MCP boundary or held in a human approval queue before

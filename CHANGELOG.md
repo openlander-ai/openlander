@@ -7,8 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-05-25
+
+### Fixed
+
+- Fixed health monitoring so Docker containers in restart loops
+  (`Restarting=true`) are treated as unhealthy and the canonical service status
+  is updated to `error` instead of staying `running`.
+- Fixed project health status propagation so repeated failed probes move the
+  service status to `error`, and a later healthy probe restores it to
+  `running`.
+
 ### Changed
 
+- Updated the README quickstart to point first-time users at the minimal
+  `openlander-demo-app` sample and to call out default MCP secret masking.
 - Hardened `redeploy_app(strategy="blue-green")` as an explicit, conditional
   strategy for eligible git/image services behind managed OpenLander/Traefik
   routes. The default strategy remains `force`; compose stacks and services
