@@ -54,6 +54,10 @@ const INITIAL_STAGGER_MS = 5_000;
 const DEFAULT_RECORD_SAMPLE_EVERY_N_TICKS = 5;
 const DEFAULT_RECORD_RUNTIME_SAMPLE_EVERY_N_TICKS = 2;
 
+function restartLoopError(exitCode: unknown): string {
+  return `Container is restarting (exit code: ${String(exitCode)})`;
+}
+
 export class ServiceHealthMonitor {
   private readonly intervalMs: number;
   private readonly serviceManager?: ServiceManager;
@@ -143,6 +147,10 @@ export class ServiceHealthMonitor {
     try {
       const info = await this.docker.inspectContainer(containerRef);
 
+      if (info.State.Restarting) {
+        return { healthy: false, error: restartLoopError(info.State.ExitCode) };
+      }
+
       if (!info.State.Running) {
         return { healthy: false, error: 'Container is not running' };
       }
@@ -160,6 +168,28 @@ export class ServiceHealthMonitor {
 
     try {
       const info = await this.docker.inspectContainer(containerRef);
+
+      if (info.State.Restarting) {
+        if (service.status !== 'error') {
+          await this.db.updateService(service.id, { status: 'error' });
+          const conns = await this.db.listServiceConnectionsByService(service.id);
+          const affectedProjects = [...new Set(conns.map((c) => c.service_id_consumer))];
+
+          await this.recordServiceDownIncident(service, affectedProjects);
+
+          log.warn(
+            {
+              serviceId: service.id,
+              serviceName: service.name,
+              containerRef,
+              affectedProjects,
+              exitCode: info.State.ExitCode,
+            },
+            'Service container is restarting — incident recorded',
+          );
+        }
+        return;
+      }
 
       if (!info.State.Running) {
         if (service.status === 'running') {

@@ -60,6 +60,8 @@ describe('ProjectHealthMonitor', () => {
   let getProject: ReturnType<typeof vi.fn>;
   let listProjects: ReturnType<typeof vi.fn>;
   let listServices: ReturnType<typeof vi.fn>;
+  let updateProject: ReturnType<typeof vi.fn>;
+  let updateService: ReturnType<typeof vi.fn>;
   let emit: ReturnType<typeof vi.fn>;
   let monitor: ProjectHealthMonitor;
 
@@ -69,6 +71,8 @@ describe('ProjectHealthMonitor', () => {
       getProject,
       listProjects,
       listServices,
+      updateProject,
+      updateService,
       // PR 4.5: canonical-first reads need this helper.
       getDeployableForProject: vi.fn().mockReturnValue(undefined),
     } as unknown as Database;
@@ -93,6 +97,8 @@ describe('ProjectHealthMonitor', () => {
       return [createProject({ id: 'project-1', status: 'running' })];
     });
     listServices = vi.fn().mockReturnValue([]);
+    updateProject = vi.fn().mockResolvedValue(undefined);
+    updateService = vi.fn().mockResolvedValue(undefined);
     emit = vi.fn().mockResolvedValue(undefined);
     monitor = createMonitor();
     mockRunProbe.mockReset();
@@ -136,6 +142,8 @@ describe('ProjectHealthMonitor', () => {
       getProject,
       listProjects,
       listServices,
+      updateProject,
+      updateService,
       getDeployableForProject,
     } as unknown as Database;
     monitor = new ProjectHealthMonitor({} as Docker, db, { emit } as unknown as EventBus);
@@ -195,6 +203,8 @@ describe('ProjectHealthMonitor', () => {
       getProject: vi.fn().mockReturnValue(project),
       listProjects,
       listServices,
+      updateProject,
+      updateService,
       getDeployableForProject,
     } as unknown as Database;
     monitor = new ProjectHealthMonitor({} as Docker, db, { emit } as unknown as EventBus);
@@ -228,11 +238,99 @@ describe('ProjectHealthMonitor', () => {
     await (monitor as unknown as MonitorInternals).runCheck('project-1');
     await (monitor as unknown as MonitorInternals).runCheck('project-1');
 
-    expect(emit).toHaveBeenCalledTimes(4);
+    expect(emit).toHaveBeenCalledTimes(5);
+    expect(updateProject).toHaveBeenCalledWith('project-1', { status: 'error' });
     expect(emit).toHaveBeenCalledWith('health:degraded', {
       projectId: 'project-1',
       consecutiveFailures: 3,
       lastError: 'Timeout',
+    });
+  });
+
+  it('marks the canonical service error when health failures reach the threshold', async () => {
+    const deployable = {
+      id: 'project-1__svc',
+      project_id: 'project-1',
+      name: 'project-1__svc',
+      status: 'running',
+      assigned_port: 3000,
+      container_id: 'container-1',
+      container_name: 'ol-project-1',
+      project_type: 'web',
+      health_check_strategy: null,
+      health_check_path: null,
+    } as ServiceRow;
+    const getDeployableForProject = vi.fn().mockReturnValue(deployable);
+    const db = {
+      getProject,
+      listProjects,
+      listServices,
+      updateProject,
+      updateService,
+      getDeployableForProject,
+    } as unknown as Database;
+    monitor = new ProjectHealthMonitor({} as Docker, db, { emit } as unknown as EventBus, {
+      failureThreshold: 2,
+    });
+    mockRunProbe.mockResolvedValue({
+      healthy: false,
+      source: 'http',
+      responseTimeMs: 100,
+      error: 'fetch failed',
+    });
+
+    await (monitor as unknown as MonitorInternals).runCheck('project-1');
+    await (monitor as unknown as MonitorInternals).runCheck('project-1');
+
+    expect(updateService).toHaveBeenCalledOnce();
+    expect(updateService).toHaveBeenCalledWith('project-1__svc', { status: 'error' });
+    expect(emit).toHaveBeenCalledWith('project:status-changed', {
+      projectId: 'project-1',
+      from: 'running',
+      to: 'error',
+      reason: 'fetch failed',
+    });
+    expect(emit).toHaveBeenCalledWith('health:degraded', {
+      projectId: 'project-1',
+      consecutiveFailures: 2,
+      lastError: 'fetch failed',
+    });
+  });
+
+  it('marks the canonical service running when an error project becomes healthy', async () => {
+    const project = createProject({ id: 'project-1', status: 'error' });
+    const deployable = {
+      id: 'project-1__svc',
+      project_id: 'project-1',
+      name: 'project-1__svc',
+      status: 'error',
+      assigned_port: 3000,
+      container_id: 'container-1',
+      container_name: 'ol-project-1',
+      project_type: 'web',
+      health_check_strategy: null,
+      health_check_path: null,
+    } as ServiceRow;
+    const db = {
+      getProject: vi.fn().mockReturnValue(project),
+      listProjects,
+      listServices,
+      updateProject,
+      updateService,
+      getDeployableForProject: vi.fn().mockReturnValue(deployable),
+    } as unknown as Database;
+    monitor = new ProjectHealthMonitor({} as Docker, db, { emit } as unknown as EventBus);
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http', responseTimeMs: 20 });
+
+    await (monitor as unknown as MonitorInternals).runCheck('project-1');
+
+    expect(updateService).toHaveBeenCalledOnce();
+    expect(updateService).toHaveBeenCalledWith('project-1__svc', { status: 'running' });
+    expect(emit).toHaveBeenCalledWith('project:status-changed', {
+      projectId: 'project-1',
+      from: 'error',
+      to: 'running',
+      reason: 'health check recovered',
     });
   });
 
