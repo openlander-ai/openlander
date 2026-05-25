@@ -21,6 +21,11 @@ The installer sets up Docker/Compose if needed, starts the published
 dashboard URL. Open it, create the admin password, then copy the MCP token into
 your coding agent.
 
+On a cloud VM, allow inbound TCP `80` for deployed app routes and TCP `10114`
+for the OpenLander dashboard/MCP endpoint. If those ports are blocked by a
+security group or host firewall, the installer can succeed while the printed
+URLs remain unreachable.
+
 Try a small public demo app after connecting your agent:
 
 ```text

@@ -9,6 +9,7 @@
 | **Compose V2**    | latest    | Installed by the installer if missing                    |
 | **Node.js**       | >= 22     | Development only; the Docker runtime image includes Node |
 | **Git**           | >= 2.x    | Development only; the Docker runtime image includes git  |
+| **Firewall**      | inbound   | TCP `80` for apps, TCP `10114` for dashboard/MCP         |
 
 **Platforms**: Linux (primary), macOS. Windows not supported (WSL2 works).
 
@@ -42,6 +43,10 @@ export/import data.
 
 Open the printed dashboard URL, usually `http://<server-ip>:10114`, and create
 the admin password.
+
+On cloud providers such as AWS, also allow inbound TCP `80` and `10114` in the
+instance security group. Port `80` serves deployed app routes through Traefik;
+port `10114` serves the OpenLander dashboard and MCP endpoint.
 
 If deployed app URLs should use a specific public host, set it during install:
 
