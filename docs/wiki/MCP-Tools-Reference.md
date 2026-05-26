@@ -30,9 +30,11 @@ Agent routing rule of thumb:
 Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a project
 group contains exactly one deployable service.
 
-Remote MCP uses scoped Bearer tokens. Use **Settings → MCP** for org-wide admin tokens and a
-project's **MCP** tab for project-scoped agent tokens. Project-scoped tokens are the safer default
-for daily work because they cannot operate outside the project group where they were issued.
+Remote MCP uses Bearer tokens. Mint one from the **Your Agent** page (`/mcp-server`) in the
+dashboard, or from the setup wizard's MCP step — both issue an org-scoped token, shown once.
+Project-scoped tokens exist via the API (`POST /api/tokens` with `scope_kind: "project"`) but
+are not part of the 0.1 onboarding UI. The MCP endpoint is your dashboard origin + `/mcp`
+(`:10114` only when reaching OpenLander without a reverse proxy).
 
 Destructive MCP operations are intentionally gated. Service deletion is blocked at the MCP boundary
 and must be completed in the web UI with typed confirmation. Supported bulk cleanup actions such as
@@ -467,9 +469,9 @@ Provide either `service_id` or `service_name`.
 | `service_name` | string | Yes      | Service name                  |
 | `lines`        | number | No       | Number of lines (default: 50) |
 
-### Database Operations
+### Database User Operations
 
-`create_database` / `list_databases` / `create_service_user`
+`create_service_user`
 
 | Parameter       | Type   | Required   | Description               |
 | --------------- | ------ | ---------- | ------------------------- |
@@ -477,6 +479,10 @@ Provide either `service_id` or `service_name`.
 | `database_name` | string | Yes        | Database name             |
 | `username`      | string | Yes (user) | Username                  |
 | `password`      | string | No         | Auto-generated if omitted |
+
+The managed database itself is provisioned by `create_service` (template `postgresql` /
+`mysql` / `mongodb`). `create_database` and `list_databases` are not exposed on the MCP
+composite surface — calling them over MCP returns `UNKNOWN_ACTION`.
 
 ### MinIO Bucket Operations
 
@@ -531,12 +537,14 @@ lists all registered domain routes.
 
 ## Git & Repository
 
-### `scan_dockerfiles` / `scan_project`
+### `scan_dockerfiles`
 
 | Parameter  | Type   | Required | Description        |
 | ---------- | ------ | -------- | ------------------ |
 | `repo_url` | string | Yes      | Git repository URL |
 | `branch`   | string | No       | Branch             |
+
+(`scan_project` exists as a tool def but is not exposed on the MCP composite surface.)
 
 ### `list_github_repos`
 

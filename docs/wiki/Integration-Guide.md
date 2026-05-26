@@ -8,11 +8,33 @@ OpenLander runs as an MCP (Model Context Protocol) server, allowing AI coding ag
 
 | Client             | Protocol              | Setup                      |
 | ------------------ | --------------------- | -------------------------- |
+| **Claude Code**    | MCP over HTTP         | `claude mcp add`           |
 | **OpenClaw**       | MCP over HTTP         | Config file                |
 | **OpenCode**       | MCP (local or remote) | opencode.json              |
 | **Claude Desktop** | MCP (stdio)           | claude_desktop_config.json |
 | **Cursor**         | MCP (stdio)           | .cursor/mcp.json           |
 | **Windsurf**       | MCP (stdio)           | mcp_config.json            |
+
+---
+
+## Claude Code
+
+The primary OpenLander client. Add the server with the Claude Code CLI:
+
+```bash
+claude mcp add --transport http \
+  --header "Authorization: Bearer YOUR_OPENLANDER_TOKEN" \
+  openlander https://YOUR_DASHBOARD_ORIGIN/mcp
+```
+
+Copy the exact command — token and endpoint already filled in — from the **Your Agent**
+page (`/mcp-server`) in the dashboard, or from the MCP step of the setup wizard. The
+endpoint is your dashboard origin + `/mcp` (e.g. `https://deploy.example.com/mcp`);
+`:10114` appears only when you reach OpenLander directly without a reverse proxy.
+
+### Test
+
+> "List all projects on OpenLander"
 
 ---
 
@@ -29,7 +51,7 @@ the instance name.
   "mcpServers": {
     "openlander-ais-prod": {
       "type": "http",
-      "url": "http://YOUR_SERVER:10114/mcp",
+      "url": "https://YOUR_DASHBOARD_ORIGIN/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_OPENLANDER_TOKEN"
       }
@@ -38,8 +60,9 @@ the instance name.
 }
 ```
 
-Get an org-wide token from OpenLander Settings → MCP, or a project-scoped token
-from a project's MCP tab.
+Get the token from the **Your Agent** page (`/mcp-server`) in the dashboard, or from the
+setup wizard's MCP step. It mints an org-scoped token, shown once. The `url` is your
+dashboard origin + `/mcp` (`:10114` only when reaching OpenLander without a reverse proxy).
 
 ### Test
 
@@ -89,7 +112,7 @@ openclaw agent --thinking high --message \
   "mcp": {
     "openlander-ais-prod": {
       "type": "remote",
-      "url": "http://YOUR_SERVER:10114/mcp",
+      "url": "https://YOUR_DASHBOARD_ORIGIN/mcp",
       "enabled": true,
     },
   },
@@ -159,15 +182,13 @@ For remote MCP connections, include the auth token in headers:
 Authorization: Bearer YOUR_TOKEN
 ```
 
-Get the token from:
+Get the token from the **Your Agent** page (`/mcp-server`) in the dashboard, or from the
+MCP step of the setup wizard. Both mint an org-scoped token, shown once. Project-scoped
+tokens exist via the API (`POST /api/tokens` with `scope_kind: "project"`) but are not
+surfaced in the 0.1 onboarding UI.
 
-- Web UI: Settings → MCP for org-wide access
-- Web UI: Project → MCP for project-scoped access
-- CLI: `openlander config` (shows masked)
-
-Project-scoped tokens are the safer default for daily agent work. They can only act
-inside the project group where they were issued. Org-wide tokens follow the active
-MCP scope selector in the OpenLander UI.
+The endpoint is your dashboard origin + `/mcp` (e.g. `https://deploy.example.com/mcp`).
+`:10114` appears only when reaching OpenLander directly without a reverse proxy.
 
 ### No Auth (Local)
 
@@ -241,7 +262,11 @@ Agent will: `get_build_log` / `get_logs` → inspect the error itself → fix �
 
 > "Create a PostgreSQL database for my-app"
 
-Agent will: `create_service` → `create_database` → `get_service_credentials` → `set_env_vars` → `redeploy_app`
+Agent will: `create_service(project_id | project_name, template)` → `get_service_credentials` → `set_env_vars` → `redeploy_app`
+
+(`create_service` requires a `project_id` or `project_name` target — get it from
+`list_projects` — and the database template provisions the database itself; there is no
+separate `create_database` MCP action.)
 
 ---
 
