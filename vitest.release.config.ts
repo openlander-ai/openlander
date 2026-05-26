@@ -28,6 +28,7 @@ export default defineConfig({
       'test/api/deployable-service-routes.test.ts',
       'test/api/docker-log-timestamps.test.ts',
       'test/api/monitoring-routes.test.ts',
+      'test/api/service-connection-routes.test.ts',
       'test/api/service-runtime-routes.test.ts',
       'test/api/traefik-config-routes.test.ts',
       'test/web/api/activity-parse-timestamp.test.ts',
