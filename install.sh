@@ -504,6 +504,26 @@ server_url() {
   printf 'http://%s:%s' "$(server_host)" "${OPENLANDER_PORT}"
 }
 
+host_is_local_or_private() {
+  case "$1" in
+    localhost | 127.* | 10.* | 192.168.* | 169.254.*) return 0 ;;
+    172.1[6-9].* | 172.2[0-9].* | 172.3[01].*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+print_reachability_notes() {
+  local host
+  host="$(server_host)"
+  log "Inbound: open TCP 80 (deployed app routes) and TCP ${OPENLANDER_PORT} (dashboard/MCP)"
+  log "  on your firewall / cloud security group. This installer does not change firewall rules."
+  if host_is_local_or_private "${host}"; then
+    log "warning: advertising '${host}' as the public host, so deployed app URLs may be"
+    log "  unreachable from other machines. Set OPENLANDER_PUBLIC_HOST=<public-ip-or-domain>"
+    log "  (env on install, or in ${OPENLANDER_INSTALL_DIR}/.env then restart) for reachable URLs."
+  fi
+}
+
 install_openlander() {
   require_root
   require_linux
@@ -521,6 +541,7 @@ install_openlander() {
 
   log "OpenLander is starting."
   log "Open $(server_url) and create the admin password."
+  print_reachability_notes
 }
 
 update_openlander() {
