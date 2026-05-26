@@ -148,6 +148,10 @@ async function authenticateMcpRequest(
   c: Context,
   authService: AuthService,
 ): Promise<{ response?: Response; identity?: RequestIdentity }> {
+  // Setup-only open state: before an admin password is ever set (first boot, prior to
+  // the setup wizard) MCP is intentionally unauthenticated so initial wiring works. Once a
+  // password exists this branch is skipped and Bearer auth is enforced below. This window is
+  // not a general "auth off" switch — any future MCP producer must not rely on it staying open.
   if (!(await authService.isPasswordSet())) {
     return {};
   }
