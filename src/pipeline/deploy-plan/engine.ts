@@ -6,6 +6,7 @@ import { scanDockerfileArgs, scanEnvFile, scanEnvTemplate } from '../../lib/env-
 import { scanForEnvUsage } from '../env-scan.js';
 import { cloneRepo } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
+import { ManagedServiceLinker } from '../managed-service-linker.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
 import {
   extractProjectName,
@@ -638,32 +639,6 @@ export class PlanEngine {
       template: planService.type,
       ...(network ? { network, aliases: [serviceName] } : {}),
     });
-    try {
-      await this.db.attachServiceToProject(created.id, targetProject.id);
-    } catch (attachError) {
-      // Mirror create_service: a post-create attach failure would orphan the
-      // just-created container/volume/row, so best-effort tear it down and
-      // rethrow the original attach error.
-      try {
-        await this.serviceManager.remove(created.id, { force: true });
-      } catch (cleanupError) {
-        // Surface the original attach failure as the thrown error, but do not
-        // silently swallow the cleanup failure (AGENTS.md: no silent swallow).
-        log.warn(
-          { err: cleanupError, serviceId: created.id, serviceType: planService.type },
-          'Failed to roll back orphaned managed service after attach failure',
-        );
-      }
-      throw attachError;
-    }
-
-    // Conflict-safe: provisioning the same approved plan twice yields exactly
-    // one connection row.
-    await this.db.upsertServiceConnection({
-      projectId: targetProject.id,
-      serviceId: created.id,
-    });
-
     const suggestedEnv = await this.serviceManager.getSuggestedEnv(created, {
       targetProjectId: targetProject.id,
     });
@@ -674,6 +649,35 @@ export class PlanEngine {
         { serviceId: created.id, envVarName },
       );
     }
+
+    // Wire the provisioned service into the project through the shared linker:
+    // attach + connection row + persisted env + auto_injected_env_keys +
+    // dependency edge. This path previously attached + upserted only, leaving
+    // the env unpersisted (deploy-time mergedEnv only), no injected-key
+    // metadata, and no dependency edge. Passing the connection string keeps the
+    // persisted env identical to the deploy-time value from getSuggestedEnv.
+    try {
+      await new ManagedServiceLinker(this.db, this.env).connect({
+        projectId: targetProject.id,
+        service: created,
+        source: 'deploy_plan',
+        credentials: { connectionString },
+      });
+    } catch (connectError) {
+      // Mirror create_service: a post-create wiring failure would orphan the
+      // just-created container/volume/row, so best-effort tear it down and
+      // rethrow. Do not silently swallow the cleanup failure (AGENTS.md).
+      try {
+        await this.serviceManager.remove(created.id, { force: true });
+      } catch (cleanupError) {
+        log.warn(
+          { err: cleanupError, serviceId: created.id, serviceType: planService.type },
+          'Failed to roll back orphaned managed service after wiring failure',
+        );
+      }
+      throw connectError;
+    }
+
     return connectionString;
   }
 
