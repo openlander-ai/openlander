@@ -5,9 +5,18 @@ import type { AppContext } from '../../app.js';
 import { TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getProjectUrl } from '../../pipeline/traefik.js';
-import { projectIdToDeployableServiceId } from '../../db/service-ids.js';
+import {
+  deployableServiceIdToProjectId,
+  projectIdToDeployableServiceId,
+} from '../../db/service-ids.js';
+import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import type { ServiceRow } from '../../db/types.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
-import { normalizeTimestamp } from './helpers/project-route-shared.js';
+import {
+  getDeployableServiceRouteName,
+  getDeployableServiceUrl,
+  normalizeTimestamp,
+} from './helpers/project-route-shared.js';
 import { gitWebhooksDisabledResponse } from './git-webhook-disabled.js';
 import { getTopologyNodeRuntime, type TopologyNode } from './helpers/topology-runtime.js';
 
@@ -25,6 +34,27 @@ function withServiceAsId<T>(c: Context, fn: (c: Context) => T): T {
     return (origParam as (n: string) => string)(name);
   }) as typeof c.req.param;
   return fn(c);
+}
+
+function isManagedServiceKind(kind: string): boolean {
+  return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
+}
+
+function storedServiceStatusToTopologyHealth(status: string | null | undefined) {
+  if (status === 'running') return 'healthy';
+  if (status === 'building') return 'deploying';
+  return 'crashed';
+}
+
+function mergeDependsOn(
+  target: Map<string, string[]>,
+  source: Map<string, string[]>,
+): Map<string, string[]> {
+  for (const [serviceId, deps] of source.entries()) {
+    const merged = new Set([...(target.get(serviceId) ?? []), ...deps]);
+    target.set(serviceId, [...merged]);
+  }
+  return target;
 }
 
 export function createServiceAuxRoutes(ctx: AppContext): Hono {
@@ -74,10 +104,122 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
     return withServiceAsId(c, async (cx) => {
       const project = await getProjectOrThrow(cx, ctx);
       try {
+        const groupServices =
+          typeof ctx.db.getDeployablesByGroup === 'function'
+            ? await ctx.db.getDeployablesByGroup(project.id)
+            : [];
         const childProjects =
-          typeof ctx.db.getComposeChildProjects === 'function'
-            ? await ctx.db.getComposeChildProjects(project.id)
-            : await ctx.db.getChildProjects(project.id);
+          groupServices.length > 0
+            ? []
+            : typeof ctx.db.getComposeChildProjects === 'function'
+              ? await ctx.db.getComposeChildProjects(project.id)
+              : await ctx.db.getChildProjects(project.id);
+        if (groupServices.length > 0) {
+          const serviceConnections =
+            typeof ctx.db.listServiceConnectionsByProject === 'function'
+              ? await ctx.db.listServiceConnectionsByProject(project.id)
+              : [];
+          const allServices =
+            serviceConnections.length > 0 && typeof ctx.db.listServices === 'function'
+              ? await ctx.db.listServices()
+              : [];
+          const servicesById = new Map(allServices.map((service) => [service.id, service]));
+          const seen = new Set(groupServices.map((service) => service.id));
+          const connectedManagedServices: ServiceRow[] = [];
+          for (const connection of serviceConnections) {
+            const service = servicesById.get(connection.service_id_provider);
+            if (!service || seen.has(service.id) || !isManagedServiceKind(service.kind)) {
+              continue;
+            }
+            seen.add(service.id);
+            connectedManagedServices.push(service);
+          }
+
+          const nodeIds = new Set(
+            [...groupServices, ...connectedManagedServices].map((service) => service.id),
+          );
+          const dependsOnMap = new Map<string, string[]>();
+          for (const service of groupServices) {
+            const lookupId = deployableServiceIdToProjectId(service.id);
+            const deps = await ctx.db.findDependenciesByProject(lookupId);
+            const siblingDeps = deps
+              .map((d) => d.target_service_id)
+              .filter((sid): sid is string => sid !== null && nodeIds.has(sid));
+            dependsOnMap.set(service.id, siblingDeps);
+          }
+
+          const connectionDependsOn = new Map<string, string[]>();
+          for (const connection of serviceConnections) {
+            if (
+              !nodeIds.has(connection.service_id_consumer) ||
+              !nodeIds.has(connection.service_id_provider)
+            ) {
+              continue;
+            }
+            const existing = connectionDependsOn.get(connection.service_id_consumer) ?? [];
+            connectionDependsOn.set(connection.service_id_consumer, [
+              ...existing,
+              connection.service_id_provider,
+            ]);
+          }
+          mergeDependsOn(dependsOnMap, connectionDependsOn);
+
+          const deployableNodes = await Promise.all(
+            groupServices.map(async (service) => {
+              const port = service.assigned_port ?? null;
+              const displayName = deployableServiceIdToProjectId(service.name);
+              const image = service.image_url ?? service.image_tag ?? `${displayName}:latest`;
+              const runtimeNode: TopologyNode = {
+                id: service.id,
+                container_id: service.container_id,
+                status: service.status ?? null,
+              };
+              const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
+              return {
+                id: service.id,
+                name: displayName,
+                kind: 'Application',
+                image,
+                health: runtime.health,
+                port,
+                url: getDeployableServiceUrl(service),
+                cpu: runtime.cpuDisplay,
+                mem: runtime.memDisplay,
+                dependsOn: dependsOnMap.get(service.id) ?? [],
+                source: service.source,
+                routeName: getDeployableServiceRouteName(service),
+              };
+            }),
+          );
+
+          return cx.json({
+            services: [
+              ...deployableNodes,
+              ...connectedManagedServices.map((service) => {
+                const port = service.assigned_port ?? null;
+                const image = service.image_url ?? service.image_tag ?? `${service.name}:latest`;
+                return {
+                  id: service.id,
+                  name: service.name,
+                  kind: 'Database',
+                  image,
+                  health: storedServiceStatusToTopologyHealth(service.status ?? null),
+                  port,
+                  url: null,
+                  cpu: '—',
+                  mem: '—',
+                  dependsOn: [],
+                  source: 'managed',
+                  routeName: service.name,
+                  containerPort: service.container_port,
+                  imageUrl: service.image_url,
+                  imageCmd: service.image_cmd,
+                };
+              }),
+            ],
+          });
+        }
+
         const nodes = childProjects.length > 0 ? childProjects : [project];
         const nodeIds = new Set(nodes.map((n) => n.id));
         const dependsOnMap = new Map<string, string[]>();

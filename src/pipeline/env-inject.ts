@@ -78,12 +78,9 @@ function toServiceNameSuffix(serviceName: string): string {
 
 function isPlaceholderEnvValue(value: string): boolean {
   const normalized = value.trim().toLowerCase();
-  return (
-    normalized.length === 0 ||
-    /^(changeme|change_me|change-me|replace_me|replace-me|your[_-]?.*here|xxx+|todo|fixme|placeholder)$/.test(
-      normalized,
-    )
-  );
+  const placeholderPattern =
+    /(^|[^a-z0-9])(changeme|change[-_]?me|replace[-_]?me|placeholder|todo|fixme|xxx+|your[-_][a-z0-9_-]*)([^a-z0-9]|$)/;
+  return normalized.length === 0 || placeholderPattern.test(normalized);
 }
 
 export async function autoInjectServiceEnv(params: {
