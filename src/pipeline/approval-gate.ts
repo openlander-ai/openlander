@@ -28,6 +28,14 @@ export class ApprovalGate {
   private readonly pendingApprovals = new Map<string, PendingApprovalEntry>();
   private readonly recentlyProcessed = new Map<string, NodeJS.Timeout>();
 
+  /**
+   * @param timeoutMs How long a pending approval waits before auto-timing-out.
+   *   Defaults to APPROVAL_TIMEOUT_MS (10 min). Raise it (via
+   *   config.monitoring.approvalTimeoutMs) for human approvals that legitimately
+   *   take longer than ten minutes.
+   */
+  constructor(private readonly timeoutMs: number = APPROVAL_TIMEOUT_MS) {}
+
   waitForApproval(actionRunId: string, metadata: ApprovalMetadata): Promise<ApprovalResult> {
     const existing = this.pendingApprovals.get(actionRunId);
     if (existing) {
@@ -45,7 +53,7 @@ export class ApprovalGate {
           this.markAsProcessed(actionRunId);
           entry.resolve('timed_out');
         }
-      }, APPROVAL_TIMEOUT_MS);
+      }, this.timeoutMs);
 
       this.pendingApprovals.set(actionRunId, {
         resolve,

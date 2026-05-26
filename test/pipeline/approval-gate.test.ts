@@ -65,6 +65,32 @@ describe('ApprovalGate', () => {
     await expect(promise).resolves.toBe('timed_out');
   });
 
+  it('honors a custom timeout longer than the default (approval can take longer than 10 min)', async () => {
+    const longTimeout = APPROVAL_TIMEOUT_MS * 6; // 1 hour
+    const gate = new ApprovalGate(longTimeout);
+    const promise = gate.waitForApproval('run-long', createMetadata({ actionRunId: 'run-long' }));
+
+    // Past the old 10-minute default, the approval is still pending.
+    await vi.advanceTimersByTimeAsync(APPROVAL_TIMEOUT_MS);
+    expect(gate.getPendingApprovals()).toHaveLength(1);
+
+    // A human approving after that window still resolves as approved.
+    expect(gate.approve('run-long')).toBe('approved');
+    await expect(promise).resolves.toBe('approved');
+  });
+
+  it('times out at the configured custom timeout', async () => {
+    const shortTimeout = 5_000;
+    const gate = new ApprovalGate(shortTimeout);
+    const promise = gate.waitForApproval('run-short', createMetadata({ actionRunId: 'run-short' }));
+
+    await vi.advanceTimersByTimeAsync(shortTimeout - 1);
+    expect(gate.getPendingApprovals()).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(promise).resolves.toBe('timed_out');
+  });
+
   it('returns not-found when approving a non-existent action run', () => {
     const gate = new ApprovalGate();
 
