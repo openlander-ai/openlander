@@ -322,6 +322,10 @@ export const serviceToolDefs: ToolDef[] = [
       try {
         const moved = await appCtx.db.attachServiceToProject(result.id, target.projectId);
         resolvedProjectId = moved.targetProjectId;
+        await appCtx.db.upsertServiceConnection({
+          projectId: resolvedProjectId,
+          serviceId: result.id,
+        });
         if (moved.droppedEnvVarKeys.length > 0 || moved.droppedSecretFiles.length > 0) {
           droppedKeys = [...moved.droppedEnvVarKeys, ...moved.droppedSecretFiles];
         }

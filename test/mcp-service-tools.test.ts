@@ -99,6 +99,7 @@ function createMockContext(
         droppedEnvVarKeys: [],
         droppedSecretFiles: [],
       })),
+      upsertServiceConnection: vi.fn(async () => undefined),
     },
     docker: {
       ensureProjectNetwork: vi.fn(async (projectName: string) => `ol-${projectName}`),
@@ -294,6 +295,10 @@ describe('MCP service tools (Task 8)', () => {
       aliases: ['myapp-pg'],
     });
     expect(ctx.db.attachServiceToProject).toHaveBeenCalledWith('svc-created', 'proj-1');
+    expect(ctx.db.upsertServiceConnection).toHaveBeenCalledWith({
+      projectId: 'proj-1',
+      serviceId: 'svc-created',
+    });
     expect(result).toMatchObject({
       status: 'created',
       scope: 'project',
