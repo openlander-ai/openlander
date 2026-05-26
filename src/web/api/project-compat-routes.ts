@@ -14,8 +14,11 @@ import {
 } from './helpers/project-route-shared.js';
 import { parseDockerLogChunk } from './helpers/docker-log-timestamps.js';
 import {
+  buildConnectionDependsOn,
+  deriveConnectedManagedServices,
   getTopologyNodeRuntime,
   mapWithConcurrency,
+  mergeDependsOn,
   registerTopologyCacheInvalidation,
   TOPOLOGY_INSPECT_CONCURRENCY,
   type TopologyNode,
@@ -26,7 +29,6 @@ import {
   deployableServiceIdToProjectId,
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
-import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import type { ServiceRow } from '../../db/types.js';
 
 const log = createModuleLogger('api');
@@ -120,21 +122,6 @@ async function inferRuntimeEnvDependencies(
   }
 
   return new Map([...inferred.entries()].map(([serviceId, deps]) => [serviceId, [...deps]]));
-}
-
-function mergeDependsOn(
-  target: Map<string, string[]>,
-  source: Map<string, string[]>,
-): Map<string, string[]> {
-  for (const [serviceId, deps] of source.entries()) {
-    const merged = new Set([...(target.get(serviceId) ?? []), ...deps]);
-    target.set(serviceId, [...merged]);
-  }
-  return target;
-}
-
-function isManagedServiceKind(kind: string): boolean {
-  return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
 }
 
 function storedServiceStatusToTopologyHealth(status: string | null | undefined): TopologyHealth {
@@ -250,27 +237,9 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
           : null;
       const legacyTopologyNodes =
         childProjects.length > 0 ? childProjects : legacyStandaloneDeployable ? [project] : [];
-      const serviceConnections = useServices
-        ? await ctx.db.listServiceConnectionsByProject(project.id)
-        : [];
-      const allServices =
-        useServices && serviceConnections.length > 0 ? await ctx.db.listServices() : [];
-      const connectedManagedServices = useServices
-        ? (() => {
-            const servicesById = new Map(allServices.map((service) => [service.id, service]));
-            const seen = new Set(groupServices.map((service) => service.id));
-            const managed: ServiceRow[] = [];
-            for (const connection of serviceConnections) {
-              const service = servicesById.get(connection.service_id_provider);
-              if (!service || seen.has(service.id) || !isManagedServiceKind(service.kind)) {
-                continue;
-              }
-              seen.add(service.id);
-              managed.push(service);
-            }
-            return managed;
-          })()
-        : [];
+      const { serviceConnections, connectedManagedServices } = useServices
+        ? await deriveConnectedManagedServices(ctx, project.id, groupServices)
+        : { serviceConnections: [], connectedManagedServices: [] };
 
       const nodeIds = new Set(
         useServices
@@ -293,21 +262,7 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
         dependsOnMap.set(nodeId, siblingDeps);
       }
       if (useServices) {
-        const connectionDependsOn = new Map<string, string[]>();
-        for (const connection of serviceConnections) {
-          if (
-            !nodeIds.has(connection.service_id_consumer) ||
-            !nodeIds.has(connection.service_id_provider)
-          ) {
-            continue;
-          }
-          const existing = connectionDependsOn.get(connection.service_id_consumer) ?? [];
-          connectionDependsOn.set(connection.service_id_consumer, [
-            ...existing,
-            connection.service_id_provider,
-          ]);
-        }
-        mergeDependsOn(dependsOnMap, connectionDependsOn);
+        mergeDependsOn(dependsOnMap, buildConnectionDependsOn(serviceConnections, nodeIds));
         mergeDependsOn(dependsOnMap, await inferRuntimeEnvDependencies(ctx, groupServices));
       }
 

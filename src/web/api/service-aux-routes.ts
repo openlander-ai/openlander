@@ -9,8 +9,6 @@ import {
   deployableServiceIdToProjectId,
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
-import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
-import type { ServiceRow } from '../../db/types.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 import {
   getDeployableServiceRouteName,
@@ -18,7 +16,13 @@ import {
   normalizeTimestamp,
 } from './helpers/project-route-shared.js';
 import { gitWebhooksDisabledResponse } from './git-webhook-disabled.js';
-import { getTopologyNodeRuntime, type TopologyNode } from './helpers/topology-runtime.js';
+import {
+  buildConnectionDependsOn,
+  deriveConnectedManagedServices,
+  getTopologyNodeRuntime,
+  mergeDependsOn,
+  type TopologyNode,
+} from './helpers/topology-runtime.js';
 
 const log = createModuleLogger('api:service-aux');
 
@@ -36,25 +40,10 @@ function withServiceAsId<T>(c: Context, fn: (c: Context) => T): T {
   return fn(c);
 }
 
-function isManagedServiceKind(kind: string): boolean {
-  return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
-}
-
 function storedServiceStatusToTopologyHealth(status: string | null | undefined) {
   if (status === 'running') return 'healthy';
   if (status === 'building') return 'deploying';
   return 'crashed';
-}
-
-function mergeDependsOn(
-  target: Map<string, string[]>,
-  source: Map<string, string[]>,
-): Map<string, string[]> {
-  for (const [serviceId, deps] of source.entries()) {
-    const merged = new Set([...(target.get(serviceId) ?? []), ...deps]);
-    target.set(serviceId, [...merged]);
-  }
-  return target;
 }
 
 export function createServiceAuxRoutes(ctx: AppContext): Hono {
@@ -115,25 +104,8 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
               ? await ctx.db.getComposeChildProjects(project.id)
               : await ctx.db.getChildProjects(project.id);
         if (groupServices.length > 0) {
-          const serviceConnections =
-            typeof ctx.db.listServiceConnectionsByProject === 'function'
-              ? await ctx.db.listServiceConnectionsByProject(project.id)
-              : [];
-          const allServices =
-            serviceConnections.length > 0 && typeof ctx.db.listServices === 'function'
-              ? await ctx.db.listServices()
-              : [];
-          const servicesById = new Map(allServices.map((service) => [service.id, service]));
-          const seen = new Set(groupServices.map((service) => service.id));
-          const connectedManagedServices: ServiceRow[] = [];
-          for (const connection of serviceConnections) {
-            const service = servicesById.get(connection.service_id_provider);
-            if (!service || seen.has(service.id) || !isManagedServiceKind(service.kind)) {
-              continue;
-            }
-            seen.add(service.id);
-            connectedManagedServices.push(service);
-          }
+          const { serviceConnections, connectedManagedServices } =
+            await deriveConnectedManagedServices(ctx, project.id, groupServices);
 
           const nodeIds = new Set(
             [...groupServices, ...connectedManagedServices].map((service) => service.id),
@@ -148,21 +120,7 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
             dependsOnMap.set(service.id, siblingDeps);
           }
 
-          const connectionDependsOn = new Map<string, string[]>();
-          for (const connection of serviceConnections) {
-            if (
-              !nodeIds.has(connection.service_id_consumer) ||
-              !nodeIds.has(connection.service_id_provider)
-            ) {
-              continue;
-            }
-            const existing = connectionDependsOn.get(connection.service_id_consumer) ?? [];
-            connectionDependsOn.set(connection.service_id_consumer, [
-              ...existing,
-              connection.service_id_provider,
-            ]);
-          }
-          mergeDependsOn(dependsOnMap, connectionDependsOn);
+          mergeDependsOn(dependsOnMap, buildConnectionDependsOn(serviceConnections, nodeIds));
 
           const deployableNodes = await Promise.all(
             groupServices.map(async (service) => {
