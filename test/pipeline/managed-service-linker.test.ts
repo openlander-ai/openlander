@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ManagedServiceLinker } from '../../src/pipeline/managed-service-linker.js';
-import { autoInjectServiceEnv } from '../../src/pipeline/env-inject.js';
+import { autoInjectServiceEnv, cleanupAutoInjectedEnv } from '../../src/pipeline/env-inject.js';
 import type { Database } from '../../src/db/index.js';
 import type { EnvManager } from '../../src/pipeline/env.js';
 
 vi.mock('../../src/pipeline/env-inject.js', () => ({
   autoInjectServiceEnv: vi.fn().mockResolvedValue(['DATABASE_URL']),
+  cleanupAutoInjectedEnv: vi.fn().mockResolvedValue(undefined),
 }));
 
 const POSTGRES_SERVICE = {
@@ -26,6 +27,9 @@ function createMockDb(overrides?: Record<string, unknown>) {
     getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue({ id: 'conn-1' }),
     updateServiceConnection: vi.fn().mockResolvedValue(undefined),
     createProjectDependency: vi.fn().mockResolvedValue({}),
+    deleteServiceConnectionByProjectAndService: vi.fn().mockResolvedValue(undefined),
+    findDependenciesByProject: vi.fn().mockResolvedValue([]),
+    deleteProjectDependency: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as Database;
 }
@@ -125,5 +129,44 @@ describe('ManagedServiceLinker.connect', () => {
 
     expect(result.droppedEnvVarKeys).toEqual(['OLD_URL']);
     expect(result.droppedSecretFiles).toEqual(['old.pem']);
+  });
+});
+
+describe('ManagedServiceLinker.disconnect', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('cleans injected env, deletes the connection row, and drops the auto dependency', async () => {
+    const db = createMockDb({
+      getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue({
+        id: 'conn-1',
+        auto_injected_env_keys: JSON.stringify(['DATABASE_URL']),
+      }),
+      findDependenciesByProject: vi
+        .fn()
+        .mockResolvedValue([{ id: 'dep-1', target_service_id: 'svc-pg', source: 'auto' }]),
+    });
+    const linker = new ManagedServiceLinker(db, mockEnv);
+
+    await linker.disconnect({ projectId: 'p1', serviceId: 'svc-pg' });
+
+    expect(vi.mocked(cleanupAutoInjectedEnv)).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'p1', autoInjectedEnvKeys: ['DATABASE_URL'] }),
+    );
+    expect(db.deleteServiceConnectionByProjectAndService).toHaveBeenCalledWith('p1', 'svc-pg');
+    expect(db.deleteProjectDependency).toHaveBeenCalledWith('dep-1');
+  });
+
+  it('is a no-op when the service is not connected to the project', async () => {
+    const db = createMockDb({
+      getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue(undefined),
+    });
+    const linker = new ManagedServiceLinker(db, mockEnv);
+
+    await linker.disconnect({ projectId: 'p1', serviceId: 'svc-pg' });
+
+    expect(vi.mocked(cleanupAutoInjectedEnv)).not.toHaveBeenCalled();
+    expect(db.deleteServiceConnectionByProjectAndService).not.toHaveBeenCalled();
   });
 });
