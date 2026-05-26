@@ -7,21 +7,14 @@ import {
   ServiceNotFoundError,
 } from '../errors.js';
 import { MANAGED_SERVICE_KINDS } from '../db/repos/service.repo.js';
+import { HUMAN_UI_ONLY_TOOL_SET, APPROVAL_HOLD_TOOL_SET } from './mcp-restricted-actions.js';
 import type { ToolContext, ToolDef } from '../tools/defs/types.js';
 
-const GROUP_A_HUMAN_UI_ONLY = new Set([
-  'remove_service',
-  'delete_service',
-  'remove_volume',
-  'delete_volume',
-  'delete_bucket',
-  'platform_force_remove',
-  'recover_platform',
-  'platform_cleanup_orphans',
-  'cleanup_docker',
-]);
-
-const GROUP_B_APPROVAL_HOLD = new Set(['bulk_delete_env_vars', 'remove_secret_file']);
+// Derived from the single policy source (mcp-restricted-actions.ts). Only real
+// tool defs land here; deployable/project lifecycle aliases live in that module's
+// HUMAN_UI_ONLY_ALIASES and are intercepted by the composite, not blocked here.
+const GROUP_A_HUMAN_UI_ONLY = HUMAN_UI_ONLY_TOOL_SET;
+const GROUP_B_APPROVAL_HOLD = APPROVAL_HOLD_TOOL_SET;
 
 interface SafetyResult {
   error?: string;
