@@ -30,6 +30,30 @@ Use that `service_id` for follow-up MCP actions such as `redeploy_app`, `set_env
 
 ---
 
+## Try It: Deploy the Demo App
+
+The fastest end-to-end check. From any connected agent:
+
+> "Deploy https://github.com/openlander-ai/openlander-demo-app to OpenLander."
+
+The agent runs `deploy_app(repo_url: "https://github.com/openlander-ai/openlander-demo-app", name: "demo")`,
+polls `get_deploy_status`, and returns the app URL. Confirm the app responds at its `/health` path.
+
+### Add a managed database (agent-driven, multi-step)
+
+A new-app deploy does **not** auto-provision a database in one shot. Wire one explicitly.
+First call `list_projects` and note the demo's `project_id` (or `project_name`) and its
+`deployable_service.service_id` — `create_service` requires a project target so the
+database lands on the same isolated network as the app.
+
+1. `openlander_managed_service.create_service(name: "demo-db", template: "postgresql", project_id: "<project_id>")`
+2. `openlander_managed_service.get_service_credentials(service_id: "<db service_id>")`
+3. `openlander_service.set_env_vars(service_id: "<app service_id>", variables: { DATABASE_URL: "<connection string>" })`
+4. `openlander_service.redeploy_app(service_id: "<app service_id>")`
+5. Verify the app's `/health` reports the database as reachable.
+
+---
+
 ## Deploy via Web Dashboard
 
 ### 1. Create a Project Group
