@@ -30,6 +30,28 @@ interface PendingApprovalEntry {
   metadata: ApprovalMetadata;
 }
 
+/**
+ * In-process, blocking-Promise gate for human-in-the-loop approval of
+ * **recovery** and **web_agent guarded-tool** actions.
+ *
+ * 0.1 status: a dormant compatibility shell. All of its producers
+ * (auto-recovery, ops-recovery, the web_agent guarded tool) are cold-storage
+ * (see app.ts V0.2_REENABLE), so no pending entries are created at runtime and
+ * nothing reads its state. Live approvals do NOT flow through this gate: the
+ * destructive-MCP flow records and resolves approval state directly on
+ * actionRuns (createPendingMcpApproval -> mcp_action_status ->
+ * /api/action-runs/:id/approve), which is the single source of truth.
+ *
+ * Scope boundary: this is also NOT the deploy-plan approval path. Deploy-plan
+ * provisioning approval is *plan-state* approval on the deploy_plans table +
+ * the in-memory PlanStateMachine (needs_approval -> ready -> executing), with a
+ * terminal audit row via ActionRunRepo.recordDeployPlanApproval.
+ *
+ * v0.2 (deferred T1 follow-up): when built-in recovery is re-enabled, redesign
+ * this gate as an actionRuns-backed waiter so its pending state can't diverge
+ * from the DB. Kept sync + in-memory here only to preserve the dormant call
+ * sites' compilation.
+ */
 export class ApprovalGate {
   private readonly pendingApprovals = new Map<string, PendingApprovalEntry>();
   private readonly recentlyProcessed = new Map<string, NodeJS.Timeout>();
