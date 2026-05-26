@@ -13,11 +13,16 @@ import {
   getMcpInstancePublicInfo,
   normalizeMcpInstanceName,
 } from '../../mcp/instance-identity.js';
+import { checkRateLimit, clientIp } from '../middleware/rate-limit.js';
 
 const log = createModuleLogger('auth-routes');
 
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60;
 const DEFAULT_PAT_EXPIRY_DAYS = 90;
+
+// Slow credential brute force on the unauthenticated auth endpoints. Per-process,
+// in-memory; keyed by IP + route. Generous enough not to lock out a fumbling operator.
+const AUTH_RATE_LIMIT = { windowMs: 60_000, max: 10 } as const;
 
 function passwordPolicyError(err: unknown): Response | null {
   if (err instanceof OpenLanderError && err.code === 'PASSWORD_TOO_SHORT') {
@@ -200,6 +205,12 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
   }
 
   api.post('/auth/setup-password', async (c) => {
+    const rl = checkRateLimit(`setup-password:${clientIp(c)}`, AUTH_RATE_LIMIT);
+    if (rl.limited) {
+      c.header('Retry-After', String(rl.retryAfterSec));
+      return c.json({ error: 'Too many attempts. Try again later.', code: 'RATE_LIMITED' }, 429);
+    }
+
     if (await authService.isPasswordSet()) {
       return c.json({ error: 'Password already configured' }, 403);
     }
@@ -227,6 +238,12 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
   });
 
   api.post('/auth/login', async (c) => {
+    const rl = checkRateLimit(`login:${clientIp(c)}`, AUTH_RATE_LIMIT);
+    if (rl.limited) {
+      c.header('Retry-After', String(rl.retryAfterSec));
+      return c.json({ error: 'Too many attempts. Try again later.', code: 'RATE_LIMITED' }, 429);
+    }
+
     const body = await c.req.json<{ password: string }>();
     if (!body.password) {
       return c.json({ error: 'Password is required' }, 400);
