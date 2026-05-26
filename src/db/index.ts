@@ -498,6 +498,7 @@ export class Database implements AuthDatabase {
   countAiUsageLogs(opts?: { projectId?: string; from?: Date; to?: Date }) { return this.aiUsageLogRepo.countAll(opts); }
   createActionRun(data: Parameters<ActionRunRepo['create']>[0]) { return this.actionRunRepo.create(data); }
   createPendingMcpApproval(data: Parameters<ActionRunRepo['createPendingMcpApproval']>[0]) { return this.actionRunRepo.createPendingMcpApproval(data); }
+  recordDeployPlanApproval(data: Parameters<ActionRunRepo['recordDeployPlanApproval']>[0]) { return this.actionRunRepo.recordDeployPlanApproval(data); }
   updateActionRunStatus(id: string, status: 'running' | 'succeeded' | 'failed' | 'pending_approval', errorMessage?: string) { return this.actionRunRepo.updateStatus(id, status, errorMessage); }
   updateActionRunStep(id: string, currentStep: number, totalSteps?: number) { return this.actionRunRepo.updateStep(id, currentStep, totalSteps); }
   updateActionRunApproval(id: string, approvalStatus: 'pending' | 'approved' | 'rejected', approvalTool?: string) { return this.actionRunRepo.updateApproval(id, approvalStatus, approvalTool); }

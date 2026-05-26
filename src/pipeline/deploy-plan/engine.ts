@@ -1293,6 +1293,30 @@ export class PlanEngine {
       planJson: JSON.stringify(this.preparePlanForStorage(executingPlan)),
     });
 
+    // Durable approval audit: a needs_approval plan's safe managed resources
+    // were approved over MCP and execution is now committed (lock held, status
+    // persisted). Record it in the action_runs approval ledger so deploy-plan
+    // approvals are as observable as destructive_mcp ones. Best-effort — a
+    // failed audit write must never break the deploy (mirrors the floating
+    // releaseDeployLock pattern). Fires only when an approval was granted:
+    // approvedSafeResources is populated solely on the needs_approval branch.
+    if (approvedSafeResources.size > 0) {
+      void this.db
+        .recordDeployPlanApproval({
+          projectId: targetProject?.id ?? plan.project_id ?? '',
+          plan: JSON.stringify({
+            plan_id: planId,
+            approved_resources: [...approvedSafeResources],
+          }),
+          correlationId: planId,
+        })
+        .catch((error: unknown) => {
+          // Error-level: a failed write leaves approved provisioning un-audited
+          // (the deploy still proceeds — best-effort), so make the gap alertable.
+          log.error({ planId, error }, 'Failed to record deploy-plan approval audit');
+        });
+    }
+
     try {
       const mergedEnv = await resolveEnvVars(
         {
