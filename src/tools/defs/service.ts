@@ -301,7 +301,7 @@ export const serviceToolDefs: ToolDef[] = [
     description:
       'Create a new managed infrastructure service (database, cache, message broker, object storage, or custom container) inside a project. Requires project_id or project_name so the service is attached to the app network that will use it. Provide template (postgresql/mysql/redis/mongodb/rabbitmq/minio), custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17"). Returns { service, scope, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, REDIS_URL, S3_ENDPOINT) for connecting the project. Call set_env_vars with the suggested key/value to save the binding, then redeploy the running project/service to apply it. Errors: PROJECT_TARGET_REQUIRED, INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
     mcpDescription:
-      'Create a managed infrastructure service inside a project. Pass project_id or project_name.',
+      'Create a managed infrastructure service inside a project. Pass project_id or project_name. Returns suggested_env; call set_env_vars and redeploy to apply it to the app.',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolveCreateServiceScope(appCtx, args);

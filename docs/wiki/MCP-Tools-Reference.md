@@ -125,6 +125,10 @@ provisioning is gated: execute returns `needs_approval` with `approval_required.
 individually. Unapproved, compose, or not-auto-creatable services are never created — supply their
 connection env (e.g. an external `DATABASE_URL`) or create them first.
 
+This auto-provisioning and env wiring applies to the deploy-plan approval flow
+only. Standalone `create_service` creates the managed service and returns
+`suggested_env`; the agent still calls `set_env_vars` and redeploys the app.
+
 Auto-provisioning is supported only for **existing** projects. Executing an approved plan for a
 brand-new app (no project row yet) returns `needs_target_project` and creates nothing. To deploy
 the new app now, pass an external connection URL (e.g. `DATABASE_URL`) in `env_vars` so no managed
@@ -404,6 +408,8 @@ databases/caches attached to the isolated project Docker network used by the app
 that will consume them. Cross-project shared managed services are not exposed in
 v0.1, and OpenLander does not expose managed database/cache ports over external
 TCP. Create the service with the target app's `project_id` or `project_name`.
+The standalone action does not write env vars to the app; use the returned
+`suggested_env` with `openlander_service.set_env_vars`, then redeploy.
 
 ### `list_services`
 
