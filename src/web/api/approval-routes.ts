@@ -71,21 +71,10 @@ export function createApprovalRoutes(ctx: AppContext): Hono {
     }
   }
 
-  function hasProjectMismatch(projectId: string, actionRunId: string): boolean {
-    const pending = ctx.approvalGate.getPendingApprovals();
-    const target = pending.find((entry) => entry.metadata.actionRunId === actionRunId);
-    if (!target) {
-      return false;
-    }
-
-    return target.metadata.projectId !== projectId;
-  }
-
   // --- Pending Approvals ---
 
   api.get('/approvals/pending', async (c) => {
-    const approvals = ctx.approvalGate.getPendingApprovals();
-    const destructiveApprovals = await Promise.all(
+    const approvals = await Promise.all(
       (await ctx.db.getActionRunsByApprovalStatus('pending', 50))
         .filter((run) => run.approval_tool === 'destructive_mcp')
         .map(async (run) => {
@@ -106,69 +95,7 @@ export function createApprovalRoutes(ctx: AppContext): Hono {
           };
         }),
     );
-    return c.json({ approvals: [...approvals, ...destructiveApprovals] });
-  });
-
-  // --- Approve Recovery Action ---
-
-  api.post('/projects/:id/recovery/approve', async (c) => {
-    let body: { actionRunId?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-
-    const { actionRunId } = body;
-    if (!actionRunId || typeof actionRunId !== 'string') {
-      return c.json({ error: 'actionRunId is required and must be a string' }, 400);
-    }
-
-    const projectId = c.req.param('id');
-    if (hasProjectMismatch(projectId, actionRunId)) {
-      return c.json({ error: 'Approval does not belong to this project' }, 403);
-    }
-
-    const result = ctx.approvalGate.approve(actionRunId);
-    if (result === 'not-found') {
-      return c.json({ error: 'Approval not found' }, 404);
-    }
-    if (result === 'already-processed') {
-      return c.json({ error: 'Approval already processed' }, 409);
-    }
-
-    return c.json({ success: true, message: 'Recovery approved' });
-  });
-
-  // --- Reject Recovery Action ---
-
-  api.post('/projects/:id/recovery/reject', async (c) => {
-    let body: { actionRunId?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-
-    const { actionRunId } = body;
-    if (!actionRunId || typeof actionRunId !== 'string') {
-      return c.json({ error: 'actionRunId is required and must be a string' }, 400);
-    }
-
-    const projectId = c.req.param('id');
-    if (hasProjectMismatch(projectId, actionRunId)) {
-      return c.json({ error: 'Approval does not belong to this project' }, 403);
-    }
-
-    const result = ctx.approvalGate.reject(actionRunId);
-    if (result === 'not-found') {
-      return c.json({ error: 'Approval not found' }, 404);
-    }
-    if (result === 'already-processed') {
-      return c.json({ error: 'Approval already processed' }, 409);
-    }
-
-    return c.json({ success: true, message: 'Recovery rejected' });
+    return c.json({ approvals });
   });
 
   return api;
