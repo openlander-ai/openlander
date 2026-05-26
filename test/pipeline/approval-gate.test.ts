@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApprovalGate,
   APPROVAL_TIMEOUT_MS,
+  MAX_APPROVAL_TIMEOUT_MS,
   type ApprovalMetadata,
 } from '../../src/pipeline/approval-gate.js';
 
@@ -62,6 +63,59 @@ describe('ApprovalGate', () => {
 
     await vi.advanceTimersByTimeAsync(APPROVAL_TIMEOUT_MS);
 
+    await expect(promise).resolves.toBe('timed_out');
+  });
+
+  it('honors a custom timeout longer than the default (approval can take longer than 10 min)', async () => {
+    const longTimeout = APPROVAL_TIMEOUT_MS * 6; // 1 hour
+    const gate = new ApprovalGate(longTimeout);
+    const promise = gate.waitForApproval('run-long', createMetadata({ actionRunId: 'run-long' }));
+
+    // Past the old 10-minute default, the approval is still pending.
+    await vi.advanceTimersByTimeAsync(APPROVAL_TIMEOUT_MS);
+    expect(gate.getPendingApprovals()).toHaveLength(1);
+
+    // A human approving after that window still resolves as approved.
+    expect(gate.approve('run-long')).toBe('approved');
+    await expect(promise).resolves.toBe('approved');
+  });
+
+  it('times out at the configured custom timeout', async () => {
+    const shortTimeout = 5_000;
+    const gate = new ApprovalGate(shortTimeout);
+    const promise = gate.waitForApproval('run-short', createMetadata({ actionRunId: 'run-short' }));
+
+    await vi.advanceTimersByTimeAsync(shortTimeout - 1);
+    expect(gate.getPendingApprovals()).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(promise).resolves.toBe('timed_out');
+  });
+
+  it('falls back to the default timeout when given an invalid value', async () => {
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const gate = new ApprovalGate(bad);
+      const promise = gate.waitForApproval('run-bad', createMetadata({ actionRunId: 'run-bad' }));
+
+      // Not coerced to ~1ms: still pending well past a tick.
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(gate.getPendingApprovals()).toHaveLength(1);
+
+      // Resolves at the default timeout.
+      await vi.advanceTimersByTimeAsync(APPROVAL_TIMEOUT_MS - 1_000);
+      await expect(promise).resolves.toBe('timed_out');
+    }
+  });
+
+  it('clamps a timeout above the setTimeout limit instead of firing almost immediately', async () => {
+    const gate = new ApprovalGate(MAX_APPROVAL_TIMEOUT_MS + 1_000_000);
+    const promise = gate.waitForApproval('run-huge', createMetadata({ actionRunId: 'run-huge' }));
+
+    // The bug this guards: a too-large delay coerces to ~1ms. It must not.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(gate.getPendingApprovals()).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(MAX_APPROVAL_TIMEOUT_MS);
     await expect(promise).resolves.toBe('timed_out');
   });
 

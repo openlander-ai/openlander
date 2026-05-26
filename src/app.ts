@@ -308,7 +308,7 @@ export async function createAppContext(
     autoDetector,
     coordinator,
   );
-  const approvalGate = new ApprovalGate();
+  const approvalGate = new ApprovalGate(config.monitoring.approvalTimeoutMs);
 
   // v0.7: Question bridge (agent ↔ UI)
   const questionBridge = new QuestionBridge();

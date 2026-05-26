@@ -193,6 +193,11 @@ export interface MonitoringConfig {
   healthcheckIntervalSec: number;
   /** Days of inactivity before suggesting cleanup */
   inactivityThresholdDays: number;
+  /**
+   * Timeout (ms) before a pending human approval auto-times-out. Default 10 min
+   * (mirrors APPROVAL_TIMEOUT_MS). Raise it for approvals that take longer.
+   */
+  approvalTimeoutMs: number;
 }
 
 export interface McpServerEntry {
@@ -371,6 +376,7 @@ function buildDefaultConfig(): OpenLanderConfig {
     monitoring: {
       healthcheckIntervalSec: 60,
       inactivityThresholdDays: 14,
+      approvalTimeoutMs: 10 * 60 * 1000,
     },
     mcp: {
       enabled: false,
