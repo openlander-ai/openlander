@@ -1311,7 +1311,9 @@ export class PlanEngine {
           correlationId: planId,
         })
         .catch((error: unknown) => {
-          log.warn({ planId, error }, 'Failed to record deploy-plan approval audit');
+          // Error-level: a failed write leaves approved provisioning un-audited
+          // (the deploy still proceeds — best-effort), so make the gap alertable.
+          log.error({ planId, error }, 'Failed to record deploy-plan approval audit');
         });
     }
 
