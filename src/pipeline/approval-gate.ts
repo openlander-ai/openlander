@@ -1,4 +1,10 @@
 export const APPROVAL_TIMEOUT_MS = 10 * 60 * 1000;
+/**
+ * setTimeout caps delays at the max 32-bit signed int (~24.8 days); anything
+ * larger — or 0/negative/NaN/Infinity — is silently coerced to ~1ms, which
+ * would fire the approval timeout almost immediately. We clamp to this max.
+ */
+export const MAX_APPROVAL_TIMEOUT_MS = 2_147_483_647;
 const PROCESSED_RETENTION_MS = 5 * 60 * 1000;
 
 export interface ApprovalMetadata {
@@ -28,13 +34,22 @@ export class ApprovalGate {
   private readonly pendingApprovals = new Map<string, PendingApprovalEntry>();
   private readonly recentlyProcessed = new Map<string, NodeJS.Timeout>();
 
+  private readonly timeoutMs: number;
+
   /**
    * @param timeoutMs How long a pending approval waits before auto-timing-out.
    *   Defaults to APPROVAL_TIMEOUT_MS (10 min). Raise it (via
    *   config.monitoring.approvalTimeoutMs) for human approvals that legitimately
-   *   take longer than ten minutes.
+   *   take longer than ten minutes. Invalid values (0, negative, NaN, Infinity)
+   *   fall back to the default; values above setTimeout's limit are clamped to
+   *   MAX_APPROVAL_TIMEOUT_MS so a large config never coerces to a ~1ms timeout.
    */
-  constructor(private readonly timeoutMs: number = APPROVAL_TIMEOUT_MS) {}
+  constructor(timeoutMs: number = APPROVAL_TIMEOUT_MS) {
+    this.timeoutMs =
+      Number.isFinite(timeoutMs) && timeoutMs > 0
+        ? Math.min(timeoutMs, MAX_APPROVAL_TIMEOUT_MS)
+        : APPROVAL_TIMEOUT_MS;
+  }
 
   waitForApproval(actionRunId: string, metadata: ApprovalMetadata): Promise<ApprovalResult> {
     const existing = this.pendingApprovals.get(actionRunId);
