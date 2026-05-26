@@ -77,6 +77,47 @@ export class ActionRunRepo {
     return id;
   }
 
+  /**
+   * Record a durable, terminal audit entry for a deploy-plan provisioning
+   * approval granted synchronously over MCP (execute_deploy_plan with
+   * approvals). Unlike the destructive-MCP flow there is no pending window —
+   * the agent supplies the approval in the same call — so the row is written
+   * already-resolved (approval_status='approved', status='succeeded'). The
+   * deploy outcome itself is tracked elsewhere (deploy_logs / timeline); this
+   * row exists so approved provisioning is visible in the same approval ledger
+   * as destructive_mcp approvals.
+   */
+  async recordDeployPlanApproval(data: {
+    projectId: string;
+    plan: string;
+    correlationId?: string;
+  }): Promise<string> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await this.db.insert(actionRuns).values({
+      id,
+      project_id: data.projectId,
+      trigger_source: 'mcp',
+      status: 'succeeded',
+      error_message: null,
+      recovery_strategy: null,
+      correlation_id: data.correlationId ?? null,
+      steps_json: null,
+      plan: data.plan,
+      approval_status: 'approved',
+      approval_tool: 'deploy_plan',
+      approval_requested_at: now,
+      approval_resolved_at: now,
+      started_at: now,
+      completed_at: now,
+      tenant_id: null,
+      user_id: null,
+      created_at: now,
+      updated_at: now,
+    });
+    return id;
+  }
+
   async updateStatus(
     id: string,
     status: 'running' | 'succeeded' | 'failed' | 'pending_approval',

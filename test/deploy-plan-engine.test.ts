@@ -1276,6 +1276,7 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
       acquireDeployLock: vi.fn().mockResolvedValue(true),
       getDeployLockInfo: vi.fn().mockResolvedValue(null),
       releaseDeployLock: vi.fn().mockResolvedValue(undefined),
+      recordDeployPlanApproval: vi.fn().mockResolvedValue('audit-run-1'),
     };
 
     mockPipeline = {
@@ -1336,6 +1337,8 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     // Loop not entered: no managed service created, no deploy started.
     expect(mockServiceManager.create).not.toHaveBeenCalled();
     expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
+    // No approval was granted, so nothing is written to the approval ledger.
+    expect(mockDb.recordDeployPlanApproval).not.toHaveBeenCalled();
   });
 
   // (d) Zero-provisioning safety: an unapproved plan creates nothing — zero
@@ -1407,6 +1410,9 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
       (call: any) => call[1]?.status === 'executing',
     );
     expect(wroteExecuting).toBe(false);
+    // Approval is audited only once execution commits; a blocked new-app plan
+    // records nothing.
+    expect(mockDb.recordDeployPlanApproval).not.toHaveBeenCalled();
   });
 
   // (e) Idempotency: approved provisioning upserts a connection row, and a
@@ -1437,6 +1443,29 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     expect(mockDb.upsertServiceConnection.mock.results.every((r: any) => r.type === 'return')).toBe(
       true,
     );
+  });
+
+  // (e2) Durable approval audit: an approved needs_approval plan whose
+  // provisioning is committed records a terminal entry in the action_runs
+  // approval ledger (approval_tool='deploy_plan'), making deploy-plan approvals
+  // as observable as destructive_mcp ones.
+  it('records a durable deploy-plan approval audit entry when approved provisioning proceeds', async () => {
+    const plan = createNeedsApprovalPlan();
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+
+    const result = await engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+      approveAllSafeResources: true,
+    });
+
+    expect(result.status).toBe('building');
+    expect(mockDb.recordDeployPlanApproval).toHaveBeenCalledTimes(1);
+    const arg = mockDb.recordDeployPlanApproval.mock.calls[0][0];
+    expect(arg.projectId).toBe('p1');
+    expect(arg.correlationId).toBe(plan.plan_id);
+    expect(JSON.parse(arg.plan)).toEqual({
+      plan_id: plan.plan_id,
+      approved_resources: ['postgresql'],
+    });
   });
 
   // (f) Crash-window: with a valid approval, force the deploy lock to fail. The
@@ -1472,6 +1501,8 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     expect(wroteExecuting).toBe(false);
     // Nothing was provisioned either — the lock guards provisioning.
     expect(mockServiceManager.create).not.toHaveBeenCalled();
+    // The lock fails before execution commits, so no approval is audited.
+    expect(mockDb.recordDeployPlanApproval).not.toHaveBeenCalled();
   });
 
   // (g) Reuse path backfill: an existing reusable managed service upserts a
