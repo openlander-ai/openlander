@@ -10,7 +10,11 @@ import {
   ServiceNotFoundError,
   ServiceOperationUnsupportedError,
 } from '../../errors.js';
-import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import {
+  isManagedServiceKind,
+  kindToLegacyType,
+  MANAGED_SERVICE_KINDS,
+} from '../../db/repos/service.repo.js';
 import type { ToolDef } from './types.js';
 import {
   backupServiceSchema,
@@ -160,10 +164,6 @@ async function resolveServiceByIdOrName(
   const service = services.find((item) => item.name === serviceName);
   if (!service) throw new ServiceNotFoundError(serviceName);
   return service;
-}
-
-function isManagedServiceKind(kind: string): boolean {
-  return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
 }
 
 function readStringArg(args: Record<string, unknown>, key: string): string | undefined {

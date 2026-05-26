@@ -1,5 +1,7 @@
 import type { AppContext } from '../../../app.js';
 import { createModuleLogger } from '../../../lib/logger.js';
+import { isManagedServiceKind } from '../../../db/repos/service.repo.js';
+import type { ServiceConnectionRow, ServiceRow } from '../../../db/types.js';
 
 const log = createModuleLogger('api:topology-runtime');
 // ---------------------------------------------------------------------------
@@ -285,4 +287,74 @@ export async function getTopologyNodeRuntime(
   const value = await promise;
   topologyNodeCache.set(containerId, { ts: Date.now(), value });
   return value;
+}
+
+/** Merge `source` dependsOn edges into `target` (deduped), returning `target`. */
+export function mergeDependsOn(
+  target: Map<string, string[]>,
+  source: Map<string, string[]>,
+): Map<string, string[]> {
+  for (const [serviceId, deps] of source.entries()) {
+    const merged = new Set([...(target.get(serviceId) ?? []), ...deps]);
+    target.set(serviceId, [...merged]);
+  }
+  return target;
+}
+
+/**
+ * Resolve which managed (database) services are connected to a project's
+ * deployable group. Shared by the project- and service-scoped topology
+ * endpoints so both derive the managed-node set identically. Returns the raw
+ * connection rows too, since the caller needs them to build connection edges.
+ */
+export async function deriveConnectedManagedServices(
+  ctx: Pick<AppContext, 'db'>,
+  projectId: string,
+  groupServices: readonly ServiceRow[],
+): Promise<{ serviceConnections: ServiceConnectionRow[]; connectedManagedServices: ServiceRow[] }> {
+  const serviceConnections =
+    typeof ctx.db.listServiceConnectionsByProject === 'function'
+      ? await ctx.db.listServiceConnectionsByProject(projectId)
+      : [];
+  const allServices =
+    serviceConnections.length > 0 && typeof ctx.db.listServices === 'function'
+      ? await ctx.db.listServices()
+      : [];
+  const servicesById = new Map(allServices.map((service) => [service.id, service]));
+  const seen = new Set(groupServices.map((service) => service.id));
+  const connectedManagedServices: ServiceRow[] = [];
+  for (const connection of serviceConnections) {
+    const service = servicesById.get(connection.service_id_provider);
+    if (!service || seen.has(service.id) || !isManagedServiceKind(service.kind)) {
+      continue;
+    }
+    seen.add(service.id);
+    connectedManagedServices.push(service);
+  }
+  return { serviceConnections, connectedManagedServices };
+}
+
+/**
+ * Build dependsOn edges implied by service connections: a consumer depends on
+ * its provider, but only when both ends are nodes in the current topology.
+ */
+export function buildConnectionDependsOn(
+  serviceConnections: readonly ServiceConnectionRow[],
+  nodeIds: ReadonlySet<string>,
+): Map<string, string[]> {
+  const connectionDependsOn = new Map<string, string[]>();
+  for (const connection of serviceConnections) {
+    if (
+      !nodeIds.has(connection.service_id_consumer) ||
+      !nodeIds.has(connection.service_id_provider)
+    ) {
+      continue;
+    }
+    const existing = connectionDependsOn.get(connection.service_id_consumer) ?? [];
+    connectionDependsOn.set(connection.service_id_consumer, [
+      ...existing,
+      connection.service_id_provider,
+    ]);
+  }
+  return connectionDependsOn;
 }

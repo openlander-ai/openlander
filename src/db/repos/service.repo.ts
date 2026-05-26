@@ -19,6 +19,11 @@ export const MANAGED_SERVICE_KINDS: readonly ServiceKind[] = [
   'minio',
 ];
 
+/** True when a service `kind` is one of the platform-managed database kinds. */
+export function isManagedServiceKind(kind: string): boolean {
+  return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
+}
+
 /**
  * Map a service `kind` value onto the canonical enum; unknown custom images
  * are stored as `image` so adopted containers do not masquerade as databases.
