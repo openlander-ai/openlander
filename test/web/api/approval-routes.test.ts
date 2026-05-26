@@ -54,7 +54,7 @@ describe('Approval Routes', () => {
               identity: {
                 source: 'mcp',
                 initiatedBy: 'claude-code',
-                mcpTokenId: 'pat-1234567890',
+                mcpTokenId: 'test-pat-id',
                 mcpTokenType: 'pat',
                 mcpScopeKind: 'project',
                 mcpScopeProjectId: 'proj-1',
@@ -78,7 +78,7 @@ describe('Approval Routes', () => {
           actor: {
             source: 'mcp',
             initiatedBy: 'claude-code',
-            tokenId: 'pat-1234567890',
+            tokenId: 'test-pat-id',
             tokenType: 'pat',
             scopeKind: 'project',
             scopeProjectId: 'proj-1',

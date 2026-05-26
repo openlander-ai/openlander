@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.6-rc.1] - 2026-05-27
+
+### Added
+
+- Added login and first-boot password setup rate limiting
+  (`10` attempts per `60s`) with `429 RATE_LIMITED` responses and
+  `Retry-After` headers.
+- Added Amazon Linux, GCP, Azure, and DigitalOcean public IP detection to the
+  installer so fresh cloud installs can advertise reachable app URLs more
+  reliably.
+- Added release-gate documentation for fresh-agent MCP onboarding, including
+  the Your Agent token location, origin-relative `/mcp` endpoints, Claude Code
+  setup, and the two demo paths used by launch dry-runs.
+
+### Changed
+
+- Centralized managed-service connect/disconnect behavior through
+  `ManagedServiceLinker` across MCP, REST, and deploy-plan provisioning so
+  service connections, project dependencies, and topology read models stay in
+  sync.
+- Unified MCP restricted-action policy into one source and added registry tests
+  to keep destructive actions aligned with the safety matrix.
+- Moved live approval-list reads to the action-run ledger and documented the
+  dormant in-memory `ApprovalGate` as v0.2 cold storage.
+- Installer output now explicitly tells operators to open inbound TCP `80` and
+  the dashboard/MCP port, and warns when localhost/private host fallback may not
+  be externally reachable.
+
+### Fixed
+
+- Fixed managed service project connections created through MCP so project
+  dashboards and topology views show attached Postgres/Redis/etc. services.
+- Fixed topology read models so managed dependencies appear as nodes and
+  app-to-managed dependency edges instead of being dropped.
+- Fixed deploy-plan managed-service provisioning to use the same linker path as
+  direct connect flows.
+- Fixed secret-scan false positives in approval-route tests by replacing
+  token-like fixture values with explicit test identifiers.
+
 ## [0.1.5] - 2026-05-25
 
 ### Fixed
