@@ -7,6 +7,49 @@ import {
 } from '../../src/mcp/mcp-restricted-actions.js';
 import { isHumanUiOnlyAction } from '../../src/mcp/composite-tools.js';
 import { isGroupBMcpHoldTool } from '../../src/mcp/destructive-safety.js';
+import { debugToolDefs } from '../../src/tools/defs/debug.js';
+import { deployableServiceToolDefs } from '../../src/tools/defs/deployable-service.js';
+import { deployToolDefs } from '../../src/tools/defs/deploy.js';
+import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
+import { envToolDefs } from '../../src/tools/defs/env.js';
+import { gitToolDefs } from '../../src/tools/defs/git.js';
+import { infraToolDefs } from '../../src/tools/defs/infra.js';
+import { monitoringToolDefs } from '../../src/tools/defs/monitoring.js';
+import { projectOpsToolDefs } from '../../src/tools/defs/project-ops.js';
+import { serviceToolDefs } from '../../src/tools/defs/service.js';
+import { volumeToolDefs } from '../../src/tools/defs/volume.js';
+import { platformReadToolDefs } from '../../src/tools/defs/platform-read.js';
+import { platformDebugToolDefs } from '../../src/tools/defs/platform-debug.js';
+import { platformActionToolDefs } from '../../src/tools/defs/platform-actions.js';
+
+// Every registered tool def name (non-platform + platform), so the policy lists
+// can be checked against reality, not just for internal self-consistency.
+const ALL_DEFS = [
+  ...deployToolDefs,
+  ...deployableServiceToolDefs,
+  ...deployPlanToolDefs,
+  ...projectOpsToolDefs,
+  ...envToolDefs,
+  ...serviceToolDefs,
+  ...volumeToolDefs,
+  ...infraToolDefs,
+  ...gitToolDefs,
+  ...monitoringToolDefs,
+  ...debugToolDefs,
+  ...platformReadToolDefs,
+  ...platformDebugToolDefs,
+  ...platformActionToolDefs,
+];
+
+const ALL_TOOL_NAMES: ReadonlySet<string> = new Set(ALL_DEFS.map((def) => def.name));
+
+// MCP-exposed = default targets, or targets explicitly include 'mcp' (same rule
+// the registry uses). Some defs exist but are agent-only (e.g. archive_service,
+// targets:['agent']) — those are legitimately aliased for MCP, so the alias
+// check is "not MCP-exposed", not "does not exist".
+const MCP_EXPOSED_TOOL_NAMES: ReadonlySet<string> = new Set(
+  ALL_DEFS.filter((def) => !def.targets || def.targets.includes('mcp')).map((def) => def.name),
+);
 
 describe('MCP restricted-action policy (single source)', () => {
   it('keeps the three tiers disjoint — no action classified twice', () => {
@@ -51,5 +94,30 @@ describe('MCP restricted-action policy (single source)', () => {
       expect(isGroupBMcpHoldTool(tool), `${tool} should be an approval-hold tool`).toBe(true);
     }
     expect(isGroupBMcpHoldTool('remove_service')).toBe(false);
+  });
+});
+
+describe('restricted-action policy vs the real tool registry', () => {
+  it('every blocked and approval-hold action is a real registered tool def', () => {
+    for (const tool of HUMAN_UI_ONLY_TOOLS) {
+      expect(ALL_TOOL_NAMES.has(tool), `${tool} is blocked but not a registered tool def`).toBe(
+        true,
+      );
+    }
+    for (const tool of APPROVAL_HOLD_TOOLS) {
+      expect(
+        ALL_TOOL_NAMES.has(tool),
+        `${tool} is approval-hold but not a registered tool def`,
+      ).toBe(true);
+    }
+  });
+
+  it('no human-UI-only alias is an MCP-exposed tool (it would be callable, not aliased)', () => {
+    for (const alias of HUMAN_UI_ONLY_ALIASES) {
+      expect(
+        MCP_EXPOSED_TOOL_NAMES.has(alias),
+        `${alias} is an alias but also an MCP-exposed tool`,
+      ).toBe(false);
+    }
   });
 });
