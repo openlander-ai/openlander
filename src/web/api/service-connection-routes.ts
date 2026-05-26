@@ -1,13 +1,9 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
-import { cleanupAutoInjectedEnv } from '../../pipeline/env-inject.js';
 import { kindToLegacyType } from '../../db/repos/service.repo.js';
 import { ManagedServiceLinker } from '../../pipeline/managed-service-linker.js';
-import { createModuleLogger } from '../../lib/logger.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
-
-const log = createModuleLogger('api:service-connection');
 
 function parseServiceCredentials(credentials: string | null): Record<string, string> | undefined {
   if (!credentials) {
@@ -102,28 +98,10 @@ export function createServiceConnectionRoutes(ctx: AppContext): Hono {
       );
     }
 
-    const parsedAutoInjected = JSON.parse(existing.auto_injected_env_keys ?? '[]') as unknown;
-    const autoInjectedEnvKeys = Array.isArray(parsedAutoInjected)
-      ? parsedAutoInjected.filter((key): key is string => typeof key === 'string')
-      : [];
-    await cleanupAutoInjectedEnv({
-      db: ctx.db,
-      env: ctx.env,
+    await new ManagedServiceLinker(ctx.db, ctx.env).disconnect({
       projectId: project.id,
-      autoInjectedEnvKeys,
+      serviceId,
     });
-
-    await ctx.db.deleteServiceConnectionByProjectAndService(project.id, serviceId);
-
-    try {
-      const deps = await ctx.db.findDependenciesByProject(project.id);
-      const matchingDep = deps.find(
-        (d) => d.target_service_id === serviceId && d.source === 'auto',
-      );
-      if (matchingDep) await ctx.db.deleteProjectDependency(matchingDep.id);
-    } catch (err) {
-      log.debug({ err, projectId: project.id, serviceId }, 'Auto dependency cleanup failed');
-    }
 
     return c.json({ message: 'Service disconnected', serviceId });
   });

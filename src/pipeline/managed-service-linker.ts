@@ -1,5 +1,5 @@
 import { createModuleLogger } from '../lib/logger.js';
-import { autoInjectServiceEnv } from './env-inject.js';
+import { autoInjectServiceEnv, cleanupAutoInjectedEnv } from './env-inject.js';
 import { projectIdToDeployableServiceId } from '../db/service-ids.js';
 import { kindToLegacyType } from '../db/repos/service.repo.js';
 import type { Database } from '../db/index.js';
@@ -131,5 +131,46 @@ export class ManagedServiceLinker {
       droppedEnvVarKeys: moved.droppedEnvVarKeys,
       droppedSecretFiles: moved.droppedSecretFiles,
     };
+  }
+
+  /**
+   * Reverse of connect() for one (project, service) pair: remove the
+   * auto-injected env, delete the connection row, and drop the auto-created
+   * dependency edge. Idempotent — a no-op when the service isn't connected to
+   * the project.
+   */
+  async disconnect(params: { projectId: string; serviceId: string }): Promise<void> {
+    const { projectId, serviceId } = params;
+
+    const connection = await this.db.getServiceConnectionByProjectAndService(projectId, serviceId);
+    if (!connection) {
+      return;
+    }
+
+    const parsed = JSON.parse(connection.auto_injected_env_keys ?? '[]') as unknown;
+    const autoInjectedEnvKeys = Array.isArray(parsed)
+      ? parsed.filter((key): key is string => typeof key === 'string')
+      : [];
+    await cleanupAutoInjectedEnv({
+      db: this.db,
+      env: this.env,
+      projectId,
+      autoInjectedEnvKeys,
+    });
+
+    await this.db.deleteServiceConnectionByProjectAndService(projectId, serviceId);
+
+    // Best-effort: drop the auto-created dependency edge.
+    try {
+      const deps = await this.db.findDependenciesByProject(projectId);
+      const matchingDep = deps.find(
+        (d) => d.target_service_id === serviceId && d.source === 'auto',
+      );
+      if (matchingDep) {
+        await this.db.deleteProjectDependency(matchingDep.id);
+      }
+    } catch (err) {
+      log.debug({ err, projectId, serviceId }, 'Auto dependency cleanup failed');
+    }
   }
 }
