@@ -639,46 +639,49 @@ export class PlanEngine {
       template: planService.type,
       ...(network ? { network, aliases: [serviceName] } : {}),
     });
-    const suggestedEnv = await this.serviceManager.getSuggestedEnv(created, {
-      targetProjectId: targetProject.id,
-    });
-    const connectionString = suggestedEnv[0]?.value;
-    if (typeof connectionString !== 'string' || connectionString.trim().length === 0) {
-      throw new ServiceConfigError(
-        `Provisioned managed service ${serviceName} did not provide a connection string for ${envVarName}`,
-        { serviceId: created.id, envVarName },
-      );
-    }
-
-    // Wire the provisioned service into the project through the shared linker:
-    // attach + connection row + persisted env + auto_injected_env_keys +
-    // dependency edge. This path previously attached + upserted only, leaving
-    // the env unpersisted (deploy-time mergedEnv only), no injected-key
-    // metadata, and no dependency edge. Passing the connection string keeps the
-    // persisted env identical to the deploy-time value from getSuggestedEnv.
+    // Everything after create() is wrapped so any failure — suggested-env
+    // lookup, a missing connection string, or wiring — rolls back the
+    // just-created container/volume/row instead of orphaning it.
+    //
+    // Wiring goes through the shared linker: attach + connection row + persisted
+    // env + auto_injected_env_keys + dependency edge. This path previously
+    // attached + upserted only, leaving the env unpersisted (deploy-time
+    // mergedEnv only), no injected-key metadata, and no dependency edge. Passing
+    // the connection string keeps the persisted env identical to the deploy-time
+    // value from getSuggestedEnv.
     try {
+      const suggestedEnv = await this.serviceManager.getSuggestedEnv(created, {
+        targetProjectId: targetProject.id,
+      });
+      const connectionString = suggestedEnv[0]?.value;
+      if (typeof connectionString !== 'string' || connectionString.trim().length === 0) {
+        throw new ServiceConfigError(
+          `Provisioned managed service ${serviceName} did not provide a connection string for ${envVarName}`,
+          { serviceId: created.id, envVarName },
+        );
+      }
+
       await new ManagedServiceLinker(this.db, this.env).connect({
         projectId: targetProject.id,
         service: created,
         source: 'deploy_plan',
         credentials: { connectionString },
       });
-    } catch (connectError) {
-      // Mirror create_service: a post-create wiring failure would orphan the
-      // just-created container/volume/row, so best-effort tear it down and
+
+      return connectionString;
+    } catch (provisionError) {
+      // Mirror create_service: best-effort tear down the orphaned service and
       // rethrow. Do not silently swallow the cleanup failure (AGENTS.md).
       try {
         await this.serviceManager.remove(created.id, { force: true });
       } catch (cleanupError) {
         log.warn(
           { err: cleanupError, serviceId: created.id, serviceType: planService.type },
-          'Failed to roll back orphaned managed service after wiring failure',
+          'Failed to roll back orphaned managed service after provisioning failure',
         );
       }
-      throw connectError;
+      throw provisionError;
     }
-
-    return connectionString;
   }
 
   private getServiceConnectionString(service: ServiceRow, envVarName: string): string {
