@@ -1,0 +1,113 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { ManagedServiceLinker } from '../../src/pipeline/managed-service-linker.js';
+import { autoInjectServiceEnv } from '../../src/pipeline/env-inject.js';
+import type { Database } from '../../src/db/index.js';
+import type { EnvManager } from '../../src/pipeline/env.js';
+
+vi.mock('../../src/pipeline/env-inject.js', () => ({
+  autoInjectServiceEnv: vi.fn().mockResolvedValue(['DATABASE_URL']),
+}));
+
+const POSTGRES_SERVICE = {
+  id: 'svc-pg',
+  name: 'app-postgres',
+  kind: 'postgres',
+  type: 'postgresql',
+  container_name: 'ol-app-postgres',
+};
+
+function createMockDb(overrides?: Record<string, unknown>) {
+  return {
+    attachServiceToProject: vi
+      .fn()
+      .mockResolvedValue({ targetProjectId: 'p1', droppedEnvVarKeys: [], droppedSecretFiles: [] }),
+    upsertServiceConnection: vi.fn().mockResolvedValue(undefined),
+    getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue({ id: 'conn-1' }),
+    updateServiceConnection: vi.fn().mockResolvedValue(undefined),
+    createProjectDependency: vi.fn().mockResolvedValue({}),
+    ...overrides,
+  } as unknown as Database;
+}
+
+const mockEnv = {} as unknown as EnvManager;
+
+describe('ManagedServiceLinker.connect', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('runs the full connect sequence and returns the resolved project + injected keys', async () => {
+    const db = createMockDb();
+    const linker = new ManagedServiceLinker(db, mockEnv);
+
+    const result = await linker.connect({
+      projectId: 'p1',
+      service: POSTGRES_SERVICE,
+      source: 'mcp',
+      credentials: { connectionString: 'postgres://host/db' },
+    });
+
+    expect(db.attachServiceToProject).toHaveBeenCalledWith('svc-pg', 'p1');
+    expect(db.upsertServiceConnection).toHaveBeenCalledWith({
+      projectId: 'p1',
+      serviceId: 'svc-pg',
+    });
+    expect(vi.mocked(autoInjectServiceEnv)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: 'p1',
+        serviceId: 'svc-pg',
+        serviceType: 'postgresql',
+        credentials: { connectionString: 'postgres://host/db' },
+      }),
+    );
+    expect(db.updateServiceConnection).toHaveBeenCalledWith('conn-1', {
+      autoInjectedEnvKeys: JSON.stringify(['DATABASE_URL']),
+    });
+    expect(db.createProjectDependency).toHaveBeenCalledWith(
+      expect.objectContaining({ target_service_id: 'svc-pg', dependency_type: 'database', source: 'auto' }),
+    );
+
+    expect(result).toEqual({
+      resolvedProjectId: 'p1',
+      autoInjectedEnvKeys: ['DATABASE_URL'],
+      droppedEnvVarKeys: [],
+      droppedSecretFiles: [],
+    });
+  });
+
+  it('treats dependency creation as best-effort (connect succeeds even if it throws)', async () => {
+    const db = createMockDb({
+      createProjectDependency: vi.fn().mockRejectedValue(new Error('dependency boom')),
+    });
+    const linker = new ManagedServiceLinker(db, mockEnv);
+
+    const result = await linker.connect({ projectId: 'p1', service: POSTGRES_SERVICE, source: 'web' });
+
+    expect(result.resolvedProjectId).toBe('p1');
+    expect(result.autoInjectedEnvKeys).toEqual(['DATABASE_URL']);
+    // The connection itself was still wired despite the dependency failure.
+    expect(db.upsertServiceConnection).toHaveBeenCalledTimes(1);
+    expect(db.updateServiceConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates dropped env/secret keys from the attach step', async () => {
+    const db = createMockDb({
+      attachServiceToProject: vi.fn().mockResolvedValue({
+        targetProjectId: 'p1',
+        droppedEnvVarKeys: ['OLD_URL'],
+        droppedSecretFiles: ['old.pem'],
+      }),
+    });
+    const linker = new ManagedServiceLinker(db, mockEnv);
+
+    const result = await linker.connect({
+      projectId: 'p1',
+      service: POSTGRES_SERVICE,
+      source: 'deploy_plan',
+    });
+
+    expect(result.droppedEnvVarKeys).toEqual(['OLD_URL']);
+    expect(result.droppedSecretFiles).toEqual(['old.pem']);
+  });
+});
