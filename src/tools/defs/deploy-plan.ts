@@ -462,9 +462,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'execute_deploy_plan',
     riskLevel: 'medium',
     description:
-      'Execute a deployment plan. A plan in "needs_approval" status lists proposed project-scoped managed services in services[] (resolution="proposed_project_service"); pass approve_all_safe_resources=true or approvals.create_resources=[...] to approve and OpenLander provisions the approved safe managed services (DB/cache), wires their connection env (e.g. DATABASE_URL), and deploys. Unapproved, compose, or not_auto_creatable services are never created — supply their env or create them first. Plans already in "ready" status execute directly.',
+      'Execute a deployment plan. A plan in "needs_approval" status lists proposed project-scoped managed services in services[] (resolution="proposed_project_service"); pass approve_all_safe_resources=true or approvals.create_resources=[...] to approve and OpenLander provisions the approved safe managed services (DB/cache), wires their connection env (e.g. DATABASE_URL), and deploys. This auto-wiring is for the deploy-plan approval flow only; standalone create_service returns suggested_env and still requires set_env_vars. Unapproved, compose, or not_auto_creatable services are never created — supply their env or create them first. Plans already in "ready" status execute directly.',
     mcpDescription:
-      'Execute a deployment plan asynchronously. Returns immediately with project_id and status. Use get_deploy_status to poll progress. A "needs_approval" plan lists proposed managed services in services[]; pass approve_all_safe_resources=true or approvals.create_resources=[...] and OpenLander provisions the approved safe managed services (DB/cache), wires their connection env, and deploys. Unapproved/compose/not_auto_creatable services are not created. "ready" plans execute directly; injects env vars and starts deployment.',
+      'Execute a deployment plan asynchronously. Returns immediately with project_id and status. Use get_deploy_status to poll progress. A "needs_approval" plan lists proposed managed services in services[]; pass approve_all_safe_resources=true or approvals.create_resources=[...] and OpenLander provisions the approved safe managed services (DB/cache), wires their connection env, and deploys. This auto-wiring is deploy-plan-only; standalone create_service returns suggested_env and still requires set_env_vars. Unapproved/compose/not_auto_creatable services are not created. "ready" plans execute directly; injects env vars and starts deployment.',
     inputSchema: executeDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -776,6 +776,7 @@ export const deployPlanToolDefs: ToolDef[] = [
             next_steps: [
               'This plan proposes project-scoped managed services (see services[] with resolution="proposed_project_service"). Confirm with the user before proceeding.',
               'Then call execute_deploy_plan with the plan_id and approve_all_safe_resources=true, or approvals.create_resources=[<identifiers>] to approve individually.',
+              'This auto-provision + env wiring path applies to deploy-plan approval; standalone create_service still returns suggested_env for set_env_vars.',
               'Note: for a NEW app, OpenLander cannot auto-provision a managed service yet — execute_deploy_plan returns needs_target_project. To deploy this app now, pass an external connection URL (e.g. DATABASE_URL) in env_vars so nothing needs provisioning; auto-provisioning is available under an existing project.',
             ],
           },

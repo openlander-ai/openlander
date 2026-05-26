@@ -42,8 +42,10 @@ delete.
 create_service(name: "my-postgres", template: "postgresql", project_name: "my-app")
 ```
 
-This creates infrastructure. It does not deploy or redeploy your app. To use the new service from an
-app, read credentials and set env vars on the deployable service.
+This creates infrastructure and returns connection guidance. It does not write
+app env vars, deploy, or redeploy your app by itself. To use the new service
+from an app, read credentials or `suggested_env`, then call `set_env_vars` on
+the deployable service.
 
 `create_service` requires `project_id` or `project_name` so the service is
 attached to the same isolated Docker network as the app that will use it.
@@ -217,3 +219,9 @@ get_service_credentials(service_name: "my-postgres")
 set_env_vars(service_id: "my-app__svc", variables: { DATABASE_URL: "..." })
 redeploy_app(service_id: "my-app__svc")
 ```
+
+This standalone `create_service` flow is separate from deploy-plan approval.
+When `execute_deploy_plan` approves a proposed project-scoped managed service on
+an existing project, that plan execution may provision the service, write its
+connection env, and deploy in one flow. Standalone `create_service` remains
+explicit: create infrastructure, then set env vars, then redeploy.
