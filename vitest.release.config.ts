@@ -70,6 +70,7 @@ export default defineConfig({
       'test/pipeline/deploy-lock-session-propagation.test.ts',
       'test/pipeline/mutation-policy.test.ts',
       'test/pipeline/managed-service-create-regression.test.ts',
+      'test/pipeline/managed-service-linker.test.ts',
       'test/pipeline/port-scan-fallback.test.ts',
       'test/pipeline/readiness-gate.test.ts',
       'test/blue-green-port-conflict.test.ts',
