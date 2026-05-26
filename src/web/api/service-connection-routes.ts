@@ -82,7 +82,7 @@ export function createServiceConnectionRoutes(ctx: AppContext): Hono {
         source_service_id: projectIdToDeployableServiceId(project.id),
         target_service_id: serviceId,
         dependency_type:
-          serviceKind === 'postgres' || serviceKind === 'mysql'
+          serviceKind === 'postgres' || serviceKind === 'postgresql' || serviceKind === 'mysql'
             ? 'database'
             : serviceKind === 'redis'
               ? 'cache'

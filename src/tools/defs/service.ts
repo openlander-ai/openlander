@@ -1,8 +1,9 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { getAllIps } from '../../pipeline/traefik.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
+import { autoInjectServiceEnv } from '../../pipeline/env-inject.js';
 import { DOCKER_LABELS, SHARED_NETWORK_NAME } from '../../config/index.js';
-import { ORPHAN_MANAGED_GROUP_ID } from '../../db/service-ids.js';
+import { ORPHAN_MANAGED_GROUP_ID, projectIdToDeployableServiceId } from '../../db/service-ids.js';
 import {
   isDockerNotFoundError,
   ManagedServicePersistenceCleanedError,
@@ -110,6 +111,34 @@ function parseServiceCredentials(credentials: string | null): Record<string, unk
     log.warn({ err: error }, 'Failed to parse service credentials');
     return null;
   }
+}
+
+function parseStringCredentials(credentials: string | null): Record<string, string> | undefined {
+  const parsed = parseServiceCredentials(credentials);
+  if (!parsed) {
+    return undefined;
+  }
+
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value === 'string') {
+      normalized[key] = value;
+    } else if (typeof value === 'number' || typeof value === 'boolean') {
+      normalized[key] = String(value);
+    }
+  }
+  return normalized;
+}
+
+function serviceDependencyType(serviceKind: string): 'database' | 'cache' | 'custom' {
+  const normalized = serviceKind === 'postgresql' ? 'postgres' : serviceKind;
+  if (normalized === 'postgres' || normalized === 'mysql') {
+    return 'database';
+  }
+  if (normalized === 'redis') {
+    return 'cache';
+  }
+  return 'custom';
 }
 
 async function getServiceByName(
@@ -319,6 +348,7 @@ export const serviceToolDefs: ToolDef[] = [
       let resolvedProjectId: string | undefined;
       let attachCleanupFailed: string | undefined;
       let droppedKeys: string[] | undefined;
+      let autoInjectedEnvKeys: string[] = [];
       try {
         const moved = await appCtx.db.attachServiceToProject(result.id, target.projectId);
         resolvedProjectId = moved.targetProjectId;
@@ -326,6 +356,40 @@ export const serviceToolDefs: ToolDef[] = [
           projectId: resolvedProjectId,
           serviceId: result.id,
         });
+        const connection = await appCtx.db.getServiceConnectionByProjectAndService(
+          resolvedProjectId,
+          result.id,
+        );
+        // eslint-disable-next-line @typescript-eslint/no-deprecated
+        const serviceKind = result.type ?? kindToLegacyType(result.kind);
+        autoInjectedEnvKeys = await autoInjectServiceEnv({
+          db: appCtx.db,
+          env: appCtx.env,
+          projectId: resolvedProjectId,
+          serviceId: result.id,
+          serviceName: result.name,
+          serviceType: serviceKind,
+          containerName: result.container_name ?? '',
+          credentials: parseStringCredentials(result.credentials),
+        });
+        if (connection) {
+          await appCtx.db.updateServiceConnection(connection.id, {
+            autoInjectedEnvKeys: JSON.stringify(autoInjectedEnvKeys),
+          });
+        }
+        try {
+          await appCtx.db.createProjectDependency({
+            source_service_id: projectIdToDeployableServiceId(resolvedProjectId),
+            target_service_id: result.id,
+            dependency_type: serviceDependencyType(serviceKind),
+            source: 'auto',
+          });
+        } catch (err) {
+          log.debug(
+            { err, projectId: resolvedProjectId, serviceId: result.id },
+            'Auto dependency sync failed',
+          );
+        }
         if (moved.droppedEnvVarKeys.length > 0 || moved.droppedSecretFiles.length > 0) {
           droppedKeys = [...moved.droppedEnvVarKeys, ...moved.droppedSecretFiles];
         }
@@ -388,12 +452,19 @@ export const serviceToolDefs: ToolDef[] = [
             }
           : {}),
         suggested_env: suggestedEnv,
+        auto_injected_env_keys: autoInjectedEnvKeys,
         externalAccess: getServiceExternalAccess(legacyPort ?? null),
         _agent_guidance: {
-          next_steps: [
-            'Call set_env_vars on the deployable service with suggested_env to save the binding.',
-            'Then call redeploy_app for the target service/project to apply it.',
-          ],
+          next_steps:
+            autoInjectedEnvKeys.length > 0
+              ? [
+                  'Connection env was saved automatically on the target deployable service.',
+                  'Call redeploy_app for the target service/project to apply it.',
+                ]
+              : [
+                  'Call set_env_vars on the deployable service with suggested_env to save the binding.',
+                  'Then call redeploy_app for the target service/project to apply it.',
+                ],
         },
       };
     },

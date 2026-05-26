@@ -100,6 +100,17 @@ function createMockContext(
         droppedSecretFiles: [],
       })),
       upsertServiceConnection: vi.fn(async () => undefined),
+      getServiceConnectionByProjectAndService: vi.fn(async () => ({ id: 'conn-1' })),
+      updateServiceConnection: vi.fn(async () => undefined),
+      listServiceConnectionsByProject: vi.fn(async () => [{ service_id_provider: 'svc-created' }]),
+      getDeployableForProject: vi.fn(async (projectId: string) => ({
+        id: `${projectId}__svc`,
+      })),
+      createProjectDependency: vi.fn(async () => undefined),
+    },
+    env: {
+      getAllForService: vi.fn(async () => ({})),
+      setBulkForService: vi.fn(async () => true),
     },
     docker: {
       ensureProjectNetwork: vi.fn(async (projectName: string) => `ol-${projectName}`),
@@ -234,14 +245,15 @@ describe('MCP service tools (Task 8)', () => {
       suggested_env: [
         { key: 'DATABASE_URL', value: 'postgresql://openlander:pw@ol-svc-shared-pg:5432/app' },
       ],
+      auto_injected_env_keys: ['DATABASE_URL'],
       externalAccess: [
         { host: '10.0.0.10', port: 5432, type: 'lan' },
         { host: '100.100.100.10', port: 5432, type: 'vpn' },
       ],
       _agent_guidance: {
         next_steps: [
-          'Call set_env_vars on the deployable service with suggested_env to save the binding.',
-          'Then call redeploy_app for the target service/project to apply it.',
+          'Connection env was saved automatically on the target deployable service.',
+          'Call redeploy_app for the target service/project to apply it.',
         ],
       },
     });
@@ -299,6 +311,18 @@ describe('MCP service tools (Task 8)', () => {
       projectId: 'proj-1',
       serviceId: 'svc-created',
     });
+    expect(ctx.env.setBulkForService).toHaveBeenCalledWith('proj-1', 'proj-1__svc', {
+      DATABASE_URL: 'postgresql://openlander:pw@ol-svc-myapp-pg:5432/app',
+    });
+    expect(ctx.db.updateServiceConnection).toHaveBeenCalledWith('conn-1', {
+      autoInjectedEnvKeys: JSON.stringify(['DATABASE_URL']),
+    });
+    expect(ctx.db.createProjectDependency).toHaveBeenCalledWith({
+      source_service_id: 'proj-1__svc',
+      target_service_id: 'svc-created',
+      dependency_type: 'database',
+      source: 'auto',
+    });
     expect(result).toMatchObject({
       status: 'created',
       scope: 'project',
@@ -307,6 +331,7 @@ describe('MCP service tools (Task 8)', () => {
       suggested_env: [
         { key: 'DATABASE_URL', value: 'postgresql://openlander:pw@ol-svc-myapp-pg:5432/app' },
       ],
+      auto_injected_env_keys: ['DATABASE_URL'],
       _agent_guidance: {
         next_steps: expect.arrayContaining([expect.stringContaining('redeploy_app')]),
       },
@@ -387,14 +412,15 @@ describe('MCP service tools (Task 8)', () => {
         },
       },
       suggested_env: [],
+      auto_injected_env_keys: ['DATABASE_URL'],
       externalAccess: [
         { host: '10.0.0.10', port: 3306, type: 'lan' },
         { host: '100.100.100.10', port: 3306, type: 'vpn' },
       ],
       _agent_guidance: {
         next_steps: [
-          'Call set_env_vars on the deployable service with suggested_env to save the binding.',
-          'Then call redeploy_app for the target service/project to apply it.',
+          'Connection env was saved automatically on the target deployable service.',
+          'Call redeploy_app for the target service/project to apply it.',
         ],
       },
     });
@@ -444,14 +470,15 @@ describe('MCP service tools (Task 8)', () => {
         },
       },
       suggested_env: [],
+      auto_injected_env_keys: ['REDIS_URL'],
       externalAccess: [
         { host: '10.0.0.10', port: 6379, type: 'lan' },
         { host: '100.100.100.10', port: 6379, type: 'vpn' },
       ],
       _agent_guidance: {
         next_steps: [
-          'Call set_env_vars on the deployable service with suggested_env to save the binding.',
-          'Then call redeploy_app for the target service/project to apply it.',
+          'Connection env was saved automatically on the target deployable service.',
+          'Call redeploy_app for the target service/project to apply it.',
         ],
       },
     });
