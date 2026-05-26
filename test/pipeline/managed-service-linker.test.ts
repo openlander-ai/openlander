@@ -76,6 +76,22 @@ describe('ManagedServiceLinker.connect', () => {
     });
   });
 
+  it('preserves saved auto_injected_env_keys on an idempotent re-connect (no clobber with [])', async () => {
+    vi.mocked(autoInjectServiceEnv).mockResolvedValueOnce([]);
+    const db = createMockDb();
+    const linker = new ManagedServiceLinker(db, mockEnv);
+
+    const result = await linker.connect({
+      projectId: 'p1',
+      service: POSTGRES_SERVICE,
+      source: 'web',
+    });
+
+    expect(result.autoInjectedEnvKeys).toEqual([]);
+    // Nothing new was injected, so the previously-saved keys must NOT be overwritten.
+    expect(db.updateServiceConnection).not.toHaveBeenCalled();
+  });
+
   it('treats dependency creation as best-effort (connect succeeds even if it throws)', async () => {
     const db = createMockDb({
       createProjectDependency: vi.fn().mockRejectedValue(new Error('dependency boom')),

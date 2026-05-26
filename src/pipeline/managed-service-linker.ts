@@ -68,7 +68,8 @@ export class ManagedServiceLinker {
   /**
    * Attach the service to the project and wire it up: connection row, env
    * auto-injection, injected-key metadata, and a best-effort dependency edge.
-   * Idempotent — re-running is a no-op (the connection upsert is conflict-safe).
+   * Idempotent — re-running is a no-op: the connection upsert is conflict-safe
+   * and the injected-key metadata is preserved when nothing new is injected.
    */
   async connect(params: ManagedServiceConnectParams): Promise<ManagedServiceConnectResult> {
     const { projectId, service, source, credentials } = params;
@@ -94,7 +95,11 @@ export class ManagedServiceLinker {
       credentials,
     });
 
-    if (connection) {
+    // Only (over)write the injected-key metadata when this call actually injected
+    // something. On an idempotent re-connect autoInjectServiceEnv returns [] (the
+    // env is already present); clobbering the saved keys with [] would strip the
+    // record that disconnect cleanup relies on to remove the injected vars.
+    if (connection && autoInjectedEnvKeys.length > 0) {
       await this.db.updateServiceConnection(connection.id, {
         autoInjectedEnvKeys: JSON.stringify(autoInjectedEnvKeys),
       });
