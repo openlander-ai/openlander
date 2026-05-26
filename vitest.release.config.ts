@@ -45,6 +45,7 @@ export default defineConfig({
       'test/mcp/composite-tool-registry.test.ts',
       'test/mcp/instance-identity.test.ts',
       'test/mcp/managed-service-rename.test.ts',
+      'test/mcp/mcp-restricted-actions.test.ts',
       'test/mcp/mode-switching.test.ts',
       'test/mcp/response-contract.test.ts',
       'test/mcp/session-heartbeat.test.ts',

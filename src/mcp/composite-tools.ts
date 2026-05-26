@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolContext, ToolDef } from '../tools/defs/types.js';
 import { maybeHandleMcpSafety } from './destructive-safety.js';
+import { HUMAN_UI_ONLY_ALIASES, HUMAN_UI_ONLY_ALIAS_SET } from './mcp-restricted-actions.js';
 
 /**
  * MCP Composite Tool Mapping
@@ -236,30 +237,12 @@ export const PLATFORM_REGISTRY = {
  * keeps a "삭제해줘" prompt from spiraling into adjacent destructive tools
  * like `remove_service` or `cleanup_docker`.
  */
-export const HUMAN_UI_ONLY_ACTIONS = [
-  'archive_app',
-  'archive_project',
-  'archive_service',
-  'delete_app',
-  'delete_project',
-  'delete_service',
-  'destroy_app',
-  'destroy_project',
-  'purge_app',
-  'purge_project',
-  'remove_app',
-  'remove_project',
-  'unarchive_app',
-  'unarchive_project',
-  'unarchive_service',
-] as const;
+export const HUMAN_UI_ONLY_ACTIONS = HUMAN_UI_ONLY_ALIASES;
 
 export type HumanUiOnlyAction = (typeof HUMAN_UI_ONLY_ACTIONS)[number];
 
-const HUMAN_UI_ONLY_SET: ReadonlySet<string> = new Set(HUMAN_UI_ONLY_ACTIONS);
-
 export function isHumanUiOnlyAction(action: string): boolean {
-  return HUMAN_UI_ONLY_SET.has(action);
+  return HUMAN_UI_ONLY_ALIAS_SET.has(action);
 }
 
 export interface CompositeTool {
