@@ -148,15 +148,22 @@ describe('createServiceConnectionRoutes', () => {
       }),
     });
     const deployable = makeServiceRow({ id: 'group-1__svc', project_id: project.id, kind: 'git' });
+    const connectionRow = { id: 'conn-1', created_at: '2026-01-02T00:00:00.000Z' };
     const db = {
       getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
       getProjectByName: vi.fn(async () => undefined),
       getService: vi.fn(async (id: string) => (id === managed.id ? managed : undefined)),
-      getServiceConnectionByProjectAndService: vi.fn(async () => undefined),
-      createServiceConnection: vi.fn(async () => ({
-        id: 'conn-1',
-        created_at: '2026-01-02T00:00:00.000Z',
+      getServiceConnectionByProjectAndService: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValue(connectionRow),
+      attachServiceToProject: vi.fn(async () => ({
+        sourceProjectId: 'group-1',
+        targetProjectId: 'group-1',
+        droppedEnvVarKeys: [],
+        droppedSecretFiles: [],
       })),
+      upsertServiceConnection: vi.fn(async () => undefined),
       updateServiceConnection: vi.fn(async () => undefined),
       listServiceConnectionsByProject: vi.fn(async () => [
         { id: 'conn-1', service_id_provider: managed.id },
