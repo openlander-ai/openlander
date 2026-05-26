@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
-import { autoInjectServiceEnv, cleanupAutoInjectedEnv } from '../../pipeline/env-inject.js';
+import { cleanupAutoInjectedEnv } from '../../pipeline/env-inject.js';
 import { kindToLegacyType } from '../../db/repos/service.repo.js';
-import { projectIdToDeployableServiceId } from '../../db/service-ids.js';
+import { ManagedServiceLinker } from '../../pipeline/managed-service-linker.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 
@@ -54,48 +54,24 @@ export function createServiceConnectionRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'ALREADY_CONNECTED', message: 'Service already connected' }, 409);
     }
 
-    const connection = await ctx.db.createServiceConnection({
+    const linker = new ManagedServiceLinker(ctx.db, ctx.env);
+    const linked = await linker.connect({
       projectId: project.id,
-      serviceId,
+      service,
+      source: 'web',
+      credentials: parseServiceCredentials(service.credentials),
     });
+    const connection = await ctx.db.getServiceConnectionByProjectAndService(
+      linked.resolvedProjectId,
+      serviceId,
+    );
 
-    const credentials = parseServiceCredentials(service.credentials);
     // Wire contract: emit legacy vocabulary (postgresql/mongodb) for back-compat.
     // eslint-disable-next-line @typescript-eslint/no-deprecated
     const serviceKind = service.type ?? kindToLegacyType(service.kind);
-    const injectedKeys = await autoInjectServiceEnv({
-      db: ctx.db,
-      env: ctx.env,
-      projectId: project.id,
-      serviceId: service.id,
-      serviceName: service.name,
-      serviceType: serviceKind,
-      containerName: service.container_name ?? '',
-      credentials,
-    });
-    await ctx.db.updateServiceConnection(connection.id, {
-      autoInjectedEnvKeys: JSON.stringify(injectedKeys),
-    });
-
-    try {
-      await ctx.db.createProjectDependency({
-        source_service_id: projectIdToDeployableServiceId(project.id),
-        target_service_id: serviceId,
-        dependency_type:
-          serviceKind === 'postgres' || serviceKind === 'postgresql' || serviceKind === 'mysql'
-            ? 'database'
-            : serviceKind === 'redis'
-              ? 'cache'
-              : 'custom',
-        source: 'auto',
-      });
-    } catch (err) {
-      log.debug({ err, projectId: project.id, serviceId }, 'Auto dependency sync failed');
-    }
-
     return c.json(
       {
-        id: connection.id,
+        id: connection?.id,
         service: {
           id: service.id,
           name: service.name,
@@ -107,8 +83,8 @@ export function createServiceConnectionRoutes(ctx: AppContext): Hono {
           port: service.assigned_port ?? service.port,
           containerName: service.container_name,
         },
-        createdAt: connection.created_at,
-        autoInjectedEnvKeys: injectedKeys,
+        createdAt: connection?.created_at,
+        autoInjectedEnvKeys: linked.autoInjectedEnvKeys,
       },
       201,
     );

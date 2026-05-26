@@ -77,15 +77,23 @@ describe('createServiceConnectionRoutes', () => {
     const project = makeProjectRow();
     const managed = makeServiceRow({ credentials: JSON.stringify({ username: 'postgres' }) });
     const deployable = makeServiceRow({ id: 'group-1__svc', project_id: project.id, kind: 'git' });
+    const connectionRow = { id: 'conn-1', created_at: '2026-01-02T00:00:00.000Z' };
     const db = {
       getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
       getProjectByName: vi.fn(async () => undefined),
       getService: vi.fn(async (id: string) => (id === managed.id ? managed : undefined)),
-      getServiceConnectionByProjectAndService: vi.fn(async () => undefined),
-      createServiceConnection: vi.fn(async () => ({
-        id: 'conn-1',
-        created_at: '2026-01-02T00:00:00.000Z',
+      // Pre-check sees no connection; after the linker upserts, lookups return the row.
+      getServiceConnectionByProjectAndService: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValue(connectionRow),
+      attachServiceToProject: vi.fn(async () => ({
+        sourceProjectId: 'group-1',
+        targetProjectId: 'group-1',
+        droppedEnvVarKeys: [],
+        droppedSecretFiles: [],
       })),
+      upsertServiceConnection: vi.fn(async () => undefined),
       updateServiceConnection: vi.fn(async () => undefined),
       listServiceConnectionsByProject: vi.fn(async () => [
         { id: 'conn-1', service_id_provider: managed.id },
@@ -102,7 +110,7 @@ describe('createServiceConnectionRoutes', () => {
     const res = await app.request('/api/projects/group-1/services/svc-pg', { method: 'POST' });
 
     expect(res.status).toBe(201);
-    expect(db.createServiceConnection).toHaveBeenCalledWith({
+    expect(db.upsertServiceConnection).toHaveBeenCalledWith({
       projectId: 'group-1',
       serviceId: 'svc-pg',
     });
