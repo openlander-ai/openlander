@@ -115,7 +115,7 @@ describe('createServiceConnectionRoutes', () => {
     expect(db.createProjectDependency).toHaveBeenCalledWith({
       source_service_id: 'group-1__svc',
       target_service_id: 'svc-pg',
-      dependency_type: 'custom',
+      dependency_type: 'database',
       source: 'auto',
     });
     await expect(res.json()).resolves.toMatchObject({

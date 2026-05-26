@@ -76,6 +76,16 @@ function toServiceNameSuffix(serviceName: string): string {
     .replace(/_+/g, '_');
 }
 
+function isPlaceholderEnvValue(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.length === 0 ||
+    /^(changeme|change_me|change-me|replace_me|replace-me|your[_-]?.*here|xxx+|todo|fixme|placeholder)$/.test(
+      normalized,
+    )
+  );
+}
+
 export async function autoInjectServiceEnv(params: {
   db: Database;
   env: EnvManager;
@@ -112,13 +122,18 @@ export async function autoInjectServiceEnv(params: {
   const envKey = hasSameTypeConnection
     ? `${mapping.varName}_${toServiceNameSuffix(params.serviceName)}`
     : mapping.varName;
-  const envValue = mapping.template(params.serviceName);
+  const credentialValue = params.credentials?.['connectionString'];
+  const envValue =
+    typeof credentialValue === 'string' && credentialValue.trim().length > 0
+      ? credentialValue.trim()
+      : mapping.template(params.serviceName);
 
   const deployable = await params.db.getDeployableForProject(params.projectId);
   const allVars = deployable
     ? await params.env.getAllForService(params.projectId, deployable.id)
     : await params.env.getAll(params.projectId);
-  if (Object.prototype.hasOwnProperty.call(allVars, envKey)) {
+  const existingValue = allVars[envKey];
+  if (typeof existingValue === 'string' && !isPlaceholderEnvValue(existingValue)) {
     return [];
   }
 
