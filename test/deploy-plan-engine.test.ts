@@ -35,6 +35,7 @@ describe('PlanEngine.updatePlan', () => {
     mockEnv = {
       getAll: vi.fn().mockReturnValue({}),
       getGlobalSecrets: vi.fn().mockReturnValue({}),
+      set: vi.fn().mockResolvedValue(undefined),
     };
 
     mockServiceManager = {
@@ -485,6 +486,7 @@ describe('PlanEngine.executePlan', () => {
     mockEnv = {
       getAll: vi.fn().mockReturnValue({}),
       getGlobalSecrets: vi.fn().mockReturnValue({}),
+      set: vi.fn().mockResolvedValue(undefined),
     };
 
     mockServiceManager = {
@@ -1269,10 +1271,19 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
       getProjectByName: vi.fn().mockReturnValue(null),
       getService: vi.fn().mockReturnValue(null),
       getLastDeployLog: vi.fn().mockReturnValue(null),
-      attachServiceToProject: vi.fn().mockResolvedValue(undefined),
+      attachServiceToProject: vi.fn().mockResolvedValue({
+        sourceProjectId: 'p1',
+        targetProjectId: 'p1',
+        droppedEnvVarKeys: [],
+        droppedSecretFiles: [],
+      }),
       // Mimics service-connection.repo onConflictDoNothing: a repeat upsert is a
       // no-op that never throws a unique-violation.
       upsertServiceConnection: vi.fn().mockResolvedValue(undefined),
+      getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue(undefined),
+      listServiceConnectionsByProject: vi.fn().mockResolvedValue([]),
+      getDeployableForProject: vi.fn().mockResolvedValue(null),
+      createProjectDependency: vi.fn().mockResolvedValue(undefined),
       acquireDeployLock: vi.fn().mockResolvedValue(true),
       getDeployLockInfo: vi.fn().mockResolvedValue(null),
       releaseDeployLock: vi.fn().mockResolvedValue(undefined),
@@ -1288,10 +1299,16 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     mockEnv = {
       getAll: vi.fn().mockReturnValue({}),
       getGlobalSecrets: vi.fn().mockReturnValue({}),
+      set: vi.fn().mockResolvedValue(undefined),
     };
 
     mockServiceManager = {
-      create: vi.fn().mockResolvedValue({ id: 'svc-pg-1', name: 'test-app-postgresql' }),
+      create: vi.fn().mockResolvedValue({
+        id: 'svc-pg-1',
+        name: 'test-app-postgresql',
+        kind: 'postgres',
+        container_name: 'ol-svc-test-app-postgresql',
+      }),
       getSuggestedEnv: vi
         .fn()
         .mockResolvedValue([{ key: 'DATABASE_URL', value: 'postgres://provisioned/db' }]),

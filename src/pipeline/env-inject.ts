@@ -32,8 +32,10 @@ export const SERVICE_ENV_MAP: Record<
   mysql: { varName: 'DATABASE_URL', template: (s) => `mysql://root:root@${s}:3306/app` },
   mariadb: { varName: 'DATABASE_URL', template: (s) => `mysql://root:root@${s}:3306/app` },
   redis: { varName: 'REDIS_URL', template: (s) => `redis://${s}:6379` },
-  mongo: { varName: 'MONGO_URL', template: (s) => `mongodb://${s}:27017/app` },
-  mongodb: { varName: 'MONGO_URL', template: (s) => `mongodb://${s}:27017/app` },
+  // Canonical key is MONGODB_URI — matches deploy-plan SERVICE_ENV_VARS and the
+  // infra-analyzer's suggested key; MONGO_URL stays a recognized input alias only.
+  mongo: { varName: 'MONGODB_URI', template: (s) => `mongodb://${s}:27017/app` },
+  mongodb: { varName: 'MONGODB_URI', template: (s) => `mongodb://${s}:27017/app` },
   rabbitmq: { varName: 'AMQP_URL', template: (s) => `amqp://${s}:5672` },
 };
 
