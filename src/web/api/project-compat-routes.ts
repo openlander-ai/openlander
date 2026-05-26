@@ -334,7 +334,7 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
                 const displayName = deployableServiceIdToProjectId(svc.name);
                 const url = getDeployableServiceUrl(svc);
                 const image = svc.image_url ?? svc.image_tag ?? `${displayName}:latest`;
-                const kind = resolveKind(`${displayName} ${image}`);
+                const kind = 'Application' as const;
                 const runtime = await getTopologyNodeRuntime(ctx, {
                   id: svc.id,
                   container_id: svc.container_id,

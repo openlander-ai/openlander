@@ -240,6 +240,7 @@ describe('createProjectCompatRoutes', () => {
         getProjectByName: vi.fn(async () => undefined),
         getDeployablesByGroup: vi.fn(async () => [appService, postgresService, redisService]),
         getEnvironmentsByProject: vi.fn(async () => []),
+        listServiceConnectionsByProject: vi.fn(async () => []),
         findDependenciesByProject: vi.fn(async () => []),
         getLatestServiceMetric: vi.fn(async () => null),
       },
@@ -271,6 +272,44 @@ describe('createProjectCompatRoutes', () => {
           id: 'stack__redis__svc',
           name: 'demo-stack/redis',
           url: null,
+        },
+      ],
+    });
+  });
+
+  it('does not classify deployable app nodes as databases from the project name', async () => {
+    const project = { id: 'pgredis-fix2', name: 'pgredis-fix2', container_id: null, status: null };
+    const appService = makeServiceRow({
+      id: 'pgredis-fix2__svc',
+      project_id: project.id,
+      name: 'pgredis-fix2__svc',
+      kind: 'git',
+      image_url: 'nginx:alpine',
+    });
+    const app = createApp({
+      docker: {
+        inspectContainer: vi.fn(async () => ({ State: { Health: { Status: 'healthy' } } })),
+      } as unknown as AppContext['docker'],
+      db: {
+        getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup: vi.fn(async () => [appService]),
+        getEnvironmentsByProject: vi.fn(async () => []),
+        listServiceConnectionsByProject: vi.fn(async () => []),
+        findDependenciesByProject: vi.fn(async () => []),
+        getLatestServiceMetric: vi.fn(async () => null),
+      },
+    });
+
+    const res = await app.request('/api/projects/pgredis-fix2/topology');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      services: [
+        {
+          id: 'pgredis-fix2__svc',
+          name: 'pgredis-fix2',
+          kind: 'Application',
         },
       ],
     });

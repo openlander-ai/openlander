@@ -287,4 +287,93 @@ describe('createServiceAuxRoutes', () => {
       ],
     });
   });
+
+  it('returns connected managed services and dependencies in service topology', async () => {
+    const project = makeProjectRow({ id: 'pgredis-fix2', name: 'pgredis-fix2' });
+    const appService = makeServiceRow({
+      id: 'pgredis-fix2__svc',
+      project_id: project.id,
+      name: 'pgredis-fix2__svc',
+      kind: 'git',
+      image_url: 'nginx:alpine',
+    });
+    const postgres = makeServiceRow({
+      id: 'svc-pg',
+      project_id: project.id,
+      name: 'pgredis-fix2-postgres',
+      kind: 'postgres',
+      assigned_port: 5432,
+      container_id: null,
+      image_url: 'postgres:17-alpine',
+      source: 'image',
+    });
+    const redis = makeServiceRow({
+      id: 'svc-redis',
+      project_id: project.id,
+      name: 'pgredis-fix2-redis',
+      kind: 'redis',
+      assigned_port: 6379,
+      container_id: null,
+      image_url: 'redis:8-alpine',
+      source: 'image',
+    });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup: vi.fn(async () => [appService]),
+        listServiceConnectionsByProject: vi.fn(async () => [
+          {
+            service_id_consumer: 'pgredis-fix2__svc',
+            service_id_provider: 'svc-pg',
+          },
+          {
+            service_id_consumer: 'pgredis-fix2__svc',
+            service_id_provider: 'svc-redis',
+          },
+        ]),
+        listServices: vi.fn(async () => [appService, postgres, redis]),
+        findDependenciesByProject: vi.fn(async () => [
+          {
+            source_service_id: 'pgredis-fix2__svc',
+            target_service_id: 'svc-pg',
+          },
+          {
+            source_service_id: 'pgredis-fix2__svc',
+            target_service_id: 'svc-redis',
+          },
+        ]),
+        getLatestServiceMetric: vi.fn(async () => null),
+      },
+      docker: {
+        inspectContainer: vi.fn(async () => ({ State: { Health: { Status: 'healthy' } } })),
+      },
+    });
+
+    const res = await app.request('/api/projects/pgredis-fix2/services/pgredis-fix2__svc/topology');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      services: [
+        {
+          id: 'pgredis-fix2__svc',
+          name: 'pgredis-fix2',
+          kind: 'Application',
+          dependsOn: ['svc-pg', 'svc-redis'],
+        },
+        {
+          id: 'svc-pg',
+          name: 'pgredis-fix2-postgres',
+          kind: 'Database',
+          source: 'managed',
+        },
+        {
+          id: 'svc-redis',
+          name: 'pgredis-fix2-redis',
+          kind: 'Database',
+          source: 'managed',
+        },
+      ],
+    });
+  });
 });

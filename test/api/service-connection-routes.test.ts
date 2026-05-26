@@ -132,6 +132,49 @@ describe('createServiceConnectionRoutes', () => {
     });
   });
 
+  it('replaces placeholder connection env values during auto injection', async () => {
+    const project = makeProjectRow();
+    const managed = makeServiceRow({
+      credentials: JSON.stringify({
+        connectionString: 'postgresql://openlander:pw@ol-svc-postgres-main:5432/app',
+      }),
+    });
+    const deployable = makeServiceRow({ id: 'group-1__svc', project_id: project.id, kind: 'git' });
+    const db = {
+      getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
+      getProjectByName: vi.fn(async () => undefined),
+      getService: vi.fn(async (id: string) => (id === managed.id ? managed : undefined)),
+      getServiceConnectionByProjectAndService: vi.fn(async () => undefined),
+      createServiceConnection: vi.fn(async () => ({
+        id: 'conn-1',
+        created_at: '2026-01-02T00:00:00.000Z',
+      })),
+      updateServiceConnection: vi.fn(async () => undefined),
+      listServiceConnectionsByProject: vi.fn(async () => [
+        { id: 'conn-1', service_id_provider: managed.id },
+      ]),
+      getDeployableForProject: vi.fn(async () => deployable),
+      createProjectDependency: vi.fn(async () => undefined),
+    };
+    const env = {
+      getAllForService: vi.fn(async () => ({
+        DATABASE_URL: 'postgresql://placeholder:placeholder@placeholder:5432/placeholder',
+      })),
+      setBulkForService: vi.fn(async () => true),
+    };
+    const app = createApp({ db, env } as Partial<AppContext>);
+
+    const res = await app.request('/api/projects/group-1/services/svc-pg', { method: 'POST' });
+
+    expect(res.status).toBe(201);
+    expect(env.setBulkForService).toHaveBeenCalledWith('group-1', 'group-1__svc', {
+      DATABASE_URL: 'postgresql://openlander:pw@ol-svc-postgres-main:5432/app',
+    });
+    expect(db.updateServiceConnection).toHaveBeenCalledWith('conn-1', {
+      autoInjectedEnvKeys: JSON.stringify(['DATABASE_URL']),
+    });
+  });
+
   it('rejects duplicate service connections', async () => {
     const project = makeProjectRow();
     const managed = makeServiceRow();
