@@ -183,7 +183,11 @@ Authorization: Bearer YOUR_TOKEN
 ```
 
 Get the token from the **Your Agent** page (`/mcp-server`) in the dashboard, or from the
-MCP step of the setup wizard. Both mint an org-scoped token, shown once. Project-scoped
+MCP step of the setup wizard. Both mint an org-scoped token, **shown only once**. If you
+didn't copy it (or need a fresh one), use **Regenerate** on the Your Agent page — there is
+no "reveal again". Regenerating **revokes the previous token**, so update your agent's
+config with the new value. (Programmatic: `POST /api/mcp/token/regenerate` reliably returns
+the plaintext; `POST /api/mcp/token` may omit it once a token already exists.) Project-scoped
 tokens exist via the API (`POST /api/tokens` with `scope_kind: "project"`) but are not
 surfaced in the 0.1 onboarding UI.
 
