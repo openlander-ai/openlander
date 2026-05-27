@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.1.6-rc.1] - 2026-05-27
+## [0.1.6] - 2026-05-27
 
 ### Added
 
@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added release-gate documentation for fresh-agent MCP onboarding, including
   the Your Agent token location, origin-relative `/mcp` endpoints, Claude Code
   setup, and the two demo paths used by launch dry-runs.
+- Added MCP prompt guidance for recovering failed deploys and synchronizing the
+  deployment-guide flow with approval handling.
 
 ### Changed
 
@@ -27,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ManagedServiceLinker` across MCP, REST, and deploy-plan provisioning so
   service connections, project dependencies, and topology read models stay in
   sync.
+- Clarified the MCP token lifecycle in public docs: org tokens are shown once,
+  regeneration revokes the previous token, and agent configs must be updated
+  with the new value.
+- Clarified human-only cleanup actions in MCP docs/tool guidance so agents do
+  not attempt destructive cleanup flows that require the web UI.
 - Unified MCP restricted-action policy into one source and added registry tests
   to keep destructive actions aligned with the safety matrix.
 - Moved live approval-list reads to the action-run ledger and documented the
