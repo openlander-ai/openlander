@@ -38,9 +38,13 @@ already exists. Project-scoped tokens exist via the API (`POST /api/tokens` with
 `scope_kind: "project"`) but are not part of the 0.1 onboarding UI. The MCP endpoint is your
 dashboard origin + `/mcp` (`:10114` only when reaching OpenLander without a reverse proxy).
 
-Destructive MCP operations are intentionally gated. Service deletion is blocked at the MCP boundary
-and must be completed in the web UI with typed confirmation. Supported bulk cleanup actions such as
-`bulk_delete_env_vars confirm=true` enter the human approval hold queue before execution.
+Destructive MCP operations are intentionally gated. Some real ToolDefs appear in the action catalog
+but are blocked at the MCP boundary because they delete managed infrastructure or perform host-wide
+cleanup: `remove_service`, `remove_volume`, `delete_bucket`, `platform_force_remove`,
+`recover_platform`, `platform_cleanup_orphans`, and `cleanup_docker`. MCP calls to these return
+`OPERATION_REQUIRES_HUMAN_UI`; use the web UI or host-maintenance path instead. Supported bulk
+cleanup actions such as `bulk_delete_env_vars confirm=true` enter the human approval hold queue
+before execution.
 
 **Project/app archive, delete, and purge are human UI-only.** Composites do not expose
 `archive_service`, `archive_project`, `delete_project`, `delete_app`, `remove_app`, or
@@ -495,6 +499,10 @@ composite surface — calling them over MCP returns `UNKNOWN_ACTION`.
 | `service_name` | string | Yes      | MinIO service name |
 | `bucket_name`  | string | Yes      | Bucket name        |
 
+`create_bucket` and `list_buckets` are MCP-executable. `delete_bucket` is human-only in OpenLander
+0.1 and returns `OPERATION_REQUIRES_HUMAN_UI` from MCP; delete buckets from the web UI after
+confirming the data-loss impact.
+
 ### Backup Operations
 
 `backup_service` / `restore_service` / `list_service_backups`
@@ -706,6 +714,10 @@ apply config/repo changes and call `redeploy_app`.
 | `project_name` | string | Yes      | Project name |
 | `volume_name`  | string | Yes      | Volume name  |
 
+`remove_volume` is human-only in OpenLander 0.1 and returns
+`OPERATION_REQUIRES_HUMAN_UI` from MCP. Remove persistent volumes from the web UI after confirming
+the data-loss impact.
+
 ### `get_disk_usage`
 
 Docker disk usage breakdown. No parameters. If Docker's `df` endpoint stalls under heavy host
@@ -713,6 +725,10 @@ load, the tool returns `unavailable: true` with `DOCKER_DISK_USAGE_UNAVAILABLE` 
 timing out the MCP request.
 
 ### `cleanup_docker`
+
+`cleanup_docker` is human-UI / host-maintenance only in OpenLander 0.1 and returns
+`OPERATION_REQUIRES_HUMAN_UI` from MCP. Agents may call `get_disk_usage` to confirm pressure, then
+surface cleanup to the operator instead of calling this action.
 
 | Parameter | Type   | Required | Description                                          |
 | --------- | ------ | -------- | ---------------------------------------------------- |
@@ -813,6 +829,10 @@ Without `confirm=true`, this returns the service row that would be created and m
 | `confirm`      | boolean | Yes                | Must be true                 |
 | `dry_run`      | boolean | No                 | Preview mode (default: true) |
 | `container_id` | string  | Yes (force_remove) | Container ID                 |
+
+`platform_reconcile` is MCP-executable when platform tools are enabled. `platform_cleanup_orphans`,
+`platform_force_remove`, and `recover_platform` are human-only in OpenLander 0.1 and return
+`OPERATION_REQUIRES_HUMAN_UI` from MCP.
 
 ---
 
