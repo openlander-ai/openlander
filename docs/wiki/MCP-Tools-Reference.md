@@ -31,10 +31,12 @@ Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut 
 group contains exactly one deployable service.
 
 Remote MCP uses Bearer tokens. Mint one from the **Your Agent** page (`/mcp-server`) in the
-dashboard, or from the setup wizard's MCP step — both issue an org-scoped token, shown once.
-Project-scoped tokens exist via the API (`POST /api/tokens` with `scope_kind: "project"`) but
-are not part of the 0.1 onboarding UI. The MCP endpoint is your dashboard origin + `/mcp`
-(`:10114` only when reaching OpenLander without a reverse proxy).
+dashboard, or from the setup wizard's MCP step — both issue an org-scoped token, **shown only
+once**. To get the value again, use **Regenerate** (or `POST /api/mcp/token/regenerate`), which
+revokes the previous token; `POST /api/mcp/token` may not return the plaintext once a token
+already exists. Project-scoped tokens exist via the API (`POST /api/tokens` with
+`scope_kind: "project"`) but are not part of the 0.1 onboarding UI. The MCP endpoint is your
+dashboard origin + `/mcp` (`:10114` only when reaching OpenLander without a reverse proxy).
 
 Destructive MCP operations are intentionally gated. Service deletion is blocked at the MCP boundary
 and must be completed in the web UI with typed confirmation. Supported bulk cleanup actions such as
