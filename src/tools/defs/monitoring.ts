@@ -783,12 +783,12 @@ function buildHostResourceNextSteps(findings: string[]): string[] {
   }
   if (findings.includes('host_disk_high')) {
     steps.push(
-      'Call openlander_managed_service.get_disk_usage, then cleanup_docker if the user approves host-wide cleanup.',
+      'Call openlander_managed_service.get_disk_usage to confirm Docker disk pressure; cleanup_docker is human-UI / host-maintenance only and blocked over MCP.',
     );
   }
   if (findings.includes('docker_disk_usage_unavailable')) {
     steps.push(
-      'Docker disk usage did not respond; avoid cleanup_docker until Docker responsiveness is confirmed.',
+      'Docker disk usage did not respond; avoid host cleanup until Docker responsiveness is confirmed.',
     );
   }
   steps.push('After addressing host pressure, retry redeploy_app for the affected service_id.');
