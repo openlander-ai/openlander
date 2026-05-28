@@ -20,6 +20,7 @@ import {
   mapWithConcurrency,
   mergeDependsOn,
   registerTopologyCacheInvalidation,
+  storedServiceStatusToTopologyHealth,
   TOPOLOGY_INSPECT_CONCURRENCY,
   type TopologyNode,
 } from './helpers/topology-runtime.js';
@@ -37,8 +38,6 @@ type TopologyServiceForEnvInference = Pick<
   ServiceRow,
   'id' | 'name' | 'container_id' | 'container_name'
 >;
-
-type TopologyHealth = 'healthy' | 'crashed' | 'deploying';
 
 function addAlias(
   aliases: Map<string, string>,
@@ -122,12 +121,6 @@ async function inferRuntimeEnvDependencies(
   }
 
   return new Map([...inferred.entries()].map(([serviceId, deps]) => [serviceId, [...deps]]));
-}
-
-function storedServiceStatusToTopologyHealth(status: string | null | undefined): TopologyHealth {
-  if (status === 'running') return 'healthy';
-  if (status === 'building') return 'deploying';
-  return 'crashed';
 }
 
 export function createProjectCompatRoutes(ctx: AppContext): Hono {

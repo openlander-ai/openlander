@@ -83,6 +83,23 @@ export interface TopologyNode {
   status: string | null;
 }
 
+/** Public-topology health label derived from a stored service status. */
+export type TopologyHealth = 'healthy' | 'crashed' | 'deploying';
+
+/**
+ * Map a stored service `status` column value to a public topology health label.
+ * Previously copy-pasted into both topology endpoints (project-compat-routes +
+ * service-aux-routes); centralized here per the #187 read-model consolidation
+ * pattern.
+ */
+export function storedServiceStatusToTopologyHealth(
+  status: string | null | undefined,
+): TopologyHealth {
+  if (status === 'running') return 'healthy';
+  if (status === 'building') return 'deploying';
+  return 'crashed';
+}
+
 const topologyCacheInvalidationRegistered = new WeakSet<object>();
 
 export function registerTopologyCacheInvalidation(ctx: AppContext): void {
