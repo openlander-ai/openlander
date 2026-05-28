@@ -1,6 +1,6 @@
 import type { AppContext } from '../../../app.js';
 import { createModuleLogger } from '../../../lib/logger.js';
-import { isManagedServiceKind } from '../../../db/repos/service.repo.js';
+import { isManagedServiceKind, MANAGED_SERVICE_KINDS } from '../../../db/repos/service.repo.js';
 import { projectIdToDeployableServiceId } from '../../../db/service-ids.js';
 import type { ServiceConnectionRow, ServiceRow } from '../../../db/types.js';
 import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../../pipeline/docker.js';
@@ -322,6 +322,10 @@ export async function deriveConnectedManagedServices(
   projectId: string,
   groupServices: readonly ServiceRow[],
 ): Promise<{ serviceConnections: ServiceConnectionRow[]; connectedManagedServices: ServiceRow[] }> {
+  const directManagedServices =
+    typeof ctx.db.getServices === 'function'
+      ? await ctx.db.getServices({ project_id: projectId, kindIn: MANAGED_SERVICE_KINDS })
+      : [];
   const serviceConnections =
     typeof ctx.db.listServiceConnectionsByProject === 'function'
       ? await ctx.db.listServiceConnectionsByProject(projectId)
@@ -333,6 +337,13 @@ export async function deriveConnectedManagedServices(
   const servicesById = new Map(allServices.map((service) => [service.id, service]));
   const seen = new Set(groupServices.map((service) => service.id));
   const connectedManagedServices: ServiceRow[] = [];
+  for (const service of directManagedServices) {
+    if (seen.has(service.id) || !isManagedServiceKind(service.kind)) {
+      continue;
+    }
+    seen.add(service.id);
+    connectedManagedServices.push(service);
+  }
   for (const connection of serviceConnections) {
     const service = servicesById.get(connection.service_id_provider);
     if (!service || seen.has(service.id) || !isManagedServiceKind(service.kind)) {

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
-import { kindToLegacyType } from '../../db/repos/service.repo.js';
+import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { ManagedServiceLinker } from '../../pipeline/managed-service-linker.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 
@@ -122,10 +122,19 @@ export function createServiceConnectionRoutes(ctx: AppContext): Hono {
     if (!project) {
       return c.json({ error: 'NOT_FOUND', message: `Project not found: ${projectId}` }, 404);
     }
+    const directManagedServices = await ctx.db.getServices({
+      project_id: project.id,
+      kindIn: MANAGED_SERVICE_KINDS,
+    });
     const connections = await ctx.db.listServiceConnectionsByProject(project.id);
-    const services = (
+    const servicesById = new Map(directManagedServices.map((svc) => [svc.id, svc]));
+    const connectedServices = (
       await Promise.all(connections.map((conn) => ctx.db.getService(conn.service_id_provider)))
     ).filter((svc): svc is NonNullable<typeof svc> => svc !== undefined);
+    for (const service of connectedServices) {
+      servicesById.set(service.id, service);
+    }
+    const services = [...servicesById.values()];
     return c.json(
       services.map((svc) => {
         // eslint-disable-next-line @typescript-eslint/no-deprecated
