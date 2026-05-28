@@ -322,4 +322,47 @@ describe('analyzeInfrastructure', () => {
       missing: [],
     });
   });
+
+  it('keeps package.json → requirements.txt → .env.example processing order for detectedFrom', () => {
+    // detectedTypes is first-hit-wins, so when multiple sources independently
+    // detect the same service type the FIRST source in the fixed processing
+    // order must supply detectedFrom. package.json runs before requirements.txt
+    // and before the .env scan. This locks the order so a future "collect once,
+    // process in arbitrary order" refactor cannot silently shuffle evidence.
+    const repoPath = mkdtempSync(join(tmpdir(), 'openlander-infra-order-'));
+    try {
+      writeFileSync(
+        join(repoPath, 'package.json'),
+        JSON.stringify({ dependencies: { pg: '^8.0.0' } }),
+      );
+      writeFileSync(join(repoPath, 'requirements.txt'), 'psycopg2==2.9.0\n');
+      writeFileSync(join(repoPath, '.env.example'), 'DATABASE_URL=postgres://localhost/db\n');
+
+      const result = analyzeInfrastructure(repoPath, []);
+
+      expect(result.needs).toEqual([{ type: 'postgresql', detectedFrom: 'pg' }]);
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it('falls through to requirements.txt when package.json has no matching dependency', () => {
+    // Companion to the order test: when the earlier source has nothing to say,
+    // detection must fall through to the next source in SCANNED_DEP_FILES order
+    // (not to the alphabetically-first or randomly-first found file).
+    const repoPath = mkdtempSync(join(tmpdir(), 'openlander-infra-order-fall-'));
+    try {
+      writeFileSync(
+        join(repoPath, 'package.json'),
+        JSON.stringify({ dependencies: { react: '^18.0.0' } }),
+      );
+      writeFileSync(join(repoPath, 'requirements.txt'), 'redis==5.0.0\n');
+
+      const result = analyzeInfrastructure(repoPath, []);
+
+      expect(result.needs).toEqual([{ type: 'redis', detectedFrom: 'redis' }]);
+    } finally {
+      rmSync(repoPath, { recursive: true, force: true });
+    }
+  });
 });

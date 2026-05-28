@@ -223,8 +223,27 @@ function connectViaForDetection(
   }
 }
 
-function findDepFiles(dir: string, filename: string, maxDepth = 3): string[] {
-  const results: string[] = [];
+/**
+ * Files that contribute infrastructure-need evidence, listed in the order they
+ * are processed inside `analyzeInfrastructure`. `detectedTypes` is first-hit-wins,
+ * so this order is part of the observable contract — pinned by the
+ * "processing order" test in `test/infra-analyzer.test.ts`.
+ */
+const SCANNED_DEP_FILES = [
+  'package.json',
+  'requirements.txt',
+  'pyproject.toml',
+  'schema.prisma',
+] as const;
+
+function findDepFiles(
+  dir: string,
+  filenames: readonly string[],
+  maxDepth = 3,
+): Map<string, string[]> {
+  const targets = new Set(filenames);
+  const results = new Map<string, string[]>();
+  for (const name of filenames) results.set(name, []);
 
   function walk(current: string, depth: number): void {
     if (depth > maxDepth) {
@@ -235,10 +254,7 @@ function findDepFiles(dir: string, filename: string, maxDepth = 3): string[] {
     try {
       entries = readdirSync(current).sort((left, right) => left.localeCompare(right));
     } catch (error) {
-      log.debug(
-        { err: error, current, filename },
-        'Could not read directory during dependency scan',
-      );
+      log.debug({ err: error, current }, 'Could not read directory during dependency scan');
       return;
     }
 
@@ -256,23 +272,27 @@ function findDepFiles(dir: string, filename: string, maxDepth = 3): string[] {
       const fullPath = join(current, entry);
       try {
         const stat = statSync(fullPath);
-        if (stat.isFile() && entry === filename) {
-          results.push(fullPath);
+        if (stat.isFile() && targets.has(entry)) {
+          // The map was seeded with every requested filename, so .get always
+          // returns a list here; narrow explicitly instead of asserting.
+          const list = results.get(entry);
+          if (list) list.push(fullPath);
         } else if (stat.isDirectory()) {
           walk(fullPath, depth + 1);
         }
       } catch (error) {
-        log.debug(
-          { err: error, fullPath, filename },
-          'Could not stat entry during dependency scan',
-        );
+        log.debug({ err: error, fullPath }, 'Could not stat entry during dependency scan');
         continue;
       }
     }
   }
 
   walk(dir, 0);
-  return results.sort((left, right) => left.localeCompare(right));
+
+  for (const list of results.values()) {
+    list.sort((left, right) => left.localeCompare(right));
+  }
+  return results;
 }
 
 /**
@@ -293,8 +313,12 @@ export function analyzeInfrastructure(
   const needs: InfrastructureNeed[] = [];
   const detectedTypes = new Map<DetectedServiceType, string>();
 
+  // Walk the repo once for every dep-file kind. Processing order across kinds is
+  // fixed by SCANNED_DEP_FILES — detectedTypes is first-hit-wins.
+  const depFiles = findDepFiles(repoPath, SCANNED_DEP_FILES);
+
   // Analyze package.json dependencies
-  const packageJsonPaths = findDepFiles(repoPath, 'package.json');
+  const packageJsonPaths = depFiles.get('package.json') ?? [];
   for (const packageJsonPath of packageJsonPaths) {
     try {
       const packageJsonContent = readFileSync(packageJsonPath, 'utf8');
@@ -319,7 +343,7 @@ export function analyzeInfrastructure(
     }
   }
 
-  const requirementsPaths = findDepFiles(repoPath, 'requirements.txt');
+  const requirementsPaths = depFiles.get('requirements.txt') ?? [];
   for (const requirementsPath of requirementsPaths) {
     try {
       const requirementsContent = readFileSync(requirementsPath, 'utf8').toLowerCase();
@@ -334,7 +358,7 @@ export function analyzeInfrastructure(
     }
   }
 
-  const pyprojectPaths = findDepFiles(repoPath, 'pyproject.toml');
+  const pyprojectPaths = depFiles.get('pyproject.toml') ?? [];
   for (const pyprojectPath of pyprojectPaths) {
     try {
       const pyprojectContent = readFileSync(pyprojectPath, 'utf8').toLowerCase();
@@ -349,7 +373,7 @@ export function analyzeInfrastructure(
     }
   }
 
-  const prismaSchemaPaths = findDepFiles(repoPath, 'schema.prisma');
+  const prismaSchemaPaths = depFiles.get('schema.prisma') ?? [];
   for (const prismaSchemaPath of prismaSchemaPaths) {
     try {
       const prismaContent = readFileSync(prismaSchemaPath, 'utf8');
@@ -405,26 +429,22 @@ export function analyzeInfrastructure(
   // matches infra needs (DATABASE_URL → postgresql, REDIS_URL → redis,
   // etc.). `git`/`image`/`compose`/`compose-child` kinds are non-managed
   // deployables and never satisfy infra needs, so map → null and filter.
-  const existingTypes = new Set(
-    existingServices
-      .map((s) => kindToDetectedType(s.kind))
-      .filter((t): t is DetectedServiceType => t !== null),
-  );
-  const available: AvailableService[] = existingServices
-    .filter((s) => {
-      const dt = kindToDetectedType(s.kind);
-      return dt !== null && detectedTypes.has(dt);
-    })
-    .map((s) => ({
-      type: kindToDetectedType(s.kind) as DetectedServiceType,
+  const existingTypes = new Set<DetectedServiceType>();
+  const available: AvailableService[] = [];
+  for (const s of existingServices) {
+    const dt = kindToDetectedType(s.kind);
+    if (dt === null) continue;
+    existingTypes.add(dt);
+    const evidence = detectedTypes.get(dt);
+    if (evidence === undefined) continue;
+    available.push({
+      type: dt,
       name: s.name,
       id: s.id,
-      connectVia: connectViaForDetection(
-        kindToDetectedType(s.kind) as DetectedServiceType,
-        detectedTypes.get(kindToDetectedType(s.kind) as DetectedServiceType) ?? '',
-      ),
-      detectedFrom: detectedTypes.get(kindToDetectedType(s.kind) as DetectedServiceType),
-    }));
+      connectVia: connectViaForDetection(dt, evidence),
+      detectedFrom: evidence,
+    });
+  }
 
   const missing: MissingService[] = Array.from(detectedTypes.keys())
     .filter((type) => !existingTypes.has(type))
