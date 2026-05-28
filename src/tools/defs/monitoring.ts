@@ -27,6 +27,7 @@ import {
 } from './schemas.js';
 import type { ToolDef } from './types.js';
 import type { ToolContext } from './types.js';
+import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../pipeline/docker.js';
 
 const log = createModuleLogger('monitoring-tools');
 
@@ -225,22 +226,11 @@ export const monitoringToolDefs: ToolDef[] = [
       }
 
       try {
-        const stats = (await appCtx.docker.getContainerStats(containerId)) as {
-          cpu_stats: {
-            cpu_usage: { total_usage: number; percpu_usage?: unknown };
-            system_cpu_usage: number;
-          };
-          precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
-          memory_stats: { usage: number; limit: number };
-        };
+        const stats = (await appCtx.docker.getContainerStats(containerId)) as ContainerStatsRaw;
         const inspect = await appCtx.docker.inspectContainer(containerId);
         // Calculate CPU percentage
-        const cpuDelta =
-          stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
-        const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
-        const cpuCount =
-          (stats.cpu_stats.cpu_usage.percpu_usage as { length?: number } | undefined)?.length ?? 1;
-        const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
+        const cpuCount = stats.cpu_stats.cpu_usage.percpu_usage?.length ?? 1;
+        const cpuPercent = computeContainerCpuPercent(stats, cpuCount);
         // Convert bytes to MB
         const memoryUsageMb = Math.round((stats.memory_stats.usage / 1024 / 1024) * 10) / 10;
         const memoryLimitMb = Math.round((stats.memory_stats.limit / 1024 / 1024) * 10) / 10;

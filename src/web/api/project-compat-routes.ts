@@ -31,6 +31,7 @@ import {
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
 import type { ServiceRow } from '../../db/types.js';
+import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../pipeline/docker.js';
 
 const log = createModuleLogger('api');
 
@@ -148,24 +149,11 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
 
     if (containerId && status === 'running') {
       try {
-        const stats = (await ctx.docker.getContainerStats(containerId)) as {
-          cpu_stats: {
-            cpu_usage: { total_usage: number };
-            system_cpu_usage: number;
-            online_cpus?: number;
-          };
-          precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
-          memory_stats: { usage: number; limit: number };
-        };
-
-        const cpuDelta =
-          stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
-        const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
-        const cpuCountRaw = (stats.cpu_stats.cpu_usage as unknown as { percpu_usage?: number[] })
-          .percpu_usage?.length;
+        const stats = (await ctx.docker.getContainerStats(containerId)) as ContainerStatsRaw;
+        const cpuCountRaw = stats.cpu_stats.cpu_usage.percpu_usage?.length;
         const cpuCount =
           cpuCountRaw && cpuCountRaw > 0 ? cpuCountRaw : stats.cpu_stats.online_cpus || 1;
-        const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
+        const cpuPercent = computeContainerCpuPercent(stats, cpuCount);
 
         return c.json({
           cpu: Math.round(cpuPercent * 10) / 10,

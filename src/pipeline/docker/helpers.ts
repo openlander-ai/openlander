@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type Dockerode from 'dockerode';
 import { getDataDir, DOCKER_LABELS } from '../../config/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
-import type { DockerStatus, SecretFileMount } from './types.js';
+import type { ContainerStatsRaw, DockerStatus, SecretFileMount } from './types.js';
 
 const log = createModuleLogger('docker');
 
@@ -271,4 +271,17 @@ export function getDockerHostType(): 'local' | 'remote' {
   } catch {
     return 'local';
   }
+}
+
+/**
+ * Standard Docker stats CPU% formula, extracted from four call sites that
+ * inlined the same `cpuDelta`/`systemDelta`/`cpuPercent` math. `cpuCount` is
+ * left to the caller because the four sites use different fallback strategies
+ * (`percpu_usage.length` vs `online_cpus` vs hardcoded `1`); keeping that
+ * choice at the call site preserves existing behavior.
+ */
+export function computeContainerCpuPercent(stats: ContainerStatsRaw, cpuCount: number): number {
+  const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
+  const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
+  return systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
 }
