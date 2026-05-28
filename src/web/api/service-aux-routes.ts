@@ -21,6 +21,7 @@ import {
   deriveConnectedManagedServices,
   getTopologyNodeRuntime,
   mergeDependsOn,
+  storedServiceStatusToTopologyHealth,
   type TopologyNode,
 } from './helpers/topology-runtime.js';
 
@@ -38,12 +39,6 @@ function withServiceAsId<T>(c: Context, fn: (c: Context) => T): T {
     return (origParam as (n: string) => string)(name);
   }) as typeof c.req.param;
   return fn(c);
-}
-
-function storedServiceStatusToTopologyHealth(status: string | null | undefined) {
-  if (status === 'running') return 'healthy';
-  if (status === 'building') return 'deploying';
-  return 'crashed';
 }
 
 export function createServiceAuxRoutes(ctx: AppContext): Hono {
