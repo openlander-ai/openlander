@@ -23,6 +23,7 @@ import {
   mergeDependsOn,
   type TopologyNode,
 } from './helpers/topology-runtime.js';
+import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../pipeline/docker.js';
 
 const log = createModuleLogger('api:service-aux');
 
@@ -59,23 +60,11 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
         return ctx.docker
           .getContainerStats(containerId)
           .then((stats) => {
-            const s = stats as {
-              cpu_stats: {
-                cpu_usage: { total_usage: number };
-                system_cpu_usage: number;
-                online_cpus?: number;
-              };
-              precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
-              memory_stats: { usage: number; limit: number };
-            };
-            const cpuDelta =
-              s.cpu_stats.cpu_usage.total_usage - s.precpu_stats.cpu_usage.total_usage;
-            const systemDelta = s.cpu_stats.system_cpu_usage - s.precpu_stats.system_cpu_usage;
-            const cpuCountRaw = (s.cpu_stats.cpu_usage as unknown as { percpu_usage?: number[] })
-              .percpu_usage?.length;
+            const s = stats as ContainerStatsRaw;
+            const cpuCountRaw = s.cpu_stats.cpu_usage.percpu_usage?.length;
             const cpuCount =
               cpuCountRaw && cpuCountRaw > 0 ? cpuCountRaw : s.cpu_stats.online_cpus || 1;
-            const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
+            const cpuPercent = computeContainerCpuPercent(s, cpuCount);
             return cx.json({
               cpu: Math.round(cpuPercent * 10) / 10,
               memory: s.memory_stats.usage,

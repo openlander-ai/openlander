@@ -207,3 +207,18 @@ export function buildResourceLimitConfig(
   }
   return { profile, ...RESOURCE_PROFILES[profile] };
 }
+
+/**
+ * Minimal shape of `docker stats` per-container output used by the four call
+ * sites (monitoring tool, two compat stats endpoints, topology read-model) that
+ * previously inlined the same literal type cast on `getContainerStats()`.
+ */
+export interface ContainerStatsRaw {
+  cpu_stats: {
+    cpu_usage: { total_usage: number; percpu_usage?: number[] };
+    system_cpu_usage: number;
+    online_cpus?: number;
+  };
+  precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
+  memory_stats: { usage: number; limit: number };
+}

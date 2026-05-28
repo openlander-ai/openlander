@@ -2,6 +2,7 @@ import type { AppContext } from '../../../app.js';
 import { createModuleLogger } from '../../../lib/logger.js';
 import { isManagedServiceKind } from '../../../db/repos/service.repo.js';
 import type { ServiceConnectionRow, ServiceRow } from '../../../db/types.js';
+import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../../pipeline/docker.js';
 
 const log = createModuleLogger('api:topology-runtime');
 // ---------------------------------------------------------------------------
@@ -193,22 +194,12 @@ async function fetchTopologyNodeRuntime(
       // Narrow test fixtures and older embedded contexts may omit the metrics
       // repo. Keep the legacy Docker stats fallback so topology still works.
       try {
-        const stats = await ctx.docker.getContainerStats(node.container_id);
-        const s = stats as {
-          cpu_stats: {
-            cpu_usage: { total_usage: number; percpu_usage?: number[] };
-            system_cpu_usage: number;
-            online_cpus?: number;
-          };
-          precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
-          memory_stats: { usage: number; limit: number };
-        };
-        const cpuDelta = s.cpu_stats.cpu_usage.total_usage - s.precpu_stats.cpu_usage.total_usage;
-        const systemDelta = s.cpu_stats.system_cpu_usage - s.precpu_stats.system_cpu_usage;
-        const cpuCount = s.cpu_stats.cpu_usage.percpu_usage?.length ?? s.cpu_stats.online_cpus ?? 1;
-        const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
+        const stats = (await ctx.docker.getContainerStats(node.container_id)) as ContainerStatsRaw;
+        const cpuCount =
+          stats.cpu_stats.cpu_usage.percpu_usage?.length ?? stats.cpu_stats.online_cpus ?? 1;
+        const cpuPercent = computeContainerCpuPercent(stats, cpuCount);
         cpuDisplay = `${String(Math.round(cpuPercent * 10) / 10)}%`;
-        memDisplay = `${String(Math.round(s.memory_stats.usage / 1024 / 1024))} MB`;
+        memDisplay = `${String(Math.round(stats.memory_stats.usage / 1024 / 1024))} MB`;
       } catch {
         // Leave displays as '—'; health is still inspected below.
       }

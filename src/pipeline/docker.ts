@@ -10,5 +10,10 @@ export type {
   BuildImageOptions,
   BuildComposeServiceOptions,
   WaitForHealthyResult,
+  ContainerStatsRaw,
 } from './docker/types.js';
-export { resolveDockerSocket, getDockerHostType } from './docker/helpers.js';
+export {
+  resolveDockerSocket,
+  getDockerHostType,
+  computeContainerCpuPercent,
+} from './docker/helpers.js';
