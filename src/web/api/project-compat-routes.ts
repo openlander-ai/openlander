@@ -15,14 +15,15 @@ import {
 import { parseDockerLogChunk } from './helpers/docker-log-timestamps.js';
 import {
   buildConnectionDependsOn,
+  buildLegacyTopologyNode,
   deriveConnectedManagedServices,
   getTopologyNodeRuntime,
+  inferLegacyTopologyKind,
   mapWithConcurrency,
   mergeDependsOn,
   registerTopologyCacheInvalidation,
   storedServiceStatusToTopologyHealth,
   TOPOLOGY_INSPECT_CONCURRENCY,
-  type TopologyNode,
 } from './helpers/topology-runtime.js';
 export { __test_resetTopologyNodeCache } from './helpers/topology-runtime.js';
 import { gitWebhooksDisabledResponse } from './git-webhook-disabled.js';
@@ -247,15 +248,6 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
         mergeDependsOn(dependsOnMap, await inferRuntimeEnvDependencies(ctx, groupServices));
       }
 
-      // Determine kind: 'Database' for known db service types, else 'Application'
-      function resolveKind(kindOrName: string): 'Application' | 'Database' {
-        const lower = kindOrName.toLowerCase();
-        if (/postgres|mysql|mariadb|mongo|redis|sqlite|clickhouse|minio/.test(lower)) {
-          return 'Database';
-        }
-        return 'Application';
-      }
-
       // Inspect health for all nodes — funneled through per-container 15s
       // TTL cache + in-flight dedupe + a 6-wide concurrency limiter so a
       // 30-node group doesn't open 60 simultaneous Docker calls.
@@ -308,7 +300,7 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
               return {
                 id: svc.id,
                 name: svc.name,
-                kind: resolveKind(`${svc.kind} ${svc.name} ${image}`),
+                kind: inferLegacyTopologyKind(`${svc.kind} ${svc.name} ${image}`),
                 image,
                 health: storedServiceStatusToTopologyHealth(svc.status ?? null),
                 port,
@@ -331,42 +323,18 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
               };
             }),
           ]
-        : await mapWithConcurrency(
-            legacyTopologyNodes,
-            TOPOLOGY_INSPECT_CONCURRENCY,
-            async (node) => {
-              const deployable =
+        : await mapWithConcurrency(legacyTopologyNodes, TOPOLOGY_INSPECT_CONCURRENCY, (node) =>
+            buildLegacyTopologyNode(ctx, node, {
+              dependsOnMap,
+              // Standalone single-project topology already fetched the
+              // deployable row above to short-circuit the empty-result
+              // case — pass it through so the helper skips the redundant
+              // DB round-trip.
+              cachedDeployable:
                 childProjects.length === 0 && node.id === project.id
-                  ? legacyStandaloneDeployable
-                  : await ctx.db.getDeployableForProject(node.id);
-              const port = deployable?.assigned_port ?? node.assigned_port ?? null;
-              const url = port ? getProjectUrl(node.name) : null;
-              const image =
-                deployable?.image_url ??
-                node.image_url ??
-                deployable?.image_tag ??
-                node.image_tag ??
-                `${node.name}:latest`;
-              const kind = resolveKind(node.name);
-              const runtimeNode: TopologyNode = {
-                id: deployable?.id ?? projectIdToDeployableServiceId(node.id),
-                container_id: deployable?.container_id ?? node.container_id,
-                status: deployable?.status ?? node.status ?? null,
-              };
-              const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
-              return {
-                id: node.id,
-                name: node.name,
-                kind,
-                image,
-                health: runtime.health,
-                port,
-                url,
-                cpu: runtime.cpuDisplay,
-                mem: runtime.memDisplay,
-                dependsOn: dependsOnMap.get(node.id) ?? [],
-              };
-            },
+                  ? (legacyStandaloneDeployable ?? null)
+                  : undefined,
+            }),
           );
 
       return c.json({ services: serviceNodes });

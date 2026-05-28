@@ -5,10 +5,7 @@ import type { AppContext } from '../../app.js';
 import { TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getProjectUrl } from '../../pipeline/traefik.js';
-import {
-  deployableServiceIdToProjectId,
-  projectIdToDeployableServiceId,
-} from '../../db/service-ids.js';
+import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 import {
   getDeployableServiceRouteName,
@@ -18,6 +15,7 @@ import {
 import { gitWebhooksDisabledResponse } from './git-webhook-disabled.js';
 import {
   buildConnectionDependsOn,
+  buildLegacyTopologyNode,
   deriveConnectedManagedServices,
   getTopologyNodeRuntime,
   mergeDependsOn,
@@ -172,44 +170,8 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
             .filter((sid): sid is string => sid !== null && nodeIds.has(sid));
           dependsOnMap.set(node.id, siblingDeps);
         }
-        function resolveKind(name: string): 'Application' | 'Database' {
-          const lower = name.toLowerCase();
-          if (/postgres|mysql|mariadb|mongo|redis|sqlite|clickhouse|minio/.test(lower)) {
-            return 'Database';
-          }
-          return 'Application';
-        }
         const serviceNodes = await Promise.all(
-          nodes.map(async (node) => {
-            const deployable = await ctx.db.getDeployableForProject(node.id);
-            const port = deployable?.assigned_port ?? node.assigned_port ?? null;
-            const url = port ? getProjectUrl(node.name) : null;
-            const image =
-              deployable?.image_url ??
-              node.image_url ??
-              deployable?.image_tag ??
-              node.image_tag ??
-              `${node.name}:latest`;
-            const kind = resolveKind(node.name);
-            const runtimeNode: TopologyNode = {
-              id: deployable?.id ?? projectIdToDeployableServiceId(node.id),
-              container_id: deployable?.container_id ?? node.container_id,
-              status: deployable?.status ?? node.status ?? null,
-            };
-            const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
-            return {
-              id: node.id,
-              name: node.name,
-              kind,
-              image,
-              health: runtime.health,
-              port,
-              url,
-              cpu: runtime.cpuDisplay,
-              mem: runtime.memDisplay,
-              dependsOn: dependsOnMap.get(node.id) ?? [],
-            };
-          }),
+          nodes.map((node) => buildLegacyTopologyNode(ctx, node, { dependsOnMap })),
         );
         return cx.json({ services: serviceNodes });
       } catch (err) {

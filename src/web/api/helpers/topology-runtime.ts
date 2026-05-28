@@ -1,8 +1,10 @@
 import type { AppContext } from '../../../app.js';
 import { createModuleLogger } from '../../../lib/logger.js';
 import { isManagedServiceKind } from '../../../db/repos/service.repo.js';
+import { projectIdToDeployableServiceId } from '../../../db/service-ids.js';
 import type { ServiceConnectionRow, ServiceRow } from '../../../db/types.js';
 import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../../pipeline/docker.js';
+import { getProjectUrl } from '../../../pipeline/traefik.js';
 
 const log = createModuleLogger('api:topology-runtime');
 // ---------------------------------------------------------------------------
@@ -340,6 +342,110 @@ export async function deriveConnectedManagedServices(
     connectedManagedServices.push(service);
   }
   return { serviceConnections, connectedManagedServices };
+}
+
+/**
+ * Pattern matched against project / service / managed-service text to label a
+ * topology node as a database. Previously duplicated as a local `resolveKind`
+ * function inside both project-compat-routes and service-aux-routes — those
+ * two regexes had drifted (same chars today, easy to drift tomorrow). Public
+ * shim for the legacy (project-row-backed) topology branch and for the
+ * managed-service post-projection in project-compat.
+ */
+const LEGACY_DATABASE_KIND_PATTERN = /postgres|mysql|mariadb|mongo|redis|sqlite|clickhouse|minio/;
+
+export function inferLegacyTopologyKind(text: string): 'Application' | 'Database' {
+  return LEGACY_DATABASE_KIND_PATTERN.test(text.toLowerCase()) ? 'Database' : 'Application';
+}
+
+/**
+ * Minimal project-row shape accepted by `buildLegacyTopologyNode`. Both
+ * `childProjects` rows and the standalone-`[project]` array passed by the
+ * legacy topology branches conform.
+ */
+export interface LegacyTopologyNodeInput {
+  id: string;
+  name: string;
+  status?: string | null;
+  container_id?: string | null;
+  assigned_port?: number | null;
+  image_url?: string | null;
+  image_tag?: string | null;
+}
+
+/** Shape returned for each legacy (project-row-backed) topology node. */
+export interface LegacyTopologyNodeResult {
+  id: string;
+  name: string;
+  kind: 'Application' | 'Database';
+  image: string;
+  health: TopologyHealth;
+  port: number | null;
+  url: string | null;
+  cpu: string;
+  mem: string;
+  dependsOn: string[];
+}
+
+/**
+ * Project-row → topology-node projection used by the two legacy topology
+ * branches (project-compat `/projects/:id/topology` standalone+compose-child
+ * fallback and service-aux `/projects/:p/services/:s/topology` non-grouped
+ * fallback). Previously a 30-line block copy-pasted across both files with
+ * identical fallback chains. Behavior preserved exactly:
+ *
+ * - `port` falls back deployable → node → null
+ * - `url` is `getProjectUrl(node.name)` when port resolves, else `null`
+ * - `image` falls back deployable.image_url → node.image_url →
+ *   deployable.image_tag → node.image_tag → `${node.name}:latest`
+ * - `runtimeNode.id` = deployable.id ?? projectIdToDeployableServiceId(node.id)
+ * - `runtimeNode.container_id` = deployable.container_id ?? node.container_id
+ * - `runtimeNode.status` = deployable.status ?? node.status ?? null
+ * - `kind` is regex-inferred from `node.name`
+ * - `dependsOn` is `dependsOnMap.get(node.id) ?? []`
+ *
+ * Callers control concurrency (`Promise.all` vs `mapWithConcurrency`) and may
+ * pass a pre-fetched deployable row via `options.cachedDeployable` to skip
+ * the redundant DB round-trip for the standalone-project case.
+ */
+export async function buildLegacyTopologyNode(
+  ctx: Pick<AppContext, 'db' | 'docker'>,
+  node: LegacyTopologyNodeInput,
+  options: {
+    dependsOnMap: ReadonlyMap<string, readonly string[]>;
+    cachedDeployable?: ServiceRow | null;
+  },
+): Promise<LegacyTopologyNodeResult> {
+  const deployable =
+    options.cachedDeployable !== undefined
+      ? options.cachedDeployable
+      : ((await ctx.db.getDeployableForProject(node.id)) ?? null);
+  const port = deployable?.assigned_port ?? node.assigned_port ?? null;
+  const url = port ? getProjectUrl(node.name) : null;
+  const image =
+    deployable?.image_url ??
+    node.image_url ??
+    deployable?.image_tag ??
+    node.image_tag ??
+    `${node.name}:latest`;
+  const runtimeNode: TopologyNode = {
+    id: deployable?.id ?? projectIdToDeployableServiceId(node.id),
+    container_id: deployable?.container_id ?? node.container_id ?? null,
+    status: deployable?.status ?? node.status ?? null,
+  };
+  const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
+  return {
+    id: node.id,
+    name: node.name,
+    kind: inferLegacyTopologyKind(node.name),
+    image,
+    health: runtime.health,
+    port,
+    url,
+    cpu: runtime.cpuDisplay,
+    mem: runtime.memDisplay,
+    dependsOn: [...(options.dependsOnMap.get(node.id) ?? [])],
+  };
 }
 
 /**
