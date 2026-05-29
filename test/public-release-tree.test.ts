@@ -130,4 +130,18 @@ describe('public release tree hygiene', () => {
     expect(serverSource).not.toContain('ONE-TIME SETUP SECRET');
     expect(authRoutes).not.toContain('INVALID_SETUP_SECRET');
   });
+
+  it('serves public brand assets before the SPA fallback', () => {
+    const serverSource = readFileSync('src/web/server.ts', 'utf8');
+    const indexHtml = readFileSync('web/index.html', 'utf8');
+    const brandSource = readFileSync('web/src/lib/brand.ts', 'utf8');
+
+    expect(indexHtml).toContain('/brand/openlander-mark-64.png');
+    expect(brandSource).toContain("markUrl: '/brand/openlander-mark.png'");
+    expect(serverSource).toContain("app.get('/brand/*'");
+    expect(serverSource.indexOf("app.get('/brand/*'")).toBeLessThan(
+      serverSource.indexOf("app.get('*'"),
+    );
+    expect(serverSource).toContain("'Content-Type': contentType");
+  });
 });
