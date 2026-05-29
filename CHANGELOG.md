@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.1.7-rc.1] - 2026-05-29
+## [0.1.7] - 2026-05-29
 
 ### Added
 
@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   runtime surface remains deterministic and MCP-driven.
 - Deduplicated route and Docker-stats helper logic across topology, stats,
   preview, and expose endpoints.
+- Polished public launch docs with a visible current-status section, clearer MCP
+  adapter positioning, demo-app links, and host-exposure security guidance.
 
 ### Fixed
 
