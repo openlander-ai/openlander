@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.7-rc.1] - 2026-05-29
+
+### Added
+
+- Added the `ServiceView` read model as the service-first source of truth for
+  deployable-service read surfaces while preserving existing project API
+  response shapes.
+- Added MCP drift gates that verify composite actions, ToolDef registration,
+  docs references, schema-required params, and shorthand examples stay aligned.
+
+### Changed
+
+- Migrated runtime stats, expose-tunnel, legacy topology-node, and project API
+  projection helpers to consume `ServiceView`.
+- Split dormant AI Ops classes into the 0.2 cold-storage boundary so the 0.1
+  runtime surface remains deterministic and MCP-driven.
+- Deduplicated route and Docker-stats helper logic across topology, stats,
+  preview, and expose endpoints.
+
+### Fixed
+
+- Fixed project detail/topology reads so project-scoped managed services are
+  included consistently.
+- Reduced infrastructure analyzer filesystem scanning by collecting dependency
+  files in a single walk.
+
 ## [0.1.6] - 2026-05-27
 
 ### Added
