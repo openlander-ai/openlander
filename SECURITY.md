@@ -13,6 +13,10 @@ If you discover a security vulnerability in OpenLander, please report it respons
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
+OpenLander controls Docker on the host and is intended for trusted self-hosted
+environments. Do not expose the dashboard or MCP endpoint publicly without
+authentication, TLS, and network-level protection.
+
 ### How to Report
 
 1. Go to the [Security Advisories](https://github.com/openlander-ai/openlander/security/advisories) page

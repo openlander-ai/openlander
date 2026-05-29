@@ -15,7 +15,7 @@ Thanks for your interest in contributing to OpenLander. This guide will help you
 ```bash
 # Clone the repository
 git clone https://github.com/openlander-ai/openlander.git
-cd OpenLander
+cd openlander
 
 # Install dependencies
 npm install
