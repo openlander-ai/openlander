@@ -171,6 +171,55 @@ describe('serviceViewFromRows', () => {
     expect(view.projectName).toBe('legacy');
     expect(view.name).toBe('legacy__svc');
   });
+
+  it('projects the S1.3 fields (projectType / accessCode / accessCodeIv) from the deployable row', () => {
+    const view = serviceViewFromRows(
+      makeProjectRow(),
+      makeServiceRow({
+        project_type: 'worker',
+        access_code: 'enc-blob',
+        access_code_iv: 'enc-iv',
+      }),
+    );
+
+    expect(view.projectType).toBe('worker');
+    expect(view.accessCode).toBe('enc-blob');
+    expect(view.accessCodeIv).toBe('enc-iv');
+  });
+
+  it('falls back to project columns for the S1.3 fields when the deployable is missing', () => {
+    const view = serviceViewFromRows(
+      makeProjectRow({
+        project_type: 'web',
+        access_code: 'legacy-blob',
+        access_code_iv: 'legacy-iv',
+      }),
+      null,
+    );
+
+    expect(view.projectType).toBe('web');
+    expect(view.accessCode).toBe('legacy-blob');
+    expect(view.accessCodeIv).toBe('legacy-iv');
+  });
+
+  it('transforms parent_service_id back to a project id via the view layer', () => {
+    const view = serviceViewFromRows(
+      makeProjectRow(),
+      makeServiceRow({ parent_service_id: 'parent-group__svc' }),
+    );
+
+    // `deployableServiceIdToProjectId` strips the `__svc` suffix.
+    expect(view.parentProjectId).toBe('parent-group');
+  });
+
+  it('falls back to project.parent_project_id when no service-side pointer exists', () => {
+    const view = serviceViewFromRows(
+      makeProjectRow({ parent_project_id: 'parent-group' }),
+      makeServiceRow({ parent_service_id: null }),
+    );
+
+    expect(view.parentProjectId).toBe('parent-group');
+  });
 });
 
 describe('loadServiceView', () => {

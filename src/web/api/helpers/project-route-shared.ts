@@ -1,6 +1,7 @@
 import type { AppContext } from '../../../app.js';
 import type { EnvironmentRow, ProjectRow, ServiceRow } from '../../../db/index.js';
 import { deployableServiceIdToProjectId } from '../../../db/service-ids.js';
+import { serviceViewFromRows } from '../../../db/views/service-view.js';
 import {
   CircuitBreakerOpenError,
   DeployLockedError,
@@ -220,37 +221,28 @@ export async function createProjectGroupWithSlugRetry(
 }
 
 export function mapProjectForApi(project: ProjectRow, deployable?: DeployableForApi) {
-  const port = deployable?.assigned_port ?? project.assigned_port ?? null;
-  const imageUrl = deployable?.image_url ?? project.image_url ?? undefined;
-  const status = deployable?.status ?? project.status ?? 'idle';
-  const containerId = deployable?.container_id ?? project.container_id ?? null;
-  const containerPort = deployable?.container_port ?? project.container_port ?? null;
-  const imageTag = deployable?.image_tag ?? project.image_tag ?? null;
-  const previousImageTag = deployable?.previous_image_tag ?? project.previous_image_tag ?? null;
-  const publicUrl = deployable?.public_url ?? project.public_url ?? null;
-  const source = deployable?.source ?? project.source;
-  const buildMethod = deployable?.build_method ?? project.build_method ?? null;
-  const dockerfilePath = deployable?.dockerfile_path ?? project.dockerfile_path;
-  const accessCode = deployable?.access_code ?? project.access_code;
-  const accessCodeIv = deployable?.access_code_iv ?? project.access_code_iv;
-  const pendingFix = deployable?.pending_fix ?? project.pending_fix;
-  const recoveringStartedAt = deployable?.recovering_started_at ?? project.recovering_started_at;
-  const dockerTarget = deployable?.docker_target ?? project.docker_target;
-  const buildContext = deployable?.build_context ?? project.build_context;
-  const imageCmdRaw = deployable?.image_cmd ?? project.image_cmd;
-  const projectType = deployable?.project_type ?? project.project_type;
-  const isPreview = deployable?.is_preview ?? project.is_preview;
-  const prNumber = deployable?.pr_number ?? project.pr_number;
-  const healthCheckStrategy = deployable?.health_check_strategy ?? project.health_check_strategy;
-  const healthCheckPath = deployable?.health_check_path ?? project.health_check_path;
-
-  const parentProjectFallback = project.parent_project_id ?? null;
-  // eslint-disable-next-line openlander-internal/no-dropped-columns -- compatibility alias until project-row deployable fields are removed from callers
-  const visibilityFallback = project.visibility;
-  const parentProjectId = deployable?.parent_service_id
-    ? deployableServiceIdToProjectId(deployable.parent_service_id)
-    : parentProjectFallback;
-  const visibility = deployable?.visibility ?? visibilityFallback ?? 'internal';
+  // v0.2 service-first read-model, slice S1.3: source the 23-field hybrid
+  // projection from `ServiceView` instead of the inline fallback chain.
+  // Project-pure metadata (tags, description, archived_at, deploy_lock_*,
+  // created_at, updated_at, display_name, server_id) stays read straight
+  // from `ProjectRow` — those columns never lived on the deployable side
+  // and the adapter owns them.
+  //
+  // `DeployableForApi` is the adapter's permissive structural input type:
+  // looser unions than the canonical `ServiceRow` (e.g. `status?: string`
+  // vs `'running' | 'stopped' | 'error'`). `serviceViewFromRows` reads
+  // every service field via optional chaining + `??` fallback, so an
+  // input that's a value-compatible subset of `ServiceRow` resolves the
+  // same view at runtime. The cast crosses only the TypeScript boundary
+  // and is safe for this call shape.
+  const view = serviceViewFromRows(
+    project,
+    deployable as unknown as Parameters<typeof serviceViewFromRows>[1],
+  );
+  const { port, image } = {
+    port: view.assignedPort,
+    image: view.imageUrl,
+  };
 
   return {
     id: project.id,
@@ -259,29 +251,34 @@ export function mapProjectForApi(project: ProjectRow, deployable?: DeployableFor
     display_name: project.display_name || project.name,
     description: project.description ?? null,
     tags: parseProjectTags(project.tags ?? null),
-    parent_project_id: parentProjectId,
-    visibility,
+    parent_project_id: view.parentProjectId,
+    visibility: view.visibility,
     server_id: project.server_id,
-    project_type: projectType,
-    is_preview: isPreview,
-    pr_number: prNumber,
-    health_check_strategy: healthCheckStrategy,
-    health_check_path: healthCheckPath,
+    project_type: view.projectType,
+    // Preserve the pre-S1 raw `0 | 1 | null | undefined` wire encoding —
+    // `ServiceView.isPreview` normalizes to a boolean (useful for internal
+    // branching), but this public API field has always shipped the raw DB
+    // representation. Adapter-owned override per decision §6.4 ("adapters
+    // preserve historic API shape; view normalizes internally").
+    is_preview: deployable?.is_preview ?? project.is_preview,
+    pr_number: view.prNumber,
+    health_check_strategy: view.healthCheckStrategy,
+    health_check_path: view.healthCheckPath,
     deploy_lock_session: project.deploy_lock_session,
     deploy_lock_at: project.deploy_lock_at,
-    access_code: accessCode,
-    access_code_iv: accessCodeIv,
-    pending_fix: pendingFix,
-    recovering_started_at: recoveringStartedAt,
+    access_code: view.accessCode,
+    access_code_iv: view.accessCodeIv,
+    pending_fix: view.pendingFix,
+    recovering_started_at: view.recoveringStartedAt,
     archived_at: project.archived_at,
-    docker_target: dockerTarget,
-    build_context: buildContext,
-    status,
-    container_id: containerId,
-    image_tag: imageTag,
-    previous_image_tag: previousImageTag,
-    build_method: buildMethod,
-    dockerfile_path: dockerfilePath,
+    docker_target: view.dockerTarget,
+    build_context: view.buildContext,
+    status: view.status,
+    container_id: view.containerId,
+    image_tag: view.imageTag,
+    previous_image_tag: view.previousImageTag,
+    build_method: view.buildMethod,
+    dockerfile_path: view.dockerfilePath,
     port,
     // Legacy consumers still read `url`; keep it aligned with
     // `preferred_url` so they pick up the port-aware host URL instead of
@@ -289,11 +286,11 @@ export function mapProjectForApi(project: ProjectRow, deployable?: DeployableFor
     url: port ? getPreferredProjectUrl(project.name, port) : null,
     preferred_url: port ? getPreferredProjectUrl(project.name, port) : null,
     urls: port ? getProjectUrls(project.name, port) : [],
-    publicUrl,
-    source,
-    imageUrl,
-    imageCmd: parseImageCmd(imageCmdRaw ?? null),
-    containerPort,
+    publicUrl: view.publicUrl,
+    source: view.source,
+    imageUrl: image,
+    imageCmd: parseImageCmd(view.imageCmdRaw),
+    containerPort: view.containerPort,
     created_at: normalizeTimestamp(project.created_at),
     updated_at: normalizeTimestamp(project.updated_at),
   };

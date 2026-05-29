@@ -439,11 +439,16 @@ export async function buildLegacyTopologyNode(
 ): Promise<LegacyTopologyNodeResult> {
   // The two concrete callers (project-compat, service-aux) always pass a
   // full `ProjectRow` as `node`; `LegacyTopologyNodeInput` is the width-typed
-  // contract. Cast is safe — `loadServiceView` reads only fields already
-  // declared on `LegacyTopologyNodeInput`. Callers that already know the
-  // project context (`project-compat`'s standalone branch) pre-build the
-  // view with `serviceViewFromRows` and pass it via `cachedView`; that path
-  // never lands here.
+  // contract that lists only the fields this helper itself uses. `loadServiceView`
+  // (via `serviceViewFromRows`) reads more ProjectRow columns than
+  // `LegacyTopologyNodeInput` declares, but each read uses optional chaining
+  // plus a `??` fallback to a typed default — undeclared fields resolve to
+  // `undefined` at runtime and fall through to the default branch. The cast
+  // is therefore TypeScript-only; runtime behavior matches a real ProjectRow
+  // with those optional columns absent. Callers that already know the project
+  // context (`project-compat`'s standalone branch) pre-build the view with
+  // `serviceViewFromRows` and pass it via `cachedView`; that path never lands
+  // here.
   const view =
     options.cachedView ??
     (await loadServiceView(ctx.db, node as unknown as Parameters<typeof loadServiceView>[1]));
