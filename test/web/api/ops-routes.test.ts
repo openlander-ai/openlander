@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 
 import { createOpsRoutes } from '../../../src/web/api/ops-routes.js';
 import type { AppContext } from '../../../src/app.js';
+import type { ProjectRow, ServiceRow } from '../../../src/db/types.js';
 
 function createHarness() {
   const ctx = {
@@ -60,5 +61,57 @@ describe('ops AI automation routes in 0.1', () => {
     const res = await app.request('/api/ops/incidents');
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ incidents: [] });
+  });
+});
+
+describe('GET /api/ops/dependencies node status projection (S2.1)', () => {
+  function createGraphHarness(opts: {
+    projects: Array<Partial<ProjectRow> & { id: string; name: string }>;
+    deployables: Record<string, Partial<ServiceRow> | undefined>;
+    services?: Array<Partial<ServiceRow> & { id: string; name: string }>;
+  }) {
+    const ctx = {
+      db: {
+        listProjects: async () => opts.projects,
+        listServices: async () => opts.services ?? [],
+        findAllProjectDependencies: async () => [],
+        getDeployableForProject: async (projectId: string) => opts.deployables[projectId],
+      },
+    } as unknown as AppContext;
+
+    const app = new Hono();
+    app.route('/api/ops', createOpsRoutes(ctx));
+    return app;
+  }
+
+  it('pins project node status: passthrough + idle→"" bottom restoration', async () => {
+    const app = createGraphHarness({
+      projects: [
+        { id: 'p-running', name: 'running-svc', status: null },
+        { id: 'p-recovering', name: 'recovering-proj', status: 'recovering' },
+        { id: 'p-empty', name: 'empty-proj', status: null },
+      ],
+      deployables: {
+        // canonical services row wins → 'running' passes through
+        'p-running': { id: 'p-running__svc', name: 'running-svc__svc', status: 'running' },
+        // no services row → fall back to the deprecated project column
+        'p-recovering': undefined,
+        // no services row and project.status null → view normalizes to
+        // 'idle', adapter must restore the historical '' bottom
+        'p-empty': undefined,
+      },
+    });
+
+    const res = await app.request('/api/ops/dependencies');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      nodes: Array<{ id: string; type: string; name: string; status: string }>;
+    };
+
+    expect(body.nodes).toEqual([
+      { id: 'p-running', type: 'project', name: 'running-svc', status: 'running' },
+      { id: 'p-recovering', type: 'project', name: 'recovering-proj', status: 'recovering' },
+      { id: 'p-empty', type: 'project', name: 'empty-proj', status: '' },
+    ]);
   });
 });
