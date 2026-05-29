@@ -1,5 +1,6 @@
 import type { AppContext } from '../../../app.js';
 import type { ProjectRow } from '../../../db/types.js';
+import { loadServiceView, type ServiceView } from '../../../db/views/service-view.js';
 import { createModuleLogger } from '../../../lib/logger.js';
 import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../../pipeline/docker.js';
 
@@ -20,10 +21,24 @@ export interface ProjectRuntimeStats {
 }
 
 /**
+ * Translate `ServiceView.status` back to the legacy `string | null` that
+ * this endpoint historically emitted. The view normalizes the
+ * "neither row had a status" case to `'idle'`; the pre-v0.2 helper
+ * emitted `null` for that case and never produced `'idle'` directly.
+ * Mapping is therefore lossless on this endpoint.
+ *
+ * (Other helpers that historically emitted `'idle'` keep view.status as-is.)
+ */
+function statusForRuntimeStats(view: ServiceView): string | null {
+  return view.status === 'idle' ? null : view.status;
+}
+
+/**
  * Resolve the runtime stats projection for a single project / deployable.
  * Behavior pinned to the pre-R2 inline blocks:
  *
- * - Status and container_id fall back deployable → project → null.
+ * - Status and container_id fall back deployable → project → null
+ *   (now sourced from `ServiceView`; see `statusForRuntimeStats`).
  * - Stats are queried only when the container is `running` AND a
  *   container_id resolves; otherwise zeroed stats are returned with the
  *   resolved status so the caller can still surface "stopped" / "building"
@@ -36,15 +51,19 @@ export interface ProjectRuntimeStats {
  * - CPU% formula stays the shared `computeContainerCpuPercent` helper from
  *   #199; per-caller cpuCount fallback resolution (`percpu_usage.length`
  *   then `online_cpus` then 1) is preserved.
+ *
+ * v0.2 service-first read model, slice S0: this helper is the proof-of-
+ * shape consumer of `ServiceView`. Behavior is byte-identical to the
+ * pre-S0 implementation (integration tests pin the contract).
  */
 export async function loadProjectRuntimeStats(
   ctx: Pick<AppContext, 'db' | 'docker'>,
   project: ProjectRow,
 ): Promise<ProjectRuntimeStats> {
-  const deployable = await ctx.db.getDeployableForProject(project.id);
-  const status = deployable?.status ?? project.status ?? null;
-  const containerId = deployable?.container_id ?? project.container_id ?? null;
-  if (!containerId || status !== 'running') {
+  const view = await loadServiceView(ctx.db, project);
+  const status = statusForRuntimeStats(view);
+  const { containerId } = view;
+  if (!containerId || view.status !== 'running') {
     return { cpu: 0, memory: 0, memoryLimit: 0, status };
   }
   try {
