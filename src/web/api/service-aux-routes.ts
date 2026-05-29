@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 
 import type { AppContext } from '../../app.js';
-import { TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
@@ -10,6 +9,7 @@ import {
   getDeployableServiceRouteName,
   getDeployableServiceUrl,
 } from './helpers/project-route-shared.js';
+import { exposeProjectTunnel } from './helpers/expose-tunnel.js';
 import { loadPreviewProjections } from './helpers/preview-projection.js';
 import { gitWebhooksDisabledResponse } from './git-webhook-disabled.js';
 import {
@@ -170,26 +170,20 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
   api.post('/projects/:p/services/:s/expose', async (c) => {
     return withServiceAsId(c, async (cx) => {
       const project = await getProjectOrThrow(cx, ctx);
-      const deployable = await ctx.db.getDeployableForProject(project.id);
-      const exposePort = deployable?.assigned_port ?? project.assigned_port;
-      if (!exposePort) {
+      const outcome = await exposeProjectTunnel(ctx, project);
+      if (outcome.kind === 'not-running') {
         return cx.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
       }
-      try {
-        const url = await ctx.pipeline.exposeTunnel(project.id, exposePort);
-        return cx.json({ status: 'exposed', project: project.name, publicUrl: url });
-      } catch (error) {
-        if (error instanceof TunnelStartError) {
-          return cx.json(
-            {
-              error: 'TUNNEL_START_FAILED',
-              message: 'Cloudflare service is temporarily unavailable. Please try again.',
-            },
-            503,
-          );
-        }
-        throw error;
+      if (outcome.kind === 'tunnel-failed') {
+        return cx.json(
+          {
+            error: 'TUNNEL_START_FAILED',
+            message: 'Cloudflare service is temporarily unavailable. Please try again.',
+          },
+          503,
+        );
       }
+      return cx.json({ status: 'exposed', project: project.name, publicUrl: outcome.publicUrl });
     });
   });
 

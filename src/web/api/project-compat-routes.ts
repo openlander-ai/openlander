@@ -10,6 +10,7 @@ import {
   getDeployableServiceRouteName,
   getDeployableServiceUrl,
 } from './helpers/project-route-shared.js';
+import { exposeProjectTunnel } from './helpers/expose-tunnel.js';
 import { loadPreviewProjections } from './helpers/preview-projection.js';
 import { parseDockerLogChunk } from './helpers/docker-log-timestamps.js';
 import {
@@ -628,29 +629,20 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
 
   api.post('/projects/:id/expose', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-
-    // PR 4 canonical-first: assigned_port from deployable services row.
-    const deployable = await ctx.db.getDeployableForProject(project.id);
-    const exposePort = deployable?.assigned_port ?? project.assigned_port;
-    if (!exposePort) {
+    const outcome = await exposeProjectTunnel(ctx, project);
+    if (outcome.kind === 'not-running') {
       return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
     }
-
-    try {
-      const url = await ctx.pipeline.exposeTunnel(project.id, exposePort);
-      return c.json({ status: 'exposed', project: project.name, publicUrl: url });
-    } catch (error) {
-      if (error instanceof TunnelStartError) {
-        return c.json(
-          {
-            error: 'TUNNEL_START_FAILED',
-            message: 'Cloudflare service is temporarily unavailable. Please try again.',
-          },
-          503,
-        );
-      }
-      throw error;
+    if (outcome.kind === 'tunnel-failed') {
+      return c.json(
+        {
+          error: 'TUNNEL_START_FAILED',
+          message: 'Cloudflare service is temporarily unavailable. Please try again.',
+        },
+        503,
+      );
     }
+    return c.json({ status: 'exposed', project: project.name, publicUrl: outcome.publicUrl });
   });
 
   api.post('/projects/:id/unexpose', async (c) => {
