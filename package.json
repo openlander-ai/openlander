@@ -1,6 +1,6 @@
 {
   "name": "openlander",
-  "version": "0.1.7-rc.1",
+  "version": "0.1.7",
   "description": "Self-hosted deployment control plane for coding agents",
   "type": "module",
   "bin": {
