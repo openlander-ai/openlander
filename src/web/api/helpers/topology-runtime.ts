@@ -1,8 +1,12 @@
 import type { AppContext } from '../../../app.js';
 import { createModuleLogger } from '../../../lib/logger.js';
 import { isManagedServiceKind, MANAGED_SERVICE_KINDS } from '../../../db/repos/service.repo.js';
-import { projectIdToDeployableServiceId } from '../../../db/service-ids.js';
 import type { ServiceConnectionRow, ServiceRow } from '../../../db/types.js';
+import {
+  loadServiceView,
+  serviceViewFromRows,
+  type ServiceView,
+} from '../../../db/views/service-view.js';
 import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../../pipeline/docker.js';
 import { getProjectUrl } from '../../../pipeline/traefik.js';
 
@@ -405,44 +409,56 @@ export interface LegacyTopologyNodeResult {
  * fallback). Previously a 30-line block copy-pasted across both files with
  * identical fallback chains. Behavior preserved exactly:
  *
- * - `port` falls back deployable → node → null
+ * - `port` = `view.assignedPort` (deployable → node → null)
  * - `url` is `getProjectUrl(node.name)` when port resolves, else `null`
- * - `image` falls back deployable.image_url → node.image_url →
- *   deployable.image_tag → node.image_tag → `${node.name}:latest`
- * - `runtimeNode.id` = deployable.id ?? projectIdToDeployableServiceId(node.id)
- * - `runtimeNode.container_id` = deployable.container_id ?? node.container_id
- * - `runtimeNode.status` = deployable.status ?? node.status ?? null
+ * - `image` = `view.imageUrl ?? view.imageTag ?? `${node.name}:latest``
+ *   (ServiceView pre-folds the deployable/node fallback for each field)
+ * - `runtimeNode.id` = `view.id` (handled by ServiceView)
+ * - `runtimeNode.container_id` = `view.containerId`
+ * - `runtimeNode.status` = `view.status === 'idle' ? null : view.status`
+ *   (adapter mapping per the decision §6.4 contract: this helper historically
+ *   emitted `null`, never `'idle'`)
  * - `kind` is regex-inferred from `node.name`
  * - `dependsOn` is `dependsOnMap.get(node.id) ?? []`
  *
  * Callers control concurrency (`Promise.all` vs `mapWithConcurrency`) and may
- * pass a pre-fetched deployable row via `options.cachedDeployable` to skip
- * the redundant DB round-trip for the standalone-project case.
+ * pass a pre-built `ServiceView` via `options.cachedView` to skip the
+ * redundant DB round-trip for the standalone-project case. (v0.2 S1.2:
+ * cache key changed from `cachedDeployable: ServiceRow | null` to
+ * `cachedView: ServiceView | null` so the caller's project context — needed
+ * for the project-row fallback half of the view — stays explicit at the
+ * call site.)
  */
 export async function buildLegacyTopologyNode(
   ctx: Pick<AppContext, 'db' | 'docker'>,
   node: LegacyTopologyNodeInput,
   options: {
     dependsOnMap: ReadonlyMap<string, readonly string[]>;
-    cachedDeployable?: ServiceRow | null;
+    cachedView?: ServiceView;
   },
 ): Promise<LegacyTopologyNodeResult> {
-  const deployable =
-    options.cachedDeployable !== undefined
-      ? options.cachedDeployable
-      : ((await ctx.db.getDeployableForProject(node.id)) ?? null);
-  const port = deployable?.assigned_port ?? node.assigned_port ?? null;
+  // The two concrete callers (project-compat, service-aux) always pass a
+  // full `ProjectRow` as `node`; `LegacyTopologyNodeInput` is the width-typed
+  // contract. Cast is safe — `loadServiceView` reads only fields already
+  // declared on `LegacyTopologyNodeInput`. Callers that already know the
+  // project context (`project-compat`'s standalone branch) pre-build the
+  // view with `serviceViewFromRows` and pass it via `cachedView`; that path
+  // never lands here.
+  const view =
+    options.cachedView ??
+    (await loadServiceView(ctx.db, node as unknown as Parameters<typeof loadServiceView>[1]));
+  const port = view.assignedPort;
   const url = port ? getProjectUrl(node.name) : null;
-  const image =
-    deployable?.image_url ??
-    node.image_url ??
-    deployable?.image_tag ??
-    node.image_tag ??
-    `${node.name}:latest`;
+  const image = view.imageUrl ?? view.imageTag ?? `${node.name}:latest`;
   const runtimeNode: TopologyNode = {
-    id: deployable?.id ?? projectIdToDeployableServiceId(node.id),
-    container_id: deployable?.container_id ?? node.container_id ?? null,
-    status: deployable?.status ?? node.status ?? null,
+    id: view.id,
+    container_id: view.containerId,
+    // Preserve the pre-S1 `string | null` shape that downstream
+    // `getTopologyNodeRuntime` consumes. The view normalizes the
+    // "missing on both rows" case to `'idle'`; this adapter restores
+    // the legacy `null` emission so the health classification branches
+    // (`status === 'building'`, `status === 'running'`) match exactly.
+    status: view.status === 'idle' ? null : view.status,
   };
   const runtime = await getTopologyNodeRuntime(ctx, runtimeNode);
   return {
@@ -458,6 +474,13 @@ export async function buildLegacyTopologyNode(
     dependsOn: [...(options.dependsOnMap.get(node.id) ?? [])],
   };
 }
+
+/**
+ * `serviceViewFromRows` is re-exported here so callers of
+ * `buildLegacyTopologyNode` can build the `cachedView` option without an
+ * extra import — the two concerns are co-located on purpose.
+ */
+export { serviceViewFromRows };
 
 /**
  * Build dependsOn edges implied by service connections: a consumer depends on
