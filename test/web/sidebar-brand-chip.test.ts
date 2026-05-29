@@ -53,7 +53,7 @@ describe('Sidebar brand chip — version pin polish', () => {
       /grid h-7 w-7 place-items-center rounded-md bg-\[color:var\(--ol-primary-soft\)\]/,
     );
     expect(sidebarSource).toMatch(/src=\{BRAND\.markUrl\}/);
-    expect(sidebarSource).toMatch(/h-5 w-5 object-contain/);
+    expect(sidebarSource).toMatch(/h-7 w-7 object-contain/);
   });
 
   it('uses 15px brand name (not 14px) so the name does not look undersized next to the glyph', () => {
