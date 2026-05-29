@@ -165,7 +165,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
           aria-hidden
           className="grid h-7 w-7 place-items-center rounded-md bg-[color:var(--ol-primary-soft)]"
         >
-          <img src={BRAND.markUrl} alt="" className="h-5 w-5 object-contain" />
+          <img src={BRAND.markUrl} alt="" className="h-7 w-7 object-contain" />
         </span>
         {!collapsed && (
           <span className="flex min-w-0 items-baseline gap-2">
