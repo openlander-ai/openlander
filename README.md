@@ -4,6 +4,11 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
+[Try the demo app](#quickstart) · [Quickstart](#quickstart) · [Current status](#current-status) · [MCP tools](docs/wiki/MCP-Tools-Reference.md)
+
+OpenLander lets coding agents deploy, inspect, diagnose, and operate apps on
+your own server, with risky actions gated by human approval.
+
 ---
 
 ## Quickstart
@@ -63,6 +68,31 @@ For agent setup details, see [MCP Tools Reference](docs/wiki/MCP-Tools-Reference
 
 ---
 
+## Current status
+
+OpenLander v0.1 is an early public preview.
+
+It is good for:
+
+- trusted self-hosted servers
+- side projects and small apps
+- agent-assisted deployment workflows
+- cheap VPS, homelab, and small server setups
+
+It is not yet:
+
+- a mature Coolify or Dokploy replacement
+- a production-grade multi-tenant sandbox
+- a Nomad or Kubernetes replacement
+- a fully self-healing PaaS
+- safe for running arbitrary untrusted code without additional isolation
+
+OpenLander controls Docker on the host and is intended for trusted self-hosted
+environments. Do not expose the dashboard or MCP endpoint publicly without
+authentication, TLS, and network-level protection.
+
+---
+
 ## Why OpenLander?
 
 AI coding agents made building software faster, but deployment is still a
@@ -71,9 +101,11 @@ deploy tools assume a human is clicking the dashboard. Agents can hit a REST
 API, but they often don't get the context they need to debug a failed build,
 inspect runtime state, or recover safely.
 
-OpenLander is a self-hosted control plane designed around MCP. It exposes
-deploys, logs, services, approvals, and runtime state in a shape coding
-agents can read, with risky actions held behind explicit human approval.
+OpenLander's core operations are protocol-independent. v0.1 ships with MCP as
+the first supported adapter because it is the most practical interface current
+coding agents can use. OpenLander exposes deploys, logs, services, approvals,
+and runtime state in a shape agents can read, with risky actions held behind
+explicit human approval.
 Environment variables and secrets are masked by default in MCP responses; raw
 values are only returned through explicit reveal operations.
 
@@ -95,10 +127,9 @@ environment, not a multi-tenant sandbox for arbitrary untrusted code.
 Most deploy platforms assume a human sits in front of the dashboard, reads the
 form, and clicks the button. OpenLander is built the other way around.
 
-**Agents do the work.** Cursor, Claude Code, OpenCode, Cline, Windsurf, and
-Codex drive deploys, redeploys, log inspection, and recovery through the MCP
-protocol. No bespoke integration — if your coding agent speaks MCP, it can
-operate OpenLander.
+**Agents do the work.** v0.1 supports MCP out of the box, so Claude Code,
+Cursor, OpenCode, Cline, Windsurf, and Codex can drive deploys, redeploys, log
+inspection, and recovery through OpenLander today.
 
 **Guardrails are built in.** Agents get org- and project-scoped tokens.
 Destructive MCP actions are either blocked outright or held for human
