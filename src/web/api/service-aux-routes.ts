@@ -4,14 +4,13 @@ import type { Context } from 'hono';
 import type { AppContext } from '../../app.js';
 import { TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
-import { getProjectUrl } from '../../pipeline/traefik.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 import {
   getDeployableServiceRouteName,
   getDeployableServiceUrl,
-  normalizeTimestamp,
 } from './helpers/project-route-shared.js';
+import { loadPreviewProjections } from './helpers/preview-projection.js';
 import { gitWebhooksDisabledResponse } from './git-webhook-disabled.js';
 import {
   buildConnectionDependsOn,
@@ -208,24 +207,7 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
   api.get('/projects/:p/services/:s/previews', (c) => {
     return withServiceAsId(c, async (cx) => {
       const project = await getProjectOrThrow(cx, ctx);
-      const previews = await ctx.db.getPreviewProjects(project.id);
-      return cx.json({
-        previews: await Promise.all(
-          previews.map(async (preview) => {
-            const deployable = await ctx.db.getDeployableForProject(preview.id);
-            return {
-              id: preview.id,
-              name: preview.name,
-              status: deployable?.status ?? preview.status,
-              prNumber: preview.pr_number,
-              url: getProjectUrl(preview.name),
-              publicUrl: deployable?.public_url ?? preview.public_url,
-              createdAt: normalizeTimestamp(preview.created_at),
-              updatedAt: normalizeTimestamp(preview.updated_at),
-            };
-          }),
-        ),
-      });
+      return cx.json({ previews: await loadPreviewProjections(ctx, project.id) });
     });
   });
 
