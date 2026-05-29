@@ -28,6 +28,7 @@
  */
 
 import type { Database } from '../index.js';
+import { deployableServiceIdToProjectId } from '../service-ids.js';
 import type { ProjectRow, ServiceRow } from '../types.js';
 
 /** Service runtime status normalized for the read model. */
@@ -37,6 +38,7 @@ export type ServiceSource = 'git' | 'image';
 export type ServiceBuildMethod = 'dockerfile' | 'compose';
 export type ServiceHealthCheckStrategy = 'http' | 'tcp' | 'exec' | 'none';
 export type ServiceVisibility = 'internal' | 'quick-share' | 'shared' | 'production';
+export type ServiceProjectType = 'web' | 'worker';
 
 /**
  * Projection used by every read-surface caller. Field set mirrors the
@@ -95,6 +97,22 @@ export interface ServiceView {
   visibility: ServiceVisibility;
   pendingFix: string | null;
   recoveringStartedAt: string | null;
+
+  // ── S1.3 additions for `mapProjectForApi` ──
+  /** `'web' | 'worker'` — defaults to `null` when neither row carries one. */
+  projectType: ServiceProjectType | null;
+  /** Encrypted quick-share / shared-access code. */
+  accessCode: string | null;
+  accessCodeIv: string | null;
+  /**
+   * Parent project group id when this service is a child of another
+   * group (compose-child / preview). Resolves the
+   * `parent_service_id → parent project id` rewrite at the view layer so
+   * adapters don't re-implement the `deployableServiceIdToProjectId`
+   * call. Falls back to `project.parent_project_id` when no service-side
+   * pointer exists.
+   */
+  parentProjectId: string | null;
 }
 
 /**
@@ -159,6 +177,18 @@ export function serviceViewFromRows(
     visibility: service?.visibility ?? project.visibility ?? 'internal',
     pendingFix: service?.pending_fix ?? project.pending_fix ?? null,
     recoveringStartedAt: service?.recovering_started_at ?? project.recovering_started_at ?? null,
+
+    projectType: service?.project_type ?? project.project_type ?? null,
+    accessCode: service?.access_code ?? project.access_code ?? null,
+    accessCodeIv: service?.access_code_iv ?? project.access_code_iv ?? null,
+    // Mirrors the pre-v0.2 `mapProjectForApi` chain: prefer the
+    // service-side `parent_service_id` (transformed back into a project
+    // id), fall through to the legacy `project.parent_project_id`
+    // column. Keeps the transform inside the view layer so adapters
+    // never re-import `deployableServiceIdToProjectId`.
+    parentProjectId: service?.parent_service_id
+      ? deployableServiceIdToProjectId(service.parent_service_id)
+      : (project.parent_project_id ?? null),
   };
 }
 
