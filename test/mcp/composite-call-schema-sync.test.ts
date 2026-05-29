@@ -25,6 +25,14 @@
  * Allowlist (`PARTIAL_PARAM_ALLOWLIST`): example call sites that
  * intentionally show partial params (teaching one parameter at a time
  * etc.) — each entry needs a rationale comment.
+ *
+ * M3 extends the same gate to backticked shorthand calls — the
+ * `deploy_app(...)`, `get_deploy_status(...)`, etc. forms that drop the
+ * `openlander_<composite>.` prefix for brevity. The shorthand surface
+ * doesn't carry composite information, so M3 only enforces ToolDef
+ * existence + required-param presence. Action scope is gated by
+ * `SCANNED_SHORTHAND_ACTIONS` to prevent the regex from matching
+ * unrelated function-call-shaped prose; opt actions in deliberately.
  */
 
 import { readFile } from 'node:fs/promises';
@@ -102,6 +110,38 @@ interface ExampleCall {
 const PARTIAL_PARAM_ALLOWLIST: ReadonlyMap<string, readonly string[]> = new Map();
 
 /**
+ * Shorthand example surface: backticked `<action>(...)` snippets in
+ * Deploy-Guide.md / Integration-Guide.md that drop the
+ * `openlander_<composite>.` prefix for brevity. The composite is
+ * ambiguous from context so M3 only enforces ToolDef existence and
+ * required-param presence — composite routing is deferred to a future
+ * slice that can derive ownership from the surrounding section header.
+ *
+ * To avoid false positives, the gate only scans actions listed here.
+ * Add an action to opt in; never to opt out.
+ */
+const SCANNED_SHORTHAND_ACTIONS: ReadonlySet<string> = new Set([
+  'deploy_app',
+  'get_deploy_status',
+  'get_build_log',
+  'create_service',
+]);
+
+/**
+ * Per-site allowlist for shorthand calls — same shape as
+ * PARTIAL_PARAM_ALLOWLIST but keyed by `<file>:<action>` (no composite
+ * prefix since the shorthand surface doesn't carry one).
+ */
+const SHORTHAND_PARTIAL_PARAM_ALLOWLIST: ReadonlyMap<string, readonly string[]> = new Map([
+  // Integration-Guide.md narrative shorthand: `create_service(project_id |
+  // project_name, template)` illustrates HOW project association works at
+  // the call site, not a literal invocation. The `name` parameter is named
+  // in the prose around the chain. Treat the missing-`name` failure as a
+  // documentation convention, not a drift signal.
+  ['docs/wiki/Integration-Guide.md:create_service', ['name']],
+]);
+
+/**
  * Walk top-level `key:` tokens out of an args string, ignoring keys
  * inside nested `{...}` objects (which represent values, not args).
  */
@@ -125,6 +165,40 @@ function extractTopLevelParamKeys(argsStr: string): string[] {
   }
   if (buffer.trim()) flush();
   return keys;
+}
+
+interface ShorthandCall {
+  source: string;
+  action: string;
+  paramKeys: string[];
+}
+
+/**
+ * Find backticked `<action>(...)` shorthand calls — `deploy_app(...)`,
+ * `get_deploy_status(...)`, etc. — restricted to actions listed in
+ * `SCANNED_SHORTHAND_ACTIONS`. The leading-backtick anchor keeps the
+ * regex from matching ordinary function-call prose (Hono handlers,
+ * TypeScript snippets) that happen to be word-shaped.
+ */
+function parseShorthandCalls(text: string, filePath: string): ShorthandCall[] {
+  const out: ShorthandCall[] = [];
+  // Backtick anchors keep the match scoped to inline code spans; `[^`)]*`
+  // stops at either the closing paren or any stray backtick so adjacent
+  // code spans don't chain into one capture.
+  const re = /`([a-z_][a-z0-9_]*)\(([^`)]*)\)`/g;
+  for (const match of text.matchAll(re)) {
+    const [, action, argsStr] = match;
+    if (!action || argsStr === undefined) continue;
+    if (!SCANNED_SHORTHAND_ACTIONS.has(action)) continue;
+    const offset = match.index ?? 0;
+    const line = text.slice(0, offset).split('\n').length;
+    out.push({
+      source: `${filePath}:${line}`,
+      action,
+      paramKeys: extractTopLevelParamKeys(argsStr),
+    });
+  }
+  return out;
 }
 
 /**
@@ -224,6 +298,52 @@ describe('MCP composite-tools ⇄ docs/wiki example calls (schema-level)', () =>
             ', ',
           )}] (declared: [${call.paramKeys.join(', ')}], schema requires: [${required.join(', ')}]). ` +
             `Add the param to the example, or — if the omission is intentional — register the action under PARTIAL_PARAM_ALLOWLIST with key "${allowKey}".`,
+        );
+      }
+    }
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
+});
+
+describe('MCP docs/wiki shorthand example calls (schema-level)', () => {
+  it('every scanned shorthand example resolves to a registered ToolDef', async () => {
+    const failures: string[] = [];
+    for (const docPath of SCANNED_DOCS) {
+      const text = await readFile(path.join(REPO_ROOT, docPath), 'utf8');
+      for (const call of parseShorthandCalls(text, docPath)) {
+        if (!TOOL_DEFS_BY_NAME.has(call.action)) {
+          // Defensive: SCANNED_SHORTHAND_ACTIONS gating already enforces
+          // that the action is known at the test boundary, but a future
+          // ToolDef rename without updating the set would surface here
+          // with a clear file:line pointer.
+          failures.push(
+            `${call.source}: shorthand \`${call.action}(...)\` — action not in ToolDef registry`,
+          );
+        }
+      }
+    }
+    expect(failures, failures.join('\n')).toEqual([]);
+  });
+
+  it('every scanned shorthand example provides all required params for its action', async () => {
+    const failures: string[] = [];
+    for (const docPath of SCANNED_DOCS) {
+      const text = await readFile(path.join(REPO_ROOT, docPath), 'utf8');
+      for (const call of parseShorthandCalls(text, docPath)) {
+        const tool = TOOL_DEFS_BY_NAME.get(call.action);
+        if (!tool) continue; // caught by the previous assertion
+        const required = requiredKeysOf(tool.inputSchema);
+        const missing = required.filter((k) => !call.paramKeys.includes(k));
+        if (missing.length === 0) continue;
+        const allowKey = `${docPath}:${call.action}`;
+        const allowed = SHORTHAND_PARTIAL_PARAM_ALLOWLIST.get(allowKey) ?? [];
+        const unexpected = missing.filter((k) => !allowed.includes(k));
+        if (unexpected.length === 0) continue;
+        failures.push(
+          `${call.source}: shorthand \`${call.action}(...)\` missing required params: [${unexpected.join(
+            ', ',
+          )}] (declared: [${call.paramKeys.join(', ')}], schema requires: [${required.join(', ')}]). ` +
+            `Add the param to the example, or — if the omission is intentional — register the action under SHORTHAND_PARTIAL_PARAM_ALLOWLIST with key "${allowKey}".`,
         );
       }
     }
