@@ -1,5 +1,6 @@
 import type { AppContext } from '../../../app.js';
 import type { ProjectRow } from '../../../db/types.js';
+import { loadServiceView } from '../../../db/views/service-view.js';
 import { TunnelStartError } from '../../../errors.js';
 
 /**
@@ -35,8 +36,13 @@ export async function exposeProjectTunnel(
   ctx: Pick<AppContext, 'db' | 'pipeline'>,
   project: ProjectRow,
 ): Promise<ExposeProjectTunnelOutcome> {
-  const deployable = await ctx.db.getDeployableForProject(project.id);
-  const exposePort = deployable?.assigned_port ?? project.assigned_port;
+  // v0.2 service-first read-model, slice S1.1: source the assigned port
+  // from `ServiceView` instead of the inline `deployable?.X ?? project.X`
+  // fallback. `view.assignedPort` collapses to `null` when neither row
+  // resolves a port, so the `!exposePort` guard short-circuits to the
+  // pre-S1 `not-running` outcome unchanged.
+  const view = await loadServiceView(ctx.db, project);
+  const exposePort = view.assignedPort;
   if (!exposePort) {
     return { kind: 'not-running' };
   }
