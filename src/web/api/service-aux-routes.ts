@@ -22,7 +22,7 @@ import {
   storedServiceStatusToTopologyHealth,
   type TopologyNode,
 } from './helpers/topology-runtime.js';
-import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../pipeline/docker.js';
+import { loadProjectRuntimeStats } from './helpers/service-runtime-stats.js';
 
 const log = createModuleLogger('api:service-aux');
 
@@ -46,28 +46,7 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
   api.get('/projects/:p/services/:s/stats', async (c) => {
     return withServiceAsId(c, async (cx) => {
       const project = await getProjectOrThrow(cx, ctx);
-      const deployable = await ctx.db.getDeployableForProject(project.id);
-      const status = deployable?.status ?? project.status;
-      const containerId = deployable?.container_id ?? project.container_id;
-      if (containerId && status === 'running') {
-        return ctx.docker
-          .getContainerStats(containerId)
-          .then((stats) => {
-            const s = stats as ContainerStatsRaw;
-            const cpuCountRaw = s.cpu_stats.cpu_usage.percpu_usage?.length;
-            const cpuCount =
-              cpuCountRaw && cpuCountRaw > 0 ? cpuCountRaw : s.cpu_stats.online_cpus || 1;
-            const cpuPercent = computeContainerCpuPercent(s, cpuCount);
-            return cx.json({
-              cpu: Math.round(cpuPercent * 10) / 10,
-              memory: s.memory_stats.usage,
-              memoryLimit: s.memory_stats.limit,
-              status,
-            });
-          })
-          .catch(() => cx.json({ cpu: 0, memory: 0, memoryLimit: 0, status }));
-      }
-      return Promise.resolve(cx.json({ cpu: 0, memory: 0, memoryLimit: 0, status }));
+      return cx.json(await loadProjectRuntimeStats(ctx, project));
     });
   });
 
