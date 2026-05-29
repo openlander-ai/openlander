@@ -6,6 +6,7 @@ import {
   __test_resetTopologyNodeCache,
   buildLegacyTopologyNode,
   inferLegacyTopologyKind,
+  serviceViewFromRows,
   type LegacyTopologyNodeInput,
 } from '../../src/web/api/helpers/topology-runtime.js';
 
@@ -145,27 +146,42 @@ describe('buildLegacyTopologyNode', () => {
     expect(node.dependsOn).toEqual([]);
   });
 
-  it('uses cachedDeployable instead of refetching when supplied', async () => {
-    const cached = makeServiceRow({ assigned_port: 7777 });
+  it('uses cachedView instead of refetching when supplied', async () => {
+    // The caller already built a ServiceView (project-compat does this
+    // in the standalone-project branch via `serviceViewFromRows`). The
+    // helper should consume it and skip the DB round-trip entirely.
+    const cachedView = serviceViewFromRows(
+      makeInputNode({ name: 'p-3' }) as unknown as Parameters<typeof serviceViewFromRows>[0],
+      makeServiceRow({ assigned_port: 7777 }),
+    );
     const ctx = makeCtx({ deployable: makeServiceRow({ assigned_port: 9999 }) });
 
     const node = await buildLegacyTopologyNode(ctx, makeInputNode({ name: 'p-3' }), {
       dependsOnMap: new Map(),
-      cachedDeployable: cached,
+      cachedView,
     });
 
     expect(node.port).toBe(7777);
     expect(ctx.db.getDeployableForProject).not.toHaveBeenCalled();
   });
 
-  it('treats cachedDeployable: null as a final "no deployable" signal (no refetch)', async () => {
+  it('supports a caller-built cachedView with a null deployable (standalone-no-svc case)', async () => {
+    // Project-compat passes `serviceViewFromRows(project, legacyStandaloneDeployable ?? null)`
+    // when the project group has no canonical `__svc` row yet. The view
+    // resolves the port from the project-row fallback.
+    const cachedView = serviceViewFromRows(
+      makeInputNode({
+        name: 'p-4',
+        assigned_port: 4444,
+      }) as unknown as Parameters<typeof serviceViewFromRows>[0],
+      null,
+    );
     const ctx = makeCtx({ deployable: makeServiceRow() });
 
-    const node = await buildLegacyTopologyNode(
-      ctx,
-      makeInputNode({ name: 'p-4', assigned_port: 4444 }),
-      { dependsOnMap: new Map(), cachedDeployable: null },
-    );
+    const node = await buildLegacyTopologyNode(ctx, makeInputNode({ name: 'p-4' }), {
+      dependsOnMap: new Map(),
+      cachedView,
+    });
 
     expect(node.port).toBe(4444);
     expect(ctx.db.getDeployableForProject).not.toHaveBeenCalled();

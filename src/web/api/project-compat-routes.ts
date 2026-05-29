@@ -22,6 +22,7 @@ import {
   mapWithConcurrency,
   mergeDependsOn,
   registerTopologyCacheInvalidation,
+  serviceViewFromRows,
   storedServiceStatusToTopologyHealth,
   TOPOLOGY_INSPECT_CONCURRENCY,
 } from './helpers/topology-runtime.js';
@@ -291,11 +292,14 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
               dependsOnMap,
               // Standalone single-project topology already fetched the
               // deployable row above to short-circuit the empty-result
-              // case — pass it through so the helper skips the redundant
-              // DB round-trip.
-              cachedDeployable:
+              // case — fold it (with the surrounding `project` row) into
+              // a `ServiceView` here so the helper skips the redundant
+              // DB round-trip. S1.2 swapped `cachedDeployable: ServiceRow`
+              // for `cachedView: ServiceView` to keep the project context
+              // explicit at the call site instead of casting inside.
+              cachedView:
                 childProjects.length === 0 && node.id === project.id
-                  ? (legacyStandaloneDeployable ?? null)
+                  ? serviceViewFromRows(project, legacyStandaloneDeployable ?? null)
                   : undefined,
             }),
           );
