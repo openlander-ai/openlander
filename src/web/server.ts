@@ -335,6 +335,22 @@ function createApp(
     return c.notFound();
   });
 
+  app.get('/brand/*', async (c) => {
+    const filePath = join(WEB_DIST, c.req.path);
+    if (existsSync(filePath)) {
+      const ext = extname(filePath);
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      const content = readFileSync(filePath);
+      return new Response(content, {
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=3600',
+        },
+      });
+    }
+    return c.notFound();
+  });
+
   app.get('*', async (c) => {
     if (
       c.req.path.startsWith('/api/') ||
