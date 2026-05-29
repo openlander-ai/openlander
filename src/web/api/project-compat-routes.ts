@@ -5,13 +5,12 @@ import type { AppContext } from '../../app.js';
 import { TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { encrypt } from '../../env/crypto.js';
-import { getProjectUrl } from '../../pipeline/traefik.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 import {
   getDeployableServiceRouteName,
   getDeployableServiceUrl,
-  normalizeTimestamp,
 } from './helpers/project-route-shared.js';
+import { loadPreviewProjections } from './helpers/preview-projection.js';
 import { parseDockerLogChunk } from './helpers/docker-log-timestamps.js';
 import {
   buildConnectionDependsOn,
@@ -773,28 +772,7 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
 
   api.get('/projects/:id/previews', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-
-    const previews = await ctx.db.getPreviewProjects(project.id);
-    return c.json({
-      previews: await Promise.all(
-        previews.map(async (preview) => {
-          // PR 4 canonical-first: status + public_url from each preview's
-          // deployable services row when available; fall back to legacy
-          // projects columns through migration 0012.
-          const deployable = await ctx.db.getDeployableForProject(preview.id);
-          return {
-            id: preview.id,
-            name: preview.name,
-            status: deployable?.status ?? preview.status,
-            prNumber: preview.pr_number,
-            url: getProjectUrl(preview.name),
-            publicUrl: deployable?.public_url ?? preview.public_url,
-            createdAt: normalizeTimestamp(preview.created_at),
-            updatedAt: normalizeTimestamp(preview.updated_at),
-          };
-        }),
-      ),
-    });
+    return c.json({ previews: await loadPreviewProjections(ctx, project.id) });
   });
 
   api.delete('/projects/:id/previews/:previewId', async (c) => {
