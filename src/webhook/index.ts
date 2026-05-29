@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid';
 
 import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
-import type { AgentPool } from '../llm/agent-pool.js';
+import type { AgentPool } from '../_ai-ops/agent-pool.js';
 import type { DeployPipeline } from '../pipeline/deploy.js';
 import { createModuleLogger } from '../lib/logger.js';
 import {

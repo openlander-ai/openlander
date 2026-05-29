@@ -3,14 +3,14 @@ import { randomUUID } from 'node:crypto';
 import type { OpsIncidentRow } from '../db/types.js';
 import { eventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
-import type { OpsConfig, OpsEvent } from './ops-types.js';
-import { DEFAULT_OPS_CONFIG, DEFAULT_RECOVERY_AUTOMATION } from './ops-types.js';
-import { resolveAutomationPolicy } from './ops-config-resolver.js';
-import { RecoveryPipeline } from './ops-recovery.js';
-import { OpsAlerting } from './ops-alerting.js';
-import { CascadeDetector } from './ops-cascade.js';
-import { DigestGenerator } from './ops-digest.js';
-import { IncidentManager } from './ops-incidents.js';
+import type { OpsConfig, OpsEvent } from '../monitor/ops-types.js';
+import { DEFAULT_OPS_CONFIG, DEFAULT_RECOVERY_AUTOMATION } from '../monitor/ops-types.js';
+import { resolveAutomationPolicy } from '../monitor/ops-config-resolver.js';
+import { RecoveryPipeline } from '../monitor/ops-recovery.js';
+import { OpsAlerting } from '../monitor/ops-alerting.js';
+import { CascadeDetector } from '../monitor/ops-cascade.js';
+import { DigestGenerator } from '../monitor/ops-digest.js';
+import { IncidentManager } from '../monitor/ops-incidents.js';
 
 const log = createModuleLogger('ops-agent');
 
@@ -374,7 +374,7 @@ export class OpsAgent {
     }
 
     try {
-      const { getSystemStats } = await import('./stats.js');
+      const { getSystemStats } = await import('../monitor/stats.js');
       const stats = await Promise.resolve(getSystemStats());
       const diskPercent = stats.disk.usagePercent;
 

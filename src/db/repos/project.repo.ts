@@ -1047,7 +1047,7 @@ export class ProjectRepo {
   }
 
   // 1.0 GA B3: default aligned with `PROJECT_LOCK_TIMEOUT_MS` (30min in
-  // `src/llm/agent-pool.ts`, 30min) so the in-memory project lock and
+  // `src/_ai-ops/agent-pool.ts`, 30min) so the in-memory project lock and
   // the persisted DB lock expire in the same window — also matches
   // recovery-policy.ts:DEFAULT_LOCK_STALE_MS.
   async cleanExpiredDeployLocks(timeoutMinutes = 30): Promise<number> {

@@ -21,8 +21,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from '../../src/db/index.js';
 import { EventBus } from '../../src/events/index.js';
 import type { OpenLanderConfig } from '../../src/config/index.js';
-import { RecoveryCoordinator } from '../../src/monitor/recovery-coordinator.js';
-import type { OpsAgentRef } from '../../src/monitor/recovery-coordinator.js';
+import { RecoveryCoordinator } from '../../src/_ai-ops/recovery-coordinator.js';
+import type { OpsAgentRef } from '../../src/_ai-ops/recovery-coordinator.js';
 
 // Suppress logger output in test runs
 vi.mock('../../src/lib/logger.js', () => ({

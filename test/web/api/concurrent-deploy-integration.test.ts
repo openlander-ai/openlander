@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { Database } from '../../../src/db/index.js';
-import { AgentPool } from '../../../src/llm/agent-pool.js';
+import { AgentPool } from '../../../src/_ai-ops/agent-pool.js';
 import { createProjectRoutes } from '../../../src/web/api/project-routes.js';
 import type { AppContext } from '../../../src/app.js';
 import type { LanguageModel } from 'ai';

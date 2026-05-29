@@ -19,7 +19,7 @@ vi.mock('../../src/lib/logger.js', () => ({
   }),
 }));
 
-const { OpsAgent } = await import('../../src/monitor/ops-agent.js');
+const { OpsAgent } = await import('../../src/_ai-ops/ops-agent.js');
 const { eventBus } = await import('../../src/events/index.js');
 
 function createMockCtx() {

@@ -16,7 +16,7 @@ const MISSING_CONTAINER_SUGGESTION = 'Run restart_service to redeploy.';
 // stuck rows; we just give legitimate long recoveries more room.
 //
 // 1.0 GA B3: this timeout is intentionally LONGER than `PROJECT_LOCK_TIMEOUT_MS`
-// (15min in `src/llm/agent-pool.ts`) and `cleanExpiredDeployLocks` default
+// (15min in `src/_ai-ops/agent-pool.ts`) and `cleanExpiredDeployLocks` default
 // (15min). The two layers solve different problems: deploy locks gate
 // concurrent mutations, the watchdog frees rows that got stuck in the
 // `recovering` status field. Recovery itself can legitimately exceed the

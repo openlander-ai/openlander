@@ -3,8 +3,8 @@ import type { Database } from '../db/index.js';
 import { LLMConcurrencyExceededError } from '../errors.js';
 import type { QuestionAnswer, QuestionBridge } from '../lib/question-bridge.js';
 import type { ApprovalGate } from '../pipeline/approval-gate.js';
-import { Agent } from './agent.js';
-import type { ContextProvider, LLMProvider } from './prompts.js';
+import { Agent } from '../llm/agent.js';
+import type { ContextProvider, LLMProvider } from '../llm/prompts.js';
 
 export const MAX_POOL_SIZE = 5;
 export const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
