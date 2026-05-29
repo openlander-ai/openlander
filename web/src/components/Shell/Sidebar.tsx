@@ -161,7 +161,12 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
           rendering across browsers and made the pin read as a status badge
           instead of a version stamp. */}
       <div className="flex h-[var(--ol-topbar-h)] items-center gap-2.5 border-b border-[color:var(--ol-border-subtle)] px-4">
-        <img src={BRAND.markUrl} alt="" aria-hidden className="h-7 w-7 object-contain" />
+        <span
+          aria-hidden
+          className="grid h-7 w-7 place-items-center rounded-md bg-[color:var(--ol-primary-soft)]"
+        >
+          <img src={BRAND.markUrl} alt="" className="h-5 w-5 object-contain" />
+        </span>
         {!collapsed && (
           <span className="flex min-w-0 items-baseline gap-2">
             <span className="truncate text-[15px] font-semibold tracking-tight">{BRAND.name}</span>

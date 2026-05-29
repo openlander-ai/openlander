@@ -42,14 +42,18 @@ describe('Sidebar brand chip — version pin polish', () => {
     expect(versionPinBlock![0]).not.toMatch(/border-\[/);
   });
 
-  it('uses a 28px brand mark image (not 24px) for visual presence on the 56px topbar', () => {
+  it('uses a 28px brand mark chip (not 24px) for visual presence on the 56px topbar', () => {
     // Brand polish 2026-05-30: the colored-chip + `◆` glyph was replaced
-    // by the real PNG mark (`BRAND.markUrl`) at the same 28px footprint.
-    // Pinning the size keeps a future tweak from regressing the mark
-    // back to the 24px size that read as undersized against the brand
-    // name.
+    // by the real PNG mark (`BRAND.markUrl`) sitting inside the same
+    // chip frame (rounded-md + soft-primary background) at the same
+    // 28px footprint. The 28px is on the chip, the mark itself is 20px
+    // (h-5 w-5) inside it so the chip's soft background is still
+    // visible around the mark — matches the pre-polish ◆ ratio.
+    expect(sidebarSource).toMatch(
+      /grid h-7 w-7 place-items-center rounded-md bg-\[color:var\(--ol-primary-soft\)\]/,
+    );
     expect(sidebarSource).toMatch(/src=\{BRAND\.markUrl\}/);
-    expect(sidebarSource).toMatch(/h-7 w-7 object-contain/);
+    expect(sidebarSource).toMatch(/h-5 w-5 object-contain/);
   });
 
   it('uses 15px brand name (not 14px) so the name does not look undersized next to the glyph', () => {
