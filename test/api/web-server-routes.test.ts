@@ -9,6 +9,8 @@ import { createWebServerRoutes } from '../../src/web/api/web-server-routes.js';
 
 const ORIGINAL_HOST_IP = process.env['HOST_IP'];
 const ORIGINAL_HOST_VPN_IP = process.env['HOST_VPN_IP'];
+const ORIGINAL_PUBLIC_HOST = process.env['OPENLANDER_PUBLIC_HOST'];
+const ORIGINAL_CONTAINERIZED = process.env['OPENLANDER_CONTAINERIZED'];
 
 function makeProject(overrides: Partial<ProjectRow> = {}): ProjectRow {
   return {
@@ -184,6 +186,16 @@ describe('createWebServerRoutes', () => {
     } else {
       process.env['HOST_VPN_IP'] = ORIGINAL_HOST_VPN_IP;
     }
+    if (ORIGINAL_PUBLIC_HOST === undefined) {
+      delete process.env['OPENLANDER_PUBLIC_HOST'];
+    } else {
+      process.env['OPENLANDER_PUBLIC_HOST'] = ORIGINAL_PUBLIC_HOST;
+    }
+    if (ORIGINAL_CONTAINERIZED === undefined) {
+      delete process.env['OPENLANDER_CONTAINERIZED'];
+    } else {
+      process.env['OPENLANDER_CONTAINERIZED'] = ORIGINAL_CONTAINERIZED;
+    }
   });
 
   it('returns Web Server summary without fake throughput', async () => {
@@ -208,6 +220,34 @@ describe('createWebServerRoutes', () => {
     );
     expect(body).not.toHaveProperty('throughput');
     expect(body.lastReloadAt).toBeNull();
+    expect(body.configuration).toMatchObject({
+      advertisedHost: null,
+      containerized: false,
+      issues: [],
+    });
+  });
+
+  it('flags missing advertised host for containerized installs without a host fallback', async () => {
+    delete process.env['HOST_IP'];
+    delete process.env['HOST_VPN_IP'];
+    delete process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    const app = createApp(createContext({}));
+
+    const res = await app.request('/api/web-server/summary');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      configuration: {
+        advertisedHost: null,
+        containerized: true,
+        issues: [
+          {
+            code: 'advertised_host_missing',
+          },
+        ],
+      },
+    });
   });
 
   it('lists generated sslip and custom-domain routes with issue flags', async () => {

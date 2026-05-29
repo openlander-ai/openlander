@@ -769,7 +769,7 @@ export const translations = {
       runtime: {
         copyUrl: 'Copy URL',
         openInNewTab: 'Open in new tab',
-        publicUrlLabel: 'Public URL',
+        publicUrlLabel: 'Access URL',
         cpuLabel: 'CPU',
         memLabel: 'Memory',
         cpuSub: 'Current usage',
@@ -1269,6 +1269,13 @@ export const translations = {
         domain_error: 'Custom domain is in an error state',
       },
     },
+    configuration: {
+      title: 'Web server configuration needs attention',
+      codes: {
+        advertised_host_missing:
+          'Advertised host is not configured. Set OPENLANDER_PUBLIC_HOST to a LAN IP or domain so generated service routes are reachable.',
+      },
+    },
     routes: {
       title: 'Detected routes',
       subtitle:
@@ -1278,7 +1285,7 @@ export const translations = {
       empty:
         'No detected public routes yet. Expose a service or add a custom domain from the service Domains tab.',
       col: {
-        host: 'Public host',
+        host: 'Route host',
         service: 'Service',
         port: 'Port',
         tls: 'TLS',

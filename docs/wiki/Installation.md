@@ -48,15 +48,17 @@ On cloud providers such as AWS, also allow inbound TCP `80` and `10114` in the
 instance security group. Port `80` serves deployed app routes through Traefik;
 port `10114` serves the OpenLander dashboard and MCP endpoint.
 
-If deployed app URLs should use a specific public host, set it during install:
+If deployed app URLs should advertise a specific host, set it during install:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/openlander-ai/openlander/main/install.sh \
   | sudo env OPENLANDER_PUBLIC_HOST=apps.example.com bash
 ```
 
-Use a domain such as `apps.example.com` or a LAN IP such as `192.168.1.50`.
-IP values are advertised through `sslip.io`.
+Despite the environment variable name, this does not have to be an internet
+public IP. Use a domain such as `apps.example.com` for internet-facing installs,
+or a LAN IP such as `192.168.1.50` for internal-only installs. IP values are
+advertised through `sslip.io`.
 
 ### Install A Specific Version
 

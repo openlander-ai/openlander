@@ -21,7 +21,6 @@ import {
   getAllIps,
   getEnvironmentProjectHostname,
   getPreferredProjectUrl,
-  getProjectUrl,
   getProjectUrls,
 } from '../../../pipeline/traefik.js';
 
@@ -316,7 +315,7 @@ export function getDeployableServiceRouteName(service: ServiceRow): string {
 export function getDeployableServiceUrl(service: ServiceRow): string | null {
   const port = service.assigned_port ?? null;
   if (!port || isComposeInternalDependency(service)) return null;
-  return getProjectUrl(getDeployableServiceRouteName(service));
+  return getPreferredProjectUrl(getDeployableServiceRouteName(service), port);
 }
 
 export function mapServiceForApi(
@@ -344,7 +343,7 @@ export function mapServiceForApi(
     image: service.image_url ?? service.image_tag,
     url,
     preferred_url: url,
-    urls: url ? [{ url, type: 'host', host: new URL(url).hostname, reachable: 'host-only' }] : [],
+    urls: url ? getProjectUrls(getDeployableServiceRouteName(service), service.assigned_port) : [],
     imageUrl: service.image_url,
     imageCmd: parseImageCmd(service.image_cmd),
     source: service.source,

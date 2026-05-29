@@ -895,7 +895,7 @@ export const translations = {
         openInNewTab: '새 탭에서 열기',
         // Chrome — short field labels match overview.* convention
         // (English in both files for metric / field labels).
-        publicUrlLabel: 'Public URL',
+        publicUrlLabel: 'Access URL',
         cpuLabel: 'CPU',
         memLabel: 'Memory',
         // Content — descriptive sub captions.
@@ -1471,11 +1471,19 @@ export const translations = {
         domain_error: '커스텀 도메인 상태에 문제가 있습니다',
       },
     },
+    configuration: {
+      // Content — setup warning for containerized installs without an advertised host.
+      title: 'Web server 설정 확인 필요',
+      codes: {
+        advertised_host_missing:
+          'Advertised host가 설정되지 않았습니다. 생성되는 서비스 라우트가 다른 기기에서도 열리도록 OPENLANDER_PUBLIC_HOST를 LAN IP나 도메인으로 설정하세요.',
+      },
+    },
     routes: {
       // Chrome — section title + table headers.
       title: '감지된 라우트',
       col: {
-        host: 'Public host',
+        host: 'Route host',
         service: 'Service',
         port: 'Port',
         tls: 'TLS',

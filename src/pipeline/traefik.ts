@@ -248,7 +248,7 @@ export class TraefikManager {
   }
 }
 
-function configuredPublicHost(): string | undefined {
+export function getConfiguredPublicHost(): string | undefined {
   const raw = process.env['OPENLANDER_PUBLIC_HOST']?.trim();
   if (!raw) return undefined;
   const withoutWildcard = raw.startsWith('*.') ? raw.slice(2) : raw;
@@ -260,6 +260,10 @@ function configuredPublicHost(): string | undefined {
   } catch (_error) {
     return withoutWildcard.replace(/\/.*$/, '').replace(/:\d+$/, '') || undefined;
   }
+}
+
+function configuredPublicHost(): string | undefined {
+  return getConfiguredPublicHost();
 }
 
 function isContainerizedRuntime(): boolean {

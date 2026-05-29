@@ -39,6 +39,18 @@ describe('Web Server page v0.1', () => {
     expect(pageSource).toContain("t('webServer.issues.title'");
   });
 
+  it('renders containerized advertised-host configuration warnings', () => {
+    expect(pageSource).toContain('data-testid="web-server-config-issue-banner"');
+    expect(pageSource).toMatch(/configurationIssues\.length > 0/);
+    expect(pageSource).toContain("t('webServer.configuration.title')");
+    expect(apiSource).toContain('WebServerConfigurationIssue');
+    for (const dict of [enSource, koSource]) {
+      expect(dict).toMatch(/configuration:\s*\{/);
+      expect(dict).toMatch(/advertised_host_missing:/);
+      expect(dict).toContain('OPENLANDER_PUBLIC_HOST');
+    }
+  });
+
   it('localizes route issues by code with raw-message fallback', () => {
     expect(pageSource).toMatch(/function translateIssue\(/);
     expect(pageSource).toMatch(/`webServer\.issues\.codes\.\$\{issue\.code\}`/);

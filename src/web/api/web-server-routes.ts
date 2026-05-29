@@ -9,6 +9,7 @@ import type { AllContainerInfo, PortInfo } from '../../pipeline/docker/types.js'
 import {
   detectReverseProxy,
   getAllIps,
+  getConfiguredPublicHost,
   getProxyStatus,
   type NetworkIp,
   type ProxyDetection,
@@ -46,6 +47,17 @@ interface WebRouteIssue {
   message: string;
 }
 
+interface WebServerConfigurationIssue {
+  code: 'advertised_host_missing';
+  message: string;
+}
+
+interface WebServerConfigurationSummary {
+  advertisedHost: string | null;
+  containerized: boolean;
+  issues: WebServerConfigurationIssue[];
+}
+
 interface WebServerRoute {
   id: string;
   source: WebRouteSource;
@@ -64,6 +76,32 @@ interface WebServerRoute {
   };
   status: WebRouteStatus;
   issues: WebRouteIssue[];
+}
+
+function isContainerizedRuntime(): boolean {
+  const raw = process.env['OPENLANDER_CONTAINERIZED']?.trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes';
+}
+
+function buildConfigurationSummary(): WebServerConfigurationSummary {
+  const advertisedHost = getConfiguredPublicHost();
+  const containerized = isContainerizedRuntime();
+  const hasDetectedHost = getAllIps().length > 0;
+  const issues: WebServerConfigurationIssue[] = [];
+
+  if (containerized && !advertisedHost && !hasDetectedHost) {
+    issues.push({
+      code: 'advertised_host_missing',
+      message:
+        'OPENLANDER_PUBLIC_HOST is not configured. Set it to a LAN IP or domain so generated service routes are reachable from other machines.',
+    });
+  }
+
+  return {
+    advertisedHost: advertisedHost ?? null,
+    containerized,
+    issues,
+  };
 }
 
 interface PortAllocation {
@@ -548,6 +586,7 @@ export function createWebServerRoutes(ctx: AppContext): Hono {
         managed,
         external: containers.length - managed,
       },
+      configuration: buildConfigurationSummary(),
       dockerUnavailable,
     });
   });

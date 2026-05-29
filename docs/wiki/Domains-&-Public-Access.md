@@ -10,6 +10,10 @@
 
 Default is **Internal** (safe).
 
+`OPENLANDER_PUBLIC_HOST` is the host OpenLander advertises in generated app
+URLs. It may be a LAN IP for internal-only installs, a VPN/MagicDNS name, or a
+public domain/IP for internet-facing installs.
+
 ---
 
 ## Internal Access
@@ -17,7 +21,7 @@ Default is **Internal** (safe).
 Every deployed project gets an internal URL via Traefik:
 
 ```
-http://project-name.your-server-ip
+http://project-name.your-server-ip.sslip.io
 ```
 
 Or by port:

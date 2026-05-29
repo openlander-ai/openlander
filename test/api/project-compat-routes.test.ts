@@ -192,7 +192,9 @@ describe('createProjectCompatRoutes', () => {
 
   it('uses route-safe URLs for HTTP compose children and hides internal dependencies', async () => {
     const previousPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
-    process.env['OPENLANDER_PUBLIC_HOST'] = 'localhost';
+    const previousContainerized = process.env['OPENLANDER_CONTAINERIZED'];
+    delete process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
     const project = { id: 'stack', name: 'demo-stack', container_id: null, status: null };
     const appService = makeServiceRow({
       id: 'stack__app__svc',
@@ -252,6 +254,11 @@ describe('createProjectCompatRoutes', () => {
       } else {
         process.env['OPENLANDER_PUBLIC_HOST'] = previousPublicHost;
       }
+      if (previousContainerized === undefined) {
+        delete process.env['OPENLANDER_CONTAINERIZED'];
+      } else {
+        process.env['OPENLANDER_CONTAINERIZED'] = previousContainerized;
+      }
     });
 
     expect(res.status).toBe(200);
@@ -260,7 +267,7 @@ describe('createProjectCompatRoutes', () => {
         {
           id: 'stack__app__svc',
           name: 'demo-stack/app',
-          url: 'http://demo-stack-app.localhost',
+          url: 'http://localhost:10006',
           dependsOn: ['stack__postgres__svc', 'stack__redis__svc'],
         },
         {

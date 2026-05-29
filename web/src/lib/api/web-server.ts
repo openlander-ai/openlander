@@ -27,6 +27,17 @@ export interface WebRouteIssue {
   message: string;
 }
 
+export interface WebServerConfigurationIssue {
+  code: 'advertised_host_missing';
+  message: string;
+}
+
+export interface WebServerConfigurationSummary {
+  advertisedHost: string | null;
+  containerized: boolean;
+  issues: WebServerConfigurationIssue[];
+}
+
 export interface WebServerRoute {
   id: string;
   source: WebRouteSource;
@@ -105,6 +116,7 @@ export interface WebServerSummary {
   // Null until OpenLander records reload events. Render as a dash, not "now".
   lastReloadAt: string | null;
   containers: { total: number; managed: number; external: number };
+  configuration?: WebServerConfigurationSummary;
   dockerUnavailable: boolean;
 }
 

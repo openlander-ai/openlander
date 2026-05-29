@@ -7,11 +7,12 @@
  * Layout (top → bottom):
  *
  *   1. Health summary stat strip — Proxy · Routes (+ issues) · Entrypoints
- *   2. Issue banner — only when any route reports an issue
- *   3. Routes table — always expanded; issue rows marked with red bar
- *   4. Port allocation — collapsible, closed by default
- *   5. External containers — collapsible, closed by default; disabled empty
- *   6. Footer — "Read-only · route editing ships in v0.2"
+ *   2. Configuration warning — only when runtime URL settings need attention
+ *   3. Issue banner — only when any route reports an issue
+ *   4. Routes table — always expanded; issue rows marked with red bar
+ *   5. Port allocation — collapsible, closed by default
+ *   6. External containers — collapsible, closed by default; disabled empty
+ *   7. Footer — "Read-only · route editing ships in v0.2"
  *
  * v0.1 cuts (per spec): the request-rate stat cell and the matching
  * per-route metric column. Both restore in v0.2 when Traefik metrics
@@ -30,6 +31,7 @@ import {
   type ExternalContainer,
   type PortAllocation,
   type ProxyType,
+  type WebServerConfigurationIssue,
   type WebRouteIssue,
   type WebRouteStatus,
   type WebRouteTlsStatus,
@@ -87,6 +89,12 @@ function translateIssue(issue: WebRouteIssue, t: Translate): string {
   return localized === key ? issue.message : localized;
 }
 
+function translateConfigurationIssue(issue: WebServerConfigurationIssue, t: Translate): string {
+  const key = `webServer.configuration.codes.${issue.code}`;
+  const localized = t(key);
+  return localized === key ? issue.message : localized;
+}
+
 // Wrap lib's formatRelativeTime to preserve the '—' fallback that this
 // page used for null / unparseable timestamps (the lib returns '' instead
 // since most callers prefer hiding the slot).
@@ -109,6 +117,7 @@ export function WebServerSettings() {
   const issueRows = (routes.data?.routes ?? []).filter(
     (route) => route.issues.length > 0 || route.status === 'error',
   );
+  const configurationIssues = summary.data?.configuration?.issues ?? [];
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
@@ -195,6 +204,26 @@ export function WebServerSettings() {
           </p>
         )}
       </OuterCard>
+
+      {configurationIssues.length > 0 && (
+        <div
+          data-testid="web-server-config-issue-banner"
+          className="flex items-start gap-3 rounded-lg border border-[color:var(--ol-warning)]/40 bg-[color:var(--ol-warning-soft,rgba(255,176,0,0.08))] px-4 py-3"
+          role="alert"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--ol-warning)]" />
+          <div className="flex min-w-0 flex-col gap-1">
+            <p className="text-[12.5px] font-semibold text-foreground">
+              {t('webServer.configuration.title')}
+            </p>
+            <ul className="flex flex-col gap-0.5 text-[12px] text-foreground/80">
+              {configurationIssues.map((issue) => (
+                <li key={issue.code}>{translateConfigurationIssue(issue, t)}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* 2. Issue banner — only when there are issues */}
       {issueRows.length > 0 && (

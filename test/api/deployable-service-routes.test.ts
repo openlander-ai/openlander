@@ -122,9 +122,11 @@ describe('createDeployableServiceRoutes', () => {
     });
   });
 
-  it('lists compose child services instead of compose parent metadata', async () => {
+  it('lists compose child services with host-port URLs when no advertised host is configured', async () => {
     const previousPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
-    process.env['OPENLANDER_PUBLIC_HOST'] = 'localhost';
+    const previousContainerized = process.env['OPENLANDER_CONTAINERIZED'];
+    delete process.env['OPENLANDER_PUBLIC_HOST'];
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
     const project = makeProjectRow({ id: 'stack', name: 'demo-stack' });
     const composeChildren = [
       makeServiceRow({
@@ -162,6 +164,11 @@ describe('createDeployableServiceRoutes', () => {
       } else {
         process.env['OPENLANDER_PUBLIC_HOST'] = previousPublicHost;
       }
+      if (previousContainerized === undefined) {
+        delete process.env['OPENLANDER_CONTAINERIZED'];
+      } else {
+        process.env['OPENLANDER_CONTAINERIZED'] = previousContainerized;
+      }
     });
 
     expect(res.status).toBe(200);
@@ -173,7 +180,16 @@ describe('createDeployableServiceRoutes', () => {
           id: 'stack__web__svc',
           name: 'demo-stack/web',
           kind: 'compose-child',
-          url: 'http://demo-stack-web.localhost',
+          url: 'http://localhost:10006',
+          preferred_url: 'http://localhost:10006',
+          urls: [
+            {
+              url: 'http://localhost:10006',
+              type: 'host',
+              host: 'localhost',
+              reachable: 'host-only',
+            },
+          ],
         },
         {
           id: 'stack__postgres__svc',
