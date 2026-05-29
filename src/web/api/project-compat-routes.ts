@@ -32,7 +32,7 @@ import {
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
 import type { ServiceRow } from '../../db/types.js';
-import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../pipeline/docker.js';
+import { loadProjectRuntimeStats } from './helpers/service-runtime-stats.js';
 
 const log = createModuleLogger('api');
 
@@ -141,44 +141,7 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
 
   api.get('/projects/:id/stats', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-
-    // Project compatibility route: prefer the deployable service row for
-    // status + container_id, then use ProjectRow compatibility aliases.
-    const deployable = await ctx.db.getDeployableForProject(project.id);
-    const status = deployable?.status ?? project.status;
-    const containerId = deployable?.container_id ?? project.container_id;
-
-    if (containerId && status === 'running') {
-      try {
-        const stats = (await ctx.docker.getContainerStats(containerId)) as ContainerStatsRaw;
-        const cpuCountRaw = stats.cpu_stats.cpu_usage.percpu_usage?.length;
-        const cpuCount =
-          cpuCountRaw && cpuCountRaw > 0 ? cpuCountRaw : stats.cpu_stats.online_cpus || 1;
-        const cpuPercent = computeContainerCpuPercent(stats, cpuCount);
-
-        return c.json({
-          cpu: Math.round(cpuPercent * 10) / 10,
-          memory: stats.memory_stats.usage,
-          memoryLimit: stats.memory_stats.limit,
-          status,
-        });
-      } catch (err) {
-        log.debug({ err, projectId: project.id }, 'Container stats fetch failed');
-        return c.json({
-          cpu: 0,
-          memory: 0,
-          memoryLimit: 0,
-          status,
-        });
-      }
-    }
-
-    return c.json({
-      cpu: 0,
-      memory: 0,
-      memoryLimit: 0,
-      status,
-    });
+    return c.json(await loadProjectRuntimeStats(ctx, project));
   });
 
   // Phase E_NEW Task 6 — topology graph for the v4 InfraMap.
