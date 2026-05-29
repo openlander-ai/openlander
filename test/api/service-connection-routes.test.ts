@@ -282,6 +282,7 @@ describe('createServiceConnectionRoutes', () => {
     const db = {
       getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
       getProjectByName: vi.fn(async () => undefined),
+      getServices: vi.fn(async () => []),
       listServiceConnectionsByProject: vi.fn(async () => [
         { id: 'conn-1', service_id_provider: managed.id },
         { id: 'conn-missing', service_id_provider: 'missing' },
@@ -301,6 +302,41 @@ describe('createServiceConnectionRoutes', () => {
         status: 'running',
         port: 5432,
         containerName: 'ol-svc-postgres-main',
+      },
+    ]);
+  });
+
+  it('lists project-scoped managed services even without formal connections', async () => {
+    const project = makeProjectRow();
+    const managed = makeServiceRow({
+      id: 'svc-redis',
+      project_id: project.id,
+      name: 'redis-main',
+      kind: 'redis',
+      assigned_port: 6379,
+      container_name: 'ol-svc-redis-main',
+      image_url: 'redis:8-alpine',
+    });
+    const db = {
+      getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
+      getProjectByName: vi.fn(async () => undefined),
+      getServices: vi.fn(async () => [managed]),
+      listServiceConnectionsByProject: vi.fn(async () => []),
+      getService: vi.fn(async () => undefined),
+    };
+    const app = createApp({ db } as Partial<AppContext>);
+
+    const res = await app.request('/api/projects/group-1/managed-services');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual([
+      {
+        id: 'svc-redis',
+        name: 'redis-main',
+        type: 'redis',
+        status: 'running',
+        port: 6379,
+        containerName: 'ol-svc-redis-main',
       },
     ]);
   });

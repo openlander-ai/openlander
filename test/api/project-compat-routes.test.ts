@@ -314,4 +314,62 @@ describe('createProjectCompatRoutes', () => {
       ],
     });
   });
+
+  it('includes project-scoped managed services in topology nodes', async () => {
+    const project = {
+      id: 'direct-managed',
+      name: 'direct-managed',
+      container_id: null,
+      status: null,
+    };
+    const appService = makeServiceRow({
+      id: 'direct-managed__svc',
+      project_id: project.id,
+      name: 'direct-managed__svc',
+      kind: 'git',
+      image_url: 'nginx:alpine',
+    });
+    const managedService = makeServiceRow({
+      id: 'direct-managed__redis',
+      project_id: project.id,
+      name: 'direct-managed-redis',
+      kind: 'redis',
+      assigned_port: 6379,
+      image_url: 'redis:8-alpine',
+    });
+    const app = createApp({
+      docker: {
+        inspectContainer: vi.fn(async () => ({ State: { Health: { Status: 'healthy' } } })),
+      } as unknown as AppContext['docker'],
+      db: {
+        getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup: vi.fn(async () => [appService]),
+        getServices: vi.fn(async () => [managedService]),
+        getEnvironmentsByProject: vi.fn(async () => []),
+        listServiceConnectionsByProject: vi.fn(async () => []),
+        findDependenciesByProject: vi.fn(async () => []),
+        getLatestServiceMetric: vi.fn(async () => null),
+      },
+    });
+
+    const res = await app.request('/api/projects/direct-managed/topology');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      services: [
+        {
+          id: 'direct-managed__svc',
+          name: 'direct-managed',
+          kind: 'Application',
+        },
+        {
+          id: 'direct-managed__redis',
+          name: 'direct-managed-redis',
+          kind: 'Database',
+          source: 'managed',
+        },
+      ],
+    });
+  });
 });
