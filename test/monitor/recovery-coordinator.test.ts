@@ -3,7 +3,7 @@ import type { OpenLanderConfig } from '../../src/config/index.js';
 import type { Database } from '../../src/db/index.js';
 import type { RuntimeSignal } from '../../src/health/types.js';
 import { EventBus } from '../../src/events/index.js';
-import { RecoveryCoordinator, type OpsAgentRef } from '../../src/monitor/recovery-coordinator.js';
+import { RecoveryCoordinator, type OpsAgentRef } from '../../src/_ai-ops/recovery-coordinator.js';
 
 vi.mock('../../src/lib/logger.js', () => ({
   createModuleLogger: () => ({

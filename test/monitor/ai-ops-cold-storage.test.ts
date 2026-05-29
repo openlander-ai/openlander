@@ -45,4 +45,18 @@ describe('AI-ops cold-storage invariant (0.1)', () => {
     expect(appSource).toContain('const model: LanguageModel | null = null;');
     expect(appSource).not.toContain('new AgentPool(');
   });
+
+  it('imports cold-storage classes from the dedicated _ai-ops/ folder', () => {
+    // The folder convention is the visual cue that these classes are dormant
+    // 0.2 surface area. If a future change moves any of them back into
+    // monitor/ or llm/ it would erase that boundary, so pin the location.
+    expect(appSource).toContain("from './_ai-ops/recovery-coordinator.js'");
+    expect(appSource).toContain("from './_ai-ops/ops-agent.js'");
+    expect(appSource).toContain("from './_ai-ops/agent-pool.js'");
+    // Conversely, the pre-move locations must stay empty so a partial revert
+    // doesn't silently re-create the boundary blur.
+    expect(appSource).not.toContain("from './monitor/recovery-coordinator.js'");
+    expect(appSource).not.toContain("from './monitor/ops-agent.js'");
+    expect(appSource).not.toContain("from './llm/agent-pool.js'");
+  });
 });

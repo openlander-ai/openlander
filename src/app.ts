@@ -39,16 +39,16 @@ import { ActivityLogger } from './monitor/activity-logger.js';
 import { ProjectStateManager } from './monitor/project-state-manager.js';
 import { McpClientManager } from './mcp/client-manager.js';
 import { PlanEngine } from './pipeline/deploy-plan/engine.js';
-import { RecoveryCoordinator } from './monitor/recovery-coordinator.js';
+import { RecoveryCoordinator } from './_ai-ops/recovery-coordinator.js';
 import { handleDestructiveMcpApproval } from './mcp/destructive-executor.js';
 import { eventBus } from './events/index.js';
 import type { EventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
 import type { LanguageModel } from 'ai';
 import { createModuleLogger } from './lib/logger.js';
-import type { AgentPool } from './llm/agent-pool.js';
+import type { AgentPool } from './_ai-ops/agent-pool.js';
 import { ApprovalGate } from './pipeline/approval-gate.js';
-import type { OpsAgent } from './monitor/ops-agent.js';
+import type { OpsAgent } from './_ai-ops/ops-agent.js';
 
 const log = createModuleLogger('app');
 

@@ -21,7 +21,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from '../../src/db/index.js';
 import type { OpenLanderConfig } from '../../src/config/index.js';
 import { EventBus } from '../../src/events/index.js';
-import { RecoveryCoordinator } from '../../src/monitor/recovery-coordinator.js';
+import { RecoveryCoordinator } from '../../src/_ai-ops/recovery-coordinator.js';
 import { IncidentReporter } from '../../src/monitor/incident-reporter.js';
 import { ActivityLogger } from '../../src/monitor/activity-logger.js';
 import type { RuntimeSignal } from '../../src/health/types.js';

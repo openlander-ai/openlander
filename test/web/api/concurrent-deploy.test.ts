@@ -15,7 +15,7 @@ import type { AppContext } from '../../../src/app.js';
 import type { ProjectRow } from '../../../src/db/index.js';
 import type { LanguageModel } from 'ai';
 import type { Database } from '../../../src/db/index.js';
-import { AgentPool } from '../../../src/llm/agent-pool.js';
+import { AgentPool } from '../../../src/_ai-ops/agent-pool.js';
 
 function makeProject(id: string, name: string): ProjectRow {
   return {

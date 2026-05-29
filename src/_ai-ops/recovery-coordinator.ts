@@ -3,14 +3,14 @@ import type { Database } from '../db/index.js';
 import type { EventBus, EventPayload } from '../events/index.js';
 import type { RuntimeSignal } from '../health/types.js';
 import { createModuleLogger } from '../lib/logger.js';
-import type { ProjectStateManager, ProjectStatus } from './project-state-manager.js';
+import type { ProjectStateManager, ProjectStatus } from '../monitor/project-state-manager.js';
 import { consumeMcpDeploy } from '../pipeline/auto-recovery.js';
 import {
   checkRecoveryEligibility,
   type EligibilityReason as PolicyEligibilityReason,
   type RecoveryEligibilityContext,
   type RecoveryTrigger,
-} from './recovery-policy.js';
+} from '../monitor/recovery-policy.js';
 
 const log = createModuleLogger('recovery-coordinator');
 

@@ -3,7 +3,7 @@ import type { LanguageModel } from 'ai';
 import type { Database } from '../../src/db/index.js';
 import { LLMConcurrencyExceededError } from '../../src/errors.js';
 import { Agent } from '../../src/llm/agent.js';
-import { AgentPool, MAX_POOL_SIZE, PROJECT_LOCK_TIMEOUT_MS } from '../../src/llm/agent-pool.js';
+import { AgentPool, MAX_POOL_SIZE, PROJECT_LOCK_TIMEOUT_MS } from '../../src/_ai-ops/agent-pool.js';
 
 function createPool(): AgentPool {
   const model = {} as unknown as LanguageModel;
