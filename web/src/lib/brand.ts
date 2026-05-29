@@ -8,7 +8,9 @@
  * across 20 files.
  *
  * Use `BRAND.name` everywhere a user-visible product name belongs.
- * Use `BRAND.glyph` for the sidebar mark.
+ * Use `BRAND.markUrl` for the sidebar / hero brand image; `BRAND.glyph`
+ * stays as a text-only fallback for environments that cannot render the
+ * PNG (loading states, plain-text contexts).
  *
  * The default export is `BRAND` for convenience; named exports are also
  * provided for tree-shaking-friendly imports.
@@ -21,7 +23,10 @@ export const BRAND = {
   /** Compact form (e.g. mobile sidebar collapsed state) */
   nameShort: 'OL',
 
-  /** Visual mark — used as the sidebar brand glyph */
+  /** Brand mark — served from `web/public/brand/openlander-mark.png`. */
+  markUrl: '/brand/openlander-mark.png',
+
+  /** Text-only fallback when an image cannot be rendered. */
   glyph: '◆',
 
   /** Tagline (used in onboarding, marketing pages, hero copy) */

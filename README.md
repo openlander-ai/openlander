@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="web/public/brand/openlander-mark.png" alt="OpenLander" width="96" />
+</p>
+
 # OpenLander
 
 **Self-hosted deployment control plane for coding agents.**
