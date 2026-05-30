@@ -1,12 +1,13 @@
 import type { MonitoringProfile, HealthCheckConfig } from './types.js';
 import type { ProjectRow, ServiceRow } from '../db/types.js';
+import { serviceViewFromRows } from '../db/views/service-view.js';
 
 export function resolveMonitoringProfile(
   project: ProjectRow,
   deployable?: ServiceRow | null,
 ): MonitoringProfile {
-  // PR 4.5: canonical-first reads — deployable (services) is source of truth post-0012.
-  const projectType = deployable?.project_type ?? project.project_type ?? 'web';
+  const view = serviceViewFromRows(project, deployable);
+  const projectType = view.projectType ?? 'web';
 
   const defaultsByType: Record<
     'web' | 'worker',
@@ -30,10 +31,9 @@ export function resolveMonitoringProfile(
 
   const defaults = defaultsByType[projectType];
 
-  const strategy =
-    deployable?.health_check_strategy ?? project.health_check_strategy ?? defaults.strategy;
+  const strategy = view.healthCheckStrategy ?? defaults.strategy;
 
-  let path = deployable?.health_check_path ?? project.health_check_path ?? defaults.path;
+  let path = view.healthCheckPath ?? defaults.path;
   if (path && !path.startsWith('/')) {
     path = '/' + path;
   }
