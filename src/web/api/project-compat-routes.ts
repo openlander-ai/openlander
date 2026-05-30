@@ -33,6 +33,7 @@ import {
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
 import type { ServiceRow } from '../../db/types.js';
+import { loadServiceView } from '../../db/views/service-view.js';
 import { loadProjectRuntimeStats } from './helpers/service-runtime-stats.js';
 
 const log = createModuleLogger('api');
@@ -440,10 +441,11 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
     switch (action) {
       case 'cleanup_stale': {
         // Remove old containers for this project (keep the current one).
-        // Project compatibility route: prefer deployable service row's
-        // container_id, then use ProjectRow compatibility aliases.
-        const deployable = await ctx.db.getDeployableForProject(project.id);
-        const currentContainerId = deployable?.container_id ?? project.container_id;
+        // S2.3 canonical-first via the service-first read model:
+        // container_id from the deployable services row, falling back to
+        // the deprecated project column.
+        const view = await loadServiceView(ctx.db, project);
+        const currentContainerId = view.containerId;
         const managed = await ctx.docker.listManagedContainers();
         const stale = managed.filter(
           (c) =>
@@ -487,9 +489,11 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
 
     const follow = c.req.query('follow');
 
-    // PR 4 canonical-first: container_id from deployable services row.
-    const deployable = await ctx.db.getDeployableForProject(project.id);
-    const followContainerId = deployable?.container_id ?? project.container_id;
+    // S2.3 canonical-first via the service-first read model: container_id
+    // from the deployable services row, falling back to the deprecated
+    // project column.
+    const view = await loadServiceView(ctx.db, project);
+    const followContainerId = view.containerId;
     if (follow && followContainerId) {
       const containerId = followContainerId;
       return stream(c, async (s) => {
@@ -672,11 +676,15 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
 
     const { encrypted, iv } = encrypt(body.accessCode);
 
-    // PR 4 canonical-first: assigned_port from deployable services row.
-    const shareDeployable = await ctx.db.getDeployableForProject(project.id);
-    const sharePort = shareDeployable?.assigned_port ?? project.assigned_port;
-    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-    if (project.visibility !== 'quick-share' && project.visibility !== 'shared') {
+    // S2.3 canonical-first via the service-first read model: assigned_port
+    // and visibility both read from the canonical services row — the same
+    // row updateProject() routes these fields to — falling back to the
+    // deprecated project columns. Reading visibility through the view
+    // drops the prior direct `project.visibility` read (and its
+    // no-dropped-columns suppression).
+    const shareView = await loadServiceView(ctx.db, project);
+    const sharePort = shareView.assignedPort;
+    if (shareView.visibility !== 'quick-share' && shareView.visibility !== 'shared') {
       if (!sharePort) {
         return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
       }

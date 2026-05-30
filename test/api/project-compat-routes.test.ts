@@ -379,4 +379,77 @@ describe('createProjectCompatRoutes', () => {
       ],
     });
   });
+
+  it('cleanup_stale keeps the deployable services-row container, not the project alias', async () => {
+    const project = {
+      id: 'group-1',
+      name: 'workspace',
+      container_id: 'stale-project-alias',
+      status: 'running',
+    };
+    const getProject = vi.fn(async (id: string) => (id === project.id ? project : undefined));
+    const getProjectByName = vi.fn(async () => undefined);
+    const getDeployableForProject = vi.fn(async () =>
+      makeServiceRow({ container_id: 'svc-current' }),
+    );
+    const stopContainer = vi.fn(async () => undefined);
+    const removeContainer = vi.fn(async () => undefined);
+    const listManagedContainers = vi.fn(async () => [
+      { id: 'svc-current', name: 'workspace', status: 'running' },
+      { id: 'old-1', name: 'workspace-old', status: 'running' },
+    ]);
+    const app = createApp({
+      db: { getProject, getProjectByName, getDeployableForProject },
+      docker: { listManagedContainers, stopContainer, removeContainer },
+    } as unknown as Partial<AppContext>);
+
+    const res = await app.request('/api/projects/group-1/actions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'cleanup_stale' }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ status: 'ok', removed: 1 });
+    // Canonical services-row container is preserved; only the unrelated
+    // stale container is removed.
+    expect(removeContainer).toHaveBeenCalledWith('old-1');
+    expect(removeContainer).not.toHaveBeenCalledWith('svc-current');
+  });
+
+  it('share treats a services-row visibility of "shared" as already shared (canonical-first)', async () => {
+    const project = {
+      id: 'group-1',
+      name: 'workspace',
+      // Deprecated project column is stale; the canonical services row wins.
+      visibility: 'internal',
+      assigned_port: 10001,
+    };
+    const getProject = vi.fn(async (id: string) => (id === project.id ? project : undefined));
+    const getProjectByName = vi.fn(async () => undefined);
+    const getDeployableForProject = vi.fn(async () =>
+      makeServiceRow({ visibility: 'shared', assigned_port: 10001 }),
+    );
+    const updateProject = vi.fn(async () => undefined);
+    const exposeTunnel = vi.fn(async () => undefined);
+    const tunnel = { enableSharedMode: vi.fn(), disableSharedMode: vi.fn() };
+    const getTunnel = vi.fn(() => tunnel);
+    const app = createApp({
+      db: { getProject, getProjectByName, getDeployableForProject, updateProject },
+      pipeline: { exposeTunnel, getTunnel },
+    } as unknown as Partial<AppContext>);
+
+    const res = await app.request('/api/projects/group-1/share', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ accessCode: 'abcd' }),
+    });
+
+    expect(res.status).toBe(200);
+    // Already shared per the canonical row + an existing tunnel ⇒ the gate
+    // never re-exposes. Reading project.visibility ('internal') instead
+    // would wrongly enter the expose-first branch.
+    expect(exposeTunnel).not.toHaveBeenCalled();
+    expect(tunnel.enableSharedMode).toHaveBeenCalledWith('workspace', 'abcd');
+  });
 });
