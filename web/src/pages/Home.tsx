@@ -100,9 +100,8 @@ export function Home() {
   const { events: activityEvents } = useActivityFeed({ limit: 5 });
   const { t } = useLanguage();
   // Two-form plural helper: en grammar needs '1 service' vs '5 services'
-  // and our t() has no plural rules. ko renders identically for both
-  // forms (see common.count in ko.ts).
-  const pluralCount = (noun: 'services' | 'projects', count: number): string =>
+  // and our t() has no plural rules. ko renders identically for both forms.
+  const pluralCount = (noun: 'deployableServices' | 'projects', count: number): string =>
     t(`common.count.${noun}_${count === 1 ? 'one' : 'other'}`, { count });
 
   // Flat health tally across all projects
@@ -121,8 +120,8 @@ export function Home() {
 
   const allHealthy = tally.crashed === 0;
 
-  const totalServices = useMemo(
-    () => projects.reduce((sum, p) => sum + (p.serviceCount ?? 0), 0),
+  const totalDeployableServices = useMemo(
+    () => projects.reduce((sum, p) => sum + (p.deployableServiceCount ?? p.serviceCount ?? 0), 0),
     [projects],
   );
 
@@ -190,14 +189,14 @@ export function Home() {
               ? t('home.hero.noProjects')
               : allHealthy
                 ? t('home.hero.allHealthy', {
-                    services: pluralCount('services', totalServices),
+                    services: pluralCount('deployableServices', totalDeployableServices),
                     projects: pluralCount('projects', projects.length),
                   })
                 : t('home.hero.someCrashed', {
                     crashed: tally.crashed,
                     total: tally.total,
                     healthy: tally.healthy,
-                    services: pluralCount('services', totalServices),
+                    services: pluralCount('deployableServices', totalDeployableServices),
                   })}
           </h1>
         </div>
@@ -283,7 +282,7 @@ export function Home() {
       {/* ── 2. Projects grid ── */}
       <OuterCard
         title={t('home.projects.sectionTitle')}
-        subtitle={`${pluralCount('projects', projects.length)} · ${pluralCount('services', totalServices)}`}
+        subtitle={`${pluralCount('projects', projects.length)} · ${pluralCount('deployableServices', totalDeployableServices)}`}
         actions={
           <button
             type="button"
@@ -311,6 +310,7 @@ export function Home() {
             {projects.slice(0, 6).map((p) => {
               // eslint-disable-next-line openlander-internal/no-dropped-columns
               const state = p.status === 'error' ? 'crashed' : 'healthy';
+              const deployableServiceCount = p.deployableServiceCount ?? p.serviceCount;
               return (
                 <button
                   key={p.id}
@@ -344,7 +344,9 @@ export function Home() {
                       )}
                     </div>
                     <div className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
-                      {p.serviceCount != null ? pluralCount('services', p.serviceCount) : ''}
+                      {deployableServiceCount != null
+                        ? pluralCount('deployableServices', deployableServiceCount)
+                        : ''}
                     </div>
                     {/* Service dots — one per service, color-coded by health */}
                     <ServiceDots

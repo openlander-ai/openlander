@@ -42,6 +42,9 @@ export interface Project {
   containerPort?: number;
   parentProjectId?: string | null;
   isCompose?: boolean;
+  /** Deployable app/worker service count. Excludes managed infrastructure services. */
+  deployableServiceCount?: number;
+  /** Legacy alias for deployableServiceCount, kept for wire compatibility. */
   serviceCount?: number;
   archived_at?: string | null;
   partiallyArchived?: boolean;

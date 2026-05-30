@@ -166,6 +166,7 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
             partially_archived: partiallyArchived,
             isCompose,
             serviceCount: childCount,
+            deployableServiceCount: childCount,
             environments: environments.map((env) => mapEnvironment(mapped.name, env)),
           };
         },

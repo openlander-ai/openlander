@@ -40,6 +40,8 @@ export const translations = {
       // Keys mirror en.ts so call sites can switch by count uniformly.
       services_one: '서비스 {count}개',
       services_other: '서비스 {count}개',
+      deployableServices_one: '배포 서비스 {count}개',
+      deployableServices_other: '배포 서비스 {count}개',
       projects_one: '프로젝트 {count}개',
       projects_other: '프로젝트 {count}개',
     },

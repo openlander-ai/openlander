@@ -147,6 +147,8 @@ describe('createProjectGroupRoutes', () => {
           urls: [],
           partiallyArchived: false,
           partially_archived: false,
+          serviceCount: 1,
+          deployableServiceCount: 1,
           environments: [
             {
               id: env.id,
@@ -193,6 +195,8 @@ describe('createProjectGroupRoutes', () => {
           archived_at: null,
           partiallyArchived: true,
           partially_archived: true,
+          serviceCount: 2,
+          deployableServiceCount: 2,
         },
       ],
     });
