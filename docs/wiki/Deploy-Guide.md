@@ -59,7 +59,7 @@ database lands on the same isolated network as the app.
 ### 1. Create a Project Group
 
 1. Go to **Projects** → **New Project**
-2. Enter a project name
+2. Enter a project group name
 3. Open the project and click **Add service**
 4. Tell your agent what to deploy:
    - Git repository application/worker
@@ -234,7 +234,7 @@ If `project_id` and `project_name` are both sent, `project_id` wins and a mismat
 | `image`   | Yes      | Docker image (e.g. `nginx:latest`) |
 | `port`    | No       | Container port                     |
 | `cmd`     | No       | Override command                   |
-| `name`    | No       | Project name                       |
+| `name`    | No       | Project group name                 |
 
 ### Docker Compose
 

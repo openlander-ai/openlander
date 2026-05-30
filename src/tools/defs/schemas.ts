@@ -6,7 +6,10 @@ const envVarsInputSchema = z.union([z.string().min(1), z.record(z.string(), z.st
 export const deployProjectSchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL (e.g., github.com/user/repo)'),
   branch: z.string().optional().describe('Branch to deploy (default: repo default branch)'),
-  name: z.string().optional().describe('Project name (auto-generated from repo if not provided)'),
+  name: z
+    .string()
+    .optional()
+    .describe('Project group name (auto-generated from repo if not provided)'),
   dockerfile_path: z
     .string()
     .optional()
@@ -45,7 +48,7 @@ export const deployProjectSchema = z.object({
 });
 
 export const projectNameSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
+  project_name: z.string().min(1).describe('Project group name'),
 });
 
 const monitoringTargetFields = {
@@ -424,7 +427,7 @@ export const deployComposeSchema = z.object({
 });
 
 export const listComposeServicesSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
+  project_name: z.string().min(1).describe('Project group name'),
 });
 
 // Service management schemas
@@ -581,7 +584,7 @@ export const getBuildLogSchema = z
   });
 
 export const debugBuildErrorSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
+  project_name: z.string().min(1).describe('Project group name'),
   build_log: z
     .string()
     .optional()
@@ -603,11 +606,11 @@ export const scanProjectSchema = z.object({
 
 // Expose/unexpose public schemas
 export const exposePublicSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
+  project_name: z.string().min(1).describe('Project group name'),
 });
 
 export const unexposePublicSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
+  project_name: z.string().min(1).describe('Project group name'),
 });
 
 // List previews schema
@@ -718,7 +721,7 @@ export const askUserQuestionSchema = z.object({
 
 // Fix dockerfile schema
 export const fixDockerfileSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
+  project_name: z.string().min(1).describe('Project group name'),
   error: z.string().min(1).describe('Build error message'),
 });
 
@@ -726,7 +729,7 @@ export const uploadSecretFileSchema = z.object({
   project_name: z
     .string()
     .optional()
-    .describe('Project name. Omit for global secret file (shared across all projects).'),
+    .describe('Project group name. Omit for global secret file (shared across all projects).'),
   filename: z.string().min(1).describe('Filename (e.g. firebase-sa.json, tls-cert.pem)'),
   content: z.string().min(1).describe('File content (plaintext — will be encrypted at rest)'),
   mount_path: z
@@ -738,11 +741,14 @@ export const uploadSecretFileSchema = z.object({
 });
 
 export const listSecretFilesSchema = z.object({
-  project_name: z.string().optional().describe('Project name. Omit to list global secret files.'),
+  project_name: z
+    .string()
+    .optional()
+    .describe('Project group name. Omit to list global secret files.'),
 });
 
 export const removeSecretFileSchema = z.object({
-  project_name: z.string().optional().describe('Project name. Omit for global secret file.'),
+  project_name: z.string().optional().describe('Project group name. Omit for global secret file.'),
   filename: z.string().min(1).describe('Filename to remove'),
 });
 
@@ -759,10 +765,10 @@ export const createDeployPlanSchema = z
       .string()
       .regex(
         /^[a-z0-9][a-z0-9-]*$/,
-        'Project name must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens',
+        'Project group name must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens',
       )
       .optional()
-      .describe('Project name (auto-generated from repo if not provided)'),
+      .describe('Project group name (auto-generated from repo if not provided)'),
     source: z.enum(['git', 'image']).optional().describe('Deployment source type'),
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
@@ -888,7 +894,10 @@ export const deploySchema = z
       .optional()
       .describe('Git repository URL (e.g., github.com/user/repo)'),
     branch: z.string().optional().describe('Branch to deploy (default: repo default branch)'),
-    name: z.string().optional().describe('Project name (auto-generated from repo if not provided)'),
+    name: z
+      .string()
+      .optional()
+      .describe('Project group name (auto-generated from repo if not provided)'),
     source: z.enum(['git', 'image']).optional().describe('Deployment source type'),
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
@@ -996,7 +1005,7 @@ export const deploySchema = z
         code: 'custom',
         path: ['project_name'],
         message:
-          'project_name scopes existing app lookups only. For new app deploys, use name as the project name.',
+          'project_name scopes existing app lookups only. For new app deploys, use name as the project group name.',
       });
     }
   });
@@ -1007,7 +1016,7 @@ export const validateDeployPlanSchema = z.object({
 
 export const updateProjectConfigSchema = z
   .object({
-    project_name: z.string().min(1).describe('Project name'),
+    project_name: z.string().min(1).describe('Project group name'),
     dockerfile_path: z
       .string()
       .optional()
@@ -1049,7 +1058,7 @@ export const deployHistorySchema = z
   });
 
 export const addVolumeSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
+  project_name: z.string().min(1).describe('Project group name'),
   volume_name: z
     .string()
     .min(1)
@@ -1066,11 +1075,11 @@ export const addVolumeSchema = z.object({
 });
 
 export const listVolumesSchema = z.object({
-  project_name: z.string().optional().describe('Project name to filter managed volumes'),
+  project_name: z.string().optional().describe('Project group name to filter managed volumes'),
 });
 
 export const removeVolumeSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
+  project_name: z.string().min(1).describe('Project group name'),
   volume_name: z
     .string()
     .min(1)
