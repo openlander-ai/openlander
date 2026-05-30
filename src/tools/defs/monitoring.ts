@@ -12,7 +12,7 @@ import {
   deployableServiceIdToProjectId,
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
-import { serviceViewFromRows } from '../../db/views/service-view.js';
+import { loadServiceViewRecords, serviceViewFromRows } from '../../db/views/service-view.js';
 import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
 import { getMcpInstancePublicInfo } from '../../mcp/instance-identity.js';
 import { BUILD_TIME_PREFIXES } from '../../pipeline/build-args.js';
@@ -63,13 +63,14 @@ async function resolveTopologyProject(
   return project;
 }
 
-async function getTopologyDeployables(appCtx: AppCtx, projectId: string): Promise<ServiceRow[]> {
-  const groupServices = await appCtx.db.getDeployablesByGroup(projectId);
+async function getTopologyDeployables(appCtx: AppCtx, project: ProjectRow): Promise<ServiceRow[]> {
+  const groupServices = await appCtx.db.getDeployablesByGroup(project.id);
   if (groupServices.length > 0) {
     return groupServices;
   }
-  const deployable = await appCtx.db.getDeployableForProject(projectId);
-  return deployable ? [deployable] : [];
+  const serviceRecords = await loadServiceViewRecords(appCtx.db, [project]);
+  const service = serviceRecords.get(project.id)?.service ?? null;
+  return service ? [service] : [];
 }
 
 async function getConnectedManagedServices(
@@ -125,7 +126,7 @@ async function getConnectedManagedServices(
 
 async function getProjectTopology(args: Record<string, unknown>, appCtx: AppCtx) {
   const project = await resolveTopologyProject(appCtx, args);
-  const deployables = await getTopologyDeployables(appCtx, project.id);
+  const deployables = await getTopologyDeployables(appCtx, project);
   const { serviceConnections, managedServices } = await getConnectedManagedServices(
     appCtx,
     project.id,
@@ -276,14 +277,12 @@ export const monitoringToolDefs: ToolDef[] = [
         throw new ProjectNotFoundError(projectId || projectName);
       }
 
-      const deployable =
-        typeof appCtx.db.getDeployableForProject === 'function'
-          ? await appCtx.db.getDeployableForProject(project.id)
-          : undefined;
+      const serviceRecords = await loadServiceViewRecords(appCtx.db, [project]);
+      const service = serviceRecords.get(project.id)?.service ?? null;
       const logs = await appCtx.pipeline.getLogs(project.id, lines);
       return {
         project: project.name,
-        service: deployable ? { id: deployable.id, name: deployable.name } : null,
+        service: service ? { id: service.id, name: service.name } : null,
         logs,
         requested_lines: lines,
         returned_lines: countLogLines(logs),
@@ -396,8 +395,10 @@ export const monitoringToolDefs: ToolDef[] = [
         // 'idle', and a real services-row status is never 'idle' (enum
         // running|stopped|error), so 'idle' uniquely marks that bottom →
         // undefined → key omitted. `containerId` is a gate only.
-        service = await appCtx.db.getDeployableForProject(project.id);
-        const view = serviceViewFromRows(project, service);
+        const serviceRecords = await loadServiceViewRecords(appCtx.db, [project]);
+        const record = serviceRecords.get(project.id);
+        service = record?.service ?? undefined;
+        const view = record?.view ?? serviceViewFromRows(project, null);
         status = view.status === 'idle' ? undefined : view.status;
         containerId = view.containerId;
       }

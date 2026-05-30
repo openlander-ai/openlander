@@ -57,6 +57,11 @@ function createMockContext() {
     db: {
       getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
       getProjectByName: vi.fn().mockReturnValue(project),
+      getServices: vi.fn((query?: { ids?: string[] }) =>
+        query?.ids?.includes('p1__svc')
+          ? [{ id: 'p1__svc', name: 'critical-app__svc', status: 'healthy', assigned_port: 10001 }]
+          : [],
+      ),
       getDeployableForProject: vi.fn((id: string) =>
         id === project.id ? { id: 'p1__svc', status: 'healthy', assigned_port: 10001 } : undefined,
       ),

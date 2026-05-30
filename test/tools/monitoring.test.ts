@@ -964,6 +964,9 @@ describe('service-targeted monitoring tools', () => {
         getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
         getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
         getService: vi.fn((id: string) => (id === service.id ? service : undefined)),
+        getServices: vi.fn(async (query?: { ids?: string[] }) =>
+          query?.ids?.includes(service.id) ? [service] : [],
+        ),
         getDeployableForProject: vi.fn(async (id: string) =>
           id === project.id ? service : undefined,
         ),
@@ -1033,7 +1036,8 @@ describe('service-targeted monitoring tools', () => {
       { target: 'mcp' },
     )) as Record<string, unknown>;
 
-    expect(ctx.db.getDeployableForProject).toHaveBeenCalledWith('app');
+    expect(ctx.db.getServices).toHaveBeenCalledWith({ ids: ['app__svc'] });
+    expect(ctx.db.getDeployableForProject).not.toHaveBeenCalled();
     expect(ctx.pipeline.getLogs).toHaveBeenCalledWith('app', 5);
     expect(result).toMatchObject({
       project: 'app',
@@ -1053,6 +1057,8 @@ describe('service-targeted monitoring tools', () => {
     )) as Record<string, unknown>;
 
     expect(ctx.db.getProject).toHaveBeenCalledWith('app');
+    expect(ctx.db.getServices).toHaveBeenCalledWith({ ids: ['app__svc'] });
+    expect(ctx.db.getDeployableForProject).not.toHaveBeenCalled();
     expect(ctx.pipeline.getLogs).toHaveBeenCalledWith('app', 6);
     expect(result).toMatchObject({
       service: { id: service.id },
@@ -1142,6 +1148,8 @@ describe('service-targeted monitoring tools', () => {
       service: { id: service.id },
       status: 'running',
     });
+    expect(ctx.db.getServices).toHaveBeenCalledWith({ ids: ['app__svc'] });
+    expect(ctx.db.getDeployableForProject).not.toHaveBeenCalled();
   });
 
   it('get_topology returns deployable and managed dependency nodes', async () => {
@@ -1229,6 +1237,7 @@ describe('service-targeted monitoring tools', () => {
       { from: 'app__svc', to: 'svc-pg' },
       { from: 'app__svc', to: 'svc-redis' },
     ]);
+    expect(ctx.db.getDeployableForProject).not.toHaveBeenCalled();
   });
 
   it('get_project_stats points agents at explicit target parameters', () => {
