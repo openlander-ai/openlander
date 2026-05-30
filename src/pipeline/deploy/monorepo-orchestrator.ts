@@ -6,6 +6,7 @@ import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
 import { parseDockerfileExposePort } from '../dockerfile-gen.js';
 import { filterBuildTimeVars } from '../build-args.js';
+import { createDependencyCacheKey } from '../build-cache.js';
 import { getCommitSubject } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { JobManager as JobManagerClass } from '../job-manager.js';
@@ -118,7 +119,7 @@ export async function deployMonorepoService(
     };
   }
 
-  let dockerBuildOutput = '';
+  let dockerBuildOutput: string = '';
 
   try {
     deps.jobManager?.updatePhase(childId, 'building');
@@ -132,6 +133,15 @@ export async function deployMonorepoService(
       { env: deps.env },
     );
     const buildTimeVarsForChild = filterBuildTimeVars(envVars);
+    const dependencyCache = createDependencyCacheKey({
+      repoPath: config.clonePath,
+      commitSha: config.commitSha,
+      volatileSalt: childStartTime,
+    });
+    if (dependencyCache) {
+      dockerBuildOutput +=
+        '[build-cache] git dependency detected; refreshing dependency install layer\n';
+    }
     let lastBuildOutputEmit = 0;
     await deps.buildExecutor.build(
       {
@@ -140,6 +150,7 @@ export async function deployMonorepoService(
         imageTag,
         dockerfilePath,
         buildArgs: buildTimeVarsForChild,
+        dependencyCacheKey: dependencyCache?.key,
       },
       (line) => {
         dockerBuildOutput += line + '\n';

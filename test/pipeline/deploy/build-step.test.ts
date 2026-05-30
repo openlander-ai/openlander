@@ -114,6 +114,61 @@ describe('BuildExecutor', () => {
     );
   });
 
+  it('injects dependency cache keys before dependency install layers only', async () => {
+    writeFileSync(
+      join(clonePath, 'Dockerfile'),
+      'FROM node:20\nCOPY package.json .\nRUN npm ci\nCOPY . .\n',
+      'utf8',
+    );
+
+    await executor.build({
+      clonePath,
+      projectId: 'p-cache',
+      imageTag: 'openlander/cache:latest',
+      dependencyCacheKey: 'git-dependency:abc123:42',
+    });
+
+    const dockerfileContent = readFileSync(join(clonePath, 'Dockerfile'), 'utf8');
+    expect(dockerfileContent).toContain('ARG OPENLANDER_DEPENDENCY_CACHE_KEY\nRUN echo');
+    expect(dockerfileContent.indexOf('COPY package.json .')).toBeLessThan(
+      dockerfileContent.indexOf('ARG OPENLANDER_DEPENDENCY_CACHE_KEY'),
+    );
+    expect(dockerfileContent.indexOf('ARG OPENLANDER_DEPENDENCY_CACHE_KEY')).toBeLessThan(
+      dockerfileContent.indexOf('RUN npm ci'),
+    );
+    expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      clonePath,
+      'openlander/cache:latest',
+      expect.objectContaining({
+        buildArgs: {
+          OPENLANDER_DEPENDENCY_CACHE_KEY: 'git-dependency:abc123:42',
+        },
+      }),
+    );
+  });
+
+  it('does not forward dependency cache keys when no install layer is found', async () => {
+    writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:20\nRUN npm run build\n', 'utf8');
+
+    await executor.build({
+      clonePath,
+      projectId: 'p-cache-noop',
+      imageTag: 'openlander/cache-noop:latest',
+      dependencyCacheKey: 'git-dependency:abc123:42',
+    });
+
+    expect(readFileSync(join(clonePath, 'Dockerfile'), 'utf8')).not.toContain(
+      'OPENLANDER_DEPENDENCY_CACHE_KEY',
+    );
+    expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      clonePath,
+      'openlander/cache-noop:latest',
+      expect.objectContaining({
+        buildArgs: undefined,
+      }),
+    );
+  });
+
   it('propagates docker build failures', async () => {
     writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:20\n', 'utf8');
     (docker.buildImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('boom'));

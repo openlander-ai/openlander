@@ -68,6 +68,7 @@ import { BuildExecutor } from './deploy/build-step.js';
 import { ContainerRunner } from './deploy/run-step.js';
 import { getImageExposedPort, mapPullError } from './image-utils.js';
 import { loadResourceLimitsForDeployTarget } from './config-snapshot.js';
+import { createDependencyCacheKey } from './build-cache.js';
 
 import {
   buildProject,
@@ -2113,6 +2114,15 @@ export class DeployPipeline {
         this.jobManager?.updatePhase(projectId, 'building');
         imageTag = `openlander/${projectName}:${String(Date.now())}`;
         buildLog += '[build] Building image...\n';
+        const dependencyCache = createDependencyCacheKey({
+          repoPath: cloneResult.path,
+          commitSha: cloneResult.commitSha,
+          volatileSalt: startTime,
+        });
+        if (dependencyCache) {
+          buildLog +=
+            '[build-cache] git dependency detected; refreshing dependency install layer\n';
+        }
 
         await this.buildExecutor.build(
           {
@@ -2122,6 +2132,7 @@ export class DeployPipeline {
             dockerfilePath: deployConfig.dockerfilePath,
             buildContext: deployConfig.buildContext,
             dockerTarget: deployConfig.dockerTarget,
+            dependencyCacheKey: dependencyCache?.key,
             noCache: options?.noCache,
           },
           (line) => {

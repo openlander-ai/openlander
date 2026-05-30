@@ -13,6 +13,7 @@ import type { EnvManager } from '../env.js';
 import { ensureDockerfile, detectFramework, parseDockerfileExposePort } from '../dockerfile-gen.js';
 import { findDockerfiles } from '../../lib/repo-scanner.js';
 import { resolveEnvVars, resolveEnvVarsForBuild } from '../resolve-env.js';
+import { createDependencyCacheKey } from '../build-cache.js';
 import { cloneRepo, getCommitSubject } from '../git.js';
 import { detectNewEnvKeys } from '../env-inject.js';
 import { analyzeBuildDiff, formatDiffForPrompt } from '../diff-analysis.js';
@@ -401,6 +402,14 @@ export async function buildProject(
   const buildStart = Date.now();
   let lastBuildOutputEmit = 0;
   let dockerBuildOutput = '';
+  const dependencyCache = createDependencyCacheKey({
+    repoPath: clonePath,
+    commitSha,
+    volatileSalt: buildStart,
+  });
+  if (dependencyCache) {
+    buildLog += '[build-cache] git dependency detected; refreshing dependency install layer\n';
+  }
 
   deps.jobManager?.updatePhase(projectId, 'building');
   try {
@@ -411,6 +420,7 @@ export async function buildProject(
         imageTag,
         dockerfilePath: resolvedDockerfilePath,
         buildArgs: buildTimeVars,
+        dependencyCacheKey: dependencyCache?.key,
         noCache: config._noCacheBuild === true,
         buildContext: config.buildContext,
         dockerTarget: config.dockerTarget,
