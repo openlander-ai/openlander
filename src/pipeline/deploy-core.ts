@@ -69,6 +69,7 @@ import { ContainerRunner } from './deploy/run-step.js';
 import { getImageExposedPort, mapPullError } from './image-utils.js';
 import { loadResourceLimitsForDeployTarget } from './config-snapshot.js';
 import { createDependencyCacheKey } from './build-cache.js';
+import { loadServiceView } from '../db/views/service-view.js';
 
 import {
   buildProject,
@@ -1875,11 +1876,10 @@ export class DeployPipeline {
 
       const redeployRouteName = getRouteName(project.name);
       const redeployPreviousLabel = `openlander/${redeployRouteName}:previous`;
-      // PR 4.5: canonical-first reads of deployable fields with `??` fallback.
-      const redeployDeployable = await this.db.getDeployableForProject(projectId);
-      const redeployImageTag = redeployDeployable?.image_tag ?? project.image_tag;
-      const redeploySource = redeployDeployable?.source ?? project.source;
-      const redeployAssignedPort = redeployDeployable?.assigned_port ?? project.assigned_port;
+      const redeployView = await loadServiceView(this.db, project);
+      const redeployImageTag = redeployView.imageTag;
+      const redeploySource = redeployView.source;
+      const redeployAssignedPort = redeployView.assignedPort;
       const previousPort = redeployAssignedPort ?? undefined;
       const config = await buildDeployConfig({
         projectId,
