@@ -17,6 +17,7 @@
 
 import type { Database, ProjectRow, DeployLogRow } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { loadServiceView } from '../db/views/service-view.js';
 
 const log = createModuleLogger('smart-defaults');
 
@@ -204,9 +205,8 @@ function normalizeUrl(url: string): string {
 
 /** Suggest reusing the previous port assignment. */
 async function suggestPort(db: Database, project: ProjectRow): Promise<SmartDefault | null> {
-  // PR 4.5: canonical-first read of assigned_port with `??` fallback.
-  const deployable = await db.getDeployableForProject(project.id);
-  const assignedPort = deployable?.assigned_port ?? project.assigned_port;
+  const view = await loadServiceView(db, project);
+  const assignedPort = view.assignedPort;
   if (assignedPort == null) return null;
 
   return {
@@ -244,10 +244,9 @@ async function suggestEnvVars(db: Database, project: ProjectRow): Promise<SmartD
  * Only applicable when the project is in a non-error state and has a container.
  */
 async function suggestCloneReuse(db: Database, project: ProjectRow): Promise<SmartDefault | null> {
-  // PR 4.5: canonical-first reads with `??` fallback.
-  const deployable = await db.getDeployableForProject(project.id);
-  const status = deployable?.status ?? project.status;
-  const containerId = deployable?.container_id ?? project.container_id;
+  const view = await loadServiceView(db, project);
+  const status = view.status;
+  const containerId = view.containerId;
 
   // Only suggest reuse if the project exists and has been deployed before
   if (status === 'error') return null;
