@@ -76,6 +76,7 @@ export default defineConfig({
       'test/pipeline/managed-service-linker.test.ts',
       'test/pipeline/port-scan-fallback.test.ts',
       'test/pipeline/readiness-gate.test.ts',
+      'test/pipeline/unarchive-idempotency.test.ts',
       'test/blue-green-port-conflict.test.ts',
       'test/service-manager-extended.test.ts',
       'test/tools/deploy-lock-mcp-tools.test.ts',
