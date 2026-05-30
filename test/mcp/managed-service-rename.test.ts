@@ -84,5 +84,16 @@ describe('MCP managed/deployable service namespace split', () => {
     expect(result).toHaveProperty('error', 'INVALID_PARAMS');
     expect(result).toHaveProperty('action', 'create_service');
     expect(result).toHaveProperty('composite', 'openlander_managed_service');
+    expect(result).toMatchObject({
+      suggested_call: {
+        tool: 'openlander_managed_service',
+        arguments: {
+          action: 'create_service',
+          params: {
+            name: '<name>',
+          },
+        },
+      },
+    });
   });
 });

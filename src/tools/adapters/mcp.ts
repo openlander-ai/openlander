@@ -13,6 +13,7 @@ import { maybeHandleMcpSafety } from '../../mcp/destructive-safety.js';
 import { getMcpInstanceContext, type McpInstanceContext } from '../../mcp/instance-identity.js';
 import {
   buildToolInputContract,
+  requiredParamsTemplate,
   unknownTopLevelParams,
   type ToolInputContract,
 } from '../../mcp/schema-guidance.js';
@@ -130,29 +131,6 @@ function nestedParamsSuggestion(
   return undefined;
 }
 
-function requiredParamsTemplate(contract: ToolInputContract): Record<string, unknown> {
-  const properties = asObject(contract.input_schema['properties']) ?? {};
-  const template: Record<string, unknown> = {};
-
-  for (const name of contract.required_params) {
-    const property = asObject(properties[name]);
-    const type = property?.['type'];
-    const enumValues = Array.isArray(property?.['enum']) ? property['enum'] : undefined;
-
-    if (enumValues?.[0] !== undefined) {
-      template[name] = enumValues[0];
-    } else if (type === 'boolean') {
-      template[name] = true;
-    } else if (type === 'number' || type === 'integer') {
-      template[name] = 1;
-    } else {
-      template[name] = `<${name}>`;
-    }
-  }
-
-  return template;
-}
-
 function invalidMcpToolParamsResponse(
   toolName: string,
   contract: ToolInputContract,
@@ -174,6 +152,7 @@ function invalidMcpToolParamsResponse(
     unknown_params: unknownParams,
     allowed_params: contract.allowed_params,
     required_params: contract.required_params,
+    optional_params: contract.optional_params,
     input_schema: contract.input_schema,
     suggested_call: {
       tool: toolName,

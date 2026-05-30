@@ -112,6 +112,17 @@ describe('Composite Action Routing', () => {
         unknown_params: ['project_name'],
         allowed_params: expect.arrayContaining(['name', 'image', 'source']),
         required_params: [],
+        optional_params: expect.arrayContaining(['name', 'image', 'source']),
+        suggested_call: {
+          tool: 'openlander_deploy',
+          arguments: {
+            action: 'create_deploy_plan',
+            params: {
+              source: 'image',
+              image: 'httpd:latest',
+            },
+          },
+        },
       });
       expect(result['allowed_params']).not.toEqual(expect.arrayContaining(['project_name']));
       const inputSchema = result['input_schema'] as Record<string, unknown>;
@@ -141,6 +152,13 @@ describe('Composite Action Routing', () => {
         action: 'deploy_app',
         composite: 'openlander_deploy',
         allowed_params: expect.arrayContaining(['name', 'project_name', 'image']),
+        suggested_call: {
+          tool: 'openlander_deploy',
+          arguments: {
+            action: 'help',
+            params: { action_name: 'deploy_app' },
+          },
+        },
       });
       expect(String(result['details'])).toContain('new app deploys');
       const inputSchema = result['input_schema'] as Record<string, unknown>;
@@ -148,6 +166,8 @@ describe('Composite Action Routing', () => {
         type: 'object',
         additionalProperties: false,
       });
+      const guidance = result['_agent_guidance'] as Record<string, unknown>;
+      expect(guidance['message']).toContain('Invalid parameter combination');
     });
 
     it('rejects deploy_app domain shortcut so agents use add_domain_route', async () => {
@@ -170,6 +190,17 @@ describe('Composite Action Routing', () => {
         composite: 'openlander_deploy',
         unknown_params: ['domain'],
         allowed_params: expect.not.arrayContaining(['domain']),
+        suggested_call: {
+          tool: 'openlander_deploy',
+          arguments: {
+            action: 'deploy_app',
+            params: {
+              source: 'image',
+              image: 'httpd:latest',
+              name: 'qa-final-check',
+            },
+          },
+        },
       });
       const guidance = result['_agent_guidance'] as Record<string, unknown>;
       expect(guidance['message']).toContain('domain');
@@ -185,6 +216,12 @@ describe('Composite Action Routing', () => {
       expect(result).toHaveProperty('composite', 'openlander_deploy');
       expect(result).toHaveProperty('available_actions');
       expect(result).toHaveProperty('_agent_guidance');
+      expect(result).toMatchObject({
+        suggested_call: {
+          tool: 'openlander_deploy',
+          arguments: { action: 'help' },
+        },
+      });
     });
 
     it('routes rollback_service action (validates params)', async () => {
@@ -362,6 +399,12 @@ describe('Composite Action Routing', () => {
         expect(actions.length).toBeGreaterThan(0);
         // available_actions should be sorted
         expect(actions).toEqual([...actions].sort());
+        expect(result).toMatchObject({
+          suggested_call: {
+            tool: composite.name,
+            arguments: { action: 'help' },
+          },
+        });
       }
     });
   });
