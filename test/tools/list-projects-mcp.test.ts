@@ -71,6 +71,19 @@ describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
           created_at: NOW,
           updated_at: NOW,
         },
+        // services row exists but its port / public_url are null —
+        // listProjects() hydrates these nulls onto the project row via
+        // mergeDeployable(), so the historic wire emitted explicit null.
+        {
+          id: 'nullports',
+          name: 'nullports',
+          status: 'stopped',
+          visibility: null,
+          assigned_port: null,
+          public_url: null,
+          created_at: NOW,
+          updated_at: NOW,
+        },
         // no services row and no project runtime columns at all
         {
           id: 'empty',
@@ -92,6 +105,15 @@ describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
           container_name: 'ol-full',
           public_url: 'https://full.example',
         }),
+        nullports: makeService({
+          id: 'nullports__svc',
+          name: 'nullports__svc',
+          project_id: 'nullports',
+          status: 'stopped',
+          assigned_port: null,
+          container_id: null,
+          public_url: null,
+        }),
         empty: undefined,
       },
       groups: {
@@ -106,12 +128,24 @@ describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
             container_name: 'ol-full',
           }),
         ],
+        nullports: [
+          makeService({
+            id: 'nullports__svc',
+            name: 'nullports__svc',
+            project_id: 'nullports',
+            status: 'stopped',
+            assigned_port: null,
+            container_id: null,
+            public_url: null,
+          }),
+        ],
         empty: [],
       },
     });
 
     const wire = await runWire(ctx);
     const full = wire.projects.find((p) => p['id'] === 'full')!;
+    const nullports = wire.projects.find((p) => p['id'] === 'nullports')!;
     const empty = wire.projects.find((p) => p['id'] === 'empty')!;
 
     // Canonical services-row values surface (project columns were null).
@@ -121,8 +155,15 @@ describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
       publicUrl: 'https://full.example',
     });
 
-    // Both-empty project: the keys must be OMITTED on the wire, not
-    // serialized as null / 'idle'.
+    // services row present but port / public_url null: the keys must
+    // remain on the wire as explicit null (NOT omitted) — the deployable
+    // exists, so the historic shape serialized null.
+    expect(nullports).toHaveProperty('port', null);
+    expect(nullports).toHaveProperty('publicUrl', null);
+    expect(nullports['status']).toBe('stopped');
+
+    // Both-empty project (no services row): the keys must be OMITTED on
+    // the wire, not serialized as null / 'idle'.
     expect(empty).not.toHaveProperty('status');
     expect(empty).not.toHaveProperty('port');
     expect(empty).not.toHaveProperty('publicUrl');

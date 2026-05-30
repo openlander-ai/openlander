@@ -73,20 +73,28 @@ export const projectOpsToolDefs: ToolDef[] = [
             const deployable = deployables.get(project.id);
             const view = serviceViewFromRows(project, deployable);
             // S3.2: read via ServiceView, but restore each field's historic
-            // JSON-omit bottom at the MCP boundary. The view normalizes
-            // status→'idle' and assignedPort/publicUrl→null, whereas the
-            // previous `deployable?.X ?? project.X` chains emitted
-            // `undefined` (key omitted on JSON.stringify) when both rows
-            // lacked the value. status never carries a real 'idle' (the
-            // services row enum is running|stopped|error; ProjectRow.status
-            // has no idle), so 'idle' uniquely marks the synthesized
-            // bottom. visibility stays on the deprecated direct read —
-            // its raw null/undefined distinction is not recoverable from
-            // the view (deferred, service-view-deferred-routes).
+            // MCP JSON bottom (JSON.stringify omits `undefined`, serializes
+            // `null`). `listProjects()` hydrates the project row from the
+            // canonical `__svc` services row (mergeDeployable), so the old
+            // `deployable?.X ?? project.X` chains emitted:
+            //   - a value / explicit `null` when a services row exists
+            //     (assigned_port / public_url are nullable on that row), and
+            //   - `undefined` (key omitted) only when NO services row exists.
+            // So restore `null` when `deployable` is present and omit
+            // otherwise — `view.assignedPort ?? undefined` alone would drop
+            // the explicit-null case to an omit.
+            //
+            // status is exempt: the services-row status is non-null and
+            // never 'idle' (enum running|stopped|error), so a view 'idle'
+            // uniquely marks the no-services-row bottom → omit.
+            //
+            // visibility stays on the deprecated direct read — its raw
+            // null/undefined distinction is not recoverable from the view
+            // (deferred, service-view-deferred-routes).
             const status = view.status === 'idle' ? undefined : view.status;
-            const port = view.assignedPort ?? undefined;
+            const port = deployable ? view.assignedPort : undefined;
             const containerId = view.containerId;
-            const publicUrl = view.publicUrl ?? undefined;
+            const publicUrl = deployable ? view.publicUrl : undefined;
             const deployableContainerName =
               deployable?.container_name ??
               (containerId ? projectContainerName(project.name) : null);
