@@ -3,8 +3,13 @@ import { getRouteName } from './helpers.js';
 import { containerName as projectContainerName } from '../helpers.js';
 
 import type { Database } from '../../db/index.js';
-import type { ProjectRow, ServiceRow } from '../../db/types.js';
+import type { ServiceRow } from '../../db/types.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
+import {
+  loadServiceViewRecord,
+  loadServiceViewRecords,
+  type ServiceViewRecord,
+} from '../../db/views/service-view.js';
 import { eventBus } from '../../events/index.js';
 import { ContainerNotFoundError, OpenLanderError } from '../../errors.js';
 import type { ProjectStatus, StateTransitionOptions } from '../../monitor/project-state-manager.js';
@@ -79,11 +84,9 @@ export class ContainerLifecycle {
     }
 
     const project = await this.db.getProject(projectId);
-    // PR 4.5: canonical-first read of container_id with `??` fallback to
-    // legacy `projects` column through migration 0012.
-    const startDeployable = project ? await this.db.getDeployableForProject(projectId) : undefined;
-    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-    const startContainerId = startDeployable?.container_id ?? project?.container_id;
+    const startContainerId = project
+      ? (await loadServiceViewRecord(this.db, project)).view.containerId
+      : null;
     if (!project || !startContainerId) {
       if (hasChildren) {
         await this.stateManager.transition(projectId, 'running', 'container-healthy');
@@ -125,10 +128,9 @@ export class ContainerLifecycle {
     }
 
     const project = await this.db.getProject(projectId);
-    // PR 4.5: canonical-first read of container_id.
-    const stopDeployable = project ? await this.db.getDeployableForProject(projectId) : undefined;
-    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-    const stopContainerId = stopDeployable?.container_id ?? project?.container_id;
+    const stopContainerId = project
+      ? (await loadServiceViewRecord(this.db, project)).view.containerId
+      : null;
     if (!project || !stopContainerId) {
       await this.stateManager.transition(projectId, 'stopped', 'container-manual-stop');
       await eventBus.emit('container:stop', { projectId, containerId: '' });
@@ -180,9 +182,8 @@ export class ContainerLifecycle {
     }
 
     tunnelManager?.close(projectId);
-    // PR 4.5: canonical-first read of container_id for the remove event.
-    const removeDeployable = await this.db.getDeployableForProject(projectId);
-    const removeContainerId = removeDeployable?.container_id ?? project.container_id ?? '';
+    const removeContainerId =
+      (await loadServiceViewRecord(this.db, project)).view.containerId ?? '';
     await this.db.deleteProject(projectId);
     await eventBus.emit('container:remove', { projectId, containerId: removeContainerId });
   }
@@ -231,17 +232,15 @@ export class ContainerLifecycle {
   private async assertRuntimeProjectArchivable(
     projectId: string,
     options: { allowMissing?: boolean } = {},
-  ): Promise<{ project: ProjectRow; deployable?: ServiceRow } | null> {
+  ): Promise<ServiceViewRecord | null> {
     const project = await this.db.getProject(projectId);
     if (!project) {
       if (options.allowMissing) return null;
       throw new OpenLanderError('Project not found', 'PROJECT_NOT_FOUND', 404, { projectId });
     }
 
-    // PR 4.5: canonical-first reads of runtime fields with `??` fallback to
-    // legacy `projects` columns through migration 0012.
-    const deployable = await this.db.getDeployableForProject(projectId);
-    const archiveStatus = deployable?.status ?? project.status;
+    const record = await loadServiceViewRecord(this.db, project);
+    const archiveStatus = record.view.status;
 
     if (archiveStatus === 'building') {
       throw new OpenLanderError(
@@ -262,7 +261,7 @@ export class ContainerLifecycle {
       );
     }
 
-    return { project, deployable };
+    return record;
   }
 
   private async archiveRuntimeProject(
@@ -274,13 +273,11 @@ export class ContainerLifecycle {
       allowMissing: true,
     });
     if (!archiveState) return;
-    const { project, deployable } = archiveState;
+    const { service, view } = archiveState;
     const emitEvent = options.emitEvent ?? true;
 
-    // PR 4.5: canonical-first reads of runtime fields with `??` fallback to
-    // legacy `projects` columns through migration 0012.
-    const archiveContainerId = deployable?.container_id ?? project.container_id;
-    const archiveImageTag = deployable?.image_tag ?? project.image_tag;
+    const archiveContainerId = view.containerId;
+    const archiveImageTag = view.imageTag;
 
     // PR 2: switch compose-child lookup to services.parent_service_id.
     const children = await this.db.getComposeChildProjects(projectId);
@@ -292,7 +289,7 @@ export class ContainerLifecycle {
     // the Eligibility Gate will see archived_at and reject recovery
     await this.db.archiveProject(projectId, options.archivedAt);
     if (options.archivedAt === undefined) {
-      await this.clearPartialGroupArchiveMarkerAfterRuntimeArchive(deployable);
+      await this.clearPartialGroupArchiveMarkerAfterRuntimeArchive(service ?? undefined);
     }
 
     if (archiveContainerId) {
@@ -375,8 +372,8 @@ export class ContainerLifecycle {
     const project = await this.db.getProject(projectId);
     if (!project) return;
 
-    const deployable = await this.db.getDeployableForProject(projectId);
-    if (!project.archived_at && !deployable?.archived_at) return;
+    const record = await loadServiceViewRecord(this.db, project);
+    if (!project.archived_at && !record.service?.archived_at) return;
 
     await this.db.unarchiveProject(projectId);
     const port = await allocatePort(this.db, this.runtime, {}, 'production');
@@ -394,16 +391,14 @@ export class ContainerLifecycle {
     const ids = new Set<string>();
     const names = new Set<string>();
 
-    // PR 4.5: canonical-first read of container_id with `??` fallback.
-    const cleanupDeployable = await this.db.getDeployableForProject(projectId);
-    const cleanupContainerId = cleanupDeployable?.container_id ?? project.container_id;
+    const cleanupContainerId = (await loadServiceViewRecord(this.db, project)).view.containerId;
     if (cleanupContainerId) ids.add(cleanupContainerId);
     names.add(projectContainerName(project.name));
 
     const children = await this.db.getChildProjects(projectId);
+    const childRecords = await loadServiceViewRecords(this.db, children);
     for (const child of children) {
-      const childDeployable = await this.db.getDeployableForProject(child.id);
-      const childContainerId = childDeployable?.container_id ?? child.container_id;
+      const childContainerId = childRecords.get(child.id)?.view.containerId ?? null;
       if (childContainerId) ids.add(childContainerId);
       names.add(projectContainerName(child.name));
     }
@@ -523,9 +518,7 @@ export class ContainerLifecycle {
     if (!project) {
       return 'No container running for this project.';
     }
-    // PR 4.5: canonical-first read of container_id.
-    const logsDeployable = await this.db.getDeployableForProject(projectId);
-    const logsContainerId = logsDeployable?.container_id ?? project.container_id;
+    const logsContainerId = (await loadServiceViewRecord(this.db, project)).view.containerId;
     if (!logsContainerId) {
       return 'No container running for this project.';
     }

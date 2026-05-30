@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 
 import type { Database, EnvironmentRow, ProjectRow } from '../../db/index.js';
+import { loadServiceViewRecord, type ServiceViewRecord } from '../../db/views/service-view.js';
 import type { OpenLanderEnv } from '../../config/index.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
@@ -31,7 +32,6 @@ export interface RollbackResult {
 type RollbackTarget =
   | { project: ProjectRow; environment: EnvironmentRow }
   | { project: ProjectRow; environment?: undefined };
-type ProjectDeployable = Awaited<ReturnType<Database['getDeployableForProject']>>;
 type DeployTrigger = 'chat' | 'webhook' | 'api';
 
 function createFallbackStateManager(db: Database): {
@@ -102,8 +102,9 @@ export class RollbackExecutor {
         (environment) => environment.type === 'production',
       );
 
+    const projectRecord = await loadServiceViewRecord(this.db, target.target.project);
     const rollbackImageTag =
-      productionEnvironment?.previous_image_tag ?? target.target.project.previous_image_tag;
+      productionEnvironment?.previous_image_tag ?? projectRecord.view.previousImageTag;
 
     if (!rollbackImageTag) {
       return {
@@ -114,8 +115,7 @@ export class RollbackExecutor {
       };
     }
 
-    const currentImageTag =
-      productionEnvironment?.image_tag ?? target.target.project.image_tag ?? '';
+    const currentImageTag = productionEnvironment?.image_tag ?? projectRecord.view.imageTag ?? '';
 
     try {
       await this.runtime.inspectImage(rollbackImageTag);
@@ -131,16 +131,15 @@ export class RollbackExecutor {
     try {
       await this.stateManager.transition(projectId, 'recovering', 'deploy-started');
 
-      const projectDeployable = await this.db.getDeployableForProject(projectId);
       const { port, containerName } = await this.resolveContainerRuntime(
         target.target,
         productionEnvironment,
-        projectDeployable,
+        projectRecord,
       );
       await this.cleanupRunningContainer(
         target.target,
         productionEnvironment,
-        projectDeployable,
+        projectRecord,
         containerName,
       );
       const containerPort = (await this.runtime.getImageExposedPort(rollbackImageTag)) ?? port;
@@ -151,7 +150,7 @@ export class RollbackExecutor {
 
       const resourceLimits = await loadResourceLimitsForDeployTarget(this.db, {
         projectId,
-        serviceId: projectDeployable?.id,
+        serviceId: projectRecord.service?.id,
       });
 
       const containerId = await this.runtime.runContainer({
@@ -277,7 +276,7 @@ export class RollbackExecutor {
   private async cleanupRunningContainer(
     target: RollbackTarget,
     productionEnvironment: EnvironmentRow | undefined,
-    projectDeployable: ProjectDeployable,
+    projectRecord: ServiceViewRecord,
     containerName: string,
   ): Promise<void> {
     const refs = new Set<string>();
@@ -295,7 +294,7 @@ export class RollbackExecutor {
 
     addRef(target.environment?.container_id, target.environment?.status);
     addRef(productionEnvironment?.container_id, productionEnvironment?.status);
-    addRef(projectDeployable?.container_id, projectDeployable?.status);
+    addRef(projectRecord.view.containerId, projectRecord.view.status);
 
     // Docker rejects a new container when the old canonical name still exists,
     // even if metadata no longer points at its container id.
@@ -318,13 +317,13 @@ export class RollbackExecutor {
   private async resolveContainerRuntime(
     target: RollbackTarget,
     productionEnvironment: EnvironmentRow | undefined,
-    projectDeployable: ProjectDeployable,
+    projectRecord: ServiceViewRecord,
   ): Promise<{ port: number; containerName: string }> {
     const environment = target.environment ?? productionEnvironment;
     const routeName = getRouteName(target.project.name, environment?.type);
     const port =
       environment?.assigned_port ??
-      projectDeployable?.assigned_port ??
+      projectRecord.view.assignedPort ??
       (await allocatePort(this.db, this.runtime, {}, 'production'));
 
     return {
