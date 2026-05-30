@@ -10,6 +10,7 @@ import {
 } from '../../errors.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
+import { loadServiceView } from '../../db/views/service-view.js';
 import {
   bulkDeleteEnvVarsSchema,
   deleteEnvVarSchema,
@@ -638,14 +639,15 @@ export const envToolDefs: ToolDef[] = [
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
       const project = await getProjectByName(appCtx, projectName);
-      // PR 4.5: canonical-first port read.
-      const exposeDeployable = await appCtx.db.getDeployableForProject(project.id);
-      const exposePort = exposeDeployable?.assigned_port ?? project.assigned_port;
-      if (!exposePort) {
+      // S3.1 canonical-first via the service-first read model: assigned_port
+      // from the deployable services row, then the deprecated project
+      // column. Gate only — the port is not emitted in the response.
+      const view = await loadServiceView(appCtx.db, project);
+      if (!view.assignedPort) {
         throw new Error('Project is not running — deploy it first');
       }
 
-      const url = await appCtx.pipeline.exposeTunnel(project.id, exposePort);
+      const url = await appCtx.pipeline.exposeTunnel(project.id, view.assignedPort);
       return {
         status: 'exposed',
         project: projectName,
