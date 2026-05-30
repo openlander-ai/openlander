@@ -6,6 +6,7 @@ import {
   ProjectRecoveringError,
 } from '../../errors.js';
 import type { ProjectRow } from '../../db/index.js';
+import { loadServiceViewRecords, serviceViewFromRows } from '../../db/views/service-view.js';
 import { assertProjectMutable } from '../../pipeline/mutation-policy.js';
 import type { ToolDef } from './types.js';
 
@@ -116,10 +117,24 @@ export async function tryRejectIfNotMutable(
   context: Parameters<ToolDef['execute']>[1],
 ) {
   try {
-    const [deployable, circuitOpen] = await Promise.all([
-      context.appCtx.db.getDeployableForProject(project.id),
+    const [serviceRecords, circuitOpen] = await Promise.all([
+      typeof context.appCtx.db.getServices === 'function'
+        ? loadServiceViewRecords(context.appCtx.db, [project])
+        : Promise.resolve(
+            new Map([
+              [
+                project.id,
+                {
+                  project,
+                  service: null,
+                  view: serviceViewFromRows(project, null),
+                },
+              ],
+            ]),
+          ),
       context.appCtx.db.isCircuitBreakerOpen(project.id),
     ]);
+    const deployable = serviceRecords.get(project.id)?.service ?? undefined;
     assertProjectMutable(project, {
       db: {
         getDeployableForProject: () => deployable,

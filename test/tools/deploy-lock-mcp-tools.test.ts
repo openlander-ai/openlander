@@ -19,6 +19,9 @@ function createLockedContext(): AppContext {
       getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
       getProjectByName: vi.fn((name: string) => (name === 'locked-app' ? project : undefined)),
       getService: vi.fn((id: string) => (id === service.id ? service : undefined)),
+      getServices: vi.fn((query?: { ids?: string[] }) =>
+        query?.ids?.includes(`${project.id}__svc`) ? [service] : [],
+      ),
       getDeployableForProject: vi.fn((id: string) => (id === project.id ? service : undefined)),
       listServices: vi.fn(() => [service]),
       acquireDeployLock: vi.fn(() => false),
@@ -74,6 +77,9 @@ function createMemoryLockedContext(): AppContext {
       getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
       getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
       getService: vi.fn((id: string) => (id === service.id ? service : undefined)),
+      getServices: vi.fn((query?: { ids?: string[] }) =>
+        query?.ids?.includes(`${project.id}__svc`) ? [service] : [],
+      ),
       getDeployableForProject: vi.fn((id: string) => (id === project.id ? service : undefined)),
       listServices: vi.fn(() => [service]),
       acquireDeployLock: vi.fn(() => true),

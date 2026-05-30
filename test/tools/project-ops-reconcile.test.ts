@@ -123,6 +123,7 @@ describe('project-ops list_projects reconciliation', () => {
       db: {
         listProjects,
         updateProject,
+        getServices: vi.fn().mockResolvedValue([]),
         getDeployableForProject: vi.fn().mockReturnValue(undefined),
       },
       docker: {
@@ -161,6 +162,7 @@ describe('project-ops list_projects reconciliation', () => {
       db: {
         listProjects,
         updateProject,
+        getServices: vi.fn().mockResolvedValue([]),
         getDeployableForProject: vi.fn().mockReturnValue(undefined),
       },
       docker: {
@@ -192,6 +194,7 @@ describe('project-ops list_projects reconciliation', () => {
       db: {
         listProjects,
         updateProject,
+        getServices: vi.fn().mockResolvedValue([]),
         getDeployableForProject: vi.fn().mockReturnValue(undefined),
       },
       docker: {
@@ -222,6 +225,7 @@ describe('project-ops list_projects reconciliation', () => {
       db: {
         listProjects,
         updateProject,
+        getServices: vi.fn().mockResolvedValue([]),
         getDeployableForProject: vi.fn().mockReturnValue(undefined),
       },
       docker: {

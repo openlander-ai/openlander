@@ -56,21 +56,16 @@ async function loadProjectServiceRecords(
     return loadServiceViewRecords(appCtx.db, projects);
   }
 
-  const records = new Map<
-    string,
-    {
-      service: ServiceRow | null;
-      view: ReturnType<typeof serviceViewFromRows>;
-    }
-  >();
-  for (const project of projects) {
-    const service = (await appCtx.db.getDeployableForProject(project.id)) ?? null;
-    records.set(project.id, {
-      service,
-      view: serviceViewFromRows(project, service),
-    });
-  }
-  return records;
+  return new Map(
+    projects.map((project) => [
+      project.id,
+      {
+        project,
+        service: null,
+        view: serviceViewFromRows(project, null),
+      },
+    ]),
+  );
 }
 
 async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1]['appCtx']) {

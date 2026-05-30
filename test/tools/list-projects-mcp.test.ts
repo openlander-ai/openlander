@@ -35,9 +35,15 @@ function createContext(params: {
   deployables: Record<string, ReturnType<typeof makeService> | undefined>;
   groups?: Record<string, Array<ReturnType<typeof makeService>>>;
 }) {
+  const services = Object.values(params.deployables).filter(
+    (service): service is ReturnType<typeof makeService> => service !== undefined,
+  );
   const ctx = {
     db: {
       listProjects: vi.fn(async () => params.projects),
+      getServices: vi.fn(async (query?: { ids?: string[] }) =>
+        query?.ids ? services.filter((service) => query.ids?.includes(service.id)) : services,
+      ),
       getDeployableForProject: vi.fn(async (id: string) => params.deployables[id]),
       getDeployablesByGroup: vi.fn(async (id: string) => params.groups?.[id] ?? []),
       updateProject: vi.fn(async () => undefined),

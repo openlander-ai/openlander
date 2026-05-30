@@ -35,6 +35,9 @@ function createContext() {
     db: {
       getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
       getService: vi.fn((id: string) => (id === service.id ? service : undefined)),
+      getServices: vi.fn((query?: { ids?: string[] }) =>
+        query?.ids?.includes(`${project.id}__svc`) ? [service] : [],
+      ),
       getDeployableForProject: vi.fn((id: string) => (id === project.id ? service : undefined)),
       listServices: vi.fn(() => [service]),
       isCircuitBreakerOpen: vi.fn(() => false),
