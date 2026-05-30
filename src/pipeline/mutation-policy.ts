@@ -23,6 +23,7 @@ import {
   ProjectRecoveringError,
 } from '../errors.js';
 import type { ProjectRow, ServiceRow } from '../db/index.js';
+import { serviceViewFromRows } from '../db/views/service-view.js';
 
 /**
  * Minimal context required by `assertProjectMutable`. Implemented by both
@@ -47,9 +48,8 @@ export function assertProjectMutable(project: ProjectRow, ctx: MutationPolicyCtx
   if (project.archived_at) {
     throw new ProjectArchivedError(project.id);
   }
-  // PR 4.5: canonical-first read of status with `??` fallback.
   const deployable = ctx.db.getDeployableForProject(project.id);
-  const status = deployable?.status ?? project.status;
+  const status = serviceViewFromRows(project, deployable).status;
   if (status === 'recovering') {
     throw new ProjectRecoveringError(project.id);
   }
@@ -105,9 +105,8 @@ export function assertProjectLifecycleMutable(
     throw new ProjectArchivedError(project.id);
   }
 
-  // PR 4.5: canonical-first status read with `??` fallback.
   const deployable = ctx.db.getDeployableForProject(project.id);
-  const status = deployable?.status ?? project.status;
+  const status = serviceViewFromRows(project, deployable).status;
 
   // Recovering gate — `stop` is the operator escape hatch.
   if (status === 'recovering' && action !== 'stop') {

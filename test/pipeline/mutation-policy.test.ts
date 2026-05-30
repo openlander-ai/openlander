@@ -10,7 +10,7 @@ import {
   ProjectArchivedError,
   ProjectRecoveringError,
 } from '../../src/errors.js';
-import type { ProjectRow } from '../../src/db/index.js';
+import type { ProjectRow, ServiceRow } from '../../src/db/index.js';
 
 function makeProject(overrides: Partial<ProjectRow> = {}): ProjectRow {
   return {
@@ -60,6 +60,49 @@ function makeCtx(opts: { circuitBreakerOpen?: boolean } = {}) {
   };
 }
 
+function makeService(overrides: Partial<ServiceRow> = {}): ServiceRow {
+  return {
+    id: 'proj-1__svc',
+    project_id: 'proj-1',
+    name: 'my-app__svc',
+    kind: 'git',
+    parent_service_id: null,
+    status: 'running',
+    visibility: 'internal',
+    assigned_port: 3001,
+    container_id: 'svc-ctr',
+    container_name: 'ol-my-app',
+    container_port: 3000,
+    image_tag: 'openlander/my-app:latest',
+    previous_image_tag: null,
+    public_url: null,
+    dockerfile_path: 'Dockerfile',
+    docker_target: null,
+    build_context: null,
+    build_method: 'dockerfile',
+    source: 'git',
+    repo_url: 'https://github.com/test/repo',
+    branch: 'main',
+    image_url: null,
+    image_cmd: null,
+    pending_fix: null,
+    access_code: null,
+    access_code_iv: null,
+    is_preview: 0,
+    pr_number: null,
+    project_type: 'web',
+    health_check_strategy: 'http',
+    health_check_path: '/',
+    recovering_started_at: null,
+    credentials: null,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+    archived_at: null,
+    server_id: 'default',
+    ...overrides,
+  };
+}
+
 describe('assertProjectMutable', () => {
   it('throws ProjectArchivedError when project is archived', () => {
     const project = makeProject({ archived_at: '2024-06-01T00:00:00Z' });
@@ -95,6 +138,15 @@ describe('assertProjectMutable', () => {
     const ctx = makeCtx({ circuitBreakerOpen: true });
     expect(() => assertProjectMutable(project, ctx)).toThrow(ProjectRecoveringError);
     expect(ctx.db.isCircuitBreakerOpen).not.toHaveBeenCalled();
+  });
+
+  it('uses canonical service status before stale project status', () => {
+    const project = makeProject({ status: 'recovering' });
+    const ctx = makeCtx();
+    ctx.db.getDeployableForProject.mockReturnValueOnce(makeService({ status: 'running' }));
+
+    expect(() => assertProjectMutable(project, ctx)).not.toThrow();
+    expect(ctx.db.isCircuitBreakerOpen).toHaveBeenCalledOnce();
   });
 });
 
@@ -197,6 +249,15 @@ describe('assertProjectLifecycleMutable', () => {
     it('allows healthy running project', () => {
       const project = makeProject();
       expect(() => assertProjectLifecycleMutable(project, 'archive', makeCtx())).not.toThrow();
+    });
+
+    it('uses canonical service status before stale project status', () => {
+      const project = makeProject({ status: 'recovering' });
+      const ctx = makeCtx();
+      ctx.db.getDeployableForProject.mockReturnValueOnce(makeService({ status: 'running' }));
+
+      expect(() => assertProjectLifecycleMutable(project, 'archive', ctx)).not.toThrow();
+      expect(ctx.db.isCircuitBreakerOpen).toHaveBeenCalledOnce();
     });
   });
 
