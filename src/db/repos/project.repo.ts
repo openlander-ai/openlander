@@ -662,7 +662,15 @@ export class ProjectRepo {
     });
   }
 
-  async archiveProject(id: string): Promise<void> {
+  async setProjectArchivedAt(id: string, archivedAt: string | null): Promise<void> {
+    await this.db
+      .update(projects)
+      .set({ archived_at: archivedAt, updated_at: sql`CURRENT_TIMESTAMP` })
+      .where(eq(projects.id, id))
+      .returning({ id: projects.id });
+  }
+
+  async archiveProject(id: string, archivedAt = new Date().toISOString()): Promise<void> {
     const project = await this.getProject(id);
     if (!project) {
       throw new ProjectNotFoundError(id);
@@ -687,7 +695,6 @@ export class ProjectRepo {
         { projectId: id },
       );
     }
-    const archivedAt = new Date().toISOString();
     await this.db
       .update(projects)
       .set({ archived_at: archivedAt, updated_at: sql`CURRENT_TIMESTAMP` })

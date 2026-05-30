@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { Database } from '../../../src/db/index.js';
+import type { ProjectRow, ServiceRow } from '../../../src/db/types.js';
 import { eventBus } from '../../../src/events/index.js';
 import { ContainerLifecycle } from '../../../src/pipeline/deploy/lifecycle.js';
 import type { Docker } from '../../../src/pipeline/docker.js';
@@ -16,6 +17,7 @@ function createMockDocker(): Docker {
     safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     removeProjectNetwork: vi.fn().mockResolvedValue(undefined),
     getLogs: vi.fn().mockResolvedValue(''),
+    listAllContainers: vi.fn().mockResolvedValue([]),
     listManagedContainers: vi.fn().mockResolvedValue([]),
     cleanupSecretFiles: vi.fn(),
     removeImage: vi.fn().mockResolvedValue(undefined),
@@ -358,5 +360,110 @@ describe('ContainerLifecycle', () => {
 
     expect(docker.getLogs as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('container-logs', 20);
     expect(logs).toBe('line-a\nline-b');
+  });
+});
+
+describe('ContainerLifecycle group archive semantics', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function makeRuntimeProject(id: string, archivedAt: string | null = null): ProjectRow {
+    return {
+      id,
+      name: id,
+      archived_at: archivedAt,
+      status: 'running',
+    } as ProjectRow;
+  }
+
+  function makeDeployable(id: string, overrides: Partial<ServiceRow> = {}): ServiceRow {
+    return {
+      id,
+      project_id: 'group-1',
+      name: id,
+      kind: 'git',
+      status: 'running',
+      container_id: `${id}-container`,
+      image_tag: `${id}:latest`,
+      archived_at: null,
+      ...overrides,
+    } as ServiceRow;
+  }
+
+  it('archiveGroup archives all active deployables with one restore marker', async () => {
+    const web = makeDeployable('group-1__svc');
+    const worker = makeDeployable('worker__svc');
+    const alreadyArchived = makeDeployable('old-worker__svc', {
+      archived_at: '2026-01-01T00:00:00.000Z',
+      container_id: 'old-container',
+    });
+    const db = {
+      getProject: vi.fn(async (id: string) => makeRuntimeProject(id)),
+      getDeployablesByGroup: vi.fn(async () => [web, worker, alreadyArchived]),
+      getDeployableForProject: vi.fn(async (id: string) =>
+        id === 'group-1' ? web : id === 'worker' ? worker : alreadyArchived,
+      ),
+      getEnvironmentsByProject: vi.fn(async () => []),
+      getComposeChildProjects: vi.fn(async () => []),
+      archiveProject: vi.fn(async () => undefined),
+      setProjectArchivedAt: vi.fn(async () => undefined),
+    };
+    const runtime = createMockDocker();
+    const emitSpy = vi.spyOn(eventBus, 'emit').mockResolvedValue(undefined);
+    const lifecycle = new ContainerLifecycle(runtime, db as unknown as Database);
+
+    await lifecycle.archiveGroup('group-1');
+
+    expect(db.archiveProject).toHaveBeenCalledTimes(2);
+    const marker = db.archiveProject.mock.calls[0]?.[1];
+    expect(typeof marker).toBe('string');
+    expect(db.archiveProject).toHaveBeenCalledWith('group-1', marker);
+    expect(db.archiveProject).toHaveBeenCalledWith('worker', marker);
+    expect(db.archiveProject).not.toHaveBeenCalledWith('old-worker', expect.anything());
+    expect(db.setProjectArchivedAt).toHaveBeenCalledWith('group-1', marker);
+    expect(runtime.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'group-1__svc-container',
+    );
+    expect(runtime.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'worker__svc-container',
+    );
+    expect(runtime.stopContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
+      'old-container',
+    );
+    expect(emitSpy).toHaveBeenCalledWith('project:archive', { projectId: 'group-1' });
+  });
+
+  it('unarchiveGroup restores only services touched by the matching group archive marker', async () => {
+    const marker = '2026-02-01T00:00:00.000Z';
+    const web = makeDeployable('group-1__svc', { archived_at: marker });
+    const worker = makeDeployable('worker__svc', {
+      archived_at: '2026-01-01T00:00:00.000Z',
+    });
+    const db = {
+      getProject: vi.fn(async (id: string) =>
+        id === 'group-1'
+          ? makeRuntimeProject(id, marker)
+          : makeRuntimeProject(id, worker.archived_at),
+      ),
+      getDeployablesByGroup: vi.fn(async () => [web, worker]),
+      getDeployableForProject: vi.fn(async (id: string) => (id === 'group-1' ? web : worker)),
+      unarchiveProject: vi.fn(async () => undefined),
+      updateProject: vi.fn(async () => undefined),
+      setProjectArchivedAt: vi.fn(async () => undefined),
+      getUsedPorts: vi.fn(async () => []),
+    };
+    const runtime = createMockDocker();
+    const lifecycle = new ContainerLifecycle(runtime, db as unknown as Database);
+
+    await lifecycle.unarchiveGroup('group-1');
+
+    expect(db.unarchiveProject).toHaveBeenCalledTimes(1);
+    expect(db.unarchiveProject).toHaveBeenCalledWith('group-1');
+    expect(db.unarchiveProject).not.toHaveBeenCalledWith('worker');
+    expect(db.updateProject).toHaveBeenCalledWith('group-1', {
+      assignedPort: expect.any(Number),
+    });
+    expect(db.setProjectArchivedAt).toHaveBeenCalledWith('group-1', null);
   });
 });

@@ -2715,8 +2715,16 @@ export class DeployPipeline {
     await this.lifecycle.archive(projectId, this.tunnelManager);
   }
 
+  async archiveGroup(projectId: string): Promise<void> {
+    await this.lifecycle.archiveGroup(projectId, this.tunnelManager);
+  }
+
   async unarchive(projectId: string): Promise<void> {
     await this.lifecycle.unarchive(projectId);
+  }
+
+  async unarchiveGroup(projectId: string): Promise<void> {
+    await this.lifecycle.unarchiveGroup(projectId);
   }
 
   /** Create a TryCloudflare tunnel for a project. */
