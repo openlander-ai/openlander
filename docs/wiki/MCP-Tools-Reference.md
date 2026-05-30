@@ -50,12 +50,15 @@ approval hold queue before executing.
 Supported bulk cleanup actions such as `bulk_delete_env_vars confirm=true` also
 enter that queue.
 
-**Project/app hard delete and purge are human UI-only.** Composites do not expose
-`archive_project`, `delete_project`, `delete_app`, `remove_app`, or `purge_project`. Calls to
-those names return
+**Project/app hard delete, purge, and whole-group lifecycle changes are human UI-only.**
+Composites do not expose `archive_project`, `unarchive_project`, `delete_project`, `delete_app`,
+`remove_app`, or `purge_project`. Project groups can contain multiple deployable app/worker
+services, so whole-group archive/restore stays in the web UI until group-wide lifecycle semantics
+are explicit. Calls to those names return
 `{ error: "HUMAN_UI_ONLY", _agent_guidance: { message: "...use the web UI: Settings → Danger zone..." } }`
 so agents do not silently substitute `remove_service` or `cleanup_docker` (those target managed
-infrastructure services, not deployable apps).
+infrastructure services, not deployable apps). For agent-requested cleanup of one deployable,
+use `archive_service` / `unarchive_service` with a `service_id`.
 
 Composite catalog:
 
