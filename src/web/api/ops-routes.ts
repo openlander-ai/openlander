@@ -3,7 +3,7 @@ import { stream } from 'hono/streaming';
 
 import type { AppContext } from '../../app.js';
 import type { OpsIncidentEventRow, OpsIncidentRow, ProjectRow } from '../../db/types.js';
-import { serviceViewFromRows } from '../../db/views/service-view.js';
+import { loadServiceViewRecords, serviceViewFromRows } from '../../db/views/service-view.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { aiOpsDisabledResponse } from './ai-ops-disabled.js';
 
@@ -622,12 +622,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
         ctx.db.listServices(),
         ctx.db.findAllProjectDependencies(),
       ]);
-      const deployables = await Promise.all(
-        projects.map((project) => ctx.db.getDeployableForProject(project.id)),
-      );
-      const deployableByProjectId = new Map(
-        projects.map((project, index) => [project.id, deployables[index]]),
-      );
+      const serviceRecords = await loadServiceViewRecords(ctx.db, projects);
 
       const nodes: Array<{
         id: string;
@@ -643,7 +638,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
           // nor the deprecated ProjectRow.status can carry 'idle', so a
           // view status of 'idle' here uniquely marks the synthesized
           // bottom — restore the '' it replaced.
-          const view = serviceViewFromRows(p, deployableByProjectId.get(p.id));
+          const view = serviceRecords.get(p.id)?.view ?? serviceViewFromRows(p, null);
           return {
             id: p.id,
             type: 'project' as const,

@@ -18,6 +18,7 @@ function createHarness() {
       listAllCircuitBreakers: async () => [],
       listProjects: async () => [],
       listServices: async () => [],
+      getServices: async () => [],
       findAllProjectDependencies: async () => [],
       getActionRunsByProject: async () => [],
       getActionRunsByApprovalStatus: async () => [],
@@ -74,8 +75,14 @@ describe('GET /api/ops/dependencies node status projection (S2.1)', () => {
       db: {
         listProjects: async () => opts.projects,
         listServices: async () => opts.services ?? [],
+        getServices: async ({ ids }: { ids?: readonly string[] } = {}) =>
+          Object.values(opts.deployables)
+            .filter((service): service is Partial<ServiceRow> => service !== undefined)
+            .filter((service) => !ids || ids.includes(service.id ?? '')),
         findAllProjectDependencies: async () => [],
-        getDeployableForProject: async (projectId: string) => opts.deployables[projectId],
+        getDeployableForProject: async () => {
+          throw new Error('getDeployableForProject must not be called by /api/ops/dependencies');
+        },
       },
     } as unknown as AppContext;
 
