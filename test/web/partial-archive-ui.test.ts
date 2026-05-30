@@ -38,4 +38,10 @@ describe('partial archive UI wiring', () => {
       expect(koSource).toContain(key);
     }
   });
+
+  it('keeps partial-archive chrome labels English in Korean locale', () => {
+    expect(koSource).toContain("partiallyArchivedBadge: 'Partially archived'");
+    expect(koSource).toContain("remainingButton: 'Archive remaining'");
+    expect(koSource).toContain("partialArchiveTitle: 'Archive remaining services'");
+  });
 });
