@@ -163,6 +163,30 @@ describe('ContainerStateReconciler', () => {
     expect(emit).not.toHaveBeenCalledWith('container:missing', expect.anything());
   });
 
+  it('inspects canonical service container before stale project container', async () => {
+    const project = createProject({
+      id: 'canonical-app',
+      name: 'canonical-app',
+      status: 'stopped',
+      container_id: 'stale-project-container',
+    });
+    const service = createService({
+      id: 'canonical-app__svc',
+      status: 'running',
+      container_id: 'canonical-service-container',
+      container_name: 'ol-canonical-app',
+    });
+    service.project_id = 'canonical-app';
+    listProjects.mockReturnValue([project]);
+    listServices.mockReturnValue([service]);
+    const reconciler = new ContainerStateReconciler(docker, db, events);
+
+    await reconciler.reconcile();
+
+    expect(inspectContainer).toHaveBeenCalledWith('canonical-service-container');
+    expect(inspectContainer).not.toHaveBeenCalledWith('stale-project-container');
+  });
+
   it('skips stopped projects during missing container detection', async () => {
     listProjects.mockReturnValue([
       createProject({ id: 'project-1', status: 'stopped', container_id: 'container-1' }),

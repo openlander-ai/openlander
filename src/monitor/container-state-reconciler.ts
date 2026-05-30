@@ -1,5 +1,6 @@
 import type { Database, ProjectRow, ServiceRow } from '../db/index.js';
 import { projectIdToDeployableServiceId } from '../db/service-ids.js';
+import { serviceViewFromRows, type ServiceView } from '../db/views/service-view.js';
 import { isDockerNotFoundError } from '../errors.js';
 import type { EventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
@@ -26,7 +27,7 @@ const MISSING_CONTAINER_SUGGESTION = 'Run restart_service to redeploy.';
 // and short-circuit the timeout when an active deploy lock is held for the
 // project (lock holder owns the lifecycle).
 const RECOVERING_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
-const RECONCILE_ELIGIBLE_STATUSES: ReadonlySet<ProjectRow['status']> = new Set([
+const RECONCILE_ELIGIBLE_STATUSES: ReadonlySet<ServiceView['status']> = new Set([
   'running',
   'error',
   'recovering',
@@ -35,6 +36,18 @@ const RECONCILE_ELIGIBLE_STATUSES: ReadonlySet<ProjectRow['status']> = new Set([
 const INITIAL_STAGGER_MS = 3_000;
 
 type DeployableByProject = Map<string, ServiceRow | undefined>;
+
+function reconciliationContainerRef(
+  view: ServiceView,
+  deployable: ServiceRow | undefined,
+): string | null {
+  // Preserve the reconciler's historic probe order:
+  // service.container_id → service.container_name → project.container_id.
+  // ServiceView.containerId intentionally contains the project fallback.
+  return deployable && !deployable.container_id
+    ? (view.containerName ?? view.containerId)
+    : (view.containerId ?? view.containerName);
+}
 
 export class ContainerStateReconciler {
   private intervalId?: ReturnType<typeof setInterval>;
@@ -131,14 +144,15 @@ export class ContainerStateReconciler {
   ): Promise<void> {
     const projects = allProjects.filter((project) => {
       const d = deployablesByProject.get(project.id);
-      const containerRef = d?.container_id ?? d?.container_name ?? project.container_id;
-      const status = d?.status ?? project.status;
+      const view = serviceViewFromRows(project, d);
+      const containerRef = reconciliationContainerRef(view, d);
+      const status = view.status;
       return Boolean(containerRef) && RECONCILE_ELIGIBLE_STATUSES.has(status);
     });
 
     for (const project of projects) {
       const d = deployablesByProject.get(project.id);
-      const containerRef = d?.container_id ?? d?.container_name ?? project.container_id;
+      const containerRef = reconciliationContainerRef(serviceViewFromRows(project, d), d);
       if (!containerRef) {
         continue;
       }
@@ -178,10 +192,8 @@ export class ContainerStateReconciler {
     const now = Date.now();
     const recovering = await this.db.listProjects('recovering');
     for (const project of recovering) {
-      // PR 4.5: canonical-first read of recovering_started_at with `??` fallback.
       const deployable = deployablesByProject.get(project.id);
-      const recoveringStartedAt =
-        deployable?.recovering_started_at ?? project.recovering_started_at;
+      const recoveringStartedAt = serviceViewFromRows(project, deployable).recoveringStartedAt;
       if (!recoveringStartedAt) continue;
       const elapsed = now - new Date(recoveringStartedAt).getTime();
       if (elapsed < RECOVERING_TIMEOUT_MS) continue;
@@ -235,10 +247,10 @@ export class ContainerStateReconciler {
 
       const knownContainerRefs = new Set<string>();
       for (const project of projects) {
-        // PR 4.5: canonical-first read of container_id with `??` fallback.
         const deployable = deployablesByProject.get(project.id);
-        const containerId = deployable?.container_id ?? project.container_id;
-        const containerName = deployable?.container_name;
+        const view = serviceViewFromRows(project, deployable);
+        const containerId = view.containerId;
+        const containerName = view.containerName;
         if (containerId) {
           knownContainerRefs.add(containerId);
         }
