@@ -219,4 +219,42 @@ describe('ProjectStateManager', () => {
     );
     expect(capturedEvents).toEqual([]);
   });
+
+  it('uses canonical service runtime state before stale project columns', async () => {
+    const staleProject = createProject({
+      id: 'canonical-demo',
+      name: 'canonical-demo',
+      status: 'error',
+      container_id: 'stale-project-container',
+    });
+    const canonicalDeployable = {
+      id: 'canonical-demo__svc',
+      project_id: 'canonical-demo',
+      name: 'canonical-demo__svc',
+      status: 'building',
+      container_id: 'canonical-service-container',
+      container_name: 'ol-canonical-demo',
+    } as ServiceRow;
+
+    listProjects.mockReturnValue([staleProject]);
+    getProject.mockReturnValue(staleProject);
+    getDeployableForProject.mockReturnValue(canonicalDeployable);
+    listManagedContainers.mockResolvedValue([
+      {
+        id: 'canonical-service-container',
+        name: 'ol-canonical-demo',
+        status: 'running',
+        labels: {},
+      },
+    ]);
+
+    const result = await manager.reconcileAll();
+
+    expect(result).toEqual({ reconciled: 1, skipped: 0 });
+    expect(updateProject).toHaveBeenCalledWith(
+      'canonical-demo',
+      expect.objectContaining({ status: 'running' }),
+    );
+    expect(capturedEvents).toEqual([]);
+  });
 });
