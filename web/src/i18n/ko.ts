@@ -612,6 +612,7 @@ export const translations = {
     serviceLifecycle: {
       // Chrome — section heading.
       title: '서비스 라이프사이클',
+      archivedBadge: '아카이브됨',
     },
     serviceArchive: {
       // Chrome — card title + modal title + buttons.
@@ -620,10 +621,22 @@ export const translations = {
       archiving: '아카이브 중…',
       confirmButton: '서비스 아카이브',
       // Content — descriptive body + confirmation prose + error.
-      body: '런타임을 중지하고 설정과 기록은 보존한 채 이 배포 서비스를 숨깁니다.',
+      body: '런타임을 중지하고 설정과 기록은 보존한 채 이 배포 서비스를 아카이브 상태로 표시합니다.',
       confirmDescription:
-        '런타임을 중지하고 활성 서비스 보기에서 제거합니다. 설정, 환경 변수, 도메인, 기록은 보존됩니다.',
+        '런타임을 중지하고 서비스를 아카이브 상태로 표시합니다. 설정, 환경 변수, 도메인, 기록은 보존됩니다.',
       error: '서비스 아카이브에 실패했습니다',
+    },
+    serviceRestore: {
+      // Chrome — card title + modal title + buttons.
+      title: '이 서비스 복원',
+      confirmTitle: '배포 서비스 복원',
+      restoring: '복원 중…',
+      confirmButton: '서비스 복원',
+      // Content — descriptive body + confirmation prose + error.
+      body: '아카이브된 배포 서비스를 다시 활성 라이프사이클로 되돌립니다. 런타임은 복원 후 재배포로 시작하세요.',
+      confirmDescription:
+        '아카이브 표시를 해제합니다. 컨테이너를 자동으로 시작하지는 않으므로, 복원 후 서비스를 재배포하세요.',
+      error: '서비스 복원에 실패했습니다',
     },
     servicesGuide: {
       empty:

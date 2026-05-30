@@ -247,6 +247,7 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
                   source: svc.source,
                   repoUrl: svc.repo_url,
                   branch: svc.branch,
+                  archivedAt: svc.archived_at,
                   deployedBranch:
                     groupEnvironments.find(
                       (env) => env.service_id === svc.id && env.type === 'production',

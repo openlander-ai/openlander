@@ -333,6 +333,8 @@ export function mapServiceForApi(
     project_id: service.project_id,
     parent_service_id: service.parent_service_id,
     status: service.status,
+    archived_at: service.archived_at,
+    archivedAt: service.archived_at,
     assigned_port: service.assigned_port,
     port: service.assigned_port,
     container_id: service.container_id,

@@ -94,7 +94,8 @@ function createApp(ctx: Partial<AppContext>) {
 describe('createDeployableServiceRoutes', () => {
   it('lists deployable services for a project group', async () => {
     const project = makeProjectRow();
-    const service = makeServiceRow();
+    const archivedAt = '2026-01-02T00:00:00.000Z';
+    const service = makeServiceRow({ archived_at: archivedAt });
     const env = makeEnvironmentRow();
     const db = {
       getProject: vi.fn(async () => project),
@@ -115,6 +116,8 @@ describe('createDeployableServiceRoutes', () => {
           id: 'group-1__svc',
           name: 'group-1',
           source: 'image',
+          archived_at: archivedAt,
+          archivedAt,
           imageCmd: ['nginx', '-g', 'daemon off;'],
           deployedBranch: 'main',
         },

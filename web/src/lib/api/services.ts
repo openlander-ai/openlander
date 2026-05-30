@@ -99,6 +99,7 @@ export interface GroupService {
   status: 'running' | 'stopped' | 'error' | 'building' | 'idle';
   port: number | null;
   url: string | null;
+  archivedAt?: string | null;
   health: ServiceHealth | null;
   source?: string | null;
   repoUrl?: string | null;
@@ -125,6 +126,8 @@ interface BackendGroupService {
   assigned_port?: number | null;
   port?: number | null;
   url?: string | null;
+  archived_at?: string | null;
+  archivedAt?: string | null;
   health?: ServiceHealth | null;
   source?: string | null;
   repoUrl?: string | null;
@@ -151,6 +154,7 @@ function normalizeGroupService(raw: BackendGroupService): GroupService {
     status: raw.status ?? 'idle',
     port: raw.port ?? raw.assigned_port ?? null,
     url: raw.url ?? null,
+    archivedAt: raw.archivedAt ?? raw.archived_at ?? null,
     health: raw.health ?? null,
     source: raw.source ?? null,
     repoUrl: raw.repoUrl ?? null,
@@ -256,6 +260,15 @@ export function archiveGroupService(
 ): Promise<ArchiveGroupServiceResult> {
   return apiPost<ArchiveGroupServiceResult>(
     `/api/projects/${groupId}/services/${serviceId}/archive`,
+  );
+}
+
+export function unarchiveGroupService(
+  groupId: string,
+  serviceId: string,
+): Promise<ArchiveGroupServiceResult> {
+  return apiPost<ArchiveGroupServiceResult>(
+    `/api/projects/${groupId}/services/${serviceId}/unarchive`,
   );
 }
 
