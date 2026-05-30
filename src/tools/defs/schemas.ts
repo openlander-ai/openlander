@@ -103,6 +103,15 @@ export const getLogsSchema = monitoringTargetSchema({
 
 export const getProjectStatsSchema = monitoringTargetSchema({});
 
+export const getTopologySchema = z
+  .object({
+    project_id: z.string().min(1).optional().describe('Project group id'),
+    project_name: z.string().min(1).optional().describe('Project group name'),
+  })
+  .refine((value) => Boolean(value.project_id || value.project_name), {
+    message: 'project_id or project_name is required',
+  });
+
 export const getInstanceInfoSchema = z.object({}).strict();
 
 export const diagnoseServiceSchema = z

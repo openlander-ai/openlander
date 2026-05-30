@@ -349,9 +349,9 @@ interface ToolDef {
 }
 ```
 
-Tool definition files back the MCP tool system. The MCP adapter exposes **5 composite tools** (`openlander_deploy|_project|_service|_managed_service|_monitor`) over 66 unique default operations, plus **13 platform tools** gated by `config.mcp.platformTools`. The registry currently spans (99 ToolDefs, 19 tool definition files). Two adapters exist:
+Tool definition files back the MCP tool system. The MCP adapter exposes **5 composite tools** (`openlander_deploy|_project|_service|_managed_service|_monitor`) over 69 unique default operations, plus **13 platform tools** gated by `config.mcp.platformTools`. The registry currently spans (100 ToolDefs, 19 tool definition files). Two adapters exist:
 
-- Current MCP-facing snapshot: 66 default MCP ToolDefs + 13 optional platform ToolDefs. Keep `test/mcp/*registry*` authoritative when counts change.
+- Current MCP-facing snapshot: 69 default MCP ToolDefs + 13 optional platform ToolDefs. Keep `test/mcp/*registry*` authoritative when counts change.
 - `src/tools/adapters/mcp.ts` — MCP protocol format (5 composite tools + gated platform tools)
 - `src/tools/adapters/ai-sdk.ts` — legacy/future internal LLM adapter, not part of the 0.1 runtime surface
 

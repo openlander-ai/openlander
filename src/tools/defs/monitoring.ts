@@ -7,8 +7,11 @@ import {
   ServiceNotFoundError,
   ServiceOperationUnsupportedError,
 } from '../../errors.js';
-import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
-import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
+import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import {
+  deployableServiceIdToProjectId,
+  projectIdToDeployableServiceId,
+} from '../../db/service-ids.js';
 import { serviceViewFromRows } from '../../db/views/service-view.js';
 import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
 import { getMcpInstancePublicInfo } from '../../mcp/instance-identity.js';
@@ -22,6 +25,7 @@ import {
   getInstanceInfoSchema,
   getLogsSchema,
   getProjectStatsSchema,
+  getTopologySchema,
   getSystemStatsSchema,
   mcpActionStatusSchema,
   probeHostSchema,
@@ -42,6 +46,163 @@ interface ResolvedDeployableService {
   service: ServiceRow;
   project: ProjectRow;
   runtimeProject: ProjectRow;
+}
+
+async function resolveTopologyProject(
+  appCtx: AppCtx,
+  args: Record<string, unknown>,
+): Promise<ProjectRow> {
+  const projectId = typeof args['project_id'] === 'string' ? args['project_id'].trim() : '';
+  const projectName = typeof args['project_name'] === 'string' ? args['project_name'].trim() : '';
+  const project = projectId
+    ? await appCtx.db.getProject(projectId)
+    : await appCtx.db.getProjectByName(projectName);
+  if (!project) {
+    throw new ProjectNotFoundError(projectId || projectName);
+  }
+  return project;
+}
+
+async function getTopologyDeployables(appCtx: AppCtx, projectId: string): Promise<ServiceRow[]> {
+  const groupServices = await appCtx.db.getDeployablesByGroup(projectId);
+  if (groupServices.length > 0) {
+    return groupServices;
+  }
+  const deployable = await appCtx.db.getDeployableForProject(projectId);
+  return deployable ? [deployable] : [];
+}
+
+async function getConnectedManagedServices(
+  appCtx: AppCtx,
+  projectId: string,
+  deployables: readonly ServiceRow[],
+): Promise<{
+  serviceConnections: Awaited<ReturnType<AppCtx['db']['listServiceConnectionsByProject']>>;
+  managedServices: ServiceRow[];
+}> {
+  const directManagedServices =
+    typeof appCtx.db.getServices === 'function'
+      ? await appCtx.db.getServices({ project_id: projectId, kindIn: MANAGED_SERVICE_KINDS })
+      : [];
+  const serviceConnections =
+    typeof appCtx.db.listServiceConnectionsByProject === 'function'
+      ? await appCtx.db.listServiceConnectionsByProject(projectId)
+      : [];
+  const allServices =
+    serviceConnections.length > 0 && typeof appCtx.db.listServices === 'function'
+      ? await appCtx.db.listServices()
+      : [];
+  const servicesById = new Map(allServices.map((service) => [service.id, service]));
+  const seen = new Set(deployables.map((service) => service.id));
+  const managedServices: ServiceRow[] = [];
+
+  for (const service of directManagedServices) {
+    if (
+      seen.has(service.id) ||
+      !(MANAGED_SERVICE_KINDS as readonly string[]).includes(service.kind)
+    ) {
+      continue;
+    }
+    seen.add(service.id);
+    managedServices.push(service);
+  }
+
+  for (const connection of serviceConnections) {
+    const service = servicesById.get(connection.service_id_provider);
+    if (
+      !service ||
+      seen.has(service.id) ||
+      !(MANAGED_SERVICE_KINDS as readonly string[]).includes(service.kind)
+    ) {
+      continue;
+    }
+    seen.add(service.id);
+    managedServices.push(service);
+  }
+
+  return { serviceConnections, managedServices };
+}
+
+async function getProjectTopology(args: Record<string, unknown>, appCtx: AppCtx) {
+  const project = await resolveTopologyProject(appCtx, args);
+  const deployables = await getTopologyDeployables(appCtx, project.id);
+  const { serviceConnections, managedServices } = await getConnectedManagedServices(
+    appCtx,
+    project.id,
+    deployables,
+  );
+  const nodeIds = new Set([...deployables, ...managedServices].map((service) => service.id));
+  const dependsOnMap = new Map<string, string[]>();
+
+  for (const service of deployables) {
+    const lookupId = deployableServiceIdToProjectId(service.id);
+    const deps = await appCtx.db.findDependenciesByProject(lookupId);
+    const siblingDeps = deps
+      .map((dep) => dep.target_service_id)
+      .filter((serviceId): serviceId is string => serviceId !== null && nodeIds.has(serviceId));
+    dependsOnMap.set(projectIdToDeployableServiceId(lookupId), siblingDeps);
+  }
+
+  for (const connection of serviceConnections) {
+    if (
+      !nodeIds.has(connection.service_id_consumer) ||
+      !nodeIds.has(connection.service_id_provider)
+    ) {
+      continue;
+    }
+    const existing = dependsOnMap.get(connection.service_id_consumer) ?? [];
+    dependsOnMap.set(connection.service_id_consumer, [
+      ...new Set([...existing, connection.service_id_provider]),
+    ]);
+  }
+
+  const services = [
+    ...deployables.map((service) => ({
+      id: service.id,
+      name: service.name,
+      role: 'deployable' as const,
+      kind: 'application' as const,
+      source: service.source,
+      status: service.status,
+      project_id: project.id,
+      port: service.assigned_port ?? null,
+      image: service.image_url ?? service.image_tag ?? null,
+      dependsOn: dependsOnMap.get(service.id) ?? [],
+    })),
+    ...managedServices.map((service) => ({
+      id: service.id,
+      name: service.name,
+      role: 'managed' as const,
+      kind: service.kind,
+      type: service.type ?? kindToLegacyType(service.kind),
+      status: service.status,
+      attached_project_id: project.id,
+      attached_project_name: project.name,
+      port: service.assigned_port ?? service.port ?? null,
+      image: service.image_url ?? service.image ?? null,
+      dependsOn: [] as string[],
+    })),
+  ];
+
+  return {
+    project: { id: project.id, name: project.name },
+    count: services.length,
+    services,
+    edges: deployables.flatMap((service) =>
+      (dependsOnMap.get(service.id) ?? []).map((targetServiceId) => ({
+        from: service.id,
+        to: targetServiceId,
+      })),
+    ),
+    _agent_guidance: {
+      message:
+        'Topology is read-only. Deployable services depend on managed services listed in dependsOn.',
+      next_steps: [
+        'Use openlander_monitor.diagnose_service with a deployable service_id to inspect failures.',
+        'Use openlander_managed_service.get_service_credentials for managed service connection details when needed.',
+      ],
+    },
+  };
 }
 
 function countLogLines(value: string): number {
@@ -307,6 +468,16 @@ export const monitoringToolDefs: ToolDef[] = [
         };
       }
     },
+  },
+  {
+    name: 'get_topology',
+    riskLevel: 'low',
+    description:
+      'Return the read-only service topology for a project group. Shows deployable services, connected managed services, and dependsOn edges so agents can understand app-to-database/cache ownership over MCP. Requires project_id or project_name. Does not inspect Docker or mutate state.',
+    mcpDescription:
+      'Return project service topology: deployables, managed services, and dependency edges.',
+    inputSchema: getTopologySchema,
+    execute: async (args, context) => getProjectTopology(args, context.appCtx),
   },
   {
     name: 'diagnose_service',

@@ -152,7 +152,7 @@ export const SERVICE_ACTIONS = [
  * - Host/endpoint connectivity probing
  * - One-shot service diagnostics
  * - Host resource pressure diagnosis
- * Total: 10 tools
+ * Total: 11 tools
  */
 export const MONITOR_ACTIONS = [
   'get_instance_info',
@@ -163,6 +163,7 @@ export const MONITOR_ACTIONS = [
   'get_alerts',
   'dismiss_alert',
   'get_project_stats',
+  'get_topology',
   'probe_host',
   'mcp_action_status',
 ] as const;
@@ -199,7 +200,7 @@ export const PLATFORM_ACTIONS = [
  * - PROJECT_ACTIONS: 14 tools
  * - MANAGED_SERVICE_ACTIONS: 21 tools
  * - SERVICE_ACTIONS: 21 tools
- * - MONITOR_ACTIONS: 10 tools
+ * - MONITOR_ACTIONS: 11 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
  * - Platform tools: 13 direct tools (gated separately)
  */

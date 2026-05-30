@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **68 unique default operations** surfaced through those composites
+- **69 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -68,7 +68,7 @@ Composite catalog:
 | `openlander_project`         | 14           | Project groups, secrets, temporary share URLs; env actions route to services       |
 | `openlander_service`         | 21           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary |
 | `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage         |
-| `openlander_monitor`         | 10           | Logs, alerts, system stats, host diagnosis, project stats, probes                  |
+| `openlander_monitor`         | 11           | Logs, alerts, topology, system stats, host diagnosis, project stats, probes        |
 
 `openlander_project` owns group/config actions. `openlander_service` owns deployable runtime actions.
 
@@ -668,6 +668,17 @@ OOM, disk pressure, or Docker daemon instability.
 | `service_name` | string | No       | Deployable service name                      |
 | `project_id`   | string | No       | Convenience target for single-service groups |
 | `project_name` | string | No       | Convenience target for single-service groups |
+
+### `get_topology`
+
+Read-only project service graph for agents. Returns deployable services,
+connected managed services, and `dependsOn`/`edges` so an agent can see which
+apps depend on which databases/caches over MCP.
+
+| Parameter      | Type   | Required | Description        |
+| -------------- | ------ | -------- | ------------------ |
+| `project_id`   | string | No       | Project group id   |
+| `project_name` | string | No       | Project group name |
 
 ### `diagnose_service`
 
