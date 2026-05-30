@@ -43,6 +43,14 @@ interface ResolvedDeployableService {
   runtimeProject: ProjectRow;
 }
 
+function countLogLines(value: string): number {
+  if (!value) return 0;
+  const normalized = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const withoutTrailingNewline = normalized.endsWith('\n') ? normalized.slice(0, -1) : normalized;
+  if (!withoutTrailingNewline) return 0;
+  return withoutTrailingNewline.split('\n').length;
+}
+
 export const monitoringToolDefs: ToolDef[] = [
   {
     name: 'get_instance_info',
@@ -58,13 +66,14 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'get_logs',
     riskLevel: 'low',
     description:
-      'Get recent container stdout/stderr logs for a deployable service or project. Prefer service_id from list_projects.deployable_service when available. Use when user asks about errors, crashes, or app behavior. Returns { project, service, logs } where logs is a string of recent lines (agent default: 20, MCP default: 50). Errors: PROJECT_NOT_FOUND, SERVICE_NOT_FOUND. If logs show a build error, call get_build_log for the raw build output. For deployment history (past deploys, triggers, durations), use get_deploy_history instead.',
+      'Get recent container stdout/stderr logs for a deployable service or project. Prefer service_id from list_projects.deployable_service when available. Use when user asks about errors, crashes, or app behavior. Returns { project, service, logs } where logs is a string of recent lines (agent default: 80, MCP default: 200). Errors: PROJECT_NOT_FOUND, SERVICE_NOT_FOUND. If logs show a build error, call get_build_log for the raw build output. For deployment history (past deploys, triggers, durations), use get_deploy_history instead.',
     mcpDescription:
-      'Get recent deployable service/project logs. Prefer service_id. MCP default is 50 lines.',
+      'Get recent deployable service/project logs. Prefer service_id. MCP default is 200 lines; pass lines=500+ for long tracebacks.',
     inputSchema: getLogsSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
-      const lines = (args['lines'] as number | undefined) ?? (context.target === 'agent' ? 20 : 50);
+      const lines =
+        (args['lines'] as number | undefined) ?? (context.target === 'agent' ? 80 : 200);
       const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
       const serviceName =
         typeof args['service_name'] === 'string' ? args['service_name'].trim() : '';
@@ -85,6 +94,13 @@ export const monitoringToolDefs: ToolDef[] = [
             container_name: service.container_name,
           },
           logs,
+          requested_lines: lines,
+          returned_lines: countLogLines(logs),
+          tail: true,
+          _agent_guidance: {
+            message:
+              'Logs are returned from the Docker tail buffer. If the traceback or migration failure is still cut off, retry get_logs with a larger lines value such as 500 or 1000.',
+          },
         };
       }
 
@@ -107,6 +123,13 @@ export const monitoringToolDefs: ToolDef[] = [
         project: project.name,
         service: deployable ? { id: deployable.id, name: deployable.name } : null,
         logs,
+        requested_lines: lines,
+        returned_lines: countLogLines(logs),
+        tail: true,
+        _agent_guidance: {
+          message:
+            'Logs are returned from the Docker tail buffer. If the traceback or migration failure is still cut off, retry get_logs with a larger lines value such as 500 or 1000.',
+        },
       };
     },
   },

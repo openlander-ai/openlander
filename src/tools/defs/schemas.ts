@@ -887,7 +887,9 @@ export const deploySchema = z
     no_cache: z
       .boolean()
       .optional()
-      .describe('When deploy_app resolves an existing service, force a fresh Docker build.'),
+      .describe(
+        'When deploy_app resolves an existing service, force a fresh Docker build. Use when Docker cache may have hidden a dependency change.',
+      ),
     strategy: z
       .enum(['blue-green', 'force'])
       .optional()
