@@ -225,6 +225,10 @@ export async function loadServiceViewRecords(
   db: Pick<Database, 'getServices'>,
   projects: readonly ProjectRow[],
 ): Promise<Map<string, ServiceViewRecord>> {
+  if (projects.length === 0) {
+    return new Map();
+  }
+
   const ids = projects.map((project) => `${project.id}__svc`);
   const services = await db.getServices({ ids });
   const servicesById = new Map(services.map((service) => [service.id, service]));

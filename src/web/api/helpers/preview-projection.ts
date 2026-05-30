@@ -1,4 +1,5 @@
 import type { AppContext } from '../../../app.js';
+import { loadServiceViewRecords } from '../../../db/views/service-view.js';
 import { getProjectUrl } from '../../../pipeline/traefik.js';
 import { normalizeTimestamp } from './project-route-shared.js';
 
@@ -34,30 +35,31 @@ export interface PreviewProjection {
  *   - `url` is always `getProjectUrl(preview.name)` (no port query)
  *   - `prNumber`, `createdAt`, `updatedAt` come from the preview row
  *
- * Concurrency stays the caller's pre-R3 `Promise.all` per-preview
- * fan-out — preserving wall-time semantics for small N preview lists.
+ * Reads deployable rows in one batch, then applies the existing
+ * service-row-present fallback semantics per preview.
  */
 export async function loadPreviewProjections(
   ctx: Pick<AppContext, 'db'>,
   parentProjectId: string,
 ): Promise<PreviewProjection[]> {
   const previews = await ctx.db.getPreviewProjects(parentProjectId);
-  return Promise.all(
-    previews.map(async (preview) => {
-      // PR 4 canonical-first: status + public_url from the preview's
-      // deployable services row when available; fall back to legacy
-      // preview-row columns through migration 0012.
-      const deployable = await ctx.db.getDeployableForProject(preview.id);
-      return {
-        id: preview.id,
-        name: preview.name,
-        status: deployable?.status ?? preview.status,
-        prNumber: preview.pr_number,
-        url: getProjectUrl(preview.name),
-        publicUrl: deployable?.public_url ?? preview.public_url,
-        createdAt: normalizeTimestamp(preview.created_at),
-        updatedAt: normalizeTimestamp(preview.updated_at),
-      };
-    }),
-  );
+  const records = await loadServiceViewRecords(ctx.db, previews);
+  return previews.map((preview) => {
+    const record = records.get(preview.id);
+    // PR 4 canonical-first: status + public_url from the preview's
+    // deployable services row when available; fall back to legacy
+    // preview-row columns through migration 0012. Do not emit the
+    // ServiceView 'idle' bottom case when no service row exists — this
+    // route historically returned the preview row's nullable status.
+    return {
+      id: preview.id,
+      name: preview.name,
+      status: record?.service ? record.view.status : preview.status,
+      prNumber: preview.pr_number,
+      url: getProjectUrl(preview.name),
+      publicUrl: record?.service ? record.view.publicUrl : preview.public_url,
+      createdAt: normalizeTimestamp(preview.created_at),
+      updatedAt: normalizeTimestamp(preview.updated_at),
+    };
+  });
 }

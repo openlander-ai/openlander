@@ -252,6 +252,16 @@ describe('loadServiceView', () => {
 });
 
 describe('loadServiceViewRecords', () => {
+  it('does not query services when no project rows are provided', async () => {
+    const getServices = vi.fn(async () => []);
+    const db = { getServices } as unknown as Pick<Database, 'getServices'>;
+
+    const records = await loadServiceViewRecords(db, []);
+
+    expect(records.size).toBe(0);
+    expect(getServices).not.toHaveBeenCalled();
+  });
+
   it('loads canonical deployable rows for multiple projects in one service query', async () => {
     const projects = [
       makeProjectRow({ id: 'p-1', name: 'one' }),
