@@ -164,7 +164,7 @@ ${typeSpecific}`,
 ## Safety Gates (do not flail against these)
 
 - \`remove_service\`, \`delete_app\`, \`delete_project\`, \`purge_project\`, and hard-delete aliases are **human-UI-only** and return \`HUMAN_UI_ONLY\` / \`OPERATION_REQUIRES_HUMAN_UI\`. Do **not** substitute \`remove_service\` or \`cleanup_docker\` (those target managed infrastructure, not deployable apps). Surface the web-UI Danger-zone path to the user instead.
-- \`archive_service\` is the MCP-safe cleanup path for a deployable app/worker. It enters the **human approval queue** before executing — poll \`mcp_action_status\` with the returned \`action_run_id\`.
+- \`archive_service\` is the MCP-safe cleanup path for a deployable app/worker. \`unarchive_service\` restores an archived deployable without redeploying it. Both enter the **human approval queue** before executing — poll \`mcp_action_status\` with the returned \`action_run_id\`.
 - Other destructive actions that remain exposed (e.g. \`bulk_delete_env_vars confirm=true\`) also enter the **human approval queue** before executing.
 - Prefer \`service_id\` for every follow-up action. \`project_name\` only resolves when the group has exactly one deployable service.
 

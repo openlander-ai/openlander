@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **67 unique default operations** surfaced through those composites
+- **68 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -44,8 +44,9 @@ cleanup: `remove_service`, `remove_volume`, `delete_bucket`, `platform_force_rem
 `recover_platform`, `platform_cleanup_orphans`, and `cleanup_docker`. MCP calls to these return
 `OPERATION_REQUIRES_HUMAN_UI`; use the web UI or host-maintenance path instead.
 
-Deployable app cleanup uses a softer path: `archive_service` is exposed through
-`openlander_service` but enters the human approval hold queue before it executes.
+Deployable app cleanup and restore use softer paths: `archive_service` and
+`unarchive_service` are exposed through `openlander_service` but enter the human
+approval hold queue before executing.
 Supported bulk cleanup actions such as `bulk_delete_env_vars confirm=true` also
 enter that queue.
 
@@ -62,7 +63,7 @@ Composite catalog:
 | ---------------------------- | ------------ | ---------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 16           | Deploy plans, execution, previews, rollbacks, build logs, Git                      |
 | `openlander_project`         | 14           | Project groups, secrets, temporary share URLs; env actions route to services       |
-| `openlander_service`         | 20           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary |
+| `openlander_service`         | 21           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary |
 | `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage         |
 | `openlander_monitor`         | 10           | Logs, alerts, system stats, host diagnosis, project stats, probes                  |
 
@@ -302,6 +303,23 @@ history. This is the MCP-safe cleanup path when an agent created the wrong app
 or the user asks to clean up a deployable. It stops/removes the runtime and
 waits for human approval before executing. It does **not** permanently delete
 managed databases, volumes, buckets, or host-wide Docker resources.
+
+| Parameter      | Type   | Required | Description                           |
+| -------------- | ------ | -------- | ------------------------------------- |
+| `service_id`   | string | No       | Deployable service id                 |
+| `service_name` | string | No       | Deployable service name or group name |
+| `project_name` | string | No       | Optional group scope for name lookups |
+
+Provide either `service_id` or `service_name`. A successful initial MCP call
+returns `status: "pending_approval"` and an `actionRunId`; poll
+`mcp_action_status` after the user approves or rejects the request.
+
+### `unarchive_service`
+
+Restore an archived deployable app/worker service while preserving the same
+configuration and history. This reverses `archive_service` after human approval
+and does **not** redeploy automatically; call `redeploy_app` if the service
+should run again.
 
 | Parameter      | Type   | Required | Description                           |
 | -------------- | ------ | -------- | ------------------------------------- |

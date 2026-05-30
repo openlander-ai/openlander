@@ -622,7 +622,6 @@ export const deployableServiceToolDefs: ToolDef[] = [
     mcpDescription:
       'Restore an archived deployable app/worker service. Call redeploy_app to run it.',
     inputSchema: serviceTargetSchema,
-    targets: ['agent'],
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(
         args,

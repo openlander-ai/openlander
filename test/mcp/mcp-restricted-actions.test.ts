@@ -72,6 +72,7 @@ describe('MCP restricted-action policy (single source)', () => {
     expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_app');
     expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_project');
     expect(APPROVAL_HOLD_TOOLS).toContain('archive_service');
+    expect(APPROVAL_HOLD_TOOLS).toContain('unarchive_service');
     expect(APPROVAL_HOLD_TOOLS).toContain('bulk_delete_env_vars');
     expect(APPROVAL_HOLD_TOOLS).toContain('remove_secret_file');
     // delete_service is a (non-tool) alias only — it used to be duplicated into

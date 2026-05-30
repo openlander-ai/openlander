@@ -146,8 +146,10 @@ explicit checkbox to delete.
 
 Deployable app/worker cleanup is softer: MCP `archive_service` creates a human
 approval request and, after approval, archives the deployable while preserving
-configuration and history. It is not a substitute for managed service deletion
-and does not delete databases, volumes, buckets, or host-wide Docker resources.
+configuration and history. MCP `unarchive_service` uses the same approval queue
+to restore an archived deployable without redeploying it. These are not a
+substitute for managed service deletion and do not delete databases, volumes,
+buckets, or host-wide Docker resources.
 
 ---
 

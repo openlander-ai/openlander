@@ -92,4 +92,52 @@ describe('destructive MCP approval executor', () => {
     );
     expect(db.updateActionRunStatus).toHaveBeenLastCalledWith('action-run-archive', 'succeeded');
   });
+
+  it('executes approved deployable unarchive_service approvals without redeploying', async () => {
+    const service = {
+      id: 'project-1__svc',
+      name: 'web',
+      project_id: 'project-1',
+      kind: 'git',
+      source: 'git',
+    };
+    const project = { id: 'project-1', name: 'demo' };
+    const db = {
+      getActionRun: vi.fn().mockResolvedValue({
+        id: 'action-run-unarchive',
+        approval_tool: 'destructive_mcp',
+        plan: JSON.stringify({
+          type: 'destructive_mcp',
+          tool: 'unarchive_service',
+          args: { service_id: service.id },
+          targetProjectId: project.id,
+          requestedAt: '2026-05-05T00:00:00.000Z',
+        }),
+      }),
+      getService: vi.fn().mockResolvedValue(service),
+      getProject: vi.fn().mockResolvedValue(project),
+      updateActionRunPlan: vi.fn().mockResolvedValue(undefined),
+      updateActionRunStatus: vi.fn().mockResolvedValue(undefined),
+    };
+    const pipeline = {
+      unarchive: vi.fn().mockResolvedValue(undefined),
+      redeploy: vi.fn().mockResolvedValue(undefined),
+    };
+    const ctx = { db, pipeline } as unknown as AppContext;
+
+    await handleDestructiveMcpApproval(ctx, {
+      actionRunId: 'action-run-unarchive',
+      approved: true,
+      projectId: project.id,
+    });
+
+    expect(pipeline.unarchive).toHaveBeenCalledWith(project.id);
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    expect(db.updateActionRunStatus).toHaveBeenNthCalledWith(1, 'action-run-unarchive', 'running');
+    expect(db.updateActionRunPlan).toHaveBeenCalledWith(
+      'action-run-unarchive',
+      expect.stringContaining('"status":"unarchived"'),
+    );
+    expect(db.updateActionRunStatus).toHaveBeenLastCalledWith('action-run-unarchive', 'succeeded');
+  });
 });

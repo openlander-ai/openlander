@@ -76,6 +76,7 @@ const EXPECTED_TOOLS = [
   'set_global_secret',
   'start_service',
   'stop_service',
+  'unarchive_service',
   'unexpose_public',
   'update_deploy_plan',
   'update_service_config',
@@ -127,8 +128,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 67 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(67);
+  it('maintains exactly 68 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(68);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

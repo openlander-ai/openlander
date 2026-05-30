@@ -113,10 +113,11 @@ export const MANAGED_SERVICE_ACTIONS = [
 
 /**
  * openlander_service: Deployable services (apps + workers).
- * Total: 20 tools
+ * Total: 21 tools
  */
 export const SERVICE_ACTIONS = [
   'archive_service',
+  'unarchive_service',
   'restart_service',
   'redeploy_app',
   'rollback_service',
@@ -192,7 +193,7 @@ export const PLATFORM_ACTIONS = [
  * - DEPLOY_ACTIONS: 16 tools
  * - PROJECT_ACTIONS: 14 tools
  * - MANAGED_SERVICE_ACTIONS: 21 tools
- * - SERVICE_ACTIONS: 19 tools
+ * - SERVICE_ACTIONS: 21 tools
  * - MONITOR_ACTIONS: 10 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
  * - Platform tools: 13 direct tools (gated separately)
@@ -318,7 +319,7 @@ function humanUiOnlyResponse(toolName: string, action: string): Record<string, u
     action,
     composite: toolName,
     _agent_guidance: {
-      message: `"${action}" is not exposed to MCP. Project/app hard delete, purge, and project-level archive/restore are human UI-only operations. Tell the user to use the web UI: Settings → Danger zone for that project or service. For deployable app cleanup, use archive_service and wait for human approval. Do not substitute remove_service, cleanup_docker, or other destructive tools — those target managed infrastructure services, not deployable apps/projects.`,
+      message: `"${action}" is not exposed to MCP. Project/app hard delete, purge, and project-level archive/restore are human UI-only operations. Tell the user to use the web UI: Settings → Danger zone for that project or service. For deployable app cleanup or restore, use archive_service or unarchive_service and wait for human approval. Do not substitute remove_service, cleanup_docker, or other destructive tools — those target managed infrastructure services, not deployable apps/projects.`,
     },
   };
 }
