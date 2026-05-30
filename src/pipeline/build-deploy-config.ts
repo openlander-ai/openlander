@@ -1,4 +1,5 @@
 import type { Database } from '../db/index.js';
+import { loadServiceViewRecord } from '../db/views/service-view.js';
 import { validateStoredConfig } from './config-snapshot.js';
 import type { ProjectConfig } from './deploy-core.js';
 import { getRedeploySourceMissingError } from './redeploy-source.js';
@@ -44,20 +45,18 @@ export async function buildDeployConfig(params: BuildDeployConfigParams): Promis
     throw new Error(`Project not found: ${projectId}`);
   }
 
-  // PR 4.5: canonical-first reads of deployable fields with `??` fallback to
-  // legacy `projects` columns through migration 0012.
-  const deployable = await db.getDeployableForProject(projectId);
-  const buildMethod = deployable?.build_method ?? project.build_method;
-  const source = deployable?.source ?? project.source;
+  const { service: deployable, view } = await loadServiceViewRecord(db, project);
+  const buildMethod = view.buildMethod;
+  const source = view.source;
   const repoUrl = deployable?.repo_url ?? '';
   const branch = deployable?.branch ?? undefined;
-  const imageUrl = deployable?.image_url ?? project.image_url;
-  const imageCmdRaw = deployable?.image_cmd ?? project.image_cmd;
-  const containerPort = deployable?.container_port ?? project.container_port;
-  const dockerfilePath = deployable?.dockerfile_path ?? project.dockerfile_path;
-  const dockerTarget = deployable?.docker_target ?? project.docker_target;
-  const buildContext = deployable?.build_context ?? project.build_context;
-  const assignedPort = deployable?.assigned_port ?? project.assigned_port;
+  const imageUrl = view.imageUrl;
+  const imageCmdRaw = view.imageCmdRaw;
+  const containerPort = view.containerPort;
+  const dockerfilePath = view.dockerfilePath;
+  const dockerTarget = view.dockerTarget;
+  const buildContext = view.buildContext;
+  const assignedPort = view.assignedPort;
 
   const isCompose = buildMethod === 'compose';
   const sourceMissingError = getRedeploySourceMissingError({
