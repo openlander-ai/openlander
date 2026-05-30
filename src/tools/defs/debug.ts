@@ -37,17 +37,23 @@ export const debugToolDefs: ToolDef[] = [
         throw new Error('NO_DEPLOY_LOGS: No deploy logs found.');
       }
 
-      let buildLog = log.build_log ?? 'No build log captured.';
+      const rawBuildLog = log.build_log ?? 'No build log captured.';
+      let buildLog = rawBuildLog;
       const tail = args['tail'] as number | undefined;
       if (tail && log.build_log) {
         const lines = log.build_log.split('\n');
         buildLog = lines.slice(-tail).join('\n');
       }
+      const truncated = buildLog.length < rawBuildLog.length;
 
       return Promise.resolve({
         id: log.id,
         status: log.status,
         build_log: buildLog,
+        full_log: !truncated,
+        returned_chars: buildLog.length,
+        total_chars: rawBuildLog.length,
+        truncated,
         duration_ms: log.duration_ms,
         created_at: log.created_at,
       });
