@@ -457,6 +457,7 @@ export const translations = {
     card: {
       // Chrome — card field labels + badges.
       archivedBadge: 'archived',
+      partiallyArchivedBadge: '일부 아카이브됨',
       lastDeploy: 'Last deploy',
       branch: 'Branch',
       endpoint: 'Endpoint',
@@ -465,10 +466,13 @@ export const translations = {
     archive: {
       // Chrome — button.
       button: 'Archive',
+      remainingButton: '남은 서비스 아카이브',
       // Content — toast + confirmation prose.
       success: '프로젝트가 보관되었습니다',
       description:
         '이 프로젝트를 보관하시겠습니까? 컨테이너는 중지되지만 모든 구성과 기록은 보존됩니다.',
+      remainingDescription:
+        '이 프로젝트의 남은 활성 서비스를 아카이브하시겠습니까? 이미 아카이브된 서비스는 그대로 유지됩니다.',
     },
     unarchive: {
       // Chrome — button.
@@ -516,11 +520,14 @@ export const translations = {
       nav: 'Danger',
       title: 'Danger zone',
       archiveTitle: 'Archive project',
+      partialArchiveTitle: '남은 서비스 아카이브',
       restoreTitle: 'Restore project',
       deleteTitle: 'Permanently delete project',
       // Content — descriptive copy + error.
       description: '프로젝트 그룹을 보관하거나 영구 삭제합니다.',
       archiveBody: '컨테이너를 중지하고 기본 목록에서 숨기되 설정은 보존합니다.',
+      partialArchiveBody:
+        '일부 서비스가 이미 아카이브되어 있습니다. 프로젝트 그룹 아카이브를 완료하려면 남은 활성 서비스를 아카이브하세요.',
       restoreBody: '보관된 프로젝트를 기본 프로젝트 목록으로 되돌립니다.',
       deleteBody: '프로젝트 그룹, 서비스, 컨테이너, 설정, 기록을 삭제합니다.',
       purgeDescription:

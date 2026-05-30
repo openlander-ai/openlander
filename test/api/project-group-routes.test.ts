@@ -142,6 +142,7 @@ describe('createProjectGroupRoutes', () => {
           display_name: 'Readable Workspace',
           description: 'Public API surface',
           tags: ['api', 'production'],
+          archived_at: null,
           url: null,
           urls: [],
           partiallyArchived: false,
@@ -159,6 +160,39 @@ describe('createProjectGroupRoutes', () => {
               ]),
             },
           ],
+        },
+      ],
+    });
+  });
+
+  it('reports partial groups as active on GET /api/projects', async () => {
+    const archivedAt = '2026-02-01T00:00:00.000Z';
+    const project = makeProjectRow({ archived_at: archivedAt });
+    const app = createApp({
+      db: {
+        listProjectsWithMetadata: vi.fn(async () => [
+          {
+            project,
+            environments: [],
+            childCount: 2,
+            isCompose: false,
+            partiallyArchived: true,
+          },
+        ]),
+        getServices: vi.fn(async () => [makeServiceRow({ archived_at: archivedAt })]),
+      },
+    });
+
+    const res = await app.request('/api/projects');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      projects: [
+        {
+          id: project.id,
+          archived_at: null,
+          partiallyArchived: true,
+          partially_archived: true,
         },
       ],
     });

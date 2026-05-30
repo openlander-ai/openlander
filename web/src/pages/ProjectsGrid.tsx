@@ -211,6 +211,8 @@ export function ProjectsGrid() {
               ) : (
                 filtered.map((p) => {
                   const isArchived = p.archived_at != null;
+                  const isPartiallyArchived =
+                    p.partiallyArchived === true || p.partially_archived === true;
                   return (
                     <button
                       key={p.id}
@@ -250,6 +252,11 @@ export function ProjectsGrid() {
                                 wire-format field, hydrated from services.* server-side post-0012. */}
                               {/* eslint-disable-next-line openlander-internal/no-dropped-columns */}
                               <StatusPill status={p.status} />
+                              {isPartiallyArchived && (
+                                <span className="inline-flex items-center rounded-full bg-[color-mix(in_oklch,var(--ol-warning)_12%,transparent)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--ol-warning)]">
+                                  {t('projects.card.partiallyArchivedBadge')}
+                                </span>
+                              )}
                             </>
                           )}
                         </div>
