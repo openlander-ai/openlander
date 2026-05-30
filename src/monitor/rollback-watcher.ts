@@ -1,4 +1,5 @@
 import type { Database } from '../db/index.js';
+import { serviceViewFromRows } from '../db/views/service-view.js';
 import type { EventBus } from '../events/index.js';
 import type { RuntimeSignal } from '../health/types.js';
 import type { DeployPipeline } from '../pipeline/deploy.js';
@@ -73,10 +74,10 @@ export class RollbackWatcher {
 
   private async startWatching(projectId: string, planId?: string): Promise<void> {
     const project = await this.db.getProject(projectId);
-    // PR 4.5: canonical-first read of previous_image_tag with `??` fallback.
     const deployable = await this.db.getDeployableForProject(projectId);
-    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-    const previousImageTag = deployable?.previous_image_tag ?? project?.previous_image_tag;
+    const previousImageTag = project
+      ? serviceViewFromRows(project, deployable).previousImageTag
+      : deployable?.previous_image_tag;
     if (!previousImageTag) return;
 
     this.stopWatching(projectId);
@@ -112,10 +113,10 @@ export class RollbackWatcher {
       this.stopWatching(projectId);
       return;
     }
-    // PR 4.5: canonical-first reads with `??` fallback to legacy columns.
     const deployable = await this.db.getDeployableForProject(projectId);
-    const status = deployable?.status ?? project.status;
-    const previousImageTag = deployable?.previous_image_tag ?? project.previous_image_tag;
+    const view = serviceViewFromRows(project, deployable);
+    const status = view.status;
+    const previousImageTag = view.previousImageTag;
     if (status === 'stopped') {
       this.stopWatching(projectId);
       return;

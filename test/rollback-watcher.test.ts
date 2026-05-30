@@ -2,18 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RollbackWatcher } from '../src/monitor/rollback-watcher.js';
 import { EventBus } from '../src/events/index.js';
-import type { Database } from '../src/db/index.js';
+import type { Database, ServiceRow } from '../src/db/index.js';
 
 function createMockDb(overrides?: {
   previous_image_tag?: string | null;
   name?: string;
   returnNull?: boolean;
+  deployable?: Partial<ServiceRow>;
 }): Database {
   return {
     getProject: vi.fn().mockReturnValue(
       overrides?.returnNull
         ? null
         : {
+            id: 'p1',
             name: overrides?.name ?? 'test-project',
             previous_image_tag:
               'previous_image_tag' in (overrides ?? {})
@@ -21,9 +23,14 @@ function createMockDb(overrides?: {
                 : 'old-image:v1',
           },
     ),
-    // PR 4.5: canonical-first reads need this helper.
-    getDeployableForProject: vi.fn().mockReturnValue(undefined),
+    getDeployableForProject: vi.fn().mockReturnValue(overrides?.deployable),
   } as unknown as Database;
+}
+
+async function flushAsyncEventHandlers(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 describe('RollbackWatcher', () => {
@@ -161,6 +168,7 @@ describe('RollbackWatcher', () => {
       url: 'http://test.localhost',
       totalDurationMs: 1000,
     });
+    await flushAsyncEventHandlers();
 
     await events.emit('monitor:healthcheck', {
       projectId: 'p1',
@@ -177,14 +185,59 @@ describe('RollbackWatcher', () => {
       healthy: false,
       responseTimeMs: 100,
     });
+    await flushAsyncEventHandlers();
 
-    expect(rollbackHandler).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(rollbackHandler).toHaveBeenCalledOnce());
     expect(rollbackHandler).toHaveBeenCalledWith({
       projectId: 'p1',
       projectName: 'test-project',
       consecutiveFailures: 3,
       previousImageTag: 'old-image:v1',
     });
+  });
+
+  it('uses canonical service previous image tag before stale project tag', async () => {
+    const localEvents = new EventBus();
+    const localDb = createMockDb({
+      previous_image_tag: 'stale-project-image:v1',
+      deployable: {
+        id: 'p1__svc',
+        project_id: 'p1',
+        name: 'test-project__svc',
+        previous_image_tag: 'canonical-service-image:v2',
+        status: 'running',
+      },
+    });
+    const localWatcher = new RollbackWatcher(localEvents, localDb);
+    localWatcher.start();
+
+    const rollbackHandler = vi.fn();
+    localEvents.on('rollback:suggested', rollbackHandler);
+
+    await localEvents.emit('deploy:success', {
+      projectId: 'p1',
+      url: 'http://test.localhost',
+      totalDurationMs: 1000,
+    });
+    await flushAsyncEventHandlers();
+
+    for (let i = 0; i < 3; i++) {
+      await localEvents.emit('monitor:healthcheck', {
+        projectId: 'p1',
+        healthy: false,
+        responseTimeMs: 100,
+      });
+    }
+    await flushAsyncEventHandlers();
+
+    await vi.waitFor(() =>
+      expect(rollbackHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          previousImageTag: 'canonical-service-image:v2',
+        }),
+      ),
+    );
+    localWatcher.stop();
   });
 
   it('stops watching a project after emitting rollback:suggested', async () => {
@@ -198,6 +251,7 @@ describe('RollbackWatcher', () => {
       url: 'http://test.localhost',
       totalDurationMs: 1000,
     });
+    await flushAsyncEventHandlers();
 
     // Trigger rollback
     await events.emit('monitor:healthcheck', {
@@ -215,7 +269,8 @@ describe('RollbackWatcher', () => {
       healthy: false,
       responseTimeMs: 100,
     });
-    expect(rollbackHandler).toHaveBeenCalledOnce();
+    await flushAsyncEventHandlers();
+    await vi.waitFor(() => expect(rollbackHandler).toHaveBeenCalledOnce());
 
     // Further health checks should NOT trigger another rollback
     await events.emit('monitor:healthcheck', {
