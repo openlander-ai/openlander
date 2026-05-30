@@ -550,6 +550,7 @@ describe('PlanEngine.executePlan', () => {
 
     expect(result.status).toBe('building');
     expect(result.project_id).toBe('p1');
+    expect(mockDb.getProjectByName).toHaveBeenCalledTimes(2);
 
     expect(mockPipeline.startDeploy).toHaveBeenCalledWith({
       repoUrl: 'https://github.com/test/repo',

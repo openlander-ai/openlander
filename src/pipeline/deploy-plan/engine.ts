@@ -1280,7 +1280,7 @@ export class PlanEngine {
       };
     }
 
-    const existingProject = targetProject ?? (await this.db.getProjectByName(plan.app.name));
+    const existingProject = targetProject;
     let lockProjectId: string | null = null;
     let deployLockReleased = false;
     const safeReleaseDeployLock = () => {
