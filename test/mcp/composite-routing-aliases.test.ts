@@ -100,6 +100,18 @@ describe('openlander_project runtime aliases removed', () => {
     }
   });
 
+  it('does not attach group lifecycle rationale to hard-delete aliases', async () => {
+    const result = (await tool.execute(
+      { action: 'delete_app', params: {} },
+      mockContext,
+    )) as Record<string, unknown>;
+    const guidance = result['_agent_guidance'] as Record<string, unknown>;
+
+    expect(result).toHaveProperty('error', 'HUMAN_UI_ONLY');
+    expect(String(guidance['message'])).not.toContain('multiple deployable services');
+    expect(String(guidance['message'])).toContain('service_id');
+  });
+
   it('removed aliases do not emit deprecation warnings because compatibility is gone', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     await tool.execute({ action: 'stop_project', params: {} }, mockContext);

@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import type { ToolContext, ToolDef } from '../tools/defs/types.js';
 import { maybeHandleMcpSafety } from './destructive-safety.js';
-import { HUMAN_UI_ONLY_ALIASES, HUMAN_UI_ONLY_ALIAS_SET } from './mcp-restricted-actions.js';
+import {
+  HUMAN_UI_ONLY_ALIASES,
+  HUMAN_UI_ONLY_ALIAS_SET,
+  PROJECT_LIFECYCLE_ALIAS_SET,
+} from './mcp-restricted-actions.js';
 import {
   buildActionContract,
   unknownTopLevelParams,
@@ -314,17 +318,15 @@ function invalidParamsResponse(
 }
 
 function humanUiOnlyResponse(toolName: string, action: string): Record<string, unknown> {
-  const isProjectLifecycleAction =
-    action === 'archive_project' || action === 'unarchive_project' || action.endsWith('_app');
-  const lifecycleReason = isProjectLifecycleAction
-    ? ' Project group archive/restore can span multiple deployable services and remains web UI-only until group-wide lifecycle semantics are explicit. Use archive_service or unarchive_service with a service_id for agent-requested deployable cleanup/restore.'
+  const lifecycleReason = PROJECT_LIFECYCLE_ALIAS_SET.has(action)
+    ? ' Project group archive/restore can span multiple deployable services and remains web UI-only until group-wide lifecycle semantics are explicit.'
     : '';
   return {
     error: 'HUMAN_UI_ONLY',
     action,
     composite: toolName,
     _agent_guidance: {
-      message: `"${action}" is not exposed to MCP. Project/app hard delete, purge, and project-level archive/restore are human UI-only operations. Tell the user to use the web UI: Settings → Danger zone for that project or service.${lifecycleReason} Do not substitute remove_service, cleanup_docker, or other destructive tools — those target managed infrastructure services, not deployable apps/projects.`,
+      message: `"${action}" is not exposed to MCP. Project/app hard delete, purge, and project-level archive/restore are human UI-only operations. Tell the user to use the web UI: Settings → Danger zone for that project or service.${lifecycleReason} For deployable app cleanup or restore, use archive_service or unarchive_service with a service_id and wait for human approval. Do not substitute remove_service, cleanup_docker, or other destructive tools — those target managed infrastructure services, not deployable apps/projects.`,
     },
   };
 }

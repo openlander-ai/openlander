@@ -44,6 +44,13 @@ export const HUMAN_UI_ONLY_ALIASES = [
   'unarchive_project',
 ] as const;
 
+export const PROJECT_LIFECYCLE_ALIASES = [
+  'archive_app',
+  'archive_project',
+  'unarchive_app',
+  'unarchive_project',
+] as const;
+
 export const APPROVAL_HOLD_TOOLS = [
   'archive_service',
   'unarchive_service',
@@ -53,8 +60,10 @@ export const APPROVAL_HOLD_TOOLS = [
 
 export type HumanUiOnlyTool = (typeof HUMAN_UI_ONLY_TOOLS)[number];
 export type HumanUiOnlyAlias = (typeof HUMAN_UI_ONLY_ALIASES)[number];
+export type ProjectLifecycleAlias = (typeof PROJECT_LIFECYCLE_ALIASES)[number];
 export type ApprovalHoldTool = (typeof APPROVAL_HOLD_TOOLS)[number];
 
 export const HUMAN_UI_ONLY_TOOL_SET: ReadonlySet<string> = new Set(HUMAN_UI_ONLY_TOOLS);
 export const HUMAN_UI_ONLY_ALIAS_SET: ReadonlySet<string> = new Set(HUMAN_UI_ONLY_ALIASES);
+export const PROJECT_LIFECYCLE_ALIAS_SET: ReadonlySet<string> = new Set(PROJECT_LIFECYCLE_ALIASES);
 export const APPROVAL_HOLD_TOOL_SET: ReadonlySet<string> = new Set(APPROVAL_HOLD_TOOLS);

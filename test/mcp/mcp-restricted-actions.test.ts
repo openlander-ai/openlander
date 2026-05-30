@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   HUMAN_UI_ONLY_TOOLS,
   HUMAN_UI_ONLY_ALIASES,
+  PROJECT_LIFECYCLE_ALIASES,
   APPROVAL_HOLD_TOOLS,
 } from '../../src/mcp/mcp-restricted-actions.js';
 import { isHumanUiOnlyAction } from '../../src/mcp/composite-tools.js';
@@ -79,6 +80,22 @@ describe('MCP restricted-action policy (single source)', () => {
     // the blocked-tools group, where it was dead since it isn't a real tool def.
     expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_service');
     expect([...HUMAN_UI_ONLY_TOOLS]).not.toContain('delete_service');
+  });
+
+  it('keeps project lifecycle guidance aliases explicit and within human-UI-only aliases', () => {
+    expect(PROJECT_LIFECYCLE_ALIASES).toEqual([
+      'archive_app',
+      'archive_project',
+      'unarchive_app',
+      'unarchive_project',
+    ]);
+
+    const aliases = new Set<string>(HUMAN_UI_ONLY_ALIASES);
+    for (const alias of PROJECT_LIFECYCLE_ALIASES) {
+      expect(aliases.has(alias), `${alias} should be intercepted as a human-UI-only alias`).toBe(
+        true,
+      );
+    }
   });
 
   it('composite alias interception derives from the single source', () => {
