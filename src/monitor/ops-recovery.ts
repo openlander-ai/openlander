@@ -3,6 +3,7 @@ import { generateText } from 'ai';
 
 import type { AppContext } from '../app.js';
 import type { OpsIncidentEventRow } from '../db/types.js';
+import { loadServiceViewRecord, type ServiceViewRecord } from '../db/views/service-view.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { classifyLlmError } from '../llm/llm-error-types.js';
 import { createModelProxy } from '../llm/model-proxy.js';
@@ -89,6 +90,11 @@ export class RecoveryPipeline {
 
   private get msg() {
     return RECOVERY_MESSAGES[this.getLocale()];
+  }
+
+  private async loadProjectServiceView(projectId: string): Promise<ServiceViewRecord | null> {
+    const project = await this.ctx.db.getProject(projectId);
+    return project ? await loadServiceViewRecord(this.ctx.db, project) : null;
   }
 
   async execute(context: RecoveryExecuteContext): Promise<RecoveryOutcome> {
@@ -408,11 +414,7 @@ export class RecoveryPipeline {
         setTimeout(resolve, HEALTH_CHECK_INTERVAL_MS);
       });
 
-      const project = await this.ctx.db.getProject(projectId);
-      // PR 4.5: canonical-first read of assigned_port with `??` fallback.
-      const deployable = await this.ctx.db.getDeployableForProject(projectId);
-      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-      const port = deployable?.assigned_port ?? project?.assigned_port;
+      const port = (await this.loadProjectServiceView(projectId))?.view.assignedPort;
       const containerRunning = await this.isContainerRunning(containerId);
       const httpHealthy = typeof port === 'number' ? await this.isHttpHealthy(port) : false;
 
@@ -449,13 +451,9 @@ export class RecoveryPipeline {
       return null;
     }
 
-    const project = await this.ctx.db.getProject(context.projectId);
-    // PR 4.5: canonical-first status read with `??` fallback.
-    const diagDeployable = project
-      ? await this.ctx.db.getDeployableForProject(context.projectId)
-      : undefined;
-    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-    const diagStatus = diagDeployable?.status ?? project?.status;
+    const record = await this.loadProjectServiceView(context.projectId);
+    const project = record?.project ?? null;
+    const diagStatus = record?.view.status;
     if (!project || project.archived_at || diagStatus === 'stopped') {
       log.debug(
         { projectId: context.projectId, status: diagStatus },
@@ -534,13 +532,8 @@ export class RecoveryPipeline {
 
     const portConflictPattern = /eaddrinuse|address already in use|bind: address already in use/i;
     if (portConflictPattern.test(logs)) {
-      const project = await this.ctx.db.getProject(context.projectId);
-      // PR 4.5: canonical-first read of assigned_port with `??` fallback.
-      const portDeployable = project
-        ? await this.ctx.db.getDeployableForProject(context.projectId)
-        : undefined;
-      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-      const portAssigned = portDeployable?.assigned_port ?? project?.assigned_port;
+      const portAssigned = (await this.loadProjectServiceView(context.projectId))?.view
+        .assignedPort;
       if (portAssigned != null) {
         const resolved = await this.resolvePortConflict(context, portAssigned);
         notes.push(
@@ -588,13 +581,8 @@ export class RecoveryPipeline {
     context: RecoveryContext,
     reason: string,
   ): Promise<'recovered' | 'escalated'> {
-    const project = await this.ctx.db.getProject(context.projectId);
-    // PR 4.5: canonical-first read of previous_image_tag with `??` fallback.
-    const rollbackDeployable = project
-      ? await this.ctx.db.getDeployableForProject(context.projectId)
-      : undefined;
-    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-    const previousImageTag = rollbackDeployable?.previous_image_tag ?? project?.previous_image_tag;
+    const previousImageTag = (await this.loadProjectServiceView(context.projectId))?.view
+      .previousImageTag;
     if (!previousImageTag) {
       return await this.escalate(context, `${reason}; no previous image available for rollback`);
     }

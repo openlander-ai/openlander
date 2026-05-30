@@ -1,6 +1,7 @@
 import type { AppContext } from '../app.js';
 import { randomUUID } from 'node:crypto';
 import type { OpsIncidentRow } from '../db/types.js';
+import { loadServiceViewRecord } from '../db/views/service-view.js';
 import { eventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { OpsConfig, OpsEvent } from '../monitor/ops-types.js';
@@ -256,10 +257,7 @@ export class OpsAgent {
 
     // Skip projects not in running/error state — no recovery needed
     const project = await this.ctx.db.getProject(projectId);
-    // PR 4.5: canonical-first status read with `??` fallback.
-    const deployable = project ? await this.ctx.db.getDeployableForProject(projectId) : undefined;
-    // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-    const status = deployable?.status ?? project?.status;
+    const status = project ? (await loadServiceViewRecord(this.ctx.db, project)).view.status : null;
     if (!project || (status !== 'running' && status !== 'error') || project.archived_at) {
       log.debug({ projectId, status }, 'Skipping crash event for non-running project');
       return;
