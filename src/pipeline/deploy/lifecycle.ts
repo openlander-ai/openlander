@@ -203,6 +203,10 @@ export class ContainerLifecycle {
     }
 
     const activeDeployables = deployables.filter((service) => !service.archived_at);
+    if (activeDeployables.length === 0) {
+      return;
+    }
+
     for (const service of activeDeployables) {
       await this.assertRuntimeProjectArchivable(deployableServiceIdToProjectId(service.id));
     }
@@ -287,6 +291,9 @@ export class ContainerLifecycle {
     // Archive in DB first so if Docker emits a 'die' event during cleanup,
     // the Eligibility Gate will see archived_at and reject recovery
     await this.db.archiveProject(projectId, options.archivedAt);
+    if (options.archivedAt === undefined) {
+      await this.clearPartialGroupArchiveMarkerAfterRuntimeArchive(deployable);
+    }
 
     if (archiveContainerId) {
       try {
@@ -314,6 +321,24 @@ export class ContainerLifecycle {
     clearPortScanCache();
     if (emitEvent) {
       await eventBus.emit('project:archive', { projectId });
+    }
+  }
+
+  private async clearPartialGroupArchiveMarkerAfterRuntimeArchive(
+    deployable: ServiceRow | undefined,
+  ): Promise<void> {
+    if (!deployable?.project_id) return;
+    const groupId = deployable.project_id;
+    if (groupId !== deployableServiceIdToProjectId(deployable.id)) return;
+
+    const deployables = await this.db.getDeployablesByGroup(groupId);
+    if (deployables.length <= 1) return;
+
+    const hasActiveSibling = deployables.some(
+      (service) => service.id !== deployable.id && !service.archived_at,
+    );
+    if (hasActiveSibling) {
+      await this.db.setProjectArchivedAt(groupId, null);
     }
   }
 

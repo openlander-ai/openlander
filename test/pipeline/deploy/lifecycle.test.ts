@@ -434,6 +434,53 @@ describe('ContainerLifecycle group archive semantics', () => {
     expect(emitSpy).toHaveBeenCalledWith('project:archive', { projectId: 'group-1' });
   });
 
+  it('archive keeps a multi-service group active when only its primary service is archived', async () => {
+    const primary = makeDeployable('group-1__svc');
+    const primaryArchived = makeDeployable('group-1__svc', {
+      archived_at: '2026-02-01T00:00:00.000Z',
+      status: 'stopped',
+      container_id: null,
+    });
+    const worker = makeDeployable('worker__svc');
+    const db = {
+      getProject: vi.fn(async (id: string) => makeRuntimeProject(id)),
+      getDeployableForProject: vi.fn(async () => primary),
+      getEnvironmentsByProject: vi.fn(async () => []),
+      getComposeChildProjects: vi.fn(async () => []),
+      getDeployablesByGroup: vi.fn(async () => [primaryArchived, worker]),
+      archiveProject: vi.fn(async () => undefined),
+      setProjectArchivedAt: vi.fn(async () => undefined),
+    };
+    const runtime = createMockDocker();
+    const lifecycle = new ContainerLifecycle(runtime, db as unknown as Database);
+
+    await lifecycle.archive('group-1');
+
+    expect(db.archiveProject).toHaveBeenCalledWith('group-1', undefined);
+    expect(db.setProjectArchivedAt).toHaveBeenCalledWith('group-1', null);
+  });
+
+  it('archiveGroup is a no-op when every deployable is already archived', async () => {
+    const archivedAt = '2026-02-01T00:00:00.000Z';
+    const web = makeDeployable('group-1__svc', { archived_at: archivedAt });
+    const worker = makeDeployable('worker__svc', { archived_at: archivedAt });
+    const db = {
+      getProject: vi.fn(async (id: string) => makeRuntimeProject(id, archivedAt)),
+      getDeployablesByGroup: vi.fn(async () => [web, worker]),
+      archiveProject: vi.fn(async () => undefined),
+      setProjectArchivedAt: vi.fn(async () => undefined),
+    };
+    const runtime = createMockDocker();
+    const emitSpy = vi.spyOn(eventBus, 'emit').mockResolvedValue(undefined);
+    const lifecycle = new ContainerLifecycle(runtime, db as unknown as Database);
+
+    await lifecycle.archiveGroup('group-1');
+
+    expect(db.archiveProject).not.toHaveBeenCalled();
+    expect(db.setProjectArchivedAt).not.toHaveBeenCalled();
+    expect(emitSpy).not.toHaveBeenCalledWith('project:archive', { projectId: 'group-1' });
+  });
+
   it('unarchiveGroup restores only services touched by the matching group archive marker', async () => {
     const marker = '2026-02-01T00:00:00.000Z';
     const web = makeDeployable('group-1__svc', { archived_at: marker });

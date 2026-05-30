@@ -91,10 +91,18 @@ function createApp(ctx: Partial<AppContext>) {
   return app;
 }
 
-function makeRuntimeContext(overrides: Partial<AppContext> = {}) {
-  const group = makeProjectRow({ id: 'group-1', name: 'workspace' });
-  const runtime = makeProjectRow({ id: 'api', name: 'api' });
-  const service = makeServiceRow({ id: 'api__svc', project_id: group.id, name: 'api__svc' });
+function makeRuntimeContext(
+  overrides: Partial<AppContext> = {},
+  options: {
+    group?: ProjectRow;
+    runtime?: ProjectRow;
+    service?: ServiceRow;
+  } = {},
+) {
+  const group = options.group ?? makeProjectRow({ id: 'group-1', name: 'workspace' });
+  const runtime = options.runtime ?? makeProjectRow({ id: 'api', name: 'api' });
+  const service =
+    options.service ?? makeServiceRow({ id: 'api__svc', project_id: group.id, name: 'api__svc' });
   const db = {
     getProject: vi.fn(async (id: string) =>
       id === group.id ? group : id === runtime.id ? runtime : undefined,
@@ -266,6 +274,28 @@ describe('createServiceRuntimeRoutes', () => {
     await expect(res.json()).resolves.toMatchObject({
       projectId: 'group-1',
       serviceId: service.id,
+    });
+  });
+
+  it('rejects deploy when the selected service row is archived', async () => {
+    const service = makeServiceRow({
+      id: 'api__svc',
+      project_id: 'group-1',
+      name: 'api__svc',
+      archived_at: '2026-02-01T00:00:00.000Z',
+      status: 'stopped',
+    });
+    const { app, pipeline, runtime } = makeRuntimeContext({}, { service });
+
+    const res = await app.request('/api/projects/group-1/services/api__svc/deploy?strategy=force', {
+      method: 'POST',
+    });
+
+    expect(res.status).toBe(409);
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    await expect(res.json()).resolves.toMatchObject({
+      code: 'PROJECT_ARCHIVED',
+      details: { projectId: runtime.id },
     });
   });
 

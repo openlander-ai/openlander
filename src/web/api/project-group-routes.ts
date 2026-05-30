@@ -15,6 +15,7 @@ import {
   assertProjectLifecycleMutableForRoute,
   createProjectGroupWithSlugRetry,
   deriveProjectSlug,
+  deriveGroupLifecycleState,
   lifecycleErrorResponse,
   mapEnvironment,
   mapProjectForApi,
@@ -134,45 +135,55 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
 
     return c.json({
       count: projectsWithMeta.length,
-      projects: projectsWithMeta.map(({ project: p, environments, childCount, isCompose }) => {
-        const mapped = mapProjectForApi(p);
-        return {
-          id: mapped.id,
-          name: mapped.name,
-          displayName: mapped.displayName,
-          display_name: mapped.display_name,
-          description: mapped.description,
-          tags: mapped.tags,
-          status: mapped.status,
-          visibility: mapped.visibility,
-          source: mapped.source,
-          port: mapped.port,
-          url: mapped.url,
-          urls: mapped.urls,
-          publicUrl: mapped.publicUrl,
-          ...(mapped.imageUrl ? { imageUrl: mapped.imageUrl } : {}),
-          createdAt: mapped.created_at,
-          updatedAt: mapped.updated_at,
-          parentProjectId: mapped.parent_project_id,
-          isCompose,
-          serviceCount: childCount,
-          environments: environments.map((env) => mapEnvironment(mapped.name, env)),
-        };
-      }),
+      projects: projectsWithMeta.map(
+        ({ project: p, environments, childCount, isCompose, partiallyArchived }) => {
+          const mapped = mapProjectForApi(p);
+          return {
+            id: mapped.id,
+            name: mapped.name,
+            displayName: mapped.displayName,
+            display_name: mapped.display_name,
+            description: mapped.description,
+            tags: mapped.tags,
+            status: mapped.status,
+            visibility: mapped.visibility,
+            source: mapped.source,
+            port: mapped.port,
+            url: mapped.url,
+            urls: mapped.urls,
+            publicUrl: mapped.publicUrl,
+            ...(mapped.imageUrl ? { imageUrl: mapped.imageUrl } : {}),
+            createdAt: mapped.created_at,
+            updatedAt: mapped.updated_at,
+            parentProjectId: mapped.parent_project_id,
+            partiallyArchived,
+            partially_archived: partiallyArchived,
+            isCompose,
+            serviceCount: childCount,
+            environments: environments.map((env) => mapEnvironment(mapped.name, env)),
+          };
+        },
+      ),
     });
   });
 
   api.get('/projects/:id', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-    const [envVars, environments, deployLogs, deployable] = await Promise.all([
+    const [envVars, environments, deployLogs, deployable, deployables] = await Promise.all([
       ctx.env.getAll(project.id),
       ctx.db.getEnvironmentsByProject(project.id),
       ctx.db.getDeployLogs(project.id, 5),
       ctx.db.getDeployableForProject(project.id),
+      ctx.db.getDeployablesByGroup(project.id),
     ]);
+    const lifecycle = deriveGroupLifecycleState(deployables);
+    const mapped = mapProjectForApi(project, deployable);
 
     return c.json({
-      ...mapProjectForApi(project, deployable),
+      ...mapped,
+      archived_at: lifecycle.partiallyArchived ? null : mapped.archived_at,
+      partiallyArchived: lifecycle.partiallyArchived,
+      partially_archived: lifecycle.partiallyArchived,
       environments: environments.map((env) => mapEnvironment(project.name, env)),
       envVars,
       recentDeploys: deployLogs.map((log) => ({
@@ -281,9 +292,12 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
 
   api.post('/projects/:id/archive', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
+    const deployables = await ctx.db.getDeployablesByGroup(project.id);
+    const lifecycle = deriveGroupLifecycleState(deployables);
+    const policyProject = lifecycle.partiallyArchived ? { ...project, archived_at: null } : project;
 
     try {
-      await assertProjectLifecycleMutableForRoute(project, 'archive', ctx);
+      await assertProjectLifecycleMutableForRoute(policyProject, 'archive', ctx);
     } catch (err) {
       const response = lifecycleErrorResponse(err);
       if (response) return c.json(response.body, response.status);
