@@ -63,6 +63,8 @@ export interface ServiceView {
   projectName: string;
   /** Service-side name. For legacy 1.0 this equals `${projectName}__svc`. */
   name: string;
+  /** Raw service kind (`git`, `image`, `compose`, managed kinds, etc.). */
+  kind: ServiceRow['kind'] | null;
 
   // ── Lifecycle ──
   /** Normalized runtime status with `'idle'` as the bottom case. */
@@ -79,6 +81,7 @@ export interface ServiceView {
   source: ServiceSource | null;
   imageUrl: string | null;
   repoUrl: string | null;
+  branch: string | null;
   imageTag: string | null;
   previousImageTag: string | null;
   /** Raw `image_cmd` string — adapters that need an array parse it. */
@@ -169,6 +172,7 @@ export function serviceViewFromRows(
     projectId: project.id,
     projectName: project.name,
     name: service?.name ?? `${project.name}__svc`,
+    kind: service?.kind ?? null,
 
     status,
     containerId: service?.container_id ?? project.container_id ?? null,
@@ -181,6 +185,7 @@ export function serviceViewFromRows(
     source,
     imageUrl: service?.image_url ?? project.image_url ?? null,
     repoUrl: service?.repo_url ?? null,
+    branch: service?.branch ?? null,
     imageTag: service?.image_tag ?? project.image_tag ?? null,
     previousImageTag: service?.previous_image_tag ?? project.previous_image_tag ?? null,
     imageCmdRaw: service?.image_cmd ?? project.image_cmd ?? null,

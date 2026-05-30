@@ -21,7 +21,7 @@ import { resolveContainerUrl } from './url-resolver.js';
 import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
-import type { Database, EnvironmentRow, ProjectRow, ServiceRow } from '../db/index.js';
+import type { Database, EnvironmentRow, ProjectRow } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { resolveEnvVars } from './resolve-env.js';
 
@@ -69,7 +69,7 @@ import { ContainerRunner } from './deploy/run-step.js';
 import { getImageExposedPort, mapPullError } from './image-utils.js';
 import { loadResourceLimitsForDeployTarget } from './config-snapshot.js';
 import { createDependencyCacheKey } from './build-cache.js';
-import { loadServiceView } from '../db/views/service-view.js';
+import { loadServiceViewRecord, type ServiceView } from '../db/views/service-view.js';
 
 import {
   buildProject,
@@ -124,15 +124,10 @@ const BLUE_GREEN_LABELS = {
 } as const;
 
 function explicitHealthCheckPath(
-  project: ProjectRow,
-  deployable: ServiceRow,
+  view: Pick<ServiceView, 'healthCheckPath'>,
   override?: string,
 ): string | undefined {
-  const candidates = [
-    override,
-    deployable.health_check_path ?? undefined,
-    project.health_check_path ?? undefined,
-  ];
+  const candidates = [override, view.healthCheckPath ?? undefined];
   const found = candidates.find((candidate) => candidate?.trim());
   return found ? (found.startsWith('/') ? found : `/${found}`) : undefined;
 }
@@ -443,13 +438,13 @@ export class DeployPipeline {
   }
 
   private async assertProjectMutable(project: ProjectRow): Promise<void> {
-    const [deployable, circuitBreakerOpen] = await Promise.all([
-      this.db.getDeployableForProject(project.id),
+    const [record, circuitBreakerOpen] = await Promise.all([
+      loadServiceViewRecord(this.db, project),
       this.db.isCircuitBreakerOpen(project.id),
     ]);
     assertProjectMutable(project, {
       db: {
-        getDeployableForProject: () => deployable,
+        getDeployableForProject: () => record.service ?? undefined,
         isCircuitBreakerOpen: () => circuitBreakerOpen,
       },
     });
@@ -817,7 +812,9 @@ export class DeployPipeline {
   ): Promise<BlueGreenEligibility> {
     const reasons: string[] = [];
     const project = await this.db.getProject(projectId);
-    const deployable = project ? await this.db.getDeployableForProject(project.id) : null;
+    const record = project ? await loadServiceViewRecord(this.db, project) : null;
+    const deployable = record?.service ?? null;
+    const view = record?.view ?? null;
 
     if (!project) {
       reasons.push('Project not found.');
@@ -826,17 +823,17 @@ export class DeployPipeline {
       reasons.push('No deployable service found.');
     }
 
-    if (deployable) {
-      if (deployable.kind === 'compose' || deployable.kind === 'compose-child') {
+    if (deployable && view) {
+      if (view.kind === 'compose' || view.kind === 'compose-child') {
         reasons.push('Compose stacks are not eligible for blue-green deploys in v0.1.3.');
       }
-      if (deployable.source !== 'git' && deployable.source !== 'image') {
+      if (view.source !== 'git' && view.source !== 'image') {
         reasons.push('Blue-green deploys require a git or image deployable service.');
       }
-      if (deployable.status !== 'running') {
+      if (view.status !== 'running') {
         reasons.push('The current service must be running before blue-green can preserve it.');
       }
-      if (!deployable.container_id) {
+      if (!view.containerId) {
         reasons.push('The current service has no active container to keep serving as blue.');
       }
     }
@@ -846,9 +843,9 @@ export class DeployPipeline {
       reasons.push('Managed Traefik HTTP-provider routing is required for route-target flips.');
     }
 
-    if (project && deployable) {
+    if (project && deployable && view) {
       const profile = resolveMonitoringProfile(project, deployable);
-      const healthPath = explicitHealthCheckPath(project, deployable, options?.healthCheckPath);
+      const healthPath = explicitHealthCheckPath(view, options?.healthCheckPath);
       if (!profile.exposeViaTraefik) {
         reasons.push('The service is not exposed through OpenLander/Traefik routes.');
       }
@@ -870,9 +867,9 @@ export class DeployPipeline {
               id: deployable.id,
               name: deployable.name,
               kind: deployable.kind,
-              source: deployable.source,
-              build_method: deployable.build_method,
-              status: deployable.status,
+              source: view?.source ?? deployable.source,
+              build_method: view?.buildMethod ?? deployable.build_method,
+              status: view?.status ?? deployable.status,
             },
           }
         : {}),
@@ -1185,11 +1182,12 @@ export class DeployPipeline {
     const deployConfig: Partial<ProjectConfig> = { ...config };
     const projectName = deployConfig.name ?? project.name;
     const trigger = deployConfig.trigger ?? 'api';
-    const deployable = await this.db.getDeployableForProject(projectId);
-    const source =
-      deployConfig.source ?? (deployable?.source as 'git' | 'image' | undefined) ?? 'git';
-    const repoUrl = deployConfig.repoUrl ?? deployable?.repo_url ?? '';
-    const branch = deployConfig.branch ?? deployable?.branch ?? environment.branch ?? undefined;
+    const deployRecord = await loadServiceViewRecord(this.db, project);
+    const deployService = deployRecord.service;
+    const deployView = deployRecord.view;
+    const source = deployConfig.source ?? deployView.source ?? 'git';
+    const repoUrl = deployConfig.repoUrl ?? deployView.repoUrl ?? '';
+    const branch = deployConfig.branch ?? deployView.branch ?? environment.branch ?? undefined;
     if (source !== 'image' && !repoUrl) {
       // F3 (Day 9): same terminal-event guarantee for missing-repo case.
       const errorMsg = `Missing repo URL for project: ${projectId}`;
@@ -1206,16 +1204,16 @@ export class DeployPipeline {
         buildDurationMs: Date.now() - startTime,
       };
     }
-    if (source !== 'image' && deployable && !deployable.repo_url) {
-      throw new ServiceSourceMissingError(deployable.id);
+    if (source !== 'image' && deployService && !deployView.repoUrl) {
+      throw new ServiceSourceMissingError(deployService.id);
     }
     const routeName = getRouteName(projectName);
     const orchestrationDeps = this.createOrchestrationDeps();
     if (deployConfig.envVars) {
-      if (deployable) {
+      if (deployService) {
         await this.db.mergeEnvVarsForServiceDetailed(
           projectId,
-          deployable.id,
+          deployService.id,
           deployConfig.envVars,
         );
       } else {
@@ -1742,10 +1740,9 @@ export class DeployPipeline {
         }
 
         const project = await this.db.getProject(deployment.projectId);
-        // PR 4.5: canonical-first read of container_id with `??` fallback.
-        const deployableForHealth = await this.db.getDeployableForProject(deployment.projectId);
-        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-        const containerId = deployableForHealth?.container_id ?? project?.container_id;
+        const containerId = project
+          ? (await loadServiceViewRecord(this.db, project)).view.containerId
+          : null;
         if (!containerId) {
           log.warn(
             { serviceName: service.name },
@@ -1876,7 +1873,7 @@ export class DeployPipeline {
 
       const redeployRouteName = getRouteName(project.name);
       const redeployPreviousLabel = `openlander/${redeployRouteName}:previous`;
-      const redeployView = await loadServiceView(this.db, project);
+      const redeployView = (await loadServiceViewRecord(this.db, project)).view;
       const redeployImageTag = redeployView.imageTag;
       const redeploySource = redeployView.source;
       const redeployAssignedPort = redeployView.assignedPort;
@@ -2021,9 +2018,11 @@ export class DeployPipeline {
 
       projectName = project.name;
       this.validateProjectName(projectName);
-      const blueDeployable = await this.db.getDeployableForProject(projectId);
+      const blueRecord = await loadServiceViewRecord(this.db, project);
+      const blueDeployable = blueRecord.service;
+      const blueView = blueRecord.view;
       const storedHealthPath = blueDeployable
-        ? explicitHealthCheckPath(project, blueDeployable, options?.healthCheckPath)
+        ? explicitHealthCheckPath(blueView, options?.healthCheckPath)
         : undefined;
       routeProbePath ??= storedHealthPath ?? '/';
       const eligibility = await this.getBlueGreenEligibility(projectId, {
@@ -2032,7 +2031,7 @@ export class DeployPipeline {
       if (!eligibility.supported) {
         return this.buildBlueGreenUnsupportedResult(projectId, projectName, eligibility, startTime);
       }
-      if (!blueDeployable?.container_id) {
+      if (!blueDeployable || !blueView.containerId) {
         return this.buildBlueGreenUnsupportedResult(
           projectId,
           projectName,
@@ -2045,14 +2044,14 @@ export class DeployPipeline {
           startTime,
         );
       }
-      blueContainerId = blueDeployable.container_id;
+      blueContainerId = blueView.containerId;
       blueState = {
         containerId: blueContainerId,
-        containerName: blueDeployable.container_name ?? projectContainerName(projectName),
-        assignedPort: blueDeployable.assigned_port ?? project.assigned_port ?? null,
-        containerPort: blueDeployable.container_port ?? project.container_port ?? null,
-        imageTag: blueDeployable.image_tag ?? project.image_tag ?? null,
-        previousImageTag: blueDeployable.previous_image_tag ?? project.previous_image_tag ?? null,
+        containerName: blueView.containerName ?? projectContainerName(projectName),
+        assignedPort: blueView.assignedPort,
+        containerPort: blueView.containerPort,
+        imageTag: blueView.imageTag,
+        previousImageTag: blueView.previousImageTag,
       };
       await this.cleanupStaleGreenContainers({
         projectName,
@@ -2082,11 +2081,11 @@ export class DeployPipeline {
       }
 
       const source: 'git' | 'image' =
-        deployConfig.source === 'image' || blueDeployable.source === 'image' ? 'image' : 'git';
+        deployConfig.source === 'image' || blueView.source === 'image' ? 'image' : 'git';
       await eventBus.emit('deploy:start', { projectId, repoUrl: deployConfig.repoUrl });
 
       if (source === 'image') {
-        const imageUrl = deployConfig.imageUrl ?? blueDeployable.image_url;
+        const imageUrl = deployConfig.imageUrl ?? blueView.imageUrl;
         if (!imageUrl) {
           throw new MissingImageUrlError();
         }
