@@ -681,7 +681,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           error: 'INVALID_PARAMS',
           action: 'deploy_app',
           details:
-            'project_name scopes existing app lookups only. For new app deploys, use name as the project name.',
+            'project_name scopes existing app lookups only. For new app deploys, use name as the project group name.',
           invalid_params: ['project_name'],
           allowed_params: [
             'name',
@@ -701,7 +701,7 @@ export const deployPlanToolDefs: ToolDef[] = [
             message:
               'For a new app deploy, pass params.name. Keep params.project_name only for existing project lookup/scoping.',
             next_steps: [
-              'Retry deploy_app with name set to the desired new project name.',
+              'Retry deploy_app with name set to the desired new project group name.',
               'If you intended to redeploy an existing app, omit repo_url/image or pass service_id.',
             ],
           },
@@ -719,7 +719,7 @@ export const deployPlanToolDefs: ToolDef[] = [
               : 'deploy_app needs repo_url/image for a new app, or service_id/service_name/name for an existing app.',
             next_steps: [
               'For a new app, call deploy_app with repo_url or source="image" plus image.',
-              'For an existing app, call deploy_app with service_id, service_name, or the project name.',
+              'For an existing app, call deploy_app with service_id, service_name, or the project group name.',
             ],
           },
         };

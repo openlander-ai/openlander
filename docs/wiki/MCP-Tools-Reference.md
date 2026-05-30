@@ -102,7 +102,7 @@ Analyze a repository and create a deployment plan.
 | ------------------- | ------- | -------- | ------------------------------ |
 | `repo_url`          | string  | No       | Git repository URL             |
 | `branch`            | string  | No       | Branch to deploy               |
-| `name`              | string  | No       | Project name                   |
+| `name`              | string  | No       | Project group name             |
 | `source`            | string  | No       | `'git'` or `'image'`           |
 | `image`             | string  | No       | Docker image (if source=image) |
 | `cmd`               | string  | No       | Container command override     |
@@ -168,7 +168,7 @@ only when you need a fully uncached build.
 | `project_name`      | string  | No       | Existing group lookup or service name scope                     |
 | `repo_url`          | string  | No       | Git repository URL for a new app                                |
 | `branch`            | string  | No       | Branch                                                          |
-| `name`              | string  | No       | New project name, or existing project alias                     |
+| `name`              | string  | No       | New project group name, or existing project alias               |
 | `source`            | string  | No       | `'git'` or `'image'`                                            |
 | `image`             | string  | No       | Docker image                                                    |
 | `cmd`               | string  | No       | Command override                                                |
@@ -374,9 +374,9 @@ feature and requires a configured tunnel backend on the OpenLander host. If the 
 not installed/configured, use the normal service URL, custom domain routing, or configure the tunnel
 first.
 
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `project_name` | string | Yes      | Project name |
+| Parameter      | Type   | Required | Description        |
+| -------------- | ------ | -------- | ------------------ |
+| `project_name` | string | Yes      | Project group name |
 
 ### `update_service_config`
 
@@ -463,18 +463,18 @@ Exports all service env vars as raw `.env` text and records an audit event witho
 Project composite aliases for temporary public URLs. This is optional and depends on the configured
 tunnel backend; it is not required for normal deploy/redeploy flows.
 
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `project_name` | string | Yes      | Project name |
+| Parameter      | Type   | Required | Description        |
+| -------------- | ------ | -------- | ------------------ |
+| `project_name` | string | Yes      | Project group name |
 
 ### `upload_secret_file` / `list_secret_files` / `remove_secret_file`
 
-| Parameter      | Type   | Required     | Description                         |
-| -------------- | ------ | ------------ | ----------------------------------- |
-| `project_name` | string | No           | Project name (omit for global)      |
-| `filename`     | string | Yes          | Filename                            |
-| `content`      | string | Yes (upload) | File content                        |
-| `mount_path`   | string | No           | Mount dir (default: `/run/secrets`) |
+| Parameter      | Type   | Required     | Description                          |
+| -------------- | ------ | ------------ | ------------------------------------ |
+| `project_name` | string | No           | Project group name (omit for global) |
+| `filename`     | string | Yes          | Filename                             |
+| `content`      | string | Yes (upload) | File content                         |
+| `mount_path`   | string | No           | Mount dir (default: `/run/secrets`)  |
 
 ---
 
@@ -795,7 +795,7 @@ apply config/repo changes and call `redeploy_app`.
 
 | Parameter      | Type   | Required | Description           |
 | -------------- | ------ | -------- | --------------------- |
-| `project_name` | string | Yes      | Project name          |
+| `project_name` | string | Yes      | Project group name    |
 | `volume_name`  | string | Yes      | Volume name           |
 | `mount_path`   | string | Yes      | Mount path (absolute) |
 
@@ -807,10 +807,10 @@ apply config/repo changes and call `redeploy_app`.
 
 ### `remove_volume`
 
-| Parameter      | Type   | Required | Description  |
-| -------------- | ------ | -------- | ------------ |
-| `project_name` | string | Yes      | Project name |
-| `volume_name`  | string | Yes      | Volume name  |
+| Parameter      | Type   | Required | Description        |
+| -------------- | ------ | -------- | ------------------ |
+| `project_name` | string | Yes      | Project group name |
+| `volume_name`  | string | Yes      | Volume name        |
 
 `remove_volume` is human-only in OpenLander 0.1 and returns
 `OPERATION_REQUIRES_HUMAN_UI` from MCP. Remove persistent volumes from the web UI after confirming
