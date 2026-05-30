@@ -365,9 +365,11 @@ describe('deploy MCP guidance', () => {
     };
     const ctx = {
       db: {
-        getProject: vi.fn(() => undefined),
-        getProjectByName: vi.fn(() => undefined),
-        getDeployableForProject: vi.fn(async (id: string) => (id === project.id ? service : null)),
+        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getServices: vi.fn(async (query?: { ids?: string[] }) =>
+          query?.ids?.includes(service.id) ? [service] : [],
+        ),
         acquireDeployLock: vi.fn(async () => true),
         getDeployLockInfo: vi.fn(async () => null),
       },
@@ -463,7 +465,9 @@ describe('deploy MCP guidance', () => {
       db: {
         getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
         getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
-        getDeployableForProject: vi.fn(async (id: string) => (id === project.id ? service : null)),
+        getServices: vi.fn(async (query?: { ids?: string[] }) =>
+          query?.ids?.includes(service.id) ? [service] : [],
+        ),
         acquireDeployLock: vi.fn(async () => true),
         getDeployLockInfo: vi.fn(async () => null),
       },
