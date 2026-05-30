@@ -406,6 +406,7 @@ export async function buildProject(
     repoPath: clonePath,
     commitSha,
     volatileSalt: buildStart,
+    dependencyPaths: [config.buildContext, dockerfilePath],
   });
   if (dependencyCache) {
     buildLog += '[build-cache] git dependency detected; refreshing dependency install layer\n';

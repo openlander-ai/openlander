@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 
 const DEPENDENCY_FIELDS = [
   'dependencies',
@@ -17,8 +17,9 @@ export function createDependencyCacheKey(options: {
   repoPath: string;
   commitSha: string;
   volatileSalt: number | string;
+  dependencyPaths?: Array<string | undefined>;
 }): DependencyCacheKey | null {
-  if (!hasGitDependencySpec(options.repoPath)) {
+  if (!hasGitDependencySpec(options.repoPath, options.dependencyPaths)) {
     return null;
   }
 
@@ -28,17 +29,22 @@ export function createDependencyCacheKey(options: {
   };
 }
 
-export function hasGitDependencySpec(repoPath: string): boolean {
-  return (
-    packageJsonHasGitDependency(join(repoPath, 'package.json')) ||
-    requirementsHasGitDependency(join(repoPath, 'requirements.txt')) ||
-    pyprojectHasGitDependency(join(repoPath, 'pyproject.toml'))
+export function hasGitDependencySpec(
+  repoPath: string,
+  dependencyPaths: Array<string | undefined> = [],
+): boolean {
+  return dependencyRoots(repoPath, dependencyPaths).some(
+    (root) =>
+      packageJsonHasGitDependency(join(root, 'package.json')) ||
+      requirementsHasGitDependency(join(root, 'requirements.txt')) ||
+      pyprojectHasGitDependency(join(root, 'pyproject.toml')),
   );
 }
 
 export function isGitDependencySpecifier(value: string): boolean {
   const spec = value.trim();
   if (!spec) return false;
+  if (/^(?:\.{1,2}\/|\/)/.test(spec)) return false;
 
   return (
     /^(?:git\+|git:\/\/|git@|ssh:\/\/git@)/i.test(spec) ||
@@ -67,6 +73,35 @@ function packageJsonHasGitDependency(packageJsonPath: string): boolean {
   }
 
   return false;
+}
+
+function dependencyRoots(repoPath: string, dependencyPaths: Array<string | undefined>): string[] {
+  const repoRoot = resolve(repoPath);
+  const roots = new Set<string>([repoRoot]);
+
+  for (const candidate of dependencyPaths) {
+    if (!candidate || candidate.trim().length === 0) continue;
+
+    const resolved = resolve(repoRoot, candidate);
+    const rel = relative(repoRoot, resolved);
+    if (rel.startsWith('..') || rel === '..' || rel === '') {
+      continue;
+    }
+
+    try {
+      const stat = statSync(resolved);
+      if (stat.isDirectory()) {
+        roots.add(resolved);
+      } else if (stat.isFile()) {
+        roots.add(dirname(resolved));
+      }
+    } catch {
+      // Missing Dockerfile/build contexts are reported by the build step. Cache
+      // hints should stay best-effort and never fail deployment planning.
+    }
+  }
+
+  return [...roots];
 }
 
 function isDependencyMap(value: unknown): value is Record<string, string> {

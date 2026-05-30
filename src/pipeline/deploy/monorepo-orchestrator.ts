@@ -137,6 +137,7 @@ export async function deployMonorepoService(
       repoPath: config.clonePath,
       commitSha: config.commitSha,
       volatileSalt: childStartTime,
+      dependencyPaths: [dockerfilePath],
     });
     if (dependencyCache) {
       dockerBuildOutput +=

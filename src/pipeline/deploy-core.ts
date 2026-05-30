@@ -2118,6 +2118,7 @@ export class DeployPipeline {
           repoPath: cloneResult.path,
           commitSha: cloneResult.commitSha,
           volatileSalt: startTime,
+          dependencyPaths: [deployConfig.buildContext, deployConfig.dockerfilePath],
         });
         if (dependencyCache) {
           buildLog +=
