@@ -158,6 +158,7 @@ describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
     // Canonical services-row values surface (project columns were null).
     expect(full).toMatchObject({
       status: 'stopped',
+      visibility: null,
       port: 10001,
       publicUrl: 'https://full.example',
     });
@@ -167,6 +168,7 @@ describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
     // exists, so the historic shape serialized null.
     expect(nullports).toHaveProperty('port', null);
     expect(nullports).toHaveProperty('publicUrl', null);
+    expect(nullports).toHaveProperty('visibility', null);
     expect(nullports['status']).toBe('stopped');
 
     // Both-empty project (no services row): the keys must be OMITTED on
@@ -174,6 +176,7 @@ describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
     expect(empty).not.toHaveProperty('status');
     expect(empty).not.toHaveProperty('port');
     expect(empty).not.toHaveProperty('publicUrl');
+    expect(empty).toHaveProperty('visibility', null);
   });
 });
 
@@ -239,6 +242,7 @@ describe('list_projects agent-branch omit-contract (S3.3 ServiceView)', () => {
 
     expect(full).toMatchObject({
       status: 'stopped',
+      visibility: null,
       port: 10001,
       publicUrl: 'https://full.example',
     });
@@ -246,10 +250,12 @@ describe('list_projects agent-branch omit-contract (S3.3 ServiceView)', () => {
     // services row present, port/public_url null → explicit null on the wire
     expect(nullports).toHaveProperty('port', null);
     expect(nullports).toHaveProperty('publicUrl', null);
+    expect(nullports).toHaveProperty('visibility', null);
 
     // no services row → keys omitted
     expect(empty).not.toHaveProperty('status');
     expect(empty).not.toHaveProperty('port');
     expect(empty).not.toHaveProperty('publicUrl');
+    expect(empty).toHaveProperty('visibility', null);
   });
 });
