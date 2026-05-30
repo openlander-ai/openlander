@@ -48,7 +48,7 @@ export function OuterCard({
       {hasHeader && (
         <header
           className={cn(
-            'flex items-start gap-4 px-5 py-4',
+            'flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:gap-4',
             divider && 'border-b border-[color:var(--ol-border-subtle)]',
           )}
         >
@@ -64,7 +64,9 @@ export function OuterCard({
               </p>
             )}
           </div>
-          {actions != null && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+          {actions != null && (
+            <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">{actions}</div>
+          )}
         </header>
       )}
       <div className={cn(fullBleed ? '' : 'p-5', bodyClassName)}>{children}</div>

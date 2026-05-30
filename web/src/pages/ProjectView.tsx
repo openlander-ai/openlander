@@ -315,14 +315,14 @@ export function ProjectView() {
           })()
         }
         actions={
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:gap-3">
+            <span className="w-full text-[11px] text-[color:var(--ol-fg-subtle)] sm:w-auto">
               updated {projectUpdatedAt} · created {projectCreatedAt}
             </span>
             <button
               type="button"
               onClick={() => setAgentGuideOpen(true)}
-              className="flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] px-3 py-1.5 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-[color:var(--ol-border)] px-3 py-1.5 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
             >
               <Database className="h-3.5 w-3.5" />
               Ask Agent
@@ -330,7 +330,7 @@ export function ProjectView() {
             <button
               type="button"
               onClick={() => setAddServiceOpen(true)}
-              className="flex items-center gap-1.5 rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:opacity-90"
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:opacity-90"
             >
               <Plus className="h-3.5 w-3.5" />
               Add service
