@@ -309,9 +309,6 @@ describeDocker('Docker core operations', () => {
   });
 
   it('ensureSharedNetworkAttachment silently returns when container is already connected', async () => {
-    const container = createDockerContainerHandle({ id: 'container-reconcile-id' });
-    mockCreateContainer.mockResolvedValueOnce(container);
-
     const connect = vi
       .fn()
       .mockRejectedValueOnce(new Error('endpoint with name already exists in network openlander'));
@@ -329,14 +326,7 @@ describeDocker('Docker core operations', () => {
     });
 
     const docker = new Docker('/var/run/docker.sock', 'traefik-web');
-    await docker.runContainer({
-      imageTag: 'mono-worker:v1',
-      name: 'ol-mono-worker',
-      port: 19191,
-      containerPort: 3000,
-      envVars: { NODE_ENV: 'production' },
-      traefikLabels: {},
-    });
+    await docker.ensureSharedNetworkAttachment('container-reconcile-id', 'mono-worker');
 
     expect(connect).toHaveBeenCalledOnce();
     expect(connect).toHaveBeenCalledWith({

@@ -18,17 +18,24 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  esbuild: {
-    target: 'es2022',
-  },
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 512,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          ui: ['lucide-react'],
+        manualChunks(id) {
+          const normalizedId = id.replaceAll('\\', '/');
+          if (normalizedId.includes('/node_modules/lucide-react/')) {
+            return 'ui';
+          }
+          if (
+            normalizedId.includes('/node_modules/react/') ||
+            normalizedId.includes('/node_modules/react-dom/') ||
+            normalizedId.includes('/node_modules/react-router-dom/')
+          ) {
+            return 'vendor';
+          }
+          return undefined;
         },
       },
     },
