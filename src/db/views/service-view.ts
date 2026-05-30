@@ -122,6 +122,21 @@ export interface ServiceViewRecord {
 }
 
 /**
+ * Wire-boundary visibility for `list_projects`.
+ *
+ * `ServiceView.visibility` is normalized to `'internal'` for internal
+ * consumers. The tool response historically serialized the raw
+ * `ProjectRow.visibility` value returned by ProjectRepo after deployable
+ * hydration, including `null` and `undefined` bottoms. Keep that raw
+ * contract centralized here so tool defs do not read dropped project
+ * columns directly.
+ */
+export function serviceViewWireVisibility(project: ProjectRow): ProjectRow['visibility'] {
+  // eslint-disable-next-line openlander-internal/no-dropped-columns -- compatibility helper preserves the list_projects raw visibility wire contract; ServiceView.visibility intentionally normalizes null/undefined to 'internal'.
+  return project.visibility;
+}
+
+/**
  * Build a `ServiceView` from already-fetched rows. Pure synchronous —
  * use when the caller has already paid for the lookups (the common
  * "topology already pulled both" pattern).

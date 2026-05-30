@@ -4,7 +4,11 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import type { ServiceRow } from '../../db/types.js';
-import { loadServiceViewRecords, serviceViewFromRows } from '../../db/views/service-view.js';
+import {
+  loadServiceViewRecords,
+  serviceViewFromRows,
+  serviceViewWireVisibility,
+} from '../../db/views/service-view.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import { emptySchema } from './schemas.js';
 import type { ToolDef } from './types.js';
@@ -156,10 +160,12 @@ export const projectOpsToolDefs: ToolDef[] = [
             // never 'idle' (enum running|stopped|error), so a view 'idle'
             // uniquely marks the no-services-row bottom → omit.
             //
-            // visibility stays on the deprecated direct read — its raw
-            // null/undefined distinction is not recoverable from the view
-            // (deferred, service-view-deferred-routes).
+            // visibility uses the raw wire helper because
+            // ServiceView.visibility normalizes missing/null values to
+            // 'internal', while this response historically serialized the
+            // ProjectRepo-hydrated raw value.
             const status = view.status === 'idle' ? undefined : view.status;
+            const visibility = serviceViewWireVisibility(project);
             const port = deployable ? view.assignedPort : undefined;
             const containerId = view.containerId;
             const publicUrl = deployable ? view.publicUrl : undefined;
@@ -192,8 +198,7 @@ export const projectOpsToolDefs: ToolDef[] = [
               id: project.id,
               name: project.name,
               status,
-              // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-              visibility: project.visibility,
+              visibility,
               port,
               containerName: containerId ? projectContainerName(project.name) : null,
               network: projectContainerName(project.name),
@@ -226,16 +231,17 @@ export const projectOpsToolDefs: ToolDef[] = [
           // there): the agent-target result is JSON-serialized for the
           // model, so honor the historic null-vs-omit shape — null when a
           // services row exists, omit when none. status omits only on the
-          // synthesized 'idle' bottom; visibility stays deferred.
+          // synthesized 'idle' bottom; visibility uses the raw wire helper
+          // for the same reason as the MCP branch.
           const status = view.status === 'idle' ? undefined : view.status;
+          const visibility = serviceViewWireVisibility(project);
           const port = deployable ? view.assignedPort : undefined;
           const containerId = view.containerId;
           const publicUrl = deployable ? view.publicUrl : undefined;
           return {
             name: project.name,
             status,
-            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-            visibility: project.visibility,
+            visibility,
             port,
             containerName: containerId ? projectContainerName(project.name) : null,
             url: port ? getPreferredProjectUrl(project.name, port) : null,
