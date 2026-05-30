@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
+import { loadServiceViewRecords } from '../../db/views/service-view.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import {
   findService,
@@ -53,14 +54,14 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
     const envVars = service
       ? await ctx.env.getAllForService(project.id, service.id)
       : await ctx.env.getAll(project.id);
-    const [environments, deployLogs, deployable] = await Promise.all([
+    const [environments, deployLogs, serviceRecords] = await Promise.all([
       ctx.db.getEnvironmentsByProject(project.id),
       ctx.db.getDeployLogs(project.id, 5),
-      ctx.db.getDeployableForProject(project.id),
+      loadServiceViewRecords(ctx.db, [project]),
     ]);
 
     return c.json({
-      ...mapProjectForApi(project, deployable),
+      ...mapProjectForApi(project, serviceRecords.get(project.id)?.service ?? undefined),
       service: service ? mapServiceForApi(service, environments) : null,
       environments: environments.map((env) => mapEnvironment(project.name, env)),
       envVars,

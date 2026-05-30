@@ -234,7 +234,10 @@ describe('createDeployableServiceRoutes', () => {
         getService: vi.fn(async (id: string) => (id === service.id ? service : undefined)),
         getEnvironmentsByProject: vi.fn(async () => [env]),
         getDeployLogs: vi.fn(async () => [{ id: 'deploy-1', commit_message: 'Ship it' }]),
-        getDeployableForProject: vi.fn(async () => service),
+        getServices: vi.fn(async () => [service]),
+        getDeployableForProject: vi.fn(async () => {
+          throw new Error('getDeployableForProject must not be called by service detail');
+        }),
       },
       env: {
         getAllForService: vi.fn(async () => [{ key: 'DATABASE_URL', value: 'postgres://db' }]),
