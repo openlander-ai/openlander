@@ -602,9 +602,8 @@ export const deployableServiceToolDefs: ToolDef[] = [
     description:
       'Archive a deployable app/worker service. Provide service_id or service_name. Stops runtime and preserves configuration/history.',
     mcpDescription:
-      'Archive a deployable app/worker service while preserving configuration/history.',
+      'Request human approval to archive a deployable app/worker service while preserving configuration/history.',
     inputSchema: serviceTargetSchema,
-    targets: ['agent'],
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(
         args,

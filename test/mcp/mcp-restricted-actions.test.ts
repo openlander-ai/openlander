@@ -44,9 +44,9 @@ const ALL_DEFS = [
 const ALL_TOOL_NAMES: ReadonlySet<string> = new Set(ALL_DEFS.map((def) => def.name));
 
 // MCP-exposed = default targets, or targets explicitly include 'mcp' (same rule
-// the registry uses). Some defs exist but are agent-only (e.g. archive_service,
-// targets:['agent']) — those are legitimately aliased for MCP, so the alias
-// check is "not MCP-exposed", not "does not exist".
+// the registry uses). Some defs exist but are agent-only — those are
+// legitimately aliased for MCP, so the alias check is "not MCP-exposed", not
+// "does not exist".
 const MCP_EXPOSED_TOOL_NAMES: ReadonlySet<string> = new Set(
   ALL_DEFS.filter((def) => !def.targets || def.targets.includes('mcp')).map((def) => def.name),
 );
@@ -71,6 +71,7 @@ describe('MCP restricted-action policy (single source)', () => {
     expect(HUMAN_UI_ONLY_TOOLS).toContain('cleanup_docker');
     expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_app');
     expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_project');
+    expect(APPROVAL_HOLD_TOOLS).toContain('archive_service');
     expect(APPROVAL_HOLD_TOOLS).toContain('bulk_delete_env_vars');
     expect(APPROVAL_HOLD_TOOLS).toContain('remove_secret_file');
     // delete_service is a (non-tool) alias only — it used to be duplicated into
