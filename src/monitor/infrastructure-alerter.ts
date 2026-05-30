@@ -1,6 +1,6 @@
 import type { Docker } from '../pipeline/docker.js';
-import type { Database, ProjectRow, ServiceRow } from '../db/index.js';
-import { projectIdToDeployableServiceId } from '../db/service-ids.js';
+import type { Database, ProjectRow } from '../db/index.js';
+import { loadServiceViewRecords, type ServiceViewRecord } from '../db/views/service-view.js';
 import { getSystemStats } from './stats.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { parseDBTimestamp } from '../lib/parse-db-timestamp.js';
@@ -17,7 +17,7 @@ const INITIAL_STAGGER_MS = 8000;
 
 interface RunningProjectContext {
   projects: ProjectRow[];
-  deployablesByProject: Map<string, ServiceRow | undefined>;
+  recordsByProject: Map<string, ServiceViewRecord>;
 }
 
 export class InfrastructureAlerter {
@@ -87,19 +87,9 @@ export class InfrastructureAlerter {
   }
 
   private async loadRunningProjectContext(): Promise<RunningProjectContext> {
-    const [projects, services] = await Promise.all([
-      this.db.listProjects('running'),
-      this.db.listServices(),
-    ]);
-    const deployableIds = new Set(
-      projects.map((project) => projectIdToDeployableServiceId(project.id)),
-    );
-    const deployablesByProject = new Map<string, ServiceRow | undefined>();
-    for (const service of services) {
-      if (!deployableIds.has(service.id)) continue;
-      deployablesByProject.set(service.project_id, service);
-    }
-    return { projects, deployablesByProject };
+    const projects = await this.db.listProjects('running');
+    const recordsByProject = await loadServiceViewRecords(this.db, projects);
+    return { projects, recordsByProject };
   }
 
   private async checkDiskUsage(): Promise<void> {
@@ -170,10 +160,7 @@ export class InfrastructureAlerter {
     const projects = context.projects;
 
     for (const project of projects) {
-      // PR 4.5: canonical-first read of container_id with `??` fallback to
-      // legacy `projects` column through migration 0012.
-      const deployable = context.deployablesByProject.get(project.id);
-      const containerId = deployable?.container_id ?? project.container_id;
+      const containerId = context.recordsByProject.get(project.id)?.view.containerId;
       if (!containerId) continue;
 
       const key = `restart-loop:${containerId}`;
@@ -255,9 +242,7 @@ export class InfrastructureAlerter {
     const portMap = new Map<number, string[]>();
 
     for (const project of projects) {
-      // PR 4.5: canonical-first read of assigned_port with `??` fallback.
-      const deployable = context.deployablesByProject.get(project.id);
-      const assignedPort = deployable?.assigned_port ?? project.assigned_port;
+      const assignedPort = context.recordsByProject.get(project.id)?.view.assignedPort;
       if (assignedPort != null) {
         const names = portMap.get(assignedPort) ?? [];
         names.push(project.name);
@@ -294,9 +279,7 @@ export class InfrastructureAlerter {
     const projects = context.projects;
 
     for (const project of projects) {
-      // PR 4.5: canonical-first read of container_id with `??` fallback.
-      const deployable = context.deployablesByProject.get(project.id);
-      const containerId = deployable?.container_id ?? project.container_id;
+      const containerId = context.recordsByProject.get(project.id)?.view.containerId;
       if (!containerId) continue;
 
       const key = `resource-saturation:${containerId}`;
