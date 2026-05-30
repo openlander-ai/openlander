@@ -3,6 +3,7 @@ import { rm } from 'node:fs/promises';
 
 import type { AppContext } from '../../app.js';
 import type { ProjectRow, ServiceRow } from '../../db/index.js';
+import { loadServiceViewRecords } from '../../db/views/service-view.js';
 import { ServiceSelectionRequiredError } from '../../errors.js';
 import { cloneRepo } from '../../pipeline/git.js';
 import { scanForEnvUsage } from '../../pipeline/env-scan.js';
@@ -120,7 +121,8 @@ export function createProjectEnvRoutes(ctx: AppContext): Hono {
 
   api.get('/projects/:id/env-example', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-    const deployable = await ctx.db.getDeployableForProject(project.id);
+    const serviceRecords = await loadServiceViewRecords(ctx.db, [project]);
+    const deployable = serviceRecords.get(project.id)?.service;
     if (!deployable?.repo_url) {
       return c.json(
         {

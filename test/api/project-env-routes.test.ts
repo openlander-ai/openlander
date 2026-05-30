@@ -425,7 +425,10 @@ describe('createProjectEnvRoutes', () => {
       db: {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
-        getDeployableForProject: vi.fn(async () => service),
+        getServices: vi.fn(async () => [service]),
+        getDeployableForProject: vi.fn(async () => {
+          throw new Error('getDeployableForProject must not be called by env-example');
+        }),
       },
     });
 
