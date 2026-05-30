@@ -8,13 +8,12 @@
  */
 
 import { getSystemStats } from '../monitor/stats.js';
-import type {
-  ProjectRow,
-  DeployLogRow,
-  RuntimeIncidentRow,
-  Database,
-  ServiceRow,
-} from '../db/index.js';
+import type { ProjectRow, DeployLogRow, RuntimeIncidentRow, Database } from '../db/index.js';
+import {
+  loadServiceViewRecords,
+  serviceViewFromRows,
+  type ServiceViewRecord,
+} from '../db/views/service-view.js';
 import type { Docker } from '../pipeline/docker.js';
 import { scanUsedPorts } from '../pipeline/port.js';
 import { detectReverseProxy } from '../pipeline/traefik.js';
@@ -52,16 +51,17 @@ export async function buildContextSnapshot(
   scope?: ContextScope,
 ): Promise<string> {
   const projects = await db.listProjects();
+  const serviceRecords = await loadServiceViewRecords(db, projects);
   const stats = getSystemStats();
 
   const effectiveType = scope?.type ?? 'global';
 
   const projectLines =
     effectiveType === 'project' || effectiveType === 'recovery'
-      ? await buildScopedProjectLines(projects, db, scope?.projectId)
-      : await buildGlobalProjectLines(projects, db);
+      ? buildScopedProjectLines(projects, serviceRecords, scope?.projectId)
+      : buildGlobalProjectLines(projects, serviceRecords);
 
-  const projectGroups = await buildProjectGroups(projects, db);
+  const projectGroups = buildProjectGroups(projects, serviceRecords);
 
   const parts: string[] = [
     `## Current Server State (auto-injected)
@@ -87,7 +87,7 @@ ${projectLines}${projectGroups ? `\n\n${projectGroups}` : ''}`,
   }
 
   // v0.0.11: Add deployment history for smart defaults context
-  const deployHistory = await buildDeploymentHistory(db, projects);
+  const deployHistory = await buildDeploymentHistory(db, projects, serviceRecords);
   if (deployHistory) {
     parts.push(deployHistory);
   }
@@ -174,17 +174,20 @@ export async function buildIncidentBriefing(
 // Project relationship grouping
 // ---------------------------------------------------------------------------
 
-async function buildProjectGroups(projects: ProjectRow[], db: Database): Promise<string> {
+function buildProjectGroups(
+  projects: ProjectRow[],
+  serviceRecords: Map<string, ServiceViewRecord>,
+): string {
   if (projects.length < 2) return '';
 
   const repoGroups = new Map<string, ProjectRow[]>();
   const parentGroups = new Map<string, ProjectRow[]>();
-  const services = new Map<string, ServiceRow | undefined>();
+  const services = new Map<string, ServiceViewRecord['service']>();
 
   for (const p of projects) {
     // PR 3: derive compose-child parent from services.parent_service_id (canonical),
     // fall back to projects.parent_project_id for pre-migration rows.
-    const svc = await db.getService(`${p.id}__svc`);
+    const svc = serviceRecords.get(p.id)?.service ?? null;
     services.set(p.id, svc);
     const parentId =
       (svc?.parent_service_id ? svc.parent_service_id.replace(/__svc$/, '') : null) ??
@@ -241,13 +244,24 @@ async function buildProjectGroups(projects: ProjectRow[], db: Database): Promise
 // Helpers
 // ---------------------------------------------------------------------------
 
-// PR 4.5: accept optional canonical ServiceRow so callers can pass the
-// deployable row from `getDeployableForProject` and we read status/url/port
-// from it first, falling back to the legacy ProjectRow columns.
-function formatProjectLine(p: ProjectRow, svc?: ServiceRow | null): string {
-  const status = svc?.status ?? p.status;
-  const publicUrl = svc?.public_url ?? p.public_url;
-  const assignedPort = svc?.assigned_port ?? p.assigned_port;
+function serviceRecordFor(
+  project: ProjectRow,
+  serviceRecords: Map<string, ServiceViewRecord>,
+): ServiceViewRecord {
+  return (
+    serviceRecords.get(project.id) ?? {
+      project,
+      service: null,
+      view: serviceViewFromRows(project, null),
+    }
+  );
+}
+
+function formatProjectLine(p: ProjectRow, record: ServiceViewRecord): string {
+  const { view } = record;
+  const status = view.status;
+  const publicUrl = view.publicUrl;
+  const assignedPort = view.assignedPort;
 
   const statusIcon =
     status === 'running' ? '🟢' : status === 'error' ? '🔴' : status === 'building' ? '🔄' : '⚪';
@@ -257,16 +271,19 @@ function formatProjectLine(p: ProjectRow, svc?: ServiceRow | null): string {
   // Container name follows ol-{name} naming convention (only shown when not stopped)
   const containerName = status !== 'stopped' ? ` [ol-${p.name}]` : '';
 
-  return `  ${statusIcon} ${p.name} (${status ?? 'unknown'})${containerName}${url ? ` — ${url}` : ''}`;
+  return `  ${statusIcon} ${p.name} (${status})${containerName}${url ? ` — ${url}` : ''}`;
 }
 
-function formatProjectSummary(p: ProjectRow, svc?: ServiceRow | null): string {
-  const status = svc?.status ?? p.status;
+function formatProjectSummary(p: ProjectRow, record: ServiceViewRecord): string {
+  const status = record.view.status;
   const statusIcon = status === 'running' ? '🟢' : status === 'error' ? '🔴' : '⚪';
-  return `  ${statusIcon} ${p.name} (${status ?? 'unknown'})`;
+  return `  ${statusIcon} ${p.name} (${status})`;
 }
 
-async function buildGlobalProjectLines(projects: ProjectRow[], db: Database): Promise<string> {
+function buildGlobalProjectLines(
+  projects: ProjectRow[],
+  serviceRecords: Map<string, ServiceViewRecord>,
+): string {
   const MAX_DETAILED_PROJECTS = 5;
 
   if (projects.length === 0) {
@@ -274,33 +291,29 @@ async function buildGlobalProjectLines(projects: ProjectRow[], db: Database): Pr
   }
 
   if (projects.length <= MAX_DETAILED_PROJECTS) {
-    const lines = await Promise.all(
-      projects.map(async (p: ProjectRow) =>
-        formatProjectLine(p, await db.getDeployableForProject(p.id)),
-      ),
-    );
+    const lines = projects.map((p) => formatProjectLine(p, serviceRecordFor(p, serviceRecords)));
     return lines.join('\n');
   }
 
-  // PR 4.5: derive counts from canonical status, falling back to legacy column.
-  const withSvc = await Promise.all(
-    projects.map(async (p) => ({ p, svc: await db.getDeployableForProject(p.id) })),
-  );
-  const running = withSvc.filter(({ p, svc }) => (svc?.status ?? p.status) === 'running');
-  const errored = withSvc.filter(({ p, svc }) => (svc?.status ?? p.status) === 'error');
-  const stopped = withSvc.filter(({ p, svc }) => (svc?.status ?? p.status) === 'stopped');
+  const withView = projects.map((p) => ({
+    p,
+    record: serviceRecordFor(p, serviceRecords),
+  }));
+  const running = withView.filter(({ record }) => record.view.status === 'running');
+  const errored = withView.filter(({ record }) => record.view.status === 'error');
+  const stopped = withView.filter(({ record }) => record.view.status === 'stopped');
   const important = [...running, ...errored];
   return [
     `${String(running.length)} running, ${String(errored.length)} error, ${String(stopped.length)} stopped — use list_projects for full details`,
-    ...important.map(({ p, svc }) => formatProjectLine(p, svc)),
+    ...important.map(({ p, record }) => formatProjectLine(p, record)),
   ].join('\n');
 }
 
-async function buildScopedProjectLines(
+function buildScopedProjectLines(
   projects: ProjectRow[],
-  db: Database,
+  serviceRecords: Map<string, ServiceViewRecord>,
   focalProjectId?: string,
-): Promise<string> {
+): string {
   if (projects.length === 0) {
     return '(no projects deployed yet)';
   }
@@ -311,12 +324,12 @@ async function buildScopedProjectLines(
   const lines: string[] = [];
 
   if (focal) {
-    lines.push(formatProjectLine(focal, await db.getDeployableForProject(focal.id)));
+    lines.push(formatProjectLine(focal, serviceRecordFor(focal, serviceRecords)));
   }
 
   if (others.length > 0) {
-    const otherLines = await Promise.all(
-      others.map(async (p) => formatProjectSummary(p, await db.getDeployableForProject(p.id))),
+    const otherLines = others.map((p) =>
+      formatProjectSummary(p, serviceRecordFor(p, serviceRecords)),
     );
     lines.push(...otherLines);
   }
@@ -426,6 +439,7 @@ async function buildRecoverySection(db: Database, projectId: string): Promise<st
 async function buildDeploymentHistory(
   db: Database,
   allProjects: ProjectRow[],
+  serviceRecords: Map<string, ServiceViewRecord>,
 ): Promise<string | null> {
   const projectsWithHistory = allProjects.slice(0, 5);
   if (projectsWithHistory.length === 0) return null;
@@ -445,9 +459,7 @@ async function buildDeploymentHistory(
       return `    ${l.status === 'success' ? '✅' : '❌'} ${time} (${duration})${l.status === 'failed' && l.build_log ? ' — ' + extractFailureHint(l.build_log) : ''}`;
     });
 
-    // PR 4.5: canonical-first read of assigned_port with `??` fallback.
-    const portDeployable = await db.getDeployableForProject(project.id);
-    const portAssigned = portDeployable?.assigned_port ?? project.assigned_port;
+    const portAssigned = serviceRecordFor(project, serviceRecords).view.assignedPort;
     const portInfo = portAssigned != null ? `port ${String(portAssigned)}` : 'no port';
     const envInfo = envKeys.length > 0 ? `env: ${envKeys.join(', ')}` : 'no env vars';
 
