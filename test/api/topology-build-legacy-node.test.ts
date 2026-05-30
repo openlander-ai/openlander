@@ -6,6 +6,7 @@ import {
   __test_resetTopologyNodeCache,
   buildLegacyTopologyNode,
   inferLegacyTopologyKind,
+  registerTopologyCacheInvalidation,
   serviceViewFromRows,
   type LegacyTopologyNodeInput,
 } from '../../src/web/api/helpers/topology-runtime.js';
@@ -207,5 +208,52 @@ describe('buildLegacyTopologyNode', () => {
     });
 
     expect(node.url).toBeNull();
+  });
+});
+
+describe('registerTopologyCacheInvalidation', () => {
+  it('batch loads service views for project and compose-child cache invalidation', async () => {
+    const parent = makeInputNode({ id: 'parent', name: 'parent', container_id: 'stale-parent' });
+    const child = makeInputNode({ id: 'child', name: 'child', container_id: 'stale-child' });
+    const parentService = makeServiceRow({
+      id: 'parent__svc',
+      project_id: 'parent',
+      container_id: 'fresh-parent',
+    });
+    const childService = makeServiceRow({
+      id: 'child__svc',
+      project_id: 'child',
+      container_id: 'fresh-child',
+    });
+    const listeners = new Map<string, (payload: { projectId: string }) => void>();
+    const eventBus = {
+      on: vi.fn((event: string, listener: (payload: { projectId: string }) => void) => {
+        listeners.set(event, listener);
+        return () => undefined;
+      }),
+    };
+    const getServices = vi.fn(async ({ ids }: { ids?: readonly string[] } = {}) =>
+      [parentService, childService].filter((service) => !ids || ids.includes(service.id)),
+    );
+    const getDeployableForProject = vi.fn(async () => {
+      throw new Error('cache invalidation must use batched service view records');
+    });
+    const ctx = {
+      eventBus,
+      db: {
+        getProject: vi.fn(async (id: string) => (id === 'parent' ? parent : undefined)),
+        getComposeChildProjects: vi.fn(async () => [child]),
+        getServices,
+        getDeployableForProject,
+      },
+    } as unknown as AppContext;
+
+    registerTopologyCacheInvalidation(ctx);
+    listeners.get('deploy:success')?.({ projectId: 'parent' });
+
+    await vi.waitFor(() => {
+      expect(getServices).toHaveBeenCalledWith({ ids: ['parent__svc', 'child__svc'] });
+    });
+    expect(getDeployableForProject).not.toHaveBeenCalled();
   });
 });

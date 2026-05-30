@@ -22,7 +22,6 @@ import {
   mapWithConcurrency,
   mergeDependsOn,
   registerTopologyCacheInvalidation,
-  serviceViewFromRows,
   storedServiceStatusToTopologyHealth,
   TOPOLOGY_INSPECT_CONCURRENCY,
 } from './helpers/topology-runtime.js';
@@ -33,7 +32,7 @@ import {
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
 import type { ServiceRow } from '../../db/types.js';
-import { loadServiceView } from '../../db/views/service-view.js';
+import { loadServiceView, loadServiceViewRecords } from '../../db/views/service-view.js';
 import { loadProjectRuntimeStats } from './helpers/service-runtime-stats.js';
 
 const log = createModuleLogger('api');
@@ -178,12 +177,12 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
       const groupEnvironments = useServices
         ? await ctx.db.getEnvironmentsByProject(project.id)
         : [];
-      const legacyStandaloneDeployable =
+      const legacyStandaloneRecord =
         !useServices && childProjects.length === 0
-          ? await ctx.db.getDeployableForProject(project.id)
+          ? (await loadServiceViewRecords(ctx.db, [project])).get(project.id)
           : null;
       const legacyTopologyNodes =
-        childProjects.length > 0 ? childProjects : legacyStandaloneDeployable ? [project] : [];
+        childProjects.length > 0 ? childProjects : legacyStandaloneRecord?.service ? [project] : [];
       const { serviceConnections, connectedManagedServices } = useServices
         ? await deriveConnectedManagedServices(ctx, project.id, groupServices)
         : { serviceConnections: [], connectedManagedServices: [] };
@@ -301,7 +300,7 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
               // explicit at the call site instead of casting inside.
               cachedView:
                 childProjects.length === 0 && node.id === project.id
-                  ? serviceViewFromRows(project, legacyStandaloneDeployable ?? null)
+                  ? legacyStandaloneRecord?.view
                   : undefined,
             }),
           );

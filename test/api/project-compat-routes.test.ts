@@ -135,7 +135,10 @@ describe('createProjectCompatRoutes', () => {
         getComposeChildProjects: vi.fn(async () => []),
         getChildProjects: vi.fn(async () => []),
         getEnvironmentsByProject: vi.fn(async () => []),
-        getDeployableForProject: vi.fn(async () => null),
+        getServices: vi.fn(async () => []),
+        getDeployableForProject: vi.fn(async () => {
+          throw new Error('topology must use batched service view records');
+        }),
         findDependenciesByProject: vi.fn(async () => []),
       },
     });
@@ -165,7 +168,12 @@ describe('createProjectCompatRoutes', () => {
         getComposeChildProjects: vi.fn(async () => []),
         getChildProjects: vi.fn(async () => []),
         getEnvironmentsByProject: vi.fn(async () => []),
-        getDeployableForProject: vi.fn(async () => deployable),
+        getServices: vi.fn(async ({ ids }: { ids?: readonly string[] } = {}) =>
+          ids?.includes('legacy-1__svc') ? [deployable] : [],
+        ),
+        getDeployableForProject: vi.fn(async () => {
+          throw new Error('topology must use batched service view records');
+        }),
         findDependenciesByProject: vi.fn(async () => []),
         getLatestServiceMetric: vi.fn(async () => null),
       },

@@ -3,9 +3,11 @@ import { createModuleLogger } from '../../../lib/logger.js';
 import { isManagedServiceKind, MANAGED_SERVICE_KINDS } from '../../../db/repos/service.repo.js';
 import type { ServiceConnectionRow, ServiceRow } from '../../../db/types.js';
 import {
+  loadServiceViewRecords,
   loadServiceView,
   serviceViewFromRows,
   type ServiceView,
+  type ServiceViewRecord,
 } from '../../../db/views/service-view.js';
 import { computeContainerCpuPercent, type ContainerStatsRaw } from '../../../pipeline/docker.js';
 import { getProjectUrl } from '../../../pipeline/traefik.js';
@@ -131,15 +133,6 @@ export function registerTopologyCacheInvalidation(ctx: AppContext): void {
   const invalidateProjectContainers = async (projectId: string): Promise<void> => {
     try {
       const project = await ctx.db.getProject(projectId);
-      if (project) {
-        // Project routes are compatibility surfaces; container ownership lives
-        // on the deployable service row post-0012.
-        const deployable =
-          typeof ctx.db.getDeployableForProject === 'function'
-            ? await ctx.db.getDeployableForProject(projectId)
-            : undefined;
-        invalidateTopologyNodeCache(deployable?.container_id ?? project.container_id);
-      }
       // Prefer service-hierarchy compose children; keep getChildProjects only
       // as a fixture/back-compat fallback for narrow tests.
       const children =
@@ -148,12 +141,14 @@ export function registerTopologyCacheInvalidation(ctx: AppContext): void {
           : typeof ctx.db.getChildProjects === 'function'
             ? await ctx.db.getChildProjects(projectId)
             : [];
-      for (const child of children) {
-        const childDeployable =
-          typeof ctx.db.getDeployableForProject === 'function'
-            ? await ctx.db.getDeployableForProject(child.id)
-            : undefined;
-        invalidateTopologyNodeCache(childDeployable?.container_id ?? child.container_id);
+      const projects = project ? [project, ...children] : children;
+      const records: Map<string, ServiceViewRecord> =
+        typeof ctx.db.getServices === 'function'
+          ? await loadServiceViewRecords(ctx.db, projects)
+          : new Map<string, ServiceViewRecord>();
+      for (const row of projects) {
+        const view = records.get(row.id)?.view ?? serviceViewFromRows(row, null);
+        invalidateTopologyNodeCache(view.containerId);
       }
     } catch (err) {
       log.debug({ err, projectId }, 'topology cache invalidation lookup failed');
