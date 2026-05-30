@@ -1,5 +1,6 @@
 import type { Docker } from '../pipeline/docker.js';
 import type { Database } from '../db/index.js';
+import { loadServiceView } from '../db/views/service-view.js';
 import type { EventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { AlertMonitor } from './alerts.js';
@@ -51,9 +52,8 @@ export class ContainerAlertHandler {
   private async handleRuntimeCrash(projectId: string, error: string): Promise<void> {
     const project = await this.db.getProject(projectId);
     if (!project) return;
-    // PR 4.5: canonical-first read of container_id with `??` fallback.
-    const deployable = await this.db.getDeployableForProject(projectId);
-    const containerId = deployable?.container_id ?? project.container_id;
+    const view = await loadServiceView(this.db, project);
+    const containerId = view.containerId;
     if (!containerId) return;
 
     const key = `container-crash:${containerId}`;

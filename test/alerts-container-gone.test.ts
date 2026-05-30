@@ -109,6 +109,56 @@ describe('ContainerAlertHandler — container missing', () => {
     expect(alert?.details['exitCode']).toBe(137);
   });
 
+  it('uses canonical service container id for deploy runtime crashes', async () => {
+    eventHandlers.clear();
+    const project = {
+      id: 'p1',
+      name: 'myapp',
+      container_id: 'stale-project-container',
+    };
+    const service = {
+      id: 'p1__svc',
+      name: 'myapp__svc',
+      project_id: 'p1',
+      container_id: 'canonical-service-container',
+    };
+    const db = {
+      listProjects: vi.fn().mockReturnValue([]),
+      listAllActiveOpsIncidents: vi.fn().mockReturnValue([]),
+      getProject: vi.fn().mockReturnValue(project),
+      getDeployableForProject: vi.fn().mockReturnValue(service),
+    } as unknown as Database;
+
+    const emit = vi.fn().mockResolvedValue(undefined);
+    const on = vi.fn((event: string, callback: Function) => {
+      eventHandlers.set(event, callback);
+      return () => {
+        eventHandlers.delete(event);
+      };
+    });
+    const events = { emit, on } as unknown as EventBus;
+    const docker = {} as unknown as Docker;
+
+    const monitor = new AlertMonitor(docker, db, events);
+    const h = new ContainerAlertHandler(docker, db, events, monitor);
+    h.start();
+
+    const failedHandler = eventHandlers.get('deploy:failed');
+    expect(failedHandler).toBeDefined();
+
+    failedHandler!({
+      projectId: 'p1',
+      step: 'run',
+      error: 'container exited',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const alert = monitor.getActiveAlerts().find((a) => a.type === 'container-crash');
+    expect(alert).toBeDefined();
+    expect(alert?.details['containerId']).toBe('canonical-service-container');
+  });
+
   it('creates alert with OOM details on container:oom event', async () => {
     eventHandlers.clear();
     const db = {
