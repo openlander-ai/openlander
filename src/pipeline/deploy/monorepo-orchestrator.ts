@@ -19,6 +19,7 @@ import type { DeployResult, MonorepoConfig } from '../deploy-core.js';
 import type { OrchestrationResult, ServiceNode } from '../orchestrator.js';
 import type { ProjectStatus, StateTransitionOptions } from '../../monitor/project-state-manager.js';
 import { isDockerBuildCancelledError } from '../../errors.js';
+import { loadServiceView } from '../../db/views/service-view.js';
 
 const log = createModuleLogger('deploy');
 
@@ -341,9 +342,8 @@ export async function rollbackMonorepoService(
     return;
   }
 
-  // PR 4.5: canonical-first read of container_id with `??` fallback.
-  const deployable = await deps.db.getDeployableForProject(service.projectId);
-  const containerId = deployable?.container_id ?? project.container_id;
+  const view = await loadServiceView(deps.db, project);
+  const containerId = view.containerId;
   if (containerId) {
     try {
       await deps.runtime.stopContainer(containerId);
