@@ -19,6 +19,7 @@ import { pickLocale, type Locale } from '../lib/locale.js';
 import { sleep } from '../lib/sleep.js';
 import { resolveMonitoringProfile } from '../health/profile-resolver.js';
 import { resolveContainerUrl } from './url-resolver.js';
+import { loadServiceViewRecord } from '../db/views/service-view.js';
 
 const log = createModuleLogger('insight');
 
@@ -119,11 +120,20 @@ export async function generatePostDeployInsights(
  */
 async function checkHealth(ctx: InsightContext, db: Database, locale: Locale): Promise<Insight> {
   const project = await db.getProject(ctx.projectId);
-  // PR 4.5: canonical-first read of assigned_port with `??` fallback.
-  const deployable = project ? await db.getDeployableForProject(ctx.projectId) : undefined;
-  // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-  const assignedPort = deployable?.assigned_port ?? project?.assigned_port;
-  if (!project || assignedPort == null) {
+  if (!project) {
+    return {
+      title: pickLocale(locale, {
+        ko: '⚠️ 헬스체크 건너뜀 - 포트 정보가 없습니다.',
+        en: '⚠️ Health check skipped - no assigned port found.',
+      }),
+      severity: 'warning',
+      actions: [],
+    };
+  }
+
+  const { service: deployable, view } = await loadServiceViewRecord(db, project);
+  const assignedPort = view.assignedPort;
+  if (assignedPort == null) {
     return {
       title: pickLocale(locale, {
         ko: '⚠️ 헬스체크 건너뜀 - 포트 정보가 없습니다.',
@@ -207,9 +217,8 @@ async function checkStaleContainers(
   const project = await db.getProject(projectId);
   if (!project) return null;
 
-  // PR 4.5: canonical-first read of container_id with `??` fallback.
-  const deployable = await db.getDeployableForProject(projectId);
-  const currentContainerId = deployable?.container_id ?? project.container_id;
+  const { view } = await loadServiceViewRecord(db, project);
+  const currentContainerId = view.containerId;
   if (!currentContainerId) return null;
 
   try {
