@@ -1,7 +1,7 @@
 import type { AppContext } from '../../../app.js';
 import type { EnvironmentRow, ProjectRow, ServiceRow } from '../../../db/index.js';
 import { deployableServiceIdToProjectId } from '../../../db/service-ids.js';
-import { serviceViewFromRows } from '../../../db/views/service-view.js';
+import { loadServiceViewRecords, serviceViewFromRows } from '../../../db/views/service-view.js';
 import {
   CircuitBreakerOpenError,
   DeployLockedError,
@@ -469,10 +469,13 @@ export async function createMutationPolicySnapshot(
   ctx: AppContext,
   project: ProjectRow,
 ): Promise<MutationPolicyCtx> {
-  const [deployable, circuitBreakerOpen] = await Promise.all([
-    ctx.db.getDeployableForProject(project.id),
+  const [serviceRecord, circuitBreakerOpen] = await Promise.all([
+    typeof ctx.db.getServices === 'function'
+      ? loadServiceViewRecords(ctx.db, [project]).then((records) => records.get(project.id))
+      : Promise.resolve({ service: null }),
     ctx.db.isCircuitBreakerOpen(project.id),
   ]);
+  const deployable = serviceRecord?.service ?? undefined;
 
   return {
     db: {
