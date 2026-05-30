@@ -57,8 +57,11 @@ describe('project-ops list_projects reconciliation', () => {
       db: {
         listProjects: vi.fn(() => [project]),
         updateProject: vi.fn(),
-        getDeployableForProject: vi.fn().mockReturnValue(deployable),
-        getDeployablesByGroup: vi.fn().mockReturnValue([deployable, worker]),
+        getDeployableForProject: vi.fn().mockReturnValue(undefined),
+        getServices: vi.fn().mockResolvedValue([deployable]),
+        getDeployablesByGroupIds: vi
+          .fn()
+          .mockResolvedValue(new Map([['project-1', [deployable, worker]]])),
       },
       docker: {
         inspectContainer: vi.fn(async () => ({ Id: 'container-1', State: { Running: true } })),
@@ -67,6 +70,9 @@ describe('project-ops list_projects reconciliation', () => {
 
     const result = await getListProjectsTool(ctx).execute({}, { target: 'mcp' });
 
+    expect(ctx.db.getDeployableForProject).not.toHaveBeenCalled();
+    expect(ctx.db.getServices).toHaveBeenCalledWith({ ids: ['project-1__svc'] });
+    expect(ctx.db.getDeployablesByGroupIds).toHaveBeenCalledWith(['project-1']);
     expect(result).toMatchObject({
       projects: [
         {

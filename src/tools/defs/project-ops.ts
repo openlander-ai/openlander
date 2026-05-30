@@ -2,19 +2,45 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import type { ServiceRow } from '../../db/types.js';
-import { serviceViewFromRows } from '../../db/views/service-view.js';
+import { loadServiceViewRecords, serviceViewFromRows } from '../../db/views/service-view.js';
 import { emptySchema } from './schemas.js';
 import type { ToolDef } from './types.js';
 
 const log = createModuleLogger('tools-defs-project-ops');
 
+async function loadProjectServiceRecords(
+  appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
+  projects: Awaited<ReturnType<Parameters<ToolDef['execute']>[1]['appCtx']['db']['listProjects']>>,
+) {
+  if (typeof appCtx.db.getServices === 'function') {
+    return loadServiceViewRecords(appCtx.db, projects);
+  }
+
+  const records = new Map<
+    string,
+    {
+      service: ServiceRow | null;
+      view: ReturnType<typeof serviceViewFromRows>;
+    }
+  >();
+  for (const project of projects) {
+    const service = (await appCtx.db.getDeployableForProject(project.id)) ?? null;
+    records.set(project.id, {
+      service,
+      view: serviceViewFromRows(project, service),
+    });
+  }
+  return records;
+}
+
 async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1]['appCtx']) {
   const projects = await appCtx.db.listProjects();
+  const serviceRecords = await loadProjectServiceRecords(appCtx, projects);
 
   for (const project of projects) {
-    const deployable = await appCtx.db.getDeployableForProject(project.id);
-    const status = deployable?.status ?? project.status;
-    const containerId = deployable?.container_id ?? project.container_id;
+    const view = serviceRecords.get(project.id)?.view ?? serviceViewFromRows(project, null);
+    const status = view.status;
+    const containerId = view.containerId;
 
     if (status !== 'running' || !containerId) {
       continue;
@@ -49,21 +75,28 @@ export const projectOpsToolDefs: ToolDef[] = [
       }
 
       const projects = await context.appCtx.db.listProjects();
-      const deployables = new Map<
-        string,
-        Awaited<ReturnType<typeof context.appCtx.db.getDeployableForProject>>
-      >();
-      const deployableGroups = new Map<string, ServiceRow[]>();
+      const serviceRecords = await loadProjectServiceRecords(context.appCtx, projects);
+      const deployables = new Map<string, ServiceRow | undefined>();
+      const deployableGroups =
+        typeof context.appCtx.db.getDeployablesByGroupIds === 'function'
+          ? await context.appCtx.db.getDeployablesByGroupIds(projects.map((p) => p.id))
+          : new Map<string, ServiceRow[]>();
+      if (typeof context.appCtx.db.getDeployablesByGroupIds !== 'function') {
+        for (const p of projects) {
+          const primary = serviceRecords.get(p.id)?.service ?? undefined;
+          const groupDeployables =
+            typeof context.appCtx.db.getDeployablesByGroup === 'function'
+              ? await context.appCtx.db.getDeployablesByGroup(p.id)
+              : primary
+                ? [primary]
+                : [];
+          deployableGroups.set(p.id, groupDeployables);
+        }
+      }
       for (const p of projects) {
-        const primary = await context.appCtx.db.getDeployableForProject(p.id);
-        const groupDeployables =
-          typeof context.appCtx.db.getDeployablesByGroup === 'function'
-            ? await context.appCtx.db.getDeployablesByGroup(p.id)
-            : primary
-              ? [primary]
-              : [];
+        const primary = serviceRecords.get(p.id)?.service ?? undefined;
+        const groupDeployables = deployableGroups.get(p.id) ?? [];
         deployables.set(p.id, primary ?? groupDeployables[0]);
-        deployableGroups.set(p.id, groupDeployables);
       }
 
       if (context.target === 'mcp') {
