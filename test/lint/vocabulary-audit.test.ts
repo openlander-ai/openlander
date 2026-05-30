@@ -152,4 +152,17 @@ describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () =
     expect(/name:\s*'openlander',\s*version:\s*VERSION/.test(serverTs)).toBe(true);
     expect(typeof VERSION === 'string' && VERSION.length > 0).toBe(true);
   });
+
+  it('project archived/default filters derive deployable service kinds from the shared set', () => {
+    const source = readFileSync(
+      resolve(REPO_ROOT, 'src', 'db', 'repos', 'project.repo.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain(
+      "const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;",
+    );
+    expect(source).not.toMatch(/s\.kind NOT IN \('postgres', 'mysql', 'redis', 'mongo', 'minio'/);
+    expect(source.match(/deployableServiceKindFilter\(sql`s\.kind`\)/g)).toHaveLength(3);
+  });
 });

@@ -11,6 +11,7 @@ import {
   notInArray,
   or,
   sql,
+  type SQL,
 } from 'drizzle-orm';
 import {
   OpenLanderError,
@@ -62,6 +63,10 @@ type EnvironmentSelectRow = typeof environments.$inferSelect;
 type ProjectStatus = NonNullable<ProjectRow['status']>;
 
 const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;
+
+function deployableServiceKindFilter(kindColumn: SQL): SQL {
+  return notInArray(kindColumn, [...NON_DEPLOYABLE_SERVICE_KINDS]);
+}
 
 function toProjectRow(row: ProjectSelectRow): ProjectRow {
   return row as ProjectRow;
@@ -351,12 +356,12 @@ export class ProjectRepo {
     ];
     if (status) {
       conditions.push(
-        sql`EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND s.kind NOT IN ('postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose') AND s.status = ${status})`,
+        sql`EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND ${deployableServiceKindFilter(sql`s.kind`)} AND s.status = ${status})`,
       );
     }
     if (!opts?.includeArchived) {
       conditions.push(
-        sql`(${projects.archived_at} IS NULL OR EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND s.kind NOT IN ('postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose') AND s.archived_at IS NULL))`,
+        sql`(${projects.archived_at} IS NULL OR EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND ${deployableServiceKindFilter(sql`s.kind`)} AND s.archived_at IS NULL))`,
       );
     }
     const rows = await this.db
@@ -754,7 +759,7 @@ export class ProjectRepo {
           isNotNull(projects.archived_at),
           ne(projects.id, ORPHAN_MANAGED_GROUP_ID),
           excludesAttachedRuntimeProjectRows(),
-          sql`NOT EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND s.kind NOT IN ('postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose') AND s.archived_at IS NULL)`,
+          sql`NOT EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND ${deployableServiceKindFilter(sql`s.kind`)} AND s.archived_at IS NULL)`,
         ),
       )
       .orderBy(desc(projects.updated_at));
