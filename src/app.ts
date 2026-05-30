@@ -1,4 +1,5 @@
 import { Database } from './db/index.js';
+import { loadServiceViewRecord } from './db/views/service-view.js';
 import { Docker } from './pipeline/docker.js';
 import type { ServerContext } from './pipeline/server-context.js';
 import { createLocalServerContext } from './pipeline/server-context.js';
@@ -102,13 +103,7 @@ export function setupRecoveryPostmortemAutomation({
         postmortemTimers.delete(payload.projectId);
 
         const project = await db.getProject(payload.projectId);
-        // PR 4.5: canonical-first status read with `??` fallback to legacy
-        // `projects` column through migration 0012.
-        const deployable = project
-          ? await db.getDeployableForProject(payload.projectId)
-          : undefined;
-        // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-        const status = deployable?.status ?? project?.status;
+        const status = project ? (await loadServiceViewRecord(db, project)).view.status : null;
         if (!project || status !== 'running') {
           return;
         }
@@ -218,23 +213,23 @@ async function migrateDefaultResourceProfile(db: Database): Promise<void> {
   let skippedCount = 0;
 
   for (const project of allProjects) {
-    const deployable = await db.getDeployableForProject(project.id);
-    if (!deployable) {
+    const service = (await loadServiceViewRecord(db, project)).service;
+    if (!service) {
       skippedCount++;
       continue;
     }
 
-    const configRow = await db.loadDeployConfigForService(deployable.id);
+    const configRow = await db.loadDeployConfigForService(service.id);
     if (!configRow) {
       const json = serializeConfig({ resourceProfile: 'small' });
-      await db.saveDeployConfigForService(deployable.id, json, CONFIG_VERSION);
+      await db.saveDeployConfigForService(service.id, json, CONFIG_VERSION);
       migratedCount++;
     } else {
       const stored = deserializeConfig(configRow.config_json);
       if (stored && !stored.snapshot.resourceProfile) {
         const updatedSnapshot = { ...stored.snapshot, resourceProfile: 'small' as const };
         const json = serializeConfig(updatedSnapshot);
-        await db.saveDeployConfigForService(deployable.id, json, CONFIG_VERSION);
+        await db.saveDeployConfigForService(service.id, json, CONFIG_VERSION);
         migratedCount++;
       }
     }
