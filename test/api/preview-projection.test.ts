@@ -69,12 +69,19 @@ function makeCtx(overrides: {
   previews?: ProjectRow[];
   deployableByPreviewId?: Map<string, ServiceRow | undefined>;
 }): Pick<AppContext, 'db'> {
+  const getServices = vi.fn(async ({ ids }: { ids?: readonly string[] } = {}) => {
+    const rows = [...(overrides.deployableByPreviewId?.values() ?? [])].filter(
+      (service): service is ServiceRow => service !== undefined,
+    );
+    return ids ? rows.filter((service) => ids.includes(service.id)) : rows;
+  });
   return {
     db: {
       getPreviewProjects: vi.fn(async () => overrides.previews ?? []),
-      getDeployableForProject: vi.fn(async (id: string) =>
-        overrides.deployableByPreviewId?.get(id),
-      ),
+      getServices,
+      getDeployableForProject: vi.fn(async () => {
+        throw new Error('loadPreviewProjections must use batched service view records');
+      }),
     } as unknown as AppContext['db'],
   };
 }
@@ -101,6 +108,8 @@ describe('loadPreviewProjections', () => {
       },
     ]);
     expect(ctx.db.getPreviewProjects).toHaveBeenCalledWith('parent-id');
+    expect(ctx.db.getServices).toHaveBeenCalledWith({ ids: ['preview-1__svc'] });
+    expect(ctx.db.getDeployableForProject).not.toHaveBeenCalled();
   });
 
   it('falls back to preview-row status / public_url when no deployable exists', async () => {
@@ -123,24 +132,26 @@ describe('loadPreviewProjections', () => {
     const result = await loadPreviewProjections(ctx, 'parent-id');
 
     expect(result).toEqual([]);
+    expect(ctx.db.getServices).not.toHaveBeenCalled();
     expect(ctx.db.getDeployableForProject).not.toHaveBeenCalled();
   });
 
-  it('fans out one deployable lookup per preview', async () => {
+  it('batch loads preview deployables in one service query', async () => {
     const ctx = makeCtx({
       previews: [
         makePreviewRow({ id: 'p1', name: 'p1' }),
         makePreviewRow({ id: 'p2', name: 'p2' }),
         makePreviewRow({ id: 'p3', name: 'p3' }),
       ],
-      deployableByPreviewId: new Map(),
+      deployableByPreviewId: new Map([
+        ['p2', makeServiceRow({ id: 'p2__svc', project_id: 'p2', status: 'running' })],
+      ]),
     });
 
     await loadPreviewProjections(ctx, 'parent-id');
 
-    expect(ctx.db.getDeployableForProject).toHaveBeenCalledTimes(3);
-    expect(ctx.db.getDeployableForProject).toHaveBeenNthCalledWith(1, 'p1');
-    expect(ctx.db.getDeployableForProject).toHaveBeenNthCalledWith(2, 'p2');
-    expect(ctx.db.getDeployableForProject).toHaveBeenNthCalledWith(3, 'p3');
+    expect(ctx.db.getServices).toHaveBeenCalledTimes(1);
+    expect(ctx.db.getServices).toHaveBeenCalledWith({ ids: ['p1__svc', 'p2__svc', 'p3__svc'] });
+    expect(ctx.db.getDeployableForProject).not.toHaveBeenCalled();
   });
 });
