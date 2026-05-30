@@ -49,6 +49,7 @@ const EXPECTED_TOOLS = [
   'get_service_logs',
   'get_service_status',
   'get_system_stats',
+  'get_topology',
   'list_buckets',
   'list_domain_routes',
   'list_env_vars',
@@ -128,8 +129,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 68 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(68);
+  it('maintains exactly 69 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(69);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

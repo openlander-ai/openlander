@@ -1144,6 +1144,93 @@ describe('service-targeted monitoring tools', () => {
     });
   });
 
+  it('get_topology returns deployable and managed dependency nodes', async () => {
+    const project = { id: 'app', name: 'app', status: 'running' };
+    const appService = {
+      id: 'app__svc',
+      project_id: 'app',
+      name: 'web',
+      kind: 'git',
+      source: 'git',
+      status: 'running',
+      assigned_port: 10001,
+      image_url: 'app:latest',
+    };
+    const postgres = {
+      id: 'svc-pg',
+      project_id: 'app',
+      name: 'app-postgres',
+      kind: 'postgres',
+      type: null,
+      status: 'running',
+      assigned_port: 5432,
+      image_url: 'postgres:17-alpine',
+    };
+    const redis = {
+      id: 'svc-redis',
+      project_id: 'app',
+      name: 'app-redis',
+      kind: 'redis',
+      type: 'redis',
+      status: 'running',
+      assigned_port: 6379,
+      image_url: 'redis:8-alpine',
+    };
+    const ctx = {
+      db: {
+        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getDeployablesByGroup: vi.fn(async () => [appService]),
+        getDeployableForProject: vi.fn(async () => appService),
+        getServices: vi.fn(async () => [postgres]),
+        listServiceConnectionsByProject: vi.fn(async () => [
+          {
+            service_id_consumer: 'app__svc',
+            service_id_provider: 'svc-redis',
+          },
+        ]),
+        listServices: vi.fn(async () => [appService, postgres, redis]),
+        findDependenciesByProject: vi.fn(async () => [{ target_service_id: 'svc-pg' }]),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getMonitoringTool(ctx, 'get_topology').execute(
+      { project_id: 'app' },
+      { target: 'mcp' },
+    )) as {
+      project: { id: string; name: string };
+      count: number;
+      services: Array<{ id: string; role: string; type?: string; dependsOn: string[] }>;
+      edges: Array<{ from: string; to: string }>;
+    };
+
+    expect(result.project).toEqual({ id: 'app', name: 'app' });
+    expect(result.count).toBe(3);
+    expect(result.services).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'app__svc',
+          role: 'deployable',
+          dependsOn: ['svc-pg', 'svc-redis'],
+        }),
+        expect.objectContaining({
+          id: 'svc-pg',
+          role: 'managed',
+          type: 'postgresql',
+        }),
+        expect.objectContaining({
+          id: 'svc-redis',
+          role: 'managed',
+          type: 'redis',
+        }),
+      ]),
+    );
+    expect(result.edges).toEqual([
+      { from: 'app__svc', to: 'svc-pg' },
+      { from: 'app__svc', to: 'svc-redis' },
+    ]);
+  });
+
   it('get_project_stats points agents at explicit target parameters', () => {
     const { ctx } = createServiceTargetContext();
     const tool = getMonitoringTool(ctx, 'get_project_stats');
