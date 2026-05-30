@@ -475,6 +475,7 @@ The standalone action does not write env vars to the app; use the returned
 `include_orphans=true` surfaces OpenLander-managed service containers that still exist in Docker but are missing from the `services` table.
 
 MCP `list_services` intentionally omits credential values. Use `get_service_credentials` for connection strings, users, passwords, and database names.
+Project-scoped rows include `kind`, `attached_project_id`, and `attached_project_name` so agents can tell which app project can reach the database/cache over its Docker network.
 
 ### `get_service_status`
 

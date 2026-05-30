@@ -514,8 +514,13 @@ describe('MCP service tools (Task 8)', () => {
         expect.objectContaining({
           id: 'svc-redis',
           name: 'shared-redis',
+          kind: 'redis',
           type: 'redis',
           port: 6379,
+          scope: 'project',
+          attached_to: 'proj-1',
+          attached_project_id: 'proj-1',
+          attached_project_name: 'myapp',
           network: 'ol-myapp',
         }),
       ]),

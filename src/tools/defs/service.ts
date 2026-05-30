@@ -50,7 +50,7 @@ function getServiceExternalAccess(port: number | null) {
   }));
 }
 
-async function buildServiceNetworkNameLookup(
+async function buildServiceAttachmentLookup(
   appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
   services: Array<{ project_id: string }>,
 ) {
@@ -68,10 +68,20 @@ async function buildServiceNetworkNameLookup(
 
   return (service: { project_id: string }) => {
     if (service.project_id === ORPHAN_MANAGED_GROUP_ID) {
-      return SHARED_NETWORK_NAME;
+      return {
+        scope: 'unassigned',
+        attachedProjectId: null,
+        attachedProjectName: null,
+        network: SHARED_NETWORK_NAME,
+      };
     }
     const projectName = projectNameById.get(service.project_id);
-    return projectName ? projectContainerName(projectName) : null;
+    return {
+      scope: 'project',
+      attachedProjectId: service.project_id,
+      attachedProjectName: projectName ?? null,
+      network: projectName ? projectContainerName(projectName) : null,
+    };
   };
 }
 
@@ -455,25 +465,28 @@ export const serviceToolDefs: ToolDef[] = [
         : [];
 
       if (target === 'mcp') {
-        const serviceNetworkName = await buildServiceNetworkNameLookup(appCtx, services);
+        const serviceAttachment = await buildServiceAttachmentLookup(appCtx, services);
         return {
           count: services.length,
           services: services.map((service) => {
             // eslint-disable-next-line @typescript-eslint/no-deprecated
             const svcPort = service.assigned_port ?? service.port;
+            const attachment = serviceAttachment(service);
             return {
               id: service.id,
               name: service.name,
+              kind: service.kind,
               // Wire contract: emit legacy vocabulary (postgresql/mongodb).
               // eslint-disable-next-line @typescript-eslint/no-deprecated
               type: service.type ?? kindToLegacyType(service.kind),
               status: service.status,
               // Wire key preserved; canonical source: assigned_port
               port: svcPort,
-              scope: service.project_id === ORPHAN_MANAGED_GROUP_ID ? 'unassigned' : 'project',
-              attached_to:
-                service.project_id === ORPHAN_MANAGED_GROUP_ID ? null : service.project_id,
-              network: serviceNetworkName(service),
+              scope: attachment.scope,
+              attached_to: attachment.attachedProjectId,
+              attached_project_id: attachment.attachedProjectId,
+              attached_project_name: attachment.attachedProjectName,
+              network: attachment.network,
               // Wire key preserved; canonical first, legacy fallback for pre-migration rows
               // eslint-disable-next-line @typescript-eslint/no-deprecated
               image: service.image_url ?? service.image ?? '',
