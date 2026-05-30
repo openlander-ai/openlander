@@ -134,10 +134,9 @@ export async function tryRejectIfNotMutable(
           ),
       context.appCtx.db.isCircuitBreakerOpen(project.id),
     ]);
-    const deployable = serviceRecords.get(project.id)?.service ?? undefined;
     assertProjectMutable(project, {
       db: {
-        getDeployableForProject: () => deployable,
+        service: serviceRecords.get(project.id)?.service ?? null,
         isCircuitBreakerOpen: () => circuitOpen,
       },
     });

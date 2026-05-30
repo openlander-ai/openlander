@@ -444,7 +444,7 @@ export class DeployPipeline {
     ]);
     assertProjectMutable(project, {
       db: {
-        getDeployableForProject: () => record.service ?? undefined,
+        service: record.service,
         isCircuitBreakerOpen: () => circuitBreakerOpen,
       },
     });

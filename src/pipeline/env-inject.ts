@@ -2,6 +2,7 @@ import { createModuleLogger } from '../lib/logger.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Database } from '../db/index.js';
+import { loadServiceViewRecord } from '../db/views/service-view.js';
 import type { EnvScanResult } from './env-scan.js';
 import type { EnvManager } from './env.js';
 
@@ -85,6 +86,14 @@ function isPlaceholderEnvValue(value: string): boolean {
   return normalized.length === 0 || placeholderPattern.test(normalized);
 }
 
+async function loadProjectEnvService(db: Database, projectId: string): Promise<string | null> {
+  const project = await db.getProject(projectId);
+  if (!project) {
+    return null;
+  }
+  return (await loadServiceViewRecord(db, project)).service?.id ?? null;
+}
+
 export async function autoInjectServiceEnv(params: {
   db: Database;
   env: EnvManager;
@@ -127,17 +136,17 @@ export async function autoInjectServiceEnv(params: {
       ? credentialValue.trim()
       : mapping.template(params.serviceName);
 
-  const deployable = await params.db.getDeployableForProject(params.projectId);
-  const allVars = deployable
-    ? await params.env.getAllForService(params.projectId, deployable.id)
+  const targetServiceId = await loadProjectEnvService(params.db, params.projectId);
+  const allVars = targetServiceId
+    ? await params.env.getAllForService(params.projectId, targetServiceId)
     : await params.env.getAll(params.projectId);
   const existingValue = allVars[envKey];
   if (typeof existingValue === 'string' && !isPlaceholderEnvValue(existingValue)) {
     return [];
   }
 
-  if (deployable) {
-    await params.env.setBulkForService(params.projectId, deployable.id, { [envKey]: envValue });
+  if (targetServiceId) {
+    await params.env.setBulkForService(params.projectId, targetServiceId, { [envKey]: envValue });
   } else {
     await params.env.set(params.projectId, envKey, envValue);
   }
@@ -150,10 +159,10 @@ export async function cleanupAutoInjectedEnv(params: {
   projectId: string;
   autoInjectedEnvKeys: string[];
 }): Promise<void> {
-  const deployable = await params.db.getDeployableForProject(params.projectId);
+  const targetServiceId = await loadProjectEnvService(params.db, params.projectId);
   for (const key of params.autoInjectedEnvKeys) {
-    if (deployable) {
-      await params.env.deleteForService(params.projectId, deployable.id, key);
+    if (targetServiceId) {
+      await params.env.deleteForService(params.projectId, targetServiceId, key);
     } else {
       await params.env.delete(params.projectId, key);
     }
