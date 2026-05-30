@@ -47,11 +47,12 @@ function createContext(params: {
   return ctx;
 }
 
-// The MCP adapter serializes tool results with JSON.stringify, so an
-// `undefined` field is omitted from the wire. Round-trip through JSON to
-// assert the actual agent-facing shape rather than the in-memory object.
-async function runWire(ctx: AppContext) {
-  const result = await getListProjectsTool(ctx).execute({}, { target: 'mcp' });
+// Both the MCP adapter and the AI-SDK (agent) adapter serialize tool
+// results with JSON.stringify, so an `undefined` field is omitted from the
+// wire. Round-trip through JSON to assert the actual agent-facing shape
+// rather than the in-memory object.
+async function runWire(ctx: AppContext, target: 'mcp' | 'agent' = 'mcp') {
+  const result = await getListProjectsTool(ctx).execute({}, { target });
   return JSON.parse(JSON.stringify(result)) as {
     count: number;
     projects: Array<Record<string, unknown>>;
@@ -164,6 +165,83 @@ describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
 
     // Both-empty project (no services row): the keys must be OMITTED on
     // the wire, not serialized as null / 'idle'.
+    expect(empty).not.toHaveProperty('status');
+    expect(empty).not.toHaveProperty('port');
+    expect(empty).not.toHaveProperty('publicUrl');
+  });
+});
+
+describe('list_projects agent-branch omit-contract (S3.3 ServiceView)', () => {
+  it('applies the same null-vs-omit shape on the non-MCP (agent) return', async () => {
+    const ctx = createContext({
+      projects: [
+        {
+          id: 'full',
+          name: 'full',
+          status: null,
+          visibility: null,
+          created_at: NOW,
+          updated_at: NOW,
+        },
+        {
+          id: 'nullports',
+          name: 'nullports',
+          status: 'stopped',
+          visibility: null,
+          assigned_port: null,
+          public_url: null,
+          created_at: NOW,
+          updated_at: NOW,
+        },
+        {
+          id: 'empty',
+          name: 'empty',
+          status: null,
+          visibility: null,
+          created_at: NOW,
+          updated_at: NOW,
+        },
+      ],
+      deployables: {
+        full: makeService({
+          id: 'full__svc',
+          name: 'full__svc',
+          project_id: 'full',
+          status: 'stopped',
+          assigned_port: 10001,
+          container_id: 'c-full',
+          public_url: 'https://full.example',
+        }),
+        nullports: makeService({
+          id: 'nullports__svc',
+          name: 'nullports__svc',
+          project_id: 'nullports',
+          status: 'stopped',
+          assigned_port: null,
+          container_id: null,
+          public_url: null,
+        }),
+        empty: undefined,
+      },
+    });
+
+    // The agent branch keys projects by `name` (no `id`).
+    const wire = await runWire(ctx, 'agent');
+    const full = wire.projects.find((p) => p['name'] === 'full')!;
+    const nullports = wire.projects.find((p) => p['name'] === 'nullports')!;
+    const empty = wire.projects.find((p) => p['name'] === 'empty')!;
+
+    expect(full).toMatchObject({
+      status: 'stopped',
+      port: 10001,
+      publicUrl: 'https://full.example',
+    });
+
+    // services row present, port/public_url null → explicit null on the wire
+    expect(nullports).toHaveProperty('port', null);
+    expect(nullports).toHaveProperty('publicUrl', null);
+
+    // no services row → keys omitted
     expect(empty).not.toHaveProperty('status');
     expect(empty).not.toHaveProperty('port');
     expect(empty).not.toHaveProperty('publicUrl');

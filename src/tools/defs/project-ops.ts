@@ -153,10 +153,16 @@ export const projectOpsToolDefs: ToolDef[] = [
         count: projects.length,
         projects: projects.map((project) => {
           const deployable = deployables.get(project.id);
-          const status = deployable?.status ?? project.status;
-          const port = deployable?.assigned_port ?? project.assigned_port;
-          const containerId = deployable?.container_id ?? project.container_id;
-          const publicUrl = deployable?.public_url ?? project.public_url;
+          const view = serviceViewFromRows(project, deployable);
+          // Same boundary restoration as the MCP branch (see the note
+          // there): the agent-target result is JSON-serialized for the
+          // model, so honor the historic null-vs-omit shape — null when a
+          // services row exists, omit when none. status omits only on the
+          // synthesized 'idle' bottom; visibility stays deferred.
+          const status = view.status === 'idle' ? undefined : view.status;
+          const port = deployable ? view.assignedPort : undefined;
+          const containerId = view.containerId;
+          const publicUrl = deployable ? view.publicUrl : undefined;
           return {
             name: project.name,
             status,
