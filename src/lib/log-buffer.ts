@@ -24,6 +24,10 @@ export class LogRingBuffer {
     return this.buffer.getRecent(limit).map((entry) => entry.data);
   }
 
+  getAll(): LogEntry[] {
+    return this.buffer.getAll().map((entry) => entry.data);
+  }
+
   getByLevel(minLevel: number): LogEntry[] {
     return this.buffer
       .getAll()

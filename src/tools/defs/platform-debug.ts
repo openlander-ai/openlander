@@ -49,6 +49,13 @@ function applyLimit<T>(rows: T[], limit: number): T[] {
   return rows.slice(0, limit);
 }
 
+function applyTailLimit<T>(rows: T[], limit: number): T[] {
+  if (limit <= 0) {
+    return [];
+  }
+  return rows.slice(-limit);
+}
+
 function filterLogsByLevel(logs: LogEntry[], level: string): LogEntry[] {
   const minLevel = PINO_LEVEL_MAP[level.toLowerCase()];
   if (minLevel === undefined) {
@@ -72,7 +79,10 @@ export const platformDebugToolDefs: ToolDef[] = [
       const sinceMinutes = args['since_minutes'] as number | undefined;
 
       const buffer = getLogBuffer();
-      let entries = buffer.getRecent(limit);
+      let entries =
+        level !== undefined || moduleName !== undefined || sinceMinutes !== undefined
+          ? buffer.getAll()
+          : buffer.getRecent(limit);
 
       if (level !== undefined) {
         entries = filterLogsByLevel(entries, level);
@@ -88,8 +98,9 @@ export const platformDebugToolDefs: ToolDef[] = [
       }
 
       return {
-        count: entries.length,
-        logs: entries,
+        count: Math.min(entries.length, Math.max(0, limit)),
+        total_matched: entries.length,
+        logs: applyTailLimit(entries, limit),
       };
     },
     targets: ['mcp'],

@@ -150,24 +150,24 @@ One-call app deploy front door. With `service_id`, `service_name`, `project_name
 project `name`, it redeploys the existing app. With `repo_url` or `image`, it creates a new app.
 For new app names, use `name`; `project_name` is only for existing app lookup/scoping.
 
-| Parameter           | Type    | Required | Description                                 |
-| ------------------- | ------- | -------- | ------------------------------------------- |
-| `service_id`        | string  | No       | Existing deployable service id              |
-| `service_name`      | string  | No       | Existing deployable service name            |
-| `project_name`      | string  | No       | Existing group lookup or service name scope |
-| `repo_url`          | string  | No       | Git repository URL for a new app            |
-| `branch`            | string  | No       | Branch                                      |
-| `name`              | string  | No       | New project name, or existing project alias |
-| `source`            | string  | No       | `'git'` or `'image'`                        |
-| `image`             | string  | No       | Docker image                                |
-| `cmd`               | string  | No       | Command override                            |
-| `port`              | number  | No       | Container port                              |
-| `env_vars`          | object  | No       | Environment variables                       |
-| `no_cache`          | boolean | No       | Force fresh build when redeploying existing |
-| `strategy`          | string  | No       | Redeploy strategy for existing services     |
-| `health_check_path` | string  | No       | Health check path                           |
-| `wait`              | boolean | No       | Block until complete (default: true)        |
-| `timeout`           | number  | No       | Max seconds to wait (default: 300)          |
+| Parameter           | Type    | Required | Description                                                     |
+| ------------------- | ------- | -------- | --------------------------------------------------------------- |
+| `service_id`        | string  | No       | Existing deployable service id                                  |
+| `service_name`      | string  | No       | Existing deployable service name                                |
+| `project_name`      | string  | No       | Existing group lookup or service name scope                     |
+| `repo_url`          | string  | No       | Git repository URL for a new app                                |
+| `branch`            | string  | No       | Branch                                                          |
+| `name`              | string  | No       | New project name, or existing project alias                     |
+| `source`            | string  | No       | `'git'` or `'image'`                                            |
+| `image`             | string  | No       | Docker image                                                    |
+| `cmd`               | string  | No       | Command override                                                |
+| `port`              | number  | No       | Container port                                                  |
+| `env_vars`          | object  | No       | Environment variables                                           |
+| `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes |
+| `strategy`          | string  | No       | Redeploy strategy for existing services                         |
+| `health_check_path` | string  | No       | Health check path                                               |
+| `wait`              | boolean | No       | Block until complete (default: true)                            |
+| `timeout`           | number  | No       | Max seconds to wait (default: 300)                              |
 
 ### `validate_deploy_plan`
 
@@ -263,7 +263,7 @@ Deploy or restart a deployable app/worker service. Project-level runtime actions
 | `service_id`        | string  | No       | Deployable service id                                                                            |
 | `service_name`      | string  | No       | Deployable service name                                                                          |
 | `project_name`      | string  | No       | Optional group scope for name lookups                                                            |
-| `no_cache`          | boolean | No       | Force fresh build                                                                                |
+| `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes                                  |
 | `strategy`          | string  | No       | `'force'` by default; `'blue-green'` only for eligible git/image services behind managed Traefik |
 | `health_check_path` | string  | No       | Health check path                                                                                |
 
@@ -589,10 +589,11 @@ Use this first when multiple OpenLander servers are connected to the same AI cli
 | `service_name` | string | No       | Deployable service name                               |
 | `project_id`   | string | No       | Convenience target for single-service groups          |
 | `project_name` | string | No       | Convenience target for single-service groups          |
-| `lines`        | number | No       | Number of lines                                       |
+| `lines`        | number | No       | Number of tail lines; MCP default 200                 |
 
 Provide one of `service_id`, `service_name`, `project_id`, or `project_name`. Prefer
-`service_id` when chaining from `list_projects`.
+`service_id` when chaining from `list_projects`. For migration or traceback failures, retry
+with `lines=500` or `lines=1000` if the default tail is not enough.
 
 ### `get_system_stats`
 
@@ -790,6 +791,9 @@ Platform health summary. No parameters.
 | `level`         | string | No       | Level filter  |
 | `module`        | string | No       | Module filter |
 | `since_minutes` | number | No       | Time window   |
+
+When filters are provided, OpenLander filters the in-memory log buffer first and
+then applies `limit`, so older matching errors are not hidden behind recent noise.
 
 ### `platform_docker_inspect`
 

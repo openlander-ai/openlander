@@ -50,7 +50,10 @@ const serviceTargetSchema = z
 const deployServiceSchema = z
   .object({
     ...serviceTargetFields,
-    no_cache: z.boolean().optional().describe('Force a fresh Docker build without cache.'),
+    no_cache: z
+      .boolean()
+      .optional()
+      .describe('Force a fresh Docker build when Docker cache may hide dependency changes.'),
     strategy: z
       .enum(['blue-green', 'force'])
       .optional()
@@ -65,7 +68,10 @@ const deployServiceSchema = z
 const restartServiceSchema = z
   .object({
     ...serviceTargetFields,
-    no_cache: z.boolean().optional().describe('Force a fresh Docker build without cache.'),
+    no_cache: z
+      .boolean()
+      .optional()
+      .describe('Force a fresh Docker build when Docker cache may hide dependency changes.'),
   })
   .refine((value) => Boolean(value.service_id || value.service_name), {
     message: 'service_id or service_name is required',

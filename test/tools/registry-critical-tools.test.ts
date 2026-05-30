@@ -29,7 +29,7 @@ function createMockContext() {
   const pipeline = {
     startDeploy: vi.fn().mockResolvedValue({ projectId: 'p1', projectName: 'critical-app' }),
     redeploy: vi.fn().mockResolvedValue({ status: 'redeployed' }),
-    getLogs: vi.fn().mockResolvedValue('container logs'),
+    getLogs: vi.fn().mockResolvedValue('line 1\n\nline 3\n'),
     startMonorepoDeploy: vi
       .fn()
       .mockReturnValue({ parentProjectId: 'parent-1', parentName: 'repo' }),
@@ -57,9 +57,7 @@ function createMockContext() {
       getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
       getProjectByName: vi.fn().mockReturnValue(project),
       getDeployableForProject: vi.fn((id: string) =>
-        id === project.id
-          ? { id: 'p1__svc', status: 'healthy', assigned_port: 10001 }
-          : undefined,
+        id === project.id ? { id: 'p1__svc', status: 'healthy', assigned_port: 10001 } : undefined,
       ),
       getLastDeployLog: vi.fn(),
       getDeployLogs: vi.fn().mockReturnValue([
@@ -143,11 +141,19 @@ describe('registry critical tool behaviors', () => {
     const { ctx, pipeline } = createMockContext();
     const tool = getTool(ctx, 'get_logs');
 
-    await tool.execute({ project_name: 'critical-app' }, { target: 'agent' });
-    await tool.execute({ project_name: 'critical-app' }, { target: 'mcp' });
+    const agentResult = (await tool.execute(
+      { project_name: 'critical-app' },
+      { target: 'agent' },
+    )) as Record<string, unknown>;
+    const mcpResult = (await tool.execute(
+      { project_name: 'critical-app' },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
 
-    expect(pipeline.getLogs).toHaveBeenNthCalledWith(1, 'p1', 20);
-    expect(pipeline.getLogs).toHaveBeenNthCalledWith(2, 'p1', 50);
+    expect(pipeline.getLogs).toHaveBeenNthCalledWith(1, 'p1', 80);
+    expect(pipeline.getLogs).toHaveBeenNthCalledWith(2, 'p1', 200);
+    expect(agentResult).toMatchObject({ requested_lines: 80, returned_lines: 3, tail: true });
+    expect(mcpResult).toMatchObject({ requested_lines: 200, returned_lines: 3, tail: true });
   });
 
   it('deployment debug tools accept project_id and deploy_id targets', async () => {

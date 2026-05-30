@@ -123,6 +123,28 @@ describe('platform-debug tools', () => {
     expect(result.logs[0]?.msg).toBe('git log');
   });
 
+  it('platform_logs filters before limiting so older matching errors are visible', async () => {
+    const { ctx } = createMockPlatformDebugContext();
+    const now = Date.now();
+    getLogBuffer().push({ level: 50, msg: 'migration traceback', module: 'db', timestamp: now });
+    for (let i = 0; i < 75; i += 1) {
+      getLogBuffer().push({ level: 30, msg: `noise ${String(i)}`, module: 'http', timestamp: now });
+    }
+
+    const result = (await getTool('platform_logs').execute(
+      { module: 'db', limit: 1 },
+      { target: 'mcp', appCtx: ctx },
+    )) as {
+      count: number;
+      total_matched: number;
+      logs: Array<{ module?: string; msg: string }>;
+    };
+
+    expect(result.count).toBe(1);
+    expect(result.total_matched).toBe(1);
+    expect(result.logs[0]?.msg).toBe('migration traceback');
+  });
+
   it('platform_logs applies since_minutes filtering', async () => {
     const { ctx } = createMockPlatformDebugContext();
     getLogBuffer().push({ level: 30, msg: 'old', module: 'deploy', timestamp: 1000 });
@@ -250,12 +272,12 @@ describe('platform-debug tools', () => {
   it('platform_db_inspect rejects forbidden tables at runtime', async () => {
     const { ctx } = createMockPlatformDebugContext();
 
-    expect(() =>
+    await expect(
       getTool('platform_db_inspect').execute(
         { table: 'global_secrets' } as unknown as Record<string, unknown>,
         { target: 'mcp', appCtx: ctx },
       ),
-    ).toThrow('FORBIDDEN_TABLE: global_secrets');
+    ).rejects.toThrow('FORBIDDEN_TABLE: global_secrets');
   });
 
   it('platform_db_inspect uses project_id filter for environments', async () => {
