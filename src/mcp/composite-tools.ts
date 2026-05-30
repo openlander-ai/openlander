@@ -113,9 +113,10 @@ export const MANAGED_SERVICE_ACTIONS = [
 
 /**
  * openlander_service: Deployable services (apps + workers).
- * Total: 19 tools
+ * Total: 20 tools
  */
 export const SERVICE_ACTIONS = [
+  'archive_service',
   'restart_service',
   'redeploy_app',
   'rollback_service',
@@ -235,7 +236,8 @@ export const PLATFORM_REGISTRY = {
 
 /**
  * Actions that intentionally do NOT exist as MCP operations because the
- * underlying flow is human UI-only (project/app archive, delete, purge).
+ * underlying flow is human UI-only (project/app hard delete, purge, and
+ * project-level archive/restore).
  *
  * Agents reaching for these names get a `HUMAN_UI_ONLY` response with a
  * clear pointer to the web UI instead of a generic `UNKNOWN_ACTION`. That
@@ -316,7 +318,7 @@ function humanUiOnlyResponse(toolName: string, action: string): Record<string, u
     action,
     composite: toolName,
     _agent_guidance: {
-      message: `"${action}" is not exposed to MCP. Project/app archive, delete, and purge are human UI-only operations. Tell the user to use the web UI: Settings → Danger zone for that project or service. Do not substitute remove_service, cleanup_docker, or other destructive tools — those target managed infrastructure services, not deployable apps/projects.`,
+      message: `"${action}" is not exposed to MCP. Project/app hard delete, purge, and project-level archive/restore are human UI-only operations. Tell the user to use the web UI: Settings → Danger zone for that project or service. For deployable app cleanup, use archive_service and wait for human approval. Do not substitute remove_service, cleanup_docker, or other destructive tools — those target managed infrastructure services, not deployable apps/projects.`,
     },
   };
 }

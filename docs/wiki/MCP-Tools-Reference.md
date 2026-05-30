@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **66 unique default operations** surfaced through those composites
+- **67 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -42,13 +42,16 @@ Destructive MCP operations are intentionally gated. Some real ToolDefs appear in
 but are blocked at the MCP boundary because they delete managed infrastructure or perform host-wide
 cleanup: `remove_service`, `remove_volume`, `delete_bucket`, `platform_force_remove`,
 `recover_platform`, `platform_cleanup_orphans`, and `cleanup_docker`. MCP calls to these return
-`OPERATION_REQUIRES_HUMAN_UI`; use the web UI or host-maintenance path instead. Supported bulk
-cleanup actions such as `bulk_delete_env_vars confirm=true` enter the human approval hold queue
-before execution.
+`OPERATION_REQUIRES_HUMAN_UI`; use the web UI or host-maintenance path instead.
 
-**Project/app archive, delete, and purge are human UI-only.** Composites do not expose
-`archive_service`, `archive_project`, `delete_project`, `delete_app`, `remove_app`, or
-`purge_project`. Calls to those names return
+Deployable app cleanup uses a softer path: `archive_service` is exposed through
+`openlander_service` but enters the human approval hold queue before it executes.
+Supported bulk cleanup actions such as `bulk_delete_env_vars confirm=true` also
+enter that queue.
+
+**Project/app hard delete and purge are human UI-only.** Composites do not expose
+`archive_project`, `delete_project`, `delete_app`, `remove_app`, or `purge_project`. Calls to
+those names return
 `{ error: "HUMAN_UI_ONLY", _agent_guidance: { message: "...use the web UI: Settings → Danger zone..." } }`
 so agents do not silently substitute `remove_service` or `cleanup_docker` (those target managed
 infrastructure services, not deployable apps).
@@ -59,7 +62,7 @@ Composite catalog:
 | ---------------------------- | ------------ | ---------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 16           | Deploy plans, execution, previews, rollbacks, build logs, Git                      |
 | `openlander_project`         | 14           | Project groups, secrets, temporary share URLs; env actions route to services       |
-| `openlander_service`         | 19           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary |
+| `openlander_service`         | 20           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary |
 | `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage         |
 | `openlander_monitor`         | 10           | Logs, alerts, system stats, host diagnosis, project stats, probes                  |
 
@@ -291,6 +294,24 @@ For blue-green, make `health_check_path` a readiness endpoint, not a static page
 If the service needs a database, cache, storage bucket, or other dependency to
 serve real traffic, the readiness endpoint should check those dependencies before
 returning 2xx.
+
+### `archive_service`
+
+Archive a deployable app/worker service while preserving configuration and
+history. This is the MCP-safe cleanup path when an agent created the wrong app
+or the user asks to clean up a deployable. It stops/removes the runtime and
+waits for human approval before executing. It does **not** permanently delete
+managed databases, volumes, buckets, or host-wide Docker resources.
+
+| Parameter      | Type   | Required | Description                           |
+| -------------- | ------ | -------- | ------------------------------------- |
+| `service_id`   | string | No       | Deployable service id                 |
+| `service_name` | string | No       | Deployable service name or group name |
+| `project_name` | string | No       | Optional group scope for name lookups |
+
+Provide either `service_id` or `service_name`. A successful initial MCP call
+returns `status: "pending_approval"` and an `actionRunId`; poll
+`mcp_action_status` after the user approves or rejects the request.
 
 ### `expose_public` / `unexpose_public`
 

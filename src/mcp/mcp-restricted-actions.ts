@@ -10,10 +10,10 @@
  * - HUMAN_UI_ONLY_TOOLS: real tool defs that exist but are blocked from MCP
  *   execution (managed-infrastructure destruction). Invoking via MCP returns
  *   OPERATION_REQUIRES_HUMAN_UI.
- * - HUMAN_UI_ONLY_ALIASES: names that are NOT MCP tools at all (deployable/
- *   project lifecycle). The composite intercepts them with a HUMAN_UI_ONLY
- *   pointer to the web UI so a "delete it" prompt doesn't spiral into adjacent
- *   destructive tools.
+ * - HUMAN_UI_ONLY_ALIASES: names that are NOT MCP tools at all (project
+ *   lifecycle, hard delete / purge, and restore aliases). The composite
+ *   intercepts them with a HUMAN_UI_ONLY pointer to the web UI so a "delete it"
+ *   prompt doesn't spiral into adjacent destructive tools.
  * - APPROVAL_HOLD_TOOLS: destructive tools allowed via MCP only behind a human
  *   approval hold.
  */
@@ -31,7 +31,6 @@ export const HUMAN_UI_ONLY_TOOLS = [
 export const HUMAN_UI_ONLY_ALIASES = [
   'archive_app',
   'archive_project',
-  'archive_service',
   'delete_app',
   'delete_project',
   'delete_service',
@@ -46,7 +45,11 @@ export const HUMAN_UI_ONLY_ALIASES = [
   'unarchive_service',
 ] as const;
 
-export const APPROVAL_HOLD_TOOLS = ['bulk_delete_env_vars', 'remove_secret_file'] as const;
+export const APPROVAL_HOLD_TOOLS = [
+  'archive_service',
+  'bulk_delete_env_vars',
+  'remove_secret_file',
+] as const;
 
 export type HumanUiOnlyTool = (typeof HUMAN_UI_ONLY_TOOLS)[number];
 export type HumanUiOnlyAlias = (typeof HUMAN_UI_ONLY_ALIASES)[number];

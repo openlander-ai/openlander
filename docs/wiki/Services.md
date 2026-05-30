@@ -144,6 +144,11 @@ action there. Service-owned env vars, domains, and resource settings cascade wit
 the service. Managed project volumes are preserved by default and require an
 explicit checkbox to delete.
 
+Deployable app/worker cleanup is softer: MCP `archive_service` creates a human
+approval request and, after approval, archives the deployable while preserving
+configuration and history. It is not a substitute for managed service deletion
+and does not delete databases, volumes, buckets, or host-wide Docker resources.
+
 ---
 
 ## Backups
