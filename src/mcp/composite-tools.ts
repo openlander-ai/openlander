@@ -2,6 +2,11 @@ import { z } from 'zod';
 import type { ToolContext, ToolDef } from '../tools/defs/types.js';
 import { maybeHandleMcpSafety } from './destructive-safety.js';
 import { HUMAN_UI_ONLY_ALIASES, HUMAN_UI_ONLY_ALIAS_SET } from './mcp-restricted-actions.js';
+import {
+  buildActionContract,
+  unknownTopLevelParams,
+  type ToolInputContract,
+} from './schema-guidance.js';
 
 /**
  * MCP Composite Tool Mapping
@@ -252,17 +257,6 @@ export interface CompositeTool {
   execute: (args: unknown, context: ToolContext) => Promise<unknown>;
 }
 
-type JsonObject = Record<string, unknown>;
-
-interface ActionContract {
-  name: string;
-  description: string;
-  input_schema: JsonObject;
-  allowed_params: string[];
-  required_params: string[];
-  optional_params: string[];
-}
-
 const compositeToolInputSchema = z.object({
   action: z
     .string()
@@ -283,69 +277,10 @@ function buildCompositeToolDefs(allToolDefs: ToolDef[], actions: readonly string
     .filter((def): def is ToolDef => def !== undefined && isMcpTargeted(def));
 }
 
-function asObject(value: unknown): JsonObject | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return null;
-  }
-  return value as JsonObject;
-}
-
-function stringList(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((item): item is string => typeof item === 'string');
-}
-
-function toolSchemaToJson(schema: z.ZodType): JsonObject {
-  const jsonSchema = z.toJSONSchema(schema) as JsonObject;
-  delete jsonSchema['$schema'];
-  return jsonSchema;
-}
-
-function buildActionContract(def: ToolDef): ActionContract {
-  const inputSchema = toolSchemaToJson(def.inputSchema);
-  const properties = asObject(inputSchema['properties']) ?? {};
-  const allowedParams = Object.keys(properties).sort();
-  const requiredParams = stringList(inputSchema['required'])
-    .filter((name) => allowedParams.includes(name))
-    .sort();
-  const optionalParams = allowedParams.filter((name) => !requiredParams.includes(name)).sort();
-
-  return {
-    name: def.name,
-    description: def.mcpDescription ?? def.description,
-    input_schema: inputSchema,
-    allowed_params: allowedParams,
-    required_params: requiredParams,
-    optional_params: optionalParams,
-  };
-}
-
-function shouldRejectUnknownTopLevelParams(contract: ActionContract): boolean {
-  return (
-    contract.input_schema['type'] === 'object' &&
-    contract.input_schema['additionalProperties'] === false
-  );
-}
-
-function unknownTopLevelParams(
-  params: Record<string, unknown>,
-  contract: ActionContract,
-): string[] {
-  if (!shouldRejectUnknownTopLevelParams(contract)) {
-    return [];
-  }
-
-  return Object.keys(params)
-    .filter((name) => !contract.allowed_params.includes(name))
-    .sort();
-}
-
 function invalidParamsResponse(
   toolName: string,
   action: string,
-  contract: ActionContract,
+  contract: ToolInputContract,
   details: string,
   unknownParams: string[] = [],
 ): Record<string, unknown> {
@@ -358,11 +293,19 @@ function invalidParamsResponse(
     allowed_params: contract.allowed_params,
     required_params: contract.required_params,
     input_schema: contract.input_schema,
+    suggested_call: {
+      tool: toolName,
+      arguments: { action: 'help', params: { action_name: action } },
+    },
     _agent_guidance: {
       message:
         unknownParams.length > 0
           ? `Unknown parameter(s) for action "${action}": ${unknownParams.join(', ')}. Use the allowed_params list from this response and retry.`
           : `Invalid parameters for action "${action}". Use input_schema and required_params from this response and retry.`,
+      next_steps: [
+        `Call ${toolName} with { action: "help", params: { action_name: "${action}" } } to inspect this action only.`,
+        `Retry ${toolName} with action "${action}" and only params from allowed_params.`,
+      ],
     },
   };
 }
