@@ -143,6 +143,55 @@ describe('PlanEngine.createPlan', () => {
     expect(call.projectName).toBe('persist-app');
   });
 
+  it('uses project_id as the existing project target when creating a plan', async () => {
+    mockDb.getProject.mockResolvedValue({ id: 'target-project', name: 'workspace' });
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'target123',
+    });
+
+    mockAnalyzeInfra.mockReturnValue({
+      needs: [],
+      available: [],
+      missing: [],
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('');
+
+    const plan = await engine.createPlan({
+      repoUrl: 'https://github.com/test/worker',
+      branch: 'main',
+      name: 'worker',
+      projectId: 'target-project',
+    });
+
+    expect(plan.project_id).toBe('target-project');
+    expect(plan.app.name).toBe('workspace');
+    expect(mockEnv.getAll).toHaveBeenCalledWith('target-project');
+    const call = mockDb.createDeployPlan.mock.calls[0][0];
+    expect(call.projectName).toBe('workspace');
+    expect(JSON.parse(call.planJson).project_id).toBe('target-project');
+  });
+
+  it('rejects an unknown project_id instead of silently creating a new project target', async () => {
+    mockDb.getProject.mockResolvedValue(null);
+
+    await expect(
+      engine.createPlan({
+        repoUrl: 'https://github.com/test/worker',
+        branch: 'main',
+        projectId: 'missing-project',
+      }),
+    ).rejects.toMatchObject({
+      code: 'PROJECT_NOT_FOUND',
+      details: { identifier: 'missing-project' },
+    });
+
+    expect(mockCloneRepo).not.toHaveBeenCalled();
+    expect(mockDb.createDeployPlan).not.toHaveBeenCalled();
+  });
+
   it('captures commit SHA from clone result', async () => {
     mockCloneRepo.mockResolvedValue({
       path: '/tmp/test-repo',
@@ -840,7 +889,9 @@ describe('PlanEngine.createPlan', () => {
     mockAnalyzeInfra.mockReturnValue({
       needs: [{ type: 'postgresql', detectedFrom: 'pg' }],
       available: [],
-      missing: [{ type: 'postgresql', suggestion: 'Create a postgresql service', detectedFrom: 'pg' }],
+      missing: [
+        { type: 'postgresql', suggestion: 'Create a postgresql service', detectedFrom: 'pg' },
+      ],
     });
 
     mockExistsSync.mockReturnValue(true);
@@ -876,7 +927,9 @@ describe('PlanEngine.createPlan', () => {
     mockAnalyzeInfra.mockReturnValue({
       needs: [{ type: 'postgresql', detectedFrom: 'pg' }],
       available: [],
-      missing: [{ type: 'postgresql', suggestion: 'Create a postgresql service', detectedFrom: 'pg' }],
+      missing: [
+        { type: 'postgresql', suggestion: 'Create a postgresql service', detectedFrom: 'pg' },
+      ],
     });
 
     mockExistsSync.mockReturnValue(true);
@@ -909,7 +962,9 @@ describe('PlanEngine.createPlan', () => {
     mockAnalyzeInfra.mockReturnValue({
       needs: [{ type: 'postgresql', detectedFrom: 'pg' }],
       available: [],
-      missing: [{ type: 'postgresql', suggestion: 'Create a postgresql service', detectedFrom: 'pg' }],
+      missing: [
+        { type: 'postgresql', suggestion: 'Create a postgresql service', detectedFrom: 'pg' },
+      ],
     });
 
     mockExistsSync.mockReturnValue(true);

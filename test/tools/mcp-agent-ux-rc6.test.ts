@@ -32,6 +32,9 @@ function createEngine() {
     getProjectByName: vi.fn().mockResolvedValue(null),
     getLastDeployLog: vi.fn().mockResolvedValue(null),
     getService: vi.fn().mockResolvedValue(undefined),
+    acquireDeployLock: vi.fn().mockResolvedValue(true),
+    releaseDeployLock: vi.fn().mockResolvedValue(undefined),
+    getDeployLockInfo: vi.fn().mockResolvedValue(null),
     upsertServiceConnection: vi.fn().mockResolvedValue(undefined),
     attachServiceToProject: vi.fn().mockResolvedValue({
       sourceProjectId: 'orphan',
