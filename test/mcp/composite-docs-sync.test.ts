@@ -111,8 +111,7 @@ const COMPOSITE_ACTION_SET: ReadonlySet<string> = new Set(COMPOSITE_ACTION_NAMES
  * explicit way to opt a tool out of the MCP composite surface. Surprise
  * omissions stay caught by the assertion below.
  *
- * `targets: ['agent']` ToolDefs (`archive_service`, `unarchive_service`,
- * `deploy_compose`, `list_compose_services`) are auto-excluded by
+ * `targets: ['agent']` ToolDefs (`deploy_compose`, `list_compose_services`) are auto-excluded by
  * `isMcpTargeted` and do NOT need to appear here.
  */
 const TOOLDEFS_NOT_IN_COMPOSITE: ReadonlySet<string> = new Set([

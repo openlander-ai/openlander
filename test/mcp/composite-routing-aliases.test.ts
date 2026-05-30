@@ -44,8 +44,8 @@ const mockContext: ToolContext = { target: 'mcp', appCtx: {} as AppContext };
 // Actions removed from openlander_project that should still surface as
 // UNKNOWN_ACTION. Archive/unarchive are intentionally excluded — they route to
 // the HUMAN_UI_ONLY sentinel (see HUMAN_UI_ONLY_ACTIONS in
-// src/mcp/composite-tools.ts). Deployable archive_service is different: it is
-// exposed on openlander_service behind the destructive approval queue.
+// src/mcp/composite-tools.ts). Deployable archive_service/unarchive_service are
+// different: they are exposed on openlander_service behind the approval queue.
 const removedProjectRuntimeActions = [
   'stop_project',
   'start_project',
@@ -162,32 +162,23 @@ describe('openlander_service direct deployable runtime actions', () => {
     }
   });
 
-  it('exposes deployable service archive as a real approval-gated action', async () => {
+  it('exposes deployable service archive/restore as real approval-gated actions', async () => {
     const help = (await tool.execute({ action: 'help' }, mockContext)) as {
       actions: Array<{ name: string }>;
     };
-    expect(help.actions.map((action) => action.name)).toContain('archive_service');
+    const actions = help.actions.map((action) => action.name);
+    expect(actions).toContain('archive_service');
+    expect(actions).toContain('unarchive_service');
 
-    const invalid = (await tool.execute(
-      { action: 'archive_service', params: {} },
-      mockContext,
-    )) as Record<string, unknown>;
-    expect(invalid).toHaveProperty('error', 'INVALID_PARAMS');
-    expect(invalid).toHaveProperty('action', 'archive_service');
-    expect(invalid).toHaveProperty('composite', 'openlander_service');
-  });
-
-  it('keeps service unarchive human UI-only for now', async () => {
-    const result = (await tool.execute(
-      { action: 'unarchive_service', params: {} },
-      mockContext,
-    )) as Record<string, unknown>;
-    expect(result).toHaveProperty('error', 'HUMAN_UI_ONLY');
-    expect(result).toHaveProperty('action', 'unarchive_service');
-    expect(result).toHaveProperty('composite', 'openlander_service');
-    const guidance = result['_agent_guidance'] as Record<string, unknown>;
-    expect(String(guidance['message'])).toMatch(/human UI-only|human UI/i);
-    expect(String(guidance['message'])).toMatch(/remove_service|cleanup_docker/);
+    for (const action of ['archive_service', 'unarchive_service'] as const) {
+      const invalid = (await tool.execute({ action, params: {} }, mockContext)) as Record<
+        string,
+        unknown
+      >;
+      expect(invalid).toHaveProperty('error', 'INVALID_PARAMS');
+      expect(invalid).toHaveProperty('action', action);
+      expect(invalid).toHaveProperty('composite', 'openlander_service');
+    }
   });
 
   it('returns HUMAN_UI_ONLY for delete/remove/purge aliases agents commonly reach for', async () => {

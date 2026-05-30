@@ -120,26 +120,28 @@ describe('MCP destructive safety', () => {
     );
   });
 
-  it('routes deployable service archive to a pending approval row', async () => {
-    const context = createContext();
-    const result = await maybeHandleMcpSafety(
-      createTool('archive_service'),
-      { project_name: 'demo', service_name: 'web' },
-      context,
-    );
+  it('routes deployable service archive/restore to pending approval rows', async () => {
+    for (const toolName of ['archive_service', 'unarchive_service'] as const) {
+      const context = createContext();
+      const result = await maybeHandleMcpSafety(
+        createTool(toolName),
+        { project_name: 'demo', service_name: 'web' },
+        context,
+      );
 
-    expect(result).toMatchObject({
-      status: 'pending_approval',
-      actionRunId: 'action-run-1',
-      tool: 'archive_service',
-      projectId: 'project-1',
-    });
-    expect(context.appCtx.db.createPendingMcpApproval).toHaveBeenCalledWith(
-      expect.objectContaining({
+      expect(result).toMatchObject({
+        status: 'pending_approval',
+        actionRunId: 'action-run-1',
+        tool: toolName,
         projectId: 'project-1',
-        toolName: 'archive_service',
-      }),
-    );
+      });
+      expect(context.appCtx.db.createPendingMcpApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: 'project-1',
+          toolName,
+        }),
+      );
+    }
   });
 
   it('ignores stale global active scope rows for org-scoped v0.1 MCP calls', async () => {
