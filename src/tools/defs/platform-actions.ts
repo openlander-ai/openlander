@@ -1,4 +1,5 @@
 import { DOCKER_LABELS } from '../../config/index.js';
+import { loadServiceViewRecords } from '../../db/views/service-view.js';
 import { getRouteName } from '../../pipeline/deploy/helpers.js';
 import {
   collectKnownContainerNames,
@@ -324,12 +325,10 @@ export const platformActionToolDefs: ToolDef[] = [
       );
       const actions: Array<{ type: 'mark_error' | 'stop_orphan'; target: string; detail: string }> =
         [];
+      const serviceRecords = await loadServiceViewRecords(context.appCtx.db, projects);
 
       for (const project of projects) {
-        // PR 4.5: canonical-first read of container_id with `??` fallback to
-        // legacy `projects` column through migration 0012.
-        const deployable = await context.appCtx.db.getDeployableForProject(project.id);
-        const containerId = deployable?.container_id ?? project.container_id;
+        const containerId = serviceRecords.get(project.id)?.view.containerId ?? null;
         if (!containerId) {
           continue;
         }

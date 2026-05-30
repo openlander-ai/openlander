@@ -57,6 +57,9 @@ function createMockPlatformContext(overrides?: {
     db: {
       listProjects: vi.fn(() => projects),
       listServices: vi.fn(() => services),
+      getServices: vi.fn(async (query?: { ids?: string[] }) =>
+        query?.ids ? services.filter((service) => query.ids?.includes(service.id)) : services,
+      ),
       getDeployableForProject: vi.fn().mockReturnValue(undefined),
     },
   } as unknown as AppContext;
@@ -67,6 +70,8 @@ function createMockPlatformContext(overrides?: {
     db: ctx.db as unknown as {
       listProjects: ReturnType<typeof vi.fn>;
       listServices: ReturnType<typeof vi.fn>;
+      getServices: ReturnType<typeof vi.fn>;
+      getDeployableForProject: ReturnType<typeof vi.fn>;
     },
   };
 }
@@ -302,6 +307,33 @@ describe('platform-read tools', () => {
     expect(result.ghost_records).toEqual([
       { project_id: 'p1', project_name: 'ghost-app', container_id: 'missing-container' },
     ]);
+  });
+
+  it('platform_container_audit reads canonical service containers through service views', async () => {
+    const { ctx, db } = createMockPlatformContext({
+      containers: [],
+      projects: [{ id: 'p1', name: 'ghost-app', container_id: 'legacy-container' }],
+      services: [
+        {
+          id: 'p1__svc',
+          container_id: 'canonical-container',
+          container_name: 'ol-ghost-app',
+        },
+      ],
+    });
+
+    const result = (await getTool('platform_container_audit').execute(
+      {},
+      { target: 'mcp', appCtx: ctx },
+    )) as {
+      ghost_records: Array<{ project_id: string; container_id: string | null }>;
+    };
+
+    expect(result.ghost_records).toEqual([
+      { project_id: 'p1', project_name: 'ghost-app', container_id: 'canonical-container' },
+    ]);
+    expect(db.getServices).toHaveBeenCalledWith({ ids: ['p1__svc'] });
+    expect(db.getDeployableForProject).not.toHaveBeenCalled();
   });
 
   it('platform_container_audit supports project_name filter', async () => {
