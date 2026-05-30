@@ -1,5 +1,6 @@
 import type { Database, ProjectRow, ServiceRow } from '../db/index.js';
 import { projectIdToDeployableServiceId } from '../db/service-ids.js';
+import { serviceViewFromRows, type ServiceView } from '../db/views/service-view.js';
 import type { Docker } from '../pipeline/docker.js';
 import type { EventBus } from '../events/index.js';
 import { createLocalProbeRunner } from '../health/probe-runner.js';
@@ -31,6 +32,17 @@ const DEFAULT_OPTIONS: Required<ProjectHealthMonitorOptions> = {
 };
 
 const INITIAL_STAGGER_MS = 7_000;
+
+function probeContainerRef(view: ServiceView, deployable: ServiceRow | undefined): string {
+  // Preserve the monitor's historic probe order:
+  // service.container_id → service.container_name → project.container_id.
+  // ServiceView.containerId intentionally contains the project fallback.
+  const ref =
+    deployable && !deployable.container_id
+      ? (view.containerName ?? view.containerId)
+      : (view.containerId ?? view.containerName);
+  return ref ?? '';
+}
 
 export class ProjectHealthMonitor {
   private readonly options: Required<ProjectHealthMonitorOptions>;
@@ -112,12 +124,11 @@ export class ProjectHealthMonitor {
       };
     }
 
-    // PR 4.5: canonical-first read of runtime columns with `??` fallback.
+    const view = serviceViewFromRows(project, deployable);
     const probeContext: ProbeContext = {
       projectId,
-      containerId:
-        deployable?.container_id ?? deployable?.container_name ?? project.container_id ?? '',
-      assignedPort: deployable?.assigned_port ?? project.assigned_port ?? undefined,
+      containerId: probeContainerRef(view, deployable),
+      assignedPort: view.assignedPort ?? undefined,
     };
 
     const probeConfig = {
@@ -177,7 +188,7 @@ export class ProjectHealthMonitor {
       const deployablesByProject = await this.loadDeployablesByProject(projects);
       const activeProjects = projects.filter((project) => {
         const deployable = deployablesByProject.get(project.id);
-        const status = deployable?.status ?? project.status;
+        const status = serviceViewFromRows(project, deployable).status;
         return !project.archived_at && (status === 'running' || status === 'error');
       });
 
@@ -201,11 +212,10 @@ export class ProjectHealthMonitor {
       return;
     }
 
-    // PR 4.5: canonical-first status read with `??` fallback.
     const deployable =
       deployableArg ??
       (projectArg === undefined ? await this.db.getDeployableForProject(projectId) : undefined);
-    const status = deployable?.status ?? project.status;
+    const status = serviceViewFromRows(project, deployable).status;
     if ((status !== 'running' && status !== 'error') || project.archived_at) {
       return;
     }
