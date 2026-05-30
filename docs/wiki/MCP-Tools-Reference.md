@@ -149,6 +149,9 @@ of the v0.1 MCP surface.
 One-call app deploy front door. With `service_id`, `service_name`, `project_name`, or an existing
 project `name`, it redeploys the existing app. With `repo_url` or `image`, it creates a new app.
 For new app names, use `name`; `project_name` is only for existing app lookup/scoping.
+When dependency manifests declare git-based dependencies, OpenLander refreshes the dependency
+install layer while preserving normal Docker cache behavior for other repos. Use `no_cache=true`
+only when you need a fully uncached build.
 
 | Parameter           | Type    | Required | Description                                                     |
 | ------------------- | ------- | -------- | --------------------------------------------------------------- |
@@ -257,6 +260,8 @@ List all projects with status, ports, URLs. No parameters.
 ### `redeploy_app` / `restart_service`
 
 Deploy or restart a deployable app/worker service. Project-level runtime actions have been removed.
+Git-based dependency installs get a targeted dependency-layer refresh; `no_cache=true` remains the
+manual full-cache bypass.
 
 | Parameter           | Type    | Required | Description                                                                                      |
 | ------------------- | ------- | -------- | ------------------------------------------------------------------------------------------------ |

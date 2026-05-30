@@ -11,6 +11,11 @@ export const BUILD_TIME_PREFIXES = [
   'GATSBY_',
 ];
 
+export const OPENLANDER_DEPENDENCY_CACHE_KEY_ARG = 'OPENLANDER_DEPENDENCY_CACHE_KEY';
+
+const DEPENDENCY_INSTALL_RUN_PATTERN =
+  /^\s*RUN\s+.*\b(?:(?:npm|pnpm|yarn|bun)\s+(?:ci|install|i)|pip3?\s+install|poetry\s+install|uv\s+pip\s+install)\b/i;
+
 /** Returns only env vars whose keys match known build-time prefixes. */
 export function filterBuildTimeVars(envVars: Record<string, string>): Record<string, string> {
   const result: Record<string, string> = {};
@@ -44,4 +49,40 @@ export function injectBuildArgs(dockerfileContent: string, buildArgKeys: string[
   }
 
   return result.join('\n');
+}
+
+/**
+ * Invalidates only dependency-install layers by inserting a tiny cache-key layer
+ * immediately before recognized package-manager install commands.
+ */
+export function injectDependencyCacheBust(
+  dockerfileContent: string,
+  cacheKeyArg = OPENLANDER_DEPENDENCY_CACHE_KEY_ARG,
+): { content: string; injected: boolean } {
+  const lines = dockerfileContent.split('\n');
+  const result: string[] = [];
+  let injected = false;
+  let stageHasCacheArg = false;
+
+  for (const line of lines) {
+    if (/^FROM\s/i.test(line)) {
+      stageHasCacheArg = false;
+    }
+    if (new RegExp(`^\\s*ARG\\s+${cacheKeyArg}(?:\\s*=.*)?\\s*$`).test(line)) {
+      stageHasCacheArg = true;
+    }
+
+    if (DEPENDENCY_INSTALL_RUN_PATTERN.test(line)) {
+      if (!stageHasCacheArg) {
+        result.push(`ARG ${cacheKeyArg}`);
+        stageHasCacheArg = true;
+      }
+      result.push(`RUN echo "$${cacheKeyArg}" > /tmp/openlander-dependency-cache-key`);
+      injected = true;
+    }
+
+    result.push(line);
+  }
+
+  return { content: result.join('\n'), injected };
 }

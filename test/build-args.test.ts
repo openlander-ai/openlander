@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { filterBuildTimeVars, injectBuildArgs } from '../src/pipeline/build-args.js';
+import {
+  filterBuildTimeVars,
+  injectBuildArgs,
+  injectDependencyCacheBust,
+} from '../src/pipeline/build-args.js';
 
 describe('filterBuildTimeVars', () => {
   it('matches NEXT_PUBLIC_ prefix', () => {
@@ -94,5 +98,24 @@ describe('injectBuildArgs', () => {
     const lines = result.split('\n');
     const argLines = lines.filter((l) => l === 'ARG NEXT_PUBLIC_X');
     expect(argLines).toHaveLength(1);
+  });
+});
+
+describe('injectDependencyCacheBust', () => {
+  it('injects the dependency cache key immediately before npm install layers', () => {
+    const content = 'FROM node:22\nCOPY package.json .\nRUN npm ci\nCOPY . .\n';
+    const result = injectDependencyCacheBust(content);
+
+    expect(result.injected).toBe(true);
+    expect(result.content).toBe(
+      'FROM node:22\nCOPY package.json .\nARG OPENLANDER_DEPENDENCY_CACHE_KEY\nRUN echo "$OPENLANDER_DEPENDENCY_CACHE_KEY" > /tmp/openlander-dependency-cache-key\nRUN npm ci\nCOPY . .\n',
+    );
+  });
+
+  it('does not inject cache keys when there is no dependency install layer', () => {
+    const content = 'FROM node:22\nRUN npm run build\n';
+    const result = injectDependencyCacheBust(content);
+
+    expect(result).toEqual({ content, injected: false });
   });
 });
