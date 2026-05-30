@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserved deploy-plan `project_id` target context through plan storage and
+  execution so existing-project managed provisioning locks and deploys against
+  the intended project group instead of falling back to name-only lookup.
+
 ## [0.1.7] - 2026-05-29
 
 ### Added

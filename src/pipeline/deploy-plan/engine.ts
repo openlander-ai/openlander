@@ -35,7 +35,7 @@ import type { OpenLanderConfig } from '../../config/index.js';
 import type { EventBus } from '../../events/index.js';
 import type { ComposePipeline } from '../compose.js';
 import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
-import { ServiceConfigError } from '../../errors.js';
+import { ProjectNotFoundError, ServiceConfigError } from '../../errors.js';
 
 const log = createModuleLogger('plan-engine');
 
@@ -750,6 +750,7 @@ export class PlanEngine {
     status: DeployPlan['status'];
     complexity: DeployPlanComplexity;
     projectName: string;
+    projectId?: string;
     repoUrl: string;
     planBranch: string;
     commitSha: string;
@@ -799,6 +800,7 @@ export class PlanEngine {
 
     return {
       plan_id: params.planId,
+      project_id: params.projectId,
       status: params.status,
       complexity: params.complexity,
       app: {
@@ -841,6 +843,15 @@ export class PlanEngine {
       internal_url: internalUrl,
       internal_url_note: internalUrlNote,
     };
+  }
+
+  private async getExistingTargetProject(projectId: string | undefined) {
+    if (!projectId) return null;
+    const project = await this.db.getProject(projectId);
+    if (!project) {
+      throw new ProjectNotFoundError(projectId);
+    }
+    return project;
   }
 
   private detectServiceDependencies(envVars: Record<string, string>, warnings: string[]): void {
@@ -913,7 +924,8 @@ export class PlanEngine {
 
       const imageNameParts = parsedImage.name.split('/');
       const fallbackProjectName = imageNameParts[imageNameParts.length - 1] || parsedImage.name;
-      const projectName = name || fallbackProjectName;
+      const targetProject = await this.getExistingTargetProject(projectId);
+      const projectName = targetProject?.name ?? name ?? fallbackProjectName;
       // Image-source plans carry no detected service dependencies (services: []),
       // so computePlanStatus resolves to 'ready' here.
       const initialStatus: DeployPlan['status'] = this.computePlanStatus([], []);
@@ -924,6 +936,7 @@ export class PlanEngine {
         status: initialStatus,
         complexity,
         projectName,
+        projectId: targetProject?.id,
         repoUrl: '',
         planBranch: '',
         commitSha: '',
@@ -963,7 +976,8 @@ export class PlanEngine {
       throw new Error('repoUrl is required when source is "git" or undefined');
     }
 
-    const projectName = name || extractProjectName(repoUrl);
+    const targetProject = await this.getExistingTargetProject(projectId);
+    const projectName = targetProject?.name ?? name ?? extractProjectName(repoUrl);
 
     log.info({ repoUrl, branch }, 'Cloning repository');
     const cloneResult = await cloneRepo({ repoUrl, branch, sshKeyPath });
@@ -1033,6 +1047,7 @@ export class PlanEngine {
       status: initialStatus,
       complexity,
       projectName,
+      projectId: targetProject?.id,
       repoUrl,
       planBranch,
       commitSha,
@@ -1265,7 +1280,7 @@ export class PlanEngine {
       };
     }
 
-    const existingProject = await this.db.getProjectByName(plan.app.name);
+    const existingProject = targetProject ?? (await this.db.getProjectByName(plan.app.name));
     let lockProjectId: string | null = null;
     let deployLockReleased = false;
     const safeReleaseDeployLock = () => {

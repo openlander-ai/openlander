@@ -468,6 +468,9 @@ describe('PlanEngine.executePlan', () => {
       getProjectByName: vi.fn().mockReturnValue(null),
       getService: vi.fn().mockReturnValue(null),
       getLastDeployLog: vi.fn().mockReturnValue(null),
+      acquireDeployLock: vi.fn().mockResolvedValue(true),
+      getDeployLockInfo: vi.fn().mockResolvedValue(null),
+      releaseDeployLock: vi.fn().mockResolvedValue(undefined),
       upsertServiceConnection: vi.fn().mockResolvedValue(undefined),
       attachServiceToProject: vi.fn().mockResolvedValue({
         sourceProjectId: 'orphan',
@@ -1430,6 +1433,20 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     // Approval is audited only once execution commits; a blocked new-app plan
     // records nothing.
     expect(mockDb.recordDeployPlanApproval).not.toHaveBeenCalled();
+  });
+
+  it('uses plan.project_id as the lock target even when the project name lookup is empty', async () => {
+    const plan = createNeedsApprovalPlan();
+    mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+    mockDb.getProjectByName.mockReturnValue(null);
+
+    const result = await engine.executePlan(plan.plan_id, undefined, 'session-1', undefined, {
+      approveAllSafeResources: true,
+    });
+
+    expect(result.status).toBe('building');
+    expect(mockDb.acquireDeployLock).toHaveBeenCalledWith('p1', 'session-1');
+    expect(mockServiceManager.create).toHaveBeenCalledTimes(1);
   });
 
   // (e) Idempotency: approved provisioning upserts a connection row, and a
