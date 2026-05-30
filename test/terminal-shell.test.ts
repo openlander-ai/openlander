@@ -56,11 +56,17 @@ function createInteractiveExec() {
   };
 }
 
-function createTestHarness(execFactory: (cmd: string[]) => ExecMock) {
+type DeployableRecord = { status?: string; container_id?: string | null };
+
+function createTestHarness(
+  execFactory: (cmd: string[]) => ExecMock,
+  overrides?: { project?: Partial<ProjectRecord>; deployable?: DeployableRecord },
+) {
   const project: ProjectRecord = {
     id: 'p1',
     status: 'running',
     container_id: 'container-1',
+    ...overrides?.project,
   };
   const execCalls: string[][] = [];
   const ctx = {
@@ -76,7 +82,7 @@ function createTestHarness(execFactory: (cmd: string[]) => ExecMock) {
       getSession: vi.fn().mockReturnValue(null),
       createSession: vi.fn(),
       deleteSession: vi.fn(),
-      getDeployableForProject: vi.fn().mockReturnValue(undefined),
+      getDeployableForProject: vi.fn().mockReturnValue(overrides?.deployable),
     },
     docker: {
       inspectContainer: vi.fn().mockResolvedValue({ State: { Running: true } }),
@@ -211,5 +217,67 @@ describe('createTerminalRoutes shell fallback', () => {
       }),
     );
     expect(harness.ws.close).toHaveBeenCalled();
+  });
+});
+
+describe('createTerminalRoutes container gate (S2.2 ServiceView)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const NOT_RUNNING = JSON.stringify({ type: 'error', message: 'Container is not running' });
+  const failIfProbed = () => {
+    throw new Error('shell should not be probed when the container gate closes');
+  };
+
+  it('closes when the deployable row is non-running, overriding a running project', async () => {
+    const harness = createTestHarness(failIfProbed, {
+      project: { status: 'running', container_id: 'container-1' },
+      deployable: { status: 'stopped', container_id: 'svc-container' },
+    });
+
+    harness.handlers.onOpen({}, harness.ws);
+    await flushAsyncWork();
+
+    expect(harness.ws.send).toHaveBeenCalledWith(NOT_RUNNING);
+    expect(harness.ws.close).toHaveBeenCalled();
+    expect(harness.execCalls).toEqual([]);
+  });
+
+  it('closes via the deprecated project columns when no deployable row exists', async () => {
+    const harness = createTestHarness(failIfProbed, {
+      project: { status: 'stopped', container_id: 'container-1' },
+      deployable: undefined,
+    });
+
+    harness.handlers.onOpen({}, harness.ws);
+    await flushAsyncWork();
+
+    expect(harness.ws.send).toHaveBeenCalledWith(NOT_RUNNING);
+    expect(harness.execCalls).toEqual([]);
+  });
+
+  it('opens when the deployable row is running, overriding a stopped project', async () => {
+    const interactive = createInteractiveExec();
+    const harness = createTestHarness(
+      (cmd) => {
+        if (cmd[0] === '/bin/bash' && cmd[1] === '-c') return createProbeExec(0);
+        if (cmd[0] === '/bin/bash') return interactive.exec;
+        throw new Error(`Unexpected command: ${cmd.join(' ')}`);
+      },
+      {
+        project: { status: 'stopped', container_id: 'old-container' },
+        deployable: { status: 'running', container_id: 'svc-container' },
+      },
+    );
+
+    harness.handlers.onOpen({}, harness.ws);
+    await flushAsyncWork();
+
+    expect(harness.ws.send).not.toHaveBeenCalledWith(NOT_RUNNING);
+    expect(harness.execCalls).toEqual([['/bin/bash', '-c', 'exit 0'], ['/bin/bash']]);
+
+    harness.handlers.onClose({}, harness.ws);
+    interactive.stream.destroy();
   });
 });
