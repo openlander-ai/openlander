@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Database, ProjectRow } from '../../src/db/index.js';
+import type { Database, ProjectRow, ServiceRow } from '../../src/db/index.js';
 import type { EventBus, EventPayload } from '../../src/events/index.js';
 import type { Docker } from '../../src/pipeline/docker.js';
 import { ContainerStateReconciler } from '../../src/monitor/container-state-reconciler.js';
@@ -53,6 +53,17 @@ function createProject(partial?: Partial<ProjectRow>): ProjectRow {
     server_id: partial?.server_id ?? 'local',
     recovering_started_at: partial?.recovering_started_at ?? null,
   };
+}
+
+function createService(partial?: Partial<ServiceRow>): ServiceRow {
+  return {
+    id: partial?.id ?? 'project-1__svc',
+    name: partial?.name ?? 'project-1__svc',
+    project_id: partial?.project_id ?? 'project-1',
+    kind: partial?.kind ?? 'git',
+    status: partial?.status ?? 'recovering',
+    recovering_started_at: partial?.recovering_started_at ?? null,
+  } as ServiceRow;
 }
 
 describe('ContainerStateReconciler — recovering watchdog (Fix 3)', () => {
@@ -149,6 +160,34 @@ describe('ContainerStateReconciler — recovering watchdog (Fix 3)', () => {
     await reconciler.reconcile();
 
     expect(stateManager.transition).not.toHaveBeenCalled();
+  });
+
+  it('uses canonical service recovering timestamp before stale project timestamp', async () => {
+    const staleProject = createProject({
+      id: 'canonical-recovering',
+      status: 'recovering',
+      recovering_started_at: FIVE_MINUTES_AGO,
+      container_id: null,
+    });
+    const canonicalService = createService({
+      id: 'canonical-recovering__svc',
+      project_id: 'canonical-recovering',
+      recovering_started_at: SIXTY_ONE_MINUTES_AGO,
+    });
+
+    (db.listProjects as ReturnType<typeof vi.fn>).mockImplementation((status?: string) => {
+      if (status === 'recovering') return [staleProject];
+      return [staleProject];
+    });
+    (db.listServices as ReturnType<typeof vi.fn>).mockReturnValue([canonicalService]);
+
+    await reconciler.reconcile();
+
+    expect(stateManager.transition).toHaveBeenCalledWith(
+      'canonical-recovering',
+      'error',
+      'recovering-timeout',
+    );
   });
 
   it('emits project:status-changed event when timing out stuck recovery', async () => {
