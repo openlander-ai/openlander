@@ -226,8 +226,23 @@ export async function loadServiceView(
   db: Pick<Database, 'getDeployableForProject'>,
   project: ProjectRow,
 ): Promise<ServiceView> {
+  return (await loadServiceViewRecord(db, project)).view;
+}
+
+/**
+ * Resolve both halves of the projection for callers that still need the
+ * canonical service row to perform a write (for example, monitor status sync).
+ */
+export async function loadServiceViewRecord(
+  db: Pick<Database, 'getDeployableForProject'>,
+  project: ProjectRow,
+): Promise<ServiceViewRecord> {
   const service = (await db.getDeployableForProject(project.id)) ?? null;
-  return serviceViewFromRows(project, service);
+  return {
+    project,
+    service,
+    view: serviceViewFromRows(project, service),
+  };
 }
 
 /**

@@ -15,6 +15,7 @@
 
 import type { Docker } from '../pipeline/docker.js';
 import type { Database } from '../db/index.js';
+import { loadServiceView } from '../db/views/service-view.js';
 import type { EventBus } from '../events/index.js';
 import { DOCKER_LABELS } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
@@ -211,10 +212,8 @@ export class DockerEventListener {
 
     const project = await this.db.getProject(projectId);
     if (!project) return;
-    // PR 4.5: canonical-first status read with `??` fallback.
-    const oomDeployable = await this.db.getDeployableForProject(projectId);
-    const oomStatus = oomDeployable?.status ?? project.status;
-    if (oomStatus !== 'running' || project.archived_at) return;
+    const view = await loadServiceView(this.db, project);
+    if (view.status !== 'running' || project.archived_at) return;
 
     await this.events.emit('container:oom', {
       projectId,
@@ -248,9 +247,8 @@ export class DockerEventListener {
 
     const project = await this.db.getProject(projectId);
     if (!project) return;
-    // PR 4.5: canonical-first status read with `??` fallback.
-    const dieDeployable = await this.db.getDeployableForProject(projectId);
-    const activeContainerId = dieDeployable?.container_id ?? project.container_id;
+    const view = await loadServiceView(this.db, project);
+    const activeContainerId = view.containerId;
     if (activeContainerId && activeContainerId !== containerId) {
       log.debug(
         { projectId, containerId, activeContainerId },
@@ -258,8 +256,7 @@ export class DockerEventListener {
       );
       return;
     }
-    const dieStatus = dieDeployable?.status ?? project.status;
-    if (dieStatus !== 'running') return;
+    if (view.status !== 'running') return;
     if (project.archived_at) return;
 
     this.recentCrashes.set(containerId, Date.now());

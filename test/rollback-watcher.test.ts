@@ -431,6 +431,7 @@ describe('RollbackWatcher', () => {
       url: 'http://p2.localhost',
       totalDurationMs: 1000,
     });
+    await flushAsyncEventHandlers();
 
     // p1 fails 3 times → triggers rollback
     await events.emit('monitor:healthcheck', {
@@ -460,6 +461,7 @@ describe('RollbackWatcher', () => {
       healthy: false,
       responseTimeMs: 100,
     });
+    await flushAsyncEventHandlers();
 
     expect(rollbackHandler).toHaveBeenCalledOnce();
     expect(rollbackHandler).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'p1' }));
