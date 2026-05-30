@@ -94,6 +94,8 @@ export function ProjectHeader({
 
   const displayStatus = project.status;
   const displayPublicUrl = project.publicUrl;
+  const isPartiallyArchived =
+    project.partiallyArchived === true || project.partially_archived === true;
 
   const status = statusConfig[displayStatus] ?? statusConfig.stopped;
   const isBuilding = displayStatus === 'building';
@@ -190,6 +192,11 @@ export function ProjectHeader({
               <h1 className="font-display font-bold text-lg text-foreground tracking-tight truncate">
                 {project.displayName ?? project.name}
               </h1>
+              {isPartiallyArchived && (
+                <span className="inline-flex items-center rounded-full bg-warning/10 px-2 py-0.5 text-[10.5px] font-medium text-warning">
+                  {t('projects.card.partiallyArchivedBadge')}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-foreground/80">
               <span className={status.color}>{status.label}</span>
@@ -317,7 +324,11 @@ export function ProjectHeader({
                   className="text-warning focus:text-warning"
                 >
                   <Archive className="h-3.5 w-3.5 mr-2" />
-                  {t('projects.archive.button')}
+                  {t(
+                    isPartiallyArchived
+                      ? 'projects.archive.remainingButton'
+                      : 'projects.archive.button',
+                  )}
                 </DropdownMenuItem>
               ) : (
                 <>

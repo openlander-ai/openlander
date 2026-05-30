@@ -28,6 +28,8 @@ export function SettingsTab({
   const [confirmAction, setConfirmAction] = useState<ProjectDangerAction | null>(null);
   const [actionLoading, setActionLoading] = useState<ProjectDangerAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const isPartiallyArchived =
+    project?.partiallyArchived === true || project?.partially_archived === true;
 
   const navItems: { id: SettingsSection; label: string }[] = [
     { id: 'general', label: t('settings.nav.general') },
@@ -58,9 +60,17 @@ export function SettingsTab({
   const confirmCopy =
     confirmAction === 'archive'
       ? {
-          title: t('projects.archive.button'),
-          description: t('projects.archive.description'),
-          confirmLabel: t('projects.archive.button'),
+          title: t(
+            isPartiallyArchived ? 'projects.archive.remainingButton' : 'projects.archive.button',
+          ),
+          description: t(
+            isPartiallyArchived
+              ? 'projects.archive.remainingDescription'
+              : 'projects.archive.description',
+          ),
+          confirmLabel: t(
+            isPartiallyArchived ? 'projects.archive.remainingButton' : 'projects.archive.button',
+          ),
           variant: 'default' as const,
         }
       : confirmAction === 'unarchive'
@@ -146,12 +156,16 @@ export function SettingsTab({
                   <h4 className="text-sm font-medium text-foreground">
                     {project?.archived_at
                       ? t('projectDetail.danger.restoreTitle')
-                      : t('projectDetail.danger.archiveTitle')}
+                      : isPartiallyArchived
+                        ? t('projectDetail.danger.partialArchiveTitle')
+                        : t('projectDetail.danger.archiveTitle')}
                   </h4>
                   <p className="mt-1 text-xs text-foreground/70">
                     {project?.archived_at
                       ? t('projectDetail.danger.restoreBody')
-                      : t('projectDetail.danger.archiveBody')}
+                      : isPartiallyArchived
+                        ? t('projectDetail.danger.partialArchiveBody')
+                        : t('projectDetail.danger.archiveBody')}
                   </p>
                 </div>
                 <Button
@@ -167,7 +181,9 @@ export function SettingsTab({
                   )}
                   {project?.archived_at
                     ? t('projects.unarchive.button')
-                    : t('projects.archive.button')}
+                    : isPartiallyArchived
+                      ? t('projects.archive.remainingButton')
+                      : t('projects.archive.button')}
                 </Button>
               </div>
             </div>

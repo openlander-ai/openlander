@@ -384,6 +384,7 @@ export const translations = {
     },
     card: {
       archivedBadge: 'Archived',
+      partiallyArchivedBadge: 'Partially archived',
       lastDeploy: 'Last Deploy',
       branch: 'Branch',
       endpoint: 'Endpoint',
@@ -391,9 +392,12 @@ export const translations = {
     },
     archive: {
       button: 'Archive',
+      remainingButton: 'Archive remaining',
       success: 'Project archived',
       description:
         'Archive this project? The container will be stopped, but all configuration and history will be preserved.',
+      remainingDescription:
+        'Archive the remaining active services in this project? Already archived services will stay archived.',
     },
     unarchive: {
       button: 'Restore',
@@ -434,6 +438,9 @@ export const translations = {
       archiveTitle: 'Archive project',
       archiveBody:
         'Stop the project and hide it from default lists while preserving configuration.',
+      partialArchiveTitle: 'Archive remaining services',
+      partialArchiveBody:
+        'Some services are already archived. Archive the remaining active services to finish archiving this project group.',
       restoreTitle: 'Restore project',
       restoreBody: 'Bring this archived project back to the default project list.',
       deleteTitle: 'Permanently delete project',

@@ -153,6 +153,7 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
             status: mapped.status,
             visibility: mapped.visibility,
             source: mapped.source,
+            archived_at: partiallyArchived ? null : mapped.archived_at,
             port: mapped.port,
             url: mapped.url,
             urls: mapped.urls,
