@@ -63,12 +63,19 @@ function makeService(overrides: Partial<ServiceRow> = {}): ServiceRow {
   };
 }
 
-function makeDb(project: ProjectRow, service: ServiceRow): Database {
+function makeDb(
+  project: ProjectRow,
+  service: ServiceRow,
+  overrides: Partial<Record<keyof Database, unknown>> = {},
+): Database {
   return {
     getProjectByName: vi.fn(async () => project),
     getDeployableForProject: vi.fn(async () => service),
+    listProjects: vi.fn(async () => [project]),
+    getServices: vi.fn(async () => [service]),
     getEnvVars: vi.fn(async () => ({})),
     getDeployLogs: vi.fn(async () => []),
+    ...overrides,
   } as unknown as Database;
 }
 
@@ -92,5 +99,18 @@ describe('generateSmartDefaults ServiceView reads', () => {
         data: { reuseProject: true, projectId: 'project-1' },
       }),
     );
+  });
+
+  it('matches previous projects by canonical service repo URL', async () => {
+    const db = makeDb(makeProject({ name: 'other-name' }), makeService(), {
+      getProjectByName: vi.fn(async () => undefined),
+    });
+
+    const result = await generateSmartDefaults(db, {
+      repoUrl: 'https://github.com/example/demo',
+    });
+
+    expect(result.previousProject?.id).toBe('project-1');
+    expect(db.getServices).toHaveBeenCalledWith({ ids: ['project-1__svc'] });
   });
 });

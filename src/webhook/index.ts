@@ -3,6 +3,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { nanoid } from 'nanoid';
 
 import type { Database } from '../db/index.js';
+import { loadServiceViewRecord } from '../db/views/service-view.js';
 import type { EventBus } from '../events/index.js';
 import type { AgentPool } from '../_ai-ops/agent-pool.js';
 import type { DeployPipeline } from '../pipeline/deploy.js';
@@ -175,11 +176,11 @@ export class WebhookManager {
       }
 
       const previewName = `${project.name}-pr-${String(prEvent.prNumber)}`;
-      const deployable = await this.db.getDeployableForProject(projectId);
+      const repoUrl = (await loadServiceViewRecord(this.db, project)).view.repoUrl;
       const result = await this.pipeline.deployPreview({
         parentProjectId: projectId,
         previewName,
-        repoUrl: prEvent.repoUrl || deployable?.repo_url || '',
+        repoUrl: prEvent.repoUrl || repoUrl || '',
         branch: prEvent.branch,
         prNumber: prEvent.prNumber,
         commitSha: prEvent.commitSha,

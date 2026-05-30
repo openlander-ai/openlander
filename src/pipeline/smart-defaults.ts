@@ -17,7 +17,7 @@
 
 import type { Database, ProjectRow, DeployLogRow } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
-import { loadServiceView } from '../db/views/service-view.js';
+import { loadServiceView, loadServiceViewRecords } from '../db/views/service-view.js';
 
 const log = createModuleLogger('smart-defaults');
 
@@ -183,10 +183,11 @@ async function findPreviousProject(
   // Match by repo URL across all projects
   const allProjects = await db.listProjects();
   const normalizedUrl = normalizeUrl(input.repoUrl);
+  const records = await loadServiceViewRecords(db, allProjects);
 
   for (const project of allProjects) {
-    const deployable = await db.getDeployableForProject(project.id);
-    if (deployable?.repo_url && normalizeUrl(deployable.repo_url) === normalizedUrl) {
+    const repoUrl = records.get(project.id)?.view.repoUrl;
+    if (repoUrl && normalizeUrl(repoUrl) === normalizedUrl) {
       return project;
     }
   }
