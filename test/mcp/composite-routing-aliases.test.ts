@@ -96,6 +96,7 @@ describe('openlander_project runtime aliases removed', () => {
       expect(result).toHaveProperty('composite', 'openlander_project');
       const guidance = result['_agent_guidance'] as Record<string, unknown>;
       expect(String(guidance['message'])).toMatch(/Settings → Danger zone/);
+      expect(String(guidance['message'])).toMatch(/multiple deployable services|service_id/);
     }
   });
 

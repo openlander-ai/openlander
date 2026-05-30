@@ -151,6 +151,11 @@ to restore an archived deployable without redeploying it. These are not a
 substitute for managed service deletion and do not delete databases, volumes,
 buckets, or host-wide Docker resources.
 
+Project group archive/restore remains web UI-only in OpenLander 0.1. A group can
+contain multiple deployable app/worker services, so agents should target a
+specific `service_id` with `archive_service` / `unarchive_service` instead of
+trying to archive the whole group over MCP.
+
 ---
 
 ## Backups
