@@ -75,6 +75,7 @@ describe('context-assembler', () => {
       // PR 3: context-assembler now queries services for canonical parent hierarchy
       getService: () => undefined,
       getDeployableForProject: () => undefined,
+      getServices: () => [],
     };
   });
 
@@ -100,6 +101,29 @@ describe('context-assembler', () => {
       const snapshot = await buildContextSnapshot(mockDb as Database);
       expect(snapshot).toContain('10001');
       expect(snapshot).toContain('10002');
+    });
+
+    it('batch-loads canonical service views for project context', async () => {
+      const getDeployableForProject = vi.fn();
+      const getServices = vi.fn(() => [
+        {
+          id: 'proj-2__svc',
+          project_id: 'proj-2',
+          name: 'backend__svc',
+          status: 'running',
+          assigned_port: 12002,
+        },
+      ]);
+      mockDb.getDeployableForProject = getDeployableForProject;
+      mockDb.getServices = getServices as unknown as Database['getServices'];
+
+      const snapshot = await buildContextSnapshot(mockDb as Database);
+
+      expect(getServices).toHaveBeenCalledOnce();
+      expect(getServices).toHaveBeenCalledWith({ ids: ['proj-1__svc', 'proj-2__svc'] });
+      expect(getDeployableForProject).not.toHaveBeenCalled();
+      expect(snapshot).toContain('backend (running)');
+      expect(snapshot).toContain('12002');
     });
 
     it('should include global secrets summary', async () => {
@@ -141,12 +165,12 @@ describe('context-assembler', () => {
   });
 
   describe('buildIncidentBriefing', () => {
-    it('should return empty string for no incidents', () => {
-      const briefing = buildIncidentBriefing([], mockDb as Database);
+    it('should return empty string for no incidents', async () => {
+      const briefing = await buildIncidentBriefing([], mockDb as Database);
       expect(briefing).toBe('');
     });
 
-    it('should include incident header for incidents', () => {
+    it('should include incident header for incidents', async () => {
       const incidents: RuntimeIncidentRow[] = [
         {
           id: 'inc-1',
@@ -157,11 +181,11 @@ describe('context-assembler', () => {
           created_at: '2025-01-01T00:00:00Z',
         } as RuntimeIncidentRow,
       ];
-      const briefing = buildIncidentBriefing(incidents, mockDb as Database);
+      const briefing = await buildIncidentBriefing(incidents, mockDb as Database);
       expect(briefing).toContain('⚠️ Active incidents:');
     });
 
-    it('should include project name in incident briefing', () => {
+    it('should include project name in incident briefing', async () => {
       const incidents: RuntimeIncidentRow[] = [
         {
           id: 'inc-1',
@@ -173,11 +197,11 @@ describe('context-assembler', () => {
           created_at: '2025-01-01T00:00:00Z',
         } as RuntimeIncidentRow,
       ];
-      const briefing = buildIncidentBriefing(incidents, mockDb as Database);
+      const briefing = await buildIncidentBriefing(incidents, mockDb as Database);
       expect(briefing).toContain('frontend');
     });
 
-    it('should include incident category', () => {
+    it('should include incident category', async () => {
       const incidents: RuntimeIncidentRow[] = [
         {
           id: 'inc-1',
@@ -188,11 +212,11 @@ describe('context-assembler', () => {
           created_at: '2025-01-01T00:00:00Z',
         } as RuntimeIncidentRow,
       ];
-      const briefing = buildIncidentBriefing(incidents, mockDb as Database);
+      const briefing = await buildIncidentBriefing(incidents, mockDb as Database);
       expect(briefing).toContain('crash');
     });
 
-    it('should include error snippet in briefing', () => {
+    it('should include error snippet in briefing', async () => {
       const incidents: RuntimeIncidentRow[] = [
         {
           id: 'inc-1',
@@ -203,11 +227,11 @@ describe('context-assembler', () => {
           created_at: '2025-01-01T00:00:00Z',
         } as RuntimeIncidentRow,
       ];
-      const briefing = buildIncidentBriefing(incidents, mockDb as Database);
+      const briefing = await buildIncidentBriefing(incidents, mockDb as Database);
       expect(briefing).toContain('Out of memory');
     });
 
-    it('should handle null error snippet', () => {
+    it('should handle null error snippet', async () => {
       const incidents: RuntimeIncidentRow[] = [
         {
           id: 'inc-1',
@@ -218,11 +242,11 @@ describe('context-assembler', () => {
           created_at: '2025-01-01T00:00:00Z',
         } as RuntimeIncidentRow,
       ];
-      const briefing = buildIncidentBriefing(incidents, mockDb as Database);
+      const briefing = await buildIncidentBriefing(incidents, mockDb as Database);
       expect(briefing).toContain('n/a');
     });
 
-    it('should count restart attempts', () => {
+    it('should count restart attempts', async () => {
       const incidents: RuntimeIncidentRow[] = [
         {
           id: 'inc-1',
@@ -233,7 +257,7 @@ describe('context-assembler', () => {
           created_at: '2025-01-01T00:00:00Z',
         } as RuntimeIncidentRow,
       ];
-      const briefing = buildIncidentBriefing(incidents, mockDb as Database);
+      const briefing = await buildIncidentBriefing(incidents, mockDb as Database);
       expect(briefing).toContain('5x crashes');
     });
   });
@@ -292,6 +316,7 @@ describe('context-assembler', () => {
         // PR 3: context-assembler now queries services for canonical parent hierarchy
         getService: () => undefined,
         getDeployableForProject: () => undefined,
+        getServices: () => [],
       };
     });
 
@@ -474,6 +499,7 @@ describe('context-assembler', () => {
         getTopDeploymentPatterns: vi.fn().mockReturnValue(mockPatterns),
         getService: () => undefined,
         getDeployableForProject: () => undefined,
+        getServices: () => [],
       };
       const result = await buildContextSnapshot(mockDb as unknown as Database, undefined, {
         type: 'project',
@@ -512,6 +538,7 @@ describe('context-assembler', () => {
         getTopDeploymentPatterns: vi.fn().mockReturnValue([]),
         getService: () => undefined,
         getDeployableForProject: () => undefined,
+        getServices: () => [],
       };
       const result = await buildContextSnapshot(mockDb as unknown as Database, undefined, {
         type: 'project',
@@ -539,6 +566,7 @@ describe('context-assembler', () => {
         getTopDeploymentPatterns,
         getService: () => undefined,
         getDeployableForProject: () => undefined,
+        getServices: () => [],
       };
       await buildContextSnapshot(mockDb as unknown as Database, undefined, undefined);
       expect(getTopDeploymentPatterns).not.toHaveBeenCalled();
@@ -562,6 +590,7 @@ describe('context-assembler', () => {
         getTopDeploymentPatterns: vi.fn().mockReturnValue([]),
         getService: () => undefined,
         getDeployableForProject: () => undefined,
+        getServices: () => [],
       };
       const result = await buildContextSnapshot(mockDb as unknown as Database);
       expect(result).toContain('Known fix categories');
@@ -608,6 +637,7 @@ describe('context-assembler', () => {
         getTopDeploymentPatterns: vi.fn().mockReturnValue(longPatterns),
         getService: () => undefined,
         getDeployableForProject: () => undefined,
+        getServices: () => [],
       };
       const result = await buildContextSnapshot(mockDb as unknown as Database, undefined, {
         type: 'project',
