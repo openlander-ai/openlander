@@ -127,6 +127,12 @@ function buildHumanUiOnlyResponse(toolName: string): SafetyResult {
   };
 }
 
+function isAllowedMcpPreview(def: ToolDef, args: Record<string, unknown>): boolean {
+  // Keep this narrow: only read-only previews may bypass the human-UI-only MCP gate.
+  if (def.name !== 'platform_cleanup_orphans') return false;
+  return args['dry_run'] !== false;
+}
+
 export async function maybeHandleMcpSafety(
   def: ToolDef,
   args: Record<string, unknown>,
@@ -137,7 +143,7 @@ export async function maybeHandleMcpSafety(
   const targetProjectId = await resolveMcpTargetProjectId(context.appCtx, args, context.identity);
   await assertMcpActiveScope(context.appCtx, targetProjectId, false, context.identity);
 
-  if (GROUP_A_HUMAN_UI_ONLY.has(def.name)) {
+  if (GROUP_A_HUMAN_UI_ONLY.has(def.name) && !isAllowedMcpPreview(def, args)) {
     return buildHumanUiOnlyResponse(def.name);
   }
 

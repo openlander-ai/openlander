@@ -119,22 +119,22 @@ describe('platform-action tools', () => {
     }
   });
 
-  it('platform_cleanup_orphans rejects confirm=false', async () => {
+  it('platform_cleanup_orphans rejects execution without confirm=true', async () => {
     const { ctx } = createMockPlatformActionContext();
 
     await expect(
       getTool('platform_cleanup_orphans').execute(
-        { confirm: false },
+        { dry_run: false },
         { target: 'mcp', appCtx: ctx },
       ),
     ).rejects.toThrow('CONFIRMATION_REQUIRED');
   });
 
-  it('platform_reconcile rejects confirm=false', async () => {
+  it('platform_reconcile rejects execution without confirm=true', async () => {
     const { ctx } = createMockPlatformActionContext();
 
     await expect(
-      getTool('platform_reconcile').execute({ confirm: false }, { target: 'mcp', appCtx: ctx }),
+      getTool('platform_reconcile').execute({ dry_run: false }, { target: 'mcp', appCtx: ctx }),
     ).rejects.toThrow('CONFIRMATION_REQUIRED');
   });
 
@@ -229,10 +229,15 @@ describe('platform-action tools', () => {
       projects: [{ id: 'p1', name: 'app', container_id: 'known' }],
       services: [],
     });
+    const tool = getTool('platform_cleanup_orphans');
+    expect(tool.inputSchema.safeParse({ dry_run: true }).success).toBe(true);
 
-    const result = (await getTool('platform_cleanup_orphans').execute(
-      { confirm: true, dry_run: true },
-      { target: 'mcp', appCtx: ctx },
+    const result = (await tool.execute(
+      {},
+      {
+        target: 'mcp',
+        appCtx: ctx,
+      },
     )) as {
       mode: string;
       orphans_found: number;
@@ -328,11 +333,10 @@ describe('platform-action tools', () => {
       projects: [{ id: 'p1', name: 'ghost-app', container_id: 'missing-c1', status: 'running' }],
     });
     dockerMocks.inspectContainer.mockRejectedValueOnce(new Error('No such container: missing-c1'));
+    const tool = getTool('platform_reconcile');
+    expect(tool.inputSchema.safeParse({ dry_run: true }).success).toBe(true);
 
-    const result = (await getTool('platform_reconcile').execute(
-      { confirm: true, dry_run: true },
-      { target: 'mcp', appCtx: ctx },
-    )) as {
+    const result = (await tool.execute({}, { target: 'mcp', appCtx: ctx })) as {
       mode: string;
       actions: Array<{ type: string; target: string }>;
     };

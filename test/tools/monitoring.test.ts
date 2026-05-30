@@ -1144,6 +1144,19 @@ describe('service-targeted monitoring tools', () => {
     });
   });
 
+  it('get_project_stats points agents at explicit target parameters', () => {
+    const { ctx } = createServiceTargetContext();
+    const tool = getMonitoringTool(ctx, 'get_project_stats');
+    const parsed = tool.inputSchema.safeParse({ project: 'app' });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]?.message).toBe(
+        'service_id, service_name, project_id, project_name, or container_name is required',
+      );
+    }
+  });
+
   it('diagnose_service accepts project_id targets', async () => {
     const { ctx, service } = createServiceTargetContext();
     const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(

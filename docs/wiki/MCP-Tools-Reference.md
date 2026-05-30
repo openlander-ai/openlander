@@ -822,16 +822,26 @@ Platform health summary. No parameters.
 
 Without `confirm=true`, this returns the service row that would be created and makes no DB changes. With `confirm=true`, OpenLander registers the existing container as an adopted custom image service. Adopted services support logs, restart, stop, and remove; build/redeploy is rejected with `SERVICE_OPERATION_UNSUPPORTED`.
 
-### `platform_cleanup_orphans` / `platform_reconcile` / `platform_force_remove`
+### `platform_cleanup_orphans` / `platform_reconcile`
 
-| Parameter      | Type    | Required           | Description                  |
-| -------------- | ------- | ------------------ | ---------------------------- |
-| `confirm`      | boolean | Yes                | Must be true                 |
-| `dry_run`      | boolean | No                 | Preview mode (default: true) |
-| `container_id` | string  | Yes (force_remove) | Container ID                 |
+| Parameter | Type    | Required           | Description                      |
+| --------- | ------- | ------------------ | -------------------------------- |
+| `confirm` | boolean | Yes (execute only) | Must be true when not previewing |
+| `dry_run` | boolean | No                 | Preview mode (default: true)     |
 
-`platform_reconcile` is MCP-executable when platform tools are enabled. `platform_cleanup_orphans`,
-`platform_force_remove`, and `recover_platform` are human-only in OpenLander 0.1 and return
+`platform_cleanup_orphans` and `platform_reconcile` default to dry-run preview and make no
+changes without `dry_run=false` plus `confirm=true`. `platform_cleanup_orphans` execution and
+`recover_platform` are human-only in OpenLander 0.1 and return
+`OPERATION_REQUIRES_HUMAN_UI` from MCP.
+
+### `platform_force_remove`
+
+| Parameter      | Type    | Required | Description  |
+| -------------- | ------- | -------- | ------------ |
+| `container_id` | string  | Yes      | Container ID |
+| `confirm`      | boolean | Yes      | Must be true |
+
+`platform_force_remove` has no dry-run mode. It is human-only in OpenLander 0.1 and returns
 `OPERATION_REQUIRES_HUMAN_UI` from MCP.
 
 ---

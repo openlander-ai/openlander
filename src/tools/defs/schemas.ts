@@ -234,12 +234,12 @@ export const platformDbInspectSchema = z.object({
 });
 
 export const platformCleanupOrphansSchema = z.object({
-  confirm: z.boolean(),
+  confirm: z.boolean().optional(),
   dry_run: z.boolean().optional().default(true),
 });
 
 export const platformReconcileSchema = z.object({
-  confirm: z.boolean(),
+  confirm: z.boolean().optional(),
   dry_run: z.boolean().optional().default(true),
 });
 

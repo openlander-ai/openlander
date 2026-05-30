@@ -20,6 +20,16 @@ function ensureConfirmed(confirm: boolean, toolName: string): void {
   }
 }
 
+function ensureConfirmedForExecution(
+  confirm: boolean | undefined,
+  dryRun: boolean,
+  toolName: string,
+): void {
+  if (!dryRun) {
+    ensureConfirmed(confirm === true, toolName);
+  }
+}
+
 function stripDockerName(name: string | undefined): string {
   if (!name) {
     return 'unknown';
@@ -217,9 +227,9 @@ export const platformActionToolDefs: ToolDef[] = [
       'Corrective action: detect and remove orphan OpenLander-managed containers with dry-run support.',
     inputSchema: platformCleanupOrphansSchema,
     execute: async (args, context) => {
-      const confirm = args['confirm'] as boolean;
+      const confirm = args['confirm'] as boolean | undefined;
       const dryRun = (args['dry_run'] as boolean | undefined) ?? true;
-      ensureConfirmed(confirm, 'platform_cleanup_orphans');
+      ensureConfirmedForExecution(confirm, dryRun, 'platform_cleanup_orphans');
 
       const managedContainers = await context.appCtx.docker.listManagedContainers();
       const projects = await context.appCtx.db.listProjects();
@@ -290,9 +300,9 @@ export const platformActionToolDefs: ToolDef[] = [
       'Corrective action: reconcile DB records against managed Docker containers (dry-run supported).',
     inputSchema: platformReconcileSchema,
     execute: async (args, context) => {
-      const confirm = args['confirm'] as boolean;
+      const confirm = args['confirm'] as boolean | undefined;
       const dryRun = (args['dry_run'] as boolean | undefined) ?? true;
-      ensureConfirmed(confirm, 'platform_reconcile');
+      ensureConfirmedForExecution(confirm, dryRun, 'platform_reconcile');
 
       const managedContainers = await context.appCtx.docker.listManagedContainers();
       const projects = await context.appCtx.db.listProjects();
