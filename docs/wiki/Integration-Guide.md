@@ -202,7 +202,7 @@ Local stdio connections (Claude Desktop, Cursor, Windsurf) don't need tokens —
 
 ## Available Tools
 
-Once connected, AI agents see **5 composite MCP tools** covering **69 unique default operations** (83 routed composite actions, plus 13 optional platform tools with `config.mcp.platformTools: true`; the default is `false`). Each composite takes `{ action, params }`:
+Once connected, AI agents see **5 composite MCP tools** covering **71 unique default operations** (85 routed composite actions, plus 13 optional platform tools with `config.mcp.platformTools: true`; the default is `false`). Each composite takes `{ action, params }`:
 
 | Composite                    | Actions | Purpose                                                         |
 | ---------------------------- | ------- | --------------------------------------------------------------- |

@@ -12,11 +12,12 @@ import { serviceToolDefs } from '../../src/tools/defs/service.js';
 import { volumeToolDefs } from '../../src/tools/defs/volume.js';
 import type { ToolDef } from '../../src/tools/defs/types.js';
 
-/** Snapshot of non-platform MCP ToolDefs. Project runtime aliases are removed. */
+/** Snapshot of non-platform MCP ToolDefs. Legacy project runtime aliases are removed. */
 const EXPECTED_TOOLS = [
   'add_domain_route',
   'add_volume',
   'analyze_infrastructure',
+  'archive_project',
   'archive_service',
   'backup_service',
   'bulk_delete_env_vars',
@@ -77,6 +78,7 @@ const EXPECTED_TOOLS = [
   'set_global_secret',
   'start_service',
   'stop_service',
+  'unarchive_project',
   'unarchive_service',
   'unexpose_public',
   'update_deploy_plan',
@@ -86,13 +88,11 @@ const EXPECTED_TOOLS = [
 ];
 
 const REMOVED_PROJECT_RUNTIME_TOOLS = [
-  'archive_project',
   'redeploy_project',
   'restart_project',
   'rollback_project',
   'start_project',
   'stop_project',
-  'unarchive_project',
   'update_project_config',
 ];
 
@@ -129,8 +129,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 69 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(69);
+  it('maintains exactly 71 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(71);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

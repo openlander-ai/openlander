@@ -2,7 +2,8 @@
  * Vocabulary audit — guardrails for the Project=group / Service=deployable model.
  *
  * Runtime/deploy actions belong to services only. Project composite keeps group
- * listing and project-scoped configuration, but no *_project runtime aliases.
+ * lifecycle, listing, and project-scoped configuration, but no deploy/runtime
+ * *_project aliases.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -22,13 +23,13 @@ const PROJECT_RUNTIME_ACTIONS_REMOVED = [
   'restart_project',
   'redeploy_project',
   'rollback_project',
-  'archive_project',
-  'unarchive_project',
   'update_project_config',
 ] as const;
 
 const FROZEN_PROJECT_GROUP_ACTIONS = [
   'list_projects',
+  'archive_project',
+  'unarchive_project',
   'list_env_vars',
   'get_env_var',
   'set_env_vars',
@@ -70,6 +71,7 @@ const FROZEN_MANAGED_SERVICE_ACTIONS = [
 
 const FROZEN_DEPLOYABLE_SERVICE_ACTIONS = [
   'archive_service',
+  'unarchive_service',
   'restart_service',
   'redeploy_app',
   'rollback_service',

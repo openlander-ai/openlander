@@ -1,12 +1,52 @@
+import { z } from 'zod';
+
 import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import type { ServiceRow } from '../../db/types.js';
 import { loadServiceViewRecords, serviceViewFromRows } from '../../db/views/service-view.js';
+import { ProjectNotFoundError } from '../../errors.js';
 import { emptySchema } from './schemas.js';
 import type { ToolDef } from './types.js';
 
 const log = createModuleLogger('tools-defs-project-ops');
+
+type ProjectOpsContext = Parameters<ToolDef['execute']>[1];
+type ProjectRow = Awaited<ReturnType<ProjectOpsContext['appCtx']['db']['getProject']>>;
+type ResolvedProjectRow = NonNullable<ProjectRow>;
+
+const projectLifecycleSchema = z
+  .object({
+    project_id: z.string().min(1).optional().describe('Project group id'),
+    project_name: z.string().min(1).optional().describe('Project group name'),
+  })
+  .refine((value) => Boolean(value.project_id || value.project_name), {
+    message: 'project_id or project_name is required',
+  });
+
+async function resolveProjectGroup(
+  args: Record<string, unknown>,
+  context: ProjectOpsContext,
+): Promise<ResolvedProjectRow> {
+  const projectId = typeof args['project_id'] === 'string' ? args['project_id'].trim() : '';
+  const projectName = typeof args['project_name'] === 'string' ? args['project_name'].trim() : '';
+  const project = projectId
+    ? await context.appCtx.db.getProject(projectId)
+    : ((await context.appCtx.db.getProject(projectName)) ??
+      (await context.appCtx.db.getProjectByName(projectName)));
+
+  if (!project) {
+    throw new ProjectNotFoundError(projectId || projectName || 'unknown');
+  }
+  return project;
+}
+
+function projectGroupSummary(project: ResolvedProjectRow) {
+  return {
+    id: project.id,
+    name: project.name,
+  };
+}
 
 async function loadProjectServiceRecords(
   appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
@@ -208,6 +248,60 @@ export const projectOpsToolDefs: ToolDef[] = [
             publicUrl,
           };
         }),
+      };
+    },
+  },
+  {
+    name: 'archive_project',
+    riskLevel: 'high',
+    description:
+      'Archive a project group by archiving its active deployable app/worker services. Preserves configuration/history and does not delete managed infrastructure.',
+    mcpDescription:
+      'Request human approval to archive a project group. Archives active deployable app/worker services in the group while preserving configuration/history.',
+    inputSchema: projectLifecycleSchema,
+    execute: async (args, context) => {
+      const project = await resolveProjectGroup(args, context);
+      await context.appCtx.pipeline.archiveGroup(project.id);
+      return {
+        status: 'archived',
+        project_id: project.id,
+        project_name: project.name,
+        project: projectGroupSummary(project),
+        _agent_guidance: {
+          message:
+            'Project group archive completed. This preserves configuration/history and does not delete managed databases, volumes, buckets, or host Docker resources.',
+          next_steps: [
+            'Use list_projects to confirm the group lifecycle state.',
+            'Use unarchive_project if the group should be restored later; restored services are not redeployed automatically.',
+          ],
+        },
+      };
+    },
+  },
+  {
+    name: 'unarchive_project',
+    riskLevel: 'medium',
+    description:
+      'Restore a project group archive set. Does not redeploy services automatically; call redeploy_app for services that should run again.',
+    mcpDescription:
+      'Request human approval to restore a project group archive set. Restored services are not redeployed automatically.',
+    inputSchema: projectLifecycleSchema,
+    execute: async (args, context) => {
+      const project = await resolveProjectGroup(args, context);
+      await context.appCtx.pipeline.unarchiveGroup(project.id);
+      return {
+        status: 'unarchived',
+        project_id: project.id,
+        project_name: project.name,
+        project: projectGroupSummary(project),
+        _agent_guidance: {
+          message:
+            'Project group restore completed. OpenLander restores the archive set without redeploying services automatically.',
+          next_steps: [
+            'Use list_projects to confirm which deployable services are active.',
+            'Call redeploy_app with service_id for each service that should run again.',
+          ],
+        },
       };
     },
   },

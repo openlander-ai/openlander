@@ -150,6 +150,8 @@ export async function maybeHandleMcpSafety(
   }
 
   const shouldHold =
+    def.name === 'archive_project' ||
+    def.name === 'unarchive_project' ||
     def.name === 'archive_service' ||
     def.name === 'unarchive_service' ||
     def.name === 'remove_secret_file' ||

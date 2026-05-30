@@ -123,7 +123,7 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - Never create Docker networks manually
 
 ## Human UI-only operations
-Project/app hard delete and purge are intentionally NOT exposed as MCP actions. Project group archive/restore is also web UI-only in 0.1 because a group can span multiple deployable services. If the user asks to delete, remove, purge, archive, or restore a whole project/app group, tell them to use the web UI: Settings → Danger zone for that project/service. For a specific deployable app cleanup or restore, use archive_service or unarchive_service with service_id and wait for human approval. Do NOT substitute remove_service or cleanup_docker — those target managed infrastructure services and Docker hosts, not deployable apps.`;
+Project/app hard delete and purge are intentionally NOT exposed as MCP actions. If the user asks to delete, remove, purge, or destroy a project/app group, tell them to use the web UI: Settings → Danger zone for that project/service. For soft lifecycle cleanup, use archive_project/unarchive_project for a whole project group or archive_service/unarchive_service for one deployable service; all four enter the human approval queue before executing. Do NOT substitute remove_service or cleanup_docker — those target managed infrastructure services and Docker hosts, not deployable apps.`;
 
 function buildServerInstructions(ctx: AppContext, incidentBriefing: string): string {
   const instance = getMcpInstanceContext(ctx.config);

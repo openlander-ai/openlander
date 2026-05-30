@@ -42,10 +42,9 @@ const allToolDefs: ToolDef[] = [
 
 const mockContext: ToolContext = { target: 'mcp', appCtx: {} as AppContext };
 // Actions removed from openlander_project that should still surface as
-// UNKNOWN_ACTION. Archive/unarchive are intentionally excluded — they route to
-// the HUMAN_UI_ONLY sentinel (see HUMAN_UI_ONLY_ACTIONS in
-// src/mcp/composite-tools.ts). Deployable archive_service/unarchive_service are
-// different: they are exposed on openlander_service behind the approval queue.
+// UNKNOWN_ACTION. Project group archive/unarchive are exposed as real
+// approval-gated actions; deployable archive_service/unarchive_service are
+// exposed on openlander_service behind the same approval queue.
 const removedProjectRuntimeActions = [
   'stop_project',
   'start_project',
@@ -54,7 +53,7 @@ const removedProjectRuntimeActions = [
   'rollback_project',
   'update_project_config',
 ] as const;
-const humanUiOnlyProjectActions = ['archive_project', 'unarchive_project'] as const;
+const projectLifecycleActions = ['archive_project', 'unarchive_project'] as const;
 
 describe('openlander_project runtime aliases removed', () => {
   let tool: CompositeTool;
@@ -68,8 +67,11 @@ describe('openlander_project runtime aliases removed', () => {
       actions: Array<{ name: string }>;
     };
     const actionNames = result.actions.map((action) => action.name);
-    for (const removed of [...removedProjectRuntimeActions, ...humanUiOnlyProjectActions]) {
+    for (const removed of removedProjectRuntimeActions) {
       expect(actionNames).not.toContain(removed);
+    }
+    for (const action of projectLifecycleActions) {
+      expect(actionNames).toContain(action);
     }
   });
 
@@ -85,22 +87,31 @@ describe('openlander_project runtime aliases removed', () => {
     }
   });
 
-  it('returns HUMAN_UI_ONLY for project archive/unarchive', async () => {
-    for (const action of humanUiOnlyProjectActions) {
+  it('exposes project group archive/restore as real approval-gated actions', async () => {
+    for (const action of projectLifecycleActions) {
       const result = (await tool.execute({ action, params: {} }, mockContext)) as Record<
         string,
         unknown
       >;
-      expect(result).toHaveProperty('error', 'HUMAN_UI_ONLY');
+      expect(result).toHaveProperty('error', 'INVALID_PARAMS');
       expect(result).toHaveProperty('action', action);
       expect(result).toHaveProperty('composite', 'openlander_project');
-      const guidance = result['_agent_guidance'] as Record<string, unknown>;
-      expect(String(guidance['message'])).toMatch(/Settings → Danger zone/);
-      expect(String(guidance['message'])).toMatch(/multiple deployable services|service_id/);
     }
   });
 
-  it('does not attach group lifecycle rationale to hard-delete aliases', async () => {
+  it('routes legacy app lifecycle aliases to the explicit project/service lifecycle tools', async () => {
+    const result = (await tool.execute(
+      { action: 'archive_app', params: {} },
+      mockContext,
+    )) as Record<string, unknown>;
+    const guidance = result['_agent_guidance'] as Record<string, unknown>;
+
+    expect(result).toHaveProperty('error', 'HUMAN_UI_ONLY');
+    expect(String(guidance['message'])).toContain('archive_project');
+    expect(String(guidance['message'])).toContain('service_id');
+  });
+
+  it('does not attach lifecycle-tool guidance to hard-delete aliases', async () => {
     const result = (await tool.execute(
       { action: 'delete_app', params: {} },
       mockContext,
@@ -108,8 +119,8 @@ describe('openlander_project runtime aliases removed', () => {
     const guidance = result['_agent_guidance'] as Record<string, unknown>;
 
     expect(result).toHaveProperty('error', 'HUMAN_UI_ONLY');
-    expect(String(guidance['message'])).not.toContain('multiple deployable services');
-    expect(String(guidance['message'])).toContain('service_id');
+    expect(String(guidance['message'])).not.toContain('archive_project');
+    expect(String(guidance['message'])).toContain('Settings → Danger zone');
   });
 
   it('removed aliases do not emit deprecation warnings because compatibility is gone', async () => {
