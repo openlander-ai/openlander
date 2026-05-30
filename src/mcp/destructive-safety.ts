@@ -95,6 +95,8 @@ export function assertMcpActiveScope(
   atExecute = false,
   identity?: RequestIdentity,
 ): Promise<void> {
+  // Scope only: this intentionally does not reject archived lifecycle state.
+  // ToolDefs/pipeline own lifecycle mutability so restore actions can target archived services.
   if (!targetProjectId) return Promise.resolve();
 
   if (identity?.mcpScopeKind === 'project') {

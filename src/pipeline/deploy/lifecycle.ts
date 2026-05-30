@@ -239,6 +239,9 @@ export class ContainerLifecycle {
     const project = await this.db.getProject(projectId);
     if (!project) return;
 
+    const deployable = await this.db.getDeployableForProject(projectId);
+    if (!project.archived_at && !deployable?.archived_at) return;
+
     await this.db.unarchiveProject(projectId);
     const port = await allocatePort(this.db, this.runtime, {}, 'production');
     await this.db.updateProject(projectId, { assignedPort: port });
