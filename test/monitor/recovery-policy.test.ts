@@ -11,7 +11,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Database } from '../../src/db/index.js';
+import type { Database, ServiceRow } from '../../src/db/index.js';
 import { EventBus } from '../../src/events/index.js';
 import {
   DEFAULT_LOCK_STALE_MS,
@@ -55,6 +55,7 @@ function makeCtx(
     isGlobalBudgetExceeded?: boolean;
     lockStaleMs?: number;
     throwOnGetProject?: boolean;
+    deployable?: Partial<ServiceRow>;
   } = {},
 ): RecoveryEligibilityContext {
   const db = {
@@ -64,9 +65,7 @@ function makeCtx(
       }
       return project;
     }),
-    // PR 4.5: canonical-first reads need this helper; default to undefined
-    // so legacy `projects` fields drive the test snapshot.
-    getDeployableForProject: vi.fn().mockReturnValue(undefined),
+    getDeployableForProject: vi.fn().mockReturnValue(options.deployable),
   } as unknown as Pick<Database, 'getProject' | 'getDeployableForProject'>;
 
   return {
@@ -102,44 +101,54 @@ describe('checkRecoveryEligibility — invariant matrix', () => {
     vi.useRealTimers();
   });
 
-  it('returns project_not_found when getProject returns undefined', () => {
+  it('returns project_not_found when getProject returns undefined', async () => {
     for (const trigger of ALL_TRIGGERS) {
       const ctx = makeCtx(undefined);
-      const result = checkRecoveryEligibility('project-1', trigger, ctx);
+      const result = await checkRecoveryEligibility('project-1', trigger, ctx);
       expect(result).toEqual(
         expect.objectContaining({ eligible: false, reason: 'project_not_found' }),
       );
     }
   });
 
-  it('returns project_not_found when getProject throws (DB error)', () => {
+  it('returns project_not_found when getProject throws (DB error)', async () => {
     for (const trigger of ALL_TRIGGERS) {
       const ctx = makeCtx(makeProject(), { throwOnGetProject: true });
-      const result = checkRecoveryEligibility('project-1', trigger, ctx);
+      const result = await checkRecoveryEligibility('project-1', trigger, ctx);
       expect(result.eligible).toBe(false);
       expect(result.reason).toBe('project_not_found');
     }
   });
 
-  it('blocks every trigger when project is archived', () => {
+  it('blocks every trigger when project is archived', async () => {
     for (const trigger of ALL_TRIGGERS) {
       const ctx = makeCtx(makeProject({ archived_at: '2026-04-01T00:00:00Z' }));
-      const result = checkRecoveryEligibility('project-1', trigger, ctx);
+      const result = await checkRecoveryEligibility('project-1', trigger, ctx);
       expect(result.eligible).toBe(false);
       expect(result.reason).toBe('archived');
     }
   });
 
-  it('blocks every trigger when project status is stopped', () => {
+  it('blocks every trigger when project status is stopped', async () => {
     for (const trigger of ALL_TRIGGERS) {
       const ctx = makeCtx(makeProject({ status: 'stopped' }));
-      const result = checkRecoveryEligibility('project-1', trigger, ctx);
+      const result = await checkRecoveryEligibility('project-1', trigger, ctx);
       expect(result.eligible).toBe(false);
       expect(result.reason).toBe('stopped');
     }
   });
 
-  it('blocks every trigger when deploy_lock_session is fresh (within staleness window)', () => {
+  it('uses canonical service status before stale project status', async () => {
+    const ctx = makeCtx(makeProject({ status: 'stopped' }), {
+      deployable: { status: 'running' },
+    });
+
+    const result = await checkRecoveryEligibility('project-1', 'deploy_failed', ctx);
+
+    expect(result).toEqual({ eligible: true, reason: 'eligible' });
+  });
+
+  it('blocks every trigger when deploy_lock_session is fresh (within staleness window)', async () => {
     for (const trigger of ALL_TRIGGERS) {
       const ctx = makeCtx(
         makeProject({
@@ -147,13 +156,13 @@ describe('checkRecoveryEligibility — invariant matrix', () => {
           deploy_lock_at: minutesAgo(2),
         }),
       );
-      const result = checkRecoveryEligibility('project-1', trigger, ctx);
+      const result = await checkRecoveryEligibility('project-1', trigger, ctx);
       expect(result.eligible).toBe(false);
       expect(result.reason).toBe('deploy_in_progress');
     }
   });
 
-  it('allows every trigger when deploy_lock_session is stale (>30 min)', () => {
+  it('allows every trigger when deploy_lock_session is stale (>30 min)', async () => {
     for (const trigger of ALL_TRIGGERS) {
       const ctx = makeCtx(
         makeProject({
@@ -161,13 +170,13 @@ describe('checkRecoveryEligibility — invariant matrix', () => {
           deploy_lock_at: minutesAgo(31),
         }),
       );
-      const result = checkRecoveryEligibility('project-1', trigger, ctx);
+      const result = await checkRecoveryEligibility('project-1', trigger, ctx);
       expect(result.eligible).toBe(true);
       expect(result.reason).toBe('eligible');
     }
   });
 
-  it('respects custom lockStaleMs override', () => {
+  it('respects custom lockStaleMs override', async () => {
     // Lock at 6 minutes ago, custom stale threshold = 5 minutes → should be stale.
     const ctx = makeCtx(
       makeProject({
@@ -176,26 +185,26 @@ describe('checkRecoveryEligibility — invariant matrix', () => {
       }),
       { lockStaleMs: 5 * 60 * 1000 },
     );
-    const result = checkRecoveryEligibility('project-1', 'deploy_failed', ctx);
+    const result = await checkRecoveryEligibility('project-1', 'deploy_failed', ctx);
     expect(result.eligible).toBe(true);
   });
 
-  it('treats lock with missing deploy_lock_at as fresh (safe default)', () => {
+  it('treats lock with missing deploy_lock_at as fresh (safe default)', async () => {
     const ctx = makeCtx(
       makeProject({
         deploy_lock_session: 'session-no-timestamp',
         deploy_lock_at: null,
       }),
     );
-    const result = checkRecoveryEligibility('project-1', 'deploy_failed', ctx);
+    const result = await checkRecoveryEligibility('project-1', 'deploy_failed', ctx);
     expect(result.eligible).toBe(false);
     expect(result.reason).toBe('deploy_in_progress');
   });
 
-  it('blocks coordinator triggers when circuit breaker is open, but allows ops_sequence', () => {
+  it('blocks coordinator triggers when circuit breaker is open, but allows ops_sequence', async () => {
     for (const trigger of ALL_TRIGGERS) {
       const ctx = makeCtx(makeProject(), { isCircuitBreakerOpen: true });
-      const result = checkRecoveryEligibility('project-1', trigger, ctx);
+      const result = await checkRecoveryEligibility('project-1', trigger, ctx);
       if (trigger === 'ops_sequence') {
         expect(result.eligible).toBe(true);
       } else {
@@ -205,10 +214,10 @@ describe('checkRecoveryEligibility — invariant matrix', () => {
     }
   });
 
-  it('blocks coordinator triggers when global budget is exceeded, but allows ops_sequence', () => {
+  it('blocks coordinator triggers when global budget is exceeded, but allows ops_sequence', async () => {
     for (const trigger of ALL_TRIGGERS) {
       const ctx = makeCtx(makeProject(), { isGlobalBudgetExceeded: true });
-      const result = checkRecoveryEligibility('project-1', trigger, ctx);
+      const result = await checkRecoveryEligibility('project-1', trigger, ctx);
       if (trigger === 'ops_sequence') {
         expect(result.eligible).toBe(true);
       } else {
@@ -218,30 +227,30 @@ describe('checkRecoveryEligibility — invariant matrix', () => {
     }
   });
 
-  it('returns eligible for a healthy project on every trigger', () => {
+  it('returns eligible for a healthy project on every trigger', async () => {
     for (const trigger of ALL_TRIGGERS) {
       const ctx = makeCtx(makeProject());
-      const result = checkRecoveryEligibility('project-1', trigger, ctx);
+      const result = await checkRecoveryEligibility('project-1', trigger, ctx);
       expect(result).toEqual({ eligible: true, reason: 'eligible' });
     }
   });
 
-  it('continue_check rejects unexpected statuses (e.g. building)', () => {
+  it('continue_check rejects unexpected statuses (e.g. building)', async () => {
     const ctx = makeCtx(makeProject({ status: 'building' }));
-    const result = checkRecoveryEligibility('project-1', 'continue_check', ctx);
+    const result = await checkRecoveryEligibility('project-1', 'continue_check', ctx);
     expect(result.eligible).toBe(false);
     expect(result.reason).toBe('recovering_in_progress');
   });
 
-  it('continue_check accepts both running and recovering statuses', () => {
+  it('continue_check accepts both running and recovering statuses', async () => {
     for (const status of ['running', 'recovering']) {
       const ctx = makeCtx(makeProject({ status }));
-      const result = checkRecoveryEligibility('project-1', 'continue_check', ctx);
+      const result = await checkRecoveryEligibility('project-1', 'continue_check', ctx);
       expect(result.eligible).toBe(true);
     }
   });
 
-  it('uses DEFAULT_LOCK_STALE_MS when lockStaleMs is omitted', () => {
+  it('uses DEFAULT_LOCK_STALE_MS when lockStaleMs is omitted', async () => {
     // Lock at exactly DEFAULT - 1ms ago → fresh
     const ctx = makeCtx(
       makeProject({
@@ -249,7 +258,7 @@ describe('checkRecoveryEligibility — invariant matrix', () => {
         deploy_lock_at: new Date(Date.now() - DEFAULT_LOCK_STALE_MS + 1).toISOString(),
       }),
     );
-    const result = checkRecoveryEligibility('project-1', 'deploy_failed', ctx);
+    const result = await checkRecoveryEligibility('project-1', 'deploy_failed', ctx);
     expect(result.eligible).toBe(false);
     expect(result.reason).toBe('deploy_in_progress');
   });

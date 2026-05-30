@@ -11,7 +11,8 @@
  * (deploy lock vs recovery race) — see docs/launchpad/qa-1.0-ga-fix-plan-2026-04-20.md
  */
 
-import type { Database } from '../db/index.js';
+import type { Database, ProjectRow } from '../db/index.js';
+import { serviceViewFromRows } from '../db/views/service-view.js';
 import type { EventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 
@@ -109,10 +110,9 @@ export async function checkRecoveryEligibility(
     };
   }
 
-  // PR 4.5: canonical-first read of status with `??` fallback to legacy
-  // `projects` column through migration 0012.
   const deployable = await ctx.db.getDeployableForProject(projectId);
-  const status = deployable?.status ?? project.status;
+  const status = serviceViewFromRows(project as ProjectRow, deployable).status;
+  const statusMessage = status === 'idle' ? 'unknown' : status;
 
   if (status === 'stopped') {
     return {
@@ -142,7 +142,7 @@ export async function checkRecoveryEligibility(
       return {
         eligible: false,
         reason: 'recovering_in_progress',
-        message: `Project is in status ${status ?? 'unknown'}, cannot continue recovery`,
+        message: `Project is in status ${statusMessage}, cannot continue recovery`,
       };
     }
   }
