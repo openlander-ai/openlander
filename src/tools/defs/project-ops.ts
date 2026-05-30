@@ -2,6 +2,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import type { ServiceRow } from '../../db/types.js';
+import { serviceViewFromRows } from '../../db/views/service-view.js';
 import { emptySchema } from './schemas.js';
 import type { ToolDef } from './types.js';
 
@@ -70,10 +71,22 @@ export const projectOpsToolDefs: ToolDef[] = [
           count: projects.length,
           projects: projects.map((project) => {
             const deployable = deployables.get(project.id);
-            const status = deployable?.status ?? project.status;
-            const port = deployable?.assigned_port ?? project.assigned_port;
-            const containerId = deployable?.container_id ?? project.container_id;
-            const publicUrl = deployable?.public_url ?? project.public_url;
+            const view = serviceViewFromRows(project, deployable);
+            // S3.2: read via ServiceView, but restore each field's historic
+            // JSON-omit bottom at the MCP boundary. The view normalizes
+            // status→'idle' and assignedPort/publicUrl→null, whereas the
+            // previous `deployable?.X ?? project.X` chains emitted
+            // `undefined` (key omitted on JSON.stringify) when both rows
+            // lacked the value. status never carries a real 'idle' (the
+            // services row enum is running|stopped|error; ProjectRow.status
+            // has no idle), so 'idle' uniquely marks the synthesized
+            // bottom. visibility stays on the deprecated direct read —
+            // its raw null/undefined distinction is not recoverable from
+            // the view (deferred, service-view-deferred-routes).
+            const status = view.status === 'idle' ? undefined : view.status;
+            const port = view.assignedPort ?? undefined;
+            const containerId = view.containerId;
+            const publicUrl = view.publicUrl ?? undefined;
             const deployableContainerName =
               deployable?.container_name ??
               (containerId ? projectContainerName(project.name) : null);
