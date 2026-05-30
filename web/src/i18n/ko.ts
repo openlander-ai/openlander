@@ -611,13 +611,13 @@ export const translations = {
     },
     servicesGuide: {
       empty:
-        '아직 이 프로젝트에 배포 가능한 서비스가 없습니다. Git 저장소, Docker 이미지 또는 compose 서비스를 추가하세요.',
-      help: '프로젝트는 그룹이고, 서비스는 그 안에서 실제로 배포되는 앱/워커입니다. MCP 후속 작업은 service_id를 사용하는 것이 가장 안전합니다.',
+        '아직 이 프로젝트에 서비스가 없습니다. 앱, 워커, 데이터베이스, 캐시 또는 compose 서비스를 추가하세요.',
+      help: '프로젝트는 그룹이고, 서비스는 그 안에 연결된 앱, 워커, 데이터베이스, 캐시, 스토리지입니다. MCP 후속 작업은 service_id를 사용하는 것이 가장 안전합니다.',
       banner:
-        '아래 항목은 배포 가능한 서비스입니다. 환경 변수, 재배포, 도메인, 진단 작업에는 표시된 MCP service_id를 사용하세요.',
+        '아래 목록은 이 프로젝트의 애플리케이션 서비스와 인프라 서비스를 함께 보여줍니다. 후속 작업에는 표시된 MCP service_id를 사용하세요.',
       serviceId: 'MCP service_id: {id}',
       serviceIdTooltip:
-        'redeploy_app, set_env_vars, diagnose_service 같은 MCP 액션에 이 값을 전달하세요.',
+        'MCP 액션에 이 값을 전달하세요. 애플리케이션 서비스는 배포/환경 변수/도메인/진단 작업을, 인프라 서비스는 로그/연결/라이프사이클 작업을 지원합니다.',
     },
     domains: {
       // Chrome — action button + retry + badge.
