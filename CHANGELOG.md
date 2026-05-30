@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Preserved deploy-plan `project_id` target context through plan storage and
   execution so existing-project managed provisioning locks and deploys against
   the intended project group instead of falling back to name-only lookup.
+- Routed `expose_public` port selection through the service-first read model so
+  canonical deployable service ports win over stale project-group columns.
 
 ## [0.1.7] - 2026-05-29
 
