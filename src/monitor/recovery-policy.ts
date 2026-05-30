@@ -12,7 +12,7 @@
  */
 
 import type { Database, ProjectRow } from '../db/index.js';
-import { serviceViewFromRows } from '../db/views/service-view.js';
+import { loadServiceViewRecord } from '../db/views/service-view.js';
 import type { EventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 
@@ -110,8 +110,7 @@ export async function checkRecoveryEligibility(
     };
   }
 
-  const deployable = await ctx.db.getDeployableForProject(projectId);
-  const status = serviceViewFromRows(project as ProjectRow, deployable).status;
+  const status = (await loadServiceViewRecord(ctx.db, project as ProjectRow)).view.status;
   const statusMessage = status === 'idle' ? 'unknown' : status;
 
   if (status === 'stopped') {
