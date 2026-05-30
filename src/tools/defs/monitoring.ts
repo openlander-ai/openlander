@@ -9,6 +9,7 @@ import {
 } from '../../errors.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
+import { serviceViewFromRows } from '../../db/views/service-view.js';
 import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
 import { getMcpInstancePublicInfo } from '../../mcp/instance-identity.js';
 import { BUILD_TIME_PREFIXES } from '../../pipeline/build-args.js';
@@ -228,11 +229,16 @@ export const monitoringToolDefs: ToolDef[] = [
           throw new ProjectNotFoundError(projectId || projectName);
         }
         project = resolvedProject;
-        // PR 4.5: canonical-first read of runtime fields with `??` fallback to
-        // legacy `projects` columns through migration 0012.
+        // S3.4 canonical-first via the service-first read model. `status`
+        // is emitted in the early-return below, so restore its historic
+        // JSON-omit bottom: the view normalizes the no-services-row case to
+        // 'idle', and a real services-row status is never 'idle' (enum
+        // running|stopped|error), so 'idle' uniquely marks that bottom →
+        // undefined → key omitted. `containerId` is a gate only.
         service = await appCtx.db.getDeployableForProject(project.id);
-        status = service?.status ?? project.status;
-        containerId = service?.container_id ?? project.container_id;
+        const view = serviceViewFromRows(project, service);
+        status = view.status === 'idle' ? undefined : view.status;
+        containerId = view.containerId;
       }
 
       if (!containerId || status !== 'running') {
