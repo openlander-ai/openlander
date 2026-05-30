@@ -23,16 +23,20 @@ function createContext(overrides?: {
   const db = {
     getActiveScopeProjectId: vi.fn().mockResolvedValue(overrides?.activeScopeProjectId ?? null),
     createPendingMcpApproval: vi.fn().mockResolvedValue('action-run-1'),
-    getProject: vi.fn().mockResolvedValue(
-      overrides?.projectId === null
-        ? undefined
-        : { id: overrides?.projectId ?? 'project-1', name: 'demo' },
-    ),
-    getProjectByName: vi.fn().mockResolvedValue(
-      overrides?.projectId === null
-        ? undefined
-        : { id: overrides?.projectId ?? 'project-1', name: 'demo' },
-    ),
+    getProject: vi
+      .fn()
+      .mockResolvedValue(
+        overrides?.projectId === null
+          ? undefined
+          : { id: overrides?.projectId ?? 'project-1', name: 'demo' },
+      ),
+    getProjectByName: vi
+      .fn()
+      .mockResolvedValue(
+        overrides?.projectId === null
+          ? undefined
+          : { id: overrides?.projectId ?? 'project-1', name: 'demo' },
+      ),
     getService: vi.fn(),
     listServices: vi.fn().mockResolvedValue([]),
   };
@@ -45,6 +49,33 @@ describe('MCP destructive safety', () => {
     const result = await maybeHandleMcpSafety(
       createTool('remove_service'),
       { service_name: 'db' },
+      context,
+    );
+
+    expect(result).toMatchObject({
+      error: 'OPERATION_REQUIRES_HUMAN_UI',
+      code: 'OPERATION_REQUIRES_HUMAN_UI',
+    });
+    expect(context.appCtx.db.createPendingMcpApproval).not.toHaveBeenCalled();
+  });
+
+  it('lets platform_cleanup_orphans dry-run preview execute through MCP', async () => {
+    const context = createContext();
+    const result = await maybeHandleMcpSafety(
+      createTool('platform_cleanup_orphans'),
+      { dry_run: true },
+      context,
+    );
+
+    expect(result).toBeUndefined();
+    expect(context.appCtx.db.createPendingMcpApproval).not.toHaveBeenCalled();
+  });
+
+  it('still blocks platform_cleanup_orphans execution over MCP', async () => {
+    const context = createContext();
+    const result = await maybeHandleMcpSafety(
+      createTool('platform_cleanup_orphans'),
+      { confirm: true, dry_run: false },
       context,
     );
 
