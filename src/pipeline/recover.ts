@@ -13,6 +13,7 @@ import { buildTraefikLabels, ensureManagedTraefikNetwork } from './traefik.js';
 import { allocatePort } from './port.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { loadResourceLimitsForDeployTarget } from './config-snapshot.js';
+import { loadServiceViewRecord } from '../db/views/service-view.js';
 
 const log = createModuleLogger('recover');
 
@@ -211,14 +212,12 @@ async function recoverProject(
   dryRun: boolean,
 ): Promise<RecoverItemResult<ProjectStatus>> {
   const cName = projectContainerName(project.name);
-  // PR 4.5: canonical-first reads of runtime fields with `??` fallback to
-  // legacy `projects` columns through migration 0012.
-  const deployable = await ctx.db.getDeployableForProject(project.id);
-  const status = deployable?.status ?? project.status;
-  const imageTag = deployable?.image_tag ?? project.image_tag;
-  const imageCmdRaw = deployable?.image_cmd ?? project.image_cmd;
-  const assignedPort = deployable?.assigned_port ?? project.assigned_port;
-  const containerPortRaw = deployable?.container_port ?? project.container_port;
+  const { service, view } = await loadServiceViewRecord(ctx.db, project);
+  const status = view.status;
+  const imageTag = view.imageTag;
+  const imageCmdRaw = view.imageCmdRaw;
+  const assignedPort = view.assignedPort;
+  const containerPortRaw = view.containerPort;
 
   try {
     // Skip stopped/archived projects
@@ -294,7 +293,7 @@ async function recoverProject(
     await ctx.docker.safeRemoveContainer(cName);
     const resourceLimits = await loadResourceLimitsForDeployTarget(ctx.db, {
       projectId: project.id,
-      serviceId: deployable?.id,
+      serviceId: service?.id,
     });
 
     // Create and start container

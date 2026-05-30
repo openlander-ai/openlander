@@ -78,6 +78,7 @@ export interface ServiceView {
   // ── Build ──
   source: ServiceSource | null;
   imageUrl: string | null;
+  repoUrl: string | null;
   imageTag: string | null;
   previousImageTag: string | null;
   /** Raw `image_cmd` string — adapters that need an array parse it. */
@@ -179,6 +180,7 @@ export function serviceViewFromRows(
 
     source,
     imageUrl: service?.image_url ?? project.image_url ?? null,
+    repoUrl: service?.repo_url ?? null,
     imageTag: service?.image_tag ?? project.image_tag ?? null,
     previousImageTag: service?.previous_image_tag ?? project.previous_image_tag ?? null,
     imageCmdRaw: service?.image_cmd ?? project.image_cmd ?? null,
