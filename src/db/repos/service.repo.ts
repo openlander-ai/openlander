@@ -19,6 +19,12 @@ export const MANAGED_SERVICE_KINDS: readonly ServiceKind[] = [
   'minio',
 ];
 
+export const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;
+
+export function deployableServiceKindFilter(kindColumn: SQL): SQL {
+  return notInArray(kindColumn, [...NON_DEPLOYABLE_SERVICE_KINDS]);
+}
+
 /** True when a service `kind` is one of the platform-managed database kinds. */
 export function isManagedServiceKind(kind: string): boolean {
   return (MANAGED_SERVICE_KINDS as readonly string[]).includes(kind);
@@ -426,7 +432,7 @@ export class ServiceRepo {
       .where(
         and(
           eq(services.project_id, projectId),
-          notInArray(services.kind, [...MANAGED_SERVICE_KINDS, 'compose']),
+          deployableServiceKindFilter(sql`${services.kind}`),
           sql`NOT (${services.parent_service_id} IS NULL AND coalesce(${services.build_method}, '') = 'compose')`,
         ),
       )
@@ -451,7 +457,7 @@ export class ServiceRepo {
       .where(
         and(
           inArray(services.project_id, [...projectIds]),
-          notInArray(services.kind, [...MANAGED_SERVICE_KINDS, 'compose']),
+          deployableServiceKindFilter(sql`${services.kind}`),
           sql`NOT (${services.parent_service_id} IS NULL AND coalesce(${services.build_method}, '') = 'compose')`,
         ),
       )

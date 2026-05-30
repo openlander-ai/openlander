@@ -56,9 +56,20 @@ describe('ServiceRepo.getDeployablesByGroup', () => {
       source.indexOf('\n  }\n}', source.indexOf('async getDeployablesByGroup')),
     );
 
-    expect(method).toContain("notInArray(services.kind, [...MANAGED_SERVICE_KINDS, 'compose'])");
+    expect(source).toContain(
+      "export const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;",
+    );
+    expect(method).toContain('deployableServiceKindFilter(sql`${services.kind}`)');
     expect(method).toContain("coalesce(${services.build_method}, '') = 'compose'");
     expect(method).not.toContain("services.kind} != 'compose-child'");
+  });
+
+  it('keeps service status typing aligned with the recovering lifecycle state', () => {
+    const schema = readFileSync('src/db/schema.drizzle.ts', 'utf8');
+    const types = readFileSync('src/db/types.ts', 'utf8');
+
+    expect(schema).toContain("enum: ['running', 'stopped', 'error', 'recovering']");
+    expect(types).toContain("'running' | 'stopped' | 'error' | 'recovering' | null");
   });
 });
 
@@ -90,9 +101,10 @@ describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
     expect(method).toContain('serviceConnections');
     expect(method).toContain('service_id_consumer');
     expect(method).toContain('service_id_provider');
-    expect(source).toContain("import { MANAGED_SERVICE_KINDS } from './service.repo.js'");
+    expect(source).toContain('NON_DEPLOYABLE_SERVICE_KINDS');
+    expect(source).toContain('deployableServiceKindFilter');
     expect(source).not.toContain("const MANAGED_SERVICE_KINDS: ServiceKind[] = ['postgres'");
-    expect(method).toContain('MANAGED_SERVICE_KINDS');
+    expect(method).toContain('deployableServiceKindFilter(sql`${services.kind}`)');
     expect(method).toContain('directManagedRows');
     expect(method).toContain('managedServiceIdsByProject');
     expect(method).toContain('serviceIds.size');
@@ -110,10 +122,12 @@ describe('ProjectRepo.listProjectsWithMetadata', () => {
     expect(method).toContain('deriveGroupStatusFromServices');
     expect(method).toContain('servicesByProject');
     expect(method).toContain('aggregateStatus ? { ...project, status: aggregateStatus } : project');
-    expect(source).toContain(
+    expect(source).toContain('NON_DEPLOYABLE_SERVICE_KINDS');
+    expect(source).toContain('deployableServiceKindFilter');
+    expect(source).not.toContain(
       "const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;",
     );
-    expect(source).toContain('function deployableServiceKindFilter(kindColumn: SQL): SQL');
+    expect(source).not.toContain('function deployableServiceKindFilter(kindColumn: SQL): SQL');
     expect(source).not.toContain(
       "s.kind NOT IN ('postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose')",
     );
