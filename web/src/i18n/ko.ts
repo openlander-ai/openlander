@@ -38,8 +38,6 @@ export const translations = {
       // Content — count phrases with units. Korean does not mark plural
       // on counted nouns, so _one and _other resolve to the same string.
       // Keys mirror en.ts so call sites can switch by count uniformly.
-      services_one: '서비스 {count}개',
-      services_other: '서비스 {count}개',
       deployableServices_one: '배포 서비스 {count}개',
       deployableServices_other: '배포 서비스 {count}개',
       projects_one: '프로젝트 {count}개',
