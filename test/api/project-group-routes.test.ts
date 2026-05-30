@@ -167,6 +167,56 @@ describe('createProjectGroupRoutes', () => {
     });
   });
 
+  it('uses the canonical service row for runtime fields on GET /api/projects', async () => {
+    const project = makeProjectRow({
+      status: 'error',
+      assigned_port: 19001,
+      source: 'git',
+      image_url: 'stale/project-image:latest',
+      public_url: 'https://stale.example.com',
+    });
+    const service = makeServiceRow({
+      status: 'running',
+      assigned_port: 10044,
+      source: 'image',
+      image_url: 'canonical/service-image:latest',
+      public_url: 'https://canonical.example.com',
+    });
+    const getServices = vi.fn(async () => [service]);
+    const app = createApp({
+      db: {
+        listProjectsWithMetadata: vi.fn(async () => [
+          {
+            project,
+            environments: [],
+            childCount: 1,
+            isCompose: false,
+            partiallyArchived: false,
+          },
+        ]),
+        getServices,
+      },
+    });
+
+    const res = await app.request('/api/projects');
+
+    expect(res.status).toBe(200);
+    expect(getServices).toHaveBeenCalledWith({ ids: ['group-1__svc'] });
+    await expect(res.json()).resolves.toMatchObject({
+      projects: [
+        {
+          id: project.id,
+          status: 'running',
+          port: 10044,
+          url: 'http://workspace.192.0.2.10.sslip.io',
+          publicUrl: 'https://canonical.example.com',
+          source: 'image',
+          imageUrl: 'canonical/service-image:latest',
+        },
+      ],
+    });
+  });
+
   it('reports partial groups as active on GET /api/projects', async () => {
     const archivedAt = '2026-02-01T00:00:00.000Z';
     const project = makeProjectRow({ archived_at: archivedAt });
