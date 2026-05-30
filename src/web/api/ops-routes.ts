@@ -3,6 +3,7 @@ import { stream } from 'hono/streaming';
 
 import type { AppContext } from '../../app.js';
 import type { OpsIncidentEventRow, OpsIncidentRow, ProjectRow } from '../../db/types.js';
+import { serviceViewFromRows } from '../../db/views/service-view.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { aiOpsDisabledResponse } from './ai-ops-disabled.js';
 
@@ -634,13 +635,22 @@ export function createOpsRoutes(ctx: AppContext): Hono {
         name: string;
         status: string;
       }> = [
-        ...projects.map((p) => ({
-          id: p.id,
-          type: 'project' as const,
-          name: p.name,
-          // Fix 3: status is a deployable field — canonical-first ?? legacy fallback.
-          status: deployableByProjectId.get(p.id)?.status ?? p.status ?? '',
-        })),
+        ...projects.map((p) => {
+          // S2.1: status via ServiceView (canonical-first deployable ??
+          // legacy project). The view normalizes the both-rows-missing
+          // case to 'idle'; this response's historical bottom was ''.
+          // Neither the services row (status enum running|stopped|error)
+          // nor the deprecated ProjectRow.status can carry 'idle', so a
+          // view status of 'idle' here uniquely marks the synthesized
+          // bottom — restore the '' it replaced.
+          const view = serviceViewFromRows(p, deployableByProjectId.get(p.id));
+          return {
+            id: p.id,
+            type: 'project' as const,
+            name: p.name,
+            status: view.status === 'idle' ? '' : view.status,
+          };
+        }),
         ...services.map((s) => ({
           id: s.id,
           type: 'service' as const,
