@@ -41,6 +41,7 @@ function createMockContext() {
     detectComposeFile: vi.fn(),
     parseComposeFile: vi.fn(),
   };
+  const rawBuildLog = ['line 1', 'line 2', 'line 3'].join('\n');
 
   const jobManager = {
     getStatus: vi.fn(),
@@ -82,7 +83,7 @@ function createMockContext() {
               commit_sha: 'abc123',
               duration_ms: 1200,
               created_at: '2026-05-13T00:00:00.000Z',
-              build_log: 'line 1\nline 2',
+              build_log: rawBuildLog,
             }
           : undefined,
       ),
@@ -97,7 +98,7 @@ function createMockContext() {
     pipeline,
   } as unknown as AppContext;
 
-  return { ctx, pipeline, composePipeline, jobManager };
+  return { ctx, pipeline, composePipeline, jobManager, rawBuildLog };
 }
 
 function getTool(ctx: AppContext, name: string, target?: 'agent' | 'mcp') {
@@ -157,7 +158,7 @@ describe('registry critical tool behaviors', () => {
   });
 
   it('deployment debug tools accept project_id and deploy_id targets', async () => {
-    const { ctx } = createMockContext();
+    const { ctx, rawBuildLog } = createMockContext();
     const historyTool = getTool(ctx, 'get_deploy_history');
     const buildLogTool = getTool(ctx, 'get_build_log');
 
@@ -174,7 +175,47 @@ describe('registry critical tool behaviors', () => {
     expect(buildLog).toMatchObject({
       id: 'deploy-1',
       status: 'failed',
-      build_log: 'line 1\nline 2',
+      build_log: rawBuildLog,
+      full_log: true,
+      returned_chars: rawBuildLog.length,
+      total_chars: rawBuildLog.length,
+      truncated: false,
+    });
+  });
+
+  it('get_build_log reports requested tail truncation explicitly', async () => {
+    const { ctx, rawBuildLog } = createMockContext();
+    const buildLogTool = getTool(ctx, 'get_build_log');
+
+    const buildLog = await buildLogTool.execute(
+      { deploy_id: 'deploy-1', tail: 1 },
+      { target: 'mcp' },
+    );
+
+    expect(buildLog).toMatchObject({
+      build_log: 'line 3',
+      full_log: false,
+      returned_chars: 'line 3'.length,
+      total_chars: rawBuildLog.length,
+      truncated: true,
+    });
+  });
+
+  it('get_build_log treats a large requested tail as the full log', async () => {
+    const { ctx, rawBuildLog } = createMockContext();
+    const buildLogTool = getTool(ctx, 'get_build_log');
+
+    const buildLog = await buildLogTool.execute(
+      { deploy_id: 'deploy-1', tail: 100 },
+      { target: 'mcp' },
+    );
+
+    expect(buildLog).toMatchObject({
+      build_log: rawBuildLog,
+      full_log: true,
+      returned_chars: rawBuildLog.length,
+      total_chars: rawBuildLog.length,
+      truncated: false,
     });
   });
 
@@ -301,7 +342,7 @@ describe('registry critical tool behaviors', () => {
           name: 'critical-app',
           phase: 'failed',
           health: 'healthy',
-          build_log_tail: 'line 1\nline 2',
+          build_log_tail: 'line 1\nline 2\nline 3',
         },
       ],
     });
