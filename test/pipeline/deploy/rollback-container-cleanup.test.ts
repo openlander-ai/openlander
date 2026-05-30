@@ -11,6 +11,8 @@ function createMockDocker(): Docker {
     safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     inspectImage: vi.fn().mockResolvedValue({}),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
+    ensureProjectNetwork: vi.fn().mockResolvedValue('ol-test-rollback-moo7jly1'),
+    connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
     runContainer: vi.fn().mockResolvedValue('container-rollback-new'),
   } as unknown as Docker;
 }
@@ -36,9 +38,7 @@ function createProject(overrides: Partial<ProjectRow> = {}): ProjectRow {
   };
 }
 
-function createProductionEnvironment(
-  overrides: Partial<EnvironmentRow> = {},
-): EnvironmentRow {
+function createProductionEnvironment(overrides: Partial<EnvironmentRow> = {}): EnvironmentRow {
   return {
     id: 'test-rollback-production',
     service_id: 'test-rollback__svc',

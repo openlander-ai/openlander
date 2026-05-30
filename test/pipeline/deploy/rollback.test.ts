@@ -18,6 +18,8 @@ function createMockDocker(): Docker {
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
     listAllContainers: vi.fn().mockResolvedValue([]),
     inspectImage: vi.fn().mockResolvedValue({}),
+    ensureProjectNetwork: vi.fn().mockResolvedValue('ol-env-app'),
+    connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
   } as unknown as Docker;
 }
 

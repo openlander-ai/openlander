@@ -33,8 +33,7 @@ import { serviceViewFromRows } from '../db/views/service-view.js';
 export interface MutationPolicyCtx {
   db: {
     isCircuitBreakerOpen: (projectId: string) => boolean;
-    // PR 4.5: needed for canonical-first status reads with `??` fallback.
-    getDeployableForProject: (projectId: string) => ServiceRow | undefined;
+    service?: ServiceRow | null;
   };
 }
 
@@ -48,8 +47,7 @@ export function assertProjectMutable(project: ProjectRow, ctx: MutationPolicyCtx
   if (project.archived_at) {
     throw new ProjectArchivedError(project.id);
   }
-  const deployable = ctx.db.getDeployableForProject(project.id);
-  const status = serviceViewFromRows(project, deployable).status;
+  const status = serviceViewFromRows(project, ctx.db.service).status;
   if (status === 'recovering') {
     throw new ProjectRecoveringError(project.id);
   }
@@ -105,8 +103,7 @@ export function assertProjectLifecycleMutable(
     throw new ProjectArchivedError(project.id);
   }
 
-  const deployable = ctx.db.getDeployableForProject(project.id);
-  const status = serviceViewFromRows(project, deployable).status;
+  const status = serviceViewFromRows(project, ctx.db.service).status;
 
   // Recovering gate — `stop` is the operator escape hatch.
   if (status === 'recovering' && action !== 'stop') {

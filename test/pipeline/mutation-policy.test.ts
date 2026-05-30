@@ -53,9 +53,7 @@ function makeCtx(opts: { circuitBreakerOpen?: boolean } = {}) {
   return {
     db: {
       isCircuitBreakerOpen: vi.fn().mockReturnValue(opts.circuitBreakerOpen ?? false),
-      // PR 4.5: canonical-first reads need this helper; default to undefined
-      // so legacy `projects` columns provide the fallback.
-      getDeployableForProject: vi.fn().mockReturnValue(undefined),
+      service: null as ServiceRow | null,
     },
   };
 }
@@ -143,7 +141,7 @@ describe('assertProjectMutable', () => {
   it('uses canonical service status before stale project status', () => {
     const project = makeProject({ status: 'recovering' });
     const ctx = makeCtx();
-    ctx.db.getDeployableForProject.mockReturnValueOnce(makeService({ status: 'running' }));
+    ctx.db.service = makeService({ status: 'running' });
 
     expect(() => assertProjectMutable(project, ctx)).not.toThrow();
     expect(ctx.db.isCircuitBreakerOpen).toHaveBeenCalledOnce();
@@ -254,7 +252,7 @@ describe('assertProjectLifecycleMutable', () => {
     it('uses canonical service status before stale project status', () => {
       const project = makeProject({ status: 'recovering' });
       const ctx = makeCtx();
-      ctx.db.getDeployableForProject.mockReturnValueOnce(makeService({ status: 'running' }));
+      ctx.db.service = makeService({ status: 'running' });
 
       expect(() => assertProjectLifecycleMutable(project, 'archive', ctx)).not.toThrow();
       expect(ctx.db.isCircuitBreakerOpen).toHaveBeenCalledOnce();

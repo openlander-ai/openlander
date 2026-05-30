@@ -475,11 +475,9 @@ export async function createMutationPolicySnapshot(
       : Promise.resolve({ service: null }),
     ctx.db.isCircuitBreakerOpen(project.id),
   ]);
-  const deployable = serviceRecord?.service ?? undefined;
-
   return {
     db: {
-      getDeployableForProject: (projectId) => (projectId === project.id ? deployable : undefined),
+      service: serviceRecord?.service ?? null,
       isCircuitBreakerOpen: (projectId) => projectId === project.id && circuitBreakerOpen,
     },
   };
