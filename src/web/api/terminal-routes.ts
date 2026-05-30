@@ -4,6 +4,7 @@ import type { Duplex } from 'node:stream';
 
 import type { AppContext } from '../../app.js';
 import { AuthService } from '../../auth/auth-service.js';
+import { loadServiceView } from '../../db/views/service-view.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { parseCookie } from '../middleware/cookies.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
@@ -106,18 +107,19 @@ export function createTerminalRoutes(
 
               const project = await getProjectOrThrow(c, ctx);
 
-              // PR 4 canonical-first: container_id + status from the
-              // deployable services row when available; fall back to
-              // legacy projects columns through migration 0012.
-              const deployable = await ctx.db.getDeployableForProject(project.id);
-              const status = deployable?.status ?? project.status;
-              const projectContainerId = deployable?.container_id ?? project.container_id;
-              if (!projectContainerId || status !== 'running') {
+              // S2.2 canonical-first via the service-first read model:
+              // container_id + status from the deployable services row,
+              // falling back to the deprecated projects columns through
+              // migration 0012. The view normalizes a missing status to
+              // 'idle'; the gate only branches on `!== 'running'`, so
+              // that bottom case stays inert here.
+              const view = await loadServiceView(ctx.db, project);
+              if (!view.containerId || view.status !== 'running') {
                 closeWithError(ws, 'Container is not running');
                 return;
               }
 
-              const containerId = projectContainerId;
+              const containerId = view.containerId;
               const containerInfo = await ctx.docker.inspectContainer(containerId);
               if (!containerInfo.State.Running) {
                 closeWithError(ws, 'Container is not running');
