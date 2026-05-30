@@ -111,6 +111,10 @@ describe('ProjectRepo.listProjectsWithMetadata', () => {
     expect(method).toContain('servicesByProject');
     expect(method).toContain('aggregateStatus ? { ...project, status: aggregateStatus } : project');
     expect(source).toContain(
+      "const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;",
+    );
+    expect(source).toContain('function deployableServiceKindFilter(kindColumn: SQL): SQL');
+    expect(source).not.toContain(
       "s.kind NOT IN ('postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose')",
     );
   });
