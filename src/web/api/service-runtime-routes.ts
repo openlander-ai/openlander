@@ -63,7 +63,11 @@ async function assertResolvedServiceMutable(
   ctx: AppContext,
   project: ProjectRow,
   runtimeProject: ProjectRow,
+  service: ResolvedServiceForRequest['service'],
 ): Promise<void> {
+  if (service.archived_at) {
+    throw new ProjectArchivedError(runtimeProject.id);
+  }
   if (runtimeProject.id !== project.id) {
     await assertProjectMutableForRoute(project, ctx);
   }
@@ -74,8 +78,12 @@ async function assertResolvedServiceLifecycleMutable(
   ctx: AppContext,
   project: ProjectRow,
   runtimeProject: ProjectRow,
+  service: ResolvedServiceForRequest['service'],
   action: LifecycleAction,
 ): Promise<void> {
+  if (service.archived_at) {
+    throw new ProjectArchivedError(runtimeProject.id);
+  }
   if (runtimeProject.id !== project.id) {
     await assertProjectLifecycleMutableForRoute(project, action, ctx);
   }
@@ -260,7 +268,7 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
     if (resolved instanceof Response) return resolved;
     const { project, runtimeProject, service } = resolved;
     try {
-      await assertResolvedServiceLifecycleMutable(ctx, project, runtimeProject, 'start');
+      await assertResolvedServiceLifecycleMutable(ctx, project, runtimeProject, service, 'start');
     } catch (err) {
       const response = mutationPolicyResponse(c, err);
       if (response) return response;
@@ -279,7 +287,7 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
     if (resolved instanceof Response) return resolved;
     const { project, runtimeProject, service } = resolved;
     try {
-      await assertResolvedServiceLifecycleMutable(ctx, project, runtimeProject, 'stop');
+      await assertResolvedServiceLifecycleMutable(ctx, project, runtimeProject, service, 'stop');
     } catch (err) {
       const response = mutationPolicyResponse(c, err);
       if (response) return response;
@@ -307,7 +315,7 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
     if (resolved instanceof Response) return resolved;
     const { project, runtimeProject, service } = resolved;
     try {
-      await assertResolvedServiceLifecycleMutable(ctx, project, runtimeProject, 'stop');
+      await assertResolvedServiceLifecycleMutable(ctx, project, runtimeProject, service, 'stop');
     } catch (err) {
       const response = mutationPolicyResponse(c, err);
       if (response) return response;
@@ -336,7 +344,7 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
     if (resolved instanceof Response) return resolved;
     const { project, runtimeProject, service } = resolved;
     try {
-      await assertResolvedServiceMutable(ctx, project, runtimeProject);
+      await assertResolvedServiceMutable(ctx, project, runtimeProject, service);
     } catch (err) {
       const response = mutationPolicyResponse(c, err);
       if (response) return response;
@@ -476,7 +484,7 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
     if (resolved instanceof Response) return resolved;
     const { project, runtimeProject, service } = resolved;
     try {
-      await assertResolvedServiceMutable(ctx, project, runtimeProject);
+      await assertResolvedServiceMutable(ctx, project, runtimeProject, service);
     } catch (err) {
       const response = mutationPolicyResponse(c, err);
       if (response) return response;
@@ -523,7 +531,7 @@ export function createServiceRuntimeRoutes(ctx: AppContext): Hono {
     if (resolved instanceof Response) return resolved;
     const { project, runtimeProject, service } = resolved;
     try {
-      await assertResolvedServiceLifecycleMutable(ctx, project, runtimeProject, 'archive');
+      await assertResolvedServiceLifecycleMutable(ctx, project, runtimeProject, service, 'archive');
     } catch (err) {
       const response = mutationPolicyResponse(c, err);
       if (response) return response;

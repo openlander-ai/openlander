@@ -44,6 +44,8 @@ export interface Project {
   isCompose?: boolean;
   serviceCount?: number;
   archived_at?: string | null;
+  partiallyArchived?: boolean;
+  partially_archived?: boolean;
 }
 
 export interface ProjectWithEnvironments extends Project {

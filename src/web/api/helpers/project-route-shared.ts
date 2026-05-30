@@ -149,6 +149,18 @@ export function parseProjectTags(tags: string | null | undefined): string[] {
   }
 }
 
+export function deriveGroupLifecycleState(services: ServiceRow[]): {
+  partiallyArchived: boolean;
+} {
+  if (services.length === 0) {
+    return { partiallyArchived: false };
+  }
+  const archivedCount = services.filter((service) => service.archived_at).length;
+  return {
+    partiallyArchived: archivedCount > 0 && archivedCount < services.length,
+  };
+}
+
 export function normalizeProjectTagsInput(input: unknown): string | null | undefined {
   if (input === undefined) return undefined;
   if (input === null) return null;

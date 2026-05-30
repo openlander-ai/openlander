@@ -50,6 +50,8 @@ export interface ProjectWithMetadata {
   childCount: number;
   /** True when the group contains at least one `compose-child` or a `compose` parent service. */
   isCompose: boolean;
+  /** True when at least one deployable service is archived while at least one remains active. */
+  partiallyArchived: boolean;
 }
 
 const log = createModuleLogger('project-repo');
@@ -102,6 +104,15 @@ function deriveGroupStatusFromServices(
   if (deployableRows.some((service) => service.status === 'error')) return 'error';
   if (deployableRows.some((service) => service.status === 'running')) return 'running';
   return 'stopped';
+}
+
+function derivePartiallyArchivedFromServices(
+  serviceRows: Array<{ kind: string; archived_at: string | null }>,
+): boolean {
+  const deployableRows = serviceRows.filter((service) => isDeployableStatusService(service.kind));
+  if (deployableRows.length === 0) return false;
+  const archivedCount = deployableRows.filter((service) => service.archived_at).length;
+  return archivedCount > 0 && archivedCount < deployableRows.length;
 }
 
 export class ProjectRepo {
@@ -344,7 +355,9 @@ export class ProjectRepo {
       );
     }
     if (!opts?.includeArchived) {
-      conditions.push(isNull(projects.archived_at));
+      conditions.push(
+        sql`(${projects.archived_at} IS NULL OR EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND s.kind NOT IN ('postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose') AND s.archived_at IS NULL))`,
+      );
     }
     const rows = await this.db
       .select()
@@ -492,6 +505,7 @@ export class ProjectRepo {
         project_id: services.project_id,
         kind: services.kind,
         status: services.status,
+        archived_at: services.archived_at,
       })
       .from(services)
       .where(inArray(services.project_id, projectIds));
@@ -499,12 +513,12 @@ export class ProjectRepo {
     const isComposeByProject = new Map<string, boolean>();
     const servicesByProject = new Map<
       string,
-      Array<{ kind: string; status: ServiceRow['status'] }>
+      Array<{ kind: string; status: ServiceRow['status']; archived_at: string | null }>
     >();
     for (const s of groupServices) {
       if (!s.project_id) continue;
       const rows = servicesByProject.get(s.project_id) ?? [];
-      rows.push({ kind: s.kind, status: s.status });
+      rows.push({ kind: s.kind, status: s.status, archived_at: s.archived_at });
       servicesByProject.set(s.project_id, rows);
       if (s.kind === 'compose' || s.kind === 'compose-child') {
         isComposeByProject.set(s.project_id, true);
@@ -521,14 +535,14 @@ export class ProjectRepo {
     const childCountByParent = await this.getDeployableServiceCountsByProjectIds(projectIds);
 
     return projectRows.map((project) => {
-      const aggregateStatus = deriveGroupStatusFromServices(
-        servicesByProject.get(project.id) ?? [],
-      );
+      const servicesForProject = servicesByProject.get(project.id) ?? [];
+      const aggregateStatus = deriveGroupStatusFromServices(servicesForProject);
       return {
         project: aggregateStatus ? { ...project, status: aggregateStatus } : project,
         environments: envByProject.get(project.id) ?? [],
         childCount: childCountByParent.get(project.id) ?? 0,
         isCompose: isComposeByProject.get(project.id) ?? false,
+        partiallyArchived: derivePartiallyArchivedFromServices(servicesForProject),
       };
     });
   }
@@ -740,6 +754,7 @@ export class ProjectRepo {
           isNotNull(projects.archived_at),
           ne(projects.id, ORPHAN_MANAGED_GROUP_ID),
           excludesAttachedRuntimeProjectRows(),
+          sql`NOT EXISTS (SELECT 1 FROM services s WHERE s.project_id = ${projects.id} AND s.kind NOT IN ('postgres', 'mysql', 'redis', 'mongo', 'minio', 'compose') AND s.archived_at IS NULL)`,
         ),
       )
       .orderBy(desc(projects.updated_at));

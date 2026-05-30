@@ -252,6 +252,13 @@ function serviceSummary(service: NonNullable<ServiceRow>, project: NonNullable<P
   };
 }
 
+function buildArchivedServiceRejection(
+  runtimeProject: ResolvedProjectRow,
+  project: ResolvedProjectRow,
+) {
+  return buildPolicyRejectionResponse(new ProjectArchivedError(runtimeProject.id), project.name);
+}
+
 function parseInternalRedeployEnvVars(args: Record<string, unknown>): Record<string, string> {
   const value = args['env_vars'];
   if (value === undefined || value === null) {
@@ -312,6 +319,10 @@ export async function runDeployableServiceAction(
   const healthCheckPath = args.health_check_path as string | undefined;
   const cmd = args.cmd as string[] | undefined;
   const envVars = parseInternalRedeployEnvVars(args);
+
+  if (service.archived_at) {
+    return buildArchivedServiceRejection(runtimeProject, project);
+  }
 
   const groupPolicyRejection =
     runtimeProject.id === project.id ? undefined : await tryRejectIfNotMutable(project, context);
@@ -534,6 +545,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
       if (groupPolicyRejection) {
         return groupPolicyRejection;
       }
+      if (service.archived_at) {
+        return buildArchivedServiceRejection(runtimeProject, project);
+      }
       const policyRejection = await tryRejectIfNotMutable(runtimeProject, context);
       if (policyRejection) {
         return policyRejection;
@@ -610,6 +624,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
         context,
         'archive_service',
       );
+      if (service.archived_at) {
+        return buildArchivedServiceRejection(runtimeProject, project);
+      }
       await context.appCtx.pipeline.archive(runtimeProject.id);
       return { status: 'archived', service: serviceSummary(service, project) };
     },

@@ -118,7 +118,13 @@ describe('createProjectGroupRoutes', () => {
     const app = createApp({
       db: {
         listProjectsWithMetadata: vi.fn(async () => [
-          { project, environments: [env], childCount: 1, isCompose: false },
+          {
+            project,
+            environments: [env],
+            childCount: 1,
+            isCompose: false,
+            partiallyArchived: false,
+          },
         ]),
       },
     });
@@ -137,16 +143,18 @@ describe('createProjectGroupRoutes', () => {
           tags: ['api', 'production'],
           url: null,
           urls: [],
+          partiallyArchived: false,
+          partially_archived: false,
           environments: [
             {
               id: env.id,
               url: 'http://workspace.192.0.2.10.sslip.io',
               urls: expect.arrayContaining([
-                {
+                expect.objectContaining({
                   url: 'http://workspace.192.0.2.10.sslip.io',
                   type: 'lan',
                   ip: '192.0.2.10',
-                },
+                }),
               ]),
             },
           ],
@@ -165,6 +173,7 @@ describe('createProjectGroupRoutes', () => {
         getEnvironmentsByProject: vi.fn(async () => [env]),
         getDeployLogs: vi.fn(async () => []),
         getDeployableForProject: vi.fn(async () => service),
+        getDeployablesByGroup: vi.fn(async () => [service]),
       },
       env: { getAll: vi.fn(async () => []) },
     });
@@ -177,25 +186,57 @@ describe('createProjectGroupRoutes', () => {
       port: 10001,
       url: 'http://workspace.192.0.2.10.sslip.io',
       urls: expect.arrayContaining([
-        {
+        expect.objectContaining({
           url: 'http://workspace.192.0.2.10.sslip.io',
           type: 'lan',
           ip: '192.0.2.10',
-        },
+        }),
       ]),
       environments: [
         {
           id: env.id,
           url: 'http://workspace.192.0.2.10.sslip.io',
           urls: expect.arrayContaining([
-            {
+            expect.objectContaining({
               url: 'http://workspace.192.0.2.10.sslip.io',
               type: 'lan',
               ip: '192.0.2.10',
-            },
+            }),
           ]),
         },
       ],
+    });
+  });
+
+  it('reports a partial group without exposing the group as archived on detail', async () => {
+    const archivedAt = '2026-02-01T00:00:00.000Z';
+    const project = makeProjectRow({ archived_at: archivedAt });
+    const primary = makeServiceRow({ archived_at: archivedAt });
+    const worker = makeServiceRow({
+      id: 'worker__svc',
+      name: 'worker__svc',
+      archived_at: null,
+      status: 'running',
+    });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getEnvironmentsByProject: vi.fn(async () => []),
+        getDeployLogs: vi.fn(async () => []),
+        getDeployableForProject: vi.fn(async () => primary),
+        getDeployablesByGroup: vi.fn(async () => [primary, worker]),
+      },
+      env: { getAll: vi.fn(async () => []) },
+    });
+
+    const res = await app.request('/api/projects/group-1');
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      id: project.id,
+      archived_at: null,
+      partiallyArchived: true,
+      partially_archived: true,
     });
   });
 
@@ -316,6 +357,7 @@ describe('createProjectGroupRoutes', () => {
     const db = {
       getProject: vi.fn(async () => project),
       getDeployableForProject: vi.fn(async () => makeServiceRow()),
+      getDeployablesByGroup: vi.fn(async () => [makeServiceRow()]),
       isCircuitBreakerOpen: vi.fn(async () => false),
     };
     const pipeline = {
@@ -336,6 +378,32 @@ describe('createProjectGroupRoutes', () => {
     expect(pipeline.unarchiveGroup).toHaveBeenCalledWith('group-1');
     expect(pipeline.archive).not.toHaveBeenCalled();
     expect(pipeline.unarchive).not.toHaveBeenCalled();
+  });
+
+  it('allows group archive to finish a partially archived group', async () => {
+    const archivedAt = '2026-02-01T00:00:00.000Z';
+    const project = makeProjectRow({ archived_at: archivedAt });
+    const primary = makeServiceRow({ archived_at: archivedAt });
+    const worker = makeServiceRow({
+      id: 'worker__svc',
+      name: 'worker__svc',
+      archived_at: null,
+      status: 'running',
+    });
+    const db = {
+      getProject: vi.fn(async () => project),
+      getDeployableForProject: vi.fn(async () => primary),
+      getDeployablesByGroup: vi.fn(async () => [primary, worker]),
+      isCircuitBreakerOpen: vi.fn(async () => false),
+    };
+    const pipeline = { archiveGroup: vi.fn(async () => undefined) };
+    const coordinator = { suppressProject: vi.fn() };
+    const app = createApp({ db, pipeline, coordinator });
+
+    const res = await app.request('/api/projects/group-1/archive', { method: 'POST' });
+
+    expect(res.status).toBe(200);
+    expect(pipeline.archiveGroup).toHaveBeenCalledWith('group-1');
   });
 
   it('blocks project delete when deployable services still exist', async () => {

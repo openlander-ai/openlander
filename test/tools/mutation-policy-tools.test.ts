@@ -11,6 +11,7 @@ import { createSharedToolRegistry } from './shared-tool-registry.js';
 
 interface ProjectFixtureOpts {
   archived?: boolean;
+  serviceArchived?: boolean;
   status?: 'running' | 'recovering' | 'stopped' | 'error' | 'building';
   circuitBreakerOpen?: boolean;
 }
@@ -30,6 +31,7 @@ function createPolicyContext(opts: ProjectFixtureOpts = {}): AppContext {
     source: 'git',
     repo_url: 'https://github.com/openlander/rejected-api.git',
     image_url: null,
+    archived_at: opts.serviceArchived ? '2026-02-01T00:00:00.000Z' : null,
   };
   return {
     db: {
@@ -156,6 +158,14 @@ describe('MCP service runtime mutation policy rejections', () => {
   describe('redeploy_app', () => {
     it('rejects archived project up-front instead of returning fake deploying', async () => {
       const ctx = createPolicyContext({ archived: true });
+      const result = await getTool(ctx, 'redeploy_app').execute(serviceArgs, { target: 'mcp' });
+      expectPolicyRejection(result, 'PROJECT_ARCHIVED');
+      expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+      expect(ctx.db.acquireDeployLock).not.toHaveBeenCalled();
+    });
+
+    it('rejects archived service rows even when the group project is active', async () => {
+      const ctx = createPolicyContext({ serviceArchived: true });
       const result = await getTool(ctx, 'redeploy_app').execute(serviceArgs, { target: 'mcp' });
       expectPolicyRejection(result, 'PROJECT_ARCHIVED');
       expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
