@@ -1,5 +1,6 @@
 import type { OpenLanderConfig } from '../config/index.js';
-import type { Database } from '../db/index.js';
+import type { Database, ProjectRow } from '../db/index.js';
+import { loadServiceViewRecord } from '../db/views/service-view.js';
 import type { EventBus, EventPayload } from '../events/index.js';
 import type { RuntimeSignal } from '../health/types.js';
 import { createModuleLogger } from '../lib/logger.js';
@@ -230,10 +231,7 @@ export class RecoveryCoordinator {
       return { eligible: false, reason: 'project_not_found' };
     }
 
-    // PR 4.5: canonical-first read of status with `??` fallback to legacy
-    // `projects` column through migration 0012.
-    const deployable = await this.db.getDeployableForProject(projectId);
-    const status = deployable?.status ?? project.status;
+    const status = (await loadServiceViewRecord(this.db, project as ProjectRow)).view.status;
 
     // Coordinator-specific status whitelist (depends on trigger).
     // checkEligibility legacy behaviour: only running/error are eligible.
@@ -241,11 +239,11 @@ export class RecoveryCoordinator {
     // already have transitioned the project; recovery_in_progress handled by policy).
     if (trigger === 'continue_check') {
       if (status !== 'running' && status !== 'recovering') {
-        return { eligible: false, reason: `status_${status ?? 'unknown'}` };
+        return { eligible: false, reason: `status_${status}` };
       }
     } else {
       if (status !== 'running' && status !== 'error') {
-        return { eligible: false, reason: `status_${status ?? 'unknown'}` };
+        return { eligible: false, reason: `status_${status}` };
       }
     }
 
@@ -511,16 +509,15 @@ export class RecoveryCoordinator {
       return;
     }
     const project = await this.getProjectSnapshot(projectId);
-    // PR 4.5: canonical-first read of container_id with `||` fallback.
-    const deployable = await this.db.getDeployableForProject(projectId);
+    const view = project
+      ? (await loadServiceViewRecord(this.db, project as ProjectRow)).view
+      : null;
     this.opsAgent.enqueue({
       type: 'deploy:crash',
       payload: {
         projectId,
         projectName: project?.name ?? projectId,
-        containerId:
-          // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-          containerIdOverride || deployable?.container_id || project?.container_id || '',
+        containerId: containerIdOverride || view?.containerId || '',
       },
       timestamp: Date.now(),
     });
@@ -573,9 +570,7 @@ export class RecoveryCoordinator {
     const project = await this.getProjectSnapshot(projectId);
     if (!project) return;
 
-    // PR 4.5: canonical-first status read with `??` fallback.
-    const deployable = await this.db.getDeployableForProject(projectId);
-    const status = deployable?.status ?? project.status;
+    const status = (await loadServiceViewRecord(this.db, project as ProjectRow)).view.status;
 
     if (status === 'recovering') {
       await this.transitionProjectStatus(

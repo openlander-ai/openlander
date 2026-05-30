@@ -71,7 +71,7 @@ describe('RecoveryCoordinator', () => {
     vi.useRealTimers();
   });
 
-  it('returns eligible when all 7 gate conditions pass', () => {
+  it('returns eligible when all 7 gate conditions pass', async () => {
     const { db } = createMockDb();
     const coordinator = new RecoveryCoordinator(
       db as unknown as Database,
@@ -79,10 +79,10 @@ describe('RecoveryCoordinator', () => {
       createMockConfig(),
     );
 
-    expect(coordinator.checkEligibility('proj-1')).toEqual({ eligible: true });
+    await expect(coordinator.checkEligibility('proj-1')).resolves.toEqual({ eligible: true });
   });
 
-  it('allows recovery for project in error status', () => {
+  it('allows recovery for project in error status', async () => {
     const { db } = createMockDb({ status: 'error' });
     const coordinator = new RecoveryCoordinator(
       db as unknown as Database,
@@ -90,10 +90,10 @@ describe('RecoveryCoordinator', () => {
       createMockConfig(),
     );
 
-    expect(coordinator.checkEligibility('proj-1')).toEqual({ eligible: true });
+    await expect(coordinator.checkEligibility('proj-1')).resolves.toEqual({ eligible: true });
   });
 
-  it('blocks suppressed projects and expires suppression window', () => {
+  it('blocks suppressed projects and expires suppression window', async () => {
     const { db } = createMockDb();
     const coordinator = new RecoveryCoordinator(
       db as unknown as Database,
@@ -102,7 +102,7 @@ describe('RecoveryCoordinator', () => {
     );
 
     coordinator.suppressProject('proj-1', 5_000);
-    expect(coordinator.checkEligibility('proj-1')).toEqual({
+    await expect(coordinator.checkEligibility('proj-1')).resolves.toEqual({
       eligible: false,
       reason: 'operator_suppressed',
     });
@@ -110,10 +110,10 @@ describe('RecoveryCoordinator', () => {
     vi.advanceTimersByTime(5_001);
 
     expect(coordinator.isOperatorSuppressed('proj-1')).toBe(false);
-    expect(coordinator.checkEligibility('proj-1')).toEqual({ eligible: true });
+    await expect(coordinator.checkEligibility('proj-1')).resolves.toEqual({ eligible: true });
   });
 
-  it('enforces the rolling global LLM budget window', () => {
+  it('enforces the rolling global LLM budget window', async () => {
     const { db } = createMockDb();
     const coordinator = new RecoveryCoordinator(
       db as unknown as Database,
@@ -126,7 +126,7 @@ describe('RecoveryCoordinator', () => {
     coordinator.recordLlmCall();
 
     expect(coordinator.isGlobalBudgetExceeded()).toBe(true);
-    expect(coordinator.checkEligibility('proj-1')).toEqual({
+    await expect(coordinator.checkEligibility('proj-1')).resolves.toEqual({
       eligible: false,
       reason: 'global_budget_exceeded',
     });
@@ -490,13 +490,16 @@ describe('RecoveryCoordinator', () => {
         events,
         createMockConfig(),
       );
-      let resolveStarted: (() => void) | undefined;
-      const gate = new Promise<void>((resolve) => {
-        resolveStarted = resolve;
+      let resolveTransition: (() => void) | undefined;
+      const transitionGate = new Promise<void>((resolve) => {
+        resolveTransition = resolve;
       });
-      const started = vi.fn(async () => {
-        await gate;
+      const transition = vi.fn(async () => {
+        await transitionGate;
+        return true;
       });
+      coordinator.setStateManager({ transition });
+      const started = vi.fn();
       const signal: RuntimeSignal = {
         projectId: 'proj-1',
         kind: 'probe_failed',
@@ -507,13 +510,13 @@ describe('RecoveryCoordinator', () => {
       events.on('recovery:started', started);
 
       const firstIngest = coordinator.ingestRuntimeSignal(signal);
-      await Promise.resolve();
       await coordinator.ingestRuntimeSignal(signal);
 
-      expect(started).toHaveBeenCalledTimes(1);
-
-      resolveStarted?.();
+      resolveTransition?.();
       await firstIngest;
+
+      expect(transition).toHaveBeenCalledTimes(1);
+      expect(started).toHaveBeenCalledTimes(1);
     });
 
     it('routes post_deploy_regression through the health degradation flow', async () => {
