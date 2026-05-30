@@ -134,7 +134,10 @@ describe('GET /api/projects/:id/env-example', () => {
       db: {
         getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
         getProjectByName: vi.fn(async () => undefined),
-        getDeployableForProject: vi.fn(async () => deployable),
+        getServices: vi.fn(async () => [deployable]),
+        getDeployableForProject: vi.fn(async () => {
+          throw new Error('getDeployableForProject must not be called by env-example');
+        }),
         getEnvironmentsByProject: vi.fn(async () => [productionEnvironment]),
       },
       env: {
