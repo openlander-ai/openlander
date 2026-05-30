@@ -66,6 +66,20 @@ function isManagedServiceNode(service: ServiceNode): boolean {
   return service.source === 'managed';
 }
 
+function serviceRoleLabel(service: ServiceNode): string {
+  if (isManagedServiceNode(service)) {
+    const normalized = service.image?.toLowerCase() ?? '';
+    if (normalized.includes('postgres')) return 'PostgreSQL';
+    if (normalized.includes('timescale')) return 'Timescale';
+    if (normalized.includes('redis')) return 'Redis';
+    if (normalized.includes('minio')) return 'MinIO';
+    if (normalized.includes('mysql')) return 'MySQL';
+    if (normalized.includes('mongo')) return 'MongoDB';
+    return 'Infrastructure';
+  }
+  return service.kind === 'Database' ? 'Database' : 'Application';
+}
+
 function reportManagedServicesLoadFailure(err: unknown): void {
   if (import.meta.env.DEV) {
     console.warn('[ProjectView] Failed to load connected managed services', err);
@@ -465,6 +479,7 @@ function ServicesPanel({
                     <span className="text-[13.5px] font-semibold text-[color:var(--ol-fg)]">
                       {s.name}
                     </span>
+                    <ServiceRoleBadge service={s} />
                     <HealthPill health={s.health} />
                   </div>
                   <div className="ol-mono mt-0.5 truncate text-[11.5px] text-[color:var(--ol-fg-muted)]">
@@ -508,6 +523,22 @@ function ServicesPanel({
         })}
       </ul>
     </div>
+  );
+}
+
+function ServiceRoleBadge({ service }: { service: ServiceNode }) {
+  const managed = isManagedServiceNode(service);
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium',
+        managed
+          ? 'border-[color:var(--ol-border)] bg-[color:var(--ol-info-soft)] text-[color:var(--ol-info)]'
+          : 'border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]',
+      )}
+    >
+      {serviceRoleLabel(service)}
+    </span>
   );
 }
 

@@ -520,13 +520,13 @@ export const translations = {
     },
     servicesGuide: {
       empty:
-        'No deployable services in this project yet. Add a Git repo, Docker image, or compose service.',
-      help: 'A project is the group; services are the deployable apps/workers inside it. MCP follow-up actions should use service_id.',
+        'No services in this project yet. Add an app, worker, database, cache, or compose service.',
+      help: 'A project is the group; services are the apps, workers, databases, caches, and storage attached to it. MCP follow-up actions should use service_id.',
       banner:
-        'These are deployable services. Use the MCP service_id shown below for env vars, redeploys, domains, and diagnostics.',
+        'This list includes application and infrastructure services in the project. Use the MCP service_id shown below for follow-up actions.',
       serviceId: 'MCP service_id: {id}',
       serviceIdTooltip:
-        'Pass this to MCP actions like redeploy_app, set_env_vars, and diagnose_service.',
+        'Pass this to MCP actions. Application services support deploy/env/domain/diagnostic actions; infrastructure services support logs, connections, and lifecycle actions.',
     },
     domains: {
       empty: 'No domains attached yet.',
