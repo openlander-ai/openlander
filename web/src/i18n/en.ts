@@ -520,16 +520,27 @@ export const translations = {
     },
     serviceLifecycle: {
       title: 'Service lifecycle',
+      archivedBadge: 'Archived',
     },
     serviceArchive: {
       title: 'Archive this service',
-      body: 'Stop the runtime and hide this deployable while preserving configuration and history.',
+      body: 'Stop the runtime and mark this deployable archived while preserving configuration and history.',
       confirmTitle: 'Archive deployable service',
       confirmDescription:
-        'This stops the runtime and removes it from the active services view. Configuration, env vars, domains, and history are preserved.',
+        'This stops the runtime and marks the service archived. Configuration, env vars, domains, and history are preserved.',
       archiving: 'Archiving…',
       confirmButton: 'Archive service',
       error: 'Failed to archive service',
+    },
+    serviceRestore: {
+      title: 'Restore this service',
+      body: 'Return this archived deployable to the active lifecycle path. Redeploy it to start a runtime again.',
+      confirmTitle: 'Restore deployable service',
+      confirmDescription:
+        'This clears the archived marker. It does not start a container by itself; redeploy the service after restoring it.',
+      restoring: 'Restoring…',
+      confirmButton: 'Restore service',
+      error: 'Failed to restore service',
     },
     servicesGuide: {
       empty:

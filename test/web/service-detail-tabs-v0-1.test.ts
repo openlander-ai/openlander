@@ -178,9 +178,13 @@ describe('Service detail v0.1 tabs', () => {
 
   it('surfaces service archive before hard delete and keeps deletion typed-confirm', () => {
     expect(source).toContain('archiveGroupService');
+    expect(source).toContain('unarchiveGroupService');
+    expect(source).toContain('archivedAt');
     expect(source).toContain("t('projectDetail.serviceLifecycle.title')");
-    expect(source).toContain("t('projectDetail.serviceArchive.title')");
-    expect(source.indexOf("t('projectDetail.serviceArchive.title')")).toBeLessThan(
+    expect(source).toContain("t('projectDetail.serviceLifecycle.archivedBadge')");
+    expect(source).toContain('projectDetail.serviceArchive.title');
+    expect(source).toContain('projectDetail.serviceRestore.title');
+    expect(source.indexOf('projectDetail.serviceArchive.title')).toBeLessThan(
       source.indexOf("t('projectDetail.serviceDelete.title')"),
     );
     expect(source).toContain('expectedDeleteSlug');

@@ -27,6 +27,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import {
   Activity as ActivityIcon,
   Archive,
+  ArchiveRestore,
   Box,
   ClipboardPaste,
   Code2,
@@ -65,6 +66,7 @@ import {
   archiveGroupService,
   deleteGroupService,
   managedServices,
+  unarchiveGroupService,
   type ConnectedProject,
   type GroupService,
   type MetricsRange,
@@ -239,6 +241,8 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
       imageUrl: serviceDetail.imageUrl ?? service.imageUrl,
       imageCmd: serviceDetail.imageCmd ?? service.imageCmd,
       containerPort: serviceDetail.containerPort ?? service.containerPort,
+      archivedAt:
+        serviceDetail.archivedAt !== undefined ? serviceDetail.archivedAt : service.archivedAt,
       image: serviceDetail.image ?? service.image,
       port: serviceDetail.port ?? service.port,
     };
@@ -353,6 +357,11 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
             </span>
             <span>{resolvedService.name}</span>
             {effectiveHealth && <HealthBadge health={effectiveHealth} />}
+            {resolvedService.archivedAt && (
+              <Badge variant="neutral" className="text-[10.5px] uppercase tracking-[0.06em]">
+                {t('projectDetail.serviceLifecycle.archivedBadge')}
+              </Badge>
+            )}
             {liveHealth.error && (
               // Health endpoint is degraded — surface gracefully so the
               // user knows the displayed pill is the LAST KNOWN state
@@ -1572,16 +1581,29 @@ function ServiceDangerZone({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const expectedDeleteSlug = projectName ? `${projectName}/${service.name}` : '';
+  const isArchived = service.archivedAt != null;
 
   const submitArchiveService = async () => {
     if (!projectId) return;
     setArchiving(true);
     setArchiveError(null);
     try {
-      await archiveGroupService(projectId, service.id);
+      if (isArchived) {
+        await unarchiveGroupService(projectId, service.id);
+      } else {
+        await archiveGroupService(projectId, service.id);
+      }
       onServiceArchived();
     } catch (err) {
-      setArchiveError(err instanceof Error ? err.message : t('projectDetail.serviceArchive.error'));
+      setArchiveError(
+        err instanceof Error
+          ? err.message
+          : t(
+              isArchived
+                ? 'projectDetail.serviceRestore.error'
+                : 'projectDetail.serviceArchive.error',
+            ),
+      );
     } finally {
       setArchiving(false);
     }
@@ -1626,14 +1648,22 @@ function ServiceDangerZone({
           aria-hidden
           className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[color:var(--ol-primary-soft)] text-[color:var(--ol-primary)]"
         >
-          <Archive className="h-4 w-4" />
+          {isArchived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
         </span>
         <span className="flex flex-col gap-0.5">
           <span className="text-[13px] font-medium text-[color:var(--ol-fg)]">
-            {t('projectDetail.serviceArchive.title')}
+            {t(
+              isArchived
+                ? 'projectDetail.serviceRestore.title'
+                : 'projectDetail.serviceArchive.title',
+            )}
           </span>
           <span className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
-            {t('projectDetail.serviceArchive.body')}
+            {t(
+              isArchived
+                ? 'projectDetail.serviceRestore.body'
+                : 'projectDetail.serviceArchive.body',
+            )}
           </span>
         </span>
       </button>
@@ -1737,12 +1767,28 @@ function ServiceDangerZone({
       <ConfirmDialog
         open={archiveOpen}
         onOpenChange={setArchiveOpen}
-        title={t('projectDetail.serviceArchive.confirmTitle')}
-        description={t('projectDetail.serviceArchive.confirmDescription')}
+        title={t(
+          isArchived
+            ? 'projectDetail.serviceRestore.confirmTitle'
+            : 'projectDetail.serviceArchive.confirmTitle',
+        )}
+        description={t(
+          isArchived
+            ? 'projectDetail.serviceRestore.confirmDescription'
+            : 'projectDetail.serviceArchive.confirmDescription',
+        )}
         confirmLabel={
           archiving
-            ? t('projectDetail.serviceArchive.archiving')
-            : t('projectDetail.serviceArchive.confirmButton')
+            ? t(
+                isArchived
+                  ? 'projectDetail.serviceRestore.restoring'
+                  : 'projectDetail.serviceArchive.archiving',
+              )
+            : t(
+                isArchived
+                  ? 'projectDetail.serviceRestore.confirmButton'
+                  : 'projectDetail.serviceArchive.confirmButton',
+              )
         }
         cancelLabel={t('projectDetail.env.cancel')}
         onConfirm={() => void submitArchiveService()}

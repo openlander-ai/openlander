@@ -286,12 +286,14 @@ describe('createProjectCompatRoutes', () => {
 
   it('does not classify deployable app nodes as databases from the project name', async () => {
     const project = { id: 'pgredis-fix2', name: 'pgredis-fix2', container_id: null, status: null };
+    const archivedAt = '2026-01-02T00:00:00.000Z';
     const appService = makeServiceRow({
       id: 'pgredis-fix2__svc',
       project_id: project.id,
       name: 'pgredis-fix2__svc',
       kind: 'git',
       image_url: 'nginx:alpine',
+      archived_at: archivedAt,
     });
     const app = createApp({
       docker: {
@@ -317,6 +319,7 @@ describe('createProjectCompatRoutes', () => {
           id: 'pgredis-fix2__svc',
           name: 'pgredis-fix2',
           kind: 'Application',
+          archivedAt,
         },
       ],
     });
