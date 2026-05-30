@@ -1,5 +1,6 @@
 import type { Agent } from '../llm/agent.js';
 import type { Database, DeployLogRow } from '../db/index.js';
+import { loadServiceViewRecord } from '../db/views/service-view.js';
 import type { EventBus } from '../events/index.js';
 import type { OpenLanderConfig } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
@@ -105,10 +106,7 @@ export class PostmortemGenerator {
       }
       const project = await this.db.getProject(projectId);
       const projectName = project?.name ?? projectId;
-      // PR 4.5: canonical-first status read with `??` fallback.
-      const deployable = project ? await this.db.getDeployableForProject(projectId) : undefined;
-      // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-      const status = deployable?.status ?? project?.status;
+      const status = project ? (await loadServiceViewRecord(this.db, project)).view.status : null;
 
       // Skip non-running projects — no postmortem needed
       if (!project || status !== 'running' || project.archived_at) {
