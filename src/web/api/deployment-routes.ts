@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { AppContext } from '../../app.js';
 import type { DeployLogRow, ProjectRow, ServiceRow } from '../../db/index.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
+import { loadServiceViewRecords } from '../../db/views/service-view.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 import { extractFailureSummary, normalizeTimestamp } from './helpers/project-route-shared.js';
 import { resolveDeployableServiceForRoute } from './helpers/deployable-service-route-shared.js';
@@ -100,10 +101,8 @@ export function createDeploymentRoutes(ctx: AppContext): Hono {
     const limit = parseLimit(c.req.query('limit'), 50);
     const environmentId = c.req.query('environmentId');
     const logs = await ctx.db.getDeployLogs(project.id, limit, environmentId);
-    const deployable =
-      typeof ctx.db.getDeployableForProject === 'function'
-        ? await ctx.db.getDeployableForProject(project.id)
-        : undefined;
+    const serviceRecords = await loadServiceViewRecords(ctx.db, [project]);
+    const deployable = serviceRecords.get(project.id)?.service;
     const deployments = prependInFlightDeploy(logs.map(mapDeployLogSummary), deployable, project);
 
     return c.json({

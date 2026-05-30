@@ -106,6 +106,7 @@ describe('createDeploymentRoutes', () => {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
         getDeployLogs,
+        getServices: vi.fn(async () => []),
       },
     });
 
@@ -139,7 +140,10 @@ describe('createDeploymentRoutes', () => {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
         getDeployLogs: vi.fn(async () => [makeDeployLog({ id: 'previous-deploy' })]),
-        getDeployableForProject: vi.fn(async () => service),
+        getServices: vi.fn(async () => [service]),
+        getDeployableForProject: vi.fn(async () => {
+          throw new Error('getDeployableForProject must not be called by deployment list');
+        }),
       },
     });
 
