@@ -2,6 +2,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import type { ServiceRow } from '../../db/types.js';
+import { serviceViewFromRows } from '../../db/views/service-view.js';
 import { emptySchema } from './schemas.js';
 import type { ToolDef } from './types.js';
 
@@ -70,10 +71,30 @@ export const projectOpsToolDefs: ToolDef[] = [
           count: projects.length,
           projects: projects.map((project) => {
             const deployable = deployables.get(project.id);
-            const status = deployable?.status ?? project.status;
-            const port = deployable?.assigned_port ?? project.assigned_port;
-            const containerId = deployable?.container_id ?? project.container_id;
-            const publicUrl = deployable?.public_url ?? project.public_url;
+            const view = serviceViewFromRows(project, deployable);
+            // S3.2: read via ServiceView, but restore each field's historic
+            // MCP JSON bottom (JSON.stringify omits `undefined`, serializes
+            // `null`). `listProjects()` hydrates the project row from the
+            // canonical `__svc` services row (mergeDeployable), so the old
+            // `deployable?.X ?? project.X` chains emitted:
+            //   - a value / explicit `null` when a services row exists
+            //     (assigned_port / public_url are nullable on that row), and
+            //   - `undefined` (key omitted) only when NO services row exists.
+            // So restore `null` when `deployable` is present and omit
+            // otherwise — `view.assignedPort ?? undefined` alone would drop
+            // the explicit-null case to an omit.
+            //
+            // status is exempt: the services-row status is non-null and
+            // never 'idle' (enum running|stopped|error), so a view 'idle'
+            // uniquely marks the no-services-row bottom → omit.
+            //
+            // visibility stays on the deprecated direct read — its raw
+            // null/undefined distinction is not recoverable from the view
+            // (deferred, service-view-deferred-routes).
+            const status = view.status === 'idle' ? undefined : view.status;
+            const port = deployable ? view.assignedPort : undefined;
+            const containerId = view.containerId;
+            const publicUrl = deployable ? view.publicUrl : undefined;
             const deployableContainerName =
               deployable?.container_name ??
               (containerId ? projectContainerName(project.name) : null);
