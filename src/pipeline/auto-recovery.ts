@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import type { ChatStreamEvent } from '../types/agent-events.js';
 import type { BuildDebugger } from './build-debugger.js';
 import type { Database } from '../db/index.js';
+import { loadServiceViewRecord } from '../db/views/service-view.js';
 import type { EventBus } from '../events/index.js';
 import type { EventPayload } from '../events/index.js';
 import type { QuestionBridge } from '../lib/question-bridge.js';
@@ -336,9 +337,7 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     (async (projectId: string) => {
       const project = await db.getProject(projectId);
       if (!project) return false;
-      // PR 4.5: canonical-first status read with `??` fallback.
-      const deployable = await db.getDeployableForProject(projectId);
-      const status = deployable?.status ?? project.status;
+      const status = (await loadServiceViewRecord(db, project)).view.status;
       return status === 'running' && !project.archived_at;
     });
 
@@ -810,16 +809,11 @@ ${plan.agentGuidance}
       }
 
       if (buildDebugger && latestBuildLog) {
-        const debugDeployable = await db.getDeployableForProject(projectId);
+        const debugView = project ? (await loadServiceViewRecord(db, project)).view : null;
         const diagnosis = await buildDebugger.diagnose({
           buildLog: latestBuildLog,
           projectName,
-          // PR 4.5: canonical-first read of image_tag with `??` fallback.
-          imageTag:
-            debugDeployable?.image_tag ??
-            // eslint-disable-next-line openlander-internal/no-dropped-columns -- transitional: canonical-first read or non-row identifier; tracked for 1.1 cleanup
-            project?.image_tag ??
-            `openlander/${projectName}:latest`,
+          imageTag: debugView?.imageTag ?? `openlander/${projectName}:latest`,
           failedStep: mapFailStep(step),
         });
         await emitTimelineMessage(eventBus, projectId, `Debug summary: ${diagnosis.summary}`);
