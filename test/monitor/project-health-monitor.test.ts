@@ -225,6 +225,46 @@ describe('ProjectHealthMonitor', () => {
     expect(emit).not.toHaveBeenCalledWith('health:degraded', expect.anything());
   });
 
+  it('uses canonical service probe context before stale project columns', async () => {
+    const project = createProject({
+      id: 'canonical-app',
+      name: 'canonical-app',
+      status: 'running',
+      container_id: 'stale-project-container',
+      assigned_port: 1111,
+    });
+    const deployable = {
+      id: 'canonical-app__svc',
+      project_id: 'canonical-app',
+      name: 'canonical-app__svc',
+      status: 'running',
+      assigned_port: 4567,
+      container_id: 'canonical-service-container',
+      container_name: 'ol-canonical-app',
+      project_type: 'web',
+      health_check_strategy: null,
+      health_check_path: null,
+    } as ServiceRow;
+    const db = {
+      getProject: vi.fn().mockReturnValue(project),
+      listProjects,
+      listServices,
+      updateProject,
+      updateService,
+      getDeployableForProject: vi.fn().mockReturnValue(deployable),
+    } as unknown as Database;
+    monitor = new ProjectHealthMonitor({} as Docker, db, { emit } as unknown as EventBus);
+    mockRunProbe.mockResolvedValue({ healthy: true, source: 'http', responseTimeMs: 12 });
+
+    await (monitor as unknown as MonitorInternals).runCheck('canonical-app');
+
+    expect(mockRunProbe).toHaveBeenCalledWith(expect.objectContaining({ strategy: 'http' }), {
+      projectId: 'canonical-app',
+      containerId: 'canonical-service-container',
+      assignedPort: 4567,
+    });
+  });
+
   it('emits health:degraded after the failure threshold is reached', async () => {
     monitor = createMonitor({ failureThreshold: 3 });
     mockRunProbe.mockResolvedValue({
