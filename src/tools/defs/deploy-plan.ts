@@ -10,6 +10,11 @@ import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.j
 import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import {
+  loadServiceViewRecords,
+  serviceViewFromRows,
+  type ServiceViewRecord,
+} from '../../db/views/service-view.js';
+import {
   buildDeployLockedResponse,
   deployTriggerForToolContext,
   tryAcquireDeployLockOrResponse,
@@ -73,12 +78,32 @@ function readinessGuidance(readiness: DeploymentReadiness): string | undefined {
   return undefined;
 }
 
+async function loadProjectServiceRecord(
+  appCtx: AppCtx,
+  projectId: string,
+): Promise<ServiceViewRecord | undefined> {
+  const project = await appCtx.db.getProject(projectId);
+  if (!project) {
+    return undefined;
+  }
+
+  if (typeof appCtx.db.getServices === 'function') {
+    return (await loadServiceViewRecords(appCtx.db, [project])).get(project.id);
+  }
+
+  return {
+    project,
+    service: null,
+    view: serviceViewFromRows(project, null),
+  };
+}
+
 async function inspectProjectReadiness(
   appCtx: AppCtx,
   projectId: string,
 ): Promise<ReadinessResult> {
-  const deployable = await appCtx.db.getDeployableForProject(projectId);
-  const containerId = deployable?.container_id ?? null;
+  const serviceRecord = await loadProjectServiceRecord(appCtx, projectId);
+  const containerId = serviceRecord?.view.containerId ?? null;
   if (!containerId) {
     return { readiness: 'starting', ready: false, message: 'No container_id recorded yet.' };
   }
@@ -955,11 +980,11 @@ export const deployPlanToolDefs: ToolDef[] = [
                   ? 'unhealthy'
                   : 'timeout';
               const finalProjectId = projectIdOverride ?? projectId;
-              const deployable = await appCtx.db
-                .getDeployableForProject(finalProjectId)
-                .catch(() => undefined);
+              const serviceRecord = await loadProjectServiceRecord(appCtx, finalProjectId).catch(
+                () => undefined,
+              );
 
-              const assignedPort = deployable?.assigned_port ?? undefined;
+              const assignedPort = serviceRecord?.view.assignedPort ?? undefined;
               const portAwareUrls = getProjectUrls(result.project_name, assignedPort);
               const portAwarePreferred = getPreferredProjectUrl(result.project_name, assignedPort);
               const externalUrl = isExternalDeployUrl(payload.url) ? payload.url : undefined;
@@ -1001,11 +1026,11 @@ export const deployPlanToolDefs: ToolDef[] = [
             })
             .catch(async (err: unknown) => {
               const finalProjectId = projectIdOverride ?? projectId;
-              const deployable = await appCtx.db
-                .getDeployableForProject(finalProjectId)
-                .catch(() => undefined);
+              const serviceRecord = await loadProjectServiceRecord(appCtx, finalProjectId).catch(
+                () => undefined,
+              );
 
-              const assignedPort = deployable?.assigned_port ?? undefined;
+              const assignedPort = serviceRecord?.view.assignedPort ?? undefined;
               const portAwareUrls = getProjectUrls(result.project_name, assignedPort);
               const portAwarePreferred = getPreferredProjectUrl(result.project_name, assignedPort);
               const externalUrl = isExternalDeployUrl(payload.url) ? payload.url : undefined;
