@@ -747,14 +747,11 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
     });
 
     const updatedProject = await ctx.db.getProject(project.id);
-    // PR 4 canonical-first: public_url from deployable services row.
-    const updatedDeployable = updatedProject
-      ? await ctx.db.getDeployableForProject(updatedProject.id)
-      : undefined;
+    const updatedView = updatedProject ? await loadServiceView(ctx.db, updatedProject) : null;
     return c.json({
       status: 'shared',
       project: project.name,
-      publicUrl: updatedDeployable?.public_url ?? updatedProject?.public_url,
+      publicUrl: updatedView?.publicUrl ?? null,
     });
   });
 
