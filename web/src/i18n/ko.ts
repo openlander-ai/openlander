@@ -459,7 +459,7 @@ export const translations = {
     card: {
       // Chrome — card field labels + badges.
       archivedBadge: 'archived',
-      partiallyArchivedBadge: '일부 아카이브됨',
+      partiallyArchivedBadge: 'Partially archived',
       lastDeploy: 'Last deploy',
       branch: 'Branch',
       endpoint: 'Endpoint',
@@ -468,7 +468,7 @@ export const translations = {
     archive: {
       // Chrome — button.
       button: 'Archive',
-      remainingButton: '남은 서비스 아카이브',
+      remainingButton: 'Archive remaining',
       // Content — toast + confirmation prose.
       success: '프로젝트가 보관되었습니다',
       description:
@@ -522,7 +522,7 @@ export const translations = {
       nav: 'Danger',
       title: 'Danger zone',
       archiveTitle: 'Archive project',
-      partialArchiveTitle: '남은 서비스 아카이브',
+      partialArchiveTitle: 'Archive remaining services',
       restoreTitle: 'Restore project',
       deleteTitle: 'Permanently delete project',
       // Content — descriptive copy + error.
