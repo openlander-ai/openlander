@@ -70,7 +70,7 @@ describe('ProjectHealthMonitor', () => {
     const db = {
       getProject,
       listProjects,
-      listServices,
+      getServices: listServices,
       updateProject,
       updateService,
       // PR 4.5: canonical-first reads need this helper.
@@ -141,7 +141,7 @@ describe('ProjectHealthMonitor', () => {
     const db = {
       getProject,
       listProjects,
-      listServices,
+      getServices: listServices,
       updateProject,
       updateService,
       getDeployableForProject,
@@ -202,7 +202,7 @@ describe('ProjectHealthMonitor', () => {
     const db = {
       getProject: vi.fn().mockReturnValue(project),
       listProjects,
-      listServices,
+      getServices: listServices,
       updateProject,
       updateService,
       getDeployableForProject,
@@ -304,7 +304,7 @@ describe('ProjectHealthMonitor', () => {
     const db = {
       getProject,
       listProjects,
-      listServices,
+      getServices: listServices,
       updateProject,
       updateService,
       getDeployableForProject,
@@ -354,7 +354,7 @@ describe('ProjectHealthMonitor', () => {
     const db = {
       getProject: vi.fn().mockReturnValue(project),
       listProjects,
-      listServices,
+      getServices: listServices,
       updateProject,
       updateService,
       getDeployableForProject: vi.fn().mockReturnValue(deployable),

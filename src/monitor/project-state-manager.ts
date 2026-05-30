@@ -1,5 +1,5 @@
 import { DOCKER_LABELS } from '../config/index.js';
-import { serviceViewFromRows } from '../db/views/service-view.js';
+import { loadServiceViewRecord } from '../db/views/service-view.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { ContainerInfo } from '../pipeline/docker/types.js';
 import type { AppContext } from '../app.js';
@@ -204,8 +204,7 @@ export class ProjectStateManager {
       return false;
     }
 
-    const deployable = await this.ctx.db.getDeployableForProject(project.id);
-    const view = serviceViewFromRows(project, deployable);
+    const { service: deployable, view } = await loadServiceViewRecord(this.ctx.db, project);
     // Preserve the reconciler's historic probe order:
     // service.container_id → service.container_name → project.container_id.
     // ServiceView.containerId intentionally contains the project fallback.

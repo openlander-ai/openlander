@@ -1,5 +1,5 @@
 import type { Database } from '../db/index.js';
-import { serviceViewFromRows } from '../db/views/service-view.js';
+import { loadServiceViewRecord } from '../db/views/service-view.js';
 import type { EventBus } from '../events/index.js';
 import type { RuntimeSignal } from '../health/types.js';
 import type { DeployPipeline } from '../pipeline/deploy.js';
@@ -74,10 +74,9 @@ export class RollbackWatcher {
 
   private async startWatching(projectId: string, planId?: string): Promise<void> {
     const project = await this.db.getProject(projectId);
-    const deployable = await this.db.getDeployableForProject(projectId);
     const previousImageTag = project
-      ? serviceViewFromRows(project, deployable).previousImageTag
-      : deployable?.previous_image_tag;
+      ? (await loadServiceViewRecord(this.db, project)).view.previousImageTag
+      : null;
     if (!previousImageTag) return;
 
     this.stopWatching(projectId);
@@ -113,8 +112,7 @@ export class RollbackWatcher {
       this.stopWatching(projectId);
       return;
     }
-    const deployable = await this.db.getDeployableForProject(projectId);
-    const view = serviceViewFromRows(project, deployable);
+    const { view } = await loadServiceViewRecord(this.db, project);
     const status = view.status;
     const previousImageTag = view.previousImageTag;
     if (status === 'stopped') {

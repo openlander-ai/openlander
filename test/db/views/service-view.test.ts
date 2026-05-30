@@ -4,6 +4,7 @@ import type { Database } from '../../../src/db/index.js';
 import type { ProjectRow, ServiceRow } from '../../../src/db/types.js';
 import {
   loadServiceView,
+  loadServiceViewRecord,
   loadServiceViewRecords,
   serviceViewFromRows,
   type ServiceView,
@@ -248,6 +249,22 @@ describe('loadServiceView', () => {
     expect(view.status).toBe('stopped');
     expect(view.containerId).toBe('legacy');
     expect(view.assignedPort).toBe(4000);
+  });
+});
+
+describe('loadServiceViewRecord', () => {
+  it('returns the project, canonical service row, and projection together', async () => {
+    const project = makeProjectRow();
+    const service = makeServiceRow({ assigned_port: 9999 });
+    const getDeployableForProject = vi.fn(async () => service);
+    const db = { getDeployableForProject } as unknown as Pick<Database, 'getDeployableForProject'>;
+
+    const record = await loadServiceViewRecord(db, project);
+
+    expect(record.project).toBe(project);
+    expect(record.service).toBe(service);
+    expect(record.view.assignedPort).toBe(9999);
+    expect(getDeployableForProject).toHaveBeenCalledWith('p-1');
   });
 });
 

@@ -1,6 +1,11 @@
 import type { Database, ProjectRow, ServiceRow } from '../db/index.js';
-import { projectIdToDeployableServiceId } from '../db/service-ids.js';
-import { serviceViewFromRows, type ServiceView } from '../db/views/service-view.js';
+import {
+  loadServiceViewRecord,
+  loadServiceViewRecords,
+  serviceViewFromRows,
+  type ServiceView,
+  type ServiceViewRecord,
+} from '../db/views/service-view.js';
 import type { Docker } from '../pipeline/docker.js';
 import type { EventBus } from '../events/index.js';
 import { createLocalProbeRunner } from '../health/probe-runner.js';
@@ -23,8 +28,6 @@ type ProjectCheckResult = {
   consecutiveFailures: number;
 };
 
-type DeployableByProject = Map<string, ServiceRow | undefined>;
-
 const DEFAULT_OPTIONS: Required<ProjectHealthMonitorOptions> = {
   intervalMs: 30000,
   timeoutMs: 5000,
@@ -32,17 +35,6 @@ const DEFAULT_OPTIONS: Required<ProjectHealthMonitorOptions> = {
 };
 
 const INITIAL_STAGGER_MS = 7_000;
-
-function probeContainerRef(view: ServiceView, deployable: ServiceRow | undefined): string {
-  // Preserve the monitor's historic probe order:
-  // service.container_id → service.container_name → project.container_id.
-  // ServiceView.containerId intentionally contains the project fallback.
-  const ref =
-    deployable && !deployable.container_id
-      ? (view.containerName ?? view.containerId)
-      : (view.containerId ?? view.containerName);
-  return ref ?? '';
-}
 
 export class ProjectHealthMonitor {
   private readonly options: Required<ProjectHealthMonitorOptions>;
@@ -94,14 +86,14 @@ export class ProjectHealthMonitor {
 
   async checkProject(projectId: string): Promise<ProjectCheckResult> {
     const project = await this.db.getProject(projectId);
-    const deployable = project ? await this.db.getDeployableForProject(projectId) : undefined;
-    return this.checkProjectRows(projectId, project, deployable);
+    const record = project ? await loadServiceViewRecord(this.db, project) : undefined;
+    return this.checkProjectRows(projectId, project, record);
   }
 
   private async checkProjectRows(
     projectId: string,
     project: ProjectRow | undefined | null,
-    deployable: ServiceRow | undefined,
+    record: ServiceViewRecord | undefined,
   ): Promise<ProjectCheckResult> {
     const previousFailures = this.consecutiveFailures.get(projectId) ?? 0;
 
@@ -114,7 +106,7 @@ export class ProjectHealthMonitor {
       };
     }
 
-    const profile = resolveMonitoringProfile(project, deployable);
+    const profile = resolveMonitoringProfile(project, record?.service ?? undefined);
     if (profile.health.strategy === 'none') {
       this.consecutiveFailures.set(projectId, 0);
       return {
@@ -124,10 +116,10 @@ export class ProjectHealthMonitor {
       };
     }
 
-    const view = serviceViewFromRows(project, deployable);
+    const view = record?.view ?? serviceViewFromRows(project, null);
     const probeContext: ProbeContext = {
       projectId,
-      containerId: probeContainerRef(view, deployable),
+      containerId: this.resolveProbeContainerRef(record) ?? '',
       assignedPort: view.assignedPort ?? undefined,
     };
 
@@ -162,19 +154,16 @@ export class ProjectHealthMonitor {
     }
   }
 
-  private async loadDeployablesByProject(
-    projects: readonly ProjectRow[],
-  ): Promise<DeployableByProject> {
-    const deployableIds = new Set(
-      projects.map((project) => projectIdToDeployableServiceId(project.id)),
-    );
-    const services = await this.db.listServices();
-    const byProject: DeployableByProject = new Map();
-    for (const service of services) {
-      if (!deployableIds.has(service.id)) continue;
-      byProject.set(service.project_id, service);
+  private resolveProbeContainerRef(record: ServiceViewRecord | undefined): string | null {
+    if (!record) return null;
+    const { service, view } = record;
+    // Preserve the historic probe target order:
+    // service.container_id → service.container_name → project.container_id.
+    // ServiceView.containerId intentionally contains the project fallback.
+    if (service && !service.container_id) {
+      return view.containerName ?? view.containerId;
     }
-    return byProject;
+    return view.containerId ?? view.containerName;
   }
 
   private async checkAllProjects(): Promise<void> {
@@ -185,16 +174,15 @@ export class ProjectHealthMonitor {
     this.checking = true;
     try {
       const projects = await this.db.listProjects();
-      const deployablesByProject = await this.loadDeployablesByProject(projects);
+      const recordsByProject = await loadServiceViewRecords(this.db, projects);
       const activeProjects = projects.filter((project) => {
-        const deployable = deployablesByProject.get(project.id);
-        const status = serviceViewFromRows(project, deployable).status;
+        const status = recordsByProject.get(project.id)?.view.status ?? 'idle';
         return !project.archived_at && (status === 'running' || status === 'error');
       });
 
       await Promise.all(
         activeProjects.map((project) =>
-          this.runCheck(project.id, project, deployablesByProject.get(project.id)),
+          this.runCheck(project.id, project, recordsByProject.get(project.id)),
         ),
       );
     } finally {
@@ -205,22 +193,28 @@ export class ProjectHealthMonitor {
   private async runCheck(
     projectId: string,
     projectArg?: ProjectRow,
-    deployableArg?: ServiceRow,
+    recordArg?: ServiceViewRecord,
   ): Promise<void> {
     const project = projectArg ?? (await this.db.getProject(projectId));
     if (!project) {
       return;
     }
 
-    const deployable =
-      deployableArg ??
-      (projectArg === undefined ? await this.db.getDeployableForProject(projectId) : undefined);
-    const status = serviceViewFromRows(project, deployable).status;
+    const record =
+      recordArg ??
+      (projectArg === undefined
+        ? await loadServiceViewRecord(this.db, project)
+        : {
+            project,
+            service: null,
+            view: serviceViewFromRows(project, null),
+          });
+    const status = record.view.status;
     if ((status !== 'running' && status !== 'error') || project.archived_at) {
       return;
     }
 
-    const result = await this.checkProjectRows(projectId, project, deployable);
+    const result = await this.checkProjectRows(projectId, project, record);
 
     await this.events.emit('monitor:healthcheck', {
       projectId,
@@ -228,7 +222,7 @@ export class ProjectHealthMonitor {
       responseTimeMs: result.responseTimeMs,
     });
 
-    await this.syncStatusFromHealth(projectId, status, result, deployable);
+    await this.syncStatusFromHealth(projectId, status, result, record.service);
 
     if (!result.healthy && result.consecutiveFailures >= this.options.failureThreshold) {
       log.warn(
@@ -250,9 +244,9 @@ export class ProjectHealthMonitor {
 
   private async syncStatusFromHealth(
     projectId: string,
-    currentStatus: ProjectRow['status'] | ServiceRow['status'],
+    currentStatus: ServiceView['status'],
     result: ProjectCheckResult,
-    deployable: ServiceRow | undefined,
+    deployable: ServiceRow | null,
   ): Promise<void> {
     if (result.healthy) {
       if (currentStatus === 'error') {
@@ -283,7 +277,7 @@ export class ProjectHealthMonitor {
 
   private async updateProjectRuntimeStatus(
     projectId: string,
-    deployable: ServiceRow | undefined,
+    deployable: ServiceRow | null,
     status: NonNullable<ServiceRow['status']>,
   ): Promise<void> {
     if (deployable) {
