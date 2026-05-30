@@ -11,6 +11,11 @@ import { OpenLanderError } from '../../errors.js';
 import type { CompositeTool } from '../../mcp/composite-tools.js';
 import { maybeHandleMcpSafety } from '../../mcp/destructive-safety.js';
 import { getMcpInstanceContext, type McpInstanceContext } from '../../mcp/instance-identity.js';
+import {
+  buildToolInputContract,
+  unknownTopLevelParams,
+  type ToolInputContract,
+} from '../../mcp/schema-guidance.js';
 import type { RequestIdentity } from '../../types/identity.js';
 import type { ToolDef } from '../defs/types.js';
 
@@ -96,6 +101,97 @@ function isMcpTargeted(def: ToolDef): boolean {
   return !def.targets || def.targets.includes('mcp');
 }
 
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function nestedParamsSuggestion(
+  rawArgs: unknown,
+  contract: ToolInputContract,
+): Record<string, unknown> | undefined {
+  const args = asObject(rawArgs);
+  const nestedParams = asObject(args?.['params']);
+  if (!nestedParams) {
+    return undefined;
+  }
+
+  const nestedKeys = Object.keys(nestedParams);
+  if (nestedKeys.length === 0) {
+    return {};
+  }
+
+  if (nestedKeys.every((key) => contract.allowed_params.includes(key))) {
+    return nestedParams;
+  }
+
+  return undefined;
+}
+
+function requiredParamsTemplate(contract: ToolInputContract): Record<string, unknown> {
+  const properties = asObject(contract.input_schema['properties']) ?? {};
+  const template: Record<string, unknown> = {};
+
+  for (const name of contract.required_params) {
+    const property = asObject(properties[name]);
+    const type = property?.['type'];
+    const enumValues = Array.isArray(property?.['enum']) ? property['enum'] : undefined;
+
+    if (enumValues?.[0] !== undefined) {
+      template[name] = enumValues[0];
+    } else if (type === 'boolean') {
+      template[name] = true;
+    } else if (type === 'number' || type === 'integer') {
+      template[name] = 1;
+    } else {
+      template[name] = `<${name}>`;
+    }
+  }
+
+  return template;
+}
+
+function invalidMcpToolParamsResponse(
+  toolName: string,
+  contract: ToolInputContract,
+  details: string,
+  rawArgs: unknown,
+  unknownParams: string[] = [],
+): Record<string, unknown> {
+  const suggestedArguments =
+    nestedParamsSuggestion(rawArgs, contract) ??
+    (contract.allowed_params.includes('action')
+      ? { action: 'help' }
+      : requiredParamsTemplate(contract));
+  const hasNestedParams = unknownParams.includes('params');
+
+  return {
+    error: 'INVALID_PARAMS',
+    tool: toolName,
+    details,
+    unknown_params: unknownParams,
+    allowed_params: contract.allowed_params,
+    required_params: contract.required_params,
+    input_schema: contract.input_schema,
+    suggested_call: {
+      tool: toolName,
+      arguments: suggestedArguments,
+    },
+    _agent_guidance: {
+      message: hasNestedParams
+        ? `${toolName} is a direct MCP tool. Pass ${contract.allowed_params.join(', ') || 'its arguments'} at the top level; do not wrap them in params.`
+        : `Invalid parameters for ${toolName}. Use input_schema and allowed_params from this response and retry.`,
+      next_steps: [
+        hasNestedParams
+          ? `Retry ${toolName} with the nested params object flattened into top-level arguments.`
+          : `Retry ${toolName} with only top-level arguments from allowed_params.`,
+      ],
+    },
+  };
+}
+
 interface McpRequestHandlerServer {
   setRequestHandler(
     schema: unknown,
@@ -137,9 +233,32 @@ export function registerCompositeMcpTools(
 
       const composite = composites.find((item) => item.name === toolName);
       if (composite) {
+        const contract = buildToolInputContract({
+          name: composite.name,
+          description: composite.description,
+          inputSchema: composite.inputSchema,
+        });
+        const rawArgsObject = asObject(rawArgs) ?? {};
+        const unknownParams = unknownTopLevelParams(rawArgsObject, contract);
+        if (unknownParams.length > 0) {
+          return successResponse(
+            invalidMcpToolParamsResponse(
+              toolName,
+              contract,
+              `Unknown top-level parameter(s): ${unknownParams.join(', ')}`,
+              rawArgs,
+              unknownParams,
+            ),
+            instance,
+          );
+        }
+
         const parsed = composite.inputSchema.safeParse(rawArgs);
         if (!parsed.success) {
-          throw new McpError(ErrorCode.InvalidParams, parsed.error.message);
+          return successResponse(
+            invalidMcpToolParamsResponse(toolName, contract, parsed.error.message, rawArgs),
+            instance,
+          );
         }
 
         const result = await composite.execute(parsed.data, { target: 'mcp', appCtx, identity });
@@ -151,9 +270,32 @@ export function registerCompositeMcpTools(
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
       }
 
+      const contract = buildToolInputContract({
+        name: def.name,
+        description: def.mcpDescription ?? def.description,
+        inputSchema: def.inputSchema,
+      });
+      const rawArgsObject = asObject(rawArgs) ?? {};
+      const unknownParams = unknownTopLevelParams(rawArgsObject, contract);
+      if (unknownParams.length > 0) {
+        return successResponse(
+          invalidMcpToolParamsResponse(
+            toolName,
+            contract,
+            `Unknown top-level parameter(s): ${unknownParams.join(', ')}`,
+            rawArgs,
+            unknownParams,
+          ),
+          instance,
+        );
+      }
+
       const parsed = def.inputSchema.safeParse(rawArgs);
       if (!parsed.success) {
-        throw new McpError(ErrorCode.InvalidParams, parsed.error.message);
+        return successResponse(
+          invalidMcpToolParamsResponse(toolName, contract, parsed.error.message, rawArgs),
+          instance,
+        );
       }
 
       const context = { target: 'mcp' as const, appCtx, identity };

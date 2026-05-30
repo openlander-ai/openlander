@@ -144,6 +144,39 @@ describe('registerCompositeMcpTools', () => {
     });
   });
 
+  it('returns structured guidance for malformed composite wrapper arguments', async () => {
+    const server = createMockServer();
+    const execute = vi.fn(async () => ({ shouldNotRun: true }));
+
+    registerCompositeMcpTools(
+      server,
+      [createComposite('openlander_deploy', execute)],
+      [],
+      mockAppCtx,
+    );
+
+    const response = (await server.callHandler?.({
+      params: {
+        name: 'openlander_deploy',
+        arguments: { action: 'help', verbose: true },
+      },
+    })) as {
+      content: Array<{ type: 'text'; text: string }>;
+    };
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(JSON.parse(response.content[0]?.text ?? '{}')).toMatchObject({
+      error: 'INVALID_PARAMS',
+      tool: 'openlander_deploy',
+      unknown_params: ['verbose'],
+      allowed_params: ['action', 'params'],
+      suggested_call: {
+        tool: 'openlander_deploy',
+        arguments: { action: 'help' },
+      },
+    });
+  });
+
   it('routes platform tool calls through ToolDef execution and transformResult', async () => {
     const server = createMockServer();
 
@@ -172,6 +205,53 @@ describe('registerCompositeMcpTools', () => {
         id: 'olinst_test',
         name: 'openlander-test',
         endpoint: 'http://localhost:10114/mcp',
+      },
+    });
+  });
+
+  it('returns structured guidance when direct platform args are wrapped in params', async () => {
+    const server = createMockServer();
+    const execute = vi.fn(async () => ({ shouldNotRun: true }));
+    const platformTool: ToolDef = {
+      name: 'platform_cleanup_orphans',
+      description: 'cleanup',
+      inputSchema: z.object({
+        confirm: z.boolean().optional(),
+        dry_run: z.boolean().optional(),
+      }),
+      execute,
+      targets: ['mcp'],
+    };
+
+    registerCompositeMcpTools(
+      server,
+      [createComposite('openlander_monitor', async () => ({ composite: true }))],
+      [platformTool],
+      mockAppCtx,
+    );
+
+    const response = (await server.callHandler?.({
+      params: {
+        name: 'platform_cleanup_orphans',
+        arguments: { params: { dry_run: true } },
+      },
+    })) as {
+      content: Array<{ type: 'text'; text: string }>;
+    };
+
+    expect(execute).not.toHaveBeenCalled();
+    const payload = JSON.parse(response.content[0]?.text ?? '{}') as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      error: 'INVALID_PARAMS',
+      tool: 'platform_cleanup_orphans',
+      unknown_params: ['params'],
+      allowed_params: ['confirm', 'dry_run'],
+      suggested_call: {
+        tool: 'platform_cleanup_orphans',
+        arguments: { dry_run: true },
+      },
+      _agent_guidance: {
+        message: expect.stringContaining('do not wrap them in params'),
       },
     });
   });

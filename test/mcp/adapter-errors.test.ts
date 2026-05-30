@@ -6,12 +6,36 @@ import { OpenLanderError } from '../../src/errors.js';
 import type { CompositeTool } from '../../src/mcp/composite-tools.js';
 import { registerCompositeMcpTools } from '../../src/tools/adapters/mcp.js';
 
+const mockAppCtx = {
+  config: {
+    server: {
+      port: 10114,
+      host: '0.0.0.0',
+      baseUrl: 'http://localhost:10114',
+    },
+    mcp: {
+      enabled: true,
+      transport: 'sse',
+      instanceId: 'olinst_test',
+      instanceName: 'openlander-test',
+      servers: [],
+      platformTools: false,
+    },
+  },
+} as AppContext;
+
 function createServerHarness() {
-  const handlers: Array<(request: { params: { name: string; arguments?: unknown } }) => unknown> = [];
+  const handlers: Array<(request: { params: { name: string; arguments?: unknown } }) => unknown> =
+    [];
   const server = {
-    setRequestHandler: vi.fn((_schema: unknown, handler: (request: { params: { name: string; arguments?: unknown } }) => unknown) => {
-      handlers.push(handler);
-    }),
+    setRequestHandler: vi.fn(
+      (
+        _schema: unknown,
+        handler: (request: { params: { name: string; arguments?: unknown } }) => unknown,
+      ) => {
+        handlers.push(handler);
+      },
+    ),
   };
   return { server, handlers };
 }
@@ -32,7 +56,7 @@ describe('MCP adapter error responses', () => {
       },
     };
     const { server, handlers } = createServerHarness();
-    registerCompositeMcpTools(server, [composite], [], {} as AppContext);
+    registerCompositeMcpTools(server, [composite], [], mockAppCtx);
 
     const callHandler = handlers[1];
     expect(callHandler).toBeDefined();
@@ -47,6 +71,11 @@ describe('MCP adapter error responses', () => {
       code: 'ENV_VAR_WRITE_FAILED',
       message: 'Internal database error.',
       details: { key: 'DATABASE_URL' },
+      _instance: {
+        id: 'olinst_test',
+        name: 'openlander-test',
+        endpoint: 'http://localhost:10114/mcp',
+      },
     });
     expect(response.content[0]!.text).not.toContain('insert into');
     expect(response.content[0]!.text).not.toContain('params:');
