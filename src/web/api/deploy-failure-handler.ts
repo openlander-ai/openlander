@@ -4,6 +4,7 @@ import { stream } from 'hono/streaming';
 import { nanoid } from 'nanoid';
 
 import type { AppContext } from '../../app.js';
+import { loadServiceViewRecords } from '../../db/views/service-view.js';
 import { eventBus } from '../../events/index.js';
 import { classifyDeployError } from '../../pipeline/error-classifier.js';
 import { scanRepoEnvVars } from '../../pipeline/env-scan.js';
@@ -419,7 +420,8 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
 
   api.post('/projects/:id/env/scan', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-    const deployable = await ctx.db.getDeployableForProject(project.id);
+    const serviceRecords = await loadServiceViewRecords(ctx.db, [project]);
+    const deployable = serviceRecords.get(project.id)?.service;
     if (!deployable?.repo_url) {
       return c.json({ error: 'SERVICE_SOURCE_MISSING', code: 'SERVICE_SOURCE_MISSING' }, 400);
     }
