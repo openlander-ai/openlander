@@ -8,7 +8,8 @@ import {
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
-import type { DeployLogRow } from '../../db/types.js';
+import type { DeployLogRow, ProjectRow } from '../../db/types.js';
+import { loadServiceView, type ServiceView } from '../../db/views/service-view.js';
 import type { ToolDef } from './types.js';
 import {
   cleanupPreviewSchema,
@@ -102,22 +103,39 @@ export const deployToolDefs: ToolDef[] = [
       const shouldWait = Boolean(wait) || watchMs !== undefined;
       const waitTimeoutMs = watchMs ?? Math.max(1, timeoutSec) * 1000;
 
-      // Cache of project_id → assigned_port so formatJob can include
-      // localhost:{port} in the 'done' URL without going async. Populated
-      // lazily as we encounter new project IDs.
+      // Cache of project_id → ServiceView so status/URL projections all use
+      // the same service-first read model instead of each caller hand-rolling
+      // `deployable?.X ?? project.X`.
+      const serviceViewCache = new Map<string, ServiceView | null>();
       const portCache = new Map<string, number | undefined>();
-      const resolveAssignedPort = async (projectId: string): Promise<number | undefined> => {
-        if (portCache.has(projectId)) return portCache.get(projectId);
+      const resolveServiceView = async (
+        projectId: string,
+        project?: ProjectRow,
+      ): Promise<ServiceView | null> => {
+        if (serviceViewCache.has(projectId)) return serviceViewCache.get(projectId) ?? null;
         try {
-          const deployable = await appCtx.db.getDeployableForProject(projectId);
-
-          const port = deployable?.assigned_port ?? undefined;
-          portCache.set(projectId, port);
-          return port;
+          const projectRow = project ?? (await appCtx.db.getProject(projectId));
+          if (!projectRow) {
+            serviceViewCache.set(projectId, null);
+            return null;
+          }
+          const view = await loadServiceView(appCtx.db, projectRow);
+          serviceViewCache.set(projectId, view);
+          return view;
         } catch {
-          portCache.set(projectId, undefined);
-          return undefined;
+          serviceViewCache.set(projectId, null);
+          return null;
         }
+      };
+      const resolveAssignedPort = async (
+        projectId: string,
+        project?: ProjectRow,
+      ): Promise<number | undefined> => {
+        if (portCache.has(projectId)) return portCache.get(projectId);
+        const view = await resolveServiceView(projectId, project);
+        const port = view?.assignedPort ?? undefined;
+        portCache.set(projectId, port);
+        return port;
       };
 
       const isTerminalPhase = (phase: string): boolean => phase === 'done' || phase === 'failed';
@@ -342,9 +360,9 @@ export const deployToolDefs: ToolDef[] = [
       const formatDeployLogJob = async (log: DeployLogRow) => {
         const inferredProjectId = log.project_id ?? deployableServiceIdToProjectId(log.service_id);
         const project = await appCtx.db.getProject(inferredProjectId);
-        const deployable = await appCtx.db.getDeployableForProject(inferredProjectId);
-        const health = deployable?.status ?? 'unknown';
-        const assignedPort = deployable?.assigned_port ?? undefined;
+        const view = await resolveServiceView(inferredProjectId, project);
+        const health = view?.status === 'idle' ? 'unknown' : (view?.status ?? 'unknown');
+        const assignedPort = view?.assignedPort ?? undefined;
         const phase =
           log.status === 'success' ? 'done' : log.status === 'failed' ? 'failed' : 'cancelled';
         const completedAt = parseDBTimestamp(log.created_at);

@@ -120,6 +120,49 @@ describe('get_deploy_status structured fields (O1)', () => {
     }
   });
 
+  it('completed deploy log URLs use ServiceView project fallback when no service row exists', async () => {
+    const ctx = {
+      jobManager: { getStatus: vi.fn(() => null) },
+      db: {
+        getDeployLog: vi.fn(async (id: string) =>
+          id === 'd3'
+            ? {
+                id: 'd3',
+                service_id: 'legacy-app__svc',
+                project_id: 'legacy-app',
+                status: 'success',
+                commit_sha: 'abc123',
+                commit_message: 'ship',
+                trigger: 'api',
+                duration_ms: 2000,
+                build_log: null,
+                created_at: '2026-05-22T00:00:00Z',
+              }
+            : undefined,
+        ),
+        getProject: vi.fn(async (id: string) =>
+          id === 'legacy-app'
+            ? { id: 'legacy-app', name: 'legacy-app', assigned_port: 10077, status: 'running' }
+            : undefined,
+        ),
+        getDeployableForProject: vi.fn(async () => null),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'get_deploy_status').execute(
+      { deploy_id: 'd3' },
+      { target: 'mcp' },
+    )) as { jobs: Array<Record<string, unknown>> };
+
+    const job = result.jobs[0];
+    expect(job).toMatchObject({
+      deploy_id: 'd3',
+      phase: 'done',
+      health: 'running',
+    });
+    expect(JSON.stringify(job['urls'])).toContain('10077');
+  });
+
   it('active job found via project_id polling exposes structured fields with no deploy_id', async () => {
     // The common active-poll path: JobManager is keyed by project id, so
     // formatJob is called without a deploy id. status_call carries project_id
