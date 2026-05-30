@@ -12,10 +12,13 @@ function createApprovalContext() {
         tool: 'bulk_delete_env_vars',
         args: { project_name: 'demo', keys: ['DATABASE_URL'], confirm: true },
         targetProjectId: 'project-1',
+        identity: {
+          mcpScopeKind: 'project',
+          mcpScopeProjectId: 'project-2',
+        },
         requestedAt: '2026-05-05T00:00:00.000Z',
       }),
     }),
-    getActiveScopeProjectId: vi.fn().mockResolvedValue('project-2'),
     updateActionRunPlan: vi.fn().mockResolvedValue(undefined),
     updateActionRunStatus: vi.fn().mockResolvedValue(undefined),
   };
@@ -27,7 +30,7 @@ function createApprovalContext() {
 }
 
 describe('destructive MCP approval executor', () => {
-  it('fails before execution when the active MCP scope changed after approval', async () => {
+  it('fails before execution when the project-scoped MCP token does not match the target', async () => {
     const { ctx, db } = createApprovalContext();
 
     await handleDestructiveMcpApproval(ctx, {
