@@ -346,6 +346,7 @@ describe('POST /api/projects group creation', () => {
     const db = {
       getProject: vi.fn().mockResolvedValueOnce(project).mockResolvedValueOnce(updated),
       isCircuitBreakerOpen: vi.fn(async () => false),
+      getServices: vi.fn(async () => []),
       getDeployableForProject: vi.fn(async () => undefined),
       updateProject: vi.fn(async () => undefined),
     };

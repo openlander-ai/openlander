@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
+import { loadServiceViewRecords } from '../../db/views/service-view.js';
 import {
   DeployLockedError,
   OpenLanderError,
@@ -132,12 +133,16 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
       | undefined;
     const includeArchived = c.req.query('include_archived') === 'true';
     const projectsWithMeta = await ctx.db.listProjectsWithMetadata(status, { includeArchived });
+    const serviceRecords = await loadServiceViewRecords(
+      ctx.db,
+      projectsWithMeta.map(({ project }) => project),
+    );
 
     return c.json({
       count: projectsWithMeta.length,
       projects: projectsWithMeta.map(
         ({ project: p, environments, childCount, isCompose, partiallyArchived }) => {
-          const mapped = mapProjectForApi(p);
+          const mapped = mapProjectForApi(p, serviceRecords.get(p.id)?.service ?? undefined);
           return {
             id: mapped.id,
             name: mapped.name,
@@ -169,15 +174,15 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
 
   api.get('/projects/:id', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-    const [envVars, environments, deployLogs, deployable, deployables] = await Promise.all([
+    const [envVars, environments, deployLogs, serviceRecords, deployables] = await Promise.all([
       ctx.env.getAll(project.id),
       ctx.db.getEnvironmentsByProject(project.id),
       ctx.db.getDeployLogs(project.id, 5),
-      ctx.db.getDeployableForProject(project.id),
+      loadServiceViewRecords(ctx.db, [project]),
       ctx.db.getDeployablesByGroup(project.id),
     ]);
     const lifecycle = deriveGroupLifecycleState(deployables);
-    const mapped = mapProjectForApi(project, deployable);
+    const mapped = mapProjectForApi(project, serviceRecords.get(project.id)?.service ?? undefined);
 
     return c.json({
       ...mapped,
@@ -286,8 +291,10 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
     if (!updatedProject) {
       return c.json({ error: 'NOT_FOUND', message: 'Project not found' }, 404);
     }
-    const updatedDeployable = await ctx.db.getDeployableForProject(updatedProject.id);
-    return c.json(mapProjectForApi(updatedProject, updatedDeployable));
+    const serviceRecords = await loadServiceViewRecords(ctx.db, [updatedProject]);
+    return c.json(
+      mapProjectForApi(updatedProject, serviceRecords.get(updatedProject.id)?.service ?? undefined),
+    );
   });
 
   api.post('/projects/:id/archive', async (c) => {

@@ -126,6 +126,7 @@ describe('createProjectGroupRoutes', () => {
             partiallyArchived: false,
           },
         ]),
+        getServices: vi.fn(async () => []),
       },
     });
 
@@ -172,6 +173,7 @@ describe('createProjectGroupRoutes', () => {
         getProject: vi.fn(async () => project),
         getEnvironmentsByProject: vi.fn(async () => [env]),
         getDeployLogs: vi.fn(async () => []),
+        getServices: vi.fn(async () => [service]),
         getDeployableForProject: vi.fn(async () => service),
         getDeployablesByGroup: vi.fn(async () => [service]),
       },
@@ -223,6 +225,7 @@ describe('createProjectGroupRoutes', () => {
         getProject: vi.fn(async () => project),
         getEnvironmentsByProject: vi.fn(async () => []),
         getDeployLogs: vi.fn(async () => []),
+        getServices: vi.fn(async () => [primary]),
         getDeployableForProject: vi.fn(async () => primary),
         getDeployablesByGroup: vi.fn(async () => [primary, worker]),
       },
