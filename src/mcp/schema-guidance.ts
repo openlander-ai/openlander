@@ -82,3 +82,41 @@ export function unknownTopLevelParams(
     .filter((name) => !contract.allowed_params.includes(name))
     .sort();
 }
+
+export function requiredParamsTemplate(contract: ToolInputContract): Record<string, unknown> {
+  const properties = asObject(contract.input_schema['properties']) ?? {};
+  const template: Record<string, unknown> = {};
+
+  for (const name of contract.required_params) {
+    const property = asObject(properties[name]);
+    const type = property?.['type'];
+    const enumValues = Array.isArray(property?.['enum']) ? property['enum'] : undefined;
+
+    if (enumValues?.[0] !== undefined) {
+      template[name] = enumValues[0];
+    } else if (type === 'boolean') {
+      template[name] = true;
+    } else if (type === 'number' || type === 'integer') {
+      template[name] = 1;
+    } else {
+      template[name] = `<${name}>`;
+    }
+  }
+
+  return template;
+}
+
+export function suggestedParamsForRetry(
+  params: Record<string, unknown>,
+  contract: ToolInputContract,
+): Record<string, unknown> {
+  const suggested = requiredParamsTemplate(contract);
+
+  for (const [name, value] of Object.entries(params)) {
+    if (contract.allowed_params.includes(name)) {
+      suggested[name] = value;
+    }
+  }
+
+  return suggested;
+}

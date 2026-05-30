@@ -170,6 +170,7 @@ describe('registerCompositeMcpTools', () => {
       tool: 'openlander_deploy',
       unknown_params: ['verbose'],
       allowed_params: ['action', 'params'],
+      optional_params: ['params'],
       suggested_call: {
         tool: 'openlander_deploy',
         arguments: { action: 'help' },
@@ -246,6 +247,7 @@ describe('registerCompositeMcpTools', () => {
       tool: 'platform_cleanup_orphans',
       unknown_params: ['params'],
       allowed_params: ['confirm', 'dry_run'],
+      optional_params: ['confirm', 'dry_run'],
       suggested_call: {
         tool: 'platform_cleanup_orphans',
         arguments: { dry_run: true },

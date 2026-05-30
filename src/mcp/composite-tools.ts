@@ -8,6 +8,7 @@ import {
 } from './mcp-restricted-actions.js';
 import {
   buildActionContract,
+  suggestedParamsForRetry,
   unknownTopLevelParams,
   type ToolInputContract,
 } from './schema-guidance.js';
@@ -289,8 +290,16 @@ function invalidParamsResponse(
   action: string,
   contract: ToolInputContract,
   details: string,
+  params: Record<string, unknown>,
   unknownParams: string[] = [],
 ): Record<string, unknown> {
+  const retryParams = suggestedParamsForRetry(params, contract);
+  const shouldSuggestRetry =
+    unknownParams.length > 0 || contract.required_params.some((name) => !(name in params));
+  const suggestedCall = shouldSuggestRetry
+    ? { tool: toolName, arguments: { action, params: retryParams } }
+    : { tool: toolName, arguments: { action: 'help', params: { action_name: action } } };
+
   return {
     error: 'INVALID_PARAMS',
     action,
@@ -299,20 +308,25 @@ function invalidParamsResponse(
     unknown_params: unknownParams,
     allowed_params: contract.allowed_params,
     required_params: contract.required_params,
+    optional_params: contract.optional_params,
     input_schema: contract.input_schema,
-    suggested_call: {
-      tool: toolName,
-      arguments: { action: 'help', params: { action_name: action } },
-    },
+    suggested_call: suggestedCall,
     _agent_guidance: {
       message:
         unknownParams.length > 0
           ? `Unknown parameter(s) for action "${action}": ${unknownParams.join(', ')}. Use the allowed_params list from this response and retry.`
-          : `Invalid parameters for action "${action}". Use input_schema and required_params from this response and retry.`,
-      next_steps: [
-        `Call ${toolName} with { action: "help", params: { action_name: "${action}" } } to inspect this action only.`,
-        `Retry ${toolName} with action "${action}" and only params from allowed_params.`,
-      ],
+          : shouldSuggestRetry
+            ? `Invalid parameters for action "${action}". Retry the suggested_call after replacing any placeholder values.`
+            : `Invalid parameter combination for action "${action}". Read details, then inspect the scoped help if needed.`,
+      next_steps: shouldSuggestRetry
+        ? [
+            'Retry the suggested_call after replacing any placeholder values.',
+            `If still unsure, call ${toolName} with { action: "help", params: { action_name: "${action}" } } to inspect this action only.`,
+          ]
+        : [
+            'Read details for the semantic validation reason before retrying.',
+            `Call ${toolName} with { action: "help", params: { action_name: "${action}" } } to inspect this action only.`,
+          ],
     },
   };
 }
@@ -360,6 +374,10 @@ function createCompositeTool(
               action: requestedAction,
               composite: toolName,
               available_actions: toolDefs.map((item) => item.name).sort(),
+              suggested_call: {
+                tool: toolName,
+                arguments: { action: 'help' },
+              },
               _agent_guidance: {
                 message: `Unknown action "${requestedAction}". Use action="help" without params to list available operations.`,
               },
@@ -396,6 +414,10 @@ function createCompositeTool(
           action,
           composite: toolName,
           available_actions: toolDefs.map((item) => item.name).sort(),
+          suggested_call: {
+            tool: toolName,
+            arguments: { action: 'help' },
+          },
           _agent_guidance: {
             message: `Unknown action "${action}". Use action="help" to see available operations.`,
           },
@@ -410,13 +432,20 @@ function createCompositeTool(
           action,
           contract,
           `Unknown parameter(s): ${unknownParams.join(', ')}`,
+          params ?? {},
           unknownParams,
         );
       }
 
       const parsed = def.inputSchema.safeParse(params ?? {});
       if (!parsed.success) {
-        return invalidParamsResponse(toolName, action, contract, parsed.error.message);
+        return invalidParamsResponse(
+          toolName,
+          action,
+          contract,
+          parsed.error.message,
+          params ?? {},
+        );
       }
 
       const safetyResult = await maybeHandleMcpSafety(def, parsed.data, context);
