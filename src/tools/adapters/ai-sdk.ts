@@ -5,6 +5,7 @@ import type { AppContext } from '../../app.js';
 import type { QuestionBridge } from '../../lib/question-bridge.js';
 import { getActiveQuestionHandler } from '../../lib/question-bridge.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { loadServiceViewRecords } from '../../db/views/service-view.js';
 import {
   CircuitBreakerOpenError,
   DeployLockedError,
@@ -16,6 +17,8 @@ import {
 import type { ToolDef } from '../defs/types.js';
 
 const log = createModuleLogger('ai-sdk-adapter');
+
+type DeployableServiceRow = NonNullable<Awaited<ReturnType<AppContext['db']['getService']>>>;
 
 /**
  * Acquire the per-project agent-pool lock for fire-and-forget deploy/redeploy
@@ -58,6 +61,14 @@ function acquireAgentPoolLock(
 }
 
 const MAX_FIX_ATTEMPTS = 3;
+
+async function loadCanonicalDeployableService(
+  appCtx: AppContext,
+  project: NonNullable<Awaited<ReturnType<AppContext['db']['getProject']>>>,
+): Promise<DeployableServiceRow | undefined> {
+  const records = await loadServiceViewRecords(appCtx.db, [project]);
+  return records.get(project.id)?.service ?? undefined;
+}
 
 interface PendingFixPayload {
   filePath: string;
@@ -158,7 +169,7 @@ export function toAiSdkTools(
 
       const { cloneRepo } = await import('../../pipeline/git.js');
       const { readDockerfile } = await import('../../pipeline/build-debugger.js');
-      const deployable = await appCtx.db.getDeployableForProject(project.id);
+      const deployable = await loadCanonicalDeployableService(appCtx, project);
       if (!deployable?.repo_url) {
         throw new ServiceSourceMissingError(deployable?.id ?? `${project.id}__svc`);
       }
@@ -381,7 +392,7 @@ export function toAiSdkTools(
             };
           }
 
-          const targetDeployable = await appCtx.db.getDeployableForProject(targetProject.id);
+          const targetDeployable = await loadCanonicalDeployableService(appCtx, targetProject);
           if (!targetDeployable?.repo_url) {
             return {
               error: 'SERVICE_SOURCE_MISSING',
