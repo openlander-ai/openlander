@@ -276,11 +276,19 @@ export class ServiceRepo {
    * group (project_id) and/or include/exclude kinds.
    */
   async getServices(opts?: {
+    ids?: readonly string[];
     project_id?: string;
     kindIn?: readonly ServiceKind[];
     kindNotIn?: readonly ServiceKind[];
   }): Promise<ServiceRow[]> {
+    if (opts?.ids && opts.ids.length === 0) {
+      return [];
+    }
+
     const conditions: SQL[] = [];
+    if (opts?.ids && opts.ids.length > 0) {
+      conditions.push(inArray(services.id, [...opts.ids]));
+    }
     if (opts?.project_id) {
       conditions.push(eq(services.project_id, opts.project_id));
     }
@@ -424,5 +432,36 @@ export class ServiceRepo {
       )
       .orderBy(desc(services.updated_at));
     return rows as ServiceRow[];
+  }
+
+  async getDeployablesByGroupIds(
+    projectIds: readonly string[],
+  ): Promise<Map<string, ServiceRow[]>> {
+    const result = new Map<string, ServiceRow[]>();
+    for (const projectId of projectIds) {
+      result.set(projectId, []);
+    }
+    if (projectIds.length === 0) {
+      return result;
+    }
+
+    const rows = (await this.db
+      .select()
+      .from(services)
+      .where(
+        and(
+          inArray(services.project_id, [...projectIds]),
+          notInArray(services.kind, [...MANAGED_SERVICE_KINDS, 'compose']),
+          sql`NOT (${services.parent_service_id} IS NULL AND coalesce(${services.build_method}, '') = 'compose')`,
+        ),
+      )
+      .orderBy(desc(services.updated_at))) as ServiceRow[];
+
+    for (const row of rows) {
+      const servicesForProject = result.get(row.project_id) ?? [];
+      servicesForProject.push(row);
+      result.set(row.project_id, servicesForProject);
+    }
+    return result;
   }
 }

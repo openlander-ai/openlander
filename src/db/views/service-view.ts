@@ -115,6 +115,12 @@ export interface ServiceView {
   parentProjectId: string | null;
 }
 
+export interface ServiceViewRecord {
+  project: ProjectRow;
+  service: ServiceRow | null;
+  view: ServiceView;
+}
+
 /**
  * Build a `ServiceView` from already-fetched rows. Pure synchronous —
  * use when the caller has already paid for the lookups (the common
@@ -207,4 +213,30 @@ export async function loadServiceView(
 ): Promise<ServiceView> {
   const service = (await db.getDeployableForProject(project.id)) ?? null;
   return serviceViewFromRows(project, service);
+}
+
+/**
+ * Batch form of `loadServiceView`. Use this for list/dashboard surfaces
+ * that already hold multiple project groups and only need each group's
+ * canonical deployable row. This keeps the service-first projection
+ * centralized without reintroducing route/tool-level N+1 lookups.
+ */
+export async function loadServiceViewRecords(
+  db: Pick<Database, 'getServices'>,
+  projects: readonly ProjectRow[],
+): Promise<Map<string, ServiceViewRecord>> {
+  const ids = projects.map((project) => `${project.id}__svc`);
+  const services = await db.getServices({ ids });
+  const servicesById = new Map(services.map((service) => [service.id, service]));
+  const records = new Map<string, ServiceViewRecord>();
+
+  for (const project of projects) {
+    const service = servicesById.get(`${project.id}__svc`) ?? null;
+    records.set(project.id, {
+      project,
+      service,
+      view: serviceViewFromRows(project, service),
+    });
+  }
+  return records;
 }

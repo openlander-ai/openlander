@@ -4,6 +4,7 @@ import type { Database } from '../../../src/db/index.js';
 import type { ProjectRow, ServiceRow } from '../../../src/db/types.js';
 import {
   loadServiceView,
+  loadServiceViewRecords,
   serviceViewFromRows,
   type ServiceView,
 } from '../../../src/db/views/service-view.js';
@@ -247,5 +248,27 @@ describe('loadServiceView', () => {
     expect(view.status).toBe('stopped');
     expect(view.containerId).toBe('legacy');
     expect(view.assignedPort).toBe(4000);
+  });
+});
+
+describe('loadServiceViewRecords', () => {
+  it('loads canonical deployable rows for multiple projects in one service query', async () => {
+    const projects = [
+      makeProjectRow({ id: 'p-1', name: 'one' }),
+      makeProjectRow({ id: 'p-2', name: 'two', status: 'stopped', assigned_port: 8080 }),
+    ];
+    const service = makeServiceRow({ id: 'p-1__svc', project_id: 'p-1', assigned_port: 9999 });
+    const getServices = vi.fn(async () => [service]);
+    const db = { getServices } as unknown as Pick<Database, 'getServices'>;
+
+    const records = await loadServiceViewRecords(db, projects);
+
+    expect(getServices).toHaveBeenCalledTimes(1);
+    expect(getServices).toHaveBeenCalledWith({ ids: ['p-1__svc', 'p-2__svc'] });
+    expect(records.get('p-1')?.service).toBe(service);
+    expect(records.get('p-1')?.view.assignedPort).toBe(9999);
+    expect(records.get('p-2')?.service).toBeNull();
+    expect(records.get('p-2')?.view.status).toBe('stopped');
+    expect(records.get('p-2')?.view.assignedPort).toBe(8080);
   });
 });
