@@ -1,4 +1,5 @@
 import type { EventBus } from '../../events/index.js';
+import { loadServiceViewRecords } from '../../db/views/service-view.js';
 import { RingBuffer } from '../../lib/ring-buffer.js';
 import { getLogBuffer } from '../../lib/log-buffer.js';
 import {
@@ -222,13 +223,12 @@ export const platformReadToolDefs: ToolDef[] = [
       const dockerIds = new Set(managedContainers.map((container) => container.id));
       const dockerNames = new Set(managedContainers.map((container) => container.name));
 
-      // PR 4.5: batch-resolve deployable rows so each container_id read uses
-      // canonical-first with `??` fallback to legacy `projects` columns
-      // through migration 0012.
+      // Batch-resolve service views so each container_id read uses the
+      // canonical deployable service row with legacy project-column fallback.
       const deployableContainerIds = new Map<string, string | null>();
+      const serviceRecords = await loadServiceViewRecords(appCtx.db, projects);
       for (const p of projects) {
-        const d = await appCtx.db.getDeployableForProject(p.id);
-        deployableContainerIds.set(p.id, d?.container_id ?? p.container_id ?? null);
+        deployableContainerIds.set(p.id, serviceRecords.get(p.id)?.view.containerId ?? null);
       }
 
       const orphanContainers = managedContainers

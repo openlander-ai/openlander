@@ -42,6 +42,10 @@ function createMockPlatformActionContext(overrides?: {
   const listProjects = vi.fn(() => projects);
   const getEnvironmentsByProject = vi.fn((projectId: string) => envMap[projectId] ?? []);
   const listServices = vi.fn(() => services);
+  const getServices = vi.fn(async (query?: { ids?: string[] }) =>
+    query?.ids ? services.filter((service) => query.ids?.includes(service.id)) : services,
+  );
+  const getDeployableForProject = vi.fn().mockReturnValue(undefined);
   const adoptService = vi.fn(async (service: Record<string, unknown>) => ({
     id: service['id'],
     name: service['name'],
@@ -67,10 +71,11 @@ function createMockPlatformActionContext(overrides?: {
       listProjects,
       getEnvironmentsByProject,
       listServices,
+      getServices,
       adoptService,
       insertActivityLog,
       updateProject,
-      getDeployableForProject: vi.fn().mockReturnValue(undefined),
+      getDeployableForProject,
     },
   } as unknown as AppContext;
 
@@ -87,9 +92,11 @@ function createMockPlatformActionContext(overrides?: {
       listProjects,
       getEnvironmentsByProject,
       listServices,
+      getServices,
       adoptService,
       insertActivityLog,
       updateProject,
+      getDeployableForProject,
     },
   };
 }
@@ -325,6 +332,40 @@ describe('platform-action tools', () => {
       expect.objectContaining({ type: 'mark_error', target: 'ghost-app' }),
     );
     expect(dbMocks.updateProject).toHaveBeenCalledWith('p1', { status: 'error' });
+  });
+
+  it('platform_reconcile reads canonical service containers through service views', async () => {
+    const { ctx, dbMocks, dockerMocks } = createMockPlatformActionContext({
+      containers: [],
+      projects: [{ id: 'p1', name: 'ghost-app', container_id: 'legacy-c1', status: 'running' }],
+      services: [
+        {
+          id: 'p1__svc',
+          container_id: 'canonical-c1',
+          container_name: 'ol-ghost-app',
+        },
+      ],
+    });
+    dockerMocks.inspectContainer.mockRejectedValueOnce(
+      new Error('No such container: canonical-c1'),
+    );
+
+    const result = (await getTool('platform_reconcile').execute(
+      { confirm: true, dry_run: false },
+      { target: 'mcp', appCtx: ctx },
+    )) as {
+      actions: Array<{ type: string; detail: string }>;
+    };
+
+    expect(result.actions).toContainEqual(
+      expect.objectContaining({
+        type: 'mark_error',
+        detail: 'status updated to error (missing container: canonical-c1)',
+      }),
+    );
+    expect(dockerMocks.inspectContainer).toHaveBeenCalledWith('canonical-c1');
+    expect(dbMocks.getServices).toHaveBeenCalledWith({ ids: ['p1__svc'] });
+    expect(dbMocks.getDeployableForProject).not.toHaveBeenCalled();
   });
 
   it('platform_reconcile dry_run returns actions without mutation', async () => {
