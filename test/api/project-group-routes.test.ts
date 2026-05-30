@@ -311,6 +311,33 @@ describe('createProjectGroupRoutes', () => {
     });
   });
 
+  it('uses group lifecycle methods for project archive and unarchive routes', async () => {
+    const project = makeProjectRow();
+    const db = {
+      getProject: vi.fn(async () => project),
+      getDeployableForProject: vi.fn(async () => makeServiceRow()),
+      isCircuitBreakerOpen: vi.fn(async () => false),
+    };
+    const pipeline = {
+      archiveGroup: vi.fn(async () => undefined),
+      unarchiveGroup: vi.fn(async () => undefined),
+      archive: vi.fn(async () => undefined),
+      unarchive: vi.fn(async () => undefined),
+    };
+    const coordinator = { suppressProject: vi.fn() };
+    const app = createApp({ db, pipeline, coordinator });
+
+    const archive = await app.request('/api/projects/group-1/archive', { method: 'POST' });
+    const unarchive = await app.request('/api/projects/group-1/unarchive', { method: 'POST' });
+
+    expect(archive.status).toBe(200);
+    expect(unarchive.status).toBe(200);
+    expect(pipeline.archiveGroup).toHaveBeenCalledWith('group-1');
+    expect(pipeline.unarchiveGroup).toHaveBeenCalledWith('group-1');
+    expect(pipeline.archive).not.toHaveBeenCalled();
+    expect(pipeline.unarchive).not.toHaveBeenCalled();
+  });
+
   it('blocks project delete when deployable services still exist', async () => {
     const project = makeProjectRow();
     const service = makeServiceRow();

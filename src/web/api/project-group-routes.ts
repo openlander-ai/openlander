@@ -292,7 +292,7 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
 
     const result = await withProjectRuntimeLock(ctx, project.id, 'archive', async () => {
       ctx.coordinator.suppressProject(project.id, 60_000);
-      await ctx.pipeline.archive(project.id);
+      await ctx.pipeline.archiveGroup(project.id);
       return ctx.db.getProject(project.id);
     });
     if (result instanceof DeployLockedError) return c.json(result.toJSON(), 409);
@@ -301,7 +301,7 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
 
   api.post('/projects/:id/unarchive', async (c) => {
     const project = await getProjectOrThrow(c, ctx);
-    await ctx.pipeline.unarchive(project.id);
+    await ctx.pipeline.unarchiveGroup(project.id);
     const updated = await ctx.db.getProject(project.id);
     return c.json({ project: updated });
   });

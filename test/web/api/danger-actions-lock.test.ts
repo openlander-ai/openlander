@@ -106,6 +106,8 @@ function createCtx(opts: CtxOptions): AppContext {
       start: vi.fn(),
       stop: vi.fn().mockImplementation(opts.stopImpl ?? (async () => undefined)),
       archive: vi.fn().mockImplementation(opts.archiveImpl ?? (async () => undefined)),
+      archiveGroup: vi.fn().mockImplementation(opts.archiveImpl ?? (async () => undefined)),
+      unarchiveGroup: vi.fn().mockResolvedValue(undefined),
       remove: vi.fn().mockImplementation(opts.removeImpl ?? (async () => undefined)),
     },
     cloudflare: undefined,

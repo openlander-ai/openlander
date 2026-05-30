@@ -3,6 +3,8 @@ import { getRouteName } from './helpers.js';
 import { containerName as projectContainerName } from '../helpers.js';
 
 import type { Database } from '../../db/index.js';
+import type { ProjectRow, ServiceRow } from '../../db/types.js';
+import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { eventBus } from '../../events/index.js';
 import { ContainerNotFoundError, OpenLanderError } from '../../errors.js';
 import type { ProjectStatus, StateTransitionOptions } from '../../monitor/project-state-manager.js';
@@ -15,6 +17,15 @@ const log = createModuleLogger('deploy:lifecycle');
 
 export interface CoordinatorSuppressor {
   suppressProject(projectId: string, durationMs: number): void;
+}
+
+interface ArchiveRuntimeOptions {
+  archivedAt?: string;
+  emitEvent?: boolean;
+}
+
+interface UnarchiveRuntimeOptions {
+  emitEvent?: boolean;
 }
 
 interface ProjectStateTransitioner {
@@ -177,17 +188,56 @@ export class ContainerLifecycle {
   }
 
   async archive(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
+    await this.archiveRuntimeProject(projectId, tunnelManager);
+  }
+
+  async archiveGroup(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
     const project = await this.db.getProject(projectId);
     if (!project) return;
 
     this.coordinator?.suppressProject(projectId, 60_000);
+    const deployables = await this.db.getDeployablesByGroup(projectId);
+    if (deployables.length === 0) {
+      await this.archiveRuntimeProject(projectId, tunnelManager);
+      return;
+    }
+
+    const activeDeployables = deployables.filter((service) => !service.archived_at);
+    for (const service of activeDeployables) {
+      await this.assertRuntimeProjectArchivable(deployableServiceIdToProjectId(service.id));
+    }
+
+    // Freeze-safe restore-set marker: unarchiveGroup restores only services
+    // archived by this operation, leaving previously archived siblings alone.
+    const archivedAt = new Date().toISOString();
+    for (const service of activeDeployables) {
+      const runtimeProjectId = deployableServiceIdToProjectId(service.id);
+      this.coordinator?.suppressProject(runtimeProjectId, 60_000);
+      await this.archiveRuntimeProject(runtimeProjectId, tunnelManager, {
+        archivedAt,
+        emitEvent: false,
+      });
+    }
+
+    await this.db.setProjectArchivedAt(projectId, archivedAt);
+    clearPortScanCache();
+    await eventBus.emit('project:archive', { projectId });
+  }
+
+  private async assertRuntimeProjectArchivable(
+    projectId: string,
+    options: { allowMissing?: boolean } = {},
+  ): Promise<{ project: ProjectRow; deployable?: ServiceRow } | null> {
+    const project = await this.db.getProject(projectId);
+    if (!project) {
+      if (options.allowMissing) return null;
+      throw new OpenLanderError('Project not found', 'PROJECT_NOT_FOUND', 404, { projectId });
+    }
 
     // PR 4.5: canonical-first reads of runtime fields with `??` fallback to
     // legacy `projects` columns through migration 0012.
-    const archiveDeployable = await this.db.getDeployableForProject(projectId);
-    const archiveStatus = archiveDeployable?.status ?? project.status;
-    const archiveContainerId = archiveDeployable?.container_id ?? project.container_id;
-    const archiveImageTag = archiveDeployable?.image_tag ?? project.image_tag;
+    const deployable = await this.db.getDeployableForProject(projectId);
+    const archiveStatus = deployable?.status ?? project.status;
 
     if (archiveStatus === 'building') {
       throw new OpenLanderError(
@@ -198,15 +248,45 @@ export class ContainerLifecycle {
       );
     }
 
+    const environments = await this.db.getEnvironmentsByProject(projectId);
+    if (environments.some((environment) => environment.status === 'building')) {
+      throw new OpenLanderError(
+        'Cannot archive a building project',
+        'ARCHIVE_BUILDING_PROJECT',
+        400,
+        { projectId },
+      );
+    }
+
+    return { project, deployable };
+  }
+
+  private async archiveRuntimeProject(
+    projectId: string,
+    tunnelManager?: TunnelManager,
+    options: ArchiveRuntimeOptions = {},
+  ): Promise<void> {
+    const archiveState = await this.assertRuntimeProjectArchivable(projectId, {
+      allowMissing: true,
+    });
+    if (!archiveState) return;
+    const { project, deployable } = archiveState;
+    const emitEvent = options.emitEvent ?? true;
+
+    // PR 4.5: canonical-first reads of runtime fields with `??` fallback to
+    // legacy `projects` columns through migration 0012.
+    const archiveContainerId = deployable?.container_id ?? project.container_id;
+    const archiveImageTag = deployable?.image_tag ?? project.image_tag;
+
     // PR 2: switch compose-child lookup to services.parent_service_id.
     const children = await this.db.getComposeChildProjects(projectId);
     for (const child of children) {
-      await this.archive(child.id, tunnelManager);
+      await this.archiveRuntimeProject(child.id, tunnelManager, options);
     }
 
     // Archive in DB first so if Docker emits a 'die' event during cleanup,
     // the Eligibility Gate will see archived_at and reject recovery
-    await this.db.archiveProject(projectId);
+    await this.db.archiveProject(projectId, options.archivedAt);
 
     if (archiveContainerId) {
       try {
@@ -232,10 +312,41 @@ export class ContainerLifecycle {
 
     tunnelManager?.close(projectId);
     clearPortScanCache();
-    await eventBus.emit('project:archive', { projectId });
+    if (emitEvent) {
+      await eventBus.emit('project:archive', { projectId });
+    }
   }
 
   async unarchive(projectId: string): Promise<void> {
+    await this.unarchiveRuntimeProject(projectId);
+  }
+
+  async unarchiveGroup(projectId: string): Promise<void> {
+    const project = await this.db.getProject(projectId);
+    if (!project) return;
+
+    const deployables = await this.db.getDeployablesByGroup(projectId);
+    if (deployables.length === 0) {
+      await this.unarchiveRuntimeProject(projectId);
+      return;
+    }
+
+    const restoreMarker = project.archived_at;
+    if (!restoreMarker) return;
+
+    const restoreServices = deployables.filter((service) => service.archived_at === restoreMarker);
+    for (const service of restoreServices) {
+      await this.unarchiveRuntimeProject(deployableServiceIdToProjectId(service.id));
+    }
+
+    await this.db.setProjectArchivedAt(projectId, null);
+    clearPortScanCache();
+  }
+
+  private async unarchiveRuntimeProject(
+    projectId: string,
+    options: UnarchiveRuntimeOptions = {},
+  ): Promise<void> {
     const project = await this.db.getProject(projectId);
     if (!project) return;
 
@@ -245,7 +356,9 @@ export class ContainerLifecycle {
     await this.db.unarchiveProject(projectId);
     const port = await allocatePort(this.db, this.runtime, {}, 'production');
     await this.db.updateProject(projectId, { assignedPort: port });
-    await eventBus.emit('project:unarchive', { projectId, port });
+    if (options.emitEvent ?? true) {
+      await eventBus.emit('project:unarchive', { projectId, port });
+    }
   }
 
   async cleanupProjectContainers(projectId: string): Promise<void> {
