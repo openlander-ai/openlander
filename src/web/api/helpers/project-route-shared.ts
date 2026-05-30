@@ -241,7 +241,7 @@ export function mapProjectForApi(project: ProjectRow, deployable?: DeployableFor
   //
   // `DeployableForApi` is the adapter's permissive structural input type:
   // looser unions than the canonical `ServiceRow` (e.g. `status?: string`
-  // vs `'running' | 'stopped' | 'error'`). `serviceViewFromRows` reads
+  // vs the service status union). `serviceViewFromRows` reads
   // every service field via optional chaining + `??` fallback, so an
   // input that's a value-compatible subset of `ServiceRow` resolves the
   // same view at runtime. The cast crosses only the TypeScript boundary

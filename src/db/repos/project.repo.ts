@@ -1,18 +1,4 @@
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  inArray,
-  isNotNull,
-  isNull,
-  ne,
-  notInArray,
-  or,
-  sql,
-  type SQL,
-} from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import {
   OpenLanderError,
   ProjectAlreadyExistsError,
@@ -37,7 +23,11 @@ import {
   projectIdToDeployableServiceId,
 } from '../service-ids.js';
 import type { EnvironmentRow, PendingFixRow, ProjectRow, ServiceRow } from '../types.js';
-import { MANAGED_SERVICE_KINDS } from './service.repo.js';
+import {
+  MANAGED_SERVICE_KINDS,
+  NON_DEPLOYABLE_SERVICE_KINDS,
+  deployableServiceKindFilter,
+} from './service.repo.js';
 
 /**
  * Project row plus pre-fetched derived metadata, to let callers render lists
@@ -61,12 +51,6 @@ type ProjectSelectRow = typeof projects.$inferSelect;
 type ServiceSelectRow = typeof services.$inferSelect;
 type EnvironmentSelectRow = typeof environments.$inferSelect;
 type ProjectStatus = NonNullable<ProjectRow['status']>;
-
-const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;
-
-function deployableServiceKindFilter(kindColumn: SQL): SQL {
-  return notInArray(kindColumn, [...NON_DEPLOYABLE_SERVICE_KINDS]);
-}
 
 function toProjectRow(row: ProjectSelectRow): ProjectRow {
   return row as ProjectRow;
@@ -394,7 +378,7 @@ export class ProjectRepo {
       .where(
         and(
           inArray(services.project_id, uniqueProjectIds),
-          notInArray(services.kind, [...NON_DEPLOYABLE_SERVICE_KINDS]),
+          deployableServiceKindFilter(sql`${services.kind}`),
           sql`NOT (${services.parent_service_id} IS NULL AND coalesce(${services.build_method}, '') = 'compose')`,
         ),
       )

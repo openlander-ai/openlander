@@ -281,7 +281,9 @@ export const services = pgTable(
       onDelete: 'cascade',
     }),
     // Deployable-specific (NULL for managed)
-    status: text('status', { enum: ['running', 'stopped', 'error'] }).default('stopped'),
+    status: text('status', { enum: ['running', 'stopped', 'error', 'recovering'] }).default(
+      'stopped',
+    ),
     visibility: text('visibility'),
     assigned_port: integer('assigned_port').unique(),
     container_id: text('container_id'),
