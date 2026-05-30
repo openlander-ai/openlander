@@ -104,9 +104,9 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'list_projects',
     riskLevel: 'low',
     description:
-      'List project groups with status, ports, container names, local URLs, public URLs, and deployable service identifiers. Project groups organize deployable services; repo/image/build source lives on services. deployable_service is the primary service and deployable_services lists every app/worker service in the group. Returns { count, projects[] }. Always available, no errors.',
+      'List project groups with status, ports, container names, local URLs, public URLs, deployable service count, and deployable service identifiers. Project groups organize deployable services; repo/image/build source lives on services. deployable_service is the primary service and deployable_services lists every app/worker service in the group. Returns { count, projects[] }. Always available, no errors.',
     mcpDescription:
-      'List project groups and deployable service identifiers for follow-up service actions. deployable_service is the primary service; deployable_services includes app/worker siblings.',
+      'List project groups and deployable service identifiers for follow-up service actions. deployable_service_count is the app/worker count; deployable_service is the primary service; deployable_services includes app/worker siblings.',
     inputSchema: emptySchema,
     execute: async (_args, context) => {
       if (context.target === 'mcp') {
@@ -194,6 +194,7 @@ export const projectOpsToolDefs: ToolDef[] = [
                 service.container_name ??
                 (deployable?.id === service.id ? deployableContainerName : null),
             }));
+            const deployableServiceCount = deployableServices.length;
             return {
               id: project.id,
               name: project.name,
@@ -206,6 +207,7 @@ export const projectOpsToolDefs: ToolDef[] = [
               preferred_url: port ? getPreferredProjectUrl(project.name, port) : null,
               urls: port ? getProjectUrls(project.name, port) : [],
               publicUrl,
+              deployable_service_count: deployableServiceCount,
               deployable_service: deployableService,
               deployable_services: deployableServices,
               createdAt: project.created_at,
@@ -238,6 +240,7 @@ export const projectOpsToolDefs: ToolDef[] = [
           const port = deployable ? view.assignedPort : undefined;
           const containerId = view.containerId;
           const publicUrl = deployable ? view.publicUrl : undefined;
+          const deployableServiceCount = (deployableGroups.get(project.id) ?? []).length;
           return {
             name: project.name,
             status,
@@ -247,6 +250,7 @@ export const projectOpsToolDefs: ToolDef[] = [
             url: port ? getPreferredProjectUrl(project.name, port) : null,
             preferred_url: port ? getPreferredProjectUrl(project.name, port) : null,
             publicUrl,
+            deployable_service_count: deployableServiceCount,
           };
         }),
       };

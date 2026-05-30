@@ -78,6 +78,7 @@ describe('project-ops list_projects reconciliation', () => {
         {
           id: 'project-1',
           name: 'demo-app',
+          deployable_service_count: 2,
           deployable_service: {
             service_id: 'project-1__svc',
             service_name: 'demo-web',
