@@ -161,6 +161,7 @@ describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
       visibility: null,
       port: 10001,
       publicUrl: 'https://full.example',
+      deployable_service_count: 1,
     });
 
     // services row present but port / public_url null: the keys must
@@ -170,6 +171,7 @@ describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
     expect(nullports).toHaveProperty('publicUrl', null);
     expect(nullports).toHaveProperty('visibility', null);
     expect(nullports['status']).toBe('stopped');
+    expect(nullports).toHaveProperty('deployable_service_count', 1);
 
     // Both-empty project (no services row): the keys must be OMITTED on
     // the wire, not serialized as null / 'idle'.
@@ -177,6 +179,7 @@ describe('list_projects MCP omit-contract (S3.2 ServiceView)', () => {
     expect(empty).not.toHaveProperty('port');
     expect(empty).not.toHaveProperty('publicUrl');
     expect(empty).toHaveProperty('visibility', null);
+    expect(empty).toHaveProperty('deployable_service_count', 0);
   });
 });
 
@@ -232,6 +235,31 @@ describe('list_projects agent-branch omit-contract (S3.3 ServiceView)', () => {
         }),
         empty: undefined,
       },
+      groups: {
+        full: [
+          makeService({
+            id: 'full__svc',
+            name: 'full__svc',
+            project_id: 'full',
+            status: 'stopped',
+            assigned_port: 10001,
+            container_id: 'c-full',
+            public_url: 'https://full.example',
+          }),
+        ],
+        nullports: [
+          makeService({
+            id: 'nullports__svc',
+            name: 'nullports__svc',
+            project_id: 'nullports',
+            status: 'stopped',
+            assigned_port: null,
+            container_id: null,
+            public_url: null,
+          }),
+        ],
+        empty: [],
+      },
     });
 
     // The agent branch keys projects by `name` (no `id`).
@@ -245,17 +273,20 @@ describe('list_projects agent-branch omit-contract (S3.3 ServiceView)', () => {
       visibility: null,
       port: 10001,
       publicUrl: 'https://full.example',
+      deployable_service_count: 1,
     });
 
     // services row present, port/public_url null → explicit null on the wire
     expect(nullports).toHaveProperty('port', null);
     expect(nullports).toHaveProperty('publicUrl', null);
     expect(nullports).toHaveProperty('visibility', null);
+    expect(nullports).toHaveProperty('deployable_service_count', 1);
 
     // no services row → keys omitted
     expect(empty).not.toHaveProperty('status');
     expect(empty).not.toHaveProperty('port');
     expect(empty).not.toHaveProperty('publicUrl');
     expect(empty).toHaveProperty('visibility', null);
+    expect(empty).toHaveProperty('deployable_service_count', 0);
   });
 });

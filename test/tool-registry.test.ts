@@ -256,6 +256,7 @@ describe('Tool Registry', () => {
           url: getProjectUrl('my-app'),
           preferred_url: getProjectUrl('my-app'),
           publicUrl: null,
+          deployable_service_count: 1,
         },
       ],
     });
