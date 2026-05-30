@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **69 unique default operations** surfaced through those composites
+- **71 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -44,50 +44,49 @@ cleanup: `remove_service`, `remove_volume`, `delete_bucket`, `platform_force_rem
 `recover_platform`, `platform_cleanup_orphans`, and `cleanup_docker`. MCP calls to these return
 `OPERATION_REQUIRES_HUMAN_UI`; use the web UI or host-maintenance path instead.
 
-Deployable app cleanup and restore use softer paths: `archive_service` and
-`unarchive_service` are exposed through `openlander_service` but enter the human
-approval hold queue before executing.
+Deployable app cleanup and restore use softer paths. `archive_project`,
+`unarchive_project`, `archive_service`, and `unarchive_service` are exposed
+through the project/service composites but enter the human approval hold queue
+before executing.
 Supported bulk cleanup actions such as `bulk_delete_env_vars confirm=true` also
 enter that queue.
 
-**Project/app hard delete, purge, and whole-group lifecycle changes are human UI-only.**
-Composites do not expose `archive_project`, `unarchive_project`, `delete_project`, `delete_app`,
-`remove_app`, or `purge_project`. Project groups can contain multiple deployable app/worker
-services, so whole-group archive/restore stays in the web UI until group-wide lifecycle semantics
-are explicit. Calls to those names return
+**Project/app hard delete and purge remain human UI-only.** Composites do not expose
+`delete_project`, `delete_app`, `remove_app`, or `purge_project`. Calls to those names return
 `{ error: "HUMAN_UI_ONLY", _agent_guidance: { message: "...use the web UI: Settings → Danger zone..." } }`
 so agents do not silently substitute `remove_service` or `cleanup_docker` (those target managed
-infrastructure services, not deployable apps). For agent-requested cleanup of one deployable,
+infrastructure services, not deployable apps). For whole project-group lifecycle changes, use
+`archive_project` / `unarchive_project` with `project_id` or `project_name`; for one deployable,
 use `archive_service` / `unarchive_service` with a `service_id`.
 
 Composite catalog:
 
-| Composite                    | Action slots | Purpose                                                                            |
-| ---------------------------- | ------------ | ---------------------------------------------------------------------------------- |
-| `openlander_deploy`          | 16           | Deploy plans, execution, previews, rollbacks, build logs, Git                      |
-| `openlander_project`         | 14           | Project groups, secrets, temporary share URLs; env actions route to services       |
-| `openlander_service`         | 21           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary |
-| `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage         |
-| `openlander_monitor`         | 11           | Logs, alerts, topology, system stats, host diagnosis, project stats, probes        |
+| Composite                    | Action slots | Purpose                                                                                 |
+| ---------------------------- | ------------ | --------------------------------------------------------------------------------------- |
+| `openlander_deploy`          | 16           | Deploy plans, execution, previews, rollbacks, build logs, Git                           |
+| `openlander_project`         | 16           | Project groups, lifecycle, secrets, temporary share URLs; env actions route to services |
+| `openlander_service`         | 21           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary      |
+| `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage              |
+| `openlander_monitor`         | 11           | Logs, alerts, topology, system stats, host diagnosis, project stats, probes             |
 
 `openlander_project` owns group/config actions. `openlander_service` owns deployable runtime actions.
 
 ## Tool Categories
 
-| Category                                                 | Tools | Description                            |
-| -------------------------------------------------------- | ----- | -------------------------------------- |
-| [Deploy Plan](#deploy-plan)                              | 5     | Create, update, execute deploy plans   |
-| [Deployment Controls](#deployment-controls)              | 6     | Status, rollback, previews             |
-| [Project Operations](#project-operations)                | 4     | Group listing and group-scoped config  |
-| [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files        |
-| [Services](#services--infrastructure)                    | 17    | Create databases, manage infra         |
-| [Domains](#domains)                                      | 2     | Register Host/path domain routes       |
-| [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos          |
-| [Monitoring](#monitoring--logs)                          | 10    | Logs, stats, alerts, host diagnosis    |
-| [Debug](#debug--troubleshooting)                         | 1     | Build logs for external-agent analysis |
-| [Volume Management](#volume-management)                  | 5     | Docker volumes, disk cleanup           |
-| [Infrastructure Analysis](#infrastructure-analysis)      | 2     | Repo analysis, web search              |
-| [Platform Admin](#platform-admin)                        | 13    | Health, events, docker inspect         |
+| Category                                                 | Tools | Description                                       |
+| -------------------------------------------------------- | ----- | ------------------------------------------------- |
+| [Deploy Plan](#deploy-plan)                              | 5     | Create, update, execute deploy plans              |
+| [Deployment Controls](#deployment-controls)              | 6     | Status, rollback, previews                        |
+| [Project Operations](#project-operations)                | 6     | Group lifecycle, listing, and group-scoped config |
+| [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files                   |
+| [Services](#services--infrastructure)                    | 17    | Create databases, manage infra                    |
+| [Domains](#domains)                                      | 2     | Register Host/path domain routes                  |
+| [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos                     |
+| [Monitoring](#monitoring--logs)                          | 10    | Logs, stats, alerts, host diagnosis               |
+| [Debug](#debug--troubleshooting)                         | 1     | Build logs for external-agent analysis            |
+| [Volume Management](#volume-management)                  | 5     | Docker volumes, disk cleanup                      |
+| [Infrastructure Analysis](#infrastructure-analysis)      | 2     | Repo analysis, web search                         |
+| [Platform Admin](#platform-admin)                        | 13    | Health, events, docker inspect                    |
 
 ---
 
@@ -263,6 +262,38 @@ List active preview deployments. No parameters.
 ### `list_projects`
 
 List all projects with status, ports, URLs. No parameters.
+
+### `archive_project`
+
+Archive a project group by archiving its active deployable app/worker services
+while preserving configuration and history. This is a soft lifecycle operation:
+it does not delete managed databases, volumes, buckets, or host-wide Docker
+resources. Services that were already archived before the group archive remain
+tracked separately for restore behavior.
+
+| Parameter      | Type   | Required | Description        |
+| -------------- | ------ | -------- | ------------------ |
+| `project_id`   | string | No       | Project group id   |
+| `project_name` | string | No       | Project group name |
+
+Provide either `project_id` or `project_name`. A successful initial MCP call
+returns `status: "pending_approval"` and an `actionRunId`; poll
+`mcp_action_status` after the user approves or rejects the request.
+
+### `unarchive_project`
+
+Restore the archive set from a project-group archive. OpenLander restores the
+services archived by that group operation and does **not** redeploy them
+automatically; call `redeploy_app` with each `service_id` that should run again.
+
+| Parameter      | Type   | Required | Description        |
+| -------------- | ------ | -------- | ------------------ |
+| `project_id`   | string | No       | Project group id   |
+| `project_name` | string | No       | Project group name |
+
+Provide either `project_id` or `project_name`. A successful initial MCP call
+returns `status: "pending_approval"` and an `actionRunId`; poll
+`mcp_action_status` after the user approves or rejects the request.
 
 ### `redeploy_app` / `restart_service`
 

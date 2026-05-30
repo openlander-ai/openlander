@@ -140,4 +140,96 @@ describe('destructive MCP approval executor', () => {
     );
     expect(db.updateActionRunStatus).toHaveBeenLastCalledWith('action-run-unarchive', 'succeeded');
   });
+
+  it('executes approved project archive_project approvals', async () => {
+    const project = { id: 'project-1', name: 'demo' };
+    const db = {
+      getActionRun: vi.fn().mockResolvedValue({
+        id: 'action-run-project-archive',
+        approval_tool: 'destructive_mcp',
+        plan: JSON.stringify({
+          type: 'destructive_mcp',
+          tool: 'archive_project',
+          args: { project_name: project.name },
+          targetProjectId: project.id,
+          requestedAt: '2026-05-05T00:00:00.000Z',
+        }),
+      }),
+      getProject: vi.fn().mockResolvedValue(project),
+      getProjectByName: vi.fn().mockResolvedValue(project),
+      updateActionRunPlan: vi.fn().mockResolvedValue(undefined),
+      updateActionRunStatus: vi.fn().mockResolvedValue(undefined),
+    };
+    const pipeline = { archiveGroup: vi.fn().mockResolvedValue(undefined) };
+    const ctx = { db, pipeline } as unknown as AppContext;
+
+    await handleDestructiveMcpApproval(ctx, {
+      actionRunId: 'action-run-project-archive',
+      approved: true,
+      projectId: project.id,
+    });
+
+    expect(pipeline.archiveGroup).toHaveBeenCalledWith(project.id);
+    expect(db.updateActionRunStatus).toHaveBeenNthCalledWith(
+      1,
+      'action-run-project-archive',
+      'running',
+    );
+    expect(db.updateActionRunPlan).toHaveBeenCalledWith(
+      'action-run-project-archive',
+      expect.stringContaining('"status":"archived"'),
+    );
+    expect(db.updateActionRunStatus).toHaveBeenLastCalledWith(
+      'action-run-project-archive',
+      'succeeded',
+    );
+  });
+
+  it('executes approved project unarchive_project approvals without redeploying', async () => {
+    const project = { id: 'project-1', name: 'demo' };
+    const db = {
+      getActionRun: vi.fn().mockResolvedValue({
+        id: 'action-run-project-unarchive',
+        approval_tool: 'destructive_mcp',
+        plan: JSON.stringify({
+          type: 'destructive_mcp',
+          tool: 'unarchive_project',
+          args: { project_id: project.id },
+          targetProjectId: project.id,
+          requestedAt: '2026-05-05T00:00:00.000Z',
+        }),
+      }),
+      getProject: vi.fn().mockResolvedValue(project),
+      getProjectByName: vi.fn().mockResolvedValue(project),
+      updateActionRunPlan: vi.fn().mockResolvedValue(undefined),
+      updateActionRunStatus: vi.fn().mockResolvedValue(undefined),
+    };
+    const pipeline = {
+      unarchiveGroup: vi.fn().mockResolvedValue(undefined),
+      redeploy: vi.fn().mockResolvedValue(undefined),
+    };
+    const ctx = { db, pipeline } as unknown as AppContext;
+
+    await handleDestructiveMcpApproval(ctx, {
+      actionRunId: 'action-run-project-unarchive',
+      approved: true,
+      projectId: project.id,
+    });
+
+    expect(pipeline.unarchiveGroup).toHaveBeenCalledWith(project.id);
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    expect(db.updateActionRunStatus).toHaveBeenNthCalledWith(
+      1,
+      'action-run-project-unarchive',
+      'running',
+    );
+    expect(db.updateActionRunPlan).toHaveBeenCalledWith(
+      'action-run-project-unarchive',
+      expect.stringContaining('"status":"unarchived"'),
+    );
+    expect(db.updateActionRunStatus).toHaveBeenLastCalledWith(
+      'action-run-project-unarchive',
+      'succeeded',
+    );
+  });
 });

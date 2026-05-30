@@ -3,7 +3,9 @@ export type Decision = 'ALLOW' | 'NOTIFY_THEN_ALLOW' | 'REQUIRE_APPROVAL';
 
 const HIGH_RISK_DEFAULTS = new Set([
   'rollback_service',
+  'archive_project',
   'archive_service',
+  'unarchive_project',
   'remove_project',
   'remove_service',
   'create_database',

@@ -72,6 +72,8 @@ describe('MCP restricted-action policy (single source)', () => {
     expect(HUMAN_UI_ONLY_TOOLS).toContain('cleanup_docker');
     expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_app');
     expect(HUMAN_UI_ONLY_ALIASES).toContain('delete_project');
+    expect(APPROVAL_HOLD_TOOLS).toContain('archive_project');
+    expect(APPROVAL_HOLD_TOOLS).toContain('unarchive_project');
     expect(APPROVAL_HOLD_TOOLS).toContain('archive_service');
     expect(APPROVAL_HOLD_TOOLS).toContain('unarchive_service');
     expect(APPROVAL_HOLD_TOOLS).toContain('bulk_delete_env_vars');
@@ -83,12 +85,7 @@ describe('MCP restricted-action policy (single source)', () => {
   });
 
   it('keeps project lifecycle guidance aliases explicit and within human-UI-only aliases', () => {
-    expect(PROJECT_LIFECYCLE_ALIASES).toEqual([
-      'archive_app',
-      'archive_project',
-      'unarchive_app',
-      'unarchive_project',
-    ]);
+    expect(PROJECT_LIFECYCLE_ALIASES).toEqual(['archive_app', 'unarchive_app']);
 
     const aliases = new Set<string>(HUMAN_UI_ONLY_ALIASES);
     for (const alias of PROJECT_LIFECYCLE_ALIASES) {
@@ -96,6 +93,8 @@ describe('MCP restricted-action policy (single source)', () => {
         true,
       );
     }
+    expect(HUMAN_UI_ONLY_ALIASES).not.toContain('archive_project');
+    expect(HUMAN_UI_ONLY_ALIASES).not.toContain('unarchive_project');
   });
 
   it('composite alias interception derives from the single source', () => {

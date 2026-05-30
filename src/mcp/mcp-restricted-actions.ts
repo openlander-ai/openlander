@@ -10,9 +10,9 @@
  * - HUMAN_UI_ONLY_TOOLS: real tool defs that exist but are blocked from MCP
  *   execution (managed-infrastructure destruction). Invoking via MCP returns
  *   OPERATION_REQUIRES_HUMAN_UI.
- * - HUMAN_UI_ONLY_ALIASES: names that are NOT MCP tools at all (project
- *   lifecycle, hard delete / purge, and whole-group restore aliases). The composite
- *   intercepts them with a HUMAN_UI_ONLY pointer to the web UI so a "delete it"
+ * - HUMAN_UI_ONLY_ALIASES: names that are NOT MCP tools at all (hard delete /
+ *   purge and legacy app lifecycle aliases). The composite intercepts them
+ *   with a HUMAN_UI_ONLY pointer to the safe MCP action or web UI so a "delete it"
  *   prompt doesn't spiral into adjacent destructive tools.
  * - APPROVAL_HOLD_TOOLS: destructive or lifecycle-changing tools allowed via
  *   MCP only behind a human approval hold.
@@ -30,7 +30,6 @@ export const HUMAN_UI_ONLY_TOOLS = [
 
 export const HUMAN_UI_ONLY_ALIASES = [
   'archive_app',
-  'archive_project',
   'delete_app',
   'delete_project',
   'delete_service',
@@ -41,17 +40,13 @@ export const HUMAN_UI_ONLY_ALIASES = [
   'remove_app',
   'remove_project',
   'unarchive_app',
-  'unarchive_project',
 ] as const;
 
-export const PROJECT_LIFECYCLE_ALIASES = [
-  'archive_app',
-  'archive_project',
-  'unarchive_app',
-  'unarchive_project',
-] as const;
+export const PROJECT_LIFECYCLE_ALIASES = ['archive_app', 'unarchive_app'] as const;
 
 export const APPROVAL_HOLD_TOOLS = [
+  'archive_project',
+  'unarchive_project',
   'archive_service',
   'unarchive_service',
   'bulk_delete_env_vars',

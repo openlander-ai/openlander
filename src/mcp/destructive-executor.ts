@@ -2,6 +2,7 @@ import type { AppContext } from '../app.js';
 import { OpenLanderError } from '../errors.js';
 import { deployableServiceToolDefs } from '../tools/defs/deployable-service.js';
 import { envToolDefs } from '../tools/defs/env.js';
+import { projectOpsToolDefs } from '../tools/defs/project-ops.js';
 import type { ToolDef } from '../tools/defs/types.js';
 import type { EventPayload } from '../events/index.js';
 import { assertMcpActiveScope, isGroupBMcpHoldTool } from './destructive-safety.js';
@@ -53,7 +54,9 @@ function parsePlan(plan: string | null): DestructiveMcpPlan {
 
 function findExecutableTool(toolName: string): ToolDef | undefined {
   if (!isGroupBMcpHoldTool(toolName)) return undefined;
-  return [...deployableServiceToolDefs, ...envToolDefs].find((def) => def.name === toolName);
+  return [...projectOpsToolDefs, ...deployableServiceToolDefs, ...envToolDefs].find(
+    (def) => def.name === toolName,
+  );
 }
 
 export async function handleDestructiveMcpApproval(

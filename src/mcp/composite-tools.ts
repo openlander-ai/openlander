@@ -58,10 +58,12 @@ export const DEPLOY_ACTIONS = [
  * - Global secrets (shared across all projects)
  * - Secret files (encrypted credential files)
  * - Temporary public share URLs
- * Total: 14 tools
+ * Total: 16 tools
  */
 export const PROJECT_ACTIONS = [
   'list_projects',
+  'archive_project',
+  'unarchive_project',
   'list_env_vars',
   'get_env_var',
   'set_env_vars',
@@ -197,7 +199,7 @@ export const PLATFORM_ACTIONS = [
 /**
  * Verification: Total tool counts
  * - DEPLOY_ACTIONS: 16 tools
- * - PROJECT_ACTIONS: 14 tools
+ * - PROJECT_ACTIONS: 16 tools
  * - MANAGED_SERVICE_ACTIONS: 21 tools
  * - SERVICE_ACTIONS: 21 tools
  * - MONITOR_ACTIONS: 11 tools
@@ -244,7 +246,7 @@ export const PLATFORM_REGISTRY = {
 /**
  * Actions that intentionally do NOT exist as MCP operations because the
  * underlying flow is human UI-only (project/app hard delete, purge, and
- * project-level archive/restore).
+ * legacy app lifecycle aliases).
  *
  * Agents reaching for these names get a `HUMAN_UI_ONLY` response with a
  * clear pointer to the web UI instead of a generic `UNKNOWN_ACTION`. That
@@ -334,14 +336,14 @@ function invalidParamsResponse(
 
 function humanUiOnlyResponse(toolName: string, action: string): Record<string, unknown> {
   const lifecycleReason = PROJECT_LIFECYCLE_ALIAS_SET.has(action)
-    ? ' Project group archive/restore can span multiple deployable services and remains web UI-only until group-wide lifecycle semantics are explicit.'
+    ? ' For whole project groups, use archive_project or unarchive_project with project_id/project_name and wait for human approval. For one deployable app/worker, use archive_service or unarchive_service with service_id.'
     : '';
   return {
     error: 'HUMAN_UI_ONLY',
     action,
     composite: toolName,
     _agent_guidance: {
-      message: `"${action}" is not exposed to MCP. Project/app hard delete, purge, and project-level archive/restore are human UI-only operations. Tell the user to use the web UI: Settings → Danger zone for that project or service.${lifecycleReason} For deployable app cleanup or restore, use archive_service or unarchive_service with a service_id and wait for human approval. Do not substitute remove_service, cleanup_docker, or other destructive tools — those target managed infrastructure services, not deployable apps/projects.`,
+      message: `"${action}" is not exposed to MCP. Project/app hard delete and purge are human UI-only operations; tell the user to use the web UI: Settings → Danger zone for that project or service.${lifecycleReason} Do not substitute remove_service, cleanup_docker, or other destructive tools — those target managed infrastructure services or Docker hosts, not deployable apps/projects.`,
     },
   };
 }
