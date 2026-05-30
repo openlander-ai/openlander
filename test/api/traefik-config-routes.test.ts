@@ -471,3 +471,72 @@ describe('GET /api/traefik/config domain routing', () => {
     expect(config.http.services['svc-domain-bad-port']).toBeUndefined();
   });
 });
+
+describe('GET /api/traefik/config reads the canonical services row (S2.4)', () => {
+  it('builds auto + quick-share routers from the services row, not stale project columns', async () => {
+    // Every deprecated project column is stale; the canonical services
+    // row is the live state. The ServiceView projection must read the
+    // services row for the running filter, internal port, and the
+    // quick-share visibility / public_url.
+    const project = makeProject({
+      name: 'stack',
+      status: 'stopped',
+      visibility: 'internal',
+      public_url: null,
+      container_port: 8080,
+      container_id: null,
+    });
+    const service = makeService({
+      id: 'stack__svc',
+      project_id: 'stack',
+      name: 'stack__svc',
+      status: 'running',
+      visibility: 'shared',
+      public_url: 'https://qs.example.com',
+      container_name: 'ol-stack-green',
+      container_port: 9000,
+      container_id: 'container-green',
+    });
+    const config = await requestTraefikConfig(
+      createTraefikConfigApp({ projects: [project], services: [service], mappings: [] }).app,
+    );
+
+    // Running filter + internalPort resolve from the services row → the
+    // service is built on the canonical container_name:container_port.
+    expect(config.http.services['svc-stack']?.loadBalancer.servers[0]?.url).toBe(
+      'http://ol-stack-green:9000',
+    );
+    // Quick-share router derives from the services-row visibility +
+    // public_url even though the project column says 'internal'.
+    expect(config.http.routers['qs-stack']).toMatchObject({
+      rule: 'Host(`qs.example.com`)',
+      entryPoints: ['web'],
+      service: 'svc-stack',
+    });
+  });
+
+  it('omits both the service and the quick-share router when the services row is stopped', async () => {
+    // Inverse pin: a 'running' project column must not resurrect a
+    // service whose canonical row is stopped.
+    const project = makeProject({
+      name: 'stack',
+      status: 'running',
+      visibility: 'shared',
+      public_url: 'https://qs.example.com',
+    });
+    const service = makeService({
+      id: 'stack__svc',
+      project_id: 'stack',
+      status: 'stopped',
+      visibility: 'shared',
+      public_url: 'https://qs.example.com',
+      container_id: null,
+    });
+    const config = await requestTraefikConfig(
+      createTraefikConfigApp({ projects: [project], services: [service], mappings: [] }).app,
+    );
+
+    expect(config.http.services['svc-stack']).toBeUndefined();
+    expect(config.http.routers['qs-stack']).toBeUndefined();
+  });
+});

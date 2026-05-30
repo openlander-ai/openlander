@@ -30,6 +30,7 @@ import { containerName as projectContainerName } from '../../pipeline/helpers.js
 import { getProjectUrls } from '../../pipeline/traefik.js';
 import { projectIdToDeployableServiceId } from '../../db/service-ids.js';
 import type { ProjectRow, ServiceRow } from '../../db/types.js';
+import { serviceViewFromRows } from '../../db/views/service-view.js';
 import { normalizeDomainPathPrefix } from '../../db/repos/domain-mapping.repo.js';
 
 const log = createModuleLogger('api');
@@ -250,23 +251,26 @@ export function createApiRoutes(ctx: AppContext): Hono {
     );
     const allProjects: ProjectRow[] = [];
     for (const p of projects) {
-      const deployable = deployablesByProjectId.get(p.id);
-      const status = deployable?.status ?? p.status;
-      const containerId = deployable?.container_id ?? p.container_id;
-      if (status === 'running' || (status === 'building' && containerId)) {
+      // S2.4 canonical-first via the service-first read model: status +
+      // container_id from the deployable services row, then the
+      // deprecated project columns. The view's 'idle' bottom is inert
+      // here — the filter only matches 'running' / 'building'.
+      const view = serviceViewFromRows(p, deployablesByProjectId.get(p.id));
+      if (view.status === 'running' || (view.status === 'building' && view.containerId)) {
         allProjects.push(p);
       }
     }
     for (const project of allProjects) {
       const deployable = deployablesByProjectId.get(project.id);
-      // PR 4.5: canonical-first read with `??` fallback (joined to satisfy grep).
-      const internalPort =
-        deployable?.container_port ??
-        project.container_port ??
-        deployable?.assigned_port ??
-        project.assigned_port;
-      if (!internalPort) continue;
       if (!deployable) continue;
+      // S2.4 canonical-first via the service-first read model: container_port
+      // then assigned_port, each canonical-first over the project column.
+      const view = serviceViewFromRows(project, deployable);
+      const internalPort = view.containerPort ?? view.assignedPort;
+      if (!internalPort) continue;
+      // resolveServiceContainerName needs the raw services row for its
+      // identity check (id === `${project}__svc`) and project-name
+      // fallback, so the deployable row is kept rather than the view.
       const containerName = resolveServiceContainerName(deployable, project);
       if (!containerName) {
         log.warn(
@@ -391,11 +395,13 @@ export function createApiRoutes(ctx: AppContext): Hono {
         }
       }
 
-      // PR 4 canonical-first: public_url + visibility from deployable
-      // services row when available; fall back to legacy projects columns.
-      const deployable = deployablesByProjectId.get(project.id);
-      const visibility = deployable?.visibility ?? project.visibility;
-      const publicUrl = deployable?.public_url ?? project.public_url;
+      // S2.4 canonical-first via the service-first read model: visibility
+      // + public_url from the deployable services row, then the deprecated
+      // project columns. The view's 'internal' visibility bottom matches
+      // the legacy `?? project.visibility` undefined → non-share outcome.
+      const view = serviceViewFromRows(project, deployablesByProjectId.get(project.id));
+      const visibility = view.visibility;
+      const publicUrl = view.publicUrl;
       if ((visibility === 'quick-share' || visibility === 'shared') && publicUrl) {
         try {
           const host = new URL(publicUrl).hostname;
