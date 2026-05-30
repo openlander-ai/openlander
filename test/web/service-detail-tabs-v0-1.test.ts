@@ -176,7 +176,13 @@ describe('Service detail v0.1 tabs', () => {
     );
   });
 
-  it('keeps service deletion typed-confirm (Group A defensive UI path)', () => {
+  it('surfaces service archive before hard delete and keeps deletion typed-confirm', () => {
+    expect(source).toContain('archiveGroupService');
+    expect(source).toContain("t('projectDetail.serviceLifecycle.title')");
+    expect(source).toContain("t('projectDetail.serviceArchive.title')");
+    expect(source.indexOf("t('projectDetail.serviceArchive.title')")).toBeLessThan(
+      source.indexOf("t('projectDetail.serviceDelete.title')"),
+    );
     expect(source).toContain('expectedDeleteSlug');
     expect(source).toContain('`${projectName}/${service.name}`');
     expect(source).toContain('deleteVolumes');

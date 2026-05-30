@@ -609,6 +609,22 @@ export const translations = {
       deleteVolumes: '이 그룹의 마지막 배포 서비스일 때 관리 프로젝트 볼륨도 삭제합니다.',
       error: '서비스 삭제에 실패했습니다',
     },
+    serviceLifecycle: {
+      // Chrome — section heading.
+      title: '서비스 라이프사이클',
+    },
+    serviceArchive: {
+      // Chrome — card title + modal title + buttons.
+      title: '이 서비스 아카이브',
+      confirmTitle: '배포 서비스 아카이브',
+      archiving: '아카이브 중…',
+      confirmButton: '서비스 아카이브',
+      // Content — descriptive body + confirmation prose + error.
+      body: '런타임을 중지하고 설정과 기록은 보존한 채 이 배포 서비스를 숨깁니다.',
+      confirmDescription:
+        '런타임을 중지하고 활성 서비스 보기에서 제거합니다. 설정, 환경 변수, 도메인, 기록은 보존됩니다.',
+      error: '서비스 아카이브에 실패했습니다',
+    },
     servicesGuide: {
       empty:
         '아직 이 프로젝트에 서비스가 없습니다. 앱, 워커, 데이터베이스, 캐시 또는 compose 서비스를 추가하세요.',

@@ -518,6 +518,19 @@ export const translations = {
       confirmButton: 'Delete service',
       error: 'Failed to delete service',
     },
+    serviceLifecycle: {
+      title: 'Service lifecycle',
+    },
+    serviceArchive: {
+      title: 'Archive this service',
+      body: 'Stop the runtime and hide this deployable while preserving configuration and history.',
+      confirmTitle: 'Archive deployable service',
+      confirmDescription:
+        'This stops the runtime and removes it from the active services view. Configuration, env vars, domains, and history are preserved.',
+      archiving: 'Archiving…',
+      confirmButton: 'Archive service',
+      error: 'Failed to archive service',
+    },
     servicesGuide: {
       empty:
         'No services in this project yet. Add an app, worker, database, cache, or compose service.',

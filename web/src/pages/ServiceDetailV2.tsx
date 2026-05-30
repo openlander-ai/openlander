@@ -26,6 +26,7 @@ import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Activity as ActivityIcon,
+  Archive,
   Box,
   ClipboardPaste,
   Code2,
@@ -61,6 +62,7 @@ import { useServiceDeployments } from '@/hooks/use-deployments';
 import { useLanguage } from '@/i18n/context';
 import {
   getGroupService,
+  archiveGroupService,
   deleteGroupService,
   managedServices,
   type ConnectedProject,
@@ -455,6 +457,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
               service={resolvedService}
               projectId={projectId}
               projectName={project?.name ?? undefined}
+              onServiceArchived={() => navigate(`/projects/${project.id}`)}
               onServiceDeleted={() => navigate(`/projects/${project.id}`)}
             />
           </div>
@@ -1550,20 +1553,39 @@ function ServiceDangerZone({
   service,
   projectId,
   projectName,
+  onServiceArchived,
   onServiceDeleted,
 }: {
   service: ServiceNode;
   projectId: string | null;
   projectName?: string;
+  onServiceArchived: () => void;
   onServiceDeleted: () => void;
 }) {
   const { t } = useLanguage();
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleteVolumes, setDeleteVolumes] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const expectedDeleteSlug = projectName ? `${projectName}/${service.name}` : '';
+
+  const submitArchiveService = async () => {
+    if (!projectId) return;
+    setArchiving(true);
+    setArchiveError(null);
+    try {
+      await archiveGroupService(projectId, service.id);
+      onServiceArchived();
+    } catch (err) {
+      setArchiveError(err instanceof Error ? err.message : t('projectDetail.serviceArchive.error'));
+    } finally {
+      setArchiving(false);
+    }
+  };
 
   const submitDeleteService = async () => {
     if (!projectId || !expectedDeleteSlug || deleteConfirmation.trim() !== expectedDeleteSlug) {
@@ -1586,16 +1608,49 @@ function ServiceDangerZone({
 
   return (
     <div className="flex flex-col gap-3 border-t border-[color:var(--ol-border-subtle)] pt-5">
-      <h3 className="text-[13px] font-semibold text-[color:var(--ol-error)]">
-        {t('projectDetail.serviceDelete.title')}
+      <h3 className="text-[13px] font-semibold text-[color:var(--ol-fg)]">
+        {t('projectDetail.serviceLifecycle.title')}
       </h3>
       <button
         type="button"
+        onClick={() => setArchiveOpen(true)}
+        disabled={archiving || deleting || !projectId}
+        className={cn(
+          'flex items-start gap-3 rounded-md border border-[color:var(--ol-border-subtle)]',
+          'bg-[color:var(--ol-panel)] px-4 py-3 text-left transition-colors',
+          'hover:border-[color:var(--ol-border-strong)] hover:bg-[color:var(--ol-panel-2)]',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+        )}
+      >
+        <span
+          aria-hidden
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[color:var(--ol-primary-soft)] text-[color:var(--ol-primary)]"
+        >
+          <Archive className="h-4 w-4" />
+        </span>
+        <span className="flex flex-col gap-0.5">
+          <span className="text-[13px] font-medium text-[color:var(--ol-fg)]">
+            {t('projectDetail.serviceArchive.title')}
+          </span>
+          <span className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
+            {t('projectDetail.serviceArchive.body')}
+          </span>
+        </span>
+      </button>
+      {archiveError && (
+        <div className="rounded-md border border-[color:var(--ol-error)] bg-[color-mix(in_oklch,var(--ol-error)_8%,transparent)] px-3 py-2 text-[12px] text-[color:var(--ol-error)]">
+          {archiveError}
+        </div>
+      )}
+      <button
+        type="button"
         onClick={() => setDeleteOpen(true)}
+        disabled={archiving || deleting}
         className={cn(
           'flex items-start gap-3 rounded-md border border-[color:var(--ol-border-subtle)]',
           'bg-[color:var(--ol-panel)] px-4 py-3 text-left transition-colors',
           'hover:border-[color:var(--ol-error)] hover:bg-[color-mix(in_oklch,var(--ol-error)_6%,transparent)]',
+          'disabled:cursor-not-allowed disabled:opacity-50',
         )}
       >
         <span
@@ -1679,6 +1734,19 @@ function ServiceDangerZone({
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+        title={t('projectDetail.serviceArchive.confirmTitle')}
+        description={t('projectDetail.serviceArchive.confirmDescription')}
+        confirmLabel={
+          archiving
+            ? t('projectDetail.serviceArchive.archiving')
+            : t('projectDetail.serviceArchive.confirmButton')
+        }
+        cancelLabel={t('projectDetail.env.cancel')}
+        onConfirm={() => void submitArchiveService()}
+      />
     </div>
   );
 }

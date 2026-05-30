@@ -244,6 +244,21 @@ export async function deleteGroupService(
   return res.json();
 }
 
+export interface ArchiveGroupServiceResult {
+  project: string;
+  service: string;
+  runtimeProject: Record<string, unknown> | null;
+}
+
+export function archiveGroupService(
+  groupId: string,
+  serviceId: string,
+): Promise<ArchiveGroupServiceResult> {
+  return apiPost<ArchiveGroupServiceResult>(
+    `/api/projects/${groupId}/services/${serviceId}/archive`,
+  );
+}
+
 export async function getServiceTemplates(): Promise<ServiceTemplate[]> {
   return apiGet<ServiceTemplate[]>('/api/services/templates');
 }
