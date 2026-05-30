@@ -70,6 +70,8 @@ function createMockDb(existingProject: ReturnType<typeof makeExistingProjectRow>
     loadDeployConfig: vi.fn().mockResolvedValue(null),
     loadDeployConfigForService: vi.fn().mockResolvedValue(null),
     getEnvironmentsByProject: vi.fn().mockResolvedValue([]),
+    updateEnvironment: vi.fn().mockResolvedValue(undefined),
+    getChildProjects: vi.fn().mockResolvedValue([]),
     getLastDeployLog: vi.fn().mockResolvedValue(null),
     cleanExpiredDeployLocks: vi.fn().mockResolvedValue(0),
   } as unknown as Database;
@@ -318,5 +320,53 @@ describe('BUG: plan-engine deploy-lock session propagation through startDeploy',
     expect(docker.safeRemoveContainer).not.toHaveBeenCalled();
     expect(docker.removeContainer).not.toHaveBeenCalled();
     expect(db.updateProject).not.toHaveBeenCalled();
+  });
+
+  it('uses canonical service source when deciding whether to preserve previous image tags', async () => {
+    const project = {
+      ...makeExistingProjectRow('p-service-image', 'service-image-app'),
+      source: 'git',
+      image_tag: 'openlander/service-image-app:stale-project',
+      assigned_port: 10001,
+    };
+    const db = createMockDb(project);
+    const docker = createMockDocker();
+    const deployable = {
+      id: 'p-service-image__svc',
+      project_id: 'p-service-image',
+      name: 'app',
+      kind: 'image',
+      source: 'image',
+      status: 'running',
+      repo_url: null,
+      image_url: 'ghcr.io/acme/service-image-app:latest',
+      image_tag: 'ghcr.io/acme/service-image-app:current',
+      assigned_port: 12001,
+      container_id: 'service-image-container',
+    };
+    (db.getDeployableForProject as ReturnType<typeof vi.fn>).mockResolvedValue(deployable);
+    (db.getEnvironmentsByProject as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'p-service-image-production', type: 'production', container_id: 'container-1' },
+    ]);
+    const pipeline = buildPipeline(db, docker);
+    const deploySpy = vi.spyOn(pipeline, 'deploy').mockResolvedValue({
+      success: true,
+      projectId: 'p-service-image',
+      projectName: 'service-image-app',
+    });
+
+    await expect(pipeline.redeploy('p-service-image')).resolves.toMatchObject({
+      success: true,
+    });
+
+    expect(docker.pullImage).toHaveBeenCalledWith('ghcr.io/acme/service-image-app:latest');
+    expect(docker.tagImage).not.toHaveBeenCalled();
+    expect(deploySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'image',
+        imageUrl: 'ghcr.io/acme/service-image-app:latest',
+        _preferredPort: 12001,
+      }),
+    );
   });
 });
