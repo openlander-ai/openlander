@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolveMonitoringProfile } from '../../src/health/profile-resolver.js';
-import type { ProjectRow } from '../../src/db/types.js';
+import type { ProjectRow, ServiceRow } from '../../src/db/types.js';
 
 /**
  * Helper to create a minimal ProjectRow for testing
@@ -42,6 +42,46 @@ const makeProject = (overrides: Partial<ProjectRow>): ProjectRow =>
     health_check_path: null,
     ...overrides,
   }) as ProjectRow;
+
+const makeService = (overrides: Partial<ServiceRow>): ServiceRow =>
+  ({
+    id: 'test-id__svc',
+    project_id: 'test-id',
+    name: 'test-project__svc',
+    kind: 'git',
+    parent_service_id: null,
+    status: 'running',
+    visibility: 'internal',
+    assigned_port: 10001,
+    container_id: null,
+    container_name: null,
+    container_port: null,
+    image_tag: null,
+    previous_image_tag: null,
+    public_url: null,
+    dockerfile_path: 'Dockerfile',
+    docker_target: null,
+    build_context: null,
+    build_method: null,
+    source: 'git',
+    repo_url: null,
+    branch: 'main',
+    image_url: null,
+    image_cmd: null,
+    health_check_strategy: null,
+    health_check_path: null,
+    pending_fix: null,
+    recovering_started_at: null,
+    is_preview: 0,
+    pr_number: null,
+    project_type: 'web',
+    access_code: null,
+    access_code_iv: null,
+    archived_at: null,
+    created_at: '2025-01-01T00:00:00Z',
+    updated_at: '2025-01-01T00:00:00Z',
+    ...overrides,
+  }) as ServiceRow;
 
 describe('resolveMonitoringProfile', () => {
   it('web project returns http strategy with traefik enabled', () => {
@@ -148,5 +188,25 @@ describe('resolveMonitoringProfile', () => {
 
     expect(profile.health.strategy).toBe('http');
     expect(profile.exposeViaTraefik).toBe(false);
+  });
+
+  it('uses canonical service health fields before deprecated project fields', () => {
+    const project = makeProject({
+      project_type: 'web',
+      health_check_strategy: 'http',
+      health_check_path: '/project-health',
+    });
+    const service = makeService({
+      project_type: 'worker',
+      health_check_strategy: 'exec',
+      health_check_path: 'service-health',
+    });
+
+    const profile = resolveMonitoringProfile(project, service);
+
+    expect(profile.projectType).toBe('worker');
+    expect(profile.exposeViaTraefik).toBe(false);
+    expect(profile.health.strategy).toBe('exec');
+    expect(profile.health.path).toBeUndefined();
   });
 });
