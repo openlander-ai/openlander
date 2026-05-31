@@ -27,4 +27,15 @@ describe('project service count fields', () => {
       expect(source).not.toContain('p.deployableServiceCount ?? p.serviceCount ?? 0');
     }
   });
+
+  it('uses total service count for user-facing project summaries', () => {
+    for (const source of [homeSource, projectsGridSource, projectMapperSource]) {
+      expect(source).toContain('p.totalServiceCount ?? p.serviceCount ?? p.deployableServiceCount');
+    }
+
+    expect(homeSource).toContain("pluralCount('services', totalServices)");
+    expect(projectsGridSource).toContain("'common.count.services_one'");
+    expect(projectsGridSource).toContain("'common.count.services_other'");
+    expect(projectMapperSource).toContain('`${serviceCount} service');
+  });
 });

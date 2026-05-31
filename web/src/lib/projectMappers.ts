@@ -77,13 +77,13 @@ function createdAtFor(project: Project): string {
 }
 
 export function toProjectSummary(p: ProjectWithOptionalEnvironments): ProjectSummary {
-  const deployableServiceCount = p.deployableServiceCount ?? 0;
+  const serviceCount = p.totalServiceCount ?? p.serviceCount ?? p.deployableServiceCount ?? 0;
 
   return {
     id: p.id,
     slug: p.id,
     name: p.name,
-    description: `${deployableServiceCount} deployable service${deployableServiceCount === 1 ? '' : 's'}`,
+    description: `${serviceCount} service${serviceCount === 1 ? '' : 's'}`,
     initials: initialsFor(p.name),
     color: colorFor(p.id),
     lastDeploy: lastDeployFor(p),
