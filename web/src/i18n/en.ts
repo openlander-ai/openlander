@@ -450,6 +450,18 @@ export const translations = {
       purgeDescription:
         'This permanently deletes the project group and related runtime resources. This action cannot be undone.',
       unarchiveDescription: 'Restore this archived project to the active project list.',
+      archivedServicesTitle: 'Archived services',
+      archivedServicesBody:
+        'Archived deployable services are hidden from default lists. Restore them here, or permanently delete them with typed confirmation.',
+      archivedServicesLoading: 'Loading archived services…',
+      archivedServicesEmpty: 'No archived deployable services in this project group.',
+      archivedServicesLoadError: 'Could not load archived services',
+      archivedServiceId: 'service_id: {id}',
+      archivedServiceArchivedAt: 'Archived at {value}',
+      restoreService: 'Restore',
+      deleteService: 'Delete',
+      deleteArchivedServiceHint:
+        'Type {slug} to permanently delete this archived deployable service. This cannot be undone.',
       error: 'Project action failed',
     },
     env: {

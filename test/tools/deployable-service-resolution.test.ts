@@ -203,7 +203,9 @@ describe('deployable service target resolution', () => {
             permanent_delete: {
               kind: 'web_ui_only',
               surface: 'project_settings_danger',
+              path: 'Project Settings > Danger > Archived services',
               reason: 'hard_delete_not_exposed_to_mcp',
+              typed_confirmation: 'alpha/api',
             },
           },
         },

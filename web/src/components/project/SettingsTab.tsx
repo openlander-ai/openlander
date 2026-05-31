@@ -1,9 +1,18 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { Archive, ArchiveRestore, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useLanguage } from '@/i18n/context';
-import { archiveProject, purgeProject, unarchiveProject, updateProject } from '@/lib/api';
+import {
+  archiveProject,
+  deleteGroupService,
+  listGroupServices,
+  purgeProject,
+  unarchiveGroupService,
+  unarchiveProject,
+  updateProject,
+  type GroupService,
+} from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/types';
 
@@ -28,6 +37,7 @@ export function SettingsTab({
   const [confirmAction, setConfirmAction] = useState<ProjectDangerAction | null>(null);
   const [actionLoading, setActionLoading] = useState<ProjectDangerAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [dangerRefreshKey, setDangerRefreshKey] = useState(0);
   const isPartiallyArchived =
     project?.partiallyArchived === true || project?.partially_archived === true;
 
@@ -42,9 +52,11 @@ export function SettingsTab({
     try {
       if (action === 'archive') {
         await archiveProject(projectId);
+        setDangerRefreshKey((value) => value + 1);
         onProjectChanged?.();
       } else if (action === 'unarchive') {
         await unarchiveProject(projectId);
+        setDangerRefreshKey((value) => value + 1);
         onProjectChanged?.();
       } else {
         await purgeProject(projectId);
@@ -188,6 +200,13 @@ export function SettingsTab({
               </div>
             </div>
 
+            <ArchivedServicesDangerPanel
+              projectId={projectId}
+              projectName={project?.name ?? ''}
+              refreshKey={dangerRefreshKey}
+              onProjectChanged={onProjectChanged}
+            />
+
             <div className="rounded-lg border border-error/30 bg-error/5 p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -226,6 +245,238 @@ export function SettingsTab({
           if (confirmAction) void runProjectAction(confirmAction);
         }}
       />
+    </div>
+  );
+}
+
+function ArchivedServicesDangerPanel({
+  projectId,
+  projectName,
+  refreshKey,
+  onProjectChanged,
+}: {
+  projectId: string;
+  projectName: string;
+  refreshKey: number;
+  onProjectChanged?: () => void;
+}) {
+  const { t } = useLanguage();
+  const [services, setServices] = useState<GroupService[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionKey, setActionKey] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleteVolumes, setDeleteVolumes] = useState(false);
+
+  const loadArchivedServices = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const allServices = await listGroupServices(projectId, { includeArchived: true });
+      setServices(allServices.filter((service) => service.archivedAt != null));
+    } catch (err) {
+      setLoadError(
+        err instanceof Error ? err.message : t('projectDetail.danger.archivedServicesLoadError'),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, t]);
+
+  useEffect(() => {
+    void loadArchivedServices();
+  }, [loadArchivedServices, refreshKey]);
+
+  const resetDeleteState = () => {
+    setDeleteTargetId(null);
+    setDeleteConfirmation('');
+    setDeleteVolumes(false);
+    setActionError(null);
+  };
+
+  const restoreService = async (service: GroupService) => {
+    setActionKey(`restore:${service.id}`);
+    setActionError(null);
+    try {
+      await unarchiveGroupService(projectId, service.id);
+      resetDeleteState();
+      await loadArchivedServices();
+      onProjectChanged?.();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : t('projectDetail.serviceRestore.error'));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
+  const deleteService = async (service: GroupService, expectedSlug: string) => {
+    if (!expectedSlug || deleteConfirmation.trim() !== expectedSlug) return;
+    setActionKey(`delete:${service.id}`);
+    setActionError(null);
+    try {
+      await deleteGroupService(projectId, service.id, {
+        confirmation: deleteConfirmation.trim(),
+        deleteVolumes,
+      });
+      resetDeleteState();
+      await loadArchivedServices();
+      onProjectChanged?.();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : t('projectDetail.serviceDelete.error'));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4">
+      <div className="flex flex-col gap-1">
+        <h4 className="text-sm font-medium text-foreground">
+          {t('projectDetail.danger.archivedServicesTitle')}
+        </h4>
+        <p className="text-xs text-foreground/70">
+          {t('projectDetail.danger.archivedServicesBody')}
+        </p>
+      </div>
+
+      {loadError && (
+        <div className="mt-3 rounded-md border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
+          {t('projectDetail.danger.archivedServicesLoadError')}: {loadError}
+        </div>
+      )}
+
+      {actionError && (
+        <div className="mt-3 rounded-md border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
+          {actionError}
+        </div>
+      )}
+
+      {loading ? (
+        <p className="mt-3 text-xs text-foreground/60">
+          {t('projectDetail.danger.archivedServicesLoading')}
+        </p>
+      ) : services.length === 0 ? (
+        <p className="mt-3 text-xs text-foreground/60">
+          {t('projectDetail.danger.archivedServicesEmpty')}
+        </p>
+      ) : (
+        <div className="mt-3 flex flex-col gap-3">
+          {services.map((service) => {
+            const expectedSlug = projectName ? `${projectName}/${service.name}` : '';
+            const isDeleteOpen = deleteTargetId === service.id;
+            const busy = actionKey != null;
+            return (
+              <div
+                key={service.id}
+                className="rounded-md border border-[hsl(var(--border))] bg-bg-subtle/30 p-3"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-medium text-foreground">
+                        {service.name}
+                      </span>
+                      <span className="rounded-full border border-[hsl(var(--border))] px-2 py-0.5 text-[10px] uppercase tracking-wide text-foreground/60">
+                        {service.status}
+                      </span>
+                    </div>
+                    <p className="ol-mono mt-1 break-all text-[11px] text-foreground/60">
+                      {t('projectDetail.danger.archivedServiceId', { id: service.id })}
+                    </p>
+                    {service.archivedAt && (
+                      <p className="mt-1 text-[11px] text-foreground/50">
+                        {t('projectDetail.danger.archivedServiceArchivedAt', {
+                          value: service.archivedAt,
+                        })}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void restoreService(service)}
+                    >
+                      <ArchiveRestore className="h-3.5 w-3.5" />
+                      {actionKey === `restore:${service.id}`
+                        ? t('projectDetail.serviceRestore.restoring')
+                        : t('projectDetail.danger.restoreService')}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => {
+                        setDeleteTargetId(service.id);
+                        setDeleteConfirmation('');
+                        setDeleteVolumes(false);
+                        setActionError(null);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {t('projectDetail.danger.deleteService')}
+                    </Button>
+                  </div>
+                </div>
+
+                {isDeleteOpen && (
+                  <div className="mt-3 rounded-md border border-error/30 bg-error/5 p-3">
+                    <div className="flex flex-col gap-3">
+                      <p className="text-xs text-foreground/70">
+                        {t('projectDetail.danger.deleteArchivedServiceHint', {
+                          slug: expectedSlug,
+                        })}
+                      </p>
+                      <input
+                        value={deleteConfirmation}
+                        onChange={(event) => setDeleteConfirmation(event.target.value)}
+                        className="ol-mono w-full rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-error"
+                        placeholder={expectedSlug}
+                      />
+                      <label className="flex items-start gap-2 text-xs text-foreground/70">
+                        <input
+                          type="checkbox"
+                          checked={deleteVolumes}
+                          onChange={(event) => setDeleteVolumes(event.target.checked)}
+                          className="mt-0.5"
+                        />
+                        <span>{t('projectDetail.serviceDelete.deleteVolumes')}</span>
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={actionKey === `delete:${service.id}`}
+                          onClick={resetDeleteState}
+                        >
+                          {t('projectDetail.env.cancel')}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={
+                            actionKey != null ||
+                            !expectedSlug ||
+                            deleteConfirmation.trim() !== expectedSlug
+                          }
+                          onClick={() => void deleteService(service, expectedSlug)}
+                        >
+                          {actionKey === `delete:${service.id}`
+                            ? t('projectDetail.serviceDelete.deleting')
+                            : t('projectDetail.serviceDelete.confirmButton')}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

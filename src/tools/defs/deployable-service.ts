@@ -281,6 +281,9 @@ function archivedServiceSummary(
   service: NonNullable<ServiceRow>,
   project: NonNullable<ProjectRow>,
 ) {
+  const displayName = deployableServiceIdToProjectId(service.name);
+  const typedConfirmation = `${project.name}/${displayName}`;
+
   return {
     ...serviceSummary(service, project),
     status: service.status,
@@ -296,8 +299,10 @@ function archivedServiceSummary(
       permanent_delete: {
         kind: 'web_ui_only',
         surface: 'project_settings_danger',
+        path: 'Project Settings > Danger > Archived services',
         requires_human: true,
         reason: 'hard_delete_not_exposed_to_mcp',
+        typed_confirmation: typedConfirmation,
       },
     },
   };
@@ -310,7 +315,7 @@ function archiveLifecycleGuidance(serviceId: string) {
     next_steps: [
       `Use list_archived_services with this project to inspect archived cleanup targets, including service_id="${serviceId}".`,
       `Use unarchive_service with service_id="${serviceId}" if the service should be restored later.`,
-      'Permanent deletion is Web UI-only: open the project, show archived services if needed, then use the service Danger zone.',
+      'Permanent deletion is Web UI-only: open the project Settings > Danger > Archived services and use the typed-confirm delete flow.',
     ],
   };
 }
