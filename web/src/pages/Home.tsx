@@ -120,7 +120,7 @@ export function Home() {
   const allHealthy = tally.crashed === 0;
 
   const totalDeployableServices = useMemo(
-    () => projects.reduce((sum, p) => sum + (p.deployableServiceCount ?? p.serviceCount ?? 0), 0),
+    () => projects.reduce((sum, p) => sum + (p.deployableServiceCount ?? 0), 0),
     [projects],
   );
 
@@ -307,7 +307,7 @@ export function Home() {
             {projects.slice(0, 6).map((p) => {
               // eslint-disable-next-line openlander-internal/no-dropped-columns
               const state = p.status === 'error' ? 'crashed' : 'healthy';
-              const deployableServiceCount = p.deployableServiceCount ?? p.serviceCount;
+              const deployableServiceCount = p.deployableServiceCount ?? 0;
               return (
                 <button
                   key={p.id}
@@ -341,9 +341,7 @@ export function Home() {
                       )}
                     </div>
                     <div className="text-[11.5px] text-[color:var(--ol-fg-muted)]">
-                      {deployableServiceCount != null
-                        ? pluralCount('deployableServices', deployableServiceCount)
-                        : ''}
+                      {pluralCount('deployableServices', deployableServiceCount)}
                     </div>
                     {/* Service dots — one per service, color-coded by health */}
                     <ServiceDots

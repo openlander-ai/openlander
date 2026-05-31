@@ -77,7 +77,7 @@ function createdAtFor(project: Project): string {
 }
 
 export function toProjectSummary(p: ProjectWithOptionalEnvironments): ProjectSummary {
-  const deployableServiceCount = p.deployableServiceCount ?? p.serviceCount ?? 0;
+  const deployableServiceCount = p.deployableServiceCount ?? 0;
 
   return {
     id: p.id,

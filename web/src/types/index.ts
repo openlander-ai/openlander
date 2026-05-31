@@ -44,8 +44,13 @@ export interface Project {
   isCompose?: boolean;
   /** Deployable app/worker service count. Excludes managed infrastructure services. */
   deployableServiceCount?: number;
-  /** Legacy alias for deployableServiceCount, kept for wire compatibility. */
+  /**
+   * Legacy total service count kept for wire compatibility.
+   * Includes deployable app/worker services plus connected managed services.
+   */
   serviceCount?: number;
+  /** Explicit total service count. Same value as serviceCount on current API responses. */
+  totalServiceCount?: number;
   archived_at?: string | null;
   partiallyArchived?: boolean;
   partially_archived?: boolean;
