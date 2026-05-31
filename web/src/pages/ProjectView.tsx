@@ -30,6 +30,10 @@ import { useIsBelowMd } from '@/hooks/use-viewport';
 import { useProjectTopology } from '@/hooks/use-project-topology';
 import { useLanguage } from '@/i18n/context';
 import {
+  getProject as fetchProject,
+  type ProjectWithOptionalEnvironments,
+} from '@/lib/api/projects';
+import {
   listGroupServices,
   managedServices,
   type GroupService,
@@ -150,7 +154,13 @@ export function ProjectView() {
   // endpoint (`useGroupServices`) is reserved for callers that need
   // shaped GroupService data instead of the topology ServiceNode shape.
   const { projects, loading: projectsLoading, refetch: refetchProjects } = useProjectsContext();
-  const realProject = projects.find((p) => p.id === projectId) ?? null;
+  const contextProject = projects.find((p) => p.id === projectId) ?? null;
+  const [fallbackProject, setFallbackProject] = useState<ProjectWithOptionalEnvironments | null>(
+    null,
+  );
+  const [fallbackProjectLoading, setFallbackProjectLoading] = useState(false);
+  const realProject =
+    contextProject ?? (fallbackProject?.id === projectId ? fallbackProject : null);
   const {
     services,
     isMockFallback,
@@ -167,6 +177,34 @@ export function ProjectView() {
   // secondary action hands the user to the MCP guide instead of a native DB
   // wizard (kind="add-managed-db", never "add-service").
   const [agentGuideOpen, setAgentGuideOpen] = useState(false);
+  const isProjectArchived = realProject?.archived_at != null;
+  const showArchivedServiceList = showArchivedServices || isProjectArchived;
+
+  useEffect(() => {
+    let active = true;
+    if (!projectId || projectsLoading || contextProject) {
+      setFallbackProjectLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setFallbackProjectLoading(true);
+    fetchProject(projectId)
+      .then((project) => {
+        if (active) setFallbackProject(project);
+      })
+      .catch(() => {
+        if (active) setFallbackProject(null);
+      })
+      .finally(() => {
+        if (active) setFallbackProjectLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [contextProject, projectId, projectsLoading]);
 
   const refetchManagedServices = useCallback(async () => {
     if (!projectId) {
@@ -205,7 +243,7 @@ export function ProjectView() {
 
   useEffect(() => {
     let active = true;
-    if (!projectId || !showArchivedServices) {
+    if (!projectId || !showArchivedServiceList) {
       setArchivedServiceNodes([]);
       setArchivedServicesError(null);
       setArchivedServicesLoading(false);
@@ -235,16 +273,16 @@ export function ProjectView() {
     return () => {
       active = false;
     };
-  }, [projectId, showArchivedServices]);
+  }, [projectId, showArchivedServiceList]);
 
   const projectServiceRows = useMemo(() => {
-    const deployableServices = showArchivedServices ? archivedServiceNodes : services;
+    const deployableServices = showArchivedServiceList ? archivedServiceNodes : services;
     const serviceIds = new Set(deployableServices.map((service) => service.id));
     const connectedManagedServices = managedServiceNodes.filter(
       (service) => !serviceIds.has(service.id),
     );
     return [...deployableServices, ...connectedManagedServices];
-  }, [archivedServiceNodes, managedServiceNodes, services, showArchivedServices]);
+  }, [archivedServiceNodes, managedServiceNodes, services, showArchivedServiceList]);
 
   useEffect(() => {
     if (tabParam === 'activity' && projectId) {
@@ -295,7 +333,7 @@ export function ProjectView() {
   );
 
   // While projects are loading show a skeleton so we don't flash "not found"
-  if (projectsLoading && !realProject) {
+  if ((projectsLoading || fallbackProjectLoading) && !realProject) {
     return (
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
         <div className="h-32 animate-pulse rounded-[var(--ol-radius)] bg-[color:var(--ol-panel-2)]" />
@@ -304,7 +342,7 @@ export function ProjectView() {
     );
   }
 
-  if (!projectsLoading && !realProject) {
+  if (!projectsLoading && !fallbackProjectLoading && !realProject) {
     return (
       <div className="mx-auto w-full max-w-5xl">
         <OuterCard
@@ -338,17 +376,19 @@ export function ProjectView() {
       {/* InfraMap strip — sits above the outer card.
           Below the md breakpoint InfraMap may switch larger graphs to the
           dense layout; small graphs keep the edge view. */}
-      <InfraMap
-        projectId={projectId}
-        services={services}
-        agentActivity={[]}
-        forceDense={isBelowMd}
-        isDemo={isMockFallback}
-        onSelectService={(_p, sid) => {
-          const selected = services.find((service) => service.id === sid);
-          if (selected) openService(selected);
-        }}
-      />
+      {!isProjectArchived && (
+        <InfraMap
+          projectId={projectId}
+          services={services}
+          agentActivity={[]}
+          forceDense={isBelowMd}
+          isDemo={isMockFallback}
+          onSelectService={(_p, sid) => {
+            const selected = services.find((service) => service.id === sid);
+            if (selected) openService(selected);
+          }}
+        />
+      )}
 
       {/* Outer card with tabs */}
       <OuterCard
@@ -362,6 +402,11 @@ export function ProjectView() {
               {projectInitials}
             </span>
             <span>{projectDisplayName}</span>
+            {isProjectArchived && (
+              <span className="rounded-full border border-[color:var(--ol-warning)] bg-[color:var(--ol-warning-soft)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-[color:var(--ol-warning)]">
+                {t('projects.card.archivedBadge')}
+              </span>
+            )}
           </span>
         }
         subtitle={
@@ -403,16 +448,25 @@ export function ProjectView() {
             </span>
             <button
               type="button"
+              disabled={isProjectArchived}
               onClick={() => setAgentGuideOpen(true)}
-              className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-[color:var(--ol-border)] px-3 py-1.5 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+              className={cn(
+                'flex items-center gap-1.5 whitespace-nowrap rounded-md border border-[color:var(--ol-border)] px-3 py-1.5 text-[12.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]',
+                isProjectArchived &&
+                  'cursor-not-allowed opacity-50 hover:border-[color:var(--ol-border)]',
+              )}
             >
               <Database className="h-3.5 w-3.5" />
               Ask Agent
             </button>
             <button
               type="button"
+              disabled={isProjectArchived}
               onClick={() => setAddServiceOpen(true)}
-              className="flex items-center gap-1.5 whitespace-nowrap rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:opacity-90"
+              className={cn(
+                'flex items-center gap-1.5 whitespace-nowrap rounded-md bg-[color:var(--ol-primary)] px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:opacity-90',
+                isProjectArchived && 'cursor-not-allowed opacity-50 hover:opacity-50',
+              )}
             >
               <Plus className="h-3.5 w-3.5" />
               Add service
@@ -442,6 +496,7 @@ export function ProjectView() {
             archivedLoading={archivedServicesLoading}
             archivedError={archivedServicesError}
             onShowArchivedChange={setShowArchivedServices}
+            archiveForced={isProjectArchived}
           />
         </TabPanel>
         <TabPanel
@@ -501,6 +556,7 @@ function ServicesPanel({
   archivedLoading,
   archivedError,
   onShowArchivedChange,
+  archiveForced,
 }: {
   services: ServiceNode[];
   onOpen: (service: ServiceNode) => void;
@@ -509,6 +565,7 @@ function ServicesPanel({
   archivedLoading: boolean;
   archivedError: string | null;
   onShowArchivedChange: (show: boolean) => void;
+  archiveForced?: boolean;
 }) {
   const { t } = useLanguage();
   const toggleArchived = () => onShowArchivedChange(!showArchived);
@@ -527,26 +584,30 @@ function ServicesPanel({
             {t('projectDetail.servicesGuide.archivedLoadError', { message: archivedError })}
           </p>
         )}
-        <button
-          type="button"
-          onClick={toggleArchived}
-          disabled={archivedLoading}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {showArchived
-            ? t('projectDetail.servicesGuide.hideArchived')
-            : archivedLoading
-              ? t('projectDetail.servicesGuide.loadingArchived')
-              : t('projectDetail.servicesGuide.showArchived')}
-        </button>
-        <button
-          type="button"
-          onClick={onAddService}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add service
-        </button>
+        {!archiveForced && (
+          <>
+            <button
+              type="button"
+              onClick={toggleArchived}
+              disabled={archivedLoading}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {showArchived
+                ? t('projectDetail.servicesGuide.hideArchived')
+                : archivedLoading
+                  ? t('projectDetail.servicesGuide.loadingArchived')
+                  : t('projectDetail.servicesGuide.showArchived')}
+            </button>
+            <button
+              type="button"
+              onClick={onAddService}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add service
+            </button>
+          </>
+        )}
       </div>
     );
   }
@@ -565,19 +626,21 @@ function ServicesPanel({
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={toggleArchived}
-          disabled={archivedLoading}
-          className="inline-flex w-fit items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
-          aria-pressed={showArchived}
-        >
-          {showArchived
-            ? t('projectDetail.servicesGuide.hideArchived')
-            : archivedLoading
-              ? t('projectDetail.servicesGuide.loadingArchived')
-              : t('projectDetail.servicesGuide.showArchived')}
-        </button>
+        {!archiveForced && (
+          <button
+            type="button"
+            onClick={toggleArchived}
+            disabled={archivedLoading}
+            className="inline-flex w-fit items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+            aria-pressed={showArchived}
+          >
+            {showArchived
+              ? t('projectDetail.servicesGuide.hideArchived')
+              : archivedLoading
+                ? t('projectDetail.servicesGuide.loadingArchived')
+                : t('projectDetail.servicesGuide.showArchived')}
+          </button>
+        )}
       </div>
       <ul className="divide-y divide-[color:var(--ol-border-subtle)]">
         {services.map((s) => {
