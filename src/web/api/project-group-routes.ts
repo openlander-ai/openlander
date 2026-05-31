@@ -157,7 +157,10 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
             display_name: mapped.display_name,
             description: mapped.description,
             tags: mapped.tags,
-            status: mapped.status,
+            // `p.status` is pre-hydrated by listProjectsWithMetadata from
+            // the whole deployable group. Keep list cards aligned with
+            // topology health instead of showing only the canonical service.
+            status: p.status ?? mapped.status,
             visibility: mapped.visibility,
             source: mapped.source,
             archived_at: partiallyArchived ? null : mapped.archived_at,

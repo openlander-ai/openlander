@@ -169,7 +169,7 @@ describe('createProjectGroupRoutes', () => {
     });
   });
 
-  it('uses the canonical service row for runtime fields on GET /api/projects', async () => {
+  it('uses aggregate group status and canonical service runtime fields on GET /api/projects', async () => {
     const project = makeProjectRow({
       status: 'error',
       assigned_port: 19001,
@@ -209,7 +209,7 @@ describe('createProjectGroupRoutes', () => {
       projects: [
         {
           id: project.id,
-          status: 'running',
+          status: 'error',
           port: 10044,
           url: 'http://workspace.192.0.2.10.sslip.io',
           publicUrl: 'https://canonical.example.com',
