@@ -336,9 +336,8 @@ export function ProjectView() {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
       {/* InfraMap strip — sits above the outer card.
-          Below the md breakpoint we force the dense (3-lane) layout so the
-          nodes stay readable instead of trying to fit a horizontal row on a
-          narrow viewport. */}
+          Below the md breakpoint InfraMap may switch larger graphs to the
+          dense layout; small graphs keep the edge view. */}
       <InfraMap
         projectId={projectId}
         services={services}
@@ -584,6 +583,7 @@ function ServicesPanel({
         {services.map((s) => {
           const KindIcon = s.kind === 'Database' ? Database : Box;
           const open = () => onOpen(s);
+          const isArchived = s.archivedAt != null;
           return (
             <li key={s.id}>
               <div
@@ -596,17 +596,22 @@ function ServicesPanel({
                     open();
                   }
                 }}
-                className="flex w-full cursor-pointer items-center gap-4 px-5 py-3.5 text-left transition-colors hover:bg-[color:var(--ol-panel-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--ol-primary)]"
+                className={cn(
+                  'flex w-full cursor-pointer items-center gap-4 px-5 py-3.5 text-left transition-colors hover:bg-[color:var(--ol-panel-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--ol-primary)]',
+                  isArchived && 'bg-[color:var(--ol-panel-2)] opacity-80',
+                )}
               >
                 <span
                   aria-hidden
                   className={cn(
                     'grid h-9 w-9 shrink-0 place-items-center rounded-md',
-                    s.health === 'crashed'
-                      ? 'bg-[color:var(--ol-error-soft)] text-[color:var(--ol-error)]'
-                      : s.health === 'deploying'
-                        ? 'bg-[color:var(--ol-info-soft)] text-[color:var(--ol-info)]'
-                        : 'bg-[color:var(--ol-primary-soft)] text-[color:var(--ol-primary)]',
+                    isArchived
+                      ? 'bg-[color:var(--ol-panel)] text-[color:var(--ol-fg-subtle)]'
+                      : s.health === 'crashed'
+                        ? 'bg-[color:var(--ol-error-soft)] text-[color:var(--ol-error)]'
+                        : s.health === 'deploying'
+                          ? 'bg-[color:var(--ol-info-soft)] text-[color:var(--ol-info)]'
+                          : 'bg-[color:var(--ol-primary-soft)] text-[color:var(--ol-primary)]',
                   )}
                 >
                   <KindIcon className="h-4 w-4" />
@@ -618,7 +623,7 @@ function ServicesPanel({
                     </span>
                     <ServiceRoleBadge service={s} />
                     {s.archivedAt && (
-                      <span className="rounded-full border border-[color:var(--ol-border)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--ol-fg-subtle)]">
+                      <span className="rounded-full border border-[color:var(--ol-warning)] bg-[color:var(--ol-warning-soft)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-[color:var(--ol-warning)]">
                         {t('projectDetail.serviceLifecycle.archivedBadge')}
                       </span>
                     )}

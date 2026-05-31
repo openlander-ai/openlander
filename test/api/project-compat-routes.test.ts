@@ -294,14 +294,12 @@ describe('createProjectCompatRoutes', () => {
 
   it('does not classify deployable app nodes as databases from the project name', async () => {
     const project = { id: 'pgredis-fix2', name: 'pgredis-fix2', container_id: null, status: null };
-    const archivedAt = '2026-01-02T00:00:00.000Z';
     const appService = makeServiceRow({
       id: 'pgredis-fix2__svc',
       project_id: project.id,
       name: 'pgredis-fix2__svc',
       kind: 'git',
       image_url: 'nginx:alpine',
-      archived_at: archivedAt,
     });
     const app = createApp({
       docker: {
@@ -327,7 +325,53 @@ describe('createProjectCompatRoutes', () => {
           id: 'pgredis-fix2__svc',
           name: 'pgredis-fix2',
           kind: 'Application',
-          archivedAt,
+        },
+      ],
+    });
+  });
+
+  it('omits archived deployable services from active topology', async () => {
+    const project = { id: 'mixed-group', name: 'mixed-group', container_id: null, status: null };
+    const activeService = makeServiceRow({
+      id: 'mixed-group__svc',
+      project_id: project.id,
+      name: 'mixed-group__svc',
+      kind: 'git',
+      image_url: 'nginx:alpine',
+    });
+    const archivedService = makeServiceRow({
+      id: 'old-worker__svc',
+      project_id: project.id,
+      name: 'old-worker__svc',
+      kind: 'git',
+      image_url: 'old-worker:latest',
+      archived_at: '2026-01-02T00:00:00.000Z',
+    });
+    const app = createApp({
+      docker: {
+        inspectContainer: vi.fn(async () => ({ State: { Health: { Status: 'healthy' } } })),
+      } as unknown as AppContext['docker'],
+      db: {
+        getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup: vi.fn(async () => [activeService, archivedService]),
+        getEnvironmentsByProject: vi.fn(async () => []),
+        listServiceConnectionsByProject: vi.fn(async () => []),
+        findDependenciesByProject: vi.fn(async () => []),
+        getLatestServiceMetric: vi.fn(async () => null),
+      },
+    });
+
+    const res = await app.request('/api/projects/mixed-group/topology');
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { services: Array<{ id: string; name: string }> };
+    expect(body.services.map((service) => service.id)).toEqual(['mixed-group__svc']);
+    expect(body).toMatchObject({
+      services: [
+        {
+          id: 'mixed-group__svc',
+          name: 'mixed-group',
         },
       ],
     });
@@ -345,6 +389,7 @@ describe('createProjectCompatRoutes', () => {
       project_id: project.id,
       name: 'direct-managed__svc',
       kind: 'git',
+      container_id: 'app-container',
       image_url: 'nginx:alpine',
     });
     const managedService = makeServiceRow({
@@ -357,7 +402,10 @@ describe('createProjectCompatRoutes', () => {
     });
     const app = createApp({
       docker: {
-        inspectContainer: vi.fn(async () => ({ State: { Health: { Status: 'healthy' } } })),
+        inspectContainer: vi.fn(async () => ({
+          State: { Health: { Status: 'healthy' } },
+          Config: { Env: ['REDIS_URL=redis://direct-managed-redis:6379'] },
+        })),
       } as unknown as AppContext['docker'],
       db: {
         getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
@@ -380,6 +428,7 @@ describe('createProjectCompatRoutes', () => {
           id: 'direct-managed__svc',
           name: 'direct-managed',
           kind: 'Application',
+          dependsOn: ['direct-managed__redis'],
         },
         {
           id: 'direct-managed__redis',
