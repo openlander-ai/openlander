@@ -122,6 +122,7 @@ describe('createProjectGroupRoutes', () => {
             project,
             environments: [env],
             childCount: 1,
+            deployableChildCount: 1,
             isCompose: false,
             partiallyArchived: false,
           },
@@ -149,6 +150,7 @@ describe('createProjectGroupRoutes', () => {
           partially_archived: false,
           serviceCount: 1,
           deployableServiceCount: 1,
+          totalServiceCount: 1,
           environments: [
             {
               id: env.id,
@@ -190,6 +192,7 @@ describe('createProjectGroupRoutes', () => {
             project,
             environments: [],
             childCount: 1,
+            deployableChildCount: 1,
             isCompose: false,
             partiallyArchived: false,
           },
@@ -227,6 +230,7 @@ describe('createProjectGroupRoutes', () => {
             project,
             environments: [],
             childCount: 2,
+            deployableChildCount: 1,
             isCompose: false,
             partiallyArchived: true,
           },
@@ -246,7 +250,8 @@ describe('createProjectGroupRoutes', () => {
           partiallyArchived: true,
           partially_archived: true,
           serviceCount: 2,
-          deployableServiceCount: 2,
+          deployableServiceCount: 1,
+          totalServiceCount: 2,
         },
       ],
     });
