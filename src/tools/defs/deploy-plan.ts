@@ -646,6 +646,27 @@ export const deployPlanToolDefs: ToolDef[] = [
       const scopedProjectName = (args['project_name'] as string | undefined) ?? undefined;
       const projectName = newAppName ?? scopedProjectName ?? undefined;
 
+      if (targetProjectId) {
+        return {
+          status: 'blocked',
+          error: 'TARGET_PROJECT_ATTACH_UNSUPPORTED',
+          code: 'TARGET_PROJECT_ATTACH_UNSUPPORTED',
+          action: 'deploy_app',
+          invalid_params: ['target_project_id'],
+          message:
+            'deploy_app target_project_id is temporarily disabled because the current attach step is not durable across MCP transport disconnects, timeouts, or failed deploys.',
+          _agent_guidance: {
+            message:
+              'OpenLander did not create a temp project. Deploying a new service directly into an existing project group is blocked until target attach moves into the durable deploy plan/pipeline.',
+            next_steps: [
+              'Deploy the app as a separate project group for now, or wait for the durable multi-service attach flow.',
+              'Use list_projects to choose an existing service_id when redeploying an existing app.',
+              'If a previous attempt already created a stray temp project, archive it and clean it up through the web UI Danger path.',
+            ],
+          },
+        };
+      }
+
       const frontDoorTarget = await resolveExistingDeployAppTarget(args, context);
       if (frontDoorTarget?.kind === 'needs_selection') {
         return frontDoorTarget.response;
@@ -723,31 +744,6 @@ export const deployPlanToolDefs: ToolDef[] = [
             ],
           },
         };
-      }
-
-      // Pre-flight target_project_id checks (CCG findings #1, #2):
-      //   #1 (1.0 blocker): wait=false bypasses runPostDeploy, so the
-      //      attach step never runs. The deploy completes but stays in a
-      //      temp project forever. Reject the combination.
-      //   #2 (major): a typo in target_project_id used to silently land as
-      //      a warning AFTER the container ran. Validate up front so a bad
-      //      id fails the call before any Docker work starts.
-      if (targetProjectId) {
-        if (!wait) {
-          return {
-            status: 'failed',
-            error: 'INVALID_ARGS',
-            message:
-              'target_project_id requires wait=true. The attach step runs only after deploy completion; with wait=false the deploy would stay in a temp project. Re-call with wait=true (default).',
-          };
-        }
-        if (!(await appCtx.db.getProject(targetProjectId))) {
-          return {
-            status: 'failed',
-            error: 'TARGET_PROJECT_NOT_FOUND',
-            message: `target_project_id "${targetProjectId}" does not exist. Verify the id with list_projects before retrying.`,
-          };
-        }
       }
 
       const plan: DeployPlan = await appCtx.planEngine.createPlan({

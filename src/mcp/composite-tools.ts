@@ -120,9 +120,10 @@ export const MANAGED_SERVICE_ACTIONS = [
 
 /**
  * openlander_service: Deployable services (apps + workers).
- * Total: 21 tools
+ * Total: 22 tools
  */
 export const SERVICE_ACTIONS = [
+  'list_archived_services',
   'archive_service',
   'unarchive_service',
   'restart_service',
@@ -201,7 +202,7 @@ export const PLATFORM_ACTIONS = [
  * - DEPLOY_ACTIONS: 16 tools
  * - PROJECT_ACTIONS: 16 tools
  * - MANAGED_SERVICE_ACTIONS: 21 tools
- * - SERVICE_ACTIONS: 21 tools
+ * - SERVICE_ACTIONS: 22 tools
  * - MONITOR_ACTIONS: 11 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
  * - Platform tools: 13 direct tools (gated separately)
@@ -336,7 +337,7 @@ function invalidParamsResponse(
 
 function humanUiOnlyResponse(toolName: string, action: string): Record<string, unknown> {
   const lifecycleReason = PROJECT_LIFECYCLE_ALIAS_SET.has(action)
-    ? ' For whole project groups, use archive_project or unarchive_project with project_id/project_name and wait for human approval. For one deployable app/worker, use archive_service or unarchive_service with service_id.'
+    ? ' For whole project groups, use archive_project or unarchive_project with project_id/project_name and wait for human approval. For one deployable app/worker, use archive_service or unarchive_service with service_id. Archive is reversible cleanup; use list_archived_services to inspect archived deployable services.'
     : '';
   return {
     error: 'HUMAN_UI_ONLY',

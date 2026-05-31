@@ -15,6 +15,10 @@ create_deploy_plan  →  validate_deploy_plan  →  execute_deploy_plan  →  ge
 ```
 
 There's also a convenience `deploy_app` tool that combines all 3 steps.
+`deploy_app(target_project_id=...)` is temporarily blocked because existing-group
+attach must become durable inside the deploy plan/pipeline before agents can
+rely on it. For now, deploy a new app as its own project group or redeploy an
+existing service by `service_id`.
 
 ## Mental Model
 

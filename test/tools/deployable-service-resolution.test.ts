@@ -172,6 +172,72 @@ function getTool(ctx: AppContext, name: string) {
 }
 
 describe('deployable service target resolution', () => {
+  it('lists archived deployable services for explicit lifecycle follow-up', async () => {
+    const ctx = createDuplicateServiceContext({
+      alphaService: { archived_at: '2026-05-31T00:00:00.000Z' },
+    });
+
+    const result = (await getTool(ctx, 'list_archived_services').execute(
+      { project_id: 'alpha' },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      status: 'ok',
+      project: { id: 'alpha', name: 'alpha' },
+      count: 1,
+      services: [
+        {
+          id: 'alpha__svc',
+          name: 'api',
+          projectId: 'alpha',
+          archived_at: '2026-05-31T00:00:00.000Z',
+        },
+      ],
+      _agent_guidance: {
+        message: expect.stringContaining('not permanently deleted'),
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('unarchive_service'),
+          expect.stringContaining('Web UI'),
+        ]),
+      },
+    });
+  });
+
+  it('adds explicit lifecycle guidance to archive and restore results', async () => {
+    const ctx = createDuplicateServiceContext();
+    ctx.pipeline.archive = vi.fn().mockResolvedValue(undefined);
+    ctx.pipeline.unarchive = vi.fn().mockResolvedValue(undefined);
+
+    const archiveResult = (await getTool(ctx, 'archive_service').execute(
+      { service_id: 'alpha__svc' },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+    const unarchiveResult = (await getTool(ctx, 'unarchive_service').execute(
+      { service_id: 'alpha__svc' },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(archiveResult).toMatchObject({
+      status: 'archived',
+      project_id: 'alpha',
+      service_id: 'alpha__svc',
+      _agent_guidance: {
+        message: expect.stringContaining('not permanent deletion'),
+        next_steps: expect.arrayContaining([expect.stringContaining('list_archived_services')]),
+      },
+    });
+    expect(unarchiveResult).toMatchObject({
+      status: 'unarchived',
+      project_id: 'alpha',
+      service_id: 'alpha__svc',
+      _agent_guidance: {
+        message: expect.stringContaining('No container was started automatically'),
+        next_steps: expect.arrayContaining([expect.stringContaining('redeploy_app')]),
+      },
+    });
+  });
+
   it('scopes service_name lookup by project_name', async () => {
     const ctx = createDuplicateServiceContext();
     const result = await getTool(ctx, 'redeploy_app').execute(

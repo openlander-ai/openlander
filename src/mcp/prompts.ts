@@ -164,7 +164,8 @@ ${typeSpecific}`,
 ## Safety Gates (do not flail against these)
 
 - \`remove_service\`, \`delete_app\`, \`delete_project\`, \`purge_project\`, and hard-delete aliases are **human-UI-only** and return \`HUMAN_UI_ONLY\` / \`OPERATION_REQUIRES_HUMAN_UI\`. Do **not** substitute \`remove_service\` or \`cleanup_docker\` for deployable app/project cleanup (those target managed infrastructure, not deployable apps).
-- \`archive_project\` / \`unarchive_project\` are the MCP-safe soft lifecycle path for a whole project group. \`archive_service\` / \`unarchive_service\` target one deployable app/worker. All four enter the **human approval queue** before executing — poll \`mcp_action_status\` with the returned \`action_run_id\`. Restore actions do not redeploy automatically.
+- \`archive_project\` / \`unarchive_project\` are the MCP-safe soft lifecycle path for a whole project group. \`archive_service\` / \`unarchive_service\` target one deployable app/worker. All four enter the **human approval queue** before executing — poll \`mcp_action_status\` with the returned \`action_run_id\`. Archive is reversible cleanup, not permanent deletion: archived services are hidden from default active lists but can be inspected with \`list_archived_services\` and restored with \`unarchive_service\`. Restore actions do not redeploy automatically.
+- \`deploy_app(target_project_id=...)\` is temporarily blocked until existing-group attach is durable inside the deploy plan/pipeline. Do not rely on it to add a new deployable into an existing group.
 - Other destructive actions that remain exposed (e.g. \`bulk_delete_env_vars confirm=true\`) also enter the **human approval queue** before executing.
 - Prefer \`service_id\` for every follow-up action. \`project_name\` only resolves when the group has exactly one deployable service.
 

@@ -47,6 +47,15 @@ const serviceTargetSchema = z
     message: 'service_id or service_name is required',
   });
 
+const archivedServicesSchema = z
+  .object({
+    project_id: z.string().min(1).optional().describe('Project group id'),
+    project_name: z.string().min(1).optional().describe('Project group name'),
+  })
+  .refine((value) => Boolean(value.project_id || value.project_name), {
+    message: 'project_id or project_name is required',
+  });
+
 const deployServiceSchema = z
   .object({
     ...serviceTargetFields,
@@ -107,6 +116,22 @@ async function resolveProjectScope(
     (await context.appCtx.db.getProject(projectName)) ??
     (await context.appCtx.db.getProjectByName(projectName))
   );
+}
+
+async function resolveProjectGroupTarget(
+  args: Record<string, unknown>,
+  context: ToolContext,
+): Promise<ResolvedProjectRow> {
+  const projectId = typeof args.project_id === 'string' ? args.project_id.trim() : '';
+  const projectName = typeof args.project_name === 'string' ? args.project_name.trim() : '';
+  const project = projectId
+    ? await context.appCtx.db.getProject(projectId)
+    : await resolveProjectScope(projectName, context);
+
+  if (!project) {
+    throw new ProjectNotFoundError(projectId || projectName || 'unknown');
+  }
+  return project;
 }
 
 async function serviceSelectionCandidates(services: ResolvedServiceRow[], context: ToolContext) {
@@ -249,6 +274,40 @@ function serviceSummary(service: NonNullable<ServiceRow>, project: NonNullable<P
     projectName: project.name,
     kind: service.kind,
     source: service.source,
+  };
+}
+
+function archivedServiceSummary(
+  service: NonNullable<ServiceRow>,
+  project: NonNullable<ProjectRow>,
+) {
+  return {
+    ...serviceSummary(service, project),
+    status: service.status,
+    archived_at: service.archived_at,
+  };
+}
+
+function archiveLifecycleGuidance(serviceId: string) {
+  return {
+    message:
+      'Service archived. Archive is reversible cleanup, not permanent deletion: OpenLander stops/removes runtime containers, hides the service from default active lists, and preserves configuration/history.',
+    next_steps: [
+      `Use list_archived_services with this project to inspect archived cleanup targets, including service_id="${serviceId}".`,
+      `Use unarchive_service with service_id="${serviceId}" if the service should be restored later.`,
+      'Permanent deletion is Web UI-only: open the project, show archived services if needed, then use the service Danger zone.',
+    ],
+  };
+}
+
+function unarchiveLifecycleGuidance(serviceId: string) {
+  return {
+    message:
+      'Service restored to the active lifecycle path. No container was started automatically.',
+    next_steps: [
+      `Call redeploy_app with service_id="${serviceId}" if this service should run again.`,
+      `Call openlander_monitor.diagnose_service with service_id="${serviceId}" after redeploying to verify runtime health.`,
+    ],
   };
 }
 
@@ -505,6 +564,45 @@ export async function runDeployableServiceAction(
 
 export const deployableServiceToolDefs: ToolDef[] = [
   {
+    name: 'list_archived_services',
+    riskLevel: 'low',
+    description:
+      'List archived deployable app/worker services in a project group. Use this after archive_service/archive_project or when the user asks what can be restored or permanently deleted.',
+    mcpDescription:
+      'List archived deployable app/worker services for a project group. Archived means reversible cleanup, not permanent deletion.',
+    inputSchema: archivedServicesSchema,
+    execute: async (args, context) => {
+      const project = await resolveProjectGroupTarget(args, context);
+      const services = await context.appCtx.db.getDeployablesByGroup(project.id);
+      const archivedServices = services
+        .filter((service) => !isManagedService(service.kind))
+        .filter((service) => service.archived_at);
+
+      return {
+        status: 'ok',
+        project: { id: project.id, name: project.name },
+        count: archivedServices.length,
+        services: archivedServices.map((service) => archivedServiceSummary(service, project)),
+        _agent_guidance: {
+          message:
+            archivedServices.length > 0
+              ? 'These services are archived. They are hidden from default active lists but are not permanently deleted.'
+              : 'No archived deployable services were found for this project group.',
+          next_steps:
+            archivedServices.length > 0
+              ? [
+                  'Use unarchive_service with service_id to restore a service. Restoring does not redeploy automatically.',
+                  'For permanent deletion, ask the user to use the Web UI service Danger zone; MCP hard delete remains blocked.',
+                ]
+              : [
+                  'Use list_projects for active project groups and deployable service ids.',
+                  'If a service was meant to be cleaned up, archive_service enters the human approval queue.',
+                ],
+        },
+      };
+    },
+  },
+  {
     name: 'redeploy_app',
     riskLevel: 'medium',
     description:
@@ -628,7 +726,13 @@ export const deployableServiceToolDefs: ToolDef[] = [
         return buildArchivedServiceRejection(runtimeProject, project);
       }
       await context.appCtx.pipeline.archive(runtimeProject.id);
-      return { status: 'archived', service: serviceSummary(service, project) };
+      return {
+        status: 'archived',
+        project_id: project.id,
+        service_id: service.id,
+        service: serviceSummary(service, project),
+        _agent_guidance: archiveLifecycleGuidance(service.id),
+      };
     },
   },
   {
@@ -646,7 +750,13 @@ export const deployableServiceToolDefs: ToolDef[] = [
         'unarchive_service',
       );
       await context.appCtx.pipeline.unarchive(runtimeProject.id);
-      return { status: 'unarchived', service: serviceSummary(service, project) };
+      return {
+        status: 'unarchived',
+        project_id: project.id,
+        service_id: service.id,
+        service: serviceSummary(service, project),
+        _agent_guidance: unarchiveLifecycleGuidance(service.id),
+      };
     },
   },
   {

@@ -274,9 +274,10 @@ export const projectOpsToolDefs: ToolDef[] = [
         project: projectGroupSummary(project),
         _agent_guidance: {
           message:
-            'Project group archive completed. This preserves configuration/history and does not delete managed databases, volumes, buckets, or host Docker resources.',
+            'Project group archive completed. Archive is reversible cleanup, not permanent deletion. OpenLander stops/removes deployable runtimes, hides archived services from default active lists, and preserves configuration/history. It does not delete managed databases, volumes, buckets, or host Docker resources.',
           next_steps: [
             'Use list_projects to confirm the group lifecycle state.',
+            'Use list_archived_services if you need archived service ids for restore or cleanup review.',
             'Use unarchive_project if the group should be restored later; restored services are not redeployed automatically.',
           ],
         },
@@ -301,10 +302,11 @@ export const projectOpsToolDefs: ToolDef[] = [
         project: projectGroupSummary(project),
         _agent_guidance: {
           message:
-            'Project group restore completed. OpenLander restores the archive set without redeploying services automatically.',
+            'Project group restore completed. OpenLander restores the archive set to the active lifecycle path without redeploying services automatically.',
           next_steps: [
             'Use list_projects to confirm which deployable services are active.',
             'Call redeploy_app with service_id for each service that should run again.',
+            'Call diagnose_service after redeploying to verify runtime health before reporting success.',
           ],
         },
       };
