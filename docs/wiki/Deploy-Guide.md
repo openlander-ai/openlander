@@ -15,10 +15,11 @@ create_deploy_plan  →  validate_deploy_plan  →  execute_deploy_plan  →  ge
 ```
 
 There's also a convenience `deploy_app` tool that combines all 3 steps.
-`deploy_app(target_project_id=...)` is temporarily blocked because existing-group
-attach must become durable inside the deploy plan/pipeline before agents can
-rely on it. For now, deploy a new app as its own project group or redeploy an
-existing service by `service_id`.
+`deploy_app(target_project_id=...)` adds a newly deployed single app/worker
+service into an existing project group after the deploy succeeds. The attach is
+owned by the durable deploy-plan execution path, so MCP disconnects or timeouts
+do not own the group move. It is not supported with `expose=true`, compose, or
+ambiguous monorepo deploys; expose the service after attach if needed.
 
 ## Mental Model
 
