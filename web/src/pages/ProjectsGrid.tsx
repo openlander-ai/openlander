@@ -213,8 +213,16 @@ export function ProjectsGrid() {
                   const isArchived = p.archived_at != null;
                   const isPartiallyArchived =
                     p.partiallyArchived === true || p.partially_archived === true;
-                  const serviceCount =
-                    p.totalServiceCount ?? p.serviceCount ?? p.deployableServiceCount ?? 0;
+                  const activeServiceCount =
+                    p.activeServiceCount ??
+                    p.active_service_count ??
+                    p.deployableServiceCount ??
+                    p.totalServiceCount ??
+                    p.serviceCount ??
+                    0;
+                  const totalServiceCount =
+                    p.totalServiceCount ?? p.serviceCount ?? activeServiceCount;
+                  const serviceCount = isArchived ? totalServiceCount : activeServiceCount;
                   return (
                     <button
                       key={p.id}
