@@ -83,7 +83,7 @@ export function InfraMap(props: InfraMapProps) {
       />
     );
   }
-  if (props.forceDense || services.length > 8) {
+  if ((props.forceDense && services.length > 4) || services.length > 8) {
     return <InfraMapDense {...props} />;
   }
   return <InfraMapStandard {...props} />;

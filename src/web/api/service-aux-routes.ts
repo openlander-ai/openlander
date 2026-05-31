@@ -55,7 +55,9 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
       try {
         const groupServices =
           typeof ctx.db.getDeployablesByGroup === 'function'
-            ? await ctx.db.getDeployablesByGroup(project.id)
+            ? (await ctx.db.getDeployablesByGroup(project.id)).filter(
+                (service) => !service.archived_at,
+              )
             : [];
         const childProjects =
           groupServices.length > 0

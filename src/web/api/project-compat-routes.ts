@@ -88,13 +88,14 @@ function hostAliasesFromEnvValue(value: string): string[] {
 async function inferRuntimeEnvDependencies(
   ctx: AppContext,
   services: TopologyServiceForEnvInference[],
+  aliasServices: TopologyServiceForEnvInference[] = services,
 ): Promise<Map<string, string[]>> {
   const docker = (ctx as Partial<AppContext>).docker;
   if (typeof docker?.inspectContainer !== 'function') {
     return new Map();
   }
 
-  const aliases = serviceAliasMap(services);
+  const aliases = serviceAliasMap(aliasServices);
   const inferred = new Map<string, Set<string>>();
   for (const service of services) {
     if (!service.container_id) continue;
@@ -167,7 +168,9 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
       // path when the group has no services. The previous unconditional call
       // ran a query + N getProject() round-trips for every grouped project,
       // even though the result was discarded by useServices=true.
-      const groupServices = await ctx.db.getDeployablesByGroup(project.id);
+      const groupServices = (await ctx.db.getDeployablesByGroup(project.id)).filter(
+        (service) => !service.archived_at,
+      );
       const useServices = groupServices.length > 0;
       const childProjects = useServices
         ? []
@@ -209,7 +212,13 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
       }
       if (useServices) {
         mergeDependsOn(dependsOnMap, buildConnectionDependsOn(serviceConnections, nodeIds));
-        mergeDependsOn(dependsOnMap, await inferRuntimeEnvDependencies(ctx, groupServices));
+        mergeDependsOn(
+          dependsOnMap,
+          await inferRuntimeEnvDependencies(ctx, groupServices, [
+            ...groupServices,
+            ...connectedManagedServices,
+          ]),
+        );
       }
 
       // Inspect health for all nodes — funneled through per-container 15s
