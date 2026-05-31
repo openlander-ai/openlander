@@ -9,6 +9,13 @@ import {
 import { MANAGED_SERVICE_KINDS } from '../db/repos/service.repo.js';
 import { HUMAN_UI_ONLY_TOOL_SET, APPROVAL_HOLD_TOOL_SET } from './mcp-restricted-actions.js';
 import type { ToolContext, ToolDef } from '../tools/defs/types.js';
+import {
+  afterApprovalGuidanceForTool,
+  buildMcpActionStatusCall,
+  lifecycleEffectForTool,
+  type LifecycleEffect,
+  type McpCompositeCall,
+} from './agent-lifecycle-contract.js';
 
 // Derived from the single policy source (mcp-restricted-actions.ts). Only real
 // tool defs land here; deployable/project lifecycle aliases live in that module's
@@ -22,9 +29,17 @@ interface SafetyResult {
   message?: string;
   status?: string;
   actionRunId?: string;
+  action_run_id?: string;
   tool?: string;
   projectId?: string;
+  project_id?: string;
   details?: Record<string, unknown>;
+  poll_call?: McpCompositeCall;
+  effect_preview?: LifecycleEffect;
+  after_approval?: Record<string, string>;
+  web_ui?: Record<string, unknown>;
+  safe_alternatives?: Record<string, unknown>[];
+  do_not_substitute?: string[];
   _agent_guidance?: Record<string, unknown>;
 }
 
@@ -114,15 +129,21 @@ export function assertMcpActiveScope(
 
 function buildHumanUiOnlyResponse(toolName: string): SafetyResult {
   const error = new OperationRequiresHumanUiError(toolName);
-  const target =
-    toolName === 'cleanup_docker'
-      ? 'OpenLander web UI host cleanup or an operator-run maintenance workflow'
-      : 'the OpenLander web UI typed-confirm flow for that project, service, volume, or bucket';
+  const isHostCleanup = toolName === 'cleanup_docker';
+  const target = isHostCleanup
+    ? 'OpenLander web UI host cleanup or an operator-run maintenance workflow'
+    : 'the OpenLander web UI typed-confirm flow for that project, service, volume, or bucket';
   return {
     error: error.code,
     code: error.code,
     message: error.message,
     details: error.details,
+    web_ui: {
+      surface: isHostCleanup ? 'host_cleanup' : 'typed_confirm_danger',
+      requires_human: true,
+    },
+    safe_alternatives: [],
+    do_not_substitute: ['archive_service', 'archive_project', 'cleanup_docker', 'remove_service'],
     _agent_guidance: {
       message: `This destructive operation is intentionally blocked from MCP in OpenLander 0.1. Tell the user to use ${target}; do not substitute another MCP cleanup or removal tool.`,
     },
@@ -184,11 +205,20 @@ export async function maybeHandleMcpSafety(
   return {
     status: 'pending_approval',
     actionRunId,
+    action_run_id: actionRunId,
     tool: def.name,
     projectId: targetProjectId ?? undefined,
+    project_id: targetProjectId ?? undefined,
+    poll_call: buildMcpActionStatusCall(actionRunId),
+    effect_preview: lifecycleEffectForTool(def.name),
+    after_approval: afterApprovalGuidanceForTool(def.name),
     _agent_guidance: {
       message:
-        'This destructive MCP action is waiting for human approval. Poll mcp_action_status with the returned actionRunId.',
+        'This destructive MCP action is waiting for human approval. Poll mcp_action_status with the returned action_run_id; do not retry the original action while approval is pending.',
+      next_steps: [
+        'Use poll_call to check whether the human approved, rejected, or the executor failed.',
+        'After approval succeeds, follow after_approval for the safe next action.',
+      ],
     },
   };
 }

@@ -121,6 +121,21 @@ describe('openlander_project runtime aliases removed', () => {
     expect(result).toHaveProperty('error', 'HUMAN_UI_ONLY');
     expect(String(guidance['message'])).not.toContain('archive_project');
     expect(String(guidance['message'])).toContain('Settings → Danger zone');
+    expect(result).toMatchObject({
+      web_ui: {
+        surface: 'project_settings_danger',
+        requires_human: true,
+      },
+      safe_alternatives: [
+        {
+          tool: 'openlander_project',
+          action: 'archive_project',
+          approval_required: true,
+          effect: 'reversible_cleanup',
+        },
+      ],
+      do_not_substitute: ['remove_service', 'cleanup_docker'],
+    });
   });
 
   it('removed aliases do not emit deprecation warnings because compatibility is gone', async () => {

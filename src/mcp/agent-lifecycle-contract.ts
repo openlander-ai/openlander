@@ -1,0 +1,181 @@
+export interface McpCompositeCall {
+  tool: string;
+  arguments: {
+    action: string;
+    params: Record<string, string>;
+  };
+}
+
+export interface LifecycleEffect {
+  kind: string;
+  reversible: boolean;
+  runtime: string;
+  data: string;
+  hard_delete: boolean;
+}
+
+export interface DestructiveMcpPlanSummary {
+  tool: string;
+  args: Record<string, unknown>;
+  targetProjectId: string | null;
+}
+
+const safeArgKeys = new Set([
+  'project_id',
+  'project_name',
+  'projectId',
+  'projectName',
+  'service_id',
+  'service_name',
+  'serviceId',
+  'serviceName',
+  'target_project_id',
+]);
+
+export function buildMcpActionStatusCall(actionRunId: string): McpCompositeCall {
+  return {
+    tool: 'openlander_monitor',
+    arguments: {
+      action: 'mcp_action_status',
+      params: { action_run_id: actionRunId },
+    },
+  };
+}
+
+export function lifecycleEffectForTool(toolName: string): LifecycleEffect {
+  if (toolName === 'archive_project' || toolName === 'archive_service') {
+    return {
+      kind: 'archive',
+      reversible: true,
+      runtime: 'stop_remove_container',
+      data: 'preserve_config_history',
+      hard_delete: false,
+    };
+  }
+
+  if (toolName === 'unarchive_project' || toolName === 'unarchive_service') {
+    return {
+      kind: 'unarchive',
+      reversible: true,
+      runtime: 'no_auto_start',
+      data: 'preserve_config_history',
+      hard_delete: false,
+    };
+  }
+
+  if (toolName === 'bulk_delete_env_vars') {
+    return {
+      kind: 'delete_env_keys',
+      reversible: false,
+      runtime: 'no_runtime_change',
+      data: 'delete_env_keys',
+      hard_delete: false,
+    };
+  }
+
+  if (toolName === 'remove_secret_file') {
+    return {
+      kind: 'remove_secret_file',
+      reversible: false,
+      runtime: 'no_runtime_change',
+      data: 'delete_secret_file',
+      hard_delete: false,
+    };
+  }
+
+  return {
+    kind: 'approval_hold',
+    reversible: false,
+    runtime: 'policy_defined',
+    data: 'policy_defined',
+    hard_delete: false,
+  };
+}
+
+export function afterApprovalGuidanceForTool(toolName: string): Record<string, string> {
+  if (toolName === 'archive_project' || toolName === 'archive_service') {
+    return {
+      succeeded: 'Inspect list_archived_services to confirm archived cleanup targets.',
+      rejected: 'Stop and report that the human rejected the archive request.',
+      failed:
+        'Report the failure; do not substitute hard delete, remove_service, or cleanup_docker.',
+    };
+  }
+
+  if (toolName === 'unarchive_project' || toolName === 'unarchive_service') {
+    return {
+      succeeded:
+        'Confirm active lifecycle state, then redeploy only if the user wants runtime started.',
+      rejected: 'Stop and report that the human rejected the restore request.',
+      failed: 'Report the failure; do not claim a container was started.',
+    };
+  }
+
+  return {
+    succeeded: 'Poll mcp_action_status until the action reaches a terminal status.',
+    rejected: 'Stop and report that the human rejected the request.',
+    failed: 'Report the failure without substituting another destructive action.',
+  };
+}
+
+export function summarizeDestructiveArgs(
+  args: Record<string, unknown>,
+): Record<string, string | number> {
+  const summary: Record<string, string | number> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (safeArgKeys.has(key) && typeof value === 'string' && value.trim()) {
+      summary[key] = value.trim();
+    }
+  }
+
+  const keys = args['keys'];
+  if (Array.isArray(keys)) {
+    summary.key_count = keys.length;
+  }
+
+  return summary;
+}
+
+export function parseDestructiveMcpPlan(plan: string | null): DestructiveMcpPlanSummary | null {
+  if (!plan) return null;
+
+  try {
+    const parsed = JSON.parse(plan) as Record<string, unknown>;
+    if (parsed['type'] !== 'destructive_mcp' || typeof parsed['tool'] !== 'string') {
+      return null;
+    }
+
+    const rawArgs = parsed['args'];
+    const args =
+      rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)
+        ? (rawArgs as Record<string, unknown>)
+        : {};
+    const targetProjectId =
+      typeof parsed['targetProjectId'] === 'string' && parsed['targetProjectId'].trim()
+        ? parsed['targetProjectId'].trim()
+        : null;
+
+    return {
+      tool: parsed['tool'],
+      args,
+      targetProjectId,
+    };
+  } catch {
+    // Malformed historical action-run plans should not break status polling.
+    return null;
+  }
+}
+
+export function archivedServicesSuggestedCall(
+  projectId: string | null,
+): McpCompositeCall | undefined {
+  if (!projectId) return undefined;
+
+  return {
+    tool: 'openlander_service',
+    arguments: {
+      action: 'list_archived_services',
+      params: { project_id: projectId },
+    },
+  };
+}

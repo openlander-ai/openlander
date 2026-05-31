@@ -54,12 +54,16 @@ Archive is reversible cleanup, not permanent deletion: archived deployable
 services are hidden from default active lists, can be inspected with
 `list_archived_services`, and can be restored with `unarchive_service` or
 `unarchive_project`. Restore actions do not redeploy automatically.
+Approval-hold responses include both `actionRunId` and `action_run_id`, plus a
+`poll_call` envelope for `openlander_monitor.mcp_action_status`, an
+`effect_preview`, and `after_approval` guidance so agents know what changed and
+what to do after approval.
 Supported bulk cleanup actions such as `bulk_delete_env_vars confirm=true` also
 enter that queue.
 
 **Project/app hard delete and purge remain human UI-only.** Composites do not expose
 `delete_project`, `delete_app`, `remove_app`, or `purge_project`. Calls to those names return
-`{ error: "HUMAN_UI_ONLY", _agent_guidance: { message: "...use the web UI: Settings → Danger zone..." } }`
+`{ error: "HUMAN_UI_ONLY", web_ui: { surface: "project_settings_danger" }, safe_alternatives: [...], do_not_substitute: [...] }`
 so agents do not silently substitute `remove_service` or `cleanup_docker` (those target managed
 infrastructure services, not deployable apps). For whole project-group lifecycle changes, use
 `archive_project` / `unarchive_project` with `project_id` or `project_name`; for one deployable,
@@ -288,8 +292,9 @@ tracked separately for restore behavior.
 | `project_name` | string | No       | Project group name |
 
 Provide either `project_id` or `project_name`. A successful initial MCP call
-returns `status: "pending_approval"` and an `actionRunId`; poll
-`mcp_action_status` after the user approves or rejects the request.
+returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
+`poll_call`; poll `mcp_action_status` after the user approves or rejects the
+request.
 
 ### `unarchive_project`
 
@@ -303,8 +308,9 @@ automatically; call `redeploy_app` with each `service_id` that should run again.
 | `project_name` | string | No       | Project group name |
 
 Provide either `project_id` or `project_name`. A successful initial MCP call
-returns `status: "pending_approval"` and an `actionRunId`; poll
-`mcp_action_status` after the user approves or rejects the request.
+returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
+`poll_call`; poll `mcp_action_status` after the user approves or rejects the
+request.
 
 ### `redeploy_app` / `restart_service`
 
@@ -356,8 +362,9 @@ managed databases, volumes, buckets, or host-wide Docker resources.
 | `project_name` | string | No       | Optional group scope for name lookups |
 
 Provide either `service_id` or `service_name`. A successful initial MCP call
-returns `status: "pending_approval"` and an `actionRunId`; poll
-`mcp_action_status` after the user approves or rejects the request.
+returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
+`poll_call`; poll `mcp_action_status` after the user approves or rejects the
+request.
 
 ### `list_archived_services`
 
@@ -374,6 +381,9 @@ databases, caches, buckets, volumes, and host resources are excluded.
 Provide either `project_id` or `project_name`. Hard delete remains web
 UI-only; this action is a read-only way for agents to inspect reversible
 archive state before suggesting restore or human UI deletion.
+Each service item includes `available_actions.restore` (MCP approval via
+`unarchive_service`) and `available_actions.permanent_delete` (`web_ui_only`,
+Project Settings > Danger).
 
 ### `unarchive_service`
 
@@ -389,8 +399,9 @@ should run again.
 | `project_name` | string | No       | Optional group scope for name lookups |
 
 Provide either `service_id` or `service_name`. A successful initial MCP call
-returns `status: "pending_approval"` and an `actionRunId`; poll
-`mcp_action_status` after the user approves or rejects the request.
+returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
+`poll_call`; poll `mcp_action_status` after the user approves or rejects the
+request.
 
 ### `expose_public` / `unexpose_public`
 
@@ -775,6 +786,13 @@ probe from the correct isolated project network.
 
 ### `mcp_action_status`
 
+Check a held destructive MCP action. Approval-hold responses include a
+`poll_call` that calls this action with `action_run_id`. The response includes
+the approval status, sanitized `requested_args_summary`, `lifecycle_effect`, and
+agent guidance. Archive success returns `suggested_call` for
+`list_archived_services`; restore success reminds agents that no container was
+started automatically.
+
 | Parameter       | Type   | Required | Description                               |
 | --------------- | ------ | -------- | ----------------------------------------- |
 | `action_run_id` | string | No       | Action run id returned by a held MCP call |
@@ -984,6 +1002,7 @@ changes without `dry_run=false` plus `confirm=true`. `platform_cleanup_orphans` 
   - `status_call` for polling progress.
   - `diagnostic_call` for service or host diagnosis.
   - `suggested_call` for the primary next mutation/read action.
+  - `poll_call` for approval/status polling such as `mcp_action_status`.
 - Logs, raw build output, Docker details, host resources, and full diagnostics
   are fetched through dedicated actions such as `get_build_log`,
   `diagnose_service`, and `diagnose_host_resources`.

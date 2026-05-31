@@ -192,6 +192,20 @@ describe('deployable service target resolution', () => {
           name: 'api',
           projectId: 'alpha',
           archived_at: '2026-05-31T00:00:00.000Z',
+          available_actions: {
+            restore: {
+              kind: 'mcp_approval',
+              tool: 'openlander_service',
+              action: 'unarchive_service',
+              approval_required: true,
+              params: { service_id: 'alpha__svc' },
+            },
+            permanent_delete: {
+              kind: 'web_ui_only',
+              surface: 'project_settings_danger',
+              reason: 'hard_delete_not_exposed_to_mcp',
+            },
+          },
         },
       ],
       _agent_guidance: {

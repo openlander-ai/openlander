@@ -15,6 +15,13 @@ import {
 import { loadServiceViewRecords, serviceViewFromRows } from '../../db/views/service-view.js';
 import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
 import { getMcpInstancePublicInfo } from '../../mcp/instance-identity.js';
+import {
+  archivedServicesSuggestedCall,
+  buildMcpActionStatusCall,
+  lifecycleEffectForTool,
+  parseDestructiveMcpPlan,
+  summarizeDestructiveArgs,
+} from '../../mcp/agent-lifecycle-contract.js';
 import { BUILD_TIME_PREFIXES } from '../../pipeline/build-args.js';
 import { resolveContainerHost } from '../../pipeline/url-resolver.js';
 import {
@@ -666,16 +673,86 @@ export const monitoringToolDefs: ToolDef[] = [
               ? 'approved_executing'
               : 'pending'
             : run.status;
+      const planSummary = parseDestructiveMcpPlan(run.plan);
+      const requestedTool = planSummary?.tool;
+      const requestedArgsSummary = planSummary
+        ? summarizeDestructiveArgs(planSummary.args)
+        : undefined;
+      const projectId = run.project_id || planSummary?.targetProjectId || null;
+      const lifecycleEffect = requestedTool ? lifecycleEffectForTool(requestedTool) : undefined;
+      const pollCall =
+        status === 'pending' || status === 'approved_executing'
+          ? buildMcpActionStatusCall(run.id)
+          : undefined;
+      const suggestedCall =
+        status === 'succeeded' && lifecycleEffect?.kind === 'archive'
+          ? archivedServicesSuggestedCall(projectId)
+          : undefined;
+      const guidance =
+        status === 'pending'
+          ? {
+              message:
+                'This MCP action is still waiting for human approval. Do not retry the original destructive action.',
+              next_steps: ['Use poll_call to check this action again after the user responds.'],
+            }
+          : status === 'approved_executing'
+            ? {
+                message:
+                  'The human approved this MCP action and OpenLander is executing it. Keep polling until it reaches succeeded or failed.',
+                next_steps: ['Use poll_call again; do not start a duplicate lifecycle action.'],
+              }
+            : status === 'rejected'
+              ? {
+                  message: 'The human rejected this MCP action. Stop and report the rejection.',
+                  next_steps: ['Do not substitute hard delete, remove_service, or cleanup_docker.'],
+                }
+              : status === 'succeeded' && lifecycleEffect?.kind === 'archive'
+                ? {
+                    message:
+                      'Archive completed. Archive is reversible cleanup, not permanent deletion.',
+                    next_steps: [
+                      'Use suggested_call to inspect archived deployable services.',
+                      'Use unarchive_service or unarchive_project to restore later; hard delete remains Web UI-only.',
+                    ],
+                  }
+                : status === 'succeeded' && lifecycleEffect?.kind === 'unarchive'
+                  ? {
+                      message:
+                        'Restore completed. The target is back on the active lifecycle path, but no container was started automatically.',
+                      next_steps: [
+                        'Call redeploy_app only if the user wants the service running again.',
+                        'After redeploying, call diagnose_service to verify runtime health.',
+                      ],
+                    }
+                  : status === 'failed'
+                    ? {
+                        message:
+                          'The held MCP action failed. Report the failure and use diagnostic actions if relevant.',
+                        next_steps: [
+                          'Do not substitute hard delete, remove_service, or cleanup_docker.',
+                        ],
+                      }
+                    : undefined;
 
       return {
         actionRunId: run.id,
+        action_run_id: run.id,
         status,
-        projectId: run.project_id || null,
+        projectId,
+        project_id: projectId,
         approvalStatus: run.approval_status,
         approvalTool: run.approval_tool,
+        requestedTool,
+        requested_tool: requestedTool,
+        requestedArgsSummary,
+        requested_args_summary: requestedArgsSummary,
+        lifecycle_effect: lifecycleEffect,
+        poll_call: pollCall,
+        suggested_call: suggestedCall,
         error: run.error_message,
         requestedAt: run.approval_requested_at,
         resolvedAt: run.approval_resolved_at,
+        _agent_guidance: guidance,
       };
     },
   },

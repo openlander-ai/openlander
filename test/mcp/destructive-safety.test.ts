@@ -55,6 +55,11 @@ describe('MCP destructive safety', () => {
     expect(result).toMatchObject({
       error: 'OPERATION_REQUIRES_HUMAN_UI',
       code: 'OPERATION_REQUIRES_HUMAN_UI',
+      web_ui: {
+        requires_human: true,
+      },
+      safe_alternatives: [],
+      do_not_substitute: expect.arrayContaining(['cleanup_docker', 'remove_service']),
     });
     expect(context.appCtx.db.createPendingMcpApproval).not.toHaveBeenCalled();
   });
@@ -132,8 +137,21 @@ describe('MCP destructive safety', () => {
       expect(result).toMatchObject({
         status: 'pending_approval',
         actionRunId: 'action-run-1',
+        action_run_id: 'action-run-1',
         tool: toolName,
         projectId: 'project-1',
+        project_id: 'project-1',
+        poll_call: {
+          tool: 'openlander_monitor',
+          arguments: {
+            action: 'mcp_action_status',
+            params: { action_run_id: 'action-run-1' },
+          },
+        },
+        effect_preview: {
+          kind: toolName === 'archive_service' ? 'archive' : 'unarchive',
+          hard_delete: false,
+        },
       });
       expect(context.appCtx.db.createPendingMcpApproval).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -215,6 +233,12 @@ describe('MCP destructive safety', () => {
             status: 'pending_approval',
             approval_status: 'approved',
             approval_tool: 'destructive_mcp',
+            plan: JSON.stringify({
+              type: 'destructive_mcp',
+              tool: 'archive_service',
+              args: { service_id: 'service-1', variables: { SECRET: 'not-returned' } },
+              targetProjectId: 'project-1',
+            }),
             error_message: null,
             approval_requested_at: '2026-05-05T00:00:00.000Z',
             approval_resolved_at: '2026-05-05T00:01:00.000Z',
@@ -231,6 +255,103 @@ describe('MCP destructive safety', () => {
       projectId: 'project-1',
       approvalStatus: 'approved',
       approvalTool: 'destructive_mcp',
+      requestedTool: 'archive_service',
+      requested_tool: 'archive_service',
+      requestedArgsSummary: { service_id: 'service-1' },
+      requested_args_summary: { service_id: 'service-1' },
+      lifecycle_effect: { kind: 'archive', hard_delete: false },
+      poll_call: {
+        tool: 'openlander_monitor',
+        arguments: {
+          action: 'mcp_action_status',
+          params: { action_run_id: 'action-run-1' },
+        },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('not-returned');
+  });
+
+  it('routes succeeded archive status to archived-service inspection', async () => {
+    const statusTool = monitoringToolDefs.find((tool) => tool.name === 'mcp_action_status');
+    expect(statusTool).toBeDefined();
+    const context = {
+      target: 'mcp',
+      appCtx: {
+        db: {
+          getActionRun: vi.fn().mockResolvedValue({
+            id: 'action-run-1',
+            project_id: 'project-1',
+            status: 'succeeded',
+            approval_status: 'approved',
+            approval_tool: 'destructive_mcp',
+            plan: JSON.stringify({
+              type: 'destructive_mcp',
+              tool: 'archive_project',
+              args: { project_id: 'project-1' },
+              targetProjectId: 'project-1',
+            }),
+            error_message: null,
+            approval_requested_at: '2026-05-05T00:00:00.000Z',
+            approval_resolved_at: '2026-05-05T00:01:00.000Z',
+          }),
+        },
+      } as unknown as AppContext,
+    } as ToolContext;
+
+    const result = await statusTool!.execute({ action_run_id: 'action-run-1' }, context);
+
+    expect(result).toMatchObject({
+      status: 'succeeded',
+      lifecycle_effect: { kind: 'archive', hard_delete: false },
+      suggested_call: {
+        tool: 'openlander_service',
+        arguments: {
+          action: 'list_archived_services',
+          params: { project_id: 'project-1' },
+        },
+      },
+      _agent_guidance: {
+        message: expect.stringContaining('not permanent deletion'),
+      },
+    });
+  });
+
+  it('keeps succeeded restore status explicit that redeploy is separate', async () => {
+    const statusTool = monitoringToolDefs.find((tool) => tool.name === 'mcp_action_status');
+    expect(statusTool).toBeDefined();
+    const context = {
+      target: 'mcp',
+      appCtx: {
+        db: {
+          getActionRun: vi.fn().mockResolvedValue({
+            id: 'action-run-restore',
+            project_id: 'project-1',
+            status: 'succeeded',
+            approval_status: 'approved',
+            approval_tool: 'destructive_mcp',
+            plan: JSON.stringify({
+              type: 'destructive_mcp',
+              tool: 'unarchive_service',
+              args: { service_id: 'service-1' },
+              targetProjectId: 'project-1',
+            }),
+            error_message: null,
+            approval_requested_at: '2026-05-05T00:00:00.000Z',
+            approval_resolved_at: '2026-05-05T00:01:00.000Z',
+          }),
+        },
+      } as unknown as AppContext,
+    } as ToolContext;
+
+    const result = await statusTool!.execute({ action_run_id: 'action-run-restore' }, context);
+
+    expect(result).toMatchObject({
+      status: 'succeeded',
+      lifecycle_effect: { kind: 'unarchive', runtime: 'no_auto_start' },
+      _agent_guidance: {
+        message: expect.stringContaining('no container was started automatically'),
+        next_steps: expect.arrayContaining([expect.stringContaining('Call redeploy_app only if')]),
+      },
     });
   });
 
