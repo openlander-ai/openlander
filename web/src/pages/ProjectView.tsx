@@ -179,6 +179,16 @@ export function ProjectView() {
   const [agentGuideOpen, setAgentGuideOpen] = useState(false);
   const isProjectArchived = realProject?.archived_at != null;
   const showArchivedServiceList = showArchivedServices || isProjectArchived;
+  const activeServiceCount =
+    realProject?.activeServiceCount ??
+    realProject?.active_service_count ??
+    realProject?.deployableServiceCount ??
+    null;
+  const totalServiceCount = realProject?.totalServiceCount ?? realProject?.serviceCount ?? null;
+  const archivedServiceCount =
+    activeServiceCount != null && totalServiceCount != null
+      ? Math.max(0, totalServiceCount - activeServiceCount)
+      : 0;
 
   useEffect(() => {
     let active = true;
@@ -495,6 +505,7 @@ export function ProjectView() {
             showArchived={showArchivedServices}
             archivedLoading={archivedServicesLoading}
             archivedError={archivedServicesError}
+            archivedCount={archivedServiceCount}
             onShowArchivedChange={setShowArchivedServices}
             archiveForced={isProjectArchived}
           />
@@ -555,6 +566,7 @@ function ServicesPanel({
   showArchived,
   archivedLoading,
   archivedError,
+  archivedCount,
   onShowArchivedChange,
   archiveForced,
 }: {
@@ -564,11 +576,13 @@ function ServicesPanel({
   showArchived: boolean;
   archivedLoading: boolean;
   archivedError: string | null;
+  archivedCount: number;
   onShowArchivedChange: (show: boolean) => void;
   archiveForced?: boolean;
 }) {
   const { t } = useLanguage();
   const toggleArchived = () => onShowArchivedChange(!showArchived);
+  const canToggleArchived = !archiveForced && archivedCount > 0;
 
   if (services.length === 0) {
     return (
@@ -585,28 +599,30 @@ function ServicesPanel({
           </p>
         )}
         {!archiveForced && (
-          <>
-            <button
-              type="button"
-              onClick={toggleArchived}
-              disabled={archivedLoading}
-              className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {showArchived
-                ? t('projectDetail.servicesGuide.hideArchived')
-                : archivedLoading
-                  ? t('projectDetail.servicesGuide.loadingArchived')
-                  : t('projectDetail.servicesGuide.showArchived')}
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {canToggleArchived && (
+              <button
+                type="button"
+                onClick={toggleArchived}
+                disabled={archivedLoading}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {showArchived
+                  ? t('projectDetail.servicesGuide.hideArchived')
+                  : archivedLoading
+                    ? t('projectDetail.servicesGuide.loadingArchived')
+                    : `${t('projectDetail.servicesGuide.showArchived')} (${archivedCount})`}
+              </button>
+            )}
             <button
               type="button"
               onClick={onAddService}
-              className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)]"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5" />
               Add service
             </button>
-          </>
+          </div>
         )}
       </div>
     );
@@ -626,19 +642,19 @@ function ServicesPanel({
             </span>
           )}
         </div>
-        {!archiveForced && (
+        {canToggleArchived && (
           <button
             type="button"
             onClick={toggleArchived}
             disabled={archivedLoading}
-            className="inline-flex w-fit items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex w-fit items-center gap-1.5 self-start rounded-md px-1.5 py-1 text-[11.5px] text-[color:var(--ol-fg-subtle)] transition-colors hover:bg-[color:var(--ol-panel)] hover:text-[color:var(--ol-fg-muted)] disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
             aria-pressed={showArchived}
           >
             {showArchived
               ? t('projectDetail.servicesGuide.hideArchived')
               : archivedLoading
                 ? t('projectDetail.servicesGuide.loadingArchived')
-                : t('projectDetail.servicesGuide.showArchived')}
+                : `${t('projectDetail.servicesGuide.showArchived')} (${archivedCount})`}
           </button>
         )}
       </div>
