@@ -22,6 +22,7 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
 
   api.get('/projects/:id/services', async (c) => {
     const projectParam = c.req.param('id');
+    const includeArchived = c.req.query('include_archived') === 'true';
     const project = await resolveProject(ctx, projectParam);
     if (!project) {
       const err = new ProjectNotFoundError(projectParam);
@@ -32,10 +33,13 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
       ctx.db.getDeployablesByGroup(project.id),
       ctx.db.getEnvironmentsByProject(project.id),
     ]);
+    const visibleDeployables = includeArchived
+      ? deployables
+      : deployables.filter((service) => !service.archived_at);
 
     return c.json({
-      count: deployables.length,
-      services: deployables.map((service) => mapServiceForApi(service, environments)),
+      count: visibleDeployables.length,
+      services: visibleDeployables.map((service) => mapServiceForApi(service, environments)),
     });
   });
 

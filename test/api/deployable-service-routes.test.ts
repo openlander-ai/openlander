@@ -92,7 +92,7 @@ function createApp(ctx: Partial<AppContext>) {
 }
 
 describe('createDeployableServiceRoutes', () => {
-  it('lists deployable services for a project group', async () => {
+  it('omits archived deployable services from a project group by default', async () => {
     const project = makeProjectRow();
     const archivedAt = '2026-01-02T00:00:00.000Z';
     const service = makeServiceRow({ archived_at: archivedAt });
@@ -106,6 +106,29 @@ describe('createDeployableServiceRoutes', () => {
     const app = createApp({ db });
 
     const res = await app.request('/api/projects/group-1/services');
+
+    expect(res.status).toBe(200);
+    expect(db.getDeployablesByGroup).toHaveBeenCalledWith('group-1');
+    await expect(res.json()).resolves.toMatchObject({
+      count: 0,
+      services: [],
+    });
+  });
+
+  it('can include archived deployable services when explicitly requested', async () => {
+    const project = makeProjectRow();
+    const archivedAt = '2026-01-02T00:00:00.000Z';
+    const service = makeServiceRow({ archived_at: archivedAt });
+    const env = makeEnvironmentRow();
+    const db = {
+      getProject: vi.fn(async () => project),
+      getProjectByName: vi.fn(async () => undefined),
+      getDeployablesByGroup: vi.fn(async () => [service]),
+      getEnvironmentsByProject: vi.fn(async () => [env]),
+    };
+    const app = createApp({ db });
+
+    const res = await app.request('/api/projects/group-1/services?include_archived=true');
 
     expect(res.status).toBe(200);
     expect(db.getDeployablesByGroup).toHaveBeenCalledWith('group-1');
