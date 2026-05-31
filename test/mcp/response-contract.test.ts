@@ -21,7 +21,7 @@ describe('MCP response contract', () => {
     const agents = readFileSync('AGENTS.md', 'utf8');
     const reference = readFileSync('docs/wiki/MCP-Tools-Reference.md', 'utf8');
 
-    for (const field of ['status_call', 'diagnostic_call', 'suggested_call']) {
+    for (const field of ['status_call', 'diagnostic_call', 'suggested_call', 'poll_call']) {
       expect(agents).toContain(field);
       expect(reference).toContain(field);
     }
@@ -35,7 +35,10 @@ describe('MCP response contract', () => {
 
     for (const { path, source } of sources) {
       for (const field of forbidden) {
-        expect(source, `${path} should use status_call/diagnostic_call/suggested_call, not ${field}`).not.toContain(field);
+        expect(
+          source,
+          `${path} should use status_call/diagnostic_call/suggested_call, not ${field}`,
+        ).not.toContain(field);
       }
     }
   });

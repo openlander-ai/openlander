@@ -339,10 +339,35 @@ function humanUiOnlyResponse(toolName: string, action: string): Record<string, u
   const lifecycleReason = PROJECT_LIFECYCLE_ALIAS_SET.has(action)
     ? ' For whole project groups, use archive_project or unarchive_project with project_id/project_name and wait for human approval. For one deployable app/worker, use archive_service or unarchive_service with service_id. Archive is reversible cleanup; use list_archived_services to inspect archived deployable services.'
     : '';
+  const isRestore = action.startsWith('unarchive');
+  const isServiceAction = action.includes('service');
+  const safeAlternativeAction = isRestore
+    ? isServiceAction
+      ? 'unarchive_service'
+      : 'unarchive_project'
+    : isServiceAction
+      ? 'archive_service'
+      : 'archive_project';
+  const safeAlternativeTool = isServiceAction ? 'openlander_service' : 'openlander_project';
+
   return {
     error: 'HUMAN_UI_ONLY',
     action,
+    blocked_action: action,
     composite: toolName,
+    web_ui: {
+      surface: 'project_settings_danger',
+      requires_human: true,
+    },
+    safe_alternatives: [
+      {
+        tool: safeAlternativeTool,
+        action: safeAlternativeAction,
+        approval_required: true,
+        effect: 'reversible_cleanup',
+      },
+    ],
+    do_not_substitute: ['remove_service', 'cleanup_docker'],
     _agent_guidance: {
       message: `"${action}" is not exposed to MCP. Project/app hard delete and purge are human UI-only operations; tell the user to use the web UI: Settings → Danger zone for that project or service.${lifecycleReason} Do not substitute remove_service, cleanup_docker, or other destructive tools — those target managed infrastructure services or Docker hosts, not deployable apps/projects.`,
     },

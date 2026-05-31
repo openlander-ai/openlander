@@ -285,6 +285,21 @@ function archivedServiceSummary(
     ...serviceSummary(service, project),
     status: service.status,
     archived_at: service.archived_at,
+    available_actions: {
+      restore: {
+        kind: 'mcp_approval',
+        tool: 'openlander_service',
+        action: 'unarchive_service',
+        approval_required: true,
+        params: { service_id: service.id },
+      },
+      permanent_delete: {
+        kind: 'web_ui_only',
+        surface: 'project_settings_danger',
+        requires_human: true,
+        reason: 'hard_delete_not_exposed_to_mcp',
+      },
+    },
   };
 }
 

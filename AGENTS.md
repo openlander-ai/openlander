@@ -372,7 +372,9 @@ Keep MCP responses small and action-oriented. The stable envelope is:
 2. **Identifiers** — IDs needed for the next call (`project_id`, `service_id`,
    `deploy_id`).
 3. **Call links** — use only these top-level call helper fields:
-   `status_call`, `diagnostic_call`, and `suggested_call`.
+   `status_call`, `diagnostic_call`, `suggested_call`, and `poll_call`
+   (`poll_call` is reserved for approval/status polling such as
+   `mcp_action_status`).
 4. **Guidance** — `_agent_guidance.message` and at most a few
    `_agent_guidance.next_steps`.
 5. **Details** — logs, Docker inspect payloads, raw Traefik config, host
@@ -382,7 +384,8 @@ Keep MCP responses small and action-oriented. The stable envelope is:
 
 Do not add new one-off helper fields such as `retry_call`, `build_log_call`, or
 `next_call`. If a new next action is needed, use `suggested_call` for the
-primary recommendation or add a dedicated diagnostic/status action.
+primary recommendation, `poll_call` for approval/status polling, or add a
+dedicated diagnostic/status action.
 
 ### Docker Abstraction Layer
 
