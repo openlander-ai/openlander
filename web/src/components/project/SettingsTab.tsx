@@ -433,6 +433,9 @@ function ArchivedServicesDangerPanel({
                       <input
                         value={deleteConfirmation}
                         onChange={(event) => setDeleteConfirmation(event.target.value)}
+                        aria-label={t('projectDetail.danger.deleteArchivedServiceInputLabel', {
+                          slug: expectedSlug,
+                        })}
                         className="ol-mono w-full rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-error"
                         placeholder={expectedSlug}
                       />

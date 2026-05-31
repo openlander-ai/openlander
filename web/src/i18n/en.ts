@@ -462,6 +462,7 @@ export const translations = {
       deleteService: 'Delete',
       deleteArchivedServiceHint:
         'Type {slug} to permanently delete this archived deployable service. This cannot be undone.',
+      deleteArchivedServiceInputLabel: 'Delete confirmation for {slug}',
       error: 'Project action failed',
     },
     env: {

@@ -30,6 +30,11 @@ a release should be recorded here so follow-up work is explicit.
   relying on request-local post-deploy cleanup.
 - **Follow-up:** move post-attach expose into the durable plan path before
   allowing `target_project_id + expose=true`.
+- **Residual cleanup debt:** if the deploy itself succeeds but
+  `attachServiceToProject` fails, OpenLander now marks the deploy plan failed
+  with an explicit target-attach error, but the runtime temp project/service can
+  remain deployed. Add an explicit cleanup/archive policy for that failure mode
+  once target-attach rollback semantics are defined.
 
 ## v0.1.4
 
