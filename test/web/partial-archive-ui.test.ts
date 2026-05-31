@@ -75,6 +75,24 @@ describe('partial archive UI wiring', () => {
     expect(serviceDetailSource).toContain('service ?? (serviceDetail');
   });
 
+  it('loads archived project detail outside the active project context', () => {
+    const projectViewSource = readRepoFile('web/src/pages/ProjectView.tsx');
+
+    expect(projectViewSource).toContain('getProject as fetchProject');
+    expect(projectViewSource).toContain('const contextProject = projects.find');
+    expect(projectViewSource).toContain('contextProject ??');
+    expect(projectViewSource).toContain('fetchProject(projectId)');
+    expect(projectViewSource).toContain('fallbackProjectLoading');
+    expect(projectViewSource).toContain(
+      'const isProjectArchived = realProject?.archived_at != null',
+    );
+    expect(projectViewSource).toContain(
+      'const showArchivedServiceList = showArchivedServices || isProjectArchived',
+    );
+    expect(projectViewSource).toContain('{!isProjectArchived && (');
+    expect(projectViewSource).toContain('archiveForced={isProjectArchived}');
+  });
+
   it('keeps Korean loading copy localized for archived-service cleanup', () => {
     expect(koSource).toContain("archivedServicesLoading: '아카이브된 서비스를 불러오는 중…'");
   });

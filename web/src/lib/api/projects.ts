@@ -210,6 +210,8 @@ export async function getProject(id: string): Promise<ProjectWithOptionalEnviron
   }
   const data = (await res.json()) as Project & {
     previous_image_tag?: string | null;
+    created_at?: string;
+    updated_at?: string;
     environments?: BackendEnvironment[];
   };
 
@@ -217,16 +219,11 @@ export async function getProject(id: string): Promise<ProjectWithOptionalEnviron
     ? data.environments.map(mapEnvironment)
     : data.environments;
 
-  if (data.previous_image_tag === undefined) {
-    return {
-      ...data,
-      environments: mappedEnvironments,
-    };
-  }
-
   return {
     ...data,
-    previousImageTag: data.previous_image_tag,
+    previousImageTag: data.previousImageTag ?? data.previous_image_tag,
+    createdAt: data.createdAt ?? data.created_at ?? '',
+    updatedAt: data.updatedAt ?? data.updated_at ?? '',
     environments: mappedEnvironments,
   };
 }
