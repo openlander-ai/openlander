@@ -9,12 +9,18 @@ function readRepoFile(relativePath: string): string {
 
 describe('pending approval strip surface', () => {
   const homeSource = readRepoFile('web/src/pages/Home.tsx');
+  const appShellSource = readRepoFile('web/src/components/Shell/AppShell.tsx');
   const componentSource = readRepoFile('web/src/components/Shell/PendingApprovalsStrip.tsx');
   const approvalsApiSource = readRepoFile('web/src/lib/api/approvals.ts');
 
-  it('mounts the pending approval strip on Home', () => {
-    expect(homeSource).toContain('PendingApprovalsStrip');
-    expect(homeSource).toContain('<PendingApprovalsStrip />');
+  it('mounts the pending approval strip globally in AppShell', () => {
+    // The MCP approval hold now gates archive/unarchive for projects and
+    // services, so the strip is mounted once in the app shell (reachable
+    // from every route) rather than on Home alone.
+    expect(appShellSource).toContain('PendingApprovalsStrip');
+    expect(appShellSource).toContain('<PendingApprovalsStrip />');
+    expect(appShellSource).toContain('empty:hidden');
+    expect(homeSource).not.toContain('<PendingApprovalsStrip />');
   });
 
   it('uses the shared action-run approve/reject route', () => {
