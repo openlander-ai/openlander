@@ -11,6 +11,7 @@ function createActionRun(overrides: Record<string, unknown> = {}) {
     status: 'pending_approval',
     approval_status: 'pending',
     approval_tool: 'destructive_mcp',
+    plan: JSON.stringify({ type: 'destructive_mcp', tool: 'archive_project' }),
     recovery_strategy: 'unknown',
     ...overrides,
   };
@@ -48,6 +49,9 @@ describe('action run approval routes', () => {
       actionRunId: 'action-run-1',
       approved: true,
       projectId: 'project-1',
+      toolName: 'archive_project',
+      approvalTool: 'destructive_mcp',
+      resolvedBy: 'web-session',
     });
   });
 
@@ -67,6 +71,9 @@ describe('action run approval routes', () => {
       actionRunId: 'action-run-1',
       approved: false,
       projectId: 'project-1',
+      toolName: 'archive_project',
+      approvalTool: 'destructive_mcp',
+      resolvedBy: 'web-session',
     });
   });
 });
