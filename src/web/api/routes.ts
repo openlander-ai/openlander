@@ -43,6 +43,20 @@ type TraefikHttpRouter = {
   service: string;
   middlewares?: string[];
 };
+
+function readApprovalActionName(actionRun: { approval_tool: string | null; plan: string | null }) {
+  if (actionRun.approval_tool === 'destructive_mcp' && actionRun.plan) {
+    try {
+      const parsed = JSON.parse(actionRun.plan) as Record<string, unknown>;
+      const tool = parsed['tool'];
+      if (typeof tool === 'string' && tool.length > 0) return tool;
+    } catch {
+      // Fall through to the approval queue name; approval resolution should
+      // not fail just because an older action_run has malformed plan text.
+    }
+  }
+  return actionRun.approval_tool ?? 'approval';
+}
 type TraefikHttpService = { loadBalancer: { servers: Array<{ url: string }> } };
 type TraefikHttpMiddleware =
   | { stripPrefix: { prefixes: string[] } }
@@ -184,6 +198,9 @@ export function createApiRoutes(ctx: AppContext): Hono {
       actionRunId: id,
       approved: true,
       projectId: actionRun.project_id,
+      toolName: readApprovalActionName(actionRun),
+      approvalTool: actionRun.approval_tool ?? undefined,
+      resolvedBy: 'web-session',
     });
 
     return c.json({ success: true, actionRunId: id, status: 'approved' });
@@ -201,6 +218,9 @@ export function createApiRoutes(ctx: AppContext): Hono {
       actionRunId: id,
       approved: false,
       projectId: actionRun.project_id,
+      toolName: readApprovalActionName(actionRun),
+      approvalTool: actionRun.approval_tool ?? undefined,
+      resolvedBy: 'web-session',
     });
 
     return c.json({ success: true, actionRunId: id, status: 'rejected' });

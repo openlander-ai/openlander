@@ -423,9 +423,18 @@ export function describeActivityEvent<T extends EventType>(
   }
   if (eventType === 'recovery:approval-resolved') {
     const approvalPayload = payload as EventPayload['recovery:approval-resolved'];
+    const approvalTarget =
+      approvalPayload.toolName && approvalPayload.approvalTool
+        ? `${approvalPayload.approvalTool} action: ${approvalPayload.toolName}`
+        : (approvalPayload.toolName ?? approvalPayload.approvalTool ?? approvalPayload.actionRunId);
+    const resolver = approvalPayload.resolvedBy
+      ? `Resolved by ${approvalPayload.resolvedBy}`
+      : 'Resolved';
     return {
-      title: approvalPayload.approved ? 'Approval approved' : 'Approval rejected',
-      description: approvalPayload.actionRunId,
+      title: approvalPayload.approved
+        ? `Approval approved: ${approvalTarget}`
+        : `Approval rejected: ${approvalTarget}`,
+      description: `${resolver} · action run ${approvalPayload.actionRunId}`,
       actionRunId: approvalPayload.actionRunId,
     };
   }

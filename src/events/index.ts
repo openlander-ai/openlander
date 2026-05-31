@@ -435,6 +435,12 @@ export interface EventPayload {
     actionRunId: string;
     approved: boolean;
     projectId?: string;
+    /** Concrete action that was approved/rejected, e.g. archive_project. */
+    toolName?: string;
+    /** Approval queue/category, e.g. destructive_mcp. */
+    approvalTool?: string;
+    /** Human/API surface that resolved the approval. */
+    resolvedBy?: string;
     correlationId?: string;
   };
   'env:new-keys-detected': {
