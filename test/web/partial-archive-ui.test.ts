@@ -33,6 +33,9 @@ describe('partial archive UI wiring', () => {
       'remainingDescription',
       'partialArchiveTitle',
       'partialArchiveBody',
+      'archivedVisible',
+      'showArchived',
+      'hideArchived',
     ]) {
       expect(enSource).toContain(key);
       expect(koSource).toContain(key);
@@ -43,5 +46,19 @@ describe('partial archive UI wiring', () => {
     expect(koSource).toContain("partiallyArchivedBadge: 'Partially archived'");
     expect(koSource).toContain("remainingButton: 'Archive remaining'");
     expect(koSource).toContain("partialArchiveTitle: 'Archive remaining services'");
+    expect(koSource).toContain("showArchived: 'Show archived services'");
+    expect(koSource).toContain("hideArchived: 'Hide archived services'");
+  });
+
+  it('keeps archived service cleanup reachable after default lists hide archived rows', () => {
+    const projectViewSource = readRepoFile('web/src/pages/ProjectView.tsx');
+    const serviceDetailSource = readRepoFile('web/src/pages/ServiceDetailV2.tsx');
+    const apiSource = readRepoFile('web/src/lib/api/services.ts');
+
+    expect(apiSource).toContain('include_archived=true');
+    expect(projectViewSource).toContain('showArchivedServices');
+    expect(projectViewSource).toContain('archivedAt &&');
+    expect(serviceDetailSource).toContain('groupServiceToDetailNode');
+    expect(serviceDetailSource).toContain('service ?? (serviceDetail');
   });
 });

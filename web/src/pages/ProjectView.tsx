@@ -29,7 +29,12 @@ import { useProjectsContext } from '@/hooks/use-projects-context';
 import { useIsBelowMd } from '@/hooks/use-viewport';
 import { useProjectTopology } from '@/hooks/use-project-topology';
 import { useLanguage } from '@/i18n/context';
-import { managedServices, type ProjectManagedService } from '@/lib/api/services';
+import {
+  listGroupServices,
+  managedServices,
+  type GroupService,
+  type ProjectManagedService,
+} from '@/lib/api/services';
 import { cn } from '@/lib/utils';
 
 type ProjectTabId = 'services' | 'settings';
@@ -62,12 +67,51 @@ function managedServiceToNode(service: ProjectManagedService): ServiceNode {
   };
 }
 
+function groupServiceToNode(service: GroupService): ServiceNode {
+  const health: ServiceHealth =
+    service.status === 'running'
+      ? 'healthy'
+      : service.status === 'building'
+        ? 'deploying'
+        : 'crashed';
+
+  return {
+    id: service.id,
+    name: service.name,
+    kind: 'Application',
+    // `service` is the frontend GroupService wire shape, not a DB service row.
+    // eslint-disable-next-line openlander-internal/no-dropped-columns
+    port: service.port,
+
+    image: service.image ?? service.imageUrl ?? service.kind,
+    health,
+    cpu: '—',
+    mem: '—',
+    url: service.url,
+    archivedAt: service.archivedAt ?? null,
+    dependsOn: [],
+    source: service.source,
+    repoUrl: service.repoUrl,
+    branch: service.branch,
+    deployedBranch: service.deployedBranch,
+    dockerfilePath: service.dockerfilePath,
+    dockerTarget: service.dockerTarget,
+    buildContext: service.buildContext,
+    buildMethod: service.buildMethod,
+    imageUrl: service.imageUrl,
+    imageCmd: service.imageCmd,
+    containerPort: service.containerPort,
+  };
+}
+
 function isManagedServiceNode(service: ServiceNode): boolean {
   return service.source === 'managed';
 }
 
 function serviceRoleLabel(service: ServiceNode): string {
   if (isManagedServiceNode(service)) {
+    // `service` is the frontend ServiceNode display shape, not a DB service row.
+    // eslint-disable-next-line openlander-internal/no-dropped-columns
     const normalized = service.image?.toLowerCase() ?? '';
     if (normalized.includes('postgres')) return 'PostgreSQL';
     if (normalized.includes('timescale')) return 'Timescale';
@@ -113,6 +157,10 @@ export function ProjectView() {
     refetch: refetchTopology,
   } = useProjectTopology(projectId || null);
   const [managedServiceNodes, setManagedServiceNodes] = useState<ServiceNode[]>([]);
+  const [showArchivedServices, setShowArchivedServices] = useState(false);
+  const [archivedServiceNodes, setArchivedServiceNodes] = useState<ServiceNode[]>([]);
+  const [archivedServicesLoading, setArchivedServicesLoading] = useState(false);
+  const [archivedServicesError, setArchivedServicesError] = useState<string | null>(null);
   const isBelowMd = useIsBelowMd();
   const [addServiceOpen, setAddServiceOpen] = useState(false);
   // Managed databases/caches are agent-provisioned, not built here — this
@@ -155,13 +203,48 @@ export function ProjectView() {
     };
   }, [projectId]);
 
+  useEffect(() => {
+    let active = true;
+    if (!projectId || !showArchivedServices) {
+      setArchivedServiceNodes([]);
+      setArchivedServicesError(null);
+      setArchivedServicesLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setArchivedServicesLoading(true);
+    listGroupServices(projectId, { includeArchived: true })
+      .then((rows) => {
+        if (!active) return;
+        setArchivedServiceNodes(rows.map(groupServiceToNode));
+        setArchivedServicesError(null);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setArchivedServiceNodes([]);
+        setArchivedServicesError(
+          err instanceof Error ? err.message : 'Failed to load archived services',
+        );
+      })
+      .finally(() => {
+        if (active) setArchivedServicesLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [projectId, showArchivedServices]);
+
   const projectServiceRows = useMemo(() => {
-    const serviceIds = new Set(services.map((service) => service.id));
+    const deployableServices = showArchivedServices ? archivedServiceNodes : services;
+    const serviceIds = new Set(deployableServices.map((service) => service.id));
     const connectedManagedServices = managedServiceNodes.filter(
       (service) => !serviceIds.has(service.id),
     );
-    return [...services, ...connectedManagedServices];
-  }, [managedServiceNodes, services]);
+    return [...deployableServices, ...connectedManagedServices];
+  }, [archivedServiceNodes, managedServiceNodes, services, showArchivedServices]);
 
   useEffect(() => {
     if (tabParam === 'activity' && projectId) {
@@ -356,6 +439,10 @@ export function ProjectView() {
             services={projectServiceRows}
             onOpen={openService}
             onAddService={() => setAddServiceOpen(true)}
+            showArchived={showArchivedServices}
+            archivedLoading={archivedServicesLoading}
+            archivedError={archivedServicesError}
+            onShowArchivedChange={setShowArchivedServices}
           />
         </TabPanel>
         <TabPanel
@@ -411,12 +498,21 @@ function ServicesPanel({
   services,
   onOpen,
   onAddService,
+  showArchived,
+  archivedLoading,
+  archivedError,
+  onShowArchivedChange,
 }: {
   services: ServiceNode[];
   onOpen: (service: ServiceNode) => void;
   onAddService: () => void;
+  showArchived: boolean;
+  archivedLoading: boolean;
+  archivedError: string | null;
+  onShowArchivedChange: (show: boolean) => void;
 }) {
   const { t } = useLanguage();
+  const toggleArchived = () => onShowArchivedChange(!showArchived);
 
   if (services.length === 0) {
     return (
@@ -427,6 +523,23 @@ function ServicesPanel({
         <p className="max-w-2xl text-[12px] text-[color:var(--ol-fg-subtle)]">
           {t('projectDetail.servicesGuide.help')}
         </p>
+        {archivedError && (
+          <p className="max-w-2xl text-[12px] text-[color:var(--ol-error)]">
+            {t('projectDetail.servicesGuide.archivedLoadError', { message: archivedError })}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={toggleArchived}
+          disabled={archivedLoading}
+          className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {showArchived
+            ? t('projectDetail.servicesGuide.hideArchived')
+            : archivedLoading
+              ? t('projectDetail.servicesGuide.loadingArchived')
+              : t('projectDetail.servicesGuide.showArchived')}
+        </button>
         <button
           type="button"
           onClick={onAddService}
@@ -440,8 +553,32 @@ function ServicesPanel({
   }
   return (
     <div>
-      <div className="border-b border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-5 py-3 text-[12px] text-[color:var(--ol-fg-muted)]">
-        {t('projectDetail.servicesGuide.banner')}
+      <div className="flex flex-col gap-2 border-b border-[color:var(--ol-border-subtle)] bg-[color:var(--ol-panel-2)] px-5 py-3 text-[12px] text-[color:var(--ol-fg-muted)] sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <span>
+            {showArchived
+              ? t('projectDetail.servicesGuide.archivedVisible')
+              : t('projectDetail.servicesGuide.banner')}
+          </span>
+          {archivedError && (
+            <span className="ml-2 text-[color:var(--ol-error)]">
+              {t('projectDetail.servicesGuide.archivedLoadError', { message: archivedError })}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={toggleArchived}
+          disabled={archivedLoading}
+          className="inline-flex w-fit items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-2.5 py-1 text-[11.5px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+          aria-pressed={showArchived}
+        >
+          {showArchived
+            ? t('projectDetail.servicesGuide.hideArchived')
+            : archivedLoading
+              ? t('projectDetail.servicesGuide.loadingArchived')
+              : t('projectDetail.servicesGuide.showArchived')}
+        </button>
       </div>
       <ul className="divide-y divide-[color:var(--ol-border-subtle)]">
         {services.map((s) => {
@@ -480,7 +617,12 @@ function ServicesPanel({
                       {s.name}
                     </span>
                     <ServiceRoleBadge service={s} />
-                    <HealthPill health={s.health} />
+                    {s.archivedAt && (
+                      <span className="rounded-full border border-[color:var(--ol-border)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.06em] text-[color:var(--ol-fg-subtle)]">
+                        {t('projectDetail.serviceLifecycle.archivedBadge')}
+                      </span>
+                    )}
+                    {!s.archivedAt && <HealthPill health={s.health} />}
                   </div>
                   <div className="ol-mono mt-0.5 truncate text-[11.5px] text-[color:var(--ol-fg-muted)]">
                     {/* `s` is the frontend ServiceNode shape (lib/projectTopology), not a DB row;

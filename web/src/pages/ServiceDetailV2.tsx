@@ -119,6 +119,40 @@ function isServiceTabId(value: string | null): value is ServiceTabId {
   return value != null && (SERVICE_TAB_IDS as Set<string>).has(value);
 }
 
+function groupServiceToDetailNode(service: GroupService): ServiceNode {
+  const health: ServiceHealth =
+    service.status === 'running'
+      ? 'healthy'
+      : service.status === 'building'
+        ? 'deploying'
+        : 'crashed';
+
+  return {
+    id: service.id,
+    name: service.name,
+    kind: 'Application',
+    port: service.port,
+    image: service.image ?? service.imageUrl ?? service.kind,
+    health,
+    cpu: '—',
+    mem: '—',
+    url: service.url,
+    archivedAt: service.archivedAt ?? null,
+    dependsOn: [],
+    source: service.source,
+    repoUrl: service.repoUrl,
+    branch: service.branch,
+    deployedBranch: service.deployedBranch,
+    dockerfilePath: service.dockerfilePath,
+    dockerTarget: service.dockerTarget,
+    buildContext: service.buildContext,
+    buildMethod: service.buildMethod,
+    imageUrl: service.imageUrl,
+    imageCmd: service.imageCmd,
+    containerPort: service.containerPort,
+  };
+}
+
 /**
  * Top-level dispatcher. Same route slot serves two different ID spaces:
  *   /services/:id (deployable; :id is a projects.id) vs
@@ -226,25 +260,26 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   }, [projectId, id]);
 
   const resolvedService = useMemo<ServiceNode | undefined>(() => {
-    if (!service) return undefined;
-    if (!serviceDetail) return service;
+    const baseService = service ?? (serviceDetail ? groupServiceToDetailNode(serviceDetail) : null);
+    if (!baseService) return undefined;
+    if (!serviceDetail) return baseService;
     return {
-      ...service,
-      source: serviceDetail.source ?? service.source,
-      repoUrl: serviceDetail.repoUrl ?? service.repoUrl,
-      branch: serviceDetail.branch ?? service.branch,
-      deployedBranch: serviceDetail.deployedBranch ?? service.deployedBranch,
-      dockerfilePath: serviceDetail.dockerfilePath ?? service.dockerfilePath,
-      dockerTarget: serviceDetail.dockerTarget ?? service.dockerTarget,
-      buildContext: serviceDetail.buildContext ?? service.buildContext,
-      buildMethod: serviceDetail.buildMethod ?? service.buildMethod,
-      imageUrl: serviceDetail.imageUrl ?? service.imageUrl,
-      imageCmd: serviceDetail.imageCmd ?? service.imageCmd,
-      containerPort: serviceDetail.containerPort ?? service.containerPort,
+      ...baseService,
+      source: serviceDetail.source ?? baseService.source,
+      repoUrl: serviceDetail.repoUrl ?? baseService.repoUrl,
+      branch: serviceDetail.branch ?? baseService.branch,
+      deployedBranch: serviceDetail.deployedBranch ?? baseService.deployedBranch,
+      dockerfilePath: serviceDetail.dockerfilePath ?? baseService.dockerfilePath,
+      dockerTarget: serviceDetail.dockerTarget ?? baseService.dockerTarget,
+      buildContext: serviceDetail.buildContext ?? baseService.buildContext,
+      buildMethod: serviceDetail.buildMethod ?? baseService.buildMethod,
+      imageUrl: serviceDetail.imageUrl ?? baseService.imageUrl,
+      imageCmd: serviceDetail.imageCmd ?? baseService.imageCmd,
+      containerPort: serviceDetail.containerPort ?? baseService.containerPort,
       archivedAt:
-        serviceDetail.archivedAt !== undefined ? serviceDetail.archivedAt : service.archivedAt,
-      image: serviceDetail.image ?? service.image,
-      port: serviceDetail.port ?? service.port,
+        serviceDetail.archivedAt !== undefined ? serviceDetail.archivedAt : baseService.archivedAt,
+      image: serviceDetail.image ?? baseService.image,
+      port: serviceDetail.port ?? baseService.port,
     };
   }, [service, serviceDetail]);
 

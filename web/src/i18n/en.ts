@@ -557,6 +557,12 @@ export const translations = {
       help: 'A project is the group; services are the apps, workers, databases, caches, and storage attached to it. MCP follow-up actions should use service_id.',
       banner:
         'This list includes application and infrastructure services in the project. Use the MCP service_id shown below for follow-up actions.',
+      archivedVisible:
+        'Archived services are visible. Open one to restore it or delete it from its service danger zone.',
+      showArchived: 'Show archived services',
+      hideArchived: 'Hide archived services',
+      loadingArchived: 'Loading archived services…',
+      archivedLoadError: 'Could not load archived services: {message}',
       serviceId: 'MCP service_id: {id}',
       serviceIdTooltip:
         'Pass this to MCP actions. Application services support deploy/env/domain/diagnostic actions; infrastructure services support logs, connections, and lifecycle actions.',
