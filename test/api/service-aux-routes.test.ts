@@ -223,6 +223,9 @@ describe('createServiceAuxRoutes', () => {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
         getPreviewProjects: vi.fn(async () => [preview]),
+        getServices: vi.fn(async ({ ids }: { ids?: readonly string[] } = {}) =>
+          ids?.includes(previewService.id) ? [previewService] : [],
+        ),
         getDeployableForProject: vi.fn(async (id: string) =>
           id === preview.id ? previewService : undefined,
         ),
