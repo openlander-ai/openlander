@@ -185,11 +185,15 @@ export interface UpdateGroupServiceInput {
   containerPort?: number | null;
 }
 
-export async function listGroupServices(groupId: string): Promise<GroupService[]> {
+export async function listGroupServices(
+  groupId: string,
+  options: { includeArchived?: boolean } = {},
+): Promise<GroupService[]> {
   // P2 returns either a bare array or a `{ services }` envelope depending
   // on the route's serializer. Accept both shapes to stay forward-compat.
+  const query = options.includeArchived ? '?include_archived=true' : '';
   const data = await apiGet<BackendGroupService[] | { services: BackendGroupService[] }>(
-    `/api/projects/${groupId}/services`,
+    `/api/projects/${groupId}/services${query}`,
   );
   const services = Array.isArray(data) ? data : (data.services ?? []);
   return services.map(normalizeGroupService);

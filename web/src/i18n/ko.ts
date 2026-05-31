@@ -653,6 +653,12 @@ export const translations = {
       help: '프로젝트는 그룹이고, 서비스는 그 안에 연결된 앱, 워커, 데이터베이스, 캐시, 스토리지입니다. MCP 후속 작업은 service_id를 사용하는 것이 가장 안전합니다.',
       banner:
         '아래 목록은 이 프로젝트의 애플리케이션 서비스와 인프라 서비스를 함께 보여줍니다. 후속 작업에는 표시된 MCP service_id를 사용하세요.',
+      archivedVisible:
+        '아카이브된 서비스도 표시 중입니다. 서비스를 열어 복원하거나 서비스 Danger zone에서 삭제할 수 있습니다.',
+      showArchived: 'Show archived services',
+      hideArchived: 'Hide archived services',
+      loadingArchived: 'Loading archived services…',
+      archivedLoadError: '아카이브된 서비스를 불러오지 못했습니다: {message}',
       serviceId: 'MCP service_id: {id}',
       serviceIdTooltip:
         'MCP 액션에 이 값을 전달하세요. 애플리케이션 서비스는 배포/환경 변수/도메인/진단 작업을, 인프라 서비스는 로그/연결/라이프사이클 작업을 지원합니다.',
