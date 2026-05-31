@@ -2,13 +2,38 @@ import { ProjectNotFoundError } from '../../errors.js';
 import type { ToolDef } from './types.js';
 import { getBuildLogSchema } from './schemas.js';
 
+function formatLog(
+  rawLog: string,
+  tail: number | undefined,
+): {
+  log: string;
+  fullLog: boolean;
+  returnedChars: number;
+  totalChars: number;
+  truncated: boolean;
+} {
+  let log = rawLog;
+  if (tail) {
+    log = rawLog.split('\n').slice(-tail).join('\n');
+  }
+  const truncated = log.length < rawLog.length;
+  return {
+    log,
+    fullLog: !truncated,
+    returnedChars: log.length,
+    totalChars: rawLog.length,
+    truncated,
+  };
+}
+
 export const debugToolDefs: ToolDef[] = [
   {
     name: 'get_build_log',
     riskLevel: 'low',
     description:
-      'Get the raw build log for a project deployment. Returns the full unprocessed build output so an external MCP agent can analyze failures. Returns { status, build_log, duration_ms, created_at }. Errors: PROJECT_NOT_FOUND, NO_DEPLOY_LOGS.',
-    mcpDescription: 'Get raw Docker build output for debugging build failures.',
+      'Get the raw build log for a project deployment. Returns the full unprocessed build output and, when captured, the deployment runtime log so an external MCP agent can analyze failures. Returns { status, build_log, runtime_log, duration_ms, created_at }. Errors: PROJECT_NOT_FOUND, NO_DEPLOY_LOGS.',
+    mcpDescription:
+      'Get raw Docker build output and captured runtime logs for debugging deploy failures.',
     inputSchema: getBuildLogSchema,
     execute: async (args, { appCtx }) => {
       const deployId = args['deploy_id'] as string | undefined;
@@ -37,23 +62,27 @@ export const debugToolDefs: ToolDef[] = [
         throw new Error('NO_DEPLOY_LOGS: No deploy logs found.');
       }
 
-      const rawBuildLog = log.build_log ?? 'No build log captured.';
-      let buildLog = rawBuildLog;
       const tail = args['tail'] as number | undefined;
-      if (tail && log.build_log) {
-        const lines = log.build_log.split('\n');
-        buildLog = lines.slice(-tail).join('\n');
-      }
-      const truncated = buildLog.length < rawBuildLog.length;
+      const build = formatLog(log.build_log ?? 'No build log captured.', tail);
+      const runtime = log.runtime_log ? formatLog(log.runtime_log, tail) : undefined;
 
       return Promise.resolve({
         id: log.id,
         status: log.status,
-        build_log: buildLog,
-        full_log: !truncated,
-        returned_chars: buildLog.length,
-        total_chars: rawBuildLog.length,
-        truncated,
+        build_log: build.log,
+        full_log: build.fullLog,
+        returned_chars: build.returnedChars,
+        total_chars: build.totalChars,
+        truncated: build.truncated,
+        ...(runtime
+          ? {
+              runtime_log: runtime.log,
+              runtime_full_log: runtime.fullLog,
+              runtime_returned_chars: runtime.returnedChars,
+              runtime_total_chars: runtime.totalChars,
+              runtime_truncated: runtime.truncated,
+            }
+          : {}),
         duration_ms: log.duration_ms,
         created_at: log.created_at,
       });

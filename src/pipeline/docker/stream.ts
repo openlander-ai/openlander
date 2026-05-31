@@ -13,14 +13,18 @@ export class StreamOps {
   constructor(private readonly ctx: DockerContext) {}
 
   /** Get container logs as a string. */
-  async getLogs(containerId: string, tail = 100, opts?: DockerLogOptions): Promise<string> {
+  async getLogs(
+    containerId: string,
+    tail: number | 'all' = 100,
+    opts?: DockerLogOptions,
+  ): Promise<string> {
     try {
       const container = this.ctx.client.getContainer(containerId);
       const logs = await container.logs({
         stdout: true,
         stderr: true,
-        tail,
         follow: false,
+        ...(tail === 'all' ? {} : { tail }),
         ...(opts?.timestamps === true ? { timestamps: true } : {}),
       });
       const buffer = Buffer.isBuffer(logs) ? logs : Buffer.from(logs);

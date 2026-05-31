@@ -484,7 +484,7 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'diagnose_service',
     riskLevel: 'low',
     description:
-      'Diagnose a deployable app/worker service in one MCP call. Returns service/source summary, masked env key inventory, build-time env warnings, sanitized recent deployment status/log tail, container status, sanitized service logs, local HTTP probe, dependency probes, and recommended next actions. Use this after redeploy_app or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior. For raw container logs only use get_logs; for full untruncated build output use get_build_log.',
+      'Diagnose a deployable app/worker service in one MCP call. Returns service/source summary, masked env key inventory, build-time env warnings, sanitized recent deployment status/log tail, container status, sanitized service logs, local HTTP probe, dependency probes, and recommended next actions. Use this after redeploy_app or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior. For raw live container logs only use get_logs; for full untruncated build output and captured deploy-time runtime logs use get_build_log.',
     mcpDescription:
       'One-shot service diagnostics after deploy/runtime failures. For raw logs use get_logs; for full build output use get_build_log.',
     inputSchema: diagnoseServiceSchema,
@@ -1302,7 +1302,8 @@ function summarizeRecentDeployments(logs: DeployLogRow[]) {
           createdAt: latest.created_at,
           buildLogTail: sanitizedTailLines(latest.build_log, 30),
           buildLogTailSanitized: true,
-          fullBuildLogHint: 'Call get_build_log for full raw build output.',
+          fullBuildLogHint:
+            'Call get_build_log for full raw build output and captured runtime logs.',
         }
       : null,
     history: logs.slice(0, 5).map((entry) => ({

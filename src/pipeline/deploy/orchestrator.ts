@@ -54,6 +54,26 @@ export interface DeployOrchestrationDeps {
   secretScanEnabled: boolean;
 }
 
+export class DeployRuntimeStartError extends Error {
+  constructor(
+    message: string,
+    readonly runtimeLog: string,
+  ) {
+    super(message);
+    this.name = 'DeployRuntimeStartError';
+  }
+}
+
+export function extractRuntimeLogFromDeployError(error: unknown): string | undefined {
+  return error instanceof DeployRuntimeStartError && error.runtimeLog.length > 0
+    ? error.runtimeLog
+    : undefined;
+}
+
+function tailLogLines(logText: string, lineCount: number): string {
+  return logText.split('\n').slice(-lineCount).join('\n');
+}
+
 async function transitionProjectState(
   deps: DeployOrchestrationDeps,
   projectId: string,
@@ -558,9 +578,11 @@ export async function runAndVerify(
   });
 
   if (!healthResult.healthy) {
-    const containerLogs = await deps.runtime
-      .getLogs(containerId, 50)
-      .catch(() => '(no logs available)');
+    const containerLogs = await deps.runtime.getLogs(containerId, 'all').catch((err: unknown) => {
+      log.debug({ err, projectId, containerId }, 'Failed to capture crashed container logs');
+      return '(no logs available)';
+    });
+    const containerLogExcerpt = tailLogLines(containerLogs, 80);
     log.error(
       { projectId, error: healthResult.error, exitCode: healthResult.exitCode },
       'Container crashed after deploy',
@@ -590,8 +612,9 @@ export async function runAndVerify(
       exitCode: healthResult.exitCode,
     });
 
-    throw new Error(
-      `Container crashed after start: ${healthResult.error ?? 'unknown'}\n\nContainer logs:\n${containerLogs}`,
+    throw new DeployRuntimeStartError(
+      `Container crashed after start: ${healthResult.error ?? 'unknown'}\n\nContainer logs (last 80 lines):\n${containerLogExcerpt}`,
+      containerLogs,
     );
   }
 

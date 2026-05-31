@@ -587,7 +587,7 @@ export const getBuildLogSchema = z
       .int()
       .positive()
       .optional()
-      .describe('Return only the last N lines of the build log. Useful for large logs.'),
+      .describe('Return only the last N lines of the build/runtime logs. Useful for large logs.'),
   })
   .refine((value) => Boolean(value.deploy_id || value.project_id || value.project_name), {
     message: 'deploy_id, project_id, or project_name is required',
