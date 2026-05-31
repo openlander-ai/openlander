@@ -36,6 +36,10 @@ describe('partial archive UI wiring', () => {
       'archivedVisible',
       'showArchived',
       'hideArchived',
+      'archivedServicesTitle',
+      'archivedServicesBody',
+      'archivedServicesEmpty',
+      'deleteArchivedServiceHint',
     ]) {
       expect(enSource).toContain(key);
       expect(koSource).toContain(key);
@@ -56,6 +60,13 @@ describe('partial archive UI wiring', () => {
     const apiSource = readRepoFile('web/src/lib/api/services.ts');
 
     expect(apiSource).toContain('include_archived=true');
+    expect(settingsSource).toContain('listGroupServices(projectId, { includeArchived: true })');
+    expect(settingsSource).toContain('service.archivedAt != null');
+    expect(settingsSource).toContain('unarchiveGroupService(projectId, service.id)');
+    expect(settingsSource).toContain('deleteGroupService(projectId, service.id');
+    expect(settingsSource).toContain('`${projectName}/${service.name}`');
+    expect(settingsSource).toContain("'projectDetail.danger.archivedServicesTitle'");
+    expect(settingsSource).toContain("'projectDetail.danger.deleteArchivedServiceHint'");
     expect(projectViewSource).toContain('showArchivedServices');
     expect(projectViewSource).toContain('archivedAt &&');
     expect(serviceDetailSource).toContain('groupServiceToDetailNode');

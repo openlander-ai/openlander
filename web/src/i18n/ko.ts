@@ -535,6 +535,18 @@ export const translations = {
       purgeDescription:
         '프로젝트 그룹과 관련 런타임 리소스를 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
       unarchiveDescription: '보관된 프로젝트를 활성 프로젝트 목록으로 복원합니다.',
+      archivedServicesTitle: 'Archived services',
+      archivedServicesBody:
+        '아카이브된 배포 서비스는 기본 목록에서 숨겨집니다. 여기에서 복원하거나 typed confirmation으로 영구 삭제하세요.',
+      archivedServicesLoading: 'Loading archived services…',
+      archivedServicesEmpty: '이 프로젝트 그룹에 아카이브된 배포 서비스가 없습니다.',
+      archivedServicesLoadError: '아카이브된 서비스를 불러오지 못했습니다',
+      archivedServiceId: 'service_id: {id}',
+      archivedServiceArchivedAt: '아카이브 시간 {value}',
+      restoreService: 'Restore',
+      deleteService: 'Delete',
+      deleteArchivedServiceHint:
+        '{slug}를 입력하면 이 아카이브된 배포 서비스를 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
       error: '프로젝트 작업에 실패했습니다',
     },
     env: {

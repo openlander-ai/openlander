@@ -386,7 +386,8 @@ UI-only; this action is a read-only way for agents to inspect reversible
 archive state before suggesting restore or human UI deletion.
 Each service item includes `available_actions.restore` (MCP approval via
 `unarchive_service`) and `available_actions.permanent_delete` (`web_ui_only`,
-Project Settings > Danger).
+Project Settings > Danger > Archived services, including the typed confirmation
+string the human must enter).
 
 ### `unarchive_service`
 
