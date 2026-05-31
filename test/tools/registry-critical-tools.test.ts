@@ -42,6 +42,7 @@ function createMockContext() {
     parseComposeFile: vi.fn(),
   };
   const rawBuildLog = ['line 1', 'line 2', 'line 3'].join('\n');
+  const rawRuntimeLog = ['runtime 1', 'runtime 2', 'runtime 3'].join('\n');
 
   const jobManager = {
     getStatus: vi.fn(),
@@ -89,6 +90,7 @@ function createMockContext() {
               duration_ms: 1200,
               created_at: '2026-05-13T00:00:00.000Z',
               build_log: rawBuildLog,
+              runtime_log: rawRuntimeLog,
             }
           : undefined,
       ),
@@ -103,7 +105,7 @@ function createMockContext() {
     pipeline,
   } as unknown as AppContext;
 
-  return { ctx, pipeline, composePipeline, jobManager, rawBuildLog };
+  return { ctx, pipeline, composePipeline, jobManager, rawBuildLog, rawRuntimeLog };
 }
 
 function getTool(ctx: AppContext, name: string, target?: 'agent' | 'mcp') {
@@ -189,7 +191,7 @@ describe('registry critical tool behaviors', () => {
   });
 
   it('get_build_log reports requested tail truncation explicitly', async () => {
-    const { ctx, rawBuildLog } = createMockContext();
+    const { ctx, rawBuildLog, rawRuntimeLog } = createMockContext();
     const buildLogTool = getTool(ctx, 'get_build_log');
 
     const buildLog = await buildLogTool.execute(
@@ -203,11 +205,16 @@ describe('registry critical tool behaviors', () => {
       returned_chars: 'line 3'.length,
       total_chars: rawBuildLog.length,
       truncated: true,
+      runtime_log: 'runtime 3',
+      runtime_full_log: false,
+      runtime_returned_chars: 'runtime 3'.length,
+      runtime_total_chars: rawRuntimeLog.length,
+      runtime_truncated: true,
     });
   });
 
   it('get_build_log treats a large requested tail as the full log', async () => {
-    const { ctx, rawBuildLog } = createMockContext();
+    const { ctx, rawBuildLog, rawRuntimeLog } = createMockContext();
     const buildLogTool = getTool(ctx, 'get_build_log');
 
     const buildLog = await buildLogTool.execute(
@@ -221,6 +228,26 @@ describe('registry critical tool behaviors', () => {
       returned_chars: rawBuildLog.length,
       total_chars: rawBuildLog.length,
       truncated: false,
+      runtime_log: rawRuntimeLog,
+      runtime_full_log: true,
+      runtime_returned_chars: rawRuntimeLog.length,
+      runtime_total_chars: rawRuntimeLog.length,
+      runtime_truncated: false,
+    });
+  });
+
+  it('get_build_log includes captured runtime logs for deploy-time crashes', async () => {
+    const { ctx, rawRuntimeLog } = createMockContext();
+    const buildLogTool = getTool(ctx, 'get_build_log');
+
+    const buildLog = await buildLogTool.execute({ deploy_id: 'deploy-1' }, { target: 'mcp' });
+
+    expect(buildLog).toMatchObject({
+      runtime_log: rawRuntimeLog,
+      runtime_full_log: true,
+      runtime_returned_chars: rawRuntimeLog.length,
+      runtime_total_chars: rawRuntimeLog.length,
+      runtime_truncated: false,
     });
   });
 

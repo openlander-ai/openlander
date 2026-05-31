@@ -74,6 +74,7 @@ import { loadServiceViewRecord, type ServiceView } from '../db/views/service-vie
 import {
   buildProject,
   cloneAndAnalyze,
+  extractRuntimeLogFromDeployError,
   handlePostDeploy,
   runAndVerify,
   type DeployOrchestrationDeps,
@@ -1441,6 +1442,12 @@ export class DeployPipeline {
         };
       }
       const failStep = this.detectFailStep(buildLog);
+      const attachedRuntimeLog = extractRuntimeLogFromDeployError(error);
+      const runtimeLog =
+        attachedRuntimeLog ??
+        (failStep === 'run' || failStep === 'runtime'
+          ? await this.captureProjectRuntimeLog(projectId)
+          : undefined);
       const buildLogWithError = buildLog + `[error] ${errorMsg}\n`;
       this.jobManager?.updatePhase(projectId, 'failed', errorMsg);
 
@@ -1484,6 +1491,7 @@ export class DeployPipeline {
         commitSha,
         commitMessage,
         buildLog: buildLogWithError,
+        runtimeLog,
         durationMs: Date.now() - startTime,
       });
       await eventBus.emit('deploy:failed', {
@@ -2326,6 +2334,9 @@ export class DeployPipeline {
       const isCancelled = isDockerBuildCancelledError(error);
       const cancelMessage = 'Build cancelled by user';
       buildLog += isCancelled ? `[cancelled] ${cancelMessage}\n` : `[error] ${errorMsg}\n`;
+      const runtimeLog = isCancelled
+        ? undefined
+        : await this.captureContainerRuntimeLog(greenContainerId, projectId);
 
       if (routeTargetUpdated && !routeSwitched && blueState) {
         try {
@@ -2432,6 +2443,7 @@ export class DeployPipeline {
         trigger,
         commitSha,
         buildLog,
+        runtimeLog,
         durationMs: Date.now() - startTime,
       });
 
@@ -2485,6 +2497,35 @@ export class DeployPipeline {
       await this.runtime.safeRemoveContainer(containerId);
     } catch (err) {
       log.warn({ err }, 'Failed to remove green container during cleanup');
+    }
+  }
+
+  private async captureProjectRuntimeLog(projectId: string): Promise<string | undefined> {
+    try {
+      const project = await this.db.getProject(projectId);
+      const containerId = project
+        ? (await loadServiceViewRecord(this.db, project)).view.containerId
+        : null;
+      return await this.captureContainerRuntimeLog(containerId ?? undefined, projectId);
+    } catch (err) {
+      log.debug({ err, projectId }, 'Failed to resolve container for runtime log capture');
+      return undefined;
+    }
+  }
+
+  private async captureContainerRuntimeLog(
+    containerId: string | undefined,
+    projectId: string,
+  ): Promise<string | undefined> {
+    if (!containerId) {
+      return undefined;
+    }
+    try {
+      const runtimeLog = await this.runtime.getLogs(containerId, 'all');
+      return runtimeLog.length > 0 ? runtimeLog : undefined;
+    } catch (err) {
+      log.debug({ err, projectId, containerId }, 'Failed to capture runtime log');
+      return undefined;
     }
   }
 

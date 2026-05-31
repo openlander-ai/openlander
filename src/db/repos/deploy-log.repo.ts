@@ -28,6 +28,7 @@ export class DeployLogRepo {
     commitSha?: string;
     commitMessage?: string;
     buildLog?: string;
+    runtimeLog?: string;
     durationMs?: number;
   }): Promise<void> {
     await this.db.insert(deployLogs).values({
@@ -40,6 +41,7 @@ export class DeployLogRepo {
       commit_sha: log.commitSha ?? null,
       commit_message: log.commitMessage ?? null,
       build_log: log.buildLog ?? null,
+      runtime_log: log.runtimeLog ?? null,
       duration_ms: log.durationMs ?? null,
     });
   }

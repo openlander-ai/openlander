@@ -778,10 +778,12 @@ Provide either `action_run_id` or `action_id`.
 | `tail`         | number | No       | Return only the last N lines |
 
 Provide `deploy_id` by itself when known, or provide `project_id`/`project_name` with optional `deploy_index`.
-Without `tail`, `get_build_log` returns the full persisted build log. The
-response includes `full_log`, `returned_chars`, `total_chars`, and `truncated`
-so agents can tell whether they are looking at the whole log or a requested
-tail.
+Without `tail`, `get_build_log` returns the full persisted build log and, when
+OpenLander captured one during a runtime crash, `runtime_log`. The response
+includes `full_log`, `returned_chars`, `total_chars`, and `truncated` for the
+build log, plus `runtime_full_log`, `runtime_returned_chars`,
+`runtime_total_chars`, and `runtime_truncated` when a runtime log is present, so
+agents can tell whether they are looking at the whole log or a requested tail.
 
 OpenLander 0.1 does not expose built-in AI diagnosis. External MCP agents should
 read `get_build_log` / `get_logs`, inspect the failure in their own context, then

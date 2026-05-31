@@ -513,7 +513,11 @@ export class ContainerLifecycle {
     }
   }
 
-  async getLogs(projectId: string, tail = 50, opts?: { timestamps?: boolean }): Promise<string> {
+  async getLogs(
+    projectId: string,
+    tail: number | 'all' = 50,
+    opts?: { timestamps?: boolean },
+  ): Promise<string> {
     const project = await this.db.getProject(projectId);
     if (!project) {
       return 'No container running for this project.';

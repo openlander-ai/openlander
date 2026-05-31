@@ -166,7 +166,9 @@ If deployment reports `failed`, `unhealthy`, timeout, or the app behaves unexpec
 diagnose_service(service_id: "my-app__svc")
 ```
 
-Use `get_build_log(deploy_id: "...")` when you need the full build output.
+Use `get_build_log(deploy_id: "...")` when you need the full build output. If a
+container started and then crashed during deploy, the same response also includes
+the captured `runtime_log` when available.
 
 ---
 
