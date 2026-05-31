@@ -12,6 +12,8 @@ describe('pending approval strip surface', () => {
   const appShellSource = readRepoFile('web/src/components/Shell/AppShell.tsx');
   const componentSource = readRepoFile('web/src/components/Shell/PendingApprovalsStrip.tsx');
   const approvalsApiSource = readRepoFile('web/src/lib/api/approvals.ts');
+  const enSource = readRepoFile('web/src/i18n/en.ts');
+  const koSource = readRepoFile('web/src/i18n/ko.ts');
 
   it('mounts the pending approval strip globally in AppShell', () => {
     // The MCP approval hold now gates archive/unarchive for projects and
@@ -36,6 +38,16 @@ describe('pending approval strip surface', () => {
     expect(componentSource).toContain('DETAIL_ORDER');
     expect(componentSource).toContain('formatApprovalDetailValue');
     expect(componentSource).toContain("approval.metadata.source === 'mcp'");
+  });
+
+  it('keeps the global surface compact until the user reviews details', () => {
+    expect(componentSource).toContain('max-w-3xl');
+    expect(componentSource).toContain('aria-expanded={expanded}');
+    expect(componentSource).toContain("t('approval.pendingStrip.review')");
+    expect(componentSource).toContain("t('approval.pendingStrip.hide')");
+    expect(componentSource).toContain('visibleApprovals.slice(0, 5)');
+    expect(enSource).toContain('summaryMany');
+    expect(koSource).toContain('summaryMany');
   });
 
   it('renders the MCP token identity that requested the destructive action', () => {
