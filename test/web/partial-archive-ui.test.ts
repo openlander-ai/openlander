@@ -71,6 +71,11 @@ describe('partial archive UI wiring', () => {
     expect(settingsSource).toContain("'projectDetail.danger.deleteArchivedServiceInputLabel'");
     expect(projectViewSource).toContain('showArchivedServices');
     expect(projectViewSource).toContain('archivedAt &&');
+    expect(projectViewSource).toContain('const archivedServiceCount =');
+    expect(projectViewSource).toContain(
+      'const canToggleArchived = !archiveForced && archivedCount > 0',
+    );
+    expect(projectViewSource).toContain('archivedCount={archivedServiceCount}');
     expect(serviceDetailSource).toContain('groupServiceToDetailNode');
     expect(serviceDetailSource).toContain('service ?? (serviceDetail');
   });
