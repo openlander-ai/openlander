@@ -38,6 +38,13 @@ import {
 const log = createModuleLogger('tools-defs-service');
 const SERVICE_CRASH_LOG_PATTERN = /PANIC|FATAL|OOM|Segmentation fault|out of memory|No space left/i;
 
+type ServiceAttachmentLookup = (service: { project_id: string }) => {
+  scope: 'project' | 'unassigned';
+  attachedProjectId: string | null;
+  attachedProjectName: string | null;
+  network: string | null;
+};
+
 function getServiceExternalAccess(port: number | null) {
   if (!port) {
     return [];
@@ -53,7 +60,7 @@ function getServiceExternalAccess(port: number | null) {
 async function buildServiceAttachmentLookup(
   appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
   services: Array<{ project_id: string }>,
-) {
+): Promise<ServiceAttachmentLookup> {
   const projectIds = new Set(
     services
       .map((service) => service.project_id)
@@ -287,6 +294,58 @@ async function resolveCreateServiceScope(
   };
 }
 
+async function resolveOptionalProjectTarget(
+  appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
+  args: Record<string, unknown>,
+): Promise<
+  | {
+      ok: true;
+      project: { id: string; name: string } | null;
+    }
+  | {
+      ok: false;
+      response: Record<string, unknown>;
+    }
+> {
+  const projectId = readStringArg(args, 'project_id');
+  const projectName = readStringArg(args, 'project_name');
+
+  if (!projectId && !projectName) {
+    return { ok: true, project: null };
+  }
+
+  const project = projectId
+    ? await appCtx.db.getProject(projectId)
+    : await appCtx.db.getProjectByName(projectName ?? '');
+
+  if (!project) {
+    const requested = projectId ?? projectName ?? '';
+    return {
+      ok: false,
+      response: {
+        status: 'failed',
+        error: 'PROJECT_NOT_FOUND',
+        code: 'PROJECT_NOT_FOUND',
+        message: `Project "${requested}" does not exist. Verify it with openlander_project.list_projects before retrying.`,
+      },
+    };
+  }
+
+  if (projectName && project.name !== projectName) {
+    return {
+      ok: false,
+      response: {
+        status: 'failed',
+        error: 'INVALID_PROJECT_TARGET',
+        code: 'INVALID_PROJECT_TARGET',
+        message: `project_id "${project.id}" resolves to "${project.name}", not "${projectName}". Use one project target.`,
+      },
+    };
+  }
+
+  return { ok: true, project: { id: project.id, name: project.name } };
+}
+
 function serviceKindMismatchResponse(service: { id: string; name: string; kind: string }) {
   return {
     status: 'blocked',
@@ -444,12 +503,27 @@ export const serviceToolDefs: ToolDef[] = [
     description:
       'List all services (databases, caches, custom containers) with status, type, and connection details. Agent responses include parsed credentials; MCP responses intentionally omit credential values and expose them only through get_service_credentials. Pass include_orphans=true to also list OpenLander-managed service containers that are not registered in the services table.',
     mcpDescription:
-      'List infrastructure services with type, status, exposed port, and optional orphan service containers. Credentials are omitted; use get_service_credentials when needed.',
+      'List infrastructure services with type, status, exposed port, optional project_id/project_name filter, and optional orphan service containers. Credentials are omitted; use get_service_credentials when needed.',
     inputSchema: listServicesSchema,
     execute: async (_args, { appCtx, target }) => {
       const includeOrphans = (_args['include_orphans'] as boolean | undefined) ?? false;
+      const projectTarget = await resolveOptionalProjectTarget(appCtx, _args);
+      if (!projectTarget.ok) {
+        return projectTarget.response;
+      }
+      const selectedProject = projectTarget.project;
       const allServices = await appCtx.serviceManager.list();
-      const services = allServices.filter((service) => isManagedServiceKind(service.kind));
+      let services = allServices.filter((service) => isManagedServiceKind(service.kind));
+      if (selectedProject) {
+        const connections = await appCtx.db.listServiceConnectionsByProject(selectedProject.id);
+        const connectedServiceIds = new Set(
+          connections.map((connection) => connection.service_id_provider),
+        );
+        services = services.filter(
+          (service) =>
+            service.project_id === selectedProject.id || connectedServiceIds.has(service.id),
+        );
+      }
       const knownContainerRefs = new Set(
         allServices.flatMap((service) => [
           service.container_id ?? '',
@@ -465,7 +539,14 @@ export const serviceToolDefs: ToolDef[] = [
         : [];
 
       if (target === 'mcp') {
-        const serviceAttachment = await buildServiceAttachmentLookup(appCtx, services);
+        const serviceAttachment: ServiceAttachmentLookup = selectedProject
+          ? () => ({
+              scope: 'project' as const,
+              attachedProjectId: selectedProject.id,
+              attachedProjectName: selectedProject.name,
+              network: projectContainerName(selectedProject.name),
+            })
+          : await buildServiceAttachmentLookup(appCtx, services);
         return {
           count: services.length,
           services: services.map((service) => {
@@ -534,8 +615,13 @@ export const serviceToolDefs: ToolDef[] = [
             status: service.status,
             // Wire key preserved; canonical source: assigned_port
             port: svcPort,
-            scope: service.project_id === ORPHAN_MANAGED_GROUP_ID ? 'unassigned' : 'project',
-            attached_to: service.project_id === ORPHAN_MANAGED_GROUP_ID ? null : service.project_id,
+            scope:
+              selectedProject || service.project_id !== ORPHAN_MANAGED_GROUP_ID
+                ? 'project'
+                : 'unassigned',
+            attached_to:
+              selectedProject?.id ??
+              (service.project_id === ORPHAN_MANAGED_GROUP_ID ? null : service.project_id),
             containerName: service.container_name,
             credentials: parseServiceCredentials(service.credentials),
           };
