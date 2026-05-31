@@ -40,6 +40,7 @@ describe('partial archive UI wiring', () => {
       'archivedServicesBody',
       'archivedServicesEmpty',
       'deleteArchivedServiceHint',
+      'deleteArchivedServiceInputLabel',
     ]) {
       expect(enSource).toContain(key);
       expect(koSource).toContain(key);
@@ -67,9 +68,14 @@ describe('partial archive UI wiring', () => {
     expect(settingsSource).toContain('`${projectName}/${service.name}`');
     expect(settingsSource).toContain("'projectDetail.danger.archivedServicesTitle'");
     expect(settingsSource).toContain("'projectDetail.danger.deleteArchivedServiceHint'");
+    expect(settingsSource).toContain("'projectDetail.danger.deleteArchivedServiceInputLabel'");
     expect(projectViewSource).toContain('showArchivedServices');
     expect(projectViewSource).toContain('archivedAt &&');
     expect(serviceDetailSource).toContain('groupServiceToDetailNode');
     expect(serviceDetailSource).toContain('service ?? (serviceDetail');
+  });
+
+  it('keeps Korean loading copy localized for archived-service cleanup', () => {
+    expect(koSource).toContain("archivedServicesLoading: '아카이브된 서비스를 불러오는 중…'");
   });
 });
