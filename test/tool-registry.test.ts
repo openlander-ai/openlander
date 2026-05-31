@@ -25,6 +25,7 @@ const EXPECTED_TOOL_NAMES = [
   'get_system_stats',
   'redeploy_app',
   'restart_service',
+  'list_archived_services',
   'archive_service',
   'unarchive_service',
   'update_service_config',

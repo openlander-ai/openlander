@@ -86,7 +86,7 @@ All actions: action="help"
 
 ## openlander_service
 Deployable services (apps + workers): lifecycle, config, env vars, domains, and temporary public URLs. Prefer service_id from list_projects.
-Key actions: redeploy_app, restart_service, set_env_vars, list_env_vars, update_service_config, expose_public
+Key actions: redeploy_app, restart_service, list_archived_services, set_env_vars, list_env_vars, update_service_config, expose_public
 All actions: action="help"
 
 ## openlander_managed_service
@@ -123,7 +123,7 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - Never create Docker networks manually
 
 ## Human UI-only operations
-Project/app hard delete and purge are intentionally NOT exposed as MCP actions. If the user asks to delete, remove, purge, or destroy a project/app group, tell them to use the web UI: Settings → Danger zone for that project/service. For soft lifecycle cleanup, use archive_project/unarchive_project for a whole project group or archive_service/unarchive_service for one deployable service; all four enter the human approval queue before executing. Do NOT substitute remove_service or cleanup_docker — those target managed infrastructure services and Docker hosts, not deployable apps.`;
+Project/app hard delete and purge are intentionally NOT exposed as MCP actions. If the user asks to delete, remove, purge, or destroy a project/app group, tell them to use the web UI: Settings → Danger zone for that project/service. For soft lifecycle cleanup, use archive_project/unarchive_project for a whole project group or archive_service/unarchive_service for one deployable service; all four enter the human approval queue before executing. Archive is reversible cleanup, not permanent deletion: archived services disappear from default active lists but remain inspectable with list_archived_services and restorable with unarchive_service/unarchive_project. Do NOT substitute remove_service or cleanup_docker — those target managed infrastructure services and Docker hosts, not deployable apps.`;
 
 function buildServerInstructions(ctx: AppContext, incidentBriefing: string): string {
   const instance = getMcpInstanceContext(ctx.config);

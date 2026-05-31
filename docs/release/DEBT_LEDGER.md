@@ -3,6 +3,32 @@
 Small compatibility or vocabulary decisions that were intentionally accepted for
 a release should be recorded here so follow-up work is explicit.
 
+## v0.1.7
+
+- **Deployable archived-list MCP action:** `openlander_service.list_archived_services`
+  is added as a read-only lifecycle inspection action.
+- **Why accepted:** archive is reversible cleanup, not permanent delete. Since
+  archived deployable services are hidden from default active lists, agents
+  need an explicit read path to avoid mistaking "not listed" for "deleted."
+- **Vocab review:** "archived service" means a deployable app/worker whose
+  runtime has been stopped/removed while service-owned configuration and
+  history are preserved. It excludes managed databases, caches, buckets,
+  volumes, and host cleanup.
+- **Endpoint collision check:** no REST endpoint is added for this MCP action;
+  the web API keeps using `GET /api/projects/:id/services?include_archived=true`.
+- **Follow-up:** L6.4 should add the canonical Project Settings > Danger
+  archived-services cleanup surface, then decide whether the Services-tab
+  "show archived" escape hatch remains needed.
+
+- **Blocked `deploy_app(target_project_id=...)`:** existing-group attach is
+  temporarily rejected by `deploy_app` with `TARGET_PROJECT_ATTACH_UNSUPPORTED`.
+- **Why accepted:** the previous implementation attached a freshly deployed
+  temp project only in request-local post-deploy handling. MCP transport
+  disconnects, timeouts, or failed deploys could leave stray temp projects.
+- **Follow-up:** L6.3 should move target membership into durable deploy
+  plan/pipeline state and cover success/failure/timeout-style execution with
+  tests before re-enabling the parameter.
+
 ## v0.1.4
 
 - **Managed service delete conflict REST contract:** `DELETE /api/services/:id`

@@ -70,6 +70,7 @@ const FROZEN_MANAGED_SERVICE_ACTIONS = [
 ] as const;
 
 const FROZEN_DEPLOYABLE_SERVICE_ACTIONS = [
+  'list_archived_services',
   'archive_service',
   'unarchive_service',
   'restart_service',

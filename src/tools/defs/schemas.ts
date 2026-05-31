@@ -969,7 +969,7 @@ export const deploySchema = z
       .string()
       .optional()
       .describe(
-        'Attach the new deployable as an additional service under an existing project group instead of creating a fresh project. The deployable receives a unique service id (the project keeps its existing services). Use this to add a worker/api/web sibling to an existing app group.',
+        'Temporarily disabled in deploy_app. Existing-group attach is blocked until it is moved into durable deploy-plan execution; passing this returns TARGET_PROJECT_ATTACH_UNSUPPORTED before any temp project is created.',
       ),
   })
   .superRefine((data, ctx) => {

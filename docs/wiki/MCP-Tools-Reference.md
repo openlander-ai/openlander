@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **71 unique default operations** surfaced through those composites
+- **72 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -50,6 +50,10 @@ Deployable app cleanup and restore use softer paths. `archive_project`,
 `unarchive_project`, `archive_service`, and `unarchive_service` are exposed
 through the project/service composites but enter the human approval hold queue
 before executing.
+Archive is reversible cleanup, not permanent deletion: archived deployable
+services are hidden from default active lists, can be inspected with
+`list_archived_services`, and can be restored with `unarchive_service` or
+`unarchive_project`. Restore actions do not redeploy automatically.
 Supported bulk cleanup actions such as `bulk_delete_env_vars confirm=true` also
 enter that queue.
 
@@ -67,7 +71,7 @@ Composite catalog:
 | ---------------------------- | ------------ | --------------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 16           | Deploy plans, execution, previews, rollbacks, build logs, Git                           |
 | `openlander_project`         | 16           | Project groups, lifecycle, secrets, temporary share URLs; env actions route to services |
-| `openlander_service`         | 21           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary      |
+| `openlander_service`         | 22           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary      |
 | `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage              |
 | `openlander_monitor`         | 11           | Logs, alerts, topology, system stats, host diagnosis, project stats, probes             |
 
@@ -160,6 +164,11 @@ For new app names, use `name`; `project_name` is only for existing app lookup/sc
 When dependency manifests declare git-based dependencies, OpenLander refreshes the dependency
 install layer while preserving normal Docker cache behavior for other repos. Use `no_cache=true`
 only when you need a fully uncached build.
+
+`target_project_id` is temporarily blocked in `deploy_app`. Existing-group
+attach currently needs to move into durable deploy-plan execution; until then,
+passing `target_project_id` returns `TARGET_PROJECT_ATTACH_UNSUPPORTED` before
+OpenLander creates a temp project.
 
 | Parameter           | Type    | Required | Description                                                     |
 | ------------------- | ------- | -------- | --------------------------------------------------------------- |
@@ -349,6 +358,22 @@ managed databases, volumes, buckets, or host-wide Docker resources.
 Provide either `service_id` or `service_name`. A successful initial MCP call
 returns `status: "pending_approval"` and an `actionRunId`; poll
 `mcp_action_status` after the user approves or rejects the request.
+
+### `list_archived_services`
+
+List archived deployable app/worker services in a project group. Use this after
+`archive_service` / `archive_project`, or when the user asks what can be
+restored or permanently deleted. It returns deployable services only; managed
+databases, caches, buckets, volumes, and host resources are excluded.
+
+| Parameter      | Type   | Required | Description        |
+| -------------- | ------ | -------- | ------------------ |
+| `project_id`   | string | No       | Project group id   |
+| `project_name` | string | No       | Project group name |
+
+Provide either `project_id` or `project_name`. Hard delete remains web
+UI-only; this action is a read-only way for agents to inspect reversible
+archive state before suggesting restore or human UI deletion.
 
 ### `unarchive_service`
 

@@ -234,6 +234,39 @@ describe('deploy MCP guidance', () => {
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
   });
 
+  it('blocks target_project_id before creating a temp project', async () => {
+    const ctx = {
+      db: {
+        getProject: vi.fn(() => ({ id: 'target', name: 'target' })),
+        getProjectByName: vi.fn(() => undefined),
+      },
+      planEngine: {
+        createPlan: vi.fn(),
+        executePlan: vi.fn(),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      {
+        repo_url: 'https://github.com/acme/new-app',
+        name: 'new-app',
+        target_project_id: 'target',
+      },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      code: 'TARGET_PROJECT_ATTACH_UNSUPPORTED',
+      invalid_params: ['target_project_id'],
+      _agent_guidance: {
+        message: expect.stringContaining('did not create a temp project'),
+      },
+    });
+    expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
+    expect(ctx.planEngine.executePlan).not.toHaveBeenCalled();
+  });
+
   it('uses name as the new deploy_app project name', async () => {
     const ctx = {
       db: {
