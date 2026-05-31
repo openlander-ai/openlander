@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Check, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { usePendingApprovals } from '@/hooks/use-pending-approvals';
 import { useLanguage } from '@/i18n/context';
 import { approveActionRun, rejectActionRun, type PendingApproval } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
+import { cn } from '@/lib/utils';
 
 const RECENTLY_RESOLVED_MS = 5_000;
 const DETAIL_ORDER = ['keys', 'key', 'filename', 'path', 'name', 'service_name', 'project_name'];
@@ -57,10 +58,15 @@ function describeApprovalActor(approval: PendingApproval): string | null {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
+function describeApprovalTarget(approval: PendingApproval): string {
+  return approval.metadata.projectName ?? approval.metadata.projectId ?? 'OpenLander';
+}
+
 export function PendingApprovalsStrip() {
   const { t } = useLanguage();
   const { approvals, loading, error, refetch } = usePendingApprovals();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const [recentlyResolved, setRecentlyResolved] = useState<Set<string>>(() => new Set());
   const resolvedTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -77,6 +83,12 @@ export function PendingApprovalsStrip() {
     () => approvals.filter((approval) => !recentlyResolved.has(approval.metadata.actionRunId)),
     [approvals, recentlyResolved],
   );
+  const panelId = 'pending-approvals-panel';
+  const firstApproval = visibleApprovals[0] ?? null;
+
+  useEffect(() => {
+    if (visibleApprovals.length === 0) setExpanded(false);
+  }, [visibleApprovals.length]);
 
   function suppressResolvedApproval(actionRunId: string) {
     setRecentlyResolved((current) => {
@@ -125,94 +137,127 @@ export function PendingApprovalsStrip() {
       role="region"
       aria-live="polite"
       aria-label={t('approval.pendingStrip.title')}
-      className="rounded-[var(--ol-radius)] border border-[color-mix(in_oklch,var(--ol-warning)_35%,var(--ol-border))] bg-[color-mix(in_oklch,var(--ol-warning)_9%,var(--ol-panel))] p-4"
+      className="mx-auto w-full max-w-3xl rounded-[var(--ol-radius)] border border-[color-mix(in_oklch,var(--ol-warning)_28%,var(--ol-border))] bg-[color-mix(in_oklch,var(--ol-warning)_6%,var(--ol-panel))] shadow-sm"
     >
-      <div className="flex flex-col gap-3">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[color-mix(in_oklch,var(--ol-warning)_18%,transparent)] text-[color:var(--ol-warning)]">
-            <AlertTriangle className="h-4 w-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-semibold text-[color:var(--ol-fg)]">
-              {t('approval.pendingStrip.title')}
-            </h2>
-            <p className="mt-1 text-xs text-[color:var(--ol-fg-muted)]">
-              {error ? t('approval.pendingStrip.loadWarning') : t('approval.pendingStrip.body')}
-            </p>
+      <div className="flex flex-col">
+        <div className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[color-mix(in_oklch,var(--ol-warning)_16%,transparent)] text-[color:var(--ol-warning)]">
+              <AlertTriangle className="h-3.5 w-3.5" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-[color:var(--ol-fg)]">
+                {visibleApprovals.length === 1
+                  ? t('approval.pendingStrip.summaryOne')
+                  : t('approval.pendingStrip.summaryMany', { count: visibleApprovals.length })}
+              </h2>
+              {firstApproval && (
+                <p className="mt-0.5 truncate text-xs text-[color:var(--ol-fg-muted)]">
+                  <span className="font-mono text-[color:var(--ol-fg)]">
+                    {firstApproval.metadata.toolName}
+                  </span>
+                  <span> · {describeApprovalTarget(firstApproval)}</span>
+                  <span> · {formatRelativeTime(firstApproval.createdAt, t)}</span>
+                  <span>
+                    {' '}
+                    ·{' '}
+                    {error
+                      ? t('approval.pendingStrip.loadWarning')
+                      : t('approval.pendingStrip.body')}
+                  </span>
+                </p>
+              )}
+            </div>
           </div>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            aria-expanded={expanded}
+            aria-controls={panelId}
+            onClick={() => setExpanded((value) => !value)}
+            className="shrink-0"
+          >
+            {expanded ? t('approval.pendingStrip.hide') : t('approval.pendingStrip.review')}
+            <ChevronDown className={cn('h-4 w-4 transition-transform', expanded && 'rotate-180')} />
+          </Button>
         </div>
 
-        <div className="space-y-2">
-          {visibleApprovals.slice(0, 3).map((approval) => {
-            const actionRunId = approval.metadata.actionRunId;
-            const detail = describeApproval(approval);
-            const actor = describeApprovalActor(approval);
-            const isAnyBusy = busyId !== null;
-            return (
-              <div
-                key={actionRunId}
-                className="flex flex-col gap-3 rounded-lg border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] p-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-2 py-0.5 text-[11px] text-[color:var(--ol-fg-muted)]">
-                      {approval.metadata.source === 'mcp'
-                        ? t('approval.pendingStrip.mcpSource')
-                        : t('approval.pendingStrip.recoverySource')}
-                    </span>
-                    <span className="font-mono text-[12px] text-[color:var(--ol-fg)]">
-                      {approval.metadata.toolName}
-                    </span>
-                    <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
-                      {formatRelativeTime(approval.createdAt, t)}
-                    </span>
+        {expanded && (
+          <div id={panelId} className="space-y-2 border-t border-[color:var(--ol-border)] p-3">
+            {visibleApprovals.slice(0, 5).map((approval) => {
+              const actionRunId = approval.metadata.actionRunId;
+              const detail = describeApproval(approval);
+              const actor = describeApprovalActor(approval);
+              const isAnyBusy = busyId !== null;
+              return (
+                <div
+                  key={actionRunId}
+                  className="flex flex-col gap-2 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel)] px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-2 py-0.5 text-[10px] text-[color:var(--ol-fg-muted)]">
+                        {approval.metadata.source === 'mcp'
+                          ? t('approval.pendingStrip.mcpSource')
+                          : t('approval.pendingStrip.recoverySource')}
+                      </span>
+                      <span className="font-mono text-xs text-[color:var(--ol-fg)]">
+                        {approval.metadata.toolName}
+                      </span>
+                      <span className="text-[11px] text-[color:var(--ol-fg-subtle)]">
+                        {formatRelativeTime(approval.createdAt, t)}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-xs font-medium text-[color:var(--ol-fg)]">
+                      {describeApprovalTarget(approval)}
+                    </p>
+                    {detail && (
+                      <p className="mt-1 truncate text-xs text-[color:var(--ol-fg-muted)]">
+                        {t('approval.pendingStrip.details')}{' '}
+                        <span className="font-mono">{detail}</span>
+                      </p>
+                    )}
+                    {actor && (
+                      <p className="mt-1 truncate text-[11px] text-[color:var(--ol-fg-subtle)]">
+                        {t('approval.pendingStrip.actor')}{' '}
+                        <span className="font-mono">{actor}</span>
+                      </p>
+                    )}
                   </div>
-                  <p className="mt-1 truncate text-xs text-[color:var(--ol-fg-muted)]">
-                    {approval.metadata.projectName ?? approval.metadata.projectId ?? 'OpenLander'}
-                  </p>
-                  {detail && (
-                    <p className="mt-1 text-xs text-[color:var(--ol-fg)]">
-                      {t('approval.pendingStrip.details')}{' '}
-                      <span className="font-mono">{detail}</span>
-                    </p>
-                  )}
-                  {actor && (
-                    <p className="mt-1 text-xs text-[color:var(--ol-fg-subtle)]">
-                      {t('approval.pendingStrip.actor')} <span className="font-mono">{actor}</span>
-                    </p>
-                  )}
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isAnyBusy}
+                      onClick={() => void handleDecision(approval, false)}
+                    >
+                      <X className="h-4 w-4" />
+                      {t('approval.pendingStrip.reject')}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isAnyBusy}
+                      onClick={() => void handleDecision(approval, true)}
+                      className="border border-[color-mix(in_oklch,var(--ol-warning)_60%,var(--ol-border))] bg-[color-mix(in_oklch,var(--ol-warning)_78%,var(--ol-panel))] text-[color:var(--ol-fg)] shadow-none hover:opacity-90"
+                    >
+                      <Check className="h-4 w-4" />
+                      {t('approval.pendingStrip.approve')}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={isAnyBusy}
-                    onClick={() => void handleDecision(approval, false)}
-                  >
-                    <X className="h-4 w-4" />
-                    {t('approval.pendingStrip.reject')}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={isAnyBusy}
-                    onClick={() => void handleDecision(approval, true)}
-                    className="bg-[color:var(--ol-warning)] text-[color:var(--ol-fg)] hover:opacity-90"
-                  >
-                    <Check className="h-4 w-4" />
-                    {t('approval.pendingStrip.approve')}
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-          {visibleApprovals.length > 3 && (
-            <p className="text-xs text-[color:var(--ol-fg-muted)]">
-              {t('approval.pendingStrip.more', { count: visibleApprovals.length - 3 })}
-            </p>
-          )}
-        </div>
+              );
+            })}
+            {visibleApprovals.length > 5 && (
+              <p className="px-1 text-xs text-[color:var(--ol-fg-muted)]">
+                {t('approval.pendingStrip.more', { count: visibleApprovals.length - 5 })}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );
