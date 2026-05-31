@@ -969,7 +969,7 @@ export const deploySchema = z
       .string()
       .optional()
       .describe(
-        'Temporarily disabled in deploy_app. Existing-group attach is blocked until it is moved into durable deploy-plan execution; passing this returns TARGET_PROJECT_ATTACH_UNSUPPORTED before any temp project is created.',
+        'Attach a newly deployed single app/worker service to an existing project group after the deploy succeeds. The attach is owned by durable deploy-plan execution; failed deploys remain as separate failed attempts. Not supported with expose=true, compose, or monorepo deploys.',
       ),
   })
   .superRefine((data, ctx) => {

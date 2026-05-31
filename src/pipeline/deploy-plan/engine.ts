@@ -36,6 +36,7 @@ import type { EventBus } from '../../events/index.js';
 import type { ComposePipeline } from '../compose.js';
 import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
 import { ProjectNotFoundError, ServiceConfigError } from '../../errors.js';
+import { projectIdToDeployableServiceId } from '../../db/service-ids.js';
 
 const log = createModuleLogger('plan-engine');
 
@@ -56,6 +57,7 @@ export interface CreatePlanOptions {
   dockerfilePath?: string;
   dockerTarget?: string;
   projectId?: string;
+  targetProjectId?: string;
 }
 
 interface PlanExecutionContext {
@@ -65,6 +67,7 @@ interface PlanExecutionContext {
   trigger?: string;
   imageCmd?: string[];
   containerPort?: number;
+  targetProjectId?: string;
 }
 
 export interface PlanUpdates {
@@ -125,6 +128,9 @@ export interface ExecutePlanResult {
   plan_id: string;
   project_name: string;
   project_id?: string;
+  service_id?: string;
+  target_project_id?: string;
+  runtime_project_id?: string;
   estimated_seconds?: number;
   error?: string;
   message?: string;
@@ -445,6 +451,7 @@ export class PlanEngine {
       trigger: opts.trigger,
       imageCmd: opts.imageCmd,
       containerPort: opts.containerPort,
+      targetProjectId: opts.targetProjectId,
     };
 
     if (
@@ -453,7 +460,8 @@ export class PlanEngine {
       !execution.sshKeyPath &&
       !execution.trigger &&
       !execution.imageCmd &&
-      execution.containerPort === undefined
+      execution.containerPort === undefined &&
+      !execution.targetProjectId
     ) {
       return undefined;
     }
@@ -751,6 +759,7 @@ export class PlanEngine {
     complexity: DeployPlanComplexity;
     projectName: string;
     projectId?: string;
+    targetProjectId?: string;
     repoUrl: string;
     planBranch: string;
     commitSha: string;
@@ -801,6 +810,7 @@ export class PlanEngine {
     return {
       plan_id: params.planId,
       project_id: params.projectId,
+      target_project_id: params.targetProjectId,
       status: params.status,
       complexity: params.complexity,
       app: {
@@ -907,9 +917,25 @@ export class PlanEngine {
   }
 
   async createPlan(opts: CreatePlanOptions): Promise<DeployPlan> {
-    const { repoUrl, branch, name, envVars = {}, sshKeyPath, source, imageUrl, projectId } = opts;
+    const {
+      repoUrl,
+      branch,
+      name,
+      envVars = {},
+      sshKeyPath,
+      source,
+      imageUrl,
+      projectId,
+      targetProjectId,
+    } = opts;
     const { nanoid } = await import('nanoid');
     const planId = `plan_${nanoid(12)}`;
+    if (projectId && targetProjectId) {
+      throw new ServiceConfigError('projectId and targetProjectId cannot be used together.', {
+        projectId,
+        targetProjectId,
+      });
+    }
 
     if (source === 'image' || imageUrl) {
       const normalizedImageUrl = imageUrl?.trim();
@@ -925,7 +951,14 @@ export class PlanEngine {
       const imageNameParts = parsedImage.name.split('/');
       const fallbackProjectName = imageNameParts[imageNameParts.length - 1] || parsedImage.name;
       const targetProject = await this.getExistingTargetProject(projectId);
+      const attachTargetProject = await this.getExistingTargetProject(targetProjectId);
       const projectName = targetProject?.name ?? name ?? fallbackProjectName;
+      if (attachTargetProject && projectName === attachTargetProject.name) {
+        throw new ServiceConfigError(
+          `target_project_id deploy service name "${projectName}" collides with the target project group name.`,
+          { targetProjectId: attachTargetProject.id, projectName },
+        );
+      }
       // Image-source plans carry no detected service dependencies (services: []),
       // so computePlanStatus resolves to 'ready' here.
       const initialStatus: DeployPlan['status'] = this.computePlanStatus([], []);
@@ -937,6 +970,7 @@ export class PlanEngine {
         complexity,
         projectName,
         projectId: targetProject?.id,
+        targetProjectId: attachTargetProject?.id,
         repoUrl: '',
         planBranch: '',
         commitSha: '',
@@ -977,7 +1011,15 @@ export class PlanEngine {
     }
 
     const targetProject = await this.getExistingTargetProject(projectId);
+    const attachTargetProject = await this.getExistingTargetProject(targetProjectId);
+    const resourceProject = attachTargetProject ?? targetProject;
     const projectName = targetProject?.name ?? name ?? extractProjectName(repoUrl);
+    if (attachTargetProject && projectName === attachTargetProject.name) {
+      throw new ServiceConfigError(
+        `target_project_id deploy service name "${projectName}" collides with the target project group name.`,
+        { targetProjectId: attachTargetProject.id, projectName },
+      );
+    }
 
     log.info({ repoUrl, branch }, 'Cloning repository');
     const cloneResult = await cloneRepo({ repoUrl, branch, sshKeyPath });
@@ -994,11 +1036,25 @@ export class PlanEngine {
       composeBuildServices,
       relativeDockerfiles,
     } = this.resolveBuildConfig(clonePath, opts, warnings, detectedEnv);
+    if (
+      attachTargetProject &&
+      (buildMethod === 'compose' ||
+        (userDockerfile === 'Dockerfile' && relativeDockerfiles.length > 1))
+    ) {
+      throw new ServiceConfigError(
+        'target_project_id currently supports a single deployable service only. Select one Dockerfile or deploy the compose/monorepo app as a separate project group.',
+        {
+          targetProjectId: attachTargetProject.id,
+          buildMethod,
+          dockerfilesFound: relativeDockerfiles,
+        },
+      );
+    }
 
     const detectedServices = await this.detectPlanServices(
       clonePath,
-      projectName,
-      projectId,
+      resourceProject?.name ?? projectName,
+      resourceProject?.id,
       buildMethod === 'compose' ? composeBuildServices : undefined,
     );
     this.detectEnvVars(clonePath, userDockerfile, detectedEnv);
@@ -1020,7 +1076,7 @@ export class PlanEngine {
     const autoEnvVars = this.buildAutoEnvVars(services);
 
     // Fetch existing env vars from database if projectId is provided
-    const existingEnvVars = projectId ? await this.env.getAll(projectId) : {};
+    const existingEnvVars = resourceProject?.id ? await this.env.getAll(resourceProject.id) : {};
 
     const missingEntries = computeMissingEnvVars(
       detectedEnvWithServiceRequirements,
@@ -1048,6 +1104,7 @@ export class PlanEngine {
       complexity,
       projectName,
       projectId: targetProject?.id,
+      targetProjectId: attachTargetProject?.id,
       repoUrl,
       planBranch,
       commitSha,
@@ -1242,6 +1299,22 @@ export class PlanEngine {
       freshPlan.status === 'needs_approval'
         ? PlanStateMachine.transition(freshPlan, 'ready')
         : freshPlan;
+    const planExecution = this.getExecutionContext(plan);
+    const attachTargetProject = await this.getExistingTargetProject(planExecution.targetProjectId);
+    if (attachTargetProject) {
+      const collidingProject = await this.db.getProjectByName(plan.app.name);
+      if (collidingProject) {
+        return {
+          status: 'failed',
+          plan_id: planId,
+          project_name: plan.app.name,
+          target_project_id: attachTargetProject.id,
+          error: `target_project_id deploy service name "${plan.app.name}" collides with an existing project group.`,
+          message:
+            'Choose a unique service name for the new deployable. Existing-group attach creates a temporary runtime project before it moves the service into the target group.',
+        };
+      }
+    }
 
     // New-app guard: an approved create of a safe proposed managed service needs
     // an existing target project to provision against, but for a NEW app the
@@ -1249,6 +1322,7 @@ export class PlanEngine {
     // deploy lock and provisioning loop, creating nothing. 'needs_target_project'
     // is a response-only status (not a DeployPlanStatus / validTransitions edge).
     const targetProject =
+      attachTargetProject ??
       (plan.project_id ? await this.db.getProject(plan.project_id) : null) ??
       (await this.db.getProjectByName(plan.app.name));
     const hasApprovedCreate = plan.services.some(
@@ -1342,7 +1416,7 @@ export class PlanEngine {
     try {
       const mergedEnv = await resolveEnvVars(
         {
-          projectId: plan.project_id ?? plan.app.name,
+          projectId: attachTargetProject?.id ?? plan.project_id ?? plan.app.name,
           autoEnvVars: plan.env.auto,
           inlineEnvVars: plan.env.provided,
         },
@@ -1420,7 +1494,7 @@ export class PlanEngine {
 
       const deployMode = this.getDeployMode(plan);
       const execution = {
-        ...this.getExecutionContext(plan),
+        ...planExecution,
         ...(triggerOverride ? { trigger: triggerOverride } : {}),
       };
       const isImage = plan.build.method === 'image';
@@ -1505,10 +1579,23 @@ export class PlanEngine {
       }
 
       if (this.events) {
-        const unsubSuccess = this.events.on('deploy:success', (payload) => {
-          if (payload.projectId === startedProjectId) {
-            const completed = PlanStateMachine.transition(executingPlan, 'completed');
-            void this.db
+        let cleanup = () => undefined;
+
+        const finishSuccess = async (projectId: string): Promise<void> => {
+          try {
+            let completed = PlanStateMachine.transition(executingPlan, 'completed');
+            if (attachTargetProject) {
+              const moved = await this.db.attachServiceToProject(
+                projectIdToDeployableServiceId(projectId),
+                attachTargetProject.id,
+              );
+              completed = {
+                ...completed,
+                project_id: moved.targetProjectId,
+                target_project_id: moved.targetProjectId,
+              };
+            }
+            await this.db
               .updateDeployPlan(planId, {
                 status: 'completed',
                 planJson: JSON.stringify(this.preparePlanForStorage(completed)),
@@ -1516,74 +1603,74 @@ export class PlanEngine {
               .catch((error: unknown) => {
                 log.warn({ planId, error }, 'Failed to mark deploy plan completed');
               });
+            log.info({ planId, projectId }, 'Plan completed via event');
+          } catch (error) {
+            const errMsg =
+              error instanceof Error
+                ? `Deploy succeeded but target attach failed: ${error.message}`
+                : `Deploy succeeded but target attach failed: ${String(error)}`;
+            const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
+            await this.db
+              .updateDeployPlan(planId, {
+                status: 'failed',
+                planJson: JSON.stringify(this.preparePlanForStorage(failed)),
+                errorMessage: errMsg,
+              })
+              .catch((updateError: unknown) => {
+                log.warn({ planId, updateError }, 'Failed to mark target attach failure');
+              });
+            log.error({ planId, projectId, error }, 'Deploy plan target attach failed');
+          } finally {
             safeReleaseDeployLock();
-            log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
             cleanup();
+          }
+        };
+
+        const finishFailure = async (
+          projectId: string,
+          error: string | undefined,
+        ): Promise<void> => {
+          const errMsg = error || 'Deploy failed';
+          const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
+          await this.db
+            .updateDeployPlan(planId, {
+              status: 'failed',
+              planJson: JSON.stringify(this.preparePlanForStorage(failed)),
+              errorMessage: errMsg,
+            })
+            .catch((updateError: unknown) => {
+              log.warn({ planId, updateError }, 'Failed to mark deploy plan failed');
+            });
+          safeReleaseDeployLock();
+          log.info({ planId, projectId, error: errMsg }, 'Plan failed via event');
+          cleanup();
+        };
+
+        const unsubSuccess = this.events.on('deploy:success', (payload) => {
+          if (payload.projectId === startedProjectId) {
+            void finishSuccess(payload.projectId);
           }
         });
 
         const unsubFailed = this.events.on('deploy:failed', (payload) => {
           if (payload.projectId === startedProjectId) {
-            const errMsg = payload.error || 'Deploy failed';
-            const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
-            void this.db
-              .updateDeployPlan(planId, {
-                status: 'failed',
-                planJson: JSON.stringify(this.preparePlanForStorage(failed)),
-                errorMessage: errMsg,
-              })
-              .catch((error: unknown) => {
-                log.warn({ planId, error }, 'Failed to mark deploy plan failed');
-              });
-            safeReleaseDeployLock();
-            log.info(
-              { planId, projectId: payload.projectId, error: errMsg },
-              'Plan failed via event',
-            );
-            cleanup();
+            void finishFailure(payload.projectId, payload.error);
           }
         });
 
         const unsubComposeUp = this.events.on('compose:up', (payload) => {
           if (payload.projectId === startedProjectId) {
-            const completed = PlanStateMachine.transition(executingPlan, 'completed');
-            void this.db
-              .updateDeployPlan(planId, {
-                status: 'completed',
-                planJson: JSON.stringify(this.preparePlanForStorage(completed)),
-              })
-              .catch((error: unknown) => {
-                log.warn({ planId, error }, 'Failed to mark deploy plan completed');
-              });
-            safeReleaseDeployLock();
-            log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
-            cleanup();
+            void finishSuccess(payload.projectId);
           }
         });
 
         const unsubComposeFailed = this.events.on('compose:failed', (payload) => {
           if (payload.projectId === startedProjectId) {
-            const errMsg = payload.error || 'Deploy failed';
-            const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
-            void this.db
-              .updateDeployPlan(planId, {
-                status: 'failed',
-                planJson: JSON.stringify(this.preparePlanForStorage(failed)),
-                errorMessage: errMsg,
-              })
-              .catch((error: unknown) => {
-                log.warn({ planId, error }, 'Failed to mark deploy plan failed');
-              });
-            safeReleaseDeployLock();
-            log.info(
-              { planId, projectId: payload.projectId, error: errMsg },
-              'Plan failed via event',
-            );
-            cleanup();
+            void finishFailure(payload.projectId, payload.error);
           }
         });
 
-        const cleanup = () => {
+        cleanup = () => {
           unsubSuccess();
           unsubFailed();
           unsubComposeUp();
@@ -1622,6 +1709,13 @@ export class PlanEngine {
         plan_id: planId,
         project_name: startedProjectName,
         project_id: startedProjectId,
+        ...(attachTargetProject
+          ? {
+              service_id: projectIdToDeployableServiceId(startedProjectId),
+              target_project_id: attachTargetProject.id,
+              runtime_project_id: startedProjectId,
+            }
+          : {}),
         estimated_seconds: estimatedSeconds,
       };
     } catch (error) {

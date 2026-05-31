@@ -234,7 +234,75 @@ describe('deploy MCP guidance', () => {
     expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
   });
 
-  it('blocks target_project_id before creating a temp project', async () => {
+  it('passes target_project_id into the durable deploy plan path', async () => {
+    const ctx = {
+      db: {
+        getProject: vi.fn(() => ({ id: 'target', name: 'target' })),
+        getProjectByName: vi.fn(() => undefined),
+      },
+      planEngine: {
+        createPlan: vi.fn(async () => ({
+          plan_id: 'plan-target',
+          status: 'ready',
+          app: { name: 'new-app' },
+          build: {},
+          services: [],
+          env: { required: [], auto: [], provided: {}, detected: [] },
+          missing: [],
+          warnings: [],
+        })),
+        executePlan: vi.fn(async () => ({
+          status: 'building',
+          plan_id: 'plan-target',
+          project_name: 'new-app',
+          project_id: 'runtime-project',
+          runtime_project_id: 'runtime-project',
+          target_project_id: 'target',
+          service_id: 'runtime-project__svc',
+          estimated_seconds: 60,
+        })),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      {
+        repo_url: 'https://github.com/acme/new-app',
+        name: 'new-app',
+        target_project_id: 'target',
+        wait: false,
+      },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      status: 'building',
+      project_id: 'runtime-project',
+      runtime_project_id: 'runtime-project',
+      target_project_id: 'target',
+      service_id: 'runtime-project__svc',
+      target_attach_status: 'pending',
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('attach to target_project_id'),
+        ]),
+      },
+    });
+    expect(ctx.planEngine.createPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'new-app',
+        repoUrl: 'https://github.com/acme/new-app',
+        targetProjectId: 'target',
+      }),
+    );
+    expect(ctx.planEngine.executePlan).toHaveBeenCalledWith(
+      'plan-target',
+      undefined,
+      expect.stringMatching(/^mcp-deploy-/),
+      'chat',
+    );
+  });
+
+  it('blocks target_project_id with expose=true before creating a temp project', async () => {
     const ctx = {
       db: {
         getProject: vi.fn(() => ({ id: 'target', name: 'target' })),
@@ -251,14 +319,15 @@ describe('deploy MCP guidance', () => {
         repo_url: 'https://github.com/acme/new-app',
         name: 'new-app',
         target_project_id: 'target',
+        expose: true,
       },
       { target: 'mcp' },
     )) as Record<string, unknown>;
 
     expect(result).toMatchObject({
       status: 'blocked',
-      code: 'TARGET_PROJECT_ATTACH_UNSUPPORTED',
-      invalid_params: ['target_project_id'],
+      code: 'TARGET_PROJECT_EXPOSE_UNSUPPORTED',
+      invalid_params: ['target_project_id', 'expose'],
       _agent_guidance: {
         message: expect.stringContaining('did not create a temp project'),
       },

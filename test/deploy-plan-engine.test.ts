@@ -1157,6 +1157,185 @@ describe('PlanEngine.executePlan', () => {
     expect(completedCall).toBeDefined();
   });
 
+  it('stores targetProjectId on image plans without binding plan.project_id', async () => {
+    const plan = await engine.createPlan({
+      source: 'image',
+      imageUrl: 'nginx:latest',
+      name: 'new-worker',
+      targetProjectId: 'p1',
+    });
+
+    expect(plan.project_id).toBeUndefined();
+    expect(plan.target_project_id).toBe('p1');
+    expect((plan as { execution?: { targetProjectId?: string } }).execution?.targetProjectId).toBe(
+      'p1',
+    );
+    const createCall = mockDb.createDeployPlan.mock.calls[0][0];
+    const storedPlan = JSON.parse(createCall.planJson);
+    expect(storedPlan.project_id).toBeUndefined();
+    expect(storedPlan.target_project_id).toBe('p1');
+    expect(storedPlan.execution.targetProjectId).toBe('p1');
+  });
+
+  it('attaches a target_project_id service from the plan event listener after deploy success', async () => {
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      target_project_id: 'target',
+      app: {
+        name: 'new-worker',
+        source: {
+          repo_url: 'https://github.com/test/new-worker',
+          branch: 'main',
+          commit_sha: 'abc123',
+        },
+      },
+      execution: { targetProjectId: 'target' },
+    });
+
+    const listeners = new Map<string, (payload: { projectId: string; error?: string }) => void>();
+    mockEvents.on.mockImplementation(
+      (event: string, handler: (payload: { projectId: string; error?: string }) => void) => {
+        listeners.set(event, handler);
+        return vi.fn();
+      },
+    );
+    mockDb.getProject.mockImplementation((id: string) =>
+      id === 'target' ? { id: 'target', name: 'ais-server' } : null,
+    );
+    mockDb.getDeployPlan.mockReturnValue({
+      id: plan.plan_id,
+      status: 'ready',
+      plan_json: JSON.stringify(plan),
+    });
+    mockDb.attachServiceToProject.mockResolvedValueOnce({
+      sourceProjectId: 'runtime-project',
+      targetProjectId: 'target',
+      droppedEnvVarKeys: [],
+      droppedSecretFiles: [],
+    });
+    mockPipeline.startDeploy.mockResolvedValue({
+      status: 'building',
+      projectId: 'runtime-project',
+      projectName: 'new-worker',
+    });
+
+    const result = await engine.executePlan(plan.plan_id, undefined, 'session-target');
+
+    expect(result).toMatchObject({
+      status: 'building',
+      project_id: 'runtime-project',
+      runtime_project_id: 'runtime-project',
+      target_project_id: 'target',
+      service_id: 'runtime-project__svc',
+    });
+    expect(mockDb.acquireDeployLock).toHaveBeenCalledWith('target', 'session-target');
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'new-worker',
+        _lockSessionId: 'session-target',
+      }),
+    );
+
+    listeners.get('deploy:success')?.({ projectId: 'runtime-project' });
+
+    await vi.waitFor(() =>
+      expect(mockDb.attachServiceToProject).toHaveBeenCalledWith('runtime-project__svc', 'target'),
+    );
+    await vi.waitFor(() => {
+      const completedCall = mockDb.updateDeployPlan.mock.calls.find((call: any) => {
+        return call[0] === plan.plan_id && call[1].status === 'completed';
+      });
+      expect(completedCall).toBeDefined();
+      const completedPlan = JSON.parse(completedCall[1].planJson);
+      expect(completedPlan.project_id).toBe('target');
+      expect(completedPlan.target_project_id).toBe('target');
+    });
+  });
+
+  it('does not attach target_project_id services when deploy fails', async () => {
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      target_project_id: 'target',
+      execution: { targetProjectId: 'target' },
+    });
+
+    const listeners = new Map<string, (payload: { projectId: string; error?: string }) => void>();
+    mockEvents.on.mockImplementation(
+      (event: string, handler: (payload: { projectId: string; error?: string }) => void) => {
+        listeners.set(event, handler);
+        return vi.fn();
+      },
+    );
+    mockDb.getProject.mockImplementation((id: string) =>
+      id === 'target' ? { id: 'target', name: 'ais-server' } : null,
+    );
+    mockDb.getDeployPlan.mockReturnValue({
+      id: plan.plan_id,
+      status: 'ready',
+      plan_json: JSON.stringify(plan),
+    });
+    mockPipeline.startDeploy.mockResolvedValue({
+      status: 'building',
+      projectId: 'runtime-project',
+      projectName: 'test-app',
+    });
+
+    await engine.executePlan(plan.plan_id);
+    listeners.get('deploy:failed')?.({ projectId: 'runtime-project', error: 'build failed' });
+
+    await vi.waitFor(() => {
+      const failedCall = mockDb.updateDeployPlan.mock.calls.find((call: any) => {
+        return call[0] === plan.plan_id && call[1].status === 'failed';
+      });
+      expect(failedCall).toBeDefined();
+      expect(failedCall[1].errorMessage).toBe('build failed');
+    });
+    expect(mockDb.attachServiceToProject).not.toHaveBeenCalled();
+  });
+
+  it('marks the deploy plan failed when post-success target attach fails', async () => {
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      target_project_id: 'target',
+      execution: { targetProjectId: 'target' },
+    });
+
+    const listeners = new Map<string, (payload: { projectId: string; error?: string }) => void>();
+    mockEvents.on.mockImplementation(
+      (event: string, handler: (payload: { projectId: string; error?: string }) => void) => {
+        listeners.set(event, handler);
+        return vi.fn();
+      },
+    );
+    mockDb.getProject.mockImplementation((id: string) =>
+      id === 'target' ? { id: 'target', name: 'ais-server' } : null,
+    );
+    mockDb.getDeployPlan.mockReturnValue({
+      id: plan.plan_id,
+      status: 'ready',
+      plan_json: JSON.stringify(plan),
+    });
+    mockDb.attachServiceToProject.mockRejectedValueOnce(new Error('attach constraint failed'));
+    mockPipeline.startDeploy.mockResolvedValue({
+      status: 'building',
+      projectId: 'runtime-project',
+      projectName: 'test-app',
+    });
+
+    await engine.executePlan(plan.plan_id);
+    listeners.get('deploy:success')?.({ projectId: 'runtime-project' });
+
+    await vi.waitFor(() => {
+      const failedCall = mockDb.updateDeployPlan.mock.calls.find((call: any) => {
+        return call[0] === plan.plan_id && call[1].status === 'failed';
+      });
+      expect(failedCall).toBeDefined();
+      expect(failedCall[1].errorMessage).toContain(
+        'Deploy succeeded but target attach failed: attach constraint failed',
+      );
+    });
+  });
+
   it('uses single mode (startDeploy) when dockerfile is non-default, even with multiple dockerfiles found', async () => {
     mockPipeline.startMonorepoDeploy = vi.fn().mockReturnValue({
       parentProjectId: 'mono-1',

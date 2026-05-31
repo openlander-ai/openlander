@@ -169,10 +169,12 @@ When dependency manifests declare git-based dependencies, OpenLander refreshes t
 install layer while preserving normal Docker cache behavior for other repos. Use `no_cache=true`
 only when you need a fully uncached build.
 
-`target_project_id` is temporarily blocked in `deploy_app`. Existing-group
-attach currently needs to move into durable deploy-plan execution; until then,
-passing `target_project_id` returns `TARGET_PROJECT_ATTACH_UNSUPPORTED` before
-OpenLander creates a temp project.
+`target_project_id` attaches a newly deployed single app/worker service to an
+existing project group after the deploy succeeds. The attach is owned by the
+durable deploy-plan execution path, not request-local MCP post-processing, so
+agents should poll status and then use the returned `service_id` for follow-up
+service actions. It is not supported with `expose=true`, compose, or ambiguous
+monorepo deploys; expose the service after attach if needed.
 
 | Parameter           | Type    | Required | Description                                                     |
 | ------------------- | ------- | -------- | --------------------------------------------------------------- |
@@ -188,6 +190,7 @@ OpenLander creates a temp project.
 | `port`              | number  | No       | Container port                                                  |
 | `env_vars`          | object  | No       | Environment variables                                           |
 | `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes |
+| `target_project_id` | string  | No       | Attach new single deployable service to an existing group       |
 | `strategy`          | string  | No       | Redeploy strategy for existing services                         |
 | `health_check_path` | string  | No       | Health check path                                               |
 | `wait`              | boolean | No       | Block until complete (default: true)                            |

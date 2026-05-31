@@ -9,6 +9,7 @@ import { containerName as projectContainerName } from '../../pipeline/helpers.js
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
+import { projectIdToDeployableServiceId } from '../../db/service-ids.js';
 import {
   loadServiceViewRecords,
   serviceViewFromRows,
@@ -164,6 +165,92 @@ async function waitForProjectReadiness(
     last = await inspectProjectReadiness(appCtx, projectId);
   }
   return last;
+}
+
+interface TargetAttachObservation {
+  status?: 'attached' | 'pending' | 'failed';
+  fields: Record<string, unknown>;
+  warnings: string[];
+  error?: string;
+}
+
+function buildTargetAttachFields(result: ExecutePlanResult): Record<string, unknown> {
+  if (!result.target_project_id) {
+    return {};
+  }
+
+  const runtimeProjectId = result.runtime_project_id ?? result.project_id;
+  return {
+    target_project_id: result.target_project_id,
+    ...(runtimeProjectId ? { runtime_project_id: runtimeProjectId } : {}),
+    ...(result.service_id
+      ? { service_id: result.service_id }
+      : runtimeProjectId
+        ? { service_id: projectIdToDeployableServiceId(runtimeProjectId) }
+        : {}),
+  };
+}
+
+async function observeTargetAttach(
+  appCtx: AppCtx,
+  planId: string,
+  result: ExecutePlanResult,
+): Promise<TargetAttachObservation> {
+  const fields = buildTargetAttachFields(result);
+  if (!result.target_project_id) {
+    return { fields, warnings: [] };
+  }
+
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const row = await appCtx.db.getDeployPlan(planId);
+    const planRow = row as
+      | {
+          status?: string;
+          plan_json?: string;
+          error_message?: string | null;
+        }
+      | undefined
+      | null;
+
+    let storedStatus = planRow?.status;
+    let storedError = planRow?.error_message ?? undefined;
+    if (planRow?.plan_json) {
+      try {
+        const stored = JSON.parse(planRow.plan_json) as {
+          status?: string;
+          error_message?: string;
+        };
+        storedStatus = storedStatus ?? stored.status;
+        storedError = storedError ?? stored.error_message;
+      } catch {
+        // Ignore malformed stored JSON here; the deploy plan engine owns the
+        // authoritative terminal state and the caller still gets a poll hint.
+      }
+    }
+
+    if (storedStatus === 'completed') {
+      return { status: 'attached', fields, warnings: [] };
+    }
+    if (storedStatus === 'failed') {
+      return {
+        status: 'failed',
+        fields,
+        warnings: [],
+        error: storedError ?? 'Deploy succeeded but target attach failed.',
+      };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  return {
+    status: 'pending',
+    fields,
+    warnings: [
+      'target_project_id attach is still being finalized by the deploy plan. Poll get_deploy_status or list_projects before taking follow-up actions.',
+    ],
+  };
 }
 
 function parseEnvVarsInput(
@@ -626,9 +713,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'deploy_app',
     riskLevel: 'medium',
     description:
-      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing project with exactly one deployable service, this redeploys that service. Otherwise it creates a new app from repo_url or image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list; if it proposes project-scoped managed services, returns status "needs_approval" with approval_required (approve via execute_deploy_plan using approve_all_safe_resources / approvals.create_resources).',
+      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing project with exactly one deployable service, this redeploys that service. Otherwise it creates a new app from repo_url or image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. target_project_id attaches a newly deployed single app/worker service to an existing project group after successful deploy; expose=true is not supported with target_project_id. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list; if it proposes project-scoped managed services, returns status "needs_approval" with approval_required (approve via execute_deploy_plan using approve_all_safe_resources / approvals.create_resources).',
     mcpDescription:
-      'App deploy front door. New app: pass repo_url/image and use name for the project group name. Existing app: prefer service_id, or use service_name/project_name/name lookup. Poll get_deploy_status; diagnose failures with diagnose_service.',
+      'App deploy front door. New app: pass repo_url/image and use name for the project group name. Existing app: prefer service_id, or use service_name/project_name/name lookup. To add one new deployable service into an existing group, pass target_project_id without expose=true; the durable deploy plan performs the attach after success. Poll get_deploy_status; diagnose failures with diagnose_service.',
     inputSchema: deploySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -646,22 +733,21 @@ export const deployPlanToolDefs: ToolDef[] = [
       const scopedProjectName = (args['project_name'] as string | undefined) ?? undefined;
       const projectName = newAppName ?? scopedProjectName ?? undefined;
 
-      if (targetProjectId) {
+      if (targetProjectId && expose) {
         return {
           status: 'blocked',
-          error: 'TARGET_PROJECT_ATTACH_UNSUPPORTED',
-          code: 'TARGET_PROJECT_ATTACH_UNSUPPORTED',
+          error: 'TARGET_PROJECT_EXPOSE_UNSUPPORTED',
+          code: 'TARGET_PROJECT_EXPOSE_UNSUPPORTED',
           action: 'deploy_app',
-          invalid_params: ['target_project_id'],
+          invalid_params: ['target_project_id', 'expose'],
           message:
-            'deploy_app target_project_id is temporarily disabled because the current attach step is not durable across MCP transport disconnects, timeouts, or failed deploys.',
+            'deploy_app target_project_id with expose=true is temporarily disabled until tunnel creation is moved after durable target attach.',
           _agent_guidance: {
             message:
-              'OpenLander did not create a temp project. Deploying a new service directly into an existing project group is blocked until target attach moves into the durable deploy plan/pipeline.',
+              'OpenLander did not create a temp project. Retry without expose=true, then expose the service after the target attach completes.',
             next_steps: [
-              'Deploy the app as a separate project group for now, or wait for the durable multi-service attach flow.',
-              'Use list_projects to choose an existing service_id when redeploying an existing app.',
-              'If a previous attempt already created a stray temp project, archive it and clean it up through the web UI Danger path.',
+              'Retry deploy_app with target_project_id and expose=false or omitted.',
+              'After deployment succeeds, use expose_public with service_id if a temporary public URL is still needed.',
             ],
           },
         };
@@ -758,6 +844,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
+        targetProjectId,
         trigger: deployTriggerForToolContext(context),
       });
 
@@ -798,7 +885,13 @@ export const deployPlanToolDefs: ToolDef[] = [
               'This plan proposes project-scoped managed services (see services[] with resolution="proposed_project_service"). Confirm with the user before proceeding.',
               'Then call execute_deploy_plan with the plan_id and approve_all_safe_resources=true, or approvals.create_resources=[<identifiers>] to approve individually.',
               'This auto-provision + env wiring path applies to deploy-plan approval; standalone create_service still returns suggested_env for set_env_vars.',
-              'Note: for a NEW app, OpenLander cannot auto-provision a managed service yet — execute_deploy_plan returns needs_target_project. To deploy this app now, pass an external connection URL (e.g. DATABASE_URL) in env_vars so nothing needs provisioning; auto-provisioning is available under an existing project.',
+              ...(targetProjectId
+                ? [
+                    'Because target_project_id is set, approved managed services are provisioned on that existing project group.',
+                  ]
+                : [
+                    'Note: for a NEW app, OpenLander cannot auto-provision a managed service yet — execute_deploy_plan returns needs_target_project. To deploy this app now, pass an external connection URL (e.g. DATABASE_URL) in env_vars so nothing needs provisioning; auto-provisioning is available under an existing project.',
+                  ]),
             ],
           },
         };
@@ -846,6 +939,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           status: 'failed',
           project_name: result.project_name,
           error: result.error,
+          ...buildTargetAttachFields(result),
           ...existingGuidance,
           _agent_guidance: {
             next_steps: [
@@ -869,11 +963,18 @@ export const deployPlanToolDefs: ToolDef[] = [
             'expose requires wait=true. After deploy completes, call expose_public separately.',
           );
         }
+        if (result.target_project_id) {
+          nextSteps.push(
+            'The new service will attach to target_project_id after the deploy succeeds; use the returned service_id for follow-up service actions.',
+          );
+        }
         return {
           plan_id: plan.plan_id,
           status: 'building',
           project_name: result.project_name,
           project_id: result.project_id,
+          ...buildTargetAttachFields(result),
+          ...(result.target_project_id ? { target_attach_status: 'pending' } : {}),
           estimated_seconds: result.estimated_seconds,
           _agent_guidance: { next_steps: nextSteps },
         };
@@ -886,6 +987,8 @@ export const deployPlanToolDefs: ToolDef[] = [
           status: 'building',
           project_name: result.project_name,
           estimated_seconds: result.estimated_seconds,
+          ...buildTargetAttachFields(result),
+          ...(result.target_project_id ? { target_attach_status: 'pending' } : {}),
           _agent_guidance: {
             next_steps: ['Poll get_deploy_status to monitor build progress'],
           },
@@ -919,35 +1022,7 @@ export const deployPlanToolDefs: ToolDef[] = [
               warnings.push(`expose failed: ${err instanceof Error ? err.message : String(err)}`);
             }
           }
-          let projectIdOverride: string | undefined;
-          if (targetProjectId) {
-            try {
-              const serviceId = `${proj.id}__svc`;
-              const moved = await appCtx.db.attachServiceToProject(serviceId, targetProjectId);
-              extra.attached_to = moved.targetProjectId;
-              extra.merged_from = moved.sourceProjectId;
-              projectIdOverride = moved.targetProjectId;
-              // CCG #3: surface env_var / secret_file collision losers so the
-              // user knows what target-side keys won and which source-side
-              // values were dropped on attach.
-              if (moved.droppedEnvVarKeys.length > 0 || moved.droppedSecretFiles.length > 0) {
-                extra.dropped_on_attach = [...moved.droppedEnvVarKeys, ...moved.droppedSecretFiles];
-                const droppedTotal =
-                  moved.droppedEnvVarKeys.length + moved.droppedSecretFiles.length;
-                warnings.push(
-                  `${String(droppedTotal)} env var(s) / secret file(s) collided with target group keys and were dropped (target wins). Re-set them on ${moved.targetProjectId} if needed.`,
-                );
-              }
-            } catch (err) {
-              // CCG #2: post-success attach failure is "partial success" —
-              // the container is running but not in the target group. Make
-              // it loud, not a warning footnote.
-              warnings.push(
-                `PARTIAL SUCCESS: deploy completed but attach to ${targetProjectId} failed (${err instanceof Error ? err.message : String(err)}). The service is running under temp project ${proj.id}. Re-attach manually, or stop+remove and retry.`,
-              );
-            }
-          }
-          return { extra, warnings, projectIdOverride };
+          return { extra, warnings };
         };
 
         const resolveSuccess = (
@@ -962,6 +1037,29 @@ export const deployPlanToolDefs: ToolDef[] = [
           cleanup();
           void Promise.resolve()
             .then(async () => {
+              const targetAttach = await observeTargetAttach(appCtx, plan.plan_id, result);
+              if (targetAttach.status === 'failed') {
+                resolve({
+                  plan_id: plan.plan_id,
+                  status: 'failed',
+                  project_name: result.project_name,
+                  project_id: projectId,
+                  ...targetAttach.fields,
+                  target_attach_status: 'failed',
+                  error: targetAttach.error,
+                  docker_host: getDockerHostType(),
+                  _agent_guidance: {
+                    message:
+                      'The deploy finished, but OpenLander could not attach the service to target_project_id.',
+                    next_steps: [
+                      'Inspect the failed deploy plan before retrying.',
+                      'Archive any stray runtime project only after confirming the service was not attached.',
+                    ],
+                  },
+                });
+                return;
+              }
+
               const readiness = waitHealthy
                 ? await waitForProjectReadiness(appCtx, projectIdOverride ?? projectId, 30_000)
                 : await inspectProjectReadiness(appCtx, projectIdOverride ?? projectId);
@@ -989,6 +1087,8 @@ export const deployPlanToolDefs: ToolDef[] = [
                 status: completionStatus,
                 project_name: result.project_name,
                 project_id: finalProjectId,
+                ...targetAttach.fields,
+                ...(targetAttach.status ? { target_attach_status: targetAttach.status } : {}),
                 preferred_url: externalUrl ?? portAwarePreferred,
                 urls: externalUrl ? [externalUrl, ...portAwareUrls] : portAwareUrls,
                 internal_host: projectContainerName(result.project_name),
@@ -1000,27 +1100,46 @@ export const deployPlanToolDefs: ToolDef[] = [
                   : {}),
                 ...(timedOut || completionStatus === 'timeout' ? { timeout: true } : {}),
                 ...postDeploy,
-                ...([...readinessWarnings, ...(postDeployWarnings ?? [])].length > 0
-                  ? { warnings: [...readinessWarnings, ...(postDeployWarnings ?? [])] }
+                ...([...readinessWarnings, ...(postDeployWarnings ?? []), ...targetAttach.warnings]
+                  .length > 0
+                  ? {
+                      warnings: [
+                        ...readinessWarnings,
+                        ...(postDeployWarnings ?? []),
+                        ...targetAttach.warnings,
+                      ],
+                    }
                   : {}),
-                ...(readiness.ready && readiness.readiness === 'healthy'
-                  ? {}
-                  : {
+                ...(targetAttach.status === 'pending'
+                  ? {
                       _agent_guidance: {
                         message:
-                          readinessMessage ??
-                          'Deployment container is running, but readiness is not confirmed.',
+                          'Deployment finished; target_project_id attach is still being finalized.',
                         next_steps: [
-                          'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
-                          ...(readiness.readiness === 'no_healthcheck'
-                            ? ['Probe the service URL before reporting end-user success']
-                            : ['Wait and poll again, or inspect logs before reporting success']),
+                          'Poll get_deploy_status or list_projects before taking follow-up service actions.',
+                          'Use the returned service_id once it appears under the target project group.',
                         ],
                       },
-                    }),
+                    }
+                  : readiness.ready && readiness.readiness === 'healthy'
+                    ? {}
+                    : {
+                        _agent_guidance: {
+                          message:
+                            readinessMessage ??
+                            'Deployment container is running, but readiness is not confirmed.',
+                          next_steps: [
+                            'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
+                            ...(readiness.readiness === 'no_healthcheck'
+                              ? ['Probe the service URL before reporting end-user success']
+                              : ['Wait and poll again, or inspect logs before reporting success']),
+                          ],
+                        },
+                      }),
               });
             })
             .catch(async (err: unknown) => {
+              const targetAttachFields = buildTargetAttachFields(result);
               const finalProjectId = projectIdOverride ?? projectId;
               const serviceRecord = await loadProjectServiceRecord(appCtx, finalProjectId).catch(
                 () => undefined,
@@ -1035,6 +1154,8 @@ export const deployPlanToolDefs: ToolDef[] = [
                 status: 'done',
                 project_name: result.project_name,
                 project_id: finalProjectId,
+                ...targetAttachFields,
+                ...(result.target_project_id ? { target_attach_status: 'pending' } : {}),
                 preferred_url: externalUrl ?? portAwarePreferred,
                 urls: externalUrl ? [externalUrl, ...portAwareUrls] : portAwareUrls,
                 internal_host: projectContainerName(result.project_name),
@@ -1146,7 +1267,7 @@ export const deployPlanToolDefs: ToolDef[] = [
 
         const unsubSuccess = eventBus.on('deploy:success', (payload) => {
           if (!matchesProject(payload)) return;
-          if (expose || targetProjectId) {
+          if (expose) {
             void runPostDeploy()
               .then(({ extra, warnings, projectIdOverride }) => {
                 resolveSuccess(payload, false, extra, warnings, projectIdOverride);
@@ -1173,7 +1294,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         const currentJob = appCtx.jobManager.getStatus(projectId);
         if (currentJob && (currentJob.phase === 'done' || currentJob.phase === 'failed')) {
           if (currentJob.phase === 'done') {
-            if (expose || targetProjectId) {
+            if (expose) {
               void runPostDeploy()
                 .then(({ extra, warnings, projectIdOverride }) => {
                   resolveSuccess({}, false, extra, warnings, projectIdOverride);

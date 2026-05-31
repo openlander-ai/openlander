@@ -180,6 +180,7 @@ export interface DeployPlan {
   executed_at?: string;
   completed_at?: string;
   project_id?: string;
+  target_project_id?: string;
   error_message?: string;
   internal_url?: string;
   internal_url_note?: string;

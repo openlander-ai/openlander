@@ -20,14 +20,16 @@ a release should be recorded here so follow-up work is explicit.
   archived-services cleanup surface, then decide whether the Services-tab
   "show archived" escape hatch remains needed.
 
-- **Blocked `deploy_app(target_project_id=...)`:** existing-group attach is
-  temporarily rejected by `deploy_app` with `TARGET_PROJECT_ATTACH_UNSUPPORTED`.
-- **Why accepted:** the previous implementation attached a freshly deployed
-  temp project only in request-local post-deploy handling. MCP transport
-  disconnects, timeouts, or failed deploys could leave stray temp projects.
-- **Follow-up:** L6.3 should move target membership into durable deploy
-  plan/pipeline state and cover success/failure/timeout-style execution with
-  tests before re-enabling the parameter.
+- **`deploy_app(target_project_id=...)` limitations:** existing-group attach is
+  re-enabled for single app/worker deploys, with membership moved into durable
+  deploy-plan execution. `expose=true`, compose, and ambiguous monorepo deploys
+  remain blocked for this path.
+- **Why accepted:** tunnel creation and multi-service attach need separate
+  durable sequencing. Agents receive `target_project_id`, `runtime_project_id`,
+  and `service_id` so follow-up calls can target the attached service without
+  relying on request-local post-deploy cleanup.
+- **Follow-up:** move post-attach expose into the durable plan path before
+  allowing `target_project_id + expose=true`.
 
 ## v0.1.4
 
