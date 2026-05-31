@@ -18,7 +18,6 @@ import { ChevronRight } from 'lucide-react';
 import { OuterCard } from '@/components/Shell/OuterCard';
 import { ActivityTimeline } from '@/components/Shell/ActivityTimeline';
 import { StatusPill, TriggerChip } from '@/components/Shell/DeployRow';
-import { PendingApprovalsStrip } from '@/components/Shell/PendingApprovalsStrip';
 import { AgentGuideDialog } from '@/components/agent-guide';
 import { useActivityFeed } from '@/hooks/use-activity-feed';
 import { useProjectsContext } from '@/hooks/use-projects-context';
@@ -276,8 +275,6 @@ export function Home() {
             </button>
           );
         })()}
-
-      <PendingApprovalsStrip />
 
       {/* ── 2. Projects grid ── */}
       <OuterCard

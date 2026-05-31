@@ -79,7 +79,7 @@ describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
     const method = source.slice(
       source.indexOf('async getDeployableServiceCountsByProjectIds'),
       source.indexOf(
-        '\n  }\n\n  /**',
+        '\n  private async getConnectedManagedServiceCountsByProjectIds',
         source.indexOf('async getDeployableServiceCountsByProjectIds'),
       ),
     );
@@ -88,23 +88,37 @@ describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
     expect(method).toContain('${services.parent_service_id} IS NULL');
   });
 
-  it('adds connected managed services to project list service counts', () => {
+  it('keeps deployable counts limited to app and worker services', () => {
     const source = readFileSync('src/db/repos/project.repo.ts', 'utf8');
     const method = source.slice(
       source.indexOf('async getDeployableServiceCountsByProjectIds'),
       source.indexOf(
-        '\n  }\n\n  /**',
+        '\n  private async getConnectedManagedServiceCountsByProjectIds',
         source.indexOf('async getDeployableServiceCountsByProjectIds'),
+      ),
+    );
+
+    expect(source).toContain('NON_DEPLOYABLE_SERVICE_KINDS');
+    expect(source).toContain('deployableServiceKindFilter');
+    expect(source).not.toContain("const MANAGED_SERVICE_KINDS: ServiceKind[] = ['postgres'");
+    expect(method).toContain('deployableServiceKindFilter(sql`${services.kind}`)');
+    expect(method).not.toContain('serviceConnections');
+    expect(method).not.toContain('directManagedRows');
+  });
+
+  it('tracks connected managed services separately for total list-card service counts', () => {
+    const source = readFileSync('src/db/repos/project.repo.ts', 'utf8');
+    const method = source.slice(
+      source.indexOf('private async getConnectedManagedServiceCountsByProjectIds'),
+      source.indexOf(
+        '\n  }\n\n  /**',
+        source.indexOf('private async getConnectedManagedServiceCountsByProjectIds'),
       ),
     );
 
     expect(method).toContain('serviceConnections');
     expect(method).toContain('service_id_consumer');
     expect(method).toContain('service_id_provider');
-    expect(source).toContain('NON_DEPLOYABLE_SERVICE_KINDS');
-    expect(source).toContain('deployableServiceKindFilter');
-    expect(source).not.toContain("const MANAGED_SERVICE_KINDS: ServiceKind[] = ['postgres'");
-    expect(method).toContain('deployableServiceKindFilter(sql`${services.kind}`)');
     expect(method).toContain('directManagedRows');
     expect(method).toContain('managedServiceIdsByProject');
     expect(method).toContain('serviceIds.size');

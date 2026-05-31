@@ -22,6 +22,7 @@ import { CommandPalette } from '@/components/command/CommandPalette';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { AppDataProvider } from '@/contexts/app-data-context';
 import { useIsBelowMd } from '@/hooks/use-viewport';
+import { PendingApprovalsStrip } from './PendingApprovalsStrip';
 import { Sidebar } from './Sidebar';
 import { TopBar, type Crumb } from './TopBar';
 
@@ -128,6 +129,15 @@ export function AppShell() {
             onToggleSidebar={isBelowMd ? () => setIsMobileSidebarOpen(true) : onToggleSidebar}
           />
           <main className="min-h-0 flex-1 overflow-auto p-6">
+            {/* Global pending-approvals surface. project + service
+                archive/unarchive now enter the MCP approval hold, so the
+                strip must be reachable from every route, not just Home. It
+                self-fetches and returns null when empty; `empty:hidden`
+                collapses the wrapper (and its margin) so non-approval pages
+                show no gap. */}
+            <div className="mb-6 empty:hidden">
+              <PendingApprovalsStrip />
+            </div>
             <Outlet />
           </main>
         </div>

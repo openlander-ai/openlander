@@ -39,6 +39,8 @@ export interface ProjectWithMetadata {
   environments: EnvironmentRow[];
   /** Number of services shown under this group, including connected managed services. */
   childCount: number;
+  /** Number of deployable app/worker services shown in the project detail Services tab. */
+  deployableChildCount: number;
   /** True when the group contains at least one `compose-child` or a `compose` parent service. */
   isCompose: boolean;
   /** True when at least one deployable service is archived while at least one remains active. */
@@ -391,6 +393,16 @@ export class ProjectRepo {
       }
     }
 
+    return counts;
+  }
+
+  private async getConnectedManagedServiceCountsByProjectIds(
+    projectIds: string[],
+  ): Promise<Map<string, number>> {
+    if (projectIds.length === 0) {
+      return new Map();
+    }
+    const uniqueProjectIds = [...new Set(projectIds)];
     const managedServiceIdsByProject = new Map<string, Set<string>>();
     const addManagedService = (projectId: string | null, serviceId: string): void => {
       if (!projectId) return;
@@ -435,8 +447,9 @@ export class ProjectRepo {
       addManagedService(projectId, row.serviceId);
     }
 
+    const counts = new Map<string, number>();
     for (const [projectId, serviceIds] of managedServiceIdsByProject.entries()) {
-      counts.set(projectId, (counts.get(projectId) ?? 0) + serviceIds.size);
+      counts.set(projectId, serviceIds.size);
     }
     return counts;
   }
@@ -514,22 +527,24 @@ export class ProjectRepo {
       }
     }
 
-    // Total deployable services per project group (excludes managed-service kinds:
-    // postgres/mysql/redis/mongo/minio). Counts compose-children + git/image/compose
-    // services. This is the "serviceCount" badge shown in /api/projects.
     // Count actual deployables: plain git/image services + compose children.
     // Skip managed DBs (postgres etc.) and skip the synthetic 'compose' parent
     // metadata service — users think of compose as "3 services," not "1 parent
     // + 3 children = 4," so omit the parent meta from the badge.
-    const childCountByParent = await this.getDeployableServiceCountsByProjectIds(projectIds);
+    const deployableCountByParent = await this.getDeployableServiceCountsByProjectIds(projectIds);
+    const managedCountByParent =
+      await this.getConnectedManagedServiceCountsByProjectIds(projectIds);
 
     return projectRows.map((project) => {
       const servicesForProject = servicesByProject.get(project.id) ?? [];
       const aggregateStatus = deriveGroupStatusFromServices(servicesForProject);
+      const deployableChildCount = deployableCountByParent.get(project.id) ?? 0;
+      const childCount = deployableChildCount + (managedCountByParent.get(project.id) ?? 0);
       return {
         project: aggregateStatus ? { ...project, status: aggregateStatus } : project,
         environments: envByProject.get(project.id) ?? [],
-        childCount: childCountByParent.get(project.id) ?? 0,
+        childCount,
+        deployableChildCount,
         isCompose: isComposeByProject.get(project.id) ?? false,
         partiallyArchived: derivePartiallyArchivedFromServices(servicesForProject),
       };

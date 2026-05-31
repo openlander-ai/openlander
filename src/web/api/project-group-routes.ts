@@ -141,7 +141,14 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
     return c.json({
       count: projectsWithMeta.length,
       projects: projectsWithMeta.map(
-        ({ project: p, environments, childCount, isCompose, partiallyArchived }) => {
+        ({
+          project: p,
+          environments,
+          childCount,
+          deployableChildCount,
+          isCompose,
+          partiallyArchived,
+        }) => {
           const mapped = mapProjectForApi(p, serviceRecords.get(p.id)?.service ?? undefined);
           return {
             id: mapped.id,
@@ -166,7 +173,8 @@ export function createProjectGroupRoutes(ctx: AppContext): Hono {
             partially_archived: partiallyArchived,
             isCompose,
             serviceCount: childCount,
-            deployableServiceCount: childCount,
+            deployableServiceCount: deployableChildCount,
+            totalServiceCount: childCount,
             environments: environments.map((env) => mapEnvironment(mapped.name, env)),
           };
         },
