@@ -122,7 +122,14 @@ export function Home() {
   const totalServices = useMemo(
     () =>
       projects.reduce(
-        (sum, p) => sum + (p.totalServiceCount ?? p.serviceCount ?? p.deployableServiceCount ?? 0),
+        (sum, p) =>
+          sum +
+          (p.activeServiceCount ??
+            p.active_service_count ??
+            p.deployableServiceCount ??
+            p.totalServiceCount ??
+            p.serviceCount ??
+            0),
         0,
       ),
     [projects],
@@ -312,7 +319,12 @@ export function Home() {
               // eslint-disable-next-line openlander-internal/no-dropped-columns
               const state = p.status === 'error' ? 'crashed' : 'healthy';
               const serviceCount =
-                p.totalServiceCount ?? p.serviceCount ?? p.deployableServiceCount ?? 0;
+                p.activeServiceCount ??
+                p.active_service_count ??
+                p.deployableServiceCount ??
+                p.totalServiceCount ??
+                p.serviceCount ??
+                0;
               return (
                 <button
                   key={p.id}

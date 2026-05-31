@@ -42,6 +42,9 @@ export interface Project {
   containerPort?: number;
   parentProjectId?: string | null;
   isCompose?: boolean;
+  /** Active services shown by default in cards/topology. Excludes archived rows. */
+  activeServiceCount?: number;
+  active_service_count?: number;
   /** Deployable app/worker service count. Excludes managed infrastructure services. */
   deployableServiceCount?: number;
   /**

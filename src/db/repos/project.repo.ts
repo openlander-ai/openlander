@@ -39,6 +39,8 @@ export interface ProjectWithMetadata {
   environments: EnvironmentRow[];
   /** Number of services shown under this group, including connected managed services. */
   childCount: number;
+  /** Number of active services shown by default under this group. */
+  activeChildCount: number;
   /** Number of deployable app/worker services shown in the project detail Services tab. */
   deployableChildCount: number;
   /** True when the group contains at least one `compose-child` or a `compose` parent service. */
@@ -368,7 +370,10 @@ export class ProjectRepo {
     });
   }
 
-  async getDeployableServiceCountsByProjectIds(projectIds: string[]): Promise<Map<string, number>> {
+  async getDeployableServiceCountsByProjectIds(
+    projectIds: string[],
+    opts: { includeArchived?: boolean } = {},
+  ): Promise<Map<string, number>> {
     if (projectIds.length === 0) {
       return new Map();
     }
@@ -382,6 +387,7 @@ export class ProjectRepo {
           inArray(services.project_id, uniqueProjectIds),
           deployableServiceKindFilter(sql`${services.kind}`),
           sql`NOT (${services.parent_service_id} IS NULL AND coalesce(${services.build_method}, '') = 'compose')`,
+          opts.includeArchived === true ? undefined : isNull(services.archived_at),
         ),
       )
       .groupBy(services.project_id);
@@ -398,6 +404,7 @@ export class ProjectRepo {
 
   private async getConnectedManagedServiceCountsByProjectIds(
     projectIds: string[],
+    opts: { includeArchived?: boolean } = {},
   ): Promise<Map<string, number>> {
     if (projectIds.length === 0) {
       return new Map();
@@ -418,6 +425,7 @@ export class ProjectRepo {
         and(
           inArray(services.project_id, uniqueProjectIds),
           inArray(services.kind, [...MANAGED_SERVICE_KINDS]),
+          opts.includeArchived === true ? undefined : isNull(services.archived_at),
         ),
       );
     for (const row of directManagedRows) {
@@ -438,6 +446,7 @@ export class ProjectRepo {
             uniqueProjectIds.map(projectIdToDeployableServiceId),
           ),
           inArray(services.kind, [...MANAGED_SERVICE_KINDS]),
+          opts.includeArchived === true ? undefined : isNull(services.archived_at),
         ),
       )
       .groupBy(serviceConnections.service_id_consumer, serviceConnections.service_id_provider);
@@ -531,19 +540,29 @@ export class ProjectRepo {
     // Skip managed DBs (postgres etc.) and skip the synthetic 'compose' parent
     // metadata service — users think of compose as "3 services," not "1 parent
     // + 3 children = 4," so omit the parent meta from the badge.
-    const deployableCountByParent = await this.getDeployableServiceCountsByProjectIds(projectIds);
-    const managedCountByParent =
-      await this.getConnectedManagedServiceCountsByProjectIds(projectIds);
+    const [activeDeployableCountByParent, totalDeployableCountByParent] = await Promise.all([
+      this.getDeployableServiceCountsByProjectIds(projectIds),
+      this.getDeployableServiceCountsByProjectIds(projectIds, { includeArchived: true }),
+    ]);
+    const [activeManagedCountByParent, totalManagedCountByParent] = await Promise.all([
+      this.getConnectedManagedServiceCountsByProjectIds(projectIds),
+      this.getConnectedManagedServiceCountsByProjectIds(projectIds, { includeArchived: true }),
+    ]);
 
     return projectRows.map((project) => {
       const servicesForProject = servicesByProject.get(project.id) ?? [];
       const aggregateStatus = deriveGroupStatusFromServices(servicesForProject);
-      const deployableChildCount = deployableCountByParent.get(project.id) ?? 0;
-      const childCount = deployableChildCount + (managedCountByParent.get(project.id) ?? 0);
+      const deployableChildCount = activeDeployableCountByParent.get(project.id) ?? 0;
+      const activeChildCount =
+        deployableChildCount + (activeManagedCountByParent.get(project.id) ?? 0);
+      const childCount =
+        (totalDeployableCountByParent.get(project.id) ?? 0) +
+        (totalManagedCountByParent.get(project.id) ?? 0);
       return {
         project: aggregateStatus ? { ...project, status: aggregateStatus } : project,
         environments: envByProject.get(project.id) ?? [],
         childCount,
+        activeChildCount,
         deployableChildCount,
         isCompose: isComposeByProject.get(project.id) ?? false,
         partiallyArchived: derivePartiallyArchivedFromServices(servicesForProject),

@@ -15,6 +15,7 @@ describe('project service count fields', () => {
 
   it('documents serviceCount as a total-count compatibility field', () => {
     expect(typesSource).toContain('Legacy total service count kept for wire compatibility');
+    expect(typesSource).toContain('activeServiceCount?: number');
     expect(typesSource).toContain('totalServiceCount?: number');
     expect(typesSource).not.toContain('Legacy alias for deployableServiceCount');
   });
@@ -28,9 +29,10 @@ describe('project service count fields', () => {
     }
   });
 
-  it('uses total service count for user-facing project summaries', () => {
+  it('uses active service count for user-facing project summaries', () => {
     for (const source of [homeSource, projectsGridSource, projectMapperSource]) {
-      expect(source).toContain('p.totalServiceCount ?? p.serviceCount ?? p.deployableServiceCount');
+      expect(source).toContain('p.activeServiceCount ??');
+      expect(source).toContain('p.active_service_count ??');
     }
 
     expect(homeSource).toContain("pluralCount('services', totalServices)");
