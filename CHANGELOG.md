@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-06-01
+
+### Added
+
+- Added MCP project topology visibility and managed-service project filters so
+  agents can see project-scoped app and infrastructure relationships.
+- Added approval-gated deployable service archive/restore actions with matching
+  web UI affordances for partial project archives.
+- Added retry-shaped MCP validation guidance for invalid tool calls so agents
+  get a concrete next call instead of only a schema error.
+
+### Changed
+
+- Completed the service-first `ServiceView` migration across web, MCP,
+  monitoring, recovery, deploy-plan, and lifecycle decision paths.
+- Unified project detail service lists around application and infrastructure
+  services while keeping archived services tucked behind a low-emphasis toggle.
+- Improved project cards and summaries so active deployable counts, total
+  service counts, aggregate status, and partial archive badges stay consistent.
+- Refreshed git-dependency build-cache handling so dependency installs are
+  invalidated only when relevant dependency specs are detected.
+
 ### Fixed
 
 - Preserved deploy-plan `project_id` target context through plan storage and
@@ -14,6 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the intended project group instead of falling back to name-only lookup.
 - Routed `expose_public` port selection through the service-first read model so
   canonical deployable service ports win over stale project-group columns.
+- Fixed project detail pages for archived projects and active topology views so
+  archived services do not inflate active service counts.
+- Fixed project topology rendering for managed dependencies, including visible
+  app-to-infrastructure edges and stable service kind classification.
+- Fixed MCP platform cleanup dry-run previews, larger runtime/build log
+  retrieval, and captured runtime log surfacing in deploy diagnostics.
+- Fixed service list and project-card count mismatches caused by archived or
+  attached infrastructure services.
 
 ## [0.1.7] - 2026-05-29
 
