@@ -530,6 +530,16 @@ export const execServiceContainerSchema = z.object({
 
 export const listServicesSchema = z
   .object({
+    project_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Only list managed services attached to this project group id.'),
+    project_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Only list managed services attached to this project group name.'),
     include_orphans: z
       .boolean()
       .optional()
