@@ -38,6 +38,8 @@ export const translations = {
       // distinction, so both keys carry the same string in ko.ts.
       deployableServices_one: '{count} deployable service',
       deployableServices_other: '{count} deployable services',
+      services_one: '{count} service',
+      services_other: '{count} services',
       projects_one: '{count} project',
       projects_other: '{count} projects',
     },

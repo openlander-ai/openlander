@@ -213,7 +213,8 @@ export function ProjectsGrid() {
                   const isArchived = p.archived_at != null;
                   const isPartiallyArchived =
                     p.partiallyArchived === true || p.partially_archived === true;
-                  const deployableServiceCount = p.deployableServiceCount ?? 0;
+                  const serviceCount =
+                    p.totalServiceCount ?? p.serviceCount ?? p.deployableServiceCount ?? 0;
                   return (
                     <button
                       key={p.id}
@@ -297,10 +298,10 @@ export function ProjectsGrid() {
                         <div className="mt-2 flex items-center gap-4 border-t border-[color:var(--ol-border-subtle)] pt-3 text-[11.5px] text-[color:var(--ol-fg-muted)]">
                           <span>
                             {t(
-                              deployableServiceCount === 1
-                                ? 'common.count.deployableServices_one'
-                                : 'common.count.deployableServices_other',
-                              { count: deployableServiceCount },
+                              serviceCount === 1
+                                ? 'common.count.services_one'
+                                : 'common.count.services_other',
+                              { count: serviceCount },
                             )}
                           </span>
                           <span>
