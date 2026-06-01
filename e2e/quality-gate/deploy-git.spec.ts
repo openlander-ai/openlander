@@ -40,10 +40,7 @@ test.describe('Quality Gate — Git Deploy via Web/API', () => {
     }
   });
 
-  // fixme (0.1.x): R1 happy-path deploy now races with E2E test isolation —
-  // PROJECT_ALREADY_EXISTS / cleanup gaps surface here. Add per-test
-  // teardown before re-enabling.
-  test.fixme('Scenario A: R1 deploy via API reaches running and serves OK', async () => {
+  test('Scenario A: R1 deploy via API reaches running and serves OK', async () => {
     test.setTimeout(180_000);
 
     const deploy = await deployGitProject(R1_REPO_URL);

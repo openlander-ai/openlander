@@ -23,6 +23,11 @@ async function fetchWithRetry(url: string, retries = 5, delayMs = 2000): Promise
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Quality Gate — Compose multi-service deploy', () => {
+  test.skip(
+    process.env.OPENLANDER_E2E_SLOW !== '1',
+    'Compose quality gate is slow; set OPENLANDER_E2E_SLOW=1 to run it.',
+  );
+
   let projectId: string | null = null;
 
   test.beforeAll(() => {
@@ -56,7 +61,7 @@ test.describe('Quality Gate — Compose multi-service deploy', () => {
     }
   });
 
-  test.fixme('deploys compose repo and serves /count endpoint', async () => {
+  test('deploys compose repo and serves /count endpoint', async () => {
     test.setTimeout(SCENARIO_TIMEOUT_MS);
 
     const deploy = await deployGitProject(R3_REPO_URL);

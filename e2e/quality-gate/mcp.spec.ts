@@ -2,7 +2,13 @@ import { execSync } from 'node:child_process';
 
 import { expect, test } from '@playwright/test';
 
-import { deleteProject, getProject, listProjects, mcpCall } from './fixtures/api.js';
+import {
+  deleteProject,
+  getProject,
+  listProjects,
+  mcpCall,
+  uniqueProjectName,
+} from './fixtures/api.js';
 
 const REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
 const POLL_INTERVAL_MS = 3000;
@@ -67,10 +73,9 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
     }
   });
 
-  // fixme (0.1.x): MCP deploy plan polling cascades from the same fixture /
-  // state-isolation gaps as deploy-git. Re-enable after fixture refresh.
-  test.fixme('initialize + create_deploy_plan + execute_deploy_plan + status polling reaches running', async () => {
+  test('initialize + create_deploy_plan + execute_deploy_plan + status polling reaches running', async () => {
     test.setTimeout(240_000);
+    const projectName = uniqueProjectName('mcp-single-dockerfile');
 
     const initializeResult = (await mcpCall('initialize', {
       protocolVersion: '2024-11-05',
@@ -81,8 +86,11 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
     expect(initializeResult.protocolVersion).toBeTruthy();
 
     const createPlanEnvelope = (await mcpCall('tools/call', {
-      name: 'create_deploy_plan',
-      arguments: { repo_url: REPO_URL, branch: 'main' },
+      name: 'openlander_deploy',
+      arguments: {
+        action: 'create_deploy_plan',
+        params: { repo_url: REPO_URL, branch: 'main', name: projectName },
+      },
     })) as McpToolCallEnvelope;
 
     const createPlan = parseToolCallResult<{ plan_id: string; status: string }>(createPlanEnvelope);
@@ -91,8 +99,11 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
     expect(createPlan.status).toBe('ready');
 
     const executeEnvelope = (await mcpCall('tools/call', {
-      name: 'execute_deploy_plan',
-      arguments: { plan_id: createPlan.plan_id },
+      name: 'openlander_deploy',
+      arguments: {
+        action: 'execute_deploy_plan',
+        params: { plan_id: createPlan.plan_id },
+      },
     })) as McpToolCallEnvelope;
 
     const executeResult = parseToolCallResult<{
@@ -112,8 +123,11 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
 
     while (Date.now() - start < POLL_TIMEOUT_MS) {
       const statusEnvelope = (await mcpCall('tools/call', {
-        name: 'get_deploy_status',
-        arguments: { project_name: executeResult.project_name },
+        name: 'openlander_deploy',
+        arguments: {
+          action: 'get_deploy_status',
+          params: { project_name: executeResult.project_name },
+        },
       })) as McpToolCallEnvelope;
 
       const statusResult = parseToolCallResult<{

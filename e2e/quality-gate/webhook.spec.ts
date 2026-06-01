@@ -59,10 +59,7 @@ test.describe('quality-gate webhook: signed push auto-redeploy', () => {
     }
   });
 
-  // fixme (0.1.x): webhook test reuses test-single-dockerfile from prior
-  // specs; PROJECT_ALREADY_EXISTS without per-spec cleanup. Add teardown
-  // before re-enabling.
-  test.fixme('signed github webhook triggers redeploy with webhook trigger', async () => {
+  test('signed github webhook triggers redeploy with webhook trigger', async () => {
     test.setTimeout(SCENARIO_TIMEOUT_MS);
 
     const deployResult = await deployGitProject(R1_REPO_URL);

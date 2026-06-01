@@ -257,4 +257,51 @@ describe('registerCompositeMcpTools', () => {
       },
     });
   });
+
+  it('does not echo an empty nested params object as the suggested platform retry', async () => {
+    const server = createMockServer();
+    const execute = vi.fn(async () => ({ shouldNotRun: true }));
+    const platformTool: ToolDef = {
+      name: 'platform_required_action',
+      description: 'required action',
+      inputSchema: z.object({
+        confirm: z.boolean(),
+        dry_run: z.boolean().optional(),
+      }),
+      execute,
+      targets: ['mcp'],
+    };
+
+    registerCompositeMcpTools(
+      server,
+      [createComposite('openlander_monitor', async () => ({ composite: true }))],
+      [platformTool],
+      mockAppCtx,
+    );
+
+    const response = (await server.callHandler?.({
+      params: {
+        name: 'platform_required_action',
+        arguments: { params: {} },
+      },
+    })) as {
+      content: Array<{ type: 'text'; text: string }>;
+    };
+
+    expect(execute).not.toHaveBeenCalled();
+    const payload = JSON.parse(response.content[0]?.text ?? '{}') as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      error: 'INVALID_PARAMS',
+      suggested_call: {
+        tool: 'platform_required_action',
+        arguments: { confirm: true },
+      },
+    });
+    expect(payload).not.toMatchObject({
+      suggested_call: {
+        tool: 'platform_required_action',
+        arguments: { params: {} },
+      },
+    });
+  });
 });

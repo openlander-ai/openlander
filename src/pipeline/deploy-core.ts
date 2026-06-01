@@ -259,6 +259,8 @@ export interface MonorepoConfig {
   name?: string;
   /** @internal Pre-allocated parent ID from startMonorepoDeploy(). Do not set manually. */
   _parentId?: string;
+  /** @internal Deploy lock session for re-entrant plan-engine execution. */
+  _lockSessionId?: string;
 }
 
 export interface MonorepoResult {
@@ -1574,6 +1576,18 @@ export class DeployPipeline {
       this.jobManager?.trackJob(parentId, parentName);
     }
 
+    return this.runWithDeployLockIfTopLevel(parentId, config._lockSessionId, () =>
+      this.deployMonorepoInner(config, parentId, parentName, trigger, startTime),
+    );
+  }
+
+  private async deployMonorepoInner(
+    config: MonorepoConfig,
+    parentId: string,
+    parentName: string,
+    trigger: 'chat' | 'webhook' | 'api',
+    startTime: number,
+  ): Promise<MonorepoResult> {
     await eventBus.emit('deploy:start', {
       projectId: parentId,
       repoUrl: config.repoUrl,

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-06-01
+
+### Changed
+
+- Recovered the 0.1 quality-gate E2E suite by removing stale `fixme` markers
+  for supported deploy, lifecycle, MCP, and webhook scenarios while keeping
+  dormant Recovery/OpsAgent coverage explicitly deferred.
+- Moved compose quality-gate coverage into an explicit slow lane via
+  `OPENLANDER_E2E_SLOW=1` so the default release gate stays fast and honest.
+
+### Fixed
+
+- Propagated deploy-plan lock sessions into monorepo deploy execution and added
+  parent deploy-lock protection for top-level monorepo deploys.
+- Tightened MCP validation retry guidance so direct platform-tool calls do not
+  echo an empty nested `params` object back as the suggested retry.
+- Replaced the hardcoded GitHub API `User-Agent` version with the shared
+  application `VERSION` and removed a duplicate dead return.
+
 ## [0.1.8] - 2026-06-01
 
 ### Added

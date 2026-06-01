@@ -16,6 +16,7 @@ import type {
   SearchReposResult,
 } from './types.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { VERSION } from '../version.js';
 
 const log = createModuleLogger('github');
 
@@ -145,7 +146,6 @@ export class GitHubProvider implements GitProvider {
     } catch (err) {
       log.debug({ err, owner, name }, 'Dockerfile check failed — assuming not present');
       return false;
-      return false;
     }
   }
 
@@ -180,7 +180,7 @@ export class GitHubProvider implements GitProvider {
         Authorization: `Bearer ${this.token}`,
         Accept: 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': 'OpenLander/0.4',
+        'User-Agent': `OpenLander/${VERSION}`,
       },
     });
 

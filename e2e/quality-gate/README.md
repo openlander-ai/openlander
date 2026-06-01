@@ -29,8 +29,12 @@ OPENLANDER_E2E_BASE_URL=http://localhost:10115 npx playwright test --project=qua
 ## Running
 
 ```bash
-# Full suite (~6-7 min, excludes fixme/deferred tests)
+# Default suite (excludes slow compose and 0.2-deferred recovery/OpsAgent tests)
 npx playwright test --project=quality-gate
+
+# Slow compose lane
+OPENLANDER_E2E_SLOW=1 npx playwright test --project=quality-gate e2e/quality-gate/compose.spec.ts
+OPENLANDER_E2E_SLOW=1 npx playwright test --project=quality-gate e2e/quality-gate/event-sequences.spec.ts -g "Compose Deploy"
 
 # Single spec
 npx playwright test --project=quality-gate e2e/quality-gate/deploy-git.spec.ts
@@ -61,22 +65,17 @@ auth header automatically.
 
 ## Release Scope
 
-0.1.0 excludes the Agent Ops/OpsCenter user-facing surface. `ops-agent.spec.ts`
-is therefore deferred in this Docker E2E gate. Backend ops route/policy
-contracts remain covered by Vitest release tests.
-
-The v5.1 MCP safety scenarios are currently a separate live QA release gate, not
-part of this Playwright suite. They require scoped PAT issuance, a real MCP
-client, web-session approval, and typed-confirm destructive UI. Run
-[`docs/operations/v5.1-mcp-safety-live-qa.md`](../../docs/operations/v5.1-mcp-safety-live-qa.md)
-before shipping v5.1 safety changes.
+0.1.x keeps built-in RecoveryCoordinator/OpsAgent behavior dormant. The
+`recovery.spec.ts` and `ops-agent.spec.ts` suites stay deferred in this Docker
+E2E gate until the 0.2 product surface, docs, and regression tests are restored
+together. Backend route/policy contracts remain covered by Vitest release tests.
 
 ## Test Matrix
 
 | #   | Spec                    | Test                                        | Duration | Status       |
 | --- | ----------------------- | ------------------------------------------- | -------- | ------------ |
 | 1   | blue-green.spec.ts      | Blue-green deploy swaps container           | ~23s     | pass         |
-| 2   | compose.spec.ts         | Compose multi-service deploy + /count       | ~5min    | **fixme**    |
+| 2   | compose.spec.ts         | Compose multi-service deploy + /count       | ~5min    | slow         |
 | 3   | deploy-git.spec.ts      | R1 deploy via API reaches running + curl OK | ~9s      | pass         |
 | 4   | deploy-git.spec.ts      | R2 auto-detect deploy reaches running       | ~18s     | pass         |
 | 5   | deploy-image.spec.ts    | Docker image deploy without clone/build     | ~5s      | pass         |
@@ -85,15 +84,15 @@ before shipping v5.1 safety changes.
 | 8   | event-sequences.spec.ts | Git Deploy (Dockerfile) event sequence      | ~11s     | pass         |
 | 9   | event-sequences.spec.ts | Git Deploy (Auto-detect) event sequence     | ~16s     | pass         |
 | 10  | event-sequences.spec.ts | Image Deploy event sequence                 | ~4s      | pass         |
-| 11  | event-sequences.spec.ts | Compose Deploy reaches running              | ~5min    | **fixme**    |
+| 11  | event-sequences.spec.ts | Compose Deploy reaches running              | ~5min    | slow         |
 | 12  | event-sequences.spec.ts | Build Fail ends with error event            | ~9s      | pass         |
 | 13  | event-sequences.spec.ts | Runtime Crash deploy succeeds               | ~11s     | pass         |
 | 14  | event-sequences.spec.ts | Blue-Green standalone project               | ~16s     | pass         |
 | 15  | event-sequences.spec.ts | Rollback standalone project                 | ~24s     | pass         |
 | 16  | lifecycle.spec.ts       | Redeploy + rollback emits events            | ~35s     | pass         |
 | 17  | mcp.spec.ts             | MCP initialize + deploy plan + polling      | ~4s      | pass         |
-| 18  | recovery.spec.ts        | R5 build fail -> error/stopped              | ~9s      | pass         |
-| 19  | recovery.spec.ts        | R6 runtime crash detected                   | ~55s     | pass         |
+| 18  | recovery.spec.ts        | R5 build fail -> error/stopped              | ~9s      | **deferred** |
+| 19  | recovery.spec.ts        | R6 runtime crash detected                   | ~55s     | **deferred** |
 | 20  | webhook.spec.ts         | Signed webhook triggers redeploy            | ~11s     | pass         |
 | 21  | ops-agent.spec.ts       | OpsAgent health endpoint                    | <1s      | **deferred** |
 | 22  | ops-agent.spec.ts       | Incidents list returns array                | <1s      | **deferred** |
@@ -106,27 +105,15 @@ before shipping v5.1 safety changes.
 Auth tests skip automatically when the target is detected as no-auth. To verify
 the auth surface itself, run `auth.spec.ts` against an auth-enabled server.
 
-## fixme Tests
+## Slow And Deferred Tests
 
-| Test                           | Root Cause                                                                                                                              | Remediation                                                                                                                                       |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| compose.spec.ts                | Docker build takes 4min+. Pipeline clones to a new tmpdir each deploy (`mkdtemp`), invalidating Docker layer cache despite `cacheFrom`. | Use a pre-built test image in the compose repo, or run in a dedicated slow CI job.                                                                |
-| event-sequences Compose Deploy | Same as above.                                                                                                                          | Same as above.                                                                                                                                    |
-| ops-agent.spec.ts              | Agent Ops/OpsCenter is not part of the 0.1.0 release surface.                                                                           | Keep Vitest backend contract coverage; re-enable Docker E2E when Agent Ops is re-surfaced.                                                        |
-| auth.spec.ts (10 tests)        | Require auth middleware active. `OPENLANDER_NO_AUTH=1` bypasses all auth, so these tests are skipped in no-auth mode.                   | Run separately: `npx playwright test --project=quality-gate e2e/quality-gate/auth.spec.ts` against a server started without `OPENLANDER_NO_AUTH`. |
-
-## Product Fixes Included
-
-Changes to `src/` made alongside this E2E work:
-
-| File                             | Change                                                                                                                     |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `src/pipeline/dockerfile-gen.ts` | `npm ci` -> `npm install` fallback when no `package-lock.json` (all 7 Node.js templates)                                   |
-| `src/pipeline/compose.ts`        | Force-remove stale service containers before orchestration                                                                 |
-| `src/pipeline/docker.ts`         | Added `cacheFrom` option to `BuildComposeServiceOptions`                                                                   |
-| `src/monitor/health.ts`          | Crash loop detection (`RestartCount >= 3` -> status='error') + container exit detection (`ExitCode != 0` when not running) |
-| `src/web/middleware/auth.ts`     | `OPENLANDER_NO_AUTH=1` env var bypass                                                                                      |
-| `src/mcp/server.ts`              | `OPENLANDER_NO_AUTH=1` bypass for MCP Bearer auth                                                                          |
+| Test                           | Root Cause                                                                                                            | Remediation                                                                                                                                       |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| compose.spec.ts                | Docker build takes 4min+. The default quality gate stays fast.                                                        | Run with `OPENLANDER_E2E_SLOW=1` or move this to a dedicated slow CI job.                                                                         |
+| event-sequences Compose Deploy | Same as above.                                                                                                        | Run with `OPENLANDER_E2E_SLOW=1` or move this to a dedicated slow CI job.                                                                         |
+| recovery.spec.ts               | RecoveryCoordinator is dormant in 0.1.x.                                                                              | Re-enable only with the 0.2 recovery product surface, docs, and regression suite.                                                                 |
+| ops-agent.spec.ts              | Agent Ops/OpsCenter is dormant in 0.1.x.                                                                              | Keep Vitest backend contract coverage; re-enable Docker E2E when Agent Ops is re-surfaced.                                                        |
+| auth.spec.ts (10 tests)        | Require auth middleware active. `OPENLANDER_NO_AUTH=1` bypasses all auth, so these tests are skipped in no-auth mode. | Run separately: `npx playwright test --project=quality-gate e2e/quality-gate/auth.spec.ts` against a server started without `OPENLANDER_NO_AUTH`. |
 
 ## Troubleshooting
 
