@@ -11,10 +11,11 @@ describe('quality-gate Docker cleanup', () => {
         'ccc333 ol-demo-stack-postgres',
         'ddd444 ol-mcp-single-dockerfile',
         'eee555 qa-helper',
+        'fff666 ol-svc-qg-pg-smoke',
       ].join('\n'),
-      ['ol-test-', 'ol-golden-', 'ol-qg-', 'ol-qa-', 'ol-mcp-'],
+      ['ol-test-', 'ol-golden-', 'ol-qg-', 'ol-qa-', 'ol-mcp-', 'ol-svc-qg-'],
     );
 
-    expect(ids).toEqual(['aaa111', 'ddd444']);
+    expect(ids).toEqual(['aaa111', 'ddd444', 'fff666']);
   });
 });

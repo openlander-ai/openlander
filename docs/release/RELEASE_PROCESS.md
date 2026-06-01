@@ -186,6 +186,15 @@ credentials, screenshots with secrets, and private dogfood notes out of public
 commits; publish only the public-safe pass/fail summary in the release notes or
 PR.
 
+From a release checkout, the checked-in smoke runner covers the deploy, MCP,
+managed service, topology/log, and lifecycle portions after the exact RC
+artifact is installed:
+
+```bash
+OPENLANDER_E2E_BASE_URL=http://localhost:10114 npm run qa:rc-smoke
+OPENLANDER_E2E_BASE_URL=http://localhost:10114 OPENLANDER_E2E_SLOW=1 npm run qa:rc-smoke
+```
+
 ## Post-Release Verification
 
 ```bash

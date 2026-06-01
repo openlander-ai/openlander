@@ -50,6 +50,10 @@ npx playwright test --project=quality-gate -g "Scenario A"
 
 # Auth tests only
 npx playwright test --project=quality-gate e2e/quality-gate/auth.spec.ts
+
+# RC cold-agent smoke on a fresh/dedicated QA host
+OPENLANDER_E2E_BASE_URL=http://localhost:10114 npm run qa:rc-smoke
+OPENLANDER_E2E_BASE_URL=http://localhost:10114 OPENLANDER_E2E_SLOW=1 npm run qa:rc-smoke
 ```
 
 ## Architecture
@@ -78,35 +82,36 @@ together. Backend route/policy contracts remain covered by Vitest release tests.
 
 ## Test Matrix
 
-| #   | Spec                    | Test                                        | Duration | Status       |
-| --- | ----------------------- | ------------------------------------------- | -------- | ------------ |
-| 1   | blue-green.spec.ts      | Blue-green deploy swaps container           | ~23s     | pass         |
-| 2   | compose.spec.ts         | Compose multi-service deploy + /count       | ~5min    | slow         |
-| 3   | deploy-git.spec.ts      | R1 deploy via API reaches running + curl OK | ~9s      | pass         |
-| 4   | deploy-git.spec.ts      | R2 auto-detect deploy reaches running       | ~18s     | pass         |
-| 5   | deploy-image.spec.ts    | Docker image deploy without clone/build     | ~5s      | pass         |
-| 6   | env-vars.spec.ts        | R7 deploy without DATABASE_URL -> error     | ~45s     | pass         |
-| 7   | env-vars.spec.ts        | Set DATABASE_URL + redeploy -> running      | ~6s      | pass         |
-| 8   | event-sequences.spec.ts | Git Deploy (Dockerfile) event sequence      | ~11s     | pass         |
-| 9   | event-sequences.spec.ts | Git Deploy (Auto-detect) event sequence     | ~16s     | pass         |
-| 10  | event-sequences.spec.ts | Image Deploy event sequence                 | ~4s      | pass         |
-| 11  | event-sequences.spec.ts | Compose Deploy reaches running              | ~5min    | slow         |
-| 12  | event-sequences.spec.ts | Build Fail ends with error event            | ~9s      | pass         |
-| 13  | event-sequences.spec.ts | Runtime Crash deploy succeeds               | ~11s     | pass         |
-| 14  | event-sequences.spec.ts | Blue-Green standalone project               | ~16s     | pass         |
-| 15  | event-sequences.spec.ts | Rollback standalone project                 | ~24s     | pass         |
-| 16  | lifecycle.spec.ts       | Redeploy + rollback emits events            | ~35s     | pass         |
-| 17  | mcp.spec.ts             | MCP initialize + deploy plan + polling      | ~4s      | pass         |
-| 18  | recovery.spec.ts        | R5 build fail -> error/stopped              | ~9s      | **deferred** |
-| 19  | recovery.spec.ts        | R6 runtime crash detected                   | ~55s     | **deferred** |
-| 20  | webhook.spec.ts         | Signed webhook triggers redeploy            | ~11s     | pass         |
-| 21  | ops-agent.spec.ts       | OpsAgent health endpoint                    | <1s      | **deferred** |
-| 22  | ops-agent.spec.ts       | Incidents list returns array                | <1s      | **deferred** |
-| 23  | ops-agent.spec.ts       | Config endpoint returns enabled flag        | <1s      | **deferred** |
-| 24  | ops-agent.spec.ts       | Circuit breaker endpoint graceful           | <1s      | **deferred** |
-| 25  | ops-agent.spec.ts       | Digest trigger returns triggered:true       | <1s      | **deferred** |
-| 26  | ops-agent.spec.ts       | Crash creates ops_incident (Docker)         | ~2min    | **deferred** |
-| 27  | ops-agent.spec.ts       | Circuit breaker reset works (Docker)        | ~3min    | **deferred** |
+| #   | Spec                     | Test                                                    | Duration | Status       |
+| --- | ------------------------ | ------------------------------------------------------- | -------- | ------------ |
+| 1   | blue-green.spec.ts       | Blue-green deploy swaps container                       | ~23s     | pass         |
+| 2   | compose.spec.ts          | Compose multi-service deploy + /count                   | ~5min    | slow         |
+| 3   | deploy-git.spec.ts       | R1 deploy via API reaches running + curl OK             | ~9s      | pass         |
+| 4   | deploy-git.spec.ts       | R2 auto-detect deploy reaches running                   | ~18s     | pass         |
+| 5   | deploy-image.spec.ts     | Docker image deploy without clone/build                 | ~5s      | pass         |
+| 6   | env-vars.spec.ts         | R7 deploy without DATABASE_URL -> error                 | ~45s     | pass         |
+| 7   | env-vars.spec.ts         | Set DATABASE_URL + redeploy -> running                  | ~6s      | pass         |
+| 8   | event-sequences.spec.ts  | Git Deploy (Dockerfile) event sequence                  | ~11s     | pass         |
+| 9   | event-sequences.spec.ts  | Git Deploy (Auto-detect) event sequence                 | ~16s     | pass         |
+| 10  | event-sequences.spec.ts  | Image Deploy event sequence                             | ~4s      | pass         |
+| 11  | event-sequences.spec.ts  | Compose Deploy reaches running                          | ~5min    | slow         |
+| 12  | event-sequences.spec.ts  | Build Fail ends with error event                        | ~9s      | pass         |
+| 13  | event-sequences.spec.ts  | Runtime Crash deploy succeeds                           | ~11s     | pass         |
+| 14  | event-sequences.spec.ts  | Blue-Green standalone project                           | ~16s     | pass         |
+| 15  | event-sequences.spec.ts  | Rollback standalone project                             | ~24s     | pass         |
+| 16  | lifecycle.spec.ts        | Redeploy + rollback emits events                        | ~35s     | pass         |
+| 17  | mcp.spec.ts              | MCP initialize + deploy plan + polling                  | ~4s      | pass         |
+| 18  | managed-services.spec.ts | RC smoke: MCP deploy + PostgreSQL/Redis + topology/logs | ~3min    | rc-smoke     |
+| 19  | recovery.spec.ts         | R5 build fail -> error/stopped                          | ~9s      | **deferred** |
+| 20  | recovery.spec.ts         | R6 runtime crash detected                               | ~55s     | **deferred** |
+| 21  | webhook.spec.ts          | Signed webhook triggers redeploy                        | ~11s     | pass         |
+| 22  | ops-agent.spec.ts        | OpsAgent health endpoint                                | <1s      | **deferred** |
+| 23  | ops-agent.spec.ts        | Incidents list returns array                            | <1s      | **deferred** |
+| 24  | ops-agent.spec.ts        | Config endpoint returns enabled flag                    | <1s      | **deferred** |
+| 25  | ops-agent.spec.ts        | Circuit breaker endpoint graceful                       | <1s      | **deferred** |
+| 26  | ops-agent.spec.ts        | Digest trigger returns triggered:true                   | <1s      | **deferred** |
+| 27  | ops-agent.spec.ts        | Crash creates ops_incident (Docker)                     | ~2min    | **deferred** |
+| 28  | ops-agent.spec.ts        | Circuit breaker reset works (Docker)                    | ~3min    | **deferred** |
 
 Auth tests skip automatically when the target is detected as no-auth. The 0.1
 runtime is auth-enabled by default; to verify the auth surface itself, run
@@ -118,18 +123,19 @@ runtime is auth-enabled by default; to verify the auth surface itself, run
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | compose.spec.ts                | Docker build takes 4min+. The default quality gate stays fast.                                              | Run with `OPENLANDER_E2E_SLOW=1` or move this to a dedicated slow CI job.                                                               |
 | event-sequences Compose Deploy | Same as above.                                                                                              | Run with `OPENLANDER_E2E_SLOW=1` or move this to a dedicated slow CI job.                                                               |
+| managed-services.spec.ts       | Pulls database/cache images and mutates project-scoped managed services.                                    | Run through `npm run qa:rc-smoke` on a fresh/dedicated release QA host.                                                                 |
 | recovery.spec.ts               | RecoveryCoordinator is dormant in 0.1.x.                                                                    | Re-enable only with the 0.2 recovery product surface, docs, and regression suite.                                                       |
 | ops-agent.spec.ts              | Agent Ops/OpsCenter is dormant in 0.1.x.                                                                    | Keep Vitest backend contract coverage; re-enable Docker E2E when Agent Ops is re-surfaced.                                              |
 | auth.spec.ts (10 tests)        | Require auth middleware active. If the target API is already open, these tests are skipped in no-auth mode. | Run separately: `npx playwright test --project=quality-gate e2e/quality-gate/auth.spec.ts` against the normal auth-enabled server mode. |
 
 ## Troubleshooting
 
-| Symptom                                  | Cause                                                            | Fix                                                                                                                 |
-| ---------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Container name conflict (`409 Conflict`) | Orphan container from previous run                               | Remove only E2E-owned containers whose names start with `ol-test-`, `ol-golden-`, `ol-qg-`, `ol-qa-`, or `ol-mcp-`. |
-| `Branch 'default' not found`             | Deploy API called without branch                                 | Always pass `branch: 'main'` in deploy calls. `deployGitProject()` defaults to `'main'`.                            |
-| `401 Unauthorized` on API calls          | Server requires auth                                             | Let `global-setup.ts` issue the token, or set `process.env.OPENLANDER_API_TOKEN` explicitly.                        |
-| Stream timeout (no `complete` event)     | Stream consumer connected after deploy finished                  | Use `waitForStatus()` polling instead of stream-based waiting.                                                      |
-| `curl: Connection reset by peer`         | Container not ready immediately after start                      | `assertLocalOkResponse` retries 5 times with 2s delay. Increase if needed.                                          |
-| `SETUP_REQUIRED` (403)                   | Server has no password set                                       | `global-setup.ts` handles this automatically. If running manually, call `POST /api/auth/setup-password`.            |
-| `npm error code EUSAGE`                  | Auto-generated Dockerfile uses `npm ci` but repo has no lockfile | Fixed in `dockerfile-gen.ts`. If seen, ensure the server is running updated code.                                   |
+| Symptom                                  | Cause                                                            | Fix                                                                                                                                              |
+| ---------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Container name conflict (`409 Conflict`) | Orphan container from previous run                               | Remove only E2E-owned containers whose names start with `ol-test-`, `ol-golden-`, `ol-qg-`, `ol-qa-`, `ol-mcp-`, `ol-svc-qg-`, or `ol-svc-mcp-`. |
+| `Branch 'default' not found`             | Deploy API called without branch                                 | Always pass `branch: 'main'` in deploy calls. `deployGitProject()` defaults to `'main'`.                                                         |
+| `401 Unauthorized` on API calls          | Server requires auth                                             | Let `global-setup.ts` issue the token, or set `process.env.OPENLANDER_API_TOKEN` explicitly.                                                     |
+| Stream timeout (no `complete` event)     | Stream consumer connected after deploy finished                  | Use `waitForStatus()` polling instead of stream-based waiting.                                                                                   |
+| `curl: Connection reset by peer`         | Container not ready immediately after start                      | `assertLocalOkResponse` retries 5 times with 2s delay. Increase if needed.                                                                       |
+| `SETUP_REQUIRED` (403)                   | Server has no password set                                       | `global-setup.ts` handles this automatically. If running manually, call `POST /api/auth/setup-password`.                                         |
+| `npm error code EUSAGE`                  | Auto-generated Dockerfile uses `npm ci` but repo has no lockfile | Fixed in `dockerfile-gen.ts`. If seen, ensure the server is running updated code.                                                                |

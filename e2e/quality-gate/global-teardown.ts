@@ -98,6 +98,8 @@ export default async function globalTeardown() {
         'ol-qg-',
         'ol-qa-',
         'ol-mcp-',
+        'ol-svc-qg-',
+        'ol-svc-mcp-',
       ]);
       const uniqueContainerIds = Array.from(new Set(containerIds));
 
