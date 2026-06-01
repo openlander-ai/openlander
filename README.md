@@ -85,7 +85,7 @@ It is good for:
 
 It is not yet:
 
-- a mature Coolify or Dokploy replacement
+- a mature general-purpose PaaS
 - a production-grade multi-tenant sandbox
 - a Nomad or Kubernetes replacement
 - a fully self-healing PaaS
@@ -112,6 +112,37 @@ and runtime state in a shape agents can read, with risky actions held behind
 explicit human approval.
 Environment variables and secrets are masked by default in MCP responses; raw
 values are only returned through explicit reveal operations.
+
+### Agent-shaped failure responses
+
+OpenLander does not only expose deploy endpoints. It returns failure context in
+a shape an agent can act on.
+
+```json
+{
+  "status": "failed",
+  "phase": "healthcheck_wait",
+  "deploy_id": "dep_123",
+  "service_id": "svc_123",
+  "error": "container exited before the health check passed",
+  "diagnostic_call": {
+    "tool": "openlander_monitor",
+    "action": "diagnose_service",
+    "params": {
+      "service_id": "svc_123"
+    }
+  },
+  "_agent_guidance": {
+    "next_steps": [
+      "Call diagnose_service to inspect logs, env shape, container state, and dependency probes.",
+      "Fix the issue, then redeploy the service."
+    ]
+  }
+}
+```
+
+A generic API gives an agent endpoints. OpenLander gives it status, IDs,
+diagnostics, and the next call shape needed to keep working.
 
 OpenLander 0.1 does not run an internal self-healing agent. It gives external
 MCP-capable coding agents structured tools and context to deploy, inspect,
