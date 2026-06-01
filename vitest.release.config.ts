@@ -70,6 +70,7 @@ export default defineConfig({
       'test/pipeline/compose-host-ports.test.ts',
       'test/pipeline/compose-network-cleanup.test.ts',
       'test/pipeline/docker-sandbox.test.ts',
+      'test/pipeline/docker-facade-port-cache.test.ts',
       'test/pipeline/deploy-cancellation.test.ts',
       'test/pipeline/deploy-entry-lock.test.ts',
       'test/pipeline/deploy-lock-session-propagation.test.ts',
