@@ -197,6 +197,23 @@ OPENLANDER_E2E_BASE_URL=http://localhost:10114 npm run qa:rc-smoke
 OPENLANDER_E2E_BASE_URL=http://localhost:10114 OPENLANDER_E2E_SLOW=1 npm run qa:rc-smoke
 ```
 
+When a dedicated QA host is not available, run the same gate on a fresh
+GitHub-hosted Docker runner through the manual Release Gate workflow. Pass the
+exact RC runtime image after the prerelease image has been published:
+
+```bash
+gh workflow run release-gate.yml \
+  --ref v0.1.9-rc.1 \
+  -f rc_smoke=true \
+  -f rc_image=ghcr.io/openlander-ai/openlander:0.1.9-rc.1
+
+gh workflow run release-gate.yml \
+  --ref v0.1.9-rc.1 \
+  -f rc_smoke=true \
+  -f rc_smoke_slow=true \
+  -f rc_image=ghcr.io/openlander-ai/openlander:0.1.9-rc.1
+```
+
 ## Post-Release Verification
 
 ```bash

@@ -54,6 +54,11 @@ npx playwright test --project=quality-gate e2e/quality-gate/auth.spec.ts
 # RC cold-agent smoke on a fresh/dedicated QA host
 OPENLANDER_E2E_BASE_URL=http://localhost:10114 npm run qa:rc-smoke
 OPENLANDER_E2E_BASE_URL=http://localhost:10114 OPENLANDER_E2E_SLOW=1 npm run qa:rc-smoke
+
+# RC cold-agent smoke on a fresh GitHub-hosted Docker runner
+gh workflow run release-gate.yml --ref v0.1.9-rc.1 \
+  -f rc_smoke=true \
+  -f rc_image=ghcr.io/openlander-ai/openlander:0.1.9-rc.1
 ```
 
 The RC smoke runner refuses to start when it detects existing OpenLander-owned
