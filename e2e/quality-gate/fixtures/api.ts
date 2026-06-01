@@ -393,6 +393,10 @@ export async function postWebhook(projectId: string, payload: any, secret: strin
 let mcpSessionId: string | null = null;
 
 export async function mcpCall(method: string, params?: any): Promise<any> {
+  if (method === 'initialize') {
+    mcpSessionId = null;
+  }
+
   const payload = {
     jsonrpc: '2.0',
     id: Math.random().toString(36).slice(2),
