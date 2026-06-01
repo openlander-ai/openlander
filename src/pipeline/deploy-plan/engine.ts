@@ -1516,11 +1516,6 @@ export class PlanEngine {
             : plan.build.dockerfiles_found && plan.build.dockerfiles_found.length > 0
               ? plan.build.dockerfiles_found
               : [plan.build.dockerfile];
-        // TODO(0.1.x): MonorepoConfig does not have _lockSessionId — monorepo deploys
-        // triggered via the plan engine are still vulnerable to the lock-session
-        // ownership regression fixed for single-project deploys. Add _lockSessionId
-        // to MonorepoConfig and thread it through startMonorepoDeploy / deployMonorepo
-        // when the plumbing is in place.
         const startResult = await this.pipeline.startMonorepoDeploy({
           repoUrl: plan.app.source.repo_url,
           branch: plan.app.source.branch,
@@ -1533,6 +1528,7 @@ export class PlanEngine {
           ...(execution.trigger
             ? { trigger: execution.trigger as 'chat' | 'webhook' | 'api' }
             : {}),
+          _lockSessionId: propagatedLockSession,
         });
 
         startedProjectId = startResult.parentProjectId;

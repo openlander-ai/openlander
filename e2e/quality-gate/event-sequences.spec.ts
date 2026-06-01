@@ -54,21 +54,20 @@ test.describe('Quality Gate — Event wiring golden sequences (Q-2)', () => {
     }
   });
 
-  // fixme (0.1.x): event-sequence assertions assume async polling shape;
-  // sync-deploy contract change since v5 means the start->clone->build->run
-  // transitions arrive in a different order/group. Rework against current
-  // event stream before re-enabling.
-  test.fixme('Git Deploy (Dockerfile): start -> clone -> build -> run -> success', async () => {
+  test('Git Deploy (Dockerfile): start -> clone -> build -> run -> success', async () => {
     test.setTimeout(TEST_TIMEOUT_MS);
 
-    const deploy = await deployGitProject(R1_DOCKERFILE_REPO_URL);
-    expect(deploy.success).toBe(true);
-    createdProjectIds.add(deploy.projectId);
+    const project = await createGitProject(R1_DOCKERFILE_REPO_URL, {
+      name: `test-single-dockerfile-${Date.now().toString(36)}`,
+    });
+    createdProjectIds.add(project.projectId);
 
-    const stream = consumeDeployStream(deploy.projectId);
+    const service = await getFirstDeployableService(project.projectId);
+    const stream = consumeDeployStream(runtimeProjectIdFromServiceId(service.id));
     try {
+      await redeployService(project.projectId);
       await stream.waitForEvent('complete', TEST_TIMEOUT_MS);
-      await waitForStatus(deploy.projectId, 'running', TEST_TIMEOUT_MS);
+      await waitForServiceStatus(project.projectId, 'running', TEST_TIMEOUT_MS);
 
       assertEventSequence(stream.events, [
         'status:Preparing',
@@ -127,7 +126,11 @@ test.describe('Quality Gate — Event wiring golden sequences (Q-2)', () => {
     }
   });
 
-  test.fixme('Compose Deploy: reaches running', async () => {
+  test('Compose Deploy: reaches running', async () => {
+    test.skip(
+      process.env.OPENLANDER_E2E_SLOW !== '1',
+      'Compose quality gate is slow; set OPENLANDER_E2E_SLOW=1 to run it.',
+    );
     test.setTimeout(TEST_TIMEOUT_MS);
 
     const deploy = await deployGitProject(R3_COMPOSE_REPO_URL);

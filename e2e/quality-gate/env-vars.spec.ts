@@ -73,16 +73,16 @@ test.describe('Quality Gate — Env Vars Injection (R7)', () => {
     }
   });
 
-  // fixme (0.1.x): missing-env deploy now returns sync 5xx; fixture throws
-  // before the test can poll. Refresh fixture to handle structured errors.
-  test.fixme('Scenario A: R7 deploy without DATABASE_URL ends in error/stopped', async () => {
+  test('Scenario A: R7 deploy without DATABASE_URL ends in error/stopped', async () => {
     test.setTimeout(SCENARIO_TIMEOUT_MS);
 
-    const deploy = await deployGitProject(R7_REPO_URL);
-    expect(deploy.success).toBe(true);
-    expect(deploy.projectId).toBeTruthy();
+    const deploy = await deployGitProject(R7_REPO_URL, 'main', undefined, {
+      allowFailure: true,
+    });
+    expect(deploy.success).toBe(false);
 
     projectId = deploy.projectId;
+    expect(projectId).toBeTruthy();
 
     const failedProject = await waitForErrorOrStopped(projectId, SCENARIO_TIMEOUT_MS);
     expect(['error', 'stopped']).toContain(failedProject.status);

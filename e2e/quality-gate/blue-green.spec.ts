@@ -73,9 +73,7 @@ test.describe('quality-gate lifecycle: blue-green deploy', () => {
     }
   });
 
-  // fixme (0.1.x): cascades from the same fixture/contract drift below
-  // (deployGitProject throws on 5xx). Re-enable after fixture refresh.
-  test.fixme('blue-green deploy swaps container without downtime', async () => {
+  test('blue-green deploy swaps container without downtime', async () => {
     test.setTimeout(240_000);
 
     const deploy = await deployGitProject(R1_REPO_URL);

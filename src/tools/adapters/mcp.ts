@@ -14,6 +14,7 @@ import { getMcpInstanceContext, type McpInstanceContext } from '../../mcp/instan
 import {
   buildToolInputContract,
   requiredParamsTemplate,
+  suggestedParamsForRetry,
   unknownTopLevelParams,
   type ToolInputContract,
 } from '../../mcp/schema-guidance.js';
@@ -121,11 +122,11 @@ function nestedParamsSuggestion(
 
   const nestedKeys = Object.keys(nestedParams);
   if (nestedKeys.length === 0) {
-    return {};
+    return undefined;
   }
 
   if (nestedKeys.every((key) => contract.allowed_params.includes(key))) {
-    return nestedParams;
+    return suggestedParamsForRetry(nestedParams, contract);
   }
 
   return undefined;

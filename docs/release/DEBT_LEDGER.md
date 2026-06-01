@@ -3,6 +3,19 @@
 Small compatibility or vocabulary decisions that were intentionally accepted for
 a release should be recorded here so follow-up work is explicit.
 
+## v0.1.9
+
+- **Quality-gate compose lane:** compose E2E coverage remains supported but is
+  no longer part of the default fast Playwright gate. Run it explicitly with
+  `OPENLANDER_E2E_SLOW=1`.
+- **Why accepted:** the public compose fixture still performs a real Docker
+  build from a freshly cloned repo, so it is materially slower than the
+  deploy/lifecycle/MCP smoke path. Keeping it as a named slow lane avoids
+  hiding release risk behind stale `test.fixme` markers while preserving a fast
+  default gate.
+- **Follow-up:** move the compose fixture to a prebuilt image or dedicated slow
+  CI job before requiring it in every release candidate run.
+
 ## v0.1.7
 
 - **Deployable archived-list MCP action:** `openlander_service.list_archived_services`

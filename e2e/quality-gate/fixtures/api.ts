@@ -7,6 +7,27 @@ function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(`${OPENLANDER_URL}${path}`, { ...init, headers });
 }
 
+function slugifyName(value: string): string {
+  const slug = value
+    .toLowerCase()
+    .replace(/\.git$/, '')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+  return slug || 'quality-gate';
+}
+
+function repoNameFromUrl(repoUrl: string): string {
+  const last = repoUrl.split('/').filter(Boolean).pop() ?? 'repo';
+  return slugifyName(last);
+}
+
+export function uniqueProjectName(prefix: string): string {
+  const base = slugifyName(prefix).slice(0, 36).replace(/-+$/g, '') || 'quality-gate';
+  const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  return `${base}-${suffix}`.slice(0, 63).replace(/-+$/g, '');
+}
+
 // ============================================================================
 // Deploy
 // ============================================================================
@@ -15,12 +36,13 @@ export async function deployGitProject(
   repoUrl: string,
   branch: string = 'main',
   environment?: string,
-  options?: { allowFailure?: boolean },
+  options?: { allowFailure?: boolean; name?: string },
 ): Promise<{ projectId: string; success: boolean }> {
   const body = {
     source: 'git',
     repo_url: repoUrl,
     branch,
+    name: options?.name ?? uniqueProjectName(repoNameFromUrl(repoUrl)),
     ...(environment && { environment }),
   };
 
@@ -61,7 +83,7 @@ export async function deployImageProject(
     source: 'image',
     image_url: imageUrl,
     ...(port && { port }),
-    ...(name && { name }),
+    name: uniqueProjectName(name ?? slugifyName(imageUrl)),
   };
 
   const res = await apiFetch('/api/projects/deploy', {
@@ -155,7 +177,9 @@ async function deleteDeployableServices(projectId: string): Promise<void> {
   const servicesPayload = (await servicesRes.json()) as
     | { services?: Array<{ id?: string; name?: string }> }
     | Array<{ id?: string; name?: string }>;
-  const services = Array.isArray(servicesPayload) ? servicesPayload : (servicesPayload.services ?? []);
+  const services = Array.isArray(servicesPayload)
+    ? servicesPayload
+    : (servicesPayload.services ?? []);
 
   for (const service of services) {
     if (!service.id || !service.name) continue;
@@ -213,9 +237,25 @@ export async function getFirstDeployableService(projectId: string): Promise<{
     throw new Error(`List project services failed (${servicesRes.status}): ${text}`);
   }
   const servicesPayload = (await servicesRes.json()) as
-    | { services?: Array<{ id?: string; name?: string; status?: string; assigned_port?: number | null; port?: number | null }> }
-    | Array<{ id?: string; name?: string; status?: string; assigned_port?: number | null; port?: number | null }>;
-  const services = Array.isArray(servicesPayload) ? servicesPayload : (servicesPayload.services ?? []);
+    | {
+        services?: Array<{
+          id?: string;
+          name?: string;
+          status?: string;
+          assigned_port?: number | null;
+          port?: number | null;
+        }>;
+      }
+    | Array<{
+        id?: string;
+        name?: string;
+        status?: string;
+        assigned_port?: number | null;
+        port?: number | null;
+      }>;
+  const services = Array.isArray(servicesPayload)
+    ? servicesPayload
+    : (servicesPayload.services ?? []);
   const service = services.find((candidate) => typeof candidate.id === 'string');
   if (!service?.id) {
     throw new Error(`Project ${projectId} has no deployable services`);

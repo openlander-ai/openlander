@@ -1403,6 +1403,45 @@ describe('PlanEngine.executePlan', () => {
     expect(mockPipeline.startMonorepoDeploy).toHaveBeenCalled();
     expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
   });
+
+  it('propagates the plan lock session into monorepo execution for existing projects', async () => {
+    const { cloneRepo } = await import('../src/pipeline/git.js');
+    (cloneRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
+      path: '/tmp/test-clone',
+      commitSha: 'mono-sha',
+    });
+
+    mockPipeline.startMonorepoDeploy = vi.fn().mockReturnValue({
+      parentProjectId: 'p1',
+      parentName: 'test-app',
+      status: 'building',
+    });
+
+    const plan = createMockDeployPlan({
+      project_id: 'p1',
+      build: {
+        method: 'dockerfile',
+        dockerfile: 'Dockerfile',
+        context: '.',
+        dockerfiles_found: ['Dockerfile', 'apps/Dockerfile'],
+      },
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      id: plan.plan_id,
+      status: 'ready',
+      plan_json: JSON.stringify(plan),
+    });
+
+    await engine.executePlan(plan.plan_id, undefined, 'plan-session-mono');
+
+    expect(mockDb.acquireDeployLock).toHaveBeenCalledWith('p1', 'plan-session-mono');
+    expect(mockPipeline.startMonorepoDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        _lockSessionId: 'plan-session-mono',
+      }),
+    );
+  });
 });
 
 // P2 safety: the approval gate on a needs_approval plan. These verify the gate
