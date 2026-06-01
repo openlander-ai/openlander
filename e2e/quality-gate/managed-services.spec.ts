@@ -22,7 +22,14 @@ function sleep(ms: number): Promise<void> {
 }
 
 function parseToolCallResult<T>(envelope: McpToolCallEnvelope): T {
-  expect(envelope.isError).not.toBe(true);
+  if (envelope.isError === true) {
+    const text =
+      envelope.content
+        ?.map((item) => item.text)
+        .filter((value): value is string => typeof value === 'string')
+        .join('\n') || JSON.stringify(envelope);
+    throw new Error(`MCP tool returned error: ${text}`);
+  }
   expect(Array.isArray(envelope.content)).toBe(true);
 
   const text = envelope.content?.find((item) => item.type === 'text')?.text;

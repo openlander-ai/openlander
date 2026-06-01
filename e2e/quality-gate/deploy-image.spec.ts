@@ -1,6 +1,11 @@
 import { expect, test } from '@playwright/test';
 
-import { deleteProject, deployImageProject, waitForStatus } from './fixtures/api.js';
+import {
+  deleteProject,
+  deployImageProject,
+  resolveProjectAccessibleUrl,
+  waitForStatus,
+} from './fixtures/api.js';
 
 async function fetchWithRetry(url: string, retries = 5, delayMs = 2000): Promise<Response> {
   for (let i = 0; i < retries; i++) {
@@ -37,12 +42,7 @@ test.describe('Quality Gate — Docker Image Deploy', () => {
     const project = await waitForStatus(projectId, 'running', 120_000);
     expect(project.status).toBe('running');
 
-    const port = project.assigned_port ?? project.port;
-    if (typeof port !== 'number') {
-      throw new Error(`Expected numeric project port, got: ${String(port)}`);
-    }
-
-    const nginxResponse = await fetchWithRetry(`http://localhost:${String(port)}/`);
+    const nginxResponse = await fetchWithRetry(resolveProjectAccessibleUrl(project));
     const nginxBody = await nginxResponse.text();
 
     expect(nginxBody.includes('Welcome to nginx') || nginxResponse.status === 200).toBe(true);

@@ -82,7 +82,7 @@ jobs:
     env:
       OPENLANDER_IMAGE: ${{ inputs.rc_image || 'openlander:rc-smoke' }}
       OPENLANDER_PORT: 10114
-      OPENLANDER_PUBLIC_HOST: localhost
+      OPENLANDER_PUBLIC_HOST: 127.0.0.1.sslip.io
       OPENLANDER_POSTGRES_PASSWORD: openlander-rc-smoke
 
     steps:

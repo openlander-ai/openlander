@@ -5,6 +5,7 @@ import {
   getProject,
   listProjects,
   mcpCall,
+  resolveProjectAccessibleUrl,
   uniqueProjectName,
 } from './fixtures/api.js';
 import { removeContainersByNamePrefix } from './fixtures/docker-cleanup.js';
@@ -23,7 +24,14 @@ function sleep(ms: number): Promise<void> {
 }
 
 function parseToolCallResult<T>(envelope: McpToolCallEnvelope): T {
-  expect(envelope.isError).not.toBe(true);
+  if (envelope.isError === true) {
+    const text =
+      envelope.content
+        ?.map((item) => item.text)
+        .filter((value): value is string => typeof value === 'string')
+        .join('\n') || JSON.stringify(envelope);
+    throw new Error(`MCP tool returned error: ${text}`);
+  }
   expect(Array.isArray(envelope.content)).toBe(true);
 
   const text = envelope.content?.find((item) => item.type === 'text')?.text;
@@ -153,7 +161,7 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
     const finalProject = await getProject(projectId as string);
     expect(finalProject.status).toBe('running');
     expect(finalProject.container_id).toBeTruthy();
-    expect(typeof finalProject.assigned_port).toBe('number');
+    expect(resolveProjectAccessibleUrl(finalProject)).toMatch(/^http:\/\//);
 
     if (finalProject.status !== 'running') {
       throw new Error(
