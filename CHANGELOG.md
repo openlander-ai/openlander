@@ -16,11 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   dormant Recovery/OpsAgent coverage explicitly deferred.
 - Moved compose quality-gate coverage into an explicit slow lane via
   `OPENLANDER_E2E_SLOW=1` so the default release gate stays fast and honest.
+- Hardened the release gate with a fresh-runner RC cold-agent smoke path that
+  can validate either the current checkout or an exact published RC image.
 
 ### Fixed
 
 - Propagated deploy-plan lock sessions into monorepo deploy execution and added
   parent deploy-lock protection for top-level monorepo deploys.
+- Centralized Docker container-start port-cache invalidation so immediate
+  follow-up managed-service allocations see newly bound host ports.
 - Tightened MCP validation retry guidance so direct platform-tool calls do not
   echo an empty nested `params` object back as the suggested retry.
 - Replaced the hardcoded GitHub API `User-Agent` version with the shared
