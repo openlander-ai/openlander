@@ -1,12 +1,9 @@
-<p align="center">
-  <img src="web/public/brand/openlander-mark.png" alt="OpenLander" width="96" />
-</p>
-
 # OpenLander
 
 **MCP-native deployment control plane for coding agents.**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Release](https://img.shields.io/github/v/release/openlander-ai/openlander)](https://github.com/openlander-ai/openlander/releases)
 
 [Quickstart](#quickstart) · [Current status](#current-status) · [Why OpenLander?](#why-openlander) · [MCP tools](docs/wiki/MCP-Tools-Reference.md)
 
