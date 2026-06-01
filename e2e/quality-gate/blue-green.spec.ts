@@ -7,6 +7,7 @@ import {
   deleteProject,
   deployGitProject,
   getProject,
+  resolveProjectAccessibleUrl,
   waitForStatus,
 } from './fixtures/api.js';
 
@@ -24,14 +25,6 @@ function assertOkResponse(url: string, retries = 5, delayMs = 2000): void {
       execFileSync('sleep', [String(delayMs / 1000)]);
     }
   }
-}
-
-function resolveAccessibleUrl(project: { assigned_port?: unknown }): string {
-  if (typeof project.assigned_port === 'number' && project.assigned_port > 0) {
-    return `http://localhost:${String(project.assigned_port)}`;
-  }
-
-  throw new Error('Project has no accessible assigned_port');
 }
 
 async function waitForContainerSwitch(
@@ -87,7 +80,7 @@ test.describe('quality-gate lifecycle: blue-green deploy', () => {
     expect((runningBefore.container_id as string).length).toBeGreaterThan(0);
 
     const originalContainerId = runningBefore.container_id as string;
-    const beforeUrl = resolveAccessibleUrl(runningBefore);
+    const beforeUrl = resolveProjectAccessibleUrl(runningBefore);
     assertOkResponse(beforeUrl);
 
     await blueGreenDeploy(projectId, '/');
@@ -102,7 +95,7 @@ test.describe('quality-gate lifecycle: blue-green deploy', () => {
     expect(runningAfterSwitch.container_id).not.toBe(originalContainerId);
 
     const latestProject = await getProject(projectId);
-    const afterUrl = resolveAccessibleUrl(latestProject);
+    const afterUrl = resolveProjectAccessibleUrl(latestProject);
     assertOkResponse(afterUrl);
   });
 });

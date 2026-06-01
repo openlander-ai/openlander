@@ -157,6 +157,63 @@ Before tagging a final release:
 6. Confirm the GitHub Release is not marked prerelease and that GHCR moved
    `<major>.<minor>` and `latest` to the final image.
 
+## Cold-Agent RC Dry-Run
+
+Each accepted 0.1.x release candidate must pass a cold-agent smoke run on a
+fresh or dedicated QA host before final promotion. Do not run this gate on a
+host that already runs a dogfood OpenLander instance or unrelated `ol-*`
+containers: startup monitors reconcile managed Docker containers against the
+active database.
+
+Use the exact RC artifact under test, not a local checkout. For image-based
+validation, pin `ghcr.io/openlander-ai/openlander:<version>-rc.N`; for installer
+validation, pin `OPENLANDER_VERSION=v<version>-rc.N`.
+
+The dry-run must cover:
+
+1. Fresh install and setup/login.
+2. MCP token visibility from the UI or `POST /api/mcp/token`.
+3. Agent-compatible deploy path for the demo app through MCP or the documented
+   REST flow.
+4. Managed PostgreSQL and Redis creation/binding flow, followed by redeploy.
+5. Topology and log recovery checks after deploy completion.
+6. One rollback or redeploy lifecycle check.
+7. `OPENLANDER_E2E_SLOW=1` compose lane when the release touches compose,
+   Docker orchestration, container cleanup, or deploy lifecycle code.
+
+If any item fails, cut a new RC after the fix. Keep raw host names, IPs,
+credentials, screenshots with secrets, and private dogfood notes out of public
+commits; publish only the public-safe pass/fail summary in the release notes or
+PR.
+
+From a release checkout, the checked-in smoke runner covers the deploy, MCP,
+managed service, topology/log, and lifecycle portions after the exact RC
+artifact is installed. It refuses to start when stale OpenLander-owned app/test
+containers are already present, which protects dogfood/shared Docker daemons
+from accidental release-gate runs:
+
+```bash
+OPENLANDER_E2E_BASE_URL=http://localhost:10114 npm run qa:rc-smoke
+OPENLANDER_E2E_BASE_URL=http://localhost:10114 OPENLANDER_E2E_SLOW=1 npm run qa:rc-smoke
+```
+
+When a dedicated QA host is not available, run the same gate on a fresh
+GitHub-hosted Docker runner through the manual Release Gate workflow. Pass the
+exact RC runtime image after the prerelease image has been published:
+
+```bash
+gh workflow run release-gate.yml \
+  --ref v0.1.9-rc.1 \
+  -f rc_smoke=true \
+  -f rc_image=ghcr.io/openlander-ai/openlander:0.1.9-rc.1
+
+gh workflow run release-gate.yml \
+  --ref v0.1.9-rc.1 \
+  -f rc_smoke=true \
+  -f rc_smoke_slow=true \
+  -f rc_image=ghcr.io/openlander-ai/openlander:0.1.9-rc.1
+```
+
 ## Post-Release Verification
 
 ```bash

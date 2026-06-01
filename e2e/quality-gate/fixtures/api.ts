@@ -393,6 +393,10 @@ export async function postWebhook(projectId: string, payload: any, secret: strin
 let mcpSessionId: string | null = null;
 
 export async function mcpCall(method: string, params?: any): Promise<any> {
+  if (method === 'initialize') {
+    mcpSessionId = null;
+  }
+
   const payload = {
     jsonrpc: '2.0',
     id: Math.random().toString(36).slice(2),
@@ -513,13 +517,63 @@ export async function waitForServiceStatus(
   }
 }
 
-export async function resolveServiceAccessibleUrl(projectId: string): Promise<string> {
-  const service = await getFirstDeployableService(projectId);
-  const port = service.assigned_port ?? service.port;
-  if (!port) {
-    throw new Error(`Project ${projectId} service has no assigned port`);
+function collectProjectUrlCandidates(project: Record<string, unknown>): string[] {
+  const candidates: string[] = [];
+  const add = (value: unknown): void => {
+    if (typeof value === 'string' && /^https?:\/\//.test(value)) {
+      candidates.push(value);
+    }
+  };
+
+  add(project['url']);
+  add(project['publicUrl']);
+  add(project['public_url']);
+
+  const urls = project['urls'];
+  if (Array.isArray(urls)) {
+    for (const item of urls) {
+      if (typeof item === 'string') {
+        add(item);
+      } else if (item && typeof item === 'object') {
+        add((item as { url?: unknown }).url);
+      }
+    }
   }
-  return `http://127.0.0.1:${String(port)}`;
+
+  return [...new Set(candidates)];
+}
+
+export function resolveProjectAccessibleUrl(project: Record<string, unknown>): string {
+  const assignedPort = project['assigned_port'] ?? project['port'];
+  if (typeof assignedPort === 'number' && assignedPort > 0) {
+    return `http://127.0.0.1:${String(assignedPort)}`;
+  }
+
+  const url = collectProjectUrlCandidates(project)[0];
+  if (url) return url;
+
+  const name = project['name'];
+  if (typeof name === 'string' && name.length > 0) {
+    return `http://${name}.localhost`;
+  }
+
+  throw new Error(
+    `Project has no accessible assigned_port/url fields: ${JSON.stringify({
+      id: project['id'],
+      name: project['name'],
+      assigned_port: project['assigned_port'],
+      port: project['port'],
+      url: project['url'],
+      urls: project['urls'],
+      publicUrl: project['publicUrl'],
+      public_url: project['public_url'],
+    })}`,
+  );
+}
+
+export async function resolveServiceAccessibleUrl(projectId: string): Promise<string> {
+  const project = (await getProject(projectId)) as Record<string, unknown>;
+  return resolveProjectAccessibleUrl(project);
 }
 
 // ============================================================================

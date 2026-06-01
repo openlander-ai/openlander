@@ -6,6 +6,7 @@ import {
   getDeployments,
   getProject,
   redeployService,
+  resolveProjectAccessibleUrl,
   rollbackService,
   waitForStatus,
 } from './fixtures/api.js';
@@ -72,13 +73,7 @@ test.describe('quality-gate lifecycle: redeploy + rollback', () => {
     expect(newDeployId).toBeTruthy();
 
     const latestProject = await getProject(projectId);
-    const accessibleUrl =
-      typeof latestProject.assigned_port === 'number' && latestProject.assigned_port > 0
-        ? `http://localhost:${String(latestProject.assigned_port)}`
-        : null;
-    expect(accessibleUrl).toBeTruthy();
-
-    const urlRes = await fetchWithRetry(accessibleUrl!);
+    const urlRes = await fetchWithRetry(resolveProjectAccessibleUrl(latestProject));
     expect(urlRes.ok).toBe(true);
 
     await rollbackService(projectId, firstDeployId!);

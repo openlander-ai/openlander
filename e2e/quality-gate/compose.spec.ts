@@ -2,7 +2,13 @@ import { execSync } from 'node:child_process';
 
 import { expect, test } from '@playwright/test';
 
-import { deleteProject, deployGitProject, getProject, waitForStatus } from './fixtures/api.js';
+import {
+  deleteProject,
+  deployGitProject,
+  getProject,
+  resolveProjectAccessibleUrl,
+  waitForStatus,
+} from './fixtures/api.js';
 
 const R3_REPO_URL = 'https://github.com/openlander-ai/test-compose-multi';
 const SCENARIO_TIMEOUT_MS = 300_000;
@@ -72,14 +78,11 @@ test.describe('Quality Gate — Compose multi-service deploy', () => {
     const runningProject = await waitForStatus(projectId, 'running', SCENARIO_TIMEOUT_MS);
     expect(runningProject.status).toBe('running');
 
-    const latestProject = (await getProject(projectId)) as {
-      assigned_port?: number;
-      port?: number;
-    };
-    const port = latestProject.assigned_port ?? latestProject.port;
-    expect(port).toBeTruthy();
+    const latestProject = await getProject(projectId);
+    const countUrl = new URL(resolveProjectAccessibleUrl(latestProject));
+    countUrl.pathname = '/count';
 
-    const countResponse = await fetchWithRetry(`http://localhost:${String(port)}/count`);
+    const countResponse = await fetchWithRetry(countUrl.toString());
     expect(countResponse.ok).toBe(true);
 
     const countPayload = (await countResponse.json()) as { count?: unknown };

@@ -2,24 +2,26 @@ import { execFileSync } from 'node:child_process';
 
 import { expect, test } from '@playwright/test';
 
-import { deleteProject, deployGitProject, getProject, waitForStatus } from './fixtures/api.js';
+import {
+  deleteProject,
+  deployGitProject,
+  getProject,
+  resolveProjectAccessibleUrl,
+  waitForStatus,
+} from './fixtures/api.js';
 
 const R1_REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
 const R2_REPO_URL = 'https://github.com/openlander-ai/test-no-dockerfile';
 const SCENARIO_TIMEOUT_MS = 120_000;
 
-function assertLocalOkResponse(port: number, retries = 5, delayMs = 2000): void {
+function assertOkResponse(url: string, retries = 5, delayMs = 2000): void {
   for (let i = 0; i < retries; i++) {
     try {
-      const body = execFileSync('curl', ['-fsSL', `http://localhost:${String(port)}/`], {
-        encoding: 'utf8',
-        timeout: 5000,
-      });
+      const body = execFileSync('curl', ['-fsSL', url], { encoding: 'utf8', timeout: 5000 });
       expect(body).toContain('OK');
       return;
     } catch {
-      if (i === retries - 1)
-        throw new Error(`curl localhost:${port} failed after ${retries} retries`);
+      if (i === retries - 1) throw new Error(`curl ${url} failed after ${retries} retries`);
       execFileSync('sleep', [String(delayMs / 1000)]);
     }
   }
@@ -50,11 +52,9 @@ test.describe('Quality Gate — Git Deploy via Web/API', () => {
 
     const project = await waitForStatus(deploy.projectId, 'running', SCENARIO_TIMEOUT_MS);
     expect(project.status).toBe('running');
-    expect(typeof project.assigned_port).toBe('number');
-    expect((project.assigned_port as number) > 0).toBe(true);
     expect(project.container_id).not.toBeNull();
 
-    assertLocalOkResponse(project.assigned_port as number);
+    assertOkResponse(resolveProjectAccessibleUrl(project));
   });
 
   test('Scenario B: R2 deploy via API auto-detects and reaches running', async () => {

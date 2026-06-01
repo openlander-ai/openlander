@@ -1,5 +1,3 @@
-import { execSync } from 'node:child_process';
-
 import { expect, test } from '@playwright/test';
 
 import {
@@ -7,8 +5,13 @@ import {
   getProject,
   listProjects,
   mcpCall,
+  resolveProjectAccessibleUrl,
   uniqueProjectName,
 } from './fixtures/api.js';
+import {
+  E2E_CONTAINER_NAME_PREFIXES,
+  removeContainersByNamePrefix,
+} from './fixtures/docker-cleanup.js';
 
 const REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
 const POLL_INTERVAL_MS = 3000;
@@ -24,7 +27,14 @@ function sleep(ms: number): Promise<void> {
 }
 
 function parseToolCallResult<T>(envelope: McpToolCallEnvelope): T {
-  expect(envelope.isError).not.toBe(true);
+  if (envelope.isError === true) {
+    const text =
+      envelope.content
+        ?.map((item) => item.text)
+        .filter((value): value is string => typeof value === 'string')
+        .join('\n') || JSON.stringify(envelope);
+    throw new Error(`MCP tool returned error: ${text}`);
+  }
   expect(Array.isArray(envelope.content)).toBe(true);
 
   const text = envelope.content?.find((item) => item.type === 'text')?.text;
@@ -40,13 +50,7 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
 
   test.beforeAll(async () => {
     try {
-      const ids = execSync('docker ps -a --filter name=ol-test- -q', { encoding: 'utf-8' })
-        .trim()
-        .split('\n')
-        .filter(Boolean);
-      for (const id of ids) {
-        execSync(`docker rm -f ${id}`, { stdio: 'pipe' });
-      }
+      removeContainersByNamePrefix(E2E_CONTAINER_NAME_PREFIXES);
     } catch {
       // noop
     }
@@ -54,7 +58,8 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
     try {
       const projects = await listProjects();
       for (const p of projects) {
-        if (String(p.name).includes('test-single-dockerfile')) {
+        const name = String(p.name);
+        if (name.includes('test-single-dockerfile') || name.startsWith('mcp-')) {
           await deleteProject(String(p.id));
         }
       }
@@ -159,7 +164,7 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
     const finalProject = await getProject(projectId as string);
     expect(finalProject.status).toBe('running');
     expect(finalProject.container_id).toBeTruthy();
-    expect(typeof finalProject.assigned_port).toBe('number');
+    expect(resolveProjectAccessibleUrl(finalProject)).toMatch(/^http:\/\//);
 
     if (finalProject.status !== 'running') {
       throw new Error(

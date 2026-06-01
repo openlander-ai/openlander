@@ -72,6 +72,26 @@ describe('ContainerRunner', () => {
     });
   });
 
+  it('clears the port scan cache after successful container creation', async () => {
+    const docker = createMockDocker();
+    const db = createMockDatabase();
+    const runner = new ContainerRunner(docker, db);
+    vi.spyOn(portPipeline, 'allocatePort').mockResolvedValue(12002);
+    const clearPortScanCacheSpy = vi.spyOn(portPipeline, 'clearPortScanCache');
+
+    await runner.run({
+      imageTag: 'openlander/cache:latest',
+      projectName: 'cache-app',
+      projectId: 'p-cache',
+      envVars: {},
+    });
+
+    expect(clearPortScanCacheSpy).toHaveBeenCalled();
+    expect(
+      (docker.runContainer as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
+    ).toBeLessThan(clearPortScanCacheSpy.mock.invocationCallOrder[0] ?? 0);
+  });
+
   it('uses custom containerPort when provided', async () => {
     const docker = createMockDocker();
     const db = createMockDatabase();
