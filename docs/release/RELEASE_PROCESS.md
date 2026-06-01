@@ -188,7 +188,9 @@ PR.
 
 From a release checkout, the checked-in smoke runner covers the deploy, MCP,
 managed service, topology/log, and lifecycle portions after the exact RC
-artifact is installed:
+artifact is installed. It refuses to start when stale OpenLander-owned app/test
+containers are already present, which protects dogfood/shared Docker daemons
+from accidental release-gate runs:
 
 ```bash
 OPENLANDER_E2E_BASE_URL=http://localhost:10114 npm run qa:rc-smoke

@@ -56,6 +56,11 @@ OPENLANDER_E2E_BASE_URL=http://localhost:10114 npm run qa:rc-smoke
 OPENLANDER_E2E_BASE_URL=http://localhost:10114 OPENLANDER_E2E_SLOW=1 npm run qa:rc-smoke
 ```
 
+The RC smoke runner refuses to start when it detects existing OpenLander-owned
+app/test containers (`ol-*`, `mcp-*`, `qg-*`) beyond the baseline runtime
+containers. Use a clean QA host or remove stale smoke-test residue before
+rerunning it.
+
 ## Architecture
 
 ```

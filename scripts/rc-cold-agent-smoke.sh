@@ -6,6 +6,39 @@ if [[ -z "${OPENLANDER_E2E_BASE_URL:-}" ]]; then
   exit 1
 fi
 
+check_clean_docker_surface() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker is required for RC cold-agent smoke." >&2
+    exit 1
+  fi
+
+  local offenders=()
+  local name
+  local names
+  if ! names="$(docker ps -a --format '{{.Names}}')"; then
+    echo "Docker daemon is not reachable from this shell." >&2
+    echo "Run the RC smoke from a user/session that can access Docker on the QA host." >&2
+    exit 1
+  fi
+
+  while IFS= read -r name; do
+    case "${name}" in
+      openlander | openlander-db | openlander-edge-proxy)
+        ;;
+      ol-* | mcp-* | qg-*)
+        offenders+=("${name}")
+        ;;
+    esac
+  done <<<"${names}"
+
+  if ((${#offenders[@]} > 0)); then
+    echo "Refusing to run RC cold-agent smoke on a non-clean OpenLander Docker surface." >&2
+    echo "Use a fresh/dedicated QA host or remove these existing OpenLander-owned containers first:" >&2
+    printf '  - %s\n' "${offenders[@]}" >&2
+    exit 1
+  fi
+}
+
 cat >&2 <<'MSG'
 Running OpenLander RC cold-agent smoke.
 
@@ -14,6 +47,8 @@ Requirements:
 - start OpenLander from the exact RC artifact before invoking this script
 - ensure Docker and the public test repositories are reachable
 MSG
+
+check_clean_docker_surface
 
 export OPENLANDER_E2E_RC_SMOKE=1
 
