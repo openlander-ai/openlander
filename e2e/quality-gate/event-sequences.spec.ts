@@ -14,7 +14,10 @@ import {
   waitForStatus,
   waitForServiceStatus,
 } from './fixtures/api.js';
-import { removeContainersByNamePrefix } from './fixtures/docker-cleanup.js';
+import {
+  E2E_CONTAINER_NAME_PREFIXES,
+  removeContainersByNamePrefix,
+} from './fixtures/docker-cleanup.js';
 import { assertEventSequence, consumeDeployStream } from './fixtures/stream-consumer.js';
 
 const TEST_TIMEOUT_MS = 300_000;
@@ -31,7 +34,7 @@ test.describe('Quality Gate — Event wiring golden sequences (Q-2)', () => {
 
   test.beforeAll(() => {
     try {
-      removeContainersByNamePrefix(['ol-test-', 'ol-golden-', 'ol-qg-', 'ol-qa-']);
+      removeContainersByNamePrefix(E2E_CONTAINER_NAME_PREFIXES);
     } catch {
       // noop
     }

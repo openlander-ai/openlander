@@ -25,7 +25,8 @@ check_clean_docker_surface() {
     case "${name}" in
       openlander | openlander-db | openlander-edge-proxy)
         ;;
-      ol-* | mcp-* | qg-*)
+      # All OpenLander-managed app/service containers use the ol- prefix.
+      ol-*)
         offenders+=("${name}")
         ;;
     esac

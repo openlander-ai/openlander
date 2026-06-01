@@ -62,9 +62,8 @@ gh workflow run release-gate.yml --ref v0.1.9-rc.1 \
 ```
 
 The RC smoke runner refuses to start when it detects existing OpenLander-owned
-app/test containers (`ol-*`, `mcp-*`, `qg-*`) beyond the baseline runtime
-containers. Use a clean QA host or remove stale smoke-test residue before
-rerunning it.
+app/service containers (`ol-*`) beyond the baseline runtime containers. Use a
+clean QA host or remove stale smoke-test residue before rerunning it.
 
 ## Architecture
 
@@ -140,12 +139,12 @@ runtime is auth-enabled by default; to verify the auth surface itself, run
 
 ## Troubleshooting
 
-| Symptom                                  | Cause                                                            | Fix                                                                                                                                              |
-| ---------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Container name conflict (`409 Conflict`) | Orphan container from previous run                               | Remove only E2E-owned containers whose names start with `ol-test-`, `ol-golden-`, `ol-qg-`, `ol-qa-`, `ol-mcp-`, `ol-svc-qg-`, or `ol-svc-mcp-`. |
-| `Branch 'default' not found`             | Deploy API called without branch                                 | Always pass `branch: 'main'` in deploy calls. `deployGitProject()` defaults to `'main'`.                                                         |
-| `401 Unauthorized` on API calls          | Server requires auth                                             | Let `global-setup.ts` issue the token, or set `process.env.OPENLANDER_API_TOKEN` explicitly.                                                     |
-| Stream timeout (no `complete` event)     | Stream consumer connected after deploy finished                  | Use `waitForStatus()` polling instead of stream-based waiting.                                                                                   |
-| `curl: Connection reset by peer`         | Container not ready immediately after start                      | `assertLocalOkResponse` retries 5 times with 2s delay. Increase if needed.                                                                       |
-| `SETUP_REQUIRED` (403)                   | Server has no password set                                       | `global-setup.ts` handles this automatically. If running manually, call `POST /api/auth/setup-password`.                                         |
-| `npm error code EUSAGE`                  | Auto-generated Dockerfile uses `npm ci` but repo has no lockfile | Fixed in `dockerfile-gen.ts`. If seen, ensure the server is running updated code.                                                                |
+| Symptom                                  | Cause                                                            | Fix                                                                                                                                                                                              |
+| ---------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Container name conflict (`409 Conflict`) | Orphan container from previous run                               | Remove only E2E-owned containers whose names start with `ol-test-`, `ol-golden-`, `ol-qg-`, `ol-qa-`, `ol-mcp-`, `ol-svc-test-`, `ol-svc-golden-`, `ol-svc-qg-`, `ol-svc-qa-`, or `ol-svc-mcp-`. |
+| `Branch 'default' not found`             | Deploy API called without branch                                 | Always pass `branch: 'main'` in deploy calls. `deployGitProject()` defaults to `'main'`.                                                                                                         |
+| `401 Unauthorized` on API calls          | Server requires auth                                             | Let `global-setup.ts` issue the token, or set `process.env.OPENLANDER_API_TOKEN` explicitly.                                                                                                     |
+| Stream timeout (no `complete` event)     | Stream consumer connected after deploy finished                  | Use `waitForStatus()` polling instead of stream-based waiting.                                                                                                                                   |
+| `curl: Connection reset by peer`         | Container not ready immediately after start                      | `assertLocalOkResponse` retries 5 times with 2s delay. Increase if needed.                                                                                                                       |
+| `SETUP_REQUIRED` (403)                   | Server has no password set                                       | `global-setup.ts` handles this automatically. If running manually, call `POST /api/auth/setup-password`.                                                                                         |
+| `npm error code EUSAGE`                  | Auto-generated Dockerfile uses `npm ci` but repo has no lockfile | Fixed in `dockerfile-gen.ts`. If seen, ensure the server is running updated code.                                                                                                                |

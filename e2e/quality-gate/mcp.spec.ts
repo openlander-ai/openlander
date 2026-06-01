@@ -8,7 +8,10 @@ import {
   resolveProjectAccessibleUrl,
   uniqueProjectName,
 } from './fixtures/api.js';
-import { removeContainersByNamePrefix } from './fixtures/docker-cleanup.js';
+import {
+  E2E_CONTAINER_NAME_PREFIXES,
+  removeContainersByNamePrefix,
+} from './fixtures/docker-cleanup.js';
 
 const REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
 const POLL_INTERVAL_MS = 3000;
@@ -47,7 +50,7 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
 
   test.beforeAll(async () => {
     try {
-      removeContainersByNamePrefix(['ol-test-', 'ol-mcp-']);
+      removeContainersByNamePrefix(E2E_CONTAINER_NAME_PREFIXES);
     } catch {
       // noop
     }

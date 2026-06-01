@@ -1,7 +1,10 @@
 import { execSync } from 'node:child_process';
 
 import { authHeaders, OPENLANDER_URL } from './fixtures/config.js';
-import { listContainerIdsByNamePrefix } from './fixtures/docker-cleanup.js';
+import {
+  E2E_CONTAINER_NAME_PREFIXES,
+  listContainerIdsByNamePrefix,
+} from './fixtures/docker-cleanup.js';
 
 type ProjectSummary = { id: string; name: string };
 type ServiceSummary = { id?: string; name?: string };
@@ -92,15 +95,7 @@ export default async function globalTeardown() {
 
     console.log('  ✓ Cleaning up orphan Docker containers');
     try {
-      const containerIds = listContainerIdsByNamePrefix([
-        'ol-test-',
-        'ol-golden-',
-        'ol-qg-',
-        'ol-qa-',
-        'ol-mcp-',
-        'ol-svc-qg-',
-        'ol-svc-mcp-',
-      ]);
+      const containerIds = listContainerIdsByNamePrefix(E2E_CONTAINER_NAME_PREFIXES);
       const uniqueContainerIds = Array.from(new Set(containerIds));
 
       if (uniqueContainerIds.length === 0) {
