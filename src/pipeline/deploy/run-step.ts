@@ -106,7 +106,6 @@ export class ContainerRunner {
           resourceLimits: resourceLimits ?? undefined,
         });
 
-        clearPortScanCache();
         releasePortReservation(port);
         const url = `http://${getEnvironmentProjectHostname(config.projectName, envType)}`;
         return {

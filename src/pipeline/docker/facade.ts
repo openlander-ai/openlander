@@ -8,6 +8,7 @@ import { NetworkOps } from './network.js';
 import { StreamOps } from './stream.js';
 import type { DockerStatus } from './types.js';
 import { VolumeOps } from './volume.js';
+import { clearPortScanCache } from '../port.js';
 import type { RuntimeBackend } from '../runtime/backend.js';
 
 export class Docker implements RuntimeBackend {
@@ -39,16 +40,22 @@ export class Docker implements RuntimeBackend {
     this.infraOps = new InfraOps(this.ctx);
   }
 
+  private async runContainerStart<T>(operation: () => Promise<T>): Promise<T> {
+    const result = await operation();
+    clearPortScanCache();
+    return result;
+  }
+
   runContainer(options: Parameters<ContainerOps['runContainer']>[0], _serverId?: string) {
-    return this.containerOps.runContainer(options);
+    return this.runContainerStart(() => this.containerOps.runContainer(options));
   }
 
   runComposeService(...args: Parameters<ContainerOps['runComposeService']>) {
-    return this.containerOps.runComposeService(...args);
+    return this.runContainerStart(() => this.containerOps.runComposeService(...args));
   }
 
   runInfraContainer(...args: Parameters<ContainerOps['runInfraContainer']>) {
-    return this.containerOps.runInfraContainer(...args);
+    return this.runContainerStart(() => this.containerOps.runInfraContainer(...args));
   }
 
   stopContainer(...args: Parameters<ContainerOps['stopContainer']>) {
@@ -56,7 +63,7 @@ export class Docker implements RuntimeBackend {
   }
 
   startContainer(...args: Parameters<ContainerOps['startContainer']>) {
-    return this.containerOps.startContainer(...args);
+    return this.runContainerStart(() => this.containerOps.startContainer(...args));
   }
 
   removeContainer(...args: Parameters<ContainerOps['removeContainer']>) {
@@ -78,7 +85,7 @@ export class Docker implements RuntimeBackend {
   }
 
   restartContainer(...args: Parameters<ContainerOps['restartContainer']>) {
-    return this.containerOps.restartContainer(...args);
+    return this.runContainerStart(() => this.containerOps.restartContainer(...args));
   }
 
   getContainerStats(...args: Parameters<ContainerOps['getContainerStats']>) {
@@ -94,7 +101,7 @@ export class Docker implements RuntimeBackend {
   }
 
   runServiceContainer(...args: Parameters<ContainerOps['runServiceContainer']>) {
-    return this.containerOps.runServiceContainer(...args);
+    return this.runContainerStart(() => this.containerOps.runServiceContainer(...args));
   }
 
   waitForHealthy(...args: Parameters<ContainerOps['waitForHealthy']>) {
