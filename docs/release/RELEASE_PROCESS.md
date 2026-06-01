@@ -157,6 +157,35 @@ Before tagging a final release:
 6. Confirm the GitHub Release is not marked prerelease and that GHCR moved
    `<major>.<minor>` and `latest` to the final image.
 
+## Cold-Agent RC Dry-Run
+
+Each accepted 0.1.x release candidate must pass a cold-agent smoke run on a
+fresh or dedicated QA host before final promotion. Do not run this gate on a
+host that already runs a dogfood OpenLander instance or unrelated `ol-*`
+containers: startup monitors reconcile managed Docker containers against the
+active database.
+
+Use the exact RC artifact under test, not a local checkout. For image-based
+validation, pin `ghcr.io/openlander-ai/openlander:<version>-rc.N`; for installer
+validation, pin `OPENLANDER_VERSION=v<version>-rc.N`.
+
+The dry-run must cover:
+
+1. Fresh install and setup/login.
+2. MCP token visibility from the UI or `POST /api/mcp/token`.
+3. Agent-compatible deploy path for the demo app through MCP or the documented
+   REST flow.
+4. Managed PostgreSQL and Redis creation/binding flow, followed by redeploy.
+5. Topology and log recovery checks after deploy completion.
+6. One rollback or redeploy lifecycle check.
+7. `OPENLANDER_E2E_SLOW=1` compose lane when the release touches compose,
+   Docker orchestration, container cleanup, or deploy lifecycle code.
+
+If any item fails, cut a new RC after the fix. Keep raw host names, IPs,
+credentials, screenshots with secrets, and private dogfood notes out of public
+commits; publish only the public-safe pass/fail summary in the release notes or
+PR.
+
 ## Post-Release Verification
 
 ```bash
