@@ -4,7 +4,7 @@
 
 # OpenLander
 
-**Self-hosted deployment control plane for coding agents.**
+**MCP-native deployment control plane for coding agents.**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
@@ -12,6 +12,10 @@
 
 OpenLander lets coding agents deploy, inspect, diagnose, and operate apps on
 your own server, with risky actions gated by human approval.
+
+<p align="center">
+  <img src="docs/assets/social-preview.png" alt="OpenLander — MCP-native deployment control plane for coding agents" width="920" />
+</p>
 
 ---
 
