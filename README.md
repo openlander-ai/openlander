@@ -8,7 +8,7 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-[Try the demo app](#quickstart) · [Quickstart](#quickstart) · [Current status](#current-status) · [MCP tools](docs/wiki/MCP-Tools-Reference.md)
+[Quickstart](#quickstart) · [Current status](#current-status) · [Why OpenLander?](#why-openlander) · [MCP tools](docs/wiki/MCP-Tools-Reference.md)
 
 OpenLander lets coding agents deploy, inspect, diagnose, and operate apps on
 your own server, with risky actions gated by human approval.
@@ -28,7 +28,7 @@ and read it before running with `sudo bash`.
 The installer sets up Docker/Compose if needed, starts the published
 `ghcr.io/openlander-ai/openlander:latest` image with Postgres, and prints the
 dashboard URL. Open it, create the admin password, then copy the MCP token into
-your coding agent.
+your coding agent from the **Your Agent** page (`/mcp-server`).
 
 On a cloud VM, allow inbound TCP `80` for deployed app routes and TCP `10114`
 for the OpenLander dashboard/MCP endpoint. If those ports are blocked by a
@@ -230,7 +230,8 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 - Git-to-URL deploy pipeline.
 - MCP server with deploy / inspect / operate tools.
 - Dashboard for human oversight + intervention.
-- Managed service templates for Postgres, MySQL, Redis, MongoDB, and MinIO.
+- Project-scoped managed services for Postgres, MySQL, Redis, MongoDB, and
+  MinIO through agent/MCP workflows.
 
 **Next**
 
