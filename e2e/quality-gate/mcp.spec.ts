@@ -1,5 +1,3 @@
-import { execSync } from 'node:child_process';
-
 import { expect, test } from '@playwright/test';
 
 import {
@@ -9,6 +7,7 @@ import {
   mcpCall,
   uniqueProjectName,
 } from './fixtures/api.js';
+import { removeContainersByNamePrefix } from './fixtures/docker-cleanup.js';
 
 const REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
 const POLL_INTERVAL_MS = 3000;
@@ -40,13 +39,7 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
 
   test.beforeAll(async () => {
     try {
-      const ids = execSync('docker ps -a --filter name=ol-test- -q', { encoding: 'utf-8' })
-        .trim()
-        .split('\n')
-        .filter(Boolean);
-      for (const id of ids) {
-        execSync(`docker rm -f ${id}`, { stdio: 'pipe' });
-      }
+      removeContainersByNamePrefix(['ol-test-', 'ol-mcp-']);
     } catch {
       // noop
     }
@@ -54,7 +47,8 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
     try {
       const projects = await listProjects();
       for (const p of projects) {
-        if (String(p.name).includes('test-single-dockerfile')) {
+        const name = String(p.name);
+        if (name.includes('test-single-dockerfile') || name.startsWith('mcp-')) {
           await deleteProject(String(p.id));
         }
       }

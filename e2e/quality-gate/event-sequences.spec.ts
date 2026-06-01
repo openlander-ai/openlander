@@ -1,5 +1,3 @@
-import { execSync } from 'node:child_process';
-
 import { expect, test } from '@playwright/test';
 
 import {
@@ -16,6 +14,7 @@ import {
   waitForStatus,
   waitForServiceStatus,
 } from './fixtures/api.js';
+import { removeContainersByNamePrefix } from './fixtures/docker-cleanup.js';
 import { assertEventSequence, consumeDeployStream } from './fixtures/stream-consumer.js';
 
 const TEST_TIMEOUT_MS = 300_000;
@@ -32,13 +31,7 @@ test.describe('Quality Gate — Event wiring golden sequences (Q-2)', () => {
 
   test.beforeAll(() => {
     try {
-      const ids = execSync('docker ps -a --filter name=ol- -q', { encoding: 'utf-8' })
-        .trim()
-        .split('\n')
-        .filter(Boolean);
-      for (const id of ids) {
-        execSync(`docker rm -f ${id}`, { stdio: 'pipe' });
-      }
+      removeContainersByNamePrefix(['ol-test-', 'ol-golden-', 'ol-qg-', 'ol-qa-']);
     } catch {
       // noop
     }

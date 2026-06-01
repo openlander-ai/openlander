@@ -1,11 +1,12 @@
 import { execSync } from 'node:child_process';
 
 import { authHeaders, OPENLANDER_URL } from './fixtures/config.js';
+import { listContainerIdsByNamePrefix } from './fixtures/docker-cleanup.js';
 
 type ProjectSummary = { id: string; name: string };
 type ServiceSummary = { id?: string; name?: string };
 
-const TEST_PROJECT_PATTERN = /^(test-|golden-|qg-|qa-)/i;
+const TEST_PROJECT_PATTERN = /^(test-|golden-|qg-|qa-|mcp-)/i;
 
 function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const headers = { ...authHeaders(), ...(init?.headers as Record<string, string>) };
@@ -42,10 +43,14 @@ async function deleteDeployableServices(project: ProjectSummary): Promise<void> 
 }
 
 async function deleteProject(project: ProjectSummary): Promise<void> {
-  let response = await apiFetch(`/api/projects/${project.id}/purge?confirm=true`, { method: 'DELETE' });
+  let response = await apiFetch(`/api/projects/${project.id}/purge?confirm=true`, {
+    method: 'DELETE',
+  });
   if (response.status === 409) {
     await deleteDeployableServices(project);
-    response = await apiFetch(`/api/projects/${project.id}/purge?confirm=true`, { method: 'DELETE' });
+    response = await apiFetch(`/api/projects/${project.id}/purge?confirm=true`, {
+      method: 'DELETE',
+    });
   }
 
   if (response.ok) {
@@ -87,12 +92,13 @@ export default async function globalTeardown() {
 
     console.log('  ✓ Cleaning up orphan Docker containers');
     try {
-      const containerIds = ['test-', 'golden-', 'qg-', 'qa-'].flatMap((prefix) =>
-        execSync(`docker ps -a --filter name=${prefix} -q`, { encoding: 'utf-8' })
-          .trim()
-          .split('\n')
-          .filter(Boolean),
-      );
+      const containerIds = listContainerIdsByNamePrefix([
+        'ol-test-',
+        'ol-golden-',
+        'ol-qg-',
+        'ol-qa-',
+        'ol-mcp-',
+      ]);
       const uniqueContainerIds = Array.from(new Set(containerIds));
 
       if (uniqueContainerIds.length === 0) {
