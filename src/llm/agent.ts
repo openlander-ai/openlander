@@ -11,7 +11,8 @@ import { calculateCost, extractUsageFromResult } from './transparency.js';
 import { withTracking } from './tracking-middleware.js';
 import type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-events.js';
 import { compactHistory } from './compaction.js';
-import { decisionEngine, type ToolDecisionContext } from './decision.js';
+import { decisionEngine } from './decision.js';
+import { buildArchiveDecisionContext } from './archive-decision-context.js';
 import type { ApprovalGate } from '../pipeline/approval-gate.js';
 import { eventBus } from '../events/index.js';
 import { classifyLlmError, LlmErrorType } from './llm-error-types.js';
@@ -520,7 +521,7 @@ export class Agent {
       guardedTools[name] = {
         ...toolDef,
         execute: async (args: Record<string, unknown>, options: unknown) => {
-          const decisionContext = await this.buildToolDecisionContext(name, args);
+          const decisionContext = await buildArchiveDecisionContext(this.db, name, args);
           const decision = decisionEngine.classify(name, undefined, decisionContext);
 
           if (
@@ -581,66 +582,6 @@ export class Agent {
     }
 
     return guardedTools;
-  }
-
-  private async buildToolDecisionContext(
-    toolName: string,
-    args: Record<string, unknown>,
-  ): Promise<ToolDecisionContext | undefined> {
-    if (toolName !== 'archive_project') {
-      return undefined;
-    }
-
-    const project = await this.resolveDecisionProject(args);
-    if (!project) {
-      return undefined;
-    }
-
-    const db = this.db as unknown as {
-      getDeployableForProject?: Database['getDeployableForProject'];
-      getEnvironmentsByProject?: Database['getEnvironmentsByProject'];
-    };
-    const [deployable, environments] = await Promise.all([
-      db.getDeployableForProject?.(project.id),
-      db.getEnvironmentsByProject?.(project.id),
-    ]);
-
-    const production = environments?.find((environment) => environment.type === 'production');
-    const fallbackStatus = deployable?.status ?? project.status ?? null;
-    const productionRunning = production
-      ? production.status === 'running'
-      : fallbackStatus === 'running';
-
-    return { archiveProject: { productionRunning } };
-  }
-
-  private async resolveDecisionProject(args: Record<string, unknown>) {
-    const db = this.db as unknown as {
-      getProject?: Database['getProject'];
-      getProjectByName?: Database['getProjectByName'];
-    };
-
-    const projectId =
-      this.readStringArg(args, 'project_id') ?? this.readStringArg(args, 'projectId');
-    if (projectId && db.getProject) {
-      const project = await db.getProject(projectId);
-      if (project) {
-        return project;
-      }
-    }
-
-    const projectName =
-      this.readStringArg(args, 'project_name') ?? this.readStringArg(args, 'projectName');
-    if (projectName && db.getProjectByName) {
-      return db.getProjectByName(projectName);
-    }
-
-    return undefined;
-  }
-
-  private readStringArg(args: Record<string, unknown>, key: string): string | undefined {
-    const value = args[key];
-    return typeof value === 'string' && value.length > 0 ? value : undefined;
   }
 
   private getModelName(): string {

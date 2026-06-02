@@ -15,7 +15,8 @@ import type { DeployQueue } from './deploy-queue.js';
 import type { DeployPipeline } from './deploy.js';
 import type { OpenLanderConfig } from '../config/index.js';
 import { ApprovalGate, type ApprovalGate as ApprovalGateType } from './approval-gate.js';
-import { decisionEngine, type ToolDecisionContext } from '../llm/decision.js';
+import { decisionEngine } from '../llm/decision.js';
+import { buildArchiveDecisionContext } from '../llm/archive-decision-context.js';
 import type { PendingFixPatch } from './deploy/helpers.js';
 import { findMatchingPatterns, saveRecoveryPattern } from '../llm/memory.js';
 import type { ConfigurableRecoveryStep, RecoveryAutomationPolicy } from '../monitor/ops-types.js';
@@ -68,29 +69,6 @@ export const TOOL_TO_RECOVERY_STEP: Record<string, ConfigurableRecoveryStep> = {
 interface GateCheckResult {
   blocked: boolean;
   reason?: 'infra-error';
-}
-
-async function buildArchiveProjectDecisionContext(
-  db: Database,
-  projectId: string,
-): Promise<ToolDecisionContext | undefined> {
-  const [project, deployable, environments] = await Promise.all([
-    db.getProject(projectId),
-    db.getDeployableForProject(projectId),
-    db.getEnvironmentsByProject(projectId),
-  ]);
-
-  if (!project) {
-    return undefined;
-  }
-
-  const production = environments.find((environment) => environment.type === 'production');
-  const fallbackStatus = deployable?.status ?? project.status ?? null;
-  const productionRunning = production
-    ? production.status === 'running'
-    : fallbackStatus === 'running';
-
-  return { archiveProject: { productionRunning } };
 }
 
 export interface AutoRecoveryAgent {
@@ -559,8 +537,8 @@ ${plan.agentGuidance}
             }
 
             const decisionContext =
-              event.type === 'tool_call' && event.toolName === 'archive_project'
-                ? await buildArchiveProjectDecisionContext(db, projectId)
+              event.type === 'tool_call'
+                ? await buildArchiveDecisionContext(db, event.toolName, { project_id: projectId })
                 : undefined;
 
             if (

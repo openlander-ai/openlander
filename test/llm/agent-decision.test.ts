@@ -71,8 +71,10 @@ function createMockDb(): Database {
     createAiUsageLog: vi.fn().mockReturnValue('usage-1'),
     getProject: vi.fn(),
     getProjectByName: vi.fn(),
+    getService: vi.fn(),
     getDeployableForProject: vi.fn(),
     getEnvironmentsByProject: vi.fn(),
+    getManagedServicesByGroup: vi.fn().mockResolvedValue([]),
   };
   return mockDb as unknown as Database;
 }
@@ -81,8 +83,10 @@ function getMockDb(db: Database) {
   return db as unknown as {
     getProject: ReturnType<typeof vi.fn>;
     getProjectByName: ReturnType<typeof vi.fn>;
+    getService: ReturnType<typeof vi.fn>;
     getDeployableForProject: ReturnType<typeof vi.fn>;
     getEnvironmentsByProject: ReturnType<typeof vi.fn>;
+    getManagedServicesByGroup: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -113,6 +117,7 @@ function createAgentWithTools(
     deploy_app: { execute: toolExecuteMock },
     rollback_service: { execute: toolExecuteMock },
     archive_project: { execute: toolExecuteMock },
+    archive_service: { execute: toolExecuteMock },
   } as unknown as ToolSet;
 
   agent.setTools(tools);
@@ -240,16 +245,13 @@ describe('Agent DecisionEngine integration', () => {
 
     const db = createMockDb();
     const mockDb = getMockDb(db);
-    mockDb.getProjectByName.mockResolvedValue({
-      id: 'proj-dev',
-      name: 'dev-app',
-      status: 'stopped',
-    });
+    mockDb.getProjectByName.mockResolvedValue({ id: 'proj-dev', name: 'dev-app' });
     mockDb.getDeployableForProject.mockResolvedValue({ status: 'stopped' });
     mockDb.getEnvironmentsByProject.mockResolvedValue([
       { type: 'production', status: 'stopped' },
       { type: 'development', status: 'running' },
     ]);
+    mockDb.getManagedServicesByGroup.mockResolvedValue([{ status: 'stopped' }]);
     const approvalGate = createApprovalGate('approved');
     const { agent, toolExecuteMock } = createAgentWithTools(db, approvalGate);
     const events: ChatStreamEvent[] = [];
@@ -281,11 +283,7 @@ describe('Agent DecisionEngine integration', () => {
 
     const db = createMockDb();
     const mockDb = getMockDb(db);
-    mockDb.getProjectByName.mockResolvedValue({
-      id: 'proj-prod',
-      name: 'prod-app',
-      status: 'running',
-    });
+    mockDb.getProjectByName.mockResolvedValue({ id: 'proj-prod', name: 'prod-app' });
     mockDb.getDeployableForProject.mockResolvedValue({ status: 'running' });
     mockDb.getEnvironmentsByProject.mockResolvedValue([{ type: 'production', status: 'running' }]);
     const approvalGate = createApprovalGate('approved');
@@ -302,6 +300,82 @@ describe('Agent DecisionEngine integration', () => {
 
     expect(events.some((event) => event.type === 'approval_required')).toBe(true);
     expect(vi.mocked(approvalGate.waitForApproval)).toHaveBeenCalledTimes(1);
+    expect(toolExecuteMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires approval to archive a project whose app is stopped but a managed resource is running', async () => {
+    scenario.toolName = 'archive_project';
+    scenario.args = { project_name: 'data-app' };
+
+    const db = createMockDb();
+    const mockDb = getMockDb(db);
+    mockDb.getProjectByName.mockResolvedValue({ id: 'proj-data', name: 'data-app' });
+    mockDb.getDeployableForProject.mockResolvedValue({ status: 'stopped' });
+    mockDb.getEnvironmentsByProject.mockResolvedValue([{ type: 'production', status: 'stopped' }]);
+    // App is stopped, but a managed database is still running with data.
+    mockDb.getManagedServicesByGroup.mockResolvedValue([{ status: 'running' }]);
+    const approvalGate = createApprovalGate('approved');
+    const { agent, toolExecuteMock } = createAgentWithTools(db, approvalGate);
+    const events: ChatStreamEvent[] = [];
+
+    await agent.chatStream(
+      'archive the data app',
+      async (event) => {
+        events.push(event);
+      },
+      'session-1',
+    );
+
+    expect(events.some((event) => event.type === 'approval_required')).toBe(true);
+    expect(vi.mocked(approvalGate.waitForApproval)).toHaveBeenCalledTimes(1);
+    expect(toolExecuteMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires approval when archive target project cannot be resolved (fail-safe)', async () => {
+    scenario.toolName = 'archive_project';
+    scenario.args = { project_name: 'ghost-app' };
+
+    const db = createMockDb();
+    const mockDb = getMockDb(db);
+    mockDb.getProjectByName.mockResolvedValue(undefined);
+    const approvalGate = createApprovalGate('approved');
+    const { agent, toolExecuteMock } = createAgentWithTools(db, approvalGate);
+    const events: ChatStreamEvent[] = [];
+
+    await agent.chatStream(
+      'archive ghost app',
+      async (event) => {
+        events.push(event);
+      },
+      'session-1',
+    );
+
+    expect(events.some((event) => event.type === 'approval_required')).toBe(true);
+    expect(vi.mocked(approvalGate.waitForApproval)).toHaveBeenCalledTimes(1);
+    expect(toolExecuteMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('archives a stopped service without approval and emits notification', async () => {
+    scenario.toolName = 'archive_service';
+    scenario.args = { service_id: 'svc-1' };
+
+    const db = createMockDb();
+    const mockDb = getMockDb(db);
+    mockDb.getService.mockResolvedValue({ id: 'svc-1', status: 'stopped' });
+    const approvalGate = createApprovalGate('approved');
+    const { agent, toolExecuteMock } = createAgentWithTools(db, approvalGate);
+    const events: ChatStreamEvent[] = [];
+
+    await agent.chatStream(
+      'archive stopped service',
+      async (event) => {
+        events.push(event);
+      },
+      'session-1',
+    );
+
+    expect(events.some((event) => event.type === 'approval_required')).toBe(false);
+    expect(vi.mocked(approvalGate.waitForApproval)).not.toHaveBeenCalled();
     expect(toolExecuteMock).toHaveBeenCalledTimes(1);
   });
 });

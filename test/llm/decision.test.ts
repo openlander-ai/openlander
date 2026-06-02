@@ -31,7 +31,7 @@ describe('DecisionEngine', () => {
   it('archive_project on running production → REQUIRE_APPROVAL', () => {
     expect(
       engine.classify('archive_project', undefined, {
-        archiveProject: { productionRunning: true },
+        archive: { productionRunning: true },
       }),
     ).toBe('REQUIRE_APPROVAL');
   });
@@ -39,9 +39,29 @@ describe('DecisionEngine', () => {
   it('archive_project on stopped or non-production target → NOTIFY_THEN_ALLOW', () => {
     expect(
       engine.classify('archive_project', undefined, {
-        archiveProject: { productionRunning: false },
+        archive: { productionRunning: false },
       }),
     ).toBe('NOTIFY_THEN_ALLOW');
+  });
+
+  it('archive_service on running target → REQUIRE_APPROVAL', () => {
+    expect(
+      engine.classify('archive_service', undefined, {
+        archive: { productionRunning: true },
+      }),
+    ).toBe('REQUIRE_APPROVAL');
+  });
+
+  it('archive_service on stopped target → NOTIFY_THEN_ALLOW', () => {
+    expect(
+      engine.classify('archive_service', undefined, {
+        archive: { productionRunning: false },
+      }),
+    ).toBe('NOTIFY_THEN_ALLOW');
+  });
+
+  it('archive_service without context → REQUIRE_APPROVAL (static default)', () => {
+    expect(engine.classify('archive_service')).toBe('REQUIRE_APPROVAL');
   });
 
   it('remove_service → REQUIRE_APPROVAL', () => {
