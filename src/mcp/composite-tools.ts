@@ -32,13 +32,15 @@ import {
  * - Build logs & history
  * - Git integration (repo scanning)
  * - Infrastructure analysis
- * Total: 16 tools
+ * Total: 18 tools
  */
 export const DEPLOY_ACTIONS = [
   'create_deploy_plan',
+  'get_deploy_plan',
   'update_deploy_plan',
   'execute_deploy_plan',
   'validate_deploy_plan',
+  'cancel_deploy',
   'deploy_app',
   'get_deploy_status',
   'get_deploy_history',
@@ -199,7 +201,7 @@ export const PLATFORM_ACTIONS = [
 
 /**
  * Verification: Total tool counts
- * - DEPLOY_ACTIONS: 16 tools
+ * - DEPLOY_ACTIONS: 18 tools
  * - PROJECT_ACTIONS: 16 tools
  * - MANAGED_SERVICE_ACTIONS: 21 tools
  * - SERVICE_ACTIONS: 22 tools
@@ -298,8 +300,15 @@ function invalidParamsResponse(
   unknownParams: string[] = [],
 ): Record<string, unknown> {
   const retryParams = suggestedParamsForRetry(params, contract);
+  const hasRequiredOneOf =
+    contract.required_one_of !== undefined && contract.required_one_of.length > 0;
+  const hasAnyRequiredOneOf =
+    !hasRequiredOneOf ||
+    contract.required_one_of?.some((group) => group.every((name) => name in params));
   const shouldSuggestRetry =
-    unknownParams.length > 0 || contract.required_params.some((name) => !(name in params));
+    unknownParams.length > 0 ||
+    contract.required_params.some((name) => !(name in params)) ||
+    !hasAnyRequiredOneOf;
   const suggestedCall = shouldSuggestRetry
     ? { tool: toolName, arguments: { action, params: retryParams } }
     : { tool: toolName, arguments: { action: 'help', params: { action_name: action } } };
@@ -313,6 +322,7 @@ function invalidParamsResponse(
     allowed_params: contract.allowed_params,
     required_params: contract.required_params,
     optional_params: contract.optional_params,
+    ...(contract.required_one_of ? { required_one_of: contract.required_one_of } : {}),
     input_schema: contract.input_schema,
     suggested_call: suggestedCall,
     _agent_guidance: {

@@ -82,6 +82,7 @@ describe('Composite Action Routing', () => {
         name: 'create_deploy_plan',
         allowed_params: expect.arrayContaining(['name', 'repo_url', 'source', 'image']),
         optional_params: expect.arrayContaining(['name']),
+        required_one_of: [['repo_url'], ['source', 'image']],
       });
       expect(action['allowed_params']).not.toEqual(expect.arrayContaining(['project_name']));
       const inputSchema = action['input_schema'] as Record<string, unknown>;
