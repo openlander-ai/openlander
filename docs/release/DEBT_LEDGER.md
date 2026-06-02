@@ -16,6 +16,26 @@ a release should be recorded here so follow-up work is explicit.
   review both actions against the final project/service/runtime ID vocabulary,
   especially monorepo child-service cancellation and plan lookup fields.
 
+- **MCP project-first action during data-model freeze:**
+  `openlander_project.create_project` is added as an empty project-group
+  creation action without changing the deployable data model.
+- **Why accepted:** the action exposes the existing `createProjectGroup`
+  repository path and existing `display_name` / `description` / `tags`
+  columns to MCP agents so they can provision project-scoped managed services
+  before the first deployable app boots. It creates no runtime container,
+  repository source, deploy log, or service row.
+- **Vocab review:** "project" continues to mean a group/workspace that
+  organizes deployable services and managed infrastructure; runtime lifecycle
+  stays on `openlander_service` and managed infrastructure lifecycle stays on
+  `openlander_managed_service`.
+- **Endpoint collision check:** no REST endpoint is added for this MCP action;
+  the existing `POST /api/projects` project-group API remains the web/API
+  creation route.
+- **Follow-up:** when the 0.2 project/service/environment model is unfrozen,
+  review whether project creation should also accept explicit environment
+  seeds or generated managed-service binding metadata, rather than extending
+  the v0.1 MCP action ad hoc.
+
 - **0.2 env-scope storage first, producers later:** PR #341 makes
   environment-scoped storage and deploy-time resolution real, but the existing
   REST/MCP/UI write surfaces still save through the v0.1 service-shared path

@@ -27,6 +27,7 @@ const PROJECT_RUNTIME_ACTIONS_REMOVED = [
 ] as const;
 
 const FROZEN_PROJECT_GROUP_ACTIONS = [
+  'create_project',
   'list_projects',
   'archive_project',
   'unarchive_project',

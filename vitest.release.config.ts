@@ -57,6 +57,7 @@ export default defineConfig({
       'test/mcp/managed-service-rename.test.ts',
       'test/mcp/mcp-restricted-actions.test.ts',
       'test/mcp/mode-switching.test.ts',
+      'test/mcp/project-create-action.test.ts',
       'test/mcp/response-contract.test.ts',
       'test/mcp/session-heartbeat.test.ts',
       'test/mcp/tool-registry-snapshot.test.ts',

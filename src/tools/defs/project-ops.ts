@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 
 import { createModuleLogger } from '../../lib/logger.js';
@@ -9,11 +10,16 @@ import {
   serviceViewFromRows,
   serviceViewWireVisibility,
 } from '../../db/views/service-view.js';
-import { ProjectNotFoundError } from '../../errors.js';
+import {
+  InvalidProjectNameError,
+  ProjectAlreadyExistsError,
+  ProjectNotFoundError,
+} from '../../errors.js';
 import { emptySchema } from './schemas.js';
 import type { ToolDef } from './types.js';
 
 const log = createModuleLogger('tools-defs-project-ops');
+const PROJECT_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
 
 type ProjectOpsContext = Parameters<ToolDef['execute']>[1];
 type ProjectRow = Awaited<ReturnType<ProjectOpsContext['appCtx']['db']['getProject']>>;
@@ -27,6 +33,26 @@ const projectLifecycleSchema = z
   .refine((value) => Boolean(value.project_id || value.project_name), {
     message: 'project_id or project_name is required',
   });
+
+const createProjectSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .regex(
+      PROJECT_NAME_REGEX,
+      'Project names must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens.',
+    )
+    .describe('Project group slug. Use this before creating managed services for a brand-new app.'),
+  display_name: z
+    .string()
+    .trim()
+    .min(1)
+    .optional()
+    .describe('Optional human-readable project group name.'),
+  description: z.string().trim().min(1).optional().describe('Optional project description.'),
+  tags: z.array(z.string().trim().min(1)).max(20).optional().describe('Optional project tags.'),
+});
 
 async function resolveProjectGroup(
   args: Record<string, unknown>,
@@ -49,6 +75,53 @@ function projectGroupSummary(project: ResolvedProjectRow) {
   return {
     id: project.id,
     name: project.name,
+    display_name: project.display_name || project.name,
+    description: project.description ?? null,
+    tags: parseProjectTags(project.tags ?? null),
+    archived: Boolean(project.archived_at),
+  };
+}
+
+function parseProjectTags(tags: string | null | undefined): string[] {
+  if (!tags) return [];
+  try {
+    const parsed = JSON.parse(tags) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((tag): tag is string => typeof tag === 'string');
+  } catch {
+    return [];
+  }
+}
+
+function normalizeProjectTags(tags: unknown): string | null {
+  if (!Array.isArray(tags)) return null;
+  const normalized = tags
+    .filter((tag): tag is string => typeof tag === 'string')
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
+  const unique = [...new Set(normalized)];
+  return unique.length > 0 ? JSON.stringify(unique) : null;
+}
+
+function createProjectNextSteps(project: ResolvedProjectRow): string[] {
+  return [
+    `If this app needs a database/cache, call openlander_managed_service.create_service with project_id="${project.id}" before deploying.`,
+    `Deploy the first app with openlander_deploy.deploy_app using target_project_id="${project.id}" so the deployable service is attached to this project group after readiness succeeds.`,
+    'Use project_id for follow-up managed-service actions; use the returned deployable service_id for runtime/env/domain actions after deployment.',
+  ];
+}
+
+function createManagedServiceSuggestedCall(project: ResolvedProjectRow) {
+  return {
+    tool: 'openlander_managed_service',
+    arguments: {
+      action: 'create_service',
+      params: {
+        project_id: project.id,
+        name: '<database-or-cache-name>',
+        template: 'postgresql',
+      },
+    },
   };
 }
 
@@ -100,6 +173,90 @@ async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1
 }
 
 export const projectOpsToolDefs: ToolDef[] = [
+  {
+    name: 'create_project',
+    riskLevel: 'low',
+    description:
+      'Create an empty project group before provisioning managed services or attaching deployable app/worker services. This does not deploy code, create a repository source, or start a container. Use it for the smooth first-deploy order: create_project -> create_service(project_id) when needed -> deploy_app(target_project_id).',
+    mcpDescription:
+      'Create an empty project group. Use this before create_service(project_id) and deploy_app(target_project_id) for a brand-new app that needs project-scoped managed services.',
+    inputSchema: createProjectSchema,
+    execute: async (args, context) => {
+      const name = typeof args['name'] === 'string' ? args['name'].trim() : '';
+      if (!PROJECT_NAME_REGEX.test(name)) {
+        throw new InvalidProjectNameError(name);
+      }
+
+      const displayName =
+        typeof args['display_name'] === 'string' && args['display_name'].trim().length > 0
+          ? args['display_name'].trim()
+          : name;
+      const description =
+        typeof args['description'] === 'string' && args['description'].trim().length > 0
+          ? args['description'].trim()
+          : null;
+      const tags = normalizeProjectTags(args['tags']);
+
+      const existing = await context.appCtx.db.getProjectByName(name);
+      if (existing) {
+        return {
+          status: 'exists',
+          project_id: existing.id,
+          project_name: existing.name,
+          project: projectGroupSummary(existing),
+          suggested_call: createManagedServiceSuggestedCall(existing),
+          _agent_guidance: {
+            message:
+              'Project group already exists. Continue with this project_id instead of creating a placeholder deployment.',
+            next_steps: createProjectNextSteps(existing),
+          },
+        };
+      }
+
+      let project: ResolvedProjectRow;
+      try {
+        project = await context.appCtx.db.createProjectGroup({
+          id: randomUUID(),
+          name,
+          displayName,
+          description,
+          tags,
+        });
+      } catch (err) {
+        if (err instanceof ProjectAlreadyExistsError) {
+          const racedProject = await context.appCtx.db.getProjectByName(name);
+          if (racedProject) {
+            return {
+              status: 'exists',
+              project_id: racedProject.id,
+              project_name: racedProject.name,
+              project: projectGroupSummary(racedProject),
+              suggested_call: createManagedServiceSuggestedCall(racedProject),
+              _agent_guidance: {
+                message:
+                  'Project group already exists. Continue with this project_id instead of creating a placeholder deployment.',
+                next_steps: createProjectNextSteps(racedProject),
+              },
+            };
+          }
+        }
+        throw err;
+      }
+
+      return {
+        status: 'created',
+        project_id: project.id,
+        project_name: project.name,
+        project: projectGroupSummary(project),
+        suggested_call: createManagedServiceSuggestedCall(project),
+        _agent_guidance: {
+          message:
+            'Project group created without deploying code. This removes the first-deploy chicken-and-egg case for apps that need project-scoped managed services.',
+          next_steps: createProjectNextSteps(project),
+        },
+      };
+    },
+  },
   {
     name: 'list_projects',
     riskLevel: 'low',

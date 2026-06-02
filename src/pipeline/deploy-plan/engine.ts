@@ -1338,7 +1338,7 @@ export class PlanEngine {
         status: 'needs_target_project',
         project_name: plan.app.name,
         message:
-          'Managed auto-provisioning is supported only for existing projects. This is a new app, so there is no target project to provision the managed service on yet.',
+          'Managed auto-provisioning needs an existing project group. This is a new app, so create the project first or execute the plan with target_project_id.',
         approval_required: {
           create_resources: this.safeProposedResources(plan.services)
             .filter((svc) => approvedSafeResources.has(this.proposedResourceIdentifier(svc)))
@@ -1346,9 +1346,10 @@ export class PlanEngine {
         },
         _agent_guidance: {
           next_steps: [
-            'Managed auto-provisioning is supported only for existing projects; a brand-new app has no project to provision onto.',
-            'To deploy this new app now, pass an external connection URL (e.g. DATABASE_URL) in env_vars so no managed service needs provisioning.',
-            'Auto-provisioning becomes available once the app is deployed under an existing project group.',
+            'Call openlander_project.create_project with the intended group name.',
+            'Create the managed service in that project with openlander_managed_service.create_service(project_id=...).',
+            'Retry deploy_app or execute_deploy_plan with target_project_id so the first deployable service attaches to the existing project group.',
+            'If the user already has a real external connection URL, pass it in env_vars and execute without approving managed-service creation.',
           ],
         },
       };

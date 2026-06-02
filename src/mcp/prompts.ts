@@ -45,25 +45,26 @@ const PROMPTS: PromptDef[] = [
 ## Recommended Deployment Flow
 
 1. **Preflight** — Call \`get_system_stats\` to check disk/memory.
-2. **Deploy** — For the common single-service case, \`deploy_app\` is the one-call front door: pass \`repo_url\` (or \`image\`) + \`name\` for a new app, or \`service_id\`/\`service_name\` to redeploy an existing one. For multi-service stacks or when you want to inspect before executing, use \`create_deploy_plan\` then \`execute_deploy_plan\`. Add \`env_vars\` for additional config.
-3. **Approve proposed managed services** — When a plan would auto-provision a project-scoped managed service (e.g. a \`postgresql\` it can wire to \`DATABASE_URL\`), \`execute_deploy_plan\` returns status \`needs_approval\` with \`approval_required.create_resources\` and creates nothing. Re-run with \`approve_all_safe_resources: true\` (approve all) or \`approvals.create_resources: ["postgresql", ...]\` (approve specific identifiers). Auto-provisioning works only for an **existing** project — a brand-new app returns \`needs_target_project\`, so deploy the app first to create the project, then approve the managed service on it (or pass an external \`<ENV>_URL\` in \`env_vars\`).
-4. **Link a service manually (alternative)** — For compose stacks, not-auto-creatable services, or an external/shared dependency: \`create_service\` (template + \`project_id\`/\`project_name\`) returns \`suggested_env\`; call \`set_env_vars\` on the deployable service with it, then redeploy.
+2. **Choose project order** — For a simple app with no pre-created managed services, \`deploy_app\` is the one-call front door: pass \`repo_url\` (or \`image\`) + \`name\`. If the app needs an OpenLander-managed database/cache before first boot, call \`create_project\` first, then \`create_service(project_id=...)\`, then \`deploy_app(target_project_id=...)\`. If the user already has a real external URL such as RDS or Upstash, pass it in \`env_vars\` and skip \`create_service\`. Do not use placeholder connection strings just to force project creation.
+3. **Approve proposed managed services** — When a plan would auto-provision a project-scoped managed service (e.g. a \`postgresql\` it can wire to \`DATABASE_URL\`), \`execute_deploy_plan\` returns status \`needs_approval\` with \`approval_required.create_resources\` and creates nothing. Re-run with \`approve_all_safe_resources: true\` (approve all) or \`approvals.create_resources: ["postgresql", ...]\` (approve specific identifiers). Auto-provisioning works only when the target project already exists; for a brand-new app that needs a managed service before first boot, use \`create_project\` before creating/executing the plan. If the dependency is external and the user provides a real connection URL, pass it in \`env_vars\` instead of creating a managed service.
+4. **Link a service manually (alternative)** — For compose stacks, not-auto-creatable services, or an external/shared dependency: \`create_service\` (template + \`project_id\`/\`project_name\`) returns \`suggested_env\`. If the project already has a deployable service, redeploy it to apply saved env. If the project is empty, deploy the first app with \`deploy_app(target_project_id=...)\`.
 5. **Monitor** — Behavior depends on the path. A **new-app** \`deploy_app\` blocks until terminal by default (\`wait: true\`) and returns the final result; pass \`wait: false\` to return immediately. But when \`deploy_app\` resolves to an **existing** service (\`service_id\`/\`service_name\`, or a single-service \`name\`) it delegates to \`redeploy_app\` and returns \`deploying\` immediately — non-blocking, like \`execute_deploy_plan\`. For every non-blocking path, poll \`get_deploy_status\` until terminal. \`get_build_log\` for raw output if it fails.
 6. **On failure** — use the \`recover-failed-deploy\` prompt: gather evidence (\`get_build_log\`, \`get_logs\`, \`diagnose_service\`, \`diagnose_host_resources\`), apply the fix, and \`redeploy_app\`.
 
 ## Manual Service-Link Pattern (alternative to step 3 auto-provisioning)
 
 \`\`\`
-// 1. Create service
-create_service({ name: "mydb", template: "postgresql", project_name: "myapp" })
+// 1. Create project group before the first app if the app needs DB/cache on boot
+create_project({ name: "myapp" })
+
+// 2. Create service in that project
+create_service({ name: "mydb", template: "postgresql", project_id: "proj_..." })
 // Returns: { suggested_env: [{ key: "DATABASE_URL", value: "postgresql://..." }] }
 
-// 2. Link to the deployable service
-set_env_vars({ service_name: "myapp-web", variables: '{"DATABASE_URL": "postgresql://..."}' })
+// 3. Deploy first app into the existing project group
+deploy_app({ target_project_id: "proj_...", name: "myapp-web", repo_url: "https://github.com/user/repo" })
 
-// 3. Redeploy to apply saved env to the running container
-create_deploy_plan({ name: "myapp", repo_url: "https://github.com/user/repo" })
-execute_deploy_plan({ plan_id: "..." })
+// Later updates: set_env_vars({ service_name: "myapp-web", variables: '{"DATABASE_URL": "..."}' }) then redeploy_app(...)
 \`\`\`
 
 ## Env Var Conventions
