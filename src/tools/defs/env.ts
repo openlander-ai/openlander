@@ -285,6 +285,121 @@ async function resolveEnvWriteTarget(
   };
 }
 
+function targetResponseFields(target: EnvWriteTarget): Record<string, unknown> {
+  return {
+    ...(target.service ? { service: target.service.name } : {}),
+    ...(target.scopeExplicit || target.scope !== 'service' ? { scope: target.scope } : {}),
+    ...(target.environmentKey ? { environment_key: target.environmentKey } : {}),
+  };
+}
+
+async function getRawEnvVarsForTarget(
+  appCtx: AppCtx,
+  target: EnvWriteTarget,
+): Promise<Record<string, string>> {
+  if (target.service === undefined) {
+    return target.environmentId === undefined
+      ? await appCtx.env.getAll(target.project.id)
+      : await appCtx.env.getAll(target.project.id, target.environmentId);
+  }
+
+  return target.environmentId === undefined
+    ? await appCtx.env.getAllForService(target.project.id, target.service.id)
+    : await appCtx.env.getAllForService(target.project.id, target.service.id, target.environmentId);
+}
+
+async function getMaskedEnvVarsForTarget(
+  appCtx: AppCtx,
+  target: EnvWriteTarget,
+): Promise<Record<string, string>> {
+  if (target.service === undefined) {
+    return target.environmentId === undefined
+      ? await appCtx.env.getAllMasked(target.project.id)
+      : await appCtx.env.getAllMasked(target.project.id, target.environmentId);
+  }
+
+  return target.environmentId === undefined
+    ? await appCtx.env.getAllForServiceMasked(target.project.id, target.service.id)
+    : await appCtx.env.getAllForServiceMasked(
+        target.project.id,
+        target.service.id,
+        target.environmentId,
+      );
+}
+
+async function deleteEnvVarForTarget(
+  appCtx: AppCtx,
+  target: EnvWriteTarget,
+  key: string,
+): Promise<boolean> {
+  if (target.service === undefined) {
+    return target.environmentId === undefined
+      ? await appCtx.env.delete(target.project.id, key)
+      : await appCtx.env.delete(target.project.id, key, target.environmentId);
+  }
+
+  return target.environmentId === undefined
+    ? await appCtx.env.deleteForService(target.project.id, target.service.id, key)
+    : await appCtx.env.deleteForService(
+        target.project.id,
+        target.service.id,
+        key,
+        target.environmentId,
+      );
+}
+
+async function deleteBulkEnvVarsForTarget(
+  appCtx: AppCtx,
+  target: EnvWriteTarget,
+  keys: string[],
+): Promise<{ deleted: string[]; notFound: string[]; changed: boolean }> {
+  if (target.service === undefined) {
+    return target.environmentId === undefined
+      ? await appCtx.env.deleteBulk(target.project.id, keys)
+      : await appCtx.env.deleteBulk(target.project.id, keys, target.environmentId);
+  }
+
+  return target.environmentId === undefined
+    ? await appCtx.env.deleteBulkForService(target.project.id, target.service.id, keys)
+    : await appCtx.env.deleteBulkForService(
+        target.project.id,
+        target.service.id,
+        keys,
+        target.environmentId,
+      );
+}
+
+async function computeRedeployForTarget(
+  appCtx: AppCtx,
+  target: EnvWriteTarget,
+  changed: boolean,
+  deferRedeploy: boolean,
+  trigger: ToolDeployTrigger,
+): Promise<{
+  redeployed: boolean;
+  needsRedeploy: boolean;
+  redeploySkipped?: { reason: string; message: string };
+}> {
+  if (target.service && target.runtimeProject) {
+    return await applyRedeployIfRequested(
+      appCtx,
+      {
+        project: target.project,
+        service: target.service,
+        runtimeProject: target.runtimeProject,
+      },
+      changed,
+      deferRedeploy,
+      trigger,
+    );
+  }
+
+  return {
+    redeployed: false,
+    needsRedeploy: await projectScopeNeedsRedeploy(appCtx, target.project, changed),
+  };
+}
+
 function parseEnvVariables(raw: unknown): Record<string, string> {
   let parsed: unknown = raw;
   if (typeof raw === 'string') {
@@ -461,19 +576,20 @@ export const envToolDefs: ToolDef[] = [
     name: 'list_env_vars',
     riskLevel: 'low',
     description:
-      'List all environment variables for a deployable service. Values are masked by default; pass reveal=true to return raw values for audit/export workflows. Public prefixes (NEXT_PUBLIC_, PUBLIC_, VITE_PUBLIC_, NUXT_PUBLIC_) are not masked. Returns { variables, count, revealed }.',
-    mcpDescription: 'List service-scoped environment variables. Pass reveal=true for raw values.',
+      'List environment variables for a project/service scope. Defaults to legacy service scope. Pass scope and environment_key to inspect environment-specific vars. Values are masked by default; pass reveal=true to return raw values for audit/export workflows. Public prefixes (NEXT_PUBLIC_, PUBLIC_, VITE_PUBLIC_, NUXT_PUBLIC_) are not masked. Returns { variables, count, revealed }.',
+    mcpDescription:
+      'List project/service env vars. Use scope and environment_key for environment-specific vars.',
     inputSchema: listEnvVarsSchema,
     execute: async (_args, { appCtx }) => {
       const reveal = (_args['reveal'] as boolean | undefined) ?? false;
-      const target = await resolveEnvTarget(_args, appCtx);
+      const target = await resolveEnvWriteTarget(_args, appCtx);
       await appCtx.db.assertEnvToolSchemaReady();
       const vars = reveal
-        ? await appCtx.env.getAllForService(target.project.id, target.service.id)
-        : await appCtx.env.getAllForServiceMasked(target.project.id, target.service.id);
+        ? await getRawEnvVarsForTarget(appCtx, target)
+        : await getMaskedEnvVarsForTarget(appCtx, target);
       return Promise.resolve({
         project: target.project.name,
-        service: target.service.name,
+        ...targetResponseFields(target),
         variables: vars,
         count: Object.keys(vars).length,
         revealed: reveal,
@@ -484,25 +600,27 @@ export const envToolDefs: ToolDef[] = [
     name: 'get_env_var',
     riskLevel: 'low',
     description:
-      'Get the unmasked value of a single service environment variable for debugging. Use when you need to verify the exact value was set correctly (e.g., connection strings with special characters). Returns { key, value }. Throws NOT_FOUND error if key does not exist.',
-    mcpDescription: 'Get a single service environment variable value.',
+      'Get the unmasked value of a single project/service environment variable for debugging. Use scope and environment_key for environment-specific vars. Returns { key, value }. Throws NOT_FOUND error if key does not exist.',
+    mcpDescription: 'Get a single project/service environment variable value.',
     inputSchema: getEnvVarSchema,
     execute: async (_args, { appCtx }) => {
       const key = _args['key'] as string;
-      const target = await resolveEnvTarget(_args, appCtx);
+      const target = await resolveEnvWriteTarget(_args, appCtx);
       await appCtx.db.assertEnvToolSchemaReady();
-      const vars = await appCtx.env.getAllForService(target.project.id, target.service.id);
+      const vars = await getRawEnvVarsForTarget(appCtx, target);
       if (key in vars) {
         return Promise.resolve({
           project: target.project.name,
-          service: target.service.name,
+          ...targetResponseFields(target),
           key,
           value: vars[key],
         });
       }
       throw new OpenLanderError(`Environment variable "${key}" not found`, 'NOT_FOUND', 404, {
         key,
-        serviceId: target.service.id,
+        scope: target.scope,
+        ...(target.service ? { serviceId: target.service.id } : {}),
+        ...(target.environmentKey ? { environmentKey: target.environmentKey } : {}),
       });
     },
   },
@@ -510,7 +628,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'set_env_vars',
     riskLevel: 'medium',
     description:
-      'Set environment variables for a project or deployable service. Defaults to legacy service scope. Pass scope=project/project_environment/service/service_environment; environment scopes require environment_key. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false for immediate service redeploy. variables may be an object or JSON-stringified object with string values only; null is rejected. Returns { status, project, service?, scope, keys, changed, needs_redeploy }.',
+      'Set environment variables for a project or deployable service. Defaults to legacy service scope. Pass scope=project/project_environment/service/service_environment; environment scopes require environment_key. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false for immediate service redeploy. variables may be an object or JSON-stringified object with string values only; null is rejected. Returns { status, project, service?, scope when explicit or non-service, keys, changed, needs_redeploy }.',
     mcpDescription:
       'Set project/service env vars. Use scope and environment_key for environment-specific writes. Default saves only.',
     inputSchema: setEnvVarsSchema,
@@ -638,21 +756,24 @@ export const envToolDefs: ToolDef[] = [
     name: 'export_env_vars',
     riskLevel: 'medium',
     description:
-      'Export all environment variables for a service as .env text with raw unmasked values. This is intended for audit/migration workflows and records an audit activity without storing values.',
-    mcpDescription: 'Export service env vars as .env text with raw values.',
+      'Export all environment variables for a project/service scope as .env text with raw unmasked values. Use scope and environment_key for environment-specific vars. This is intended for audit/migration workflows and records an audit activity without storing values.',
+    mcpDescription: 'Export project/service env vars as .env text with raw values.',
     inputSchema: exportEnvVarsSchema,
     execute: async (args, { appCtx }) => {
-      const target = await resolveEnvTarget(args, appCtx);
+      const target = await resolveEnvWriteTarget(args, appCtx);
       await appCtx.db.assertEnvToolSchemaReady();
-      const vars = await appCtx.env.getAllForService(target.project.id, target.service.id);
+      const vars = await getRawEnvVarsForTarget(appCtx, target);
       const keys = Object.keys(vars).sort();
       await recordEnvActivity(appCtx, target.project.id, 'export', keys, {
-        service_id: target.service.id,
-        service_name: target.service.name,
+        scope: target.scope,
+        ...(target.service
+          ? { service_id: target.service.id, service_name: target.service.name }
+          : {}),
+        ...(target.environmentKey ? { environment_key: target.environmentKey } : {}),
       });
       return {
         project: target.project.name,
-        service: target.service.name,
+        ...targetResponseFields(target),
         count: keys.length,
         format: 'dotenv',
         env: toDotenv(vars),
@@ -663,17 +784,17 @@ export const envToolDefs: ToolDef[] = [
     name: 'delete_env_var',
     riskLevel: 'medium',
     description:
-      'Delete one service environment variable. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false.',
-    mcpDescription: 'Delete one service env var. Default saves only; call redeploy_app to apply.',
+      'Delete one project/service environment variable. Use scope and environment_key for environment-specific vars. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running service, or pass defer_redeploy=false for immediate service redeploy.',
+    mcpDescription: 'Delete one project/service env var. Default saves only.',
     inputSchema: deleteEnvVarSchema,
     execute: async (args, context) => {
       const { appCtx } = context;
       const key = args['key'] as string;
       const deferRedeploy = (args['defer_redeploy'] as boolean | undefined) ?? true;
-      const target = await resolveEnvTarget(args, appCtx);
+      const target = await resolveEnvWriteTarget(args, appCtx);
       await appCtx.db.assertEnvToolSchemaReady();
-      const deleted = await appCtx.env.deleteForService(target.project.id, target.service.id, key);
-      const redeploy = await applyRedeployIfRequested(
+      const deleted = await deleteEnvVarForTarget(appCtx, target, key);
+      const redeploy = await computeRedeployForTarget(
         appCtx,
         target,
         deleted,
@@ -682,8 +803,11 @@ export const envToolDefs: ToolDef[] = [
       );
       if (deleted) {
         await recordEnvActivity(appCtx, target.project.id, 'delete', [key], {
-          service_id: target.service.id,
-          service_name: target.service.name,
+          scope: target.scope,
+          ...(target.service
+            ? { service_id: target.service.id, service_name: target.service.name }
+            : {}),
+          ...(target.environmentKey ? { environment_key: target.environmentKey } : {}),
           needs_redeploy: redeploy.needsRedeploy,
           deferred: deferRedeploy,
         });
@@ -691,7 +815,7 @@ export const envToolDefs: ToolDef[] = [
       return {
         status: deleted ? 'deleted' : 'not_found',
         project: target.project.name,
-        service: target.service.name,
+        ...targetResponseFields(target),
         key,
         needs_redeploy: redeploy.needsRedeploy,
       };
@@ -701,22 +825,25 @@ export const envToolDefs: ToolDef[] = [
     name: 'bulk_delete_env_vars',
     riskLevel: 'high',
     description:
-      'Delete multiple service environment variables. Omitting confirm=true returns a dry-run preview only. By default confirmed deletes do NOT redeploy; call redeploy_app separately to apply, or pass defer_redeploy=false.',
-    mcpDescription: 'Bulk delete service env vars with confirm-gated dry-run behavior.',
+      'Delete multiple project/service environment variables. Use scope and environment_key for environment-specific vars. Omitting confirm=true returns a dry-run preview only. By default confirmed deletes do NOT redeploy; call redeploy_app separately to apply, or pass defer_redeploy=false for immediate service redeploy.',
+    mcpDescription: 'Bulk delete project/service env vars with confirm-gated dry-run behavior.',
     inputSchema: bulkDeleteEnvVarsSchema,
     execute: async (args, context) => {
       const { appCtx } = context;
       const keys = args['keys'] as string[];
       const confirm = (args['confirm'] as boolean | undefined) ?? false;
       const deferRedeploy = (args['defer_redeploy'] as boolean | undefined) ?? true;
-      const target = await resolveEnvTarget(args, appCtx);
+      const target = await resolveEnvWriteTarget(args, appCtx);
       await appCtx.db.assertEnvToolSchemaReady();
-      const existing = await appCtx.env.getAllForService(target.project.id, target.service.id);
+      const existing = await getRawEnvVarsForTarget(appCtx, target);
       const wouldDelete = keys.filter((key) => key in existing);
       const notFound = keys.filter((key) => !(key in existing));
 
       if (!confirm) {
         return {
+          ...(target.scopeExplicit || target.scope !== 'service'
+            ? { project: target.project.name, ...targetResponseFields(target) }
+            : {}),
           would_delete: wouldDelete,
           not_found: notFound,
           count_to_delete: wouldDelete.length,
@@ -724,12 +851,8 @@ export const envToolDefs: ToolDef[] = [
         };
       }
 
-      const result = await appCtx.env.deleteBulkForService(
-        target.project.id,
-        target.service.id,
-        keys,
-      );
-      const redeploy = await applyRedeployIfRequested(
+      const result = await deleteBulkEnvVarsForTarget(appCtx, target, keys);
+      const redeploy = await computeRedeployForTarget(
         appCtx,
         target,
         result.changed,
@@ -738,8 +861,11 @@ export const envToolDefs: ToolDef[] = [
       );
       if (result.deleted.length > 0) {
         await recordEnvActivity(appCtx, target.project.id, 'bulk_delete', result.deleted, {
-          service_id: target.service.id,
-          service_name: target.service.name,
+          scope: target.scope,
+          ...(target.service
+            ? { service_id: target.service.id, service_name: target.service.name }
+            : {}),
+          ...(target.environmentKey ? { environment_key: target.environmentKey } : {}),
           needs_redeploy: redeploy.needsRedeploy,
           deferred: deferRedeploy,
         });
@@ -747,7 +873,7 @@ export const envToolDefs: ToolDef[] = [
       return {
         status: 'deleted',
         project: target.project.name,
-        service: target.service.name,
+        ...targetResponseFields(target),
         deleted: result.deleted,
         not_found: result.notFound,
         count_deleted: result.deleted.length,
