@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.1.9] - 2026-06-01
+## [0.1.9] - 2026-06-02
 
 ### Changed
 
@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   echo an empty nested `params` object back as the suggested retry.
 - Replaced the hardcoded GitHub API `User-Agent` version with the shared
   application `VERSION` and removed a duplicate dead return.
+- Prevented false-success deploy results for containers without a Docker
+  `HEALTHCHECK` that exit or enter restart loops immediately after startup.
 
 ## [0.1.8] - 2026-06-01
 
