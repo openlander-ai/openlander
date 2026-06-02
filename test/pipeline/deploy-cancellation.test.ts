@@ -114,6 +114,7 @@ function makeEnv(): EnvManager {
   return {
     getGlobalSecrets: vi.fn(async () => ({})),
     getAll: vi.fn(async () => ({})),
+    getAllWithInheritance: vi.fn(async () => ({})),
     getAllForService: vi.fn(async () => ({})),
     getSecretFilesForDeploy: vi.fn(async () => []),
   } as unknown as EnvManager;
