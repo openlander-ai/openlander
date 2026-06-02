@@ -33,6 +33,7 @@ export default defineConfig({
       'test/api/deployable-service-routes.test.ts',
       'test/api/docker-log-timestamps.test.ts',
       'test/api/monitoring-routes.test.ts',
+      'test/api/project-env-routes.test.ts',
       'test/api/service-connection-routes.test.ts',
       'test/api/service-env-routes.test.ts',
       'test/api/service-runtime-routes.test.ts',

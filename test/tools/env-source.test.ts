@@ -13,12 +13,21 @@ const service = {
   source: 'git',
   status: 'running',
 };
+const developmentEnvironment = {
+  id: 'env-development',
+  service_id: 'svc1',
+  project_id: 'p1',
+  type: 'development',
+  branch: 'develop',
+  status: 'running',
+};
 
 function createEnvToolContext() {
   const db = {
     getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
     getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
     getDeployablesByGroup: vi.fn().mockResolvedValue([service]),
+    getEnvironmentsByProject: vi.fn().mockResolvedValue([developmentEnvironment]),
     assertEnvToolSchemaReady: vi.fn().mockResolvedValue(undefined),
     insertActivityLog: vi.fn().mockResolvedValue(undefined),
   };
@@ -43,6 +52,8 @@ function createEnvToolContext() {
       NEXT_PUBLIC_URL: 'https://public.example.com',
       EMPTY_VALUE: '""',
     }),
+    setBulkDetailed: vi.fn().mockResolvedValue([{ key: 'DATABASE_URL', op: 'update' }]),
+    verifyRoundTrip: vi.fn().mockResolvedValue([]),
     setBulkForServiceDetailed: vi.fn().mockResolvedValue([{ key: 'DATABASE_URL', op: 'update' }]),
     verifyRoundTripForService: vi.fn().mockResolvedValue([]),
     deleteForService: vi.fn().mockResolvedValue(true),
@@ -130,6 +141,151 @@ describe('env MCP tools', () => {
       changed: [{ key: 'DATABASE_URL', op: 'update' }],
       needs_redeploy: true,
     });
+  });
+
+  it('set_env_vars can write project-shared scope by project_id', async () => {
+    const { ctx, env, pipeline } = createEnvToolContext();
+
+    const result = await getEnvTool('set_env_vars').execute(
+      {
+        project_id: 'p1',
+        scope: 'project',
+        variables: { DATABASE_URL: 'postgres://project' },
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(env.setBulkDetailed).toHaveBeenCalledWith('p1', {
+      DATABASE_URL: 'postgres://project',
+    });
+    expect(env.verifyRoundTrip).toHaveBeenCalledWith('p1', {
+      DATABASE_URL: 'postgres://project',
+    });
+    expect(env.setBulkForServiceDetailed).not.toHaveBeenCalled();
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'updated',
+      project: 'my-app',
+      scope: 'project',
+      needs_redeploy: true,
+    });
+  });
+
+  it('set_env_vars can write project-environment scope by environment_key', async () => {
+    const { ctx, env } = createEnvToolContext();
+
+    const result = await getEnvTool('set_env_vars').execute(
+      {
+        project_id: 'p1',
+        scope: 'project_environment',
+        environment_key: 'development',
+        variables: { DATABASE_URL: 'postgres://project-dev' },
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(env.setBulkDetailed).toHaveBeenCalledWith(
+      'p1',
+      { DATABASE_URL: 'postgres://project-dev' },
+      'env-development',
+    );
+    expect(env.verifyRoundTrip).toHaveBeenCalledWith(
+      'p1',
+      { DATABASE_URL: 'postgres://project-dev' },
+      'env-development',
+    );
+    expect(result).toMatchObject({
+      status: 'updated',
+      project: 'my-app',
+      scope: 'project_environment',
+      environment_key: 'development',
+      needs_redeploy: true,
+    });
+  });
+
+  it('set_env_vars can write service-environment scope by environment_key', async () => {
+    const { ctx, env } = createEnvToolContext();
+
+    const result = await getEnvTool('set_env_vars').execute(
+      {
+        project_name: 'my-app',
+        scope: 'service_environment',
+        environment_key: 'development',
+        variables: { DATABASE_URL: 'postgres://service-dev' },
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(env.setBulkForServiceDetailed).toHaveBeenCalledWith(
+      'p1',
+      'svc1',
+      { DATABASE_URL: 'postgres://service-dev' },
+      'env-development',
+    );
+    expect(env.verifyRoundTripForService).toHaveBeenCalledWith(
+      'p1',
+      'svc1',
+      { DATABASE_URL: 'postgres://service-dev' },
+      'env-development',
+    );
+    expect(result).toMatchObject({
+      status: 'updated',
+      project: 'my-app',
+      service: 'web',
+      scope: 'service_environment',
+      environment_key: 'development',
+      needs_redeploy: true,
+    });
+  });
+
+  it('set_env_vars rejects invalid or missing environment_key before writing', async () => {
+    const { ctx, env } = createEnvToolContext();
+
+    await expect(
+      getEnvTool('set_env_vars').execute(
+        {
+          project_id: 'p1',
+          scope: 'project_environment',
+          variables: { DATABASE_URL: 'postgres://project-dev' },
+        },
+        { appCtx: ctx, target: 'mcp' },
+      ),
+    ).rejects.toMatchObject({ code: 'MISSING_FIELD', statusCode: 400 });
+
+    await expect(
+      getEnvTool('set_env_vars').execute(
+        {
+          project_id: 'p1',
+          scope: 'project_environment',
+          environment_key: 'preview',
+          variables: { DATABASE_URL: 'postgres://project-dev' },
+        },
+        { appCtx: ctx, target: 'mcp' },
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_FIELD', statusCode: 400 });
+
+    expect(env.setBulkDetailed).not.toHaveBeenCalled();
+    expect(env.setBulkForServiceDetailed).not.toHaveBeenCalled();
+  });
+
+  it('set_env_vars rejects missing environment rows before writing', async () => {
+    const { ctx, db, env } = createEnvToolContext();
+    db.getEnvironmentsByProject.mockResolvedValueOnce([]);
+
+    await expect(
+      getEnvTool('set_env_vars').execute(
+        {
+          project_id: 'p1',
+          scope: 'project_environment',
+          environment_key: 'development',
+          variables: { DATABASE_URL: 'postgres://project-dev' },
+        },
+        { appCtx: ctx, target: 'mcp' },
+      ),
+    ).rejects.toMatchObject({ code: 'ENVIRONMENT_NOT_FOUND', statusCode: 404 });
+
+    expect(env.setBulkDetailed).not.toHaveBeenCalled();
+    expect(env.setBulkForServiceDetailed).not.toHaveBeenCalled();
   });
 
   it('set_env_vars marks healthy services as needing redeploy', async () => {

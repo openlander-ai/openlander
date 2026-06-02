@@ -14,7 +14,24 @@ import {
   resolveEnvironmentByType,
 } from './helpers/project-helpers.js';
 import { mapEnvironment } from './helpers/project-route-shared.js';
-import { parseEnvVariables } from './helpers/env-route-validation.js';
+import { parseEnvVariables, parseOptionalEnvScope } from './helpers/env-route-validation.js';
+import { resolveRouteEnvironmentByKey } from './helpers/env-scope-route.js';
+
+const PROJECT_ENV_WRITE_SCOPES = ['project', 'project_environment'] as const;
+
+function serviceNeedsRedeploy(service: ServiceRow): boolean {
+  return ['running', 'healthy', 'unhealthy', 'degraded'].includes(String(service.status));
+}
+
+async function projectScopeNeedsRedeploy(
+  ctx: AppContext,
+  projectId: string,
+  changed: boolean,
+): Promise<boolean> {
+  if (!changed) return false;
+  const deployables = await ctx.db.getDeployablesByGroup(projectId);
+  return deployables.some(serviceNeedsRedeploy);
+}
 
 async function resolveProjectEnvCompatService(
   ctx: AppContext,
@@ -184,6 +201,52 @@ export function createProjectEnvRoutes(ctx: AppContext): Hono {
     const parsed = parseEnvVariables(body.variables);
     if (!parsed.ok) {
       return c.json({ error: parsed.error, message: parsed.message }, 400);
+    }
+
+    const parsedScope = parseOptionalEnvScope(body.scope, PROJECT_ENV_WRITE_SCOPES);
+    if (!parsedScope.ok) {
+      return c.json({ error: parsedScope.error, message: parsedScope.message }, 400);
+    }
+
+    if (body.environment_key !== undefined && parsedScope.scope !== 'project_environment') {
+      return c.json(
+        {
+          error: 'INVALID_FIELD',
+          message: 'scope must be project_environment when environment_key is provided',
+        },
+        400,
+      );
+    }
+
+    if (parsedScope.scope === 'project' || parsedScope.scope === 'project_environment') {
+      const environmentResolution =
+        parsedScope.scope === 'project_environment'
+          ? await resolveRouteEnvironmentByKey(ctx, project.id, body.environment_key)
+          : undefined;
+      if (environmentResolution && !environmentResolution.ok) {
+        return c.json(
+          { error: environmentResolution.error, message: environmentResolution.message },
+          environmentResolution.status,
+        );
+      }
+
+      const environmentId = environmentResolution?.environment.id;
+      const changed =
+        environmentId === undefined
+          ? await ctx.env.setBulk(project.id, parsed.variables)
+          : await ctx.env.setBulk(project.id, parsed.variables, environmentId);
+      const needsRedeploy =
+        environmentResolution === undefined
+          ? await projectScopeNeedsRedeploy(ctx, project.id, changed)
+          : changed && environmentResolution.environment.status === 'running';
+      return c.json({
+        status: changed ? 'updated' : 'unchanged',
+        project: project.name,
+        scope: parsedScope.scope,
+        ...(environmentResolution ? { environment_key: environmentResolution.environmentKey } : {}),
+        keys: Object.keys(parsed.variables),
+        needsRedeploy,
+      });
     }
 
     const service = await resolveProjectEnvCompatService(ctx, project);
