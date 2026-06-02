@@ -28,6 +28,22 @@ describe('DecisionEngine', () => {
     expect(engine.classify('archive_service')).toBe('REQUIRE_APPROVAL');
   });
 
+  it('archive_project on running production → REQUIRE_APPROVAL', () => {
+    expect(
+      engine.classify('archive_project', undefined, {
+        archiveProject: { productionRunning: true },
+      }),
+    ).toBe('REQUIRE_APPROVAL');
+  });
+
+  it('archive_project on stopped or non-production target → NOTIFY_THEN_ALLOW', () => {
+    expect(
+      engine.classify('archive_project', undefined, {
+        archiveProject: { productionRunning: false },
+      }),
+    ).toBe('NOTIFY_THEN_ALLOW');
+  });
+
   it('remove_service → REQUIRE_APPROVAL', () => {
     expect(engine.classify('remove_service')).toBe('REQUIRE_APPROVAL');
   });
