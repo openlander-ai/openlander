@@ -2,7 +2,12 @@ import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../../src/app.js';
-import type { EnvironmentRow, ProjectRow, ServiceRow } from '../../src/db/types.js';
+import type {
+  DomainMappingRow,
+  EnvironmentRow,
+  ProjectRow,
+  ServiceRow,
+} from '../../src/db/types.js';
 import { createDeployableServiceRoutes } from '../../src/web/api/deployable-service-routes.js';
 
 function makeProjectRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
@@ -79,6 +84,26 @@ function makeEnvironmentRow(overrides: Partial<EnvironmentRow> = {}): Environmen
     previous_image_tag: null,
     public_url: null,
     container_port: 3000,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function makeDomainMappingRow(overrides: Partial<DomainMappingRow> = {}): DomainMappingRow {
+  return {
+    id: 'domain-1',
+    service_id: 'group-1__svc',
+    domain: 'workspace.example.com',
+    cloudflare_zone_id: null,
+    cloudflare_dns_record_id: null,
+    status: 'active',
+    path_prefix: '/',
+    strip_prefix: false,
+    upstream_path_prefix: null,
+    target_port: null,
+    tls_enabled: false,
+    tls_resolver: null,
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -222,6 +247,124 @@ describe('createDeployableServiceRoutes', () => {
           name: 'demo-stack/postgres',
           kind: 'compose-child',
           url: null,
+        },
+      ],
+    });
+  });
+
+  it('does not synthesize service-name sslip URLs when an advertised public host is configured', async () => {
+    const previousPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
+    const previousContainerized = process.env['OPENLANDER_CONTAINERIZED'];
+    process.env['OPENLANDER_PUBLIC_HOST'] = '192.168.219.113';
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    const project = makeProjectRow({ id: 'hotdeal', name: 'hotdeal' });
+    const webService = makeServiceRow({
+      id: 'hotdeal__web__svc',
+      name: 'hotdeal/web__svc',
+      project_id: 'hotdeal',
+      kind: 'compose-child',
+      parent_service_id: 'hotdeal__svc',
+      assigned_port: 20032,
+      image_url: 'hotdeal-web:latest',
+    });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup: vi.fn(async () => [webService]),
+        getEnvironmentsByProject: vi.fn(async () => []),
+        listDomainMappings: vi.fn(async () => []),
+      },
+    });
+
+    const res = await app.request('/api/projects/hotdeal/services').finally(() => {
+      if (previousPublicHost === undefined) {
+        delete process.env['OPENLANDER_PUBLIC_HOST'];
+      } else {
+        process.env['OPENLANDER_PUBLIC_HOST'] = previousPublicHost;
+      }
+      if (previousContainerized === undefined) {
+        delete process.env['OPENLANDER_CONTAINERIZED'];
+      } else {
+        process.env['OPENLANDER_CONTAINERIZED'] = previousContainerized;
+      }
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      count: 1,
+      services: [
+        {
+          id: webService.id,
+          name: 'hotdeal/web',
+          url: null,
+          preferred_url: null,
+          urls: [],
+        },
+      ],
+    });
+  });
+
+  it('uses service-scoped domain mappings for deployable service URLs', async () => {
+    const previousPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
+    const previousContainerized = process.env['OPENLANDER_CONTAINERIZED'];
+    process.env['OPENLANDER_PUBLIC_HOST'] = '192.168.219.113';
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    const project = makeProjectRow({ id: 'hotdeal', name: 'hotdeal' });
+    const webService = makeServiceRow({
+      id: 'hotdeal__web__svc',
+      name: 'hotdeal/web__svc',
+      project_id: 'hotdeal',
+      kind: 'compose-child',
+      parent_service_id: 'hotdeal__svc',
+      assigned_port: 20032,
+      image_url: 'hotdeal-web:latest',
+    });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup: vi.fn(async () => [webService]),
+        getEnvironmentsByProject: vi.fn(async () => []),
+        listDomainMappings: vi.fn(async () => [
+          makeDomainMappingRow({
+            service_id: webService.id,
+            domain: 'hotdeal.loancalc.kr',
+          }),
+        ]),
+      },
+    });
+
+    const res = await app.request('/api/projects/hotdeal/services').finally(() => {
+      if (previousPublicHost === undefined) {
+        delete process.env['OPENLANDER_PUBLIC_HOST'];
+      } else {
+        process.env['OPENLANDER_PUBLIC_HOST'] = previousPublicHost;
+      }
+      if (previousContainerized === undefined) {
+        delete process.env['OPENLANDER_CONTAINERIZED'];
+      } else {
+        process.env['OPENLANDER_CONTAINERIZED'] = previousContainerized;
+      }
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      count: 1,
+      services: [
+        {
+          id: webService.id,
+          name: 'hotdeal/web',
+          url: 'http://hotdeal.loancalc.kr',
+          preferred_url: 'http://hotdeal.loancalc.kr',
+          urls: [
+            {
+              url: 'http://hotdeal.loancalc.kr',
+              type: 'public',
+              host: 'hotdeal.loancalc.kr',
+              reachable: 'external',
+            },
+          ],
         },
       ],
     });

@@ -1,6 +1,14 @@
 import type { AppContext } from '../../../app.js';
-import type { EnvironmentRow, ProjectRow, ServiceRow } from '../../../db/index.js';
-import { deployableServiceIdToProjectId } from '../../../db/service-ids.js';
+import type {
+  DomainMappingRow,
+  EnvironmentRow,
+  ProjectRow,
+  ServiceRow,
+} from '../../../db/index.js';
+import {
+  deployableServiceIdToProjectId,
+  projectIdToDeployableServiceId,
+} from '../../../db/service-ids.js';
 import { loadServiceViewRecords, serviceViewFromRows } from '../../../db/views/service-view.js';
 import {
   CircuitBreakerOpenError,
@@ -21,6 +29,7 @@ import {
   getAllIps,
   getEnvironmentProjectHostname,
   getPreferredProjectUrl,
+  type ProjectUrl,
   getProjectUrls,
 } from '../../../pipeline/traefik.js';
 
@@ -324,20 +333,147 @@ export function getDeployableServiceRouteName(service: ServiceRow): string {
   return deriveProjectSlug(getDeployableServiceDisplayName(service));
 }
 
-export function getDeployableServiceUrl(service: ServiceRow): string | null {
+export type DeployableServiceDomainMapping = Pick<
+  DomainMappingRow,
+  'service_id' | 'domain' | 'status' | 'path_prefix'
+>;
+
+export interface DeployableServiceUrlOptions {
+  domainMappings?: readonly DeployableServiceDomainMapping[];
+  autoRouteName?: string | null;
+}
+
+type DomainMappingLookup = {
+  listDomainMappings?: () => Promise<DomainMappingRow[]> | DomainMappingRow[];
+  listDomainMappingsForService?: (
+    serviceId: string,
+  ) => Promise<DomainMappingRow[]> | DomainMappingRow[];
+};
+
+function projectUrlFromExternalUrl(url: string): ProjectUrl {
+  try {
+    const parsed = new URL(url);
+    return {
+      url,
+      type: 'public',
+      host: parsed.hostname,
+      reachable: 'external',
+    };
+  } catch {
+    return { url, type: 'public', reachable: 'external' };
+  }
+}
+
+function selectDomainMappingUrl(
+  mappings: readonly DeployableServiceDomainMapping[] | undefined,
+): string | null {
+  const activeMappings = [...(mappings ?? [])]
+    .filter((mapping) => mapping.status === 'active' && mapping.domain.trim().length > 0)
+    .sort((a, b) => {
+      const aRoot = a.path_prefix === '/';
+      const bRoot = b.path_prefix === '/';
+      if (aRoot !== bRoot) return aRoot ? -1 : 1;
+      return a.path_prefix.localeCompare(b.path_prefix);
+    });
+
+  const mapping = activeMappings[0];
+  if (!mapping) return null;
+  const path = mapping.path_prefix === '/' ? '' : mapping.path_prefix;
+  return `http://${mapping.domain}${path}`;
+}
+
+function getHostOnlyServiceUrls(service: ServiceRow, port: number): ProjectUrl[] {
+  const routeName = getDeployableServiceRouteName(service);
+  return getProjectUrls(routeName, port).filter(
+    (route) => route.type === 'host' && route.host === 'localhost',
+  );
+}
+
+export function getDeployableServiceUrls(
+  service: ServiceRow,
+  options: DeployableServiceUrlOptions = {},
+): ProjectUrl[] {
   const port = service.assigned_port ?? null;
-  if (!port || isComposeInternalDependency(service)) return null;
-  return getPreferredProjectUrl(getDeployableServiceRouteName(service), port);
+  if (!port || isComposeInternalDependency(service)) return [];
+
+  if (service.public_url) {
+    return [projectUrlFromExternalUrl(service.public_url)];
+  }
+
+  const mappedUrl = selectDomainMappingUrl(options.domainMappings);
+  if (mappedUrl) {
+    return [projectUrlFromExternalUrl(mappedUrl)];
+  }
+
+  if (options.autoRouteName) {
+    return getProjectUrls(options.autoRouteName, port);
+  }
+
+  return getHostOnlyServiceUrls(service, port);
+}
+
+export function getDeployableServiceUrl(
+  service: ServiceRow,
+  options: DeployableServiceUrlOptions = {},
+): string | null {
+  return getDeployableServiceUrls(service, options)[0]?.url ?? null;
+}
+
+export function getDeployableServiceAutoRouteName(
+  project: Pick<ProjectRow, 'id' | 'name'>,
+  service: Pick<ServiceRow, 'id'>,
+): string | null {
+  return service.id === projectIdToDeployableServiceId(project.id) ? project.name : null;
+}
+
+export async function loadDomainMappingsByService(
+  ctx: Pick<AppContext, 'db'>,
+  services: readonly Pick<ServiceRow, 'id'>[],
+): Promise<Map<string, DomainMappingRow[]>> {
+  const serviceIds = new Set(services.map((service) => service.id));
+  const result = new Map<string, DomainMappingRow[]>();
+  for (const serviceId of serviceIds) {
+    result.set(serviceId, []);
+  }
+
+  if (serviceIds.size === 0) {
+    return result;
+  }
+
+  const db = ctx.db as AppContext['db'] & Partial<DomainMappingLookup>;
+  if (typeof db.listDomainMappings === 'function') {
+    const mappings = await db.listDomainMappings();
+    for (const mapping of mappings) {
+      if (!serviceIds.has(mapping.service_id)) continue;
+      const serviceMappings = result.get(mapping.service_id) ?? [];
+      serviceMappings.push(mapping);
+      result.set(mapping.service_id, serviceMappings);
+    }
+    return result;
+  }
+
+  if (typeof db.listDomainMappingsForService === 'function') {
+    const listDomainMappingsForService = db.listDomainMappingsForService.bind(db);
+    await Promise.all(
+      [...serviceIds].map(async (serviceId) => {
+        result.set(serviceId, await listDomainMappingsForService(serviceId));
+      }),
+    );
+  }
+
+  return result;
 }
 
 export function mapServiceForApi(
   service: ServiceRow,
   environments: EnvironmentRow[] = [],
+  urlOptions: DeployableServiceUrlOptions = {},
 ): Record<string, unknown> {
   const deployedBranch =
     environments.find((env) => env.service_id === service.id && env.type === 'production')
       ?.branch ?? null;
-  const url = getDeployableServiceUrl(service);
+  const urls = getDeployableServiceUrls(service, urlOptions);
+  const url = urls[0]?.url ?? null;
   return {
     id: service.id,
     name: deployableServiceIdToProjectId(service.name),
@@ -357,7 +493,7 @@ export function mapServiceForApi(
     image: service.image_url ?? service.image_tag,
     url,
     preferred_url: url,
-    urls: url ? getProjectUrls(getDeployableServiceRouteName(service), service.assigned_port) : [],
+    urls,
     imageUrl: service.image_url,
     imageCmd: parseImageCmd(service.image_cmd),
     source: service.source,
