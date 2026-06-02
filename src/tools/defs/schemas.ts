@@ -285,6 +285,21 @@ const envTargetFields = {
   project_id: z.string().min(1).optional().describe('Project group id'),
 } as const;
 
+const envScopeFields = {
+  scope: z
+    .enum(['project', 'project_environment', 'service', 'service_environment'])
+    .optional()
+    .describe(
+      'Optional explicit env scope. Defaults to legacy service scope. Use project_environment/service_environment with environment_key.',
+    ),
+  environment_key: z
+    .enum(ENVIRONMENT_KEYS)
+    .optional()
+    .describe(
+      'Logical environment for environment-scoped operations. One of production, staging, development.',
+    ),
+} as const;
+
 function envTargetSchema<T extends z.ZodRawShape>(shape: T) {
   return z
     .object({ ...envTargetFields, ...shape })
@@ -304,18 +319,7 @@ function envTargetSchema<T extends z.ZodRawShape>(shape: T) {
 
 // Environment & configuration schemas
 export const setEnvVarsSchema = envTargetSchema({
-  scope: z
-    .enum(['project', 'project_environment', 'service', 'service_environment'])
-    .optional()
-    .describe(
-      'Optional explicit env scope. Defaults to legacy service scope. Use project_environment/service_environment with environment_key.',
-    ),
-  environment_key: z
-    .enum(ENVIRONMENT_KEYS)
-    .optional()
-    .describe(
-      'Logical environment for environment-scoped writes. One of production, staging, development.',
-    ),
+  ...envScopeFields,
   variables: envVarsInputSchema.describe(
     'Environment variables as an object or JSON-stringified object (e.g., {"DATABASE_URL": "..."})',
   ),
@@ -326,16 +330,21 @@ export const setEnvVarsSchema = envTargetSchema({
 });
 
 export const listEnvVarsSchema = envTargetSchema({
+  ...envScopeFields,
   reveal: z.boolean().optional().describe('If true, return unmasked raw values. Default: false.'),
 });
 
 export const getEnvVarSchema = envTargetSchema({
+  ...envScopeFields,
   key: z.string().min(1).describe('Environment variable key to retrieve'),
 });
 
-export const exportEnvVarsSchema = envTargetSchema({});
+export const exportEnvVarsSchema = envTargetSchema({
+  ...envScopeFields,
+});
 
 export const deleteEnvVarSchema = envTargetSchema({
+  ...envScopeFields,
   key: z.string().min(1).describe('Environment variable key to delete'),
   defer_redeploy: z
     .boolean()
@@ -344,6 +353,7 @@ export const deleteEnvVarSchema = envTargetSchema({
 });
 
 export const bulkDeleteEnvVarsSchema = envTargetSchema({
+  ...envScopeFields,
   keys: z.array(z.string().min(1)).min(1).describe('Environment variable keys to delete'),
   confirm: z.boolean().optional().describe('Must be true to execute. Omit for dry-run preview.'),
   defer_redeploy: z

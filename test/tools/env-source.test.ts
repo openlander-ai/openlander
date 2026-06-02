@@ -56,6 +56,12 @@ function createEnvToolContext() {
     verifyRoundTrip: vi.fn().mockResolvedValue([]),
     setBulkForServiceDetailed: vi.fn().mockResolvedValue([{ key: 'DATABASE_URL', op: 'update' }]),
     verifyRoundTripForService: vi.fn().mockResolvedValue([]),
+    delete: vi.fn().mockResolvedValue(true),
+    deleteBulk: vi.fn().mockResolvedValue({
+      deleted: ['DATABASE_URL'],
+      notFound: ['MISSING'],
+      changed: true,
+    }),
     deleteForService: vi.fn().mockResolvedValue(true),
     deleteBulkForService: vi.fn().mockResolvedValue({
       deleted: ['DATABASE_URL'],
@@ -114,6 +120,67 @@ describe('env MCP tools', () => {
         EMPTY_VALUE: '',
       },
       revealed: true,
+    });
+  });
+
+  it('list_env_vars can inspect project-environment and service-environment scopes', async () => {
+    const { ctx, env } = createEnvToolContext();
+
+    const projectResult = await getEnvTool('list_env_vars').execute(
+      {
+        project_id: 'p1',
+        scope: 'project_environment',
+        environment_key: 'development',
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+    const serviceResult = await getEnvTool('list_env_vars').execute(
+      {
+        project_name: 'my-app',
+        scope: 'service_environment',
+        environment_key: 'development',
+        reveal: true,
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(env.getAllMasked).toHaveBeenCalledWith('p1', 'env-development');
+    expect(env.getAllForService).toHaveBeenCalledWith('p1', 'svc1', 'env-development');
+    expect(projectResult).toMatchObject({
+      project: 'my-app',
+      scope: 'project_environment',
+      environment_key: 'development',
+      revealed: false,
+    });
+    expect(serviceResult).toMatchObject({
+      project: 'my-app',
+      service: 'web',
+      scope: 'service_environment',
+      environment_key: 'development',
+      revealed: true,
+    });
+  });
+
+  it('get_env_var can read project-environment vars by scope', async () => {
+    const { ctx, env } = createEnvToolContext();
+
+    const result = await getEnvTool('get_env_var').execute(
+      {
+        project_id: 'p1',
+        scope: 'project_environment',
+        environment_key: 'development',
+        key: 'DATABASE_URL',
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(env.getAll).toHaveBeenCalledWith('p1', 'env-development');
+    expect(result).toMatchObject({
+      project: 'my-app',
+      scope: 'project_environment',
+      environment_key: 'development',
+      key: 'DATABASE_URL',
+      value: 'postgresql://user:pass@localhost:5432/db',
     });
   });
 
@@ -340,6 +407,29 @@ describe('env MCP tools', () => {
     );
   });
 
+  it('export_env_vars can export service-environment scope', async () => {
+    const { ctx, db, env } = createEnvToolContext();
+
+    const result = (await getEnvTool('export_env_vars').execute(
+      {
+        project_name: 'my-app',
+        scope: 'service_environment',
+        environment_key: 'development',
+      },
+      { appCtx: ctx, target: 'mcp' },
+    )) as { env: string; scope: string; environment_key: string };
+
+    expect(env.getAllForService).toHaveBeenCalledWith('p1', 'svc1', 'env-development');
+    expect(result).toMatchObject({
+      scope: 'service_environment',
+      environment_key: 'development',
+    });
+    expect(result.env).toContain('DATABASE_URL=postgresql://user:pass@localhost:5432/db');
+    expect(db.insertActivityLog).toHaveBeenCalledWith(
+      expect.objectContaining({ event_type: 'env:changed', severity: 'warning' }),
+    );
+  });
+
   it('bulk_delete_env_vars previews without confirm and deletes with confirm=true', async () => {
     const { ctx, env } = createEnvToolContext();
     const tool = getEnvTool('bulk_delete_env_vars');
@@ -372,6 +462,99 @@ describe('env MCP tools', () => {
       'DATABASE_URL',
       'MISSING',
     ]);
+  });
+
+  it('delete_env_var and bulk_delete_env_vars can delete project-environment scope', async () => {
+    const { ctx, env, pipeline } = createEnvToolContext();
+
+    const deleteResult = await getEnvTool('delete_env_var').execute(
+      {
+        project_id: 'p1',
+        scope: 'project_environment',
+        environment_key: 'development',
+        key: 'DATABASE_URL',
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+    const previewResult = await getEnvTool('bulk_delete_env_vars').execute(
+      {
+        project_id: 'p1',
+        scope: 'project_environment',
+        environment_key: 'development',
+        keys: ['DATABASE_URL', 'MISSING'],
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+    const confirmedResult = await getEnvTool('bulk_delete_env_vars').execute(
+      {
+        project_id: 'p1',
+        scope: 'project_environment',
+        environment_key: 'development',
+        keys: ['DATABASE_URL', 'MISSING'],
+        confirm: true,
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(env.delete).toHaveBeenCalledWith('p1', 'DATABASE_URL', 'env-development');
+    expect(env.getAll).toHaveBeenCalledWith('p1', 'env-development');
+    expect(env.deleteBulk).toHaveBeenCalledWith(
+      'p1',
+      ['DATABASE_URL', 'MISSING'],
+      'env-development',
+    );
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    expect(deleteResult).toMatchObject({
+      status: 'deleted',
+      scope: 'project_environment',
+      environment_key: 'development',
+      needs_redeploy: true,
+    });
+    expect(previewResult).toMatchObject({
+      project: 'my-app',
+      scope: 'project_environment',
+      environment_key: 'development',
+      would_delete: ['DATABASE_URL'],
+      not_found: ['MISSING'],
+      confirm_required: true,
+    });
+    expect(confirmedResult).toMatchObject({
+      status: 'deleted',
+      scope: 'project_environment',
+      environment_key: 'development',
+      deleted: ['DATABASE_URL'],
+      not_found: ['MISSING'],
+      needs_redeploy: true,
+    });
+  });
+
+  it('delete_env_var can delete service-environment scope', async () => {
+    const { ctx, env, pipeline } = createEnvToolContext();
+
+    const result = await getEnvTool('delete_env_var').execute(
+      {
+        project_name: 'my-app',
+        scope: 'service_environment',
+        environment_key: 'development',
+        key: 'DATABASE_URL',
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(env.deleteForService).toHaveBeenCalledWith(
+      'p1',
+      'svc1',
+      'DATABASE_URL',
+      'env-development',
+    );
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'deleted',
+      service: 'web',
+      scope: 'service_environment',
+      environment_key: 'development',
+      needs_redeploy: true,
+    });
   });
 
   it('get_env_var uses NOT_FOUND for missing keys', async () => {

@@ -14,7 +14,9 @@ import { createMockDeployPlan } from '../helpers/deploy-plan-mocks.js';
 import * as infraAnalyzer from '../../src/lib/infra-analyzer.js';
 import {
   createDeployPlanSchema,
+  deleteEnvVarSchema,
   deploySchema,
+  listEnvVarsSchema,
   setEnvVarsSchema,
 } from '../../src/tools/defs/schemas.js';
 import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
@@ -313,6 +315,21 @@ describe('MCP agent UX rc6 regressions', () => {
         scope: 'project_environment',
         environment_key: 'development',
         variables: { API_KEY: 'secret' },
+      }).success,
+    ).toBe(true);
+    expect(
+      listEnvVarsSchema.safeParse({
+        project_id: 'app',
+        scope: 'project_environment',
+        environment_key: 'development',
+      }).success,
+    ).toBe(true);
+    expect(
+      deleteEnvVarSchema.safeParse({
+        service_id: 'app__svc',
+        scope: 'service_environment',
+        environment_key: 'development',
+        key: 'API_KEY',
       }).success,
     ).toBe(true);
   });
