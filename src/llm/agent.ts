@@ -12,6 +12,7 @@ import { withTracking } from './tracking-middleware.js';
 import type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-events.js';
 import { compactHistory } from './compaction.js';
 import { decisionEngine } from './decision.js';
+import { buildArchiveDecisionContext } from './archive-decision-context.js';
 import type { ApprovalGate } from '../pipeline/approval-gate.js';
 import { eventBus } from '../events/index.js';
 import { classifyLlmError, LlmErrorType } from './llm-error-types.js';
@@ -520,7 +521,8 @@ export class Agent {
       guardedTools[name] = {
         ...toolDef,
         execute: async (args: Record<string, unknown>, options: unknown) => {
-          const decision = decisionEngine.classify(name);
+          const decisionContext = await buildArchiveDecisionContext(this.db, name, args);
+          const decision = decisionEngine.classify(name, undefined, decisionContext);
 
           if (
             decision === 'REQUIRE_APPROVAL' &&

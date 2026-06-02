@@ -1,6 +1,16 @@
 export type RiskLevel = 'low' | 'medium' | 'high';
 export type Decision = 'ALLOW' | 'NOTIFY_THEN_ALLOW' | 'REQUIRE_APPROVAL';
 
+export interface ToolDecisionContext {
+  /**
+   * Production-running state of an archive target (project or service). Archive
+   * is reversible cleanup, so it is gated only when the target is live.
+   */
+  archive?: {
+    productionRunning: boolean;
+  };
+}
+
 const HIGH_RISK_DEFAULTS = new Set([
   'rollback_service',
   'archive_project',
@@ -36,8 +46,8 @@ const READ_ONLY_TOOLS = new Set([
 ]);
 
 export class DecisionEngine {
-  classify(toolName: string, riskLevel?: RiskLevel): Decision {
-    const level = riskLevel ?? this.getDefaultRisk(toolName);
+  classify(toolName: string, riskLevel?: RiskLevel, context?: ToolDecisionContext): Decision {
+    const level = riskLevel ?? this.getDefaultRisk(toolName, context);
     switch (level) {
       case 'low':
         return 'ALLOW';
@@ -48,7 +58,11 @@ export class DecisionEngine {
     }
   }
 
-  private getDefaultRisk(toolName: string): RiskLevel {
+  private getDefaultRisk(toolName: string, context?: ToolDecisionContext): RiskLevel {
+    if ((toolName === 'archive_project' || toolName === 'archive_service') && context?.archive) {
+      return context.archive.productionRunning ? 'high' : 'medium';
+    }
+
     if (HIGH_RISK_DEFAULTS.has(toolName)) {
       return 'high';
     }

@@ -16,6 +16,7 @@ import type { DeployPipeline } from './deploy.js';
 import type { OpenLanderConfig } from '../config/index.js';
 import { ApprovalGate, type ApprovalGate as ApprovalGateType } from './approval-gate.js';
 import { decisionEngine } from '../llm/decision.js';
+import { buildArchiveDecisionContext } from '../llm/archive-decision-context.js';
 import type { PendingFixPatch } from './deploy/helpers.js';
 import { findMatchingPatterns, saveRecoveryPattern } from '../llm/memory.js';
 import type { ConfigurableRecoveryStep, RecoveryAutomationPolicy } from '../monitor/ops-types.js';
@@ -535,9 +536,15 @@ ${plan.agentGuidance}
               return;
             }
 
+            const decisionContext =
+              event.type === 'tool_call'
+                ? await buildArchiveDecisionContext(db, event.toolName, { project_id: projectId })
+                : undefined;
+
             if (
               event.type === 'tool_call' &&
-              decisionEngine.classify(event.toolName) === 'REQUIRE_APPROVAL'
+              decisionEngine.classify(event.toolName, undefined, decisionContext) ===
+                'REQUIRE_APPROVAL'
             ) {
               // Check automation policy before requiring manual approval
               const mappedStep = TOOL_TO_RECOVERY_STEP[event.toolName];
