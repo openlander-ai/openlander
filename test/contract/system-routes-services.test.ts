@@ -291,6 +291,92 @@ describe('system-routes /api/services wire shape contract', () => {
     expect(mockCtx.serviceManager.getLogs).not.toHaveBeenCalled();
   });
 
+  it('POST /services requires a project target', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+
+    const mockCtx = {
+      serviceManager: {
+        create: vi.fn(),
+      },
+      db: {},
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'app-pg', template: 'postgresql' }),
+    });
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: 'PROJECT_TARGET_REQUIRED',
+      code: 'PROJECT_TARGET_REQUIRED',
+    });
+    expect(mockCtx.serviceManager.create).not.toHaveBeenCalled();
+  });
+
+  it('POST /services creates managed services inside the target project network', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+    const project = { id: 'proj-app', name: 'app' };
+    const created = makeCanonicalServiceRow({
+      id: 'svc-pg',
+      name: 'app-pg',
+      project_id: project.id,
+      kind: 'postgres',
+      image_url: 'postgres:17-alpine',
+      assigned_port: 5432,
+      container_name: 'ol-svc-app-pg',
+    });
+
+    const mockCtx = {
+      serviceManager: {
+        create: vi.fn().mockResolvedValue(created),
+      },
+      db: {
+        getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn(async () => undefined),
+        getEnvVarsForService: vi.fn().mockReturnValue({}),
+      },
+      config: { gitProviders: { github: {} } },
+      docker: {
+        ensureProjectNetwork: vi.fn(async () => 'ol-app'),
+      },
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'app-pg', template: 'postgresql', project_id: project.id }),
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      id: 'svc-pg',
+      name: 'app-pg',
+      type: 'postgresql',
+      attached_project_id: project.id,
+      scope: 'project',
+    });
+    expect(mockCtx.docker.ensureProjectNetwork).toHaveBeenCalledWith(project.name);
+    expect(mockCtx.serviceManager.create).toHaveBeenCalledWith({
+      name: 'app-pg',
+      projectId: project.id,
+      template: 'postgresql',
+      image: undefined,
+      port: undefined,
+      version: undefined,
+      envVars: undefined,
+      network: 'ol-app',
+      aliases: ['app-pg'],
+    });
+  });
+
   it('DELETE /services/:id removes services without connected projects', async () => {
     const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
     const app = new Hono();

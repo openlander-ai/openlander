@@ -628,7 +628,7 @@ export const translations = {
       body: '컨테이너와 서비스 소유 설정을 제거합니다. 관리 볼륨은 명시적으로 선택하지 않으면 보존됩니다.',
       confirmDescription:
         '실행 중인 컨테이너를 중지/제거하고 서비스 소유 환경 변수, 도메인, 리소스 설정을 삭제합니다. 프로젝트 볼륨은 기본 보존됩니다.',
-      deleteVolumes: '이 그룹의 마지막 배포 서비스일 때 관리 프로젝트 볼륨도 삭제합니다.',
+      deleteVolumes: '이 그룹의 마지막 배포 서비스일 때 프로젝트 소유 Docker 볼륨도 삭제합니다.',
       error: '서비스 삭제에 실패했습니다',
     },
     serviceLifecycle: {

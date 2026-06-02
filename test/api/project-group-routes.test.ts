@@ -532,4 +532,45 @@ describe('createProjectGroupRoutes', () => {
       },
     });
   });
+
+  it('blocks project delete when project-scoped managed services still exist', async () => {
+    const project = makeProjectRow();
+    const managed = makeServiceRow({
+      id: 'svc-redis',
+      name: 'redis-main',
+      kind: 'redis',
+      assigned_port: 6379,
+      container_name: 'ol-svc-redis-main',
+    });
+    const db = {
+      getProject: vi.fn(async () => project),
+      getDeployableForProject: vi.fn(async () => undefined),
+      getDeployablesByGroup: vi.fn(async () => []),
+      getManagedServicesByGroup: vi.fn(async () => [managed]),
+      isCircuitBreakerOpen: vi.fn(async () => false),
+    };
+    const pipeline = { remove: vi.fn(async () => undefined) };
+    const coordinator = { suppressProject: vi.fn() };
+    const app = createApp({ db, pipeline, coordinator, cloudflare: {} });
+
+    const res = await app.request('/api/projects/group-1/purge?confirm=true', {
+      method: 'DELETE',
+    });
+
+    expect(res.status).toBe(409);
+    expect(pipeline.remove).not.toHaveBeenCalled();
+    await expect(res.json()).resolves.toMatchObject({
+      code: 'PROJECT_HAS_ACTIVE_SERVICES',
+      details: {
+        blockers: [
+          {
+            serviceId: 'svc-redis',
+            serviceName: 'redis-main',
+            slug: 'workspace/redis-main',
+            kind: 'redis',
+          },
+        ],
+      },
+    });
+  });
 });

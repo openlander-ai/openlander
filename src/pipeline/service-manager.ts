@@ -442,6 +442,7 @@ export class ServiceManager {
 
   async create(opts: {
     name: string;
+    projectId?: string;
     template?: string;
     image?: string;
     port?: number;
@@ -599,6 +600,7 @@ export class ServiceManager {
       await this.db.createService({
         id,
         name: opts.name,
+        projectId: opts.projectId,
         type,
         image,
         containerName,

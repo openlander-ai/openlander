@@ -418,6 +418,7 @@ export class Database implements AuthDatabase {
     return rows.filter((p): p is ProjectRow => p !== undefined);
   }
   getDeployablesByGroup(projectId: string) { return this.serviceRepo.getDeployablesByGroup(projectId); }
+  getManagedServicesByGroup(projectId: string) { return this.serviceRepo.getManagedServicesByGroup(projectId); }
   getDeployablesByGroupIds(projectIds: readonly string[]) { return this.serviceRepo.getDeployablesByGroupIds(projectIds); }
   /**
    * PR 4 helper: resolve the auto-derived deployable services row for a

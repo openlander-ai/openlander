@@ -12,7 +12,7 @@ import {
 } from '../../errors.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 import {
-  assertProjectHasNoDeployableServices,
+  assertProjectHasNoActiveServices,
   assertProjectLifecycleMutableForRoute,
   createProjectGroupWithSlugRetry,
   deriveProjectSlug,
@@ -383,7 +383,7 @@ async function handleProjectHardDelete(
     throw err;
   }
   try {
-    await assertProjectHasNoDeployableServices(ctx, project);
+    await assertProjectHasNoActiveServices(ctx, project);
   } catch (err) {
     if (err instanceof ProjectHasActiveServicesError) {
       return new Response(JSON.stringify(err.toJSON()), {

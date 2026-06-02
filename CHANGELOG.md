@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   agents can create an empty project group, provision managed services, and
   attach the first deployable app without using placeholder connection strings.
 
+### Changed
+
+- **Breaking (REST):** `POST /api/services` now requires `project_id`,
+  `target_project_id`, or `project_name`; standalone managed-service creation
+  is rejected with `PROJECT_TARGET_REQUIRED`.
+
+### Fixed
+
+- Blocked project hard-delete and purge while project-scoped managed services
+  still exist, so managed services cannot be left behind by project deletion.
+
 ## [0.1.10] - 2026-06-02
 
 ### Fixed

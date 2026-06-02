@@ -436,6 +436,7 @@ export const serviceToolDefs: ToolDef[] = [
         const network = await appCtx.docker.ensureProjectNetwork(target.projectName);
         result = await appCtx.serviceManager.create({
           name: args['name'] as string,
+          projectId: target.projectId,
           template: args['template'] as string | undefined,
           image: args['image'] as string | undefined,
           port: args['port'] as number | undefined,
