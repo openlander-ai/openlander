@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Added a project-first MCP flow with `openlander_project.create_project` so
+  agents can create an empty project group, provision managed services, and
+  attach the first deployable app without using placeholder connection strings.
+
 ## [0.1.10] - 2026-06-02
 
 ### Fixed
