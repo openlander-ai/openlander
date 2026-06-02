@@ -922,9 +922,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'cancel_deploy',
     riskLevel: 'medium',
     description:
-      'Cancel an active deployment build by deploy_id, project_id, project_name, or id. Stops the active Docker build stream if one is running and returns a status_call for follow-up.',
+      'Cancel an active deployment build by deploy_id, project_id, project_name, or id. Stops the active Docker build stream for the resolved parent project if one is running and returns a status_call for follow-up.',
     mcpDescription:
-      'Cancel an active deployment. Accepts deploy_id, project_id, project_name, or id. Returns cancelled=true only when an active build stream was stopped.',
+      'Cancel an active deployment. Accepts deploy_id, project_id, project_name, or id. Targets the resolved parent project build stream; returns cancelled=true only when an active stream was stopped.',
     inputSchema: cancelDeploySchema,
     execute: async (args, context) => {
       const resolved = await resolveCancelProject(args, context.appCtx);

@@ -238,6 +238,9 @@ return `status: "not_found"` instead of the same empty list as "no active jobs".
 Cancel an active deployment build.
 
 At least one of `deploy_id`, `project_id`, `project_name`, or `id` is required.
+Cancellation targets the resolved parent project build stream. If a monorepo child service
+build is tracked under a different runtime ID, this action returns `not_active` rather than
+stopping that child stream.
 
 | Parameter      | Type   | Required | Description                              |
 | -------------- | ------ | -------- | ---------------------------------------- |
