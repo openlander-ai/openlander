@@ -435,6 +435,9 @@ export class ContainerOps {
     const startTime = Date.now();
     const checkInterval = 2000;
     const inspectTimeoutMs = 10_000;
+    // HEALTHCHECK-less containers can report Running just before the process exits.
+    // Keep this shorter than Docker's common 30s start_period while still catching
+    // immediate crash/restart loops before deploy success is recorded.
     const noHealthcheckStableMs = 5_000;
     let noHealthcheckStableSince: number | null = null;
     let noHealthcheckRestartCount: number | null = null;
