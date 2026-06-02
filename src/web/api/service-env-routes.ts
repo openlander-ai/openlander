@@ -6,7 +6,11 @@ import {
   ENV_KEY_PATTERN,
   ENV_KEY_PATTERN_DESCRIPTION,
   parseEnvVariables,
+  parseOptionalEnvScope,
 } from './helpers/env-route-validation.js';
+import { resolveRouteEnvironmentByKey } from './helpers/env-scope-route.js';
+
+const SERVICE_ENV_WRITE_SCOPES = ['service', 'service_environment'] as const;
 
 export function createServiceEnvRoutes(ctx: AppContext): Hono {
   const api = new Hono();
@@ -30,11 +34,45 @@ export function createServiceEnvRoutes(ctx: AppContext): Hono {
     if (!parsed.ok) {
       return c.json({ error: parsed.error, message: parsed.message }, 400);
     }
-    const changed = await ctx.env.setBulkForService(project.id, service.id, parsed.variables);
+
+    const parsedScope = parseOptionalEnvScope(body.scope, SERVICE_ENV_WRITE_SCOPES);
+    if (!parsedScope.ok) {
+      return c.json({ error: parsedScope.error, message: parsedScope.message }, 400);
+    }
+
+    const scope = parsedScope.scope ?? 'service';
+    if (body.environment_key !== undefined && scope !== 'service_environment') {
+      return c.json(
+        {
+          error: 'INVALID_FIELD',
+          message: 'scope must be service_environment when environment_key is provided',
+        },
+        400,
+      );
+    }
+
+    const environmentResolution =
+      scope === 'service_environment'
+        ? await resolveRouteEnvironmentByKey(ctx, project.id, body.environment_key)
+        : undefined;
+    if (environmentResolution && !environmentResolution.ok) {
+      return c.json(
+        { error: environmentResolution.error, message: environmentResolution.message },
+        environmentResolution.status,
+      );
+    }
+
+    const environmentId = environmentResolution?.environment.id;
+    const changed =
+      environmentId === undefined
+        ? await ctx.env.setBulkForService(project.id, service.id, parsed.variables)
+        : await ctx.env.setBulkForService(project.id, service.id, parsed.variables, environmentId);
     return c.json({
       status: changed ? 'updated' : 'unchanged',
       project: project.name,
       service: service.name,
+      ...(parsedScope.scope ? { scope } : {}),
+      ...(environmentResolution ? { environment_key: environmentResolution.environmentKey } : {}),
       keys: Object.keys(parsed.variables),
       needsRedeploy: changed && service.status === 'running',
     });

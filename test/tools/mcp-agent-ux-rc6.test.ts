@@ -307,6 +307,14 @@ describe('MCP agent UX rc6 regressions', () => {
         variables: { API_KEY: 'secret' },
       }).success,
     ).toBe(true);
+    expect(
+      setEnvVarsSchema.safeParse({
+        project_id: 'app',
+        scope: 'project_environment',
+        environment_key: 'development',
+        variables: { API_KEY: 'secret' },
+      }).success,
+    ).toBe(true);
   });
 
   it('explains image deploys that omit source="image"', () => {

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../../src/app.js';
-import type { ProjectRow, ServiceRow } from '../../src/db/types.js';
+import type { EnvironmentRow, ProjectRow, ServiceRow } from '../../src/db/types.js';
 import { createServiceEnvRoutes } from '../../src/web/api/service-env-routes.js';
 
 function makeProjectRow(overrides: Partial<ProjectRow> = {}): ProjectRow {
@@ -62,6 +62,26 @@ function makeServiceRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
     updated_at: '2026-01-01T00:00:00.000Z',
     archived_at: null,
     server_id: 'local',
+    ...overrides,
+  };
+}
+
+function makeEnvironmentRow(overrides: Partial<EnvironmentRow> = {}): EnvironmentRow {
+  return {
+    id: 'env-development',
+    service_id: 'group-1__svc',
+    project_id: 'group-1',
+    type: 'development',
+    branch: 'develop',
+    status: 'running',
+    assigned_port: 10001,
+    container_id: 'container-1',
+    image_tag: 'ol-workspace:latest',
+    previous_image_tag: null,
+    public_url: null,
+    container_port: 3000,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };
 }
@@ -159,6 +179,113 @@ describe('createServiceEnvRoutes', () => {
       keys: ['NODE_ENV'],
       needsRedeploy: true,
     });
+  });
+
+  it('sets service-environment env vars by environment_key', async () => {
+    const project = makeProjectRow();
+    const service = makeServiceRow({ status: 'running' });
+    const environment = makeEnvironmentRow({ type: 'development' });
+    const env = {
+      setBulkForService: vi.fn(async () => true),
+    };
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getService: vi.fn(async (id: string) => (id === service.id ? service : undefined)),
+        getEnvironmentsByProject: vi.fn(async () => [environment]),
+      },
+      env,
+    });
+
+    const res = await app.request('/api/projects/group-1/services/group-1__svc/env', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scope: 'service_environment',
+        environment_key: 'development',
+        variables: { NODE_ENV: 'development' },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(env.setBulkForService).toHaveBeenCalledWith(
+      'group-1',
+      'group-1__svc',
+      { NODE_ENV: 'development' },
+      'env-development',
+    );
+    await expect(res.json()).resolves.toMatchObject({
+      status: 'updated',
+      scope: 'service_environment',
+      environment_key: 'development',
+      keys: ['NODE_ENV'],
+      needsRedeploy: true,
+    });
+  });
+
+  it('rejects invalid service environment_key writes before saving', async () => {
+    const project = makeProjectRow();
+    const service = makeServiceRow();
+    const env = {
+      setBulkForService: vi.fn(async () => true),
+    };
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getService: vi.fn(async () => service),
+        getEnvironmentsByProject: vi.fn(async () => []),
+      },
+      env,
+    });
+
+    const missingKeyRes = await app.request('/api/projects/group-1/services/group-1__svc/env', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scope: 'service_environment',
+        variables: { NODE_ENV: 'development' },
+      }),
+    });
+    const invalidKeyRes = await app.request('/api/projects/group-1/services/group-1__svc/env', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scope: 'service_environment',
+        environment_key: 'preview',
+        variables: { NODE_ENV: 'development' },
+      }),
+    });
+    const missingEnvironmentRes = await app.request(
+      '/api/projects/group-1/services/group-1__svc/env',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          scope: 'service_environment',
+          environment_key: 'development',
+          variables: { NODE_ENV: 'development' },
+        }),
+      },
+    );
+
+    expect(missingKeyRes.status).toBe(400);
+    await expect(missingKeyRes.json()).resolves.toMatchObject({
+      error: 'MISSING_FIELD',
+      message: 'environment_key is required for environment-scoped env vars',
+    });
+    expect(invalidKeyRes.status).toBe(400);
+    await expect(invalidKeyRes.json()).resolves.toMatchObject({
+      error: 'INVALID_FIELD',
+      message: 'environment_key must be one of: production, staging, development',
+    });
+    expect(missingEnvironmentRes.status).toBe(404);
+    await expect(missingEnvironmentRes.json()).resolves.toMatchObject({
+      error: 'ENVIRONMENT_NOT_FOUND',
+      message: 'development environment not found for project',
+    });
+    expect(env.setBulkForService).not.toHaveBeenCalled();
   });
 
   it('keeps the legacy unchanged response shape for empty env writes', async () => {

@@ -5,6 +5,29 @@ export type EnvVariablesParseResult =
 export const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const ENV_KEY_PATTERN_DESCRIPTION = '[A-Za-z_][A-Za-z0-9_]*';
 
+export type EnvScopeParseResult<TScope extends string> =
+  | { ok: true; scope: TScope | undefined }
+  | { ok: false; error: 'INVALID_FIELD'; message: string };
+
+export function parseOptionalEnvScope<TScope extends string>(
+  raw: unknown,
+  allowedScopes: readonly TScope[],
+): EnvScopeParseResult<TScope> {
+  if (raw === undefined) {
+    return { ok: true, scope: undefined };
+  }
+
+  if (typeof raw !== 'string' || !allowedScopes.includes(raw as TScope)) {
+    return {
+      ok: false,
+      error: 'INVALID_FIELD',
+      message: `scope must be one of: ${allowedScopes.join(', ')}`,
+    };
+  }
+
+  return { ok: true, scope: raw as TScope };
+}
+
 export function parseEnvVariables(raw: unknown): EnvVariablesParseResult {
   if (raw === undefined) {
     return { ok: false, error: 'MISSING_FIELD', message: 'variables object is required' };

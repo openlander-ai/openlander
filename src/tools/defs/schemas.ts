@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { ENVIRONMENT_KEYS } from '../../pipeline/env-scope.js';
+
 const envVarsInputSchema = z.union([z.string().min(1), z.record(z.string(), z.string())]);
 
 // Core project/deployment schemas
@@ -280,14 +282,20 @@ const envTargetFields = {
     .describe(
       'Project group name. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
     ),
+  project_id: z.string().min(1).optional().describe('Project group id'),
 } as const;
 
 function envTargetSchema<T extends z.ZodRawShape>(shape: T) {
   return z
     .object({ ...envTargetFields, ...shape })
     .refine(
-      (value: { service_id?: unknown; service_name?: unknown; project_name?: unknown }) =>
-        Boolean(value.service_id || value.service_name || value.project_name),
+      (value: {
+        service_id?: unknown;
+        service_name?: unknown;
+        project_name?: unknown;
+        project_id?: unknown;
+      }) =>
+        Boolean(value.service_id || value.service_name || value.project_name || value.project_id),
       {
         message: 'service_id, service_name, or project_name is required',
       },
@@ -296,6 +304,18 @@ function envTargetSchema<T extends z.ZodRawShape>(shape: T) {
 
 // Environment & configuration schemas
 export const setEnvVarsSchema = envTargetSchema({
+  scope: z
+    .enum(['project', 'project_environment', 'service', 'service_environment'])
+    .optional()
+    .describe(
+      'Optional explicit env scope. Defaults to legacy service scope. Use project_environment/service_environment with environment_key.',
+    ),
+  environment_key: z
+    .enum(ENVIRONMENT_KEYS)
+    .optional()
+    .describe(
+      'Logical environment for environment-scoped writes. One of production, staging, development.',
+    ),
   variables: envVarsInputSchema.describe(
     'Environment variables as an object or JSON-stringified object (e.g., {"DATABASE_URL": "..."})',
   ),

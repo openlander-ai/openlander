@@ -254,6 +254,140 @@ describe('createProjectEnvRoutes', () => {
     });
   });
 
+  it('writes explicit project-shared env vars without using the v0.1 service compat path', async () => {
+    const project = makeProjectRow({ status: 'running' });
+    const service = makeServiceRow();
+    const envManager = {
+      setBulk: vi.fn(async () => true),
+      setBulkForService: vi.fn(async () => true),
+    };
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup: vi.fn(async () => [service]),
+      },
+      env: envManager,
+    });
+
+    const res = await app.request('/api/projects/group-1/env', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scope: 'project', variables: { SHARED_KEY: 'project' } }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(envManager.setBulk).toHaveBeenCalledWith('group-1', { SHARED_KEY: 'project' });
+    expect(envManager.setBulkForService).not.toHaveBeenCalled();
+    await expect(res.json()).resolves.toMatchObject({
+      status: 'updated',
+      scope: 'project',
+      keys: ['SHARED_KEY'],
+      needsRedeploy: true,
+    });
+  });
+
+  it('writes explicit project-environment env vars by environment_key', async () => {
+    const project = makeProjectRow();
+    const environment = makeEnvironmentRow({
+      id: 'env-development',
+      type: 'development',
+      status: 'running',
+    });
+    const envManager = {
+      setBulk: vi.fn(async () => true),
+    };
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getEnvironmentsByProject: vi.fn(async () => [environment]),
+      },
+      env: envManager,
+    });
+
+    const res = await app.request('/api/projects/group-1/env', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scope: 'project_environment',
+        environment_key: 'development',
+        variables: { SHARED_KEY: 'development' },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(envManager.setBulk).toHaveBeenCalledWith(
+      'group-1',
+      { SHARED_KEY: 'development' },
+      'env-development',
+    );
+    await expect(res.json()).resolves.toMatchObject({
+      status: 'updated',
+      scope: 'project_environment',
+      environment_key: 'development',
+      keys: ['SHARED_KEY'],
+      needsRedeploy: true,
+    });
+  });
+
+  it('rejects invalid project environment_key writes before saving', async () => {
+    const project = makeProjectRow();
+    const setBulk = vi.fn(async () => true);
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getEnvironmentsByProject: vi.fn(async () => []),
+      },
+      env: { setBulk },
+    });
+
+    const missingKeyRes = await app.request('/api/projects/group-1/env', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scope: 'project_environment',
+        variables: { SHARED_KEY: 'development' },
+      }),
+    });
+    const invalidKeyRes = await app.request('/api/projects/group-1/env', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scope: 'project_environment',
+        environment_key: 'preview',
+        variables: { SHARED_KEY: 'development' },
+      }),
+    });
+    const missingEnvironmentRes = await app.request('/api/projects/group-1/env', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scope: 'project_environment',
+        environment_key: 'development',
+        variables: { SHARED_KEY: 'development' },
+      }),
+    });
+
+    expect(missingKeyRes.status).toBe(400);
+    await expect(missingKeyRes.json()).resolves.toMatchObject({
+      error: 'MISSING_FIELD',
+      message: 'environment_key is required for environment-scoped env vars',
+    });
+    expect(invalidKeyRes.status).toBe(400);
+    await expect(invalidKeyRes.json()).resolves.toMatchObject({
+      error: 'INVALID_FIELD',
+      message: 'environment_key must be one of: production, staging, development',
+    });
+    expect(missingEnvironmentRes.status).toBe(404);
+    await expect(missingEnvironmentRes.json()).resolves.toMatchObject({
+      error: 'ENVIRONMENT_NOT_FOUND',
+      message: 'development environment not found for project',
+    });
+    expect(setBulk).not.toHaveBeenCalled();
+  });
+
   it('requires service selection when project-level env reads target multi-deployable groups', async () => {
     const project = makeProjectRow();
     const serviceA = makeServiceRow({ id: 'web__svc', name: 'web__svc', source: 'git' });

@@ -27,19 +27,41 @@ import {
 } from './schemas.js';
 import { deployTriggerForToolContext } from './helpers.js';
 import type { ToolDeployTrigger } from './helpers.js';
+import {
+  parseEnvironmentKeyOrThrow,
+  resolveEnvironmentByKeyOrThrow,
+  type EnvironmentKey,
+} from '../../pipeline/env-scope.js';
 
 type AppCtx = Parameters<ToolDef['execute']>[1]['appCtx'];
 type ServiceRow = Awaited<ReturnType<AppCtx['db']['getService']>>;
 type ProjectRow = Awaited<ReturnType<AppCtx['db']['getProject']>>;
 type ResolvedServiceRow = NonNullable<ServiceRow>;
 type ResolvedProjectRow = NonNullable<ProjectRow>;
+type EnvWriteScope = 'project' | 'project_environment' | 'service' | 'service_environment';
 
 const MAX_AUDIT_KEYS = 50;
+const ENV_WRITE_SCOPES: readonly EnvWriteScope[] = [
+  'project',
+  'project_environment',
+  'service',
+  'service_environment',
+];
 
 interface EnvTarget {
   project: ResolvedProjectRow;
   service: ResolvedServiceRow;
   runtimeProject: ResolvedProjectRow;
+}
+
+interface EnvWriteTarget {
+  scope: EnvWriteScope;
+  scopeExplicit: boolean;
+  project: ResolvedProjectRow;
+  service?: ResolvedServiceRow;
+  runtimeProject?: ResolvedProjectRow;
+  environmentId?: string;
+  environmentKey?: EnvironmentKey;
 }
 
 function isManagedService(kind: string): boolean {
@@ -102,6 +124,8 @@ async function resolveEnvTarget(args: Record<string, unknown>, appCtx: AppCtx): 
   const serviceId = typeof args['service_id'] === 'string' ? args['service_id'].trim() : '';
   const serviceName = typeof args['service_name'] === 'string' ? args['service_name'].trim() : '';
   const projectName = typeof args['project_name'] === 'string' ? args['project_name'].trim() : '';
+  const projectId = typeof args['project_id'] === 'string' ? args['project_id'].trim() : '';
+  const projectRef = projectId || projectName;
 
   let service: ServiceRow | undefined;
   let project: ProjectRow | undefined;
@@ -111,8 +135,8 @@ async function resolveEnvTarget(args: Record<string, unknown>, appCtx: AppCtx): 
     if (!service) throw new ServiceNotFoundError(serviceId);
     project = await appCtx.db.getProject(service.project_id);
   } else if (serviceName) {
-    const projectScope = await resolveProjectScope(appCtx, projectName);
-    if (projectName && !projectScope) throw new ProjectNotFoundError(projectName);
+    const projectScope = await resolveProjectScope(appCtx, projectRef);
+    if (projectRef && !projectScope) throw new ProjectNotFoundError(projectRef);
 
     const services = await appCtx.db.listServices();
     const namedServices = services.filter((item) => item.name === serviceName);
@@ -134,14 +158,12 @@ async function resolveEnvTarget(args: Record<string, unknown>, appCtx: AppCtx): 
       service = await resolveSingleDeployableProjectAlias(appCtx, serviceName);
     }
     if (!service) {
-      throw new ServiceNotFoundError(
-        projectName ? `${serviceName} in ${projectName}` : serviceName,
-      );
+      throw new ServiceNotFoundError(projectRef ? `${serviceName} in ${projectRef}` : serviceName);
     }
     project = projectScope ?? (await appCtx.db.getProject(service.project_id));
-  } else if (projectName) {
-    project = await resolveProjectScope(appCtx, projectName);
-    if (!project) throw new ProjectNotFoundError(projectName);
+  } else if (projectRef) {
+    project = await resolveProjectScope(appCtx, projectRef);
+    if (!project) throw new ProjectNotFoundError(projectRef);
     const deployables = await appCtx.db.getDeployablesByGroup(project.id);
     if (deployables.length !== 1) {
       await throwEnvServiceSelectionRequired(
@@ -167,14 +189,100 @@ async function resolveEnvTarget(args: Record<string, unknown>, appCtx: AppCtx): 
   project ??= await appCtx.db.getProject(service.project_id);
   if (!project) throw new ProjectNotFoundError(service.project_id);
 
-  if (projectName && projectName !== project.id && projectName !== project.name) {
-    throw new ServiceNotFoundError(`${service.name} in ${projectName}`);
+  if (projectRef && projectRef !== project.id && projectRef !== project.name) {
+    throw new ServiceNotFoundError(`${service.name} in ${projectRef}`);
   }
 
   const runtimeProjectId = deployableServiceIdToProjectId(service.id);
   const runtimeProject = (await appCtx.db.getProject(runtimeProjectId)) ?? project;
 
   return { project, service, runtimeProject };
+}
+
+function parseEnvWriteScope(raw: unknown): EnvWriteScope {
+  if (raw === undefined) return 'service';
+  if (typeof raw === 'string' && ENV_WRITE_SCOPES.includes(raw as EnvWriteScope)) {
+    return raw as EnvWriteScope;
+  }
+  throw new OpenLanderError(
+    `scope must be one of: ${ENV_WRITE_SCOPES.join(', ')}`,
+    'INVALID_FIELD',
+    400,
+    { allowed: ENV_WRITE_SCOPES },
+  );
+}
+
+async function resolveProjectWriteTarget(
+  args: Record<string, unknown>,
+  appCtx: AppCtx,
+): Promise<ResolvedProjectRow> {
+  const projectId = typeof args['project_id'] === 'string' ? args['project_id'].trim() : '';
+  const projectName = typeof args['project_name'] === 'string' ? args['project_name'].trim() : '';
+  const projectRef = projectId || projectName;
+
+  if (projectRef) {
+    const project = await resolveProjectScope(appCtx, projectRef);
+    if (!project) throw new ProjectNotFoundError(projectRef);
+    return project;
+  }
+
+  const target = await resolveEnvTarget(args, appCtx);
+  return target.project;
+}
+
+async function resolveEnvWriteTarget(
+  args: Record<string, unknown>,
+  appCtx: AppCtx,
+): Promise<EnvWriteTarget> {
+  const scopeExplicit = args['scope'] !== undefined;
+  const scope = parseEnvWriteScope(args['scope']);
+
+  if (args['environment_key'] !== undefined && !scope.endsWith('_environment')) {
+    throw new OpenLanderError(
+      `scope must be ${scope === 'project' ? 'project_environment' : 'service_environment'} when environment_key is provided`,
+      'INVALID_FIELD',
+      400,
+      { scope, environment_key: args['environment_key'] },
+    );
+  }
+
+  if (scope === 'project' || scope === 'project_environment') {
+    const project = await resolveProjectWriteTarget(args, appCtx);
+    const environmentKey =
+      scope === 'project_environment'
+        ? parseEnvironmentKeyOrThrow(args['environment_key'])
+        : undefined;
+    const environment =
+      environmentKey === undefined
+        ? undefined
+        : await resolveEnvironmentByKeyOrThrow(appCtx.db, project.id, environmentKey);
+    return {
+      scope,
+      scopeExplicit,
+      project,
+      environmentId: environment?.id,
+      environmentKey,
+    };
+  }
+
+  const target = await resolveEnvTarget(args, appCtx);
+  const environmentKey =
+    scope === 'service_environment'
+      ? parseEnvironmentKeyOrThrow(args['environment_key'])
+      : undefined;
+  const environment =
+    environmentKey === undefined
+      ? undefined
+      : await resolveEnvironmentByKeyOrThrow(appCtx.db, target.project.id, environmentKey);
+  return {
+    scope,
+    scopeExplicit,
+    project: target.project,
+    service: target.service,
+    runtimeProject: target.runtimeProject,
+    environmentId: environment?.id,
+    environmentKey,
+  };
 }
 
 function parseEnvVariables(raw: unknown): Record<string, string> {
@@ -271,6 +379,26 @@ async function recordEnvActivity(
   });
 }
 
+function serviceNeedsRedeploy(service: ResolvedServiceRow): boolean {
+  const status = service.status;
+  const hasRuntimeContainer =
+    typeof service.container_id === 'string' && service.container_id.trim().length > 0;
+  const statusImpliesRuntime = ['running', 'healthy', 'unhealthy', 'degraded'].includes(
+    String(status),
+  );
+  return hasRuntimeContainer || statusImpliesRuntime;
+}
+
+async function projectScopeNeedsRedeploy(
+  appCtx: AppCtx,
+  project: ResolvedProjectRow,
+  changed: boolean,
+): Promise<boolean> {
+  if (!changed) return false;
+  const deployables = await appCtx.db.getDeployablesByGroup(project.id);
+  return deployables.some((service) => serviceNeedsRedeploy(service));
+}
+
 async function applyRedeployIfRequested(
   appCtx: AppCtx,
   target: EnvTarget,
@@ -283,13 +411,7 @@ async function applyRedeployIfRequested(
   redeploySkipped?: { reason: string; message: string };
 }> {
   const { project, service, runtimeProject } = target;
-  const status = service.status;
-  const hasRuntimeContainer =
-    typeof service.container_id === 'string' && service.container_id.trim().length > 0;
-  const statusImpliesRuntime = ['running', 'healthy', 'unhealthy', 'degraded'].includes(
-    String(status),
-  );
-  const needsRedeploy = changed && (hasRuntimeContainer || statusImpliesRuntime);
+  const needsRedeploy = changed && serviceNeedsRedeploy(service);
   if (!needsRedeploy || deferRedeploy) {
     return { redeployed: false, needsRedeploy };
   }
@@ -388,49 +510,80 @@ export const envToolDefs: ToolDef[] = [
     name: 'set_env_vars',
     riskLevel: 'medium',
     description:
-      'Set environment variables for a deployable service. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false for immediate apply. variables may be an object or JSON-stringified object with string values only; null is rejected. Returns { status, project, service, keys, changed, needs_redeploy }.',
+      'Set environment variables for a project or deployable service. Defaults to legacy service scope. Pass scope=project/project_environment/service/service_environment; environment scopes require environment_key. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false for immediate service redeploy. variables may be an object or JSON-stringified object with string values only; null is rejected. Returns { status, project, service?, scope, keys, changed, needs_redeploy }.',
     mcpDescription:
-      'Set service-scoped env vars. Default saves only; call redeploy_app to apply, or pass defer_redeploy=false.',
+      'Set project/service env vars. Use scope and environment_key for environment-specific writes. Default saves only.',
     inputSchema: setEnvVarsSchema,
     execute: async (args, context) => {
       const { appCtx } = context;
-      const target = await resolveEnvTarget(args, appCtx);
+      const target = await resolveEnvWriteTarget(args, appCtx);
       const vars = parseEnvVariables(args['variables']);
       const deferRedeploy = (args['defer_redeploy'] as boolean | undefined) ?? true;
       await appCtx.db.assertEnvToolSchemaReady();
 
-      const changes = await appCtx.env.setBulkForServiceDetailed(
-        target.project.id,
-        target.service.id,
-        vars,
-      );
+      const changes =
+        target.service === undefined
+          ? target.environmentId === undefined
+            ? await appCtx.env.setBulkDetailed(target.project.id, vars)
+            : await appCtx.env.setBulkDetailed(target.project.id, vars, target.environmentId)
+          : target.environmentId === undefined
+            ? await appCtx.env.setBulkForServiceDetailed(target.project.id, target.service.id, vars)
+            : await appCtx.env.setBulkForServiceDetailed(
+                target.project.id,
+                target.service.id,
+                vars,
+                target.environmentId,
+              );
       const changed = changes.some((change) => change.op !== 'noop');
-      const mismatches = await appCtx.env.verifyRoundTripForService(
-        target.project.id,
-        target.service.id,
-        vars,
-      );
+      const mismatches =
+        target.service === undefined
+          ? target.environmentId === undefined
+            ? await appCtx.env.verifyRoundTrip(target.project.id, vars)
+            : await appCtx.env.verifyRoundTrip(target.project.id, vars, target.environmentId)
+          : target.environmentId === undefined
+            ? await appCtx.env.verifyRoundTripForService(target.project.id, target.service.id, vars)
+            : await appCtx.env.verifyRoundTripForService(
+                target.project.id,
+                target.service.id,
+                vars,
+                target.environmentId,
+              );
 
       if (mismatches.length > 0) {
         return {
           status: 'error',
           project: target.project.name,
-          service: target.service.name,
+          ...(target.service ? { service: target.service.name } : {}),
+          ...(target.scopeExplicit || target.scope !== 'service' ? { scope: target.scope } : {}),
+          ...(target.environmentKey ? { environment_key: target.environmentKey } : {}),
           error: `Round-trip verification failed for keys: ${mismatches.join(', ')}. Values may have been mangled during storage.`,
           keys: Object.keys(vars),
         };
       }
 
-      const redeploy = await applyRedeployIfRequested(
-        appCtx,
-        target,
-        changed,
-        deferRedeploy,
-        deployTriggerForToolContext(context),
-      );
+      const redeploy =
+        target.service && target.runtimeProject
+          ? await applyRedeployIfRequested(
+              appCtx,
+              {
+                project: target.project,
+                service: target.service,
+                runtimeProject: target.runtimeProject,
+              },
+              changed,
+              deferRedeploy,
+              deployTriggerForToolContext(context),
+            )
+          : {
+              redeployed: false,
+              needsRedeploy: await projectScopeNeedsRedeploy(appCtx, target.project, changed),
+            };
       await recordEnvActivity(appCtx, target.project.id, 'set', Object.keys(vars), {
-        service_id: target.service.id,
-        service_name: target.service.name,
+        scope: target.scope,
+        ...(target.service
+          ? { service_id: target.service.id, service_name: target.service.name }
+          : {}),
+        ...(target.environmentKey ? { environment_key: target.environmentKey } : {}),
         changed_count: changes.filter((change) => change.op !== 'noop').length,
         needs_redeploy: redeploy.needsRedeploy,
         deferred: deferRedeploy,
@@ -440,7 +593,9 @@ export const envToolDefs: ToolDef[] = [
         return {
           status: 'updated_and_redeployed',
           project: target.project.name,
-          service: target.service.name,
+          ...(target.service ? { service: target.service.name } : {}),
+          ...(target.scopeExplicit || target.scope !== 'service' ? { scope: target.scope } : {}),
+          ...(target.environmentKey ? { environment_key: target.environmentKey } : {}),
           keys: Object.keys(vars),
           changed: changes,
           needs_redeploy: false,
@@ -451,7 +606,9 @@ export const envToolDefs: ToolDef[] = [
         return {
           status: 'updated_redeploy_skipped',
           project: target.project.name,
-          service: target.service.name,
+          ...(target.service ? { service: target.service.name } : {}),
+          ...(target.scopeExplicit || target.scope !== 'service' ? { scope: target.scope } : {}),
+          ...(target.environmentKey ? { environment_key: target.environmentKey } : {}),
           keys: Object.keys(vars),
           changed: changes,
           needs_redeploy: true,
@@ -463,7 +620,9 @@ export const envToolDefs: ToolDef[] = [
       return {
         status: 'updated',
         project: target.project.name,
-        service: target.service.name,
+        ...(target.service ? { service: target.service.name } : {}),
+        ...(target.scopeExplicit || target.scope !== 'service' ? { scope: target.scope } : {}),
+        ...(target.environmentKey ? { environment_key: target.environmentKey } : {}),
         keys: Object.keys(vars),
         changed: changes,
         needs_redeploy: redeploy.needsRedeploy,
