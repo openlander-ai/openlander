@@ -1166,7 +1166,11 @@ export class ServiceManager {
     const containerRef = service.container_id ?? service.container_name ?? '';
     try {
       const info = await this.runtime.inspectContainer(containerRef);
-      const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
+      const status: ServiceRow['status'] = info.State.Restarting
+        ? 'error'
+        : info.State.Running
+          ? 'running'
+          : 'stopped';
       const healthRaw: unknown = info.State.Health?.Status;
       const startedAtRaw: unknown = info.State.StartedAt;
       const restartCountRaw: unknown = info.RestartCount;

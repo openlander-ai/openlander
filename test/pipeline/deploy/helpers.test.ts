@@ -126,6 +126,13 @@ describe('detectFailStep', () => {
     expect(result).toBe('runtime');
   });
 
+  it('returns runtime when Container failed readiness check is present', () => {
+    const result = detectFailStep(
+      '[clone] step\n[dockerfile] step\n[build] step\n[run] step\nContainer failed readiness check',
+    );
+    expect(result).toBe('runtime');
+  });
+
   it('returns clone for empty log (first missing step)', () => {
     const result = detectFailStep('');
     expect(result).toBe('clone');

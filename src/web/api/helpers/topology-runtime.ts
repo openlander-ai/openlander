@@ -246,10 +246,13 @@ async function fetchTopologyNodeRuntime(
   } else if (node.container_id) {
     try {
       const info = await ctx.docker.inspectContainer(node.container_id);
-      const dockerHealth =
-        (info as unknown as { State: { Health?: { Status?: string } } }).State.Health?.Status ??
-        null;
-      if (dockerHealth === 'unhealthy') {
+      const state = (
+        info as unknown as {
+          State: { Running?: boolean; Restarting?: boolean; Health?: { Status?: string } };
+        }
+      ).State;
+      const dockerHealth = state.Health?.Status ?? null;
+      if (state.Restarting === true || state.Running === false || dockerHealth === 'unhealthy') {
         health = 'crashed';
       }
     } catch {

@@ -435,6 +435,12 @@ export class ContainerOps {
     const startTime = Date.now();
     const checkInterval = 2000;
     const inspectTimeoutMs = 10_000;
+    // HEALTHCHECK-less containers can report Running just before the process exits.
+    // Keep this shorter than Docker's common 30s start_period while still catching
+    // immediate crash/restart loops before deploy success is recorded.
+    const noHealthcheckStableMs = 5_000;
+    let noHealthcheckStableSince: number | null = null;
+    let noHealthcheckRestartCount: number | null = null;
 
     while (Date.now() - startTime < timeoutMs) {
       try {
@@ -464,8 +470,18 @@ export class ContainerOps {
             return { healthy: true };
           }
           if (!info.State.Health) {
-            return { healthy: true };
+            const restartCount = typeof info.RestartCount === 'number' ? info.RestartCount : null;
+            if (noHealthcheckStableSince === null || noHealthcheckRestartCount !== restartCount) {
+              noHealthcheckStableSince = Date.now();
+              noHealthcheckRestartCount = restartCount;
+            }
+            if (Date.now() - noHealthcheckStableSince >= noHealthcheckStableMs) {
+              return { healthy: true };
+            }
           }
+        } else {
+          noHealthcheckStableSince = null;
+          noHealthcheckRestartCount = null;
         }
       } catch (error) {
         if (isDockerNotFoundError(error)) {
@@ -473,7 +489,9 @@ export class ContainerOps {
         }
       }
 
-      await sleep(checkInterval);
+      const remainingMs = timeoutMs - (Date.now() - startTime);
+      if (remainingMs <= 0) break;
+      await sleep(Math.min(checkInterval, remainingMs));
     }
 
     try {
@@ -493,6 +511,23 @@ export class ContainerOps {
           healthy: false,
           exitCode: info.State.ExitCode,
           error: `Container healthcheck is ${info.State.Health.Status}`,
+        };
+      }
+      if (info.State.Running && !info.State.Health) {
+        const restartCount = typeof info.RestartCount === 'number' ? info.RestartCount : null;
+        const stableForMs =
+          noHealthcheckStableSince !== null && noHealthcheckRestartCount === restartCount
+            ? Date.now() - noHealthcheckStableSince
+            : 0;
+        if (stableForMs >= noHealthcheckStableMs) {
+          return { healthy: true };
+        }
+        return {
+          healthy: false,
+          exitCode: info.State.ExitCode,
+          error: `Container has no healthcheck and did not remain stable for ${String(
+            Math.ceil(noHealthcheckStableMs / 1000),
+          )}s`,
         };
       }
       return {

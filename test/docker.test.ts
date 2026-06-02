@@ -94,6 +94,7 @@ type MockContainerHandleOptions = {
   logsError?: Error;
   logsOutput?: string | Buffer;
   inspectResponses?: Array<{
+    RestartCount?: number;
     State: {
       Running: boolean;
       Restarting?: boolean;
@@ -542,9 +543,6 @@ describeDocker('Docker core operations', () => {
         { State: { Running: true, Restarting: false, ExitCode: 0, Health: { Status: 'healthy' } } },
       ],
     });
-    const runningNoHealth = createDockerContainerHandle({
-      inspectResponses: [{ State: { Running: true, Restarting: false, ExitCode: 0 } }],
-    });
     const missing = {
       inspect: vi.fn(async () => {
         throw new Error('No such container');
@@ -555,7 +553,6 @@ describeDocker('Docker core operations', () => {
       .mockReturnValueOnce(restarting)
       .mockReturnValueOnce(exited)
       .mockReturnValueOnce(healthy)
-      .mockReturnValueOnce(runningNoHealth)
       .mockReturnValueOnce(missing);
 
     const docker = new Docker();
@@ -571,12 +568,49 @@ describeDocker('Docker core operations', () => {
       error: 'Container exited with code 2',
     });
     await expect(docker.waitForHealthy('healthy', 10)).resolves.toEqual({ healthy: true });
-    await expect(docker.waitForHealthy('running-no-health', 10)).resolves.toEqual({
-      healthy: true,
-    });
     await expect(docker.waitForHealthy('missing', 10)).resolves.toEqual({
       healthy: false,
       error: 'Container not found',
+    });
+  });
+
+  it('waits for no-healthcheck containers to stay stable before success', async () => {
+    vi.useFakeTimers();
+    const runningNoHealth = createDockerContainerHandle({
+      inspectResponses: [
+        { RestartCount: 0, State: { Running: true, Restarting: false, ExitCode: 0 } },
+        { RestartCount: 0, State: { Running: true, Restarting: false, ExitCode: 0 } },
+        { RestartCount: 0, State: { Running: true, Restarting: false, ExitCode: 0 } },
+        { RestartCount: 0, State: { Running: true, Restarting: false, ExitCode: 0 } },
+      ],
+    });
+    mockGetContainer.mockReturnValue(runningNoHealth);
+
+    const docker = new Docker();
+    const result = docker.waitForHealthy('running-no-health', 6000);
+    await vi.advanceTimersByTimeAsync(6000);
+
+    await expect(result).resolves.toEqual({ healthy: true });
+  });
+
+  it('detects no-healthcheck restart loops before declaring success', async () => {
+    vi.useFakeTimers();
+    const runningThenRestarting = createDockerContainerHandle({
+      inspectResponses: [
+        { RestartCount: 0, State: { Running: true, Restarting: false, ExitCode: 0 } },
+        { RestartCount: 1, State: { Running: false, Restarting: true, ExitCode: 1 } },
+      ],
+    });
+    mockGetContainer.mockReturnValue(runningThenRestarting);
+
+    const docker = new Docker();
+    const result = docker.waitForHealthy('running-then-restarting', 6000);
+    await vi.advanceTimersByTimeAsync(2000);
+
+    await expect(result).resolves.toMatchObject({
+      healthy: false,
+      exitCode: 1,
+      error: expect.stringContaining('restart loop'),
     });
   });
 

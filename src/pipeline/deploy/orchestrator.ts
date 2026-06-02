@@ -74,6 +74,14 @@ function tailLogLines(logText: string, lineCount: number): string {
   return logText.split('\n').slice(-lineCount).join('\n');
 }
 
+function runtimeReadinessFailureMessage(error: string | undefined): string {
+  const message = error ?? 'unknown';
+  if (/healthcheck/i.test(message)) {
+    return `Container failed readiness check: ${message}`;
+  }
+  return `Container crashed after start: ${message}`;
+}
+
 async function transitionProjectState(
   deps: DeployOrchestrationDeps,
   projectId: string,
@@ -612,8 +620,9 @@ export async function runAndVerify(
       exitCode: healthResult.exitCode,
     });
 
+    const readinessFailure = runtimeReadinessFailureMessage(healthResult.error);
     throw new DeployRuntimeStartError(
-      `Container crashed after start: ${healthResult.error ?? 'unknown'}\n\nContainer logs (last 80 lines):\n${containerLogExcerpt}`,
+      `${readinessFailure}\n\nContainer logs (last 80 lines):\n${containerLogExcerpt}`,
       containerLogs,
     );
   }

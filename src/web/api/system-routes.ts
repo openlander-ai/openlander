@@ -457,6 +457,9 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       }
 
       const inspection = await ctx.serviceManager.getInspectionHealth(id);
+      if (inspection.status === 'error') {
+        return c.json({ health: 'crashed' });
+      }
       if (inspection.status !== 'running') {
         return c.json(
           { error: 'NOT_FOUND', message: `Service container is not running: ${id}` },
