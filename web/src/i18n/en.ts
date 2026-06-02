@@ -535,7 +535,7 @@ export const translations = {
         'This stops/removes the running container and deletes service-owned env vars, domains, and resource settings. Project volumes are preserved by default.',
       confirmLabel: 'Type',
       deleteVolumes:
-        'Also delete managed project volumes when this is the last deployable service.',
+        'Also delete project-owned Docker volumes when this is the last deployable service.',
       deleting: 'Deleting…',
       confirmButton: 'Delete service',
       error: 'Failed to delete service',

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
-import type { ServiceRow } from '../../db/types.js';
+import type { ProjectRow, ServiceRow } from '../../db/types.js';
 import { kindToLegacyType, MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
 import { ORPHAN_MANAGED_GROUP_ID } from '../../db/service-ids.js';
 import { ServiceInUseError, ServiceNotFoundError } from '../../errors.js';
@@ -16,6 +16,63 @@ const MAX_SERVICE_LOG_LINES = 1_000;
 
 function serviceNotFoundBody(id: string): { error: 'NOT_FOUND'; message: string } {
   return { error: 'NOT_FOUND', message: `Service not found: ${id}` };
+}
+
+async function resolveManagedServiceTargetProject(
+  ctx: AppContext,
+  input: { projectId?: string; projectName?: string },
+): Promise<
+  | { ok: true; project: ProjectRow }
+  | {
+      ok: false;
+      status: 400 | 404;
+      body: { error: string; code: string; message: string };
+    }
+> {
+  const projectId = input.projectId?.trim();
+  const projectName = input.projectName?.trim();
+
+  if (!projectId && !projectName) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: 'PROJECT_TARGET_REQUIRED',
+        code: 'PROJECT_TARGET_REQUIRED',
+        message:
+          'Managed service creation requires project_id or project_name so the service is owned by the project that will use it.',
+      },
+    };
+  }
+
+  const byId = projectId ? await ctx.db.getProject(projectId) : undefined;
+  const byName = projectName ? await ctx.db.getProjectByName(projectName) : undefined;
+  const project = byId ?? byName;
+  if (!project) {
+    return {
+      ok: false,
+      status: 404,
+      body: {
+        error: 'PROJECT_NOT_FOUND',
+        code: 'PROJECT_NOT_FOUND',
+        message: `Project not found: ${projectId ?? projectName ?? ''}`,
+      },
+    };
+  }
+
+  if (byId && byName && byId.id !== byName.id) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: 'INVALID_PROJECT_TARGET',
+        code: 'INVALID_PROJECT_TARGET',
+        message: 'project_id and project_name refer to different projects.',
+      },
+    };
+  }
+
+  return { ok: true, project };
 }
 
 /**
@@ -219,6 +276,9 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     try {
       const body = await c.req.json<{
         name?: string;
+        project_id?: string;
+        target_project_id?: string;
+        project_name?: string;
         template?: string;
         image?: string;
         port?: number;
@@ -251,13 +311,37 @@ export function createSystemRoutes(ctx: AppContext): Hono {
         );
       }
 
+      const projectId = body.project_id?.trim();
+      const legacyTargetProjectId = body.target_project_id?.trim();
+      if (projectId && legacyTargetProjectId && projectId !== legacyTargetProjectId) {
+        return c.json(
+          {
+            error: 'INVALID_PROJECT_TARGET',
+            code: 'INVALID_PROJECT_TARGET',
+            message: 'project_id and target_project_id refer to different projects.',
+          },
+          400,
+        );
+      }
+
+      const target = await resolveManagedServiceTargetProject(ctx, {
+        projectId: projectId ?? legacyTargetProjectId,
+        projectName: body.project_name,
+      });
+      if (!target.ok) {
+        return c.json(target.body, target.status);
+      }
+      const network = await ctx.docker.ensureProjectNetwork(target.project.name);
+
       const service = await ctx.serviceManager.create({
         name: body.name,
+        projectId: target.project.id,
         template: body.template,
         image: body.image,
         port: body.port,
         version: body.version,
         envVars: body.env_vars,
+        ...(network ? { network, aliases: [body.name] } : {}),
       });
       const envVars = await ctx.db.getEnvVarsForService(service.project_id, service.id);
       return c.json(toServiceWire(service, envVars));

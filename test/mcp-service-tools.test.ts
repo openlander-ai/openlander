@@ -311,6 +311,7 @@ describe('MCP service tools (Task 8)', () => {
     expect(ctx.docker.ensureProjectNetwork).toHaveBeenCalledWith('myapp');
     expect(serviceManager.create).toHaveBeenCalledWith({
       name: 'myapp-pg',
+      projectId: 'proj-1',
       template: 'postgresql',
       network: 'ol-myapp',
       aliases: ['myapp-pg'],
@@ -483,6 +484,7 @@ describe('MCP service tools (Task 8)', () => {
     });
     expect(serviceManager.create).toHaveBeenCalledWith({
       name: 'shared-mysql',
+      projectId: 'proj-1',
       template: 'mysql',
       network: 'ol-myapp',
       aliases: ['shared-mysql'],
@@ -541,6 +543,7 @@ describe('MCP service tools (Task 8)', () => {
     });
     expect(serviceManager.create).toHaveBeenCalledWith({
       name: 'shared-redis',
+      projectId: 'proj-1',
       template: 'redis',
       network: 'ol-myapp',
       aliases: ['shared-redis'],

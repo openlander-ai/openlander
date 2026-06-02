@@ -282,6 +282,9 @@ export async function getServiceTemplates(): Promise<ServiceTemplate[]> {
 
 export async function createService(opts: {
   name: string;
+  project_id?: string;
+  target_project_id?: string;
+  project_name?: string;
   template?: string;
   version?: string;
   image?: string;

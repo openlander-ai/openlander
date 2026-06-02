@@ -28,6 +28,7 @@ export default defineConfig({
       'test/auth/token-refresh.test.ts',
       'test/contract/system-routes-services.test.ts',
       'test/api/project-create-group.test.ts',
+      'test/api/project-group-routes.test.ts',
       'test/api/deploy-log-source.test.ts',
       'test/api/deploy-log-stream-routes.test.ts',
       'test/api/deployable-service-routes.test.ts',

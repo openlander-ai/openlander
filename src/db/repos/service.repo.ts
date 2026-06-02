@@ -153,13 +153,15 @@ export class ServiceRepo {
   }
 
   /**
-   * Create a managed service row under the synthesized __orphan_managed
-   * group. Post-0012: legacy type/image/port/env_vars columns are gone;
-   * canonical kind/image_url/assigned_port are the source of truth.
+   * Create a managed service row. New user-facing creation paths should pass
+   * projectId so the service is owned by the project that will use it. The
+   * orphan fallback remains for legacy/adoption paths that register already
+   * detached managed-service containers.
    */
   async createService(service: {
     id: string;
     name: string;
+    projectId?: string;
     /** Wire-format `type` string from MCP/REST; mapped to the canonical kind enum. */
     type: string;
     image: string;
@@ -168,13 +170,16 @@ export class ServiceRepo {
     /** @deprecated 1.1 — credentials column removal pairs with secret refactor. */
     credentials?: string;
   }): Promise<ServiceRow> {
-    await this.ensureOrphanManagedGroup();
+    const projectId = service.projectId ?? ORPHAN_MANAGED_GROUP_ID;
+    if (!service.projectId) {
+      await this.ensureOrphanManagedGroup();
+    }
 
     const [created] = await this.db
       .insert(services)
       .values({
         id: service.id,
-        project_id: ORPHAN_MANAGED_GROUP_ID,
+        project_id: projectId,
         name: service.name,
         kind: normalizeKind(service.type),
         source: 'image',
@@ -435,6 +440,17 @@ export class ServiceRepo {
           deployableServiceKindFilter(sql`${services.kind}`),
           sql`NOT (${services.parent_service_id} IS NULL AND coalesce(${services.build_method}, '') = 'compose')`,
         ),
+      )
+      .orderBy(desc(services.updated_at));
+    return rows as ServiceRow[];
+  }
+
+  async getManagedServicesByGroup(projectId: string): Promise<ServiceRow[]> {
+    const rows = await this.db
+      .select()
+      .from(services)
+      .where(
+        and(eq(services.project_id, projectId), inArray(services.kind, [...MANAGED_SERVICE_KINDS])),
       )
       .orderBy(desc(services.updated_at));
     return rows as ServiceRow[];

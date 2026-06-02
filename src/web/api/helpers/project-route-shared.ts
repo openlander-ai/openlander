@@ -9,6 +9,7 @@ import {
   deployableServiceIdToProjectId,
   projectIdToDeployableServiceId,
 } from '../../../db/service-ids.js';
+import { isManagedServiceKind } from '../../../db/repos/service.repo.js';
 import { loadServiceViewRecords, serviceViewFromRows } from '../../../db/views/service-view.js';
 import {
   CircuitBreakerOpenError,
@@ -574,13 +575,25 @@ export async function getProjectDeletionBlockers(
       getDeployablesByGroup?: (projectId: string) => Promise<ServiceRow[]> | ServiceRow[];
     }
   ).getDeployablesByGroup;
-  if (!getDeployablesByGroup) {
+
+  const getManagedServicesByGroup = (
+    ctx.db as {
+      getManagedServicesByGroup?: (projectId: string) => Promise<ServiceRow[]> | ServiceRow[];
+    }
+  ).getManagedServicesByGroup;
+  if (!getDeployablesByGroup && !getManagedServicesByGroup) {
     return [];
   }
 
-  const services = await getDeployablesByGroup.call(ctx.db, project.id);
+  const [deployables, managedServices] = await Promise.all([
+    getDeployablesByGroup ? getDeployablesByGroup.call(ctx.db, project.id) : [],
+    getManagedServicesByGroup ? getManagedServicesByGroup.call(ctx.db, project.id) : [],
+  ]);
+  const services = [...deployables, ...managedServices];
   return services.map((service) => {
-    const serviceName = getDeployableServiceDisplayName(service);
+    const serviceName = isManagedServiceKind(service.kind)
+      ? service.name
+      : getDeployableServiceDisplayName(service);
     return {
       serviceId: service.id,
       serviceName,
@@ -591,7 +604,7 @@ export async function getProjectDeletionBlockers(
   });
 }
 
-export async function assertProjectHasNoDeployableServices(
+export async function assertProjectHasNoActiveServices(
   ctx: AppContext,
   project: ProjectRow,
 ): Promise<void> {
@@ -600,6 +613,8 @@ export async function assertProjectHasNoDeployableServices(
     throw new ProjectHasActiveServicesError(project.id, project.name, blockers);
   }
 }
+
+export const assertProjectHasNoDeployableServices = assertProjectHasNoActiveServices;
 
 export async function createMutationPolicySnapshot(
   ctx: AppContext,

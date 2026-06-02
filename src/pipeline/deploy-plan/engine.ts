@@ -644,6 +644,7 @@ export class PlanEngine {
     const network = await this.docker.ensureProjectNetwork(targetProject.name);
     const created = await this.serviceManager.create({
       name: serviceName,
+      projectId: targetProject.id,
       template: planService.type,
       ...(network ? { network, aliases: [serviceName] } : {}),
     });

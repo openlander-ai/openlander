@@ -341,7 +341,7 @@ export class ProjectHasActiveServicesError extends OpenLanderError {
     }>,
   ) {
     super(
-      `Project '${projectName}' still has ${String(blockers.length)} deployable service(s). Delete services first.`,
+      `Project '${projectName}' still has ${String(blockers.length)} active service(s). Delete services first.`,
       'PROJECT_HAS_ACTIVE_SERVICES',
       409,
       { projectId, projectName, blockers },
