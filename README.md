@@ -198,9 +198,9 @@ common single-service case.
 
 - Git → Docker → URL pipeline. Auto-detects ports, proxies, and containers
   before deploying.
-- Deploy apps from Git repos or public container images. With explicit approval,
-  provision project-scoped Postgres, MySQL, Redis, MongoDB, and MinIO services
-  alongside them. Private registry support is on the roadmap.
+- Deploy apps from Git repos or public container images, and provision
+  project-scoped Postgres, MySQL, Redis, MongoDB, and MinIO services alongside
+  them. Private registry support is on the roadmap.
 - Cancel a stuck build mid-flight. The cancel goes through the same SSE log
   channel agents are watching.
 
