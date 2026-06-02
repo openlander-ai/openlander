@@ -106,10 +106,19 @@ function createMockContext(
       getDeployableForProject: vi.fn(async (projectId: string) => ({
         id: `${projectId}__svc`,
       })),
+      getDeployablesByGroup: vi.fn(async (projectId: string) => [
+        {
+          id: `${projectId}__svc`,
+          name: 'myapp-web',
+          kind: 'app',
+        },
+      ]),
       createProjectDependency: vi.fn(async () => undefined),
     },
     env: {
+      getAll: vi.fn(async () => ({})),
       getAllForService: vi.fn(async () => ({})),
+      set: vi.fn(async () => true),
       setBulkForService: vi.fn(async () => true),
     },
     docker: {
@@ -336,6 +345,54 @@ describe('MCP service tools (Task 8)', () => {
         next_steps: expect.arrayContaining([expect.stringContaining('redeploy_app')]),
       },
     });
+  });
+
+  it('create_service points empty project groups at first deploy_app attach', async () => {
+    const { ctx, serviceManager } = createMockContext();
+    const db = ctx.db as unknown as {
+      getDeployableForProject: ReturnType<typeof vi.fn>;
+      getDeployablesByGroup: ReturnType<typeof vi.fn>;
+    };
+    db.getDeployableForProject.mockResolvedValueOnce(null);
+    db.getDeployablesByGroup.mockResolvedValueOnce([]);
+    const tool = getTool(ctx, 'create_service');
+
+    serviceManager.create.mockResolvedValueOnce(
+      createServiceRow({
+        id: 'svc-created',
+        name: 'myapp-pg',
+        credentials: '{"connectionString":"postgresql://openlander:pw@ol-svc-myapp-pg:5432/app"}',
+      }),
+    );
+    serviceManager.getSuggestedEnv.mockResolvedValueOnce([
+      { key: 'DATABASE_URL', value: 'postgresql://openlander:pw@ol-svc-myapp-pg:5432/app' },
+    ]);
+
+    const result = (await tool.execute(
+      { name: 'myapp-pg', template: 'postgresql', project_id: 'proj-1' },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      status: 'created',
+      attached_to: 'proj-1',
+      auto_injected_env_keys: ['DATABASE_URL'],
+      suggested_call: {
+        tool: 'openlander_deploy',
+        arguments: {
+          action: 'deploy_app',
+          params: {
+            target_project_id: 'proj-1',
+            name: '<app-service-name>',
+            repo_url: '<git-repo-url>',
+          },
+        },
+      },
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([expect.stringContaining('empty project group')]),
+      },
+    });
+    expect(ctx.env.set).toHaveBeenCalledWith('proj-1', 'DATABASE_URL', expect.any(String));
   });
 
   it('create_service returns retry-safe guidance after managed service rollback', async () => {

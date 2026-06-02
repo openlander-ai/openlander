@@ -81,7 +81,7 @@ All actions: action="help"
 
 ## openlander_project
 Project groups and shared config. A project group organizes deployable services; env actions route to service targets.
-Key actions: list_projects, set_global_secret, upload_secret_file, expose_public
+Key actions: create_project, list_projects, set_global_secret, upload_secret_file, expose_public
 All actions: action="help"
 
 ## openlander_service
@@ -102,7 +102,8 @@ All actions: action="help"
 ## Usage
 Example: openlander_deploy({ action: "deploy_app", params: { repo_url: "https://github.com/user/repo", name: "my-app" } })
 Example: openlander_project({ action: "help" })
-Example: openlander_managed_service({ action: "create_service", params: { name: "pg", template: "postgresql", project_name: "my-app" } })
+Example: openlander_project({ action: "create_project", params: { name: "my-app" } })
+Example: openlander_managed_service({ action: "create_service", params: { name: "pg", template: "postgresql", project_id: "proj_..." } })
 Example: openlander_service({ action: "set_env_vars", params: { service_name: "app-web", variables: '{"DATABASE_URL":"..."}' } })
 
 ## Environment Variable Changes
@@ -112,10 +113,11 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - export_env_vars returns raw .env text and should be used sparingly.
 
 ## Deploy Flow
-1. For "deploy this app", call openlander_deploy.deploy_app first. New apps use params.name for the project group name. Existing apps can be targeted by service_id/service_name/project_name/name.
-2. openlander_deploy({ action: "get_deploy_status", params: { project_name: "..." } })  ← poll until done when deploy_app returns building/deploying
-3. openlander_project({ action: "list_projects" })  ← confirm running and use projects[].deployable_service.service_id for later service-level actions
-4. If anything fails, times out, or looks unhealthy, call openlander_monitor.diagnose_service with service_id before retrying.
+1. If the new app needs an OpenLander-managed database/cache before first boot, call openlander_project.create_project first, then openlander_managed_service.create_service with that project_id, then openlander_deploy.deploy_app with target_project_id. If the user already has a real external URL (RDS, Upstash, etc.), pass it in env_vars and skip create_service. Do not use a placeholder DATABASE_URL just to create the project.
+2. For a simple new app with no pre-created managed services, call openlander_deploy.deploy_app directly. New apps use params.name for the project group name. Existing apps can be targeted by service_id/service_name/project_name/name.
+3. openlander_deploy({ action: "get_deploy_status", params: { project_name: "..." } })  ← poll until done when deploy_app returns building/deploying
+4. openlander_project({ action: "list_projects" })  ← confirm running and use projects[].deployable_service.service_id for later service-level actions
+5. If anything fails, times out, or looks unhealthy, call openlander_monitor.diagnose_service with service_id before retrying.
 
 ## Networking
 - All containers share the "openlander" Docker network

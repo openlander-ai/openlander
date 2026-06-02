@@ -57,12 +57,14 @@ export const DEPLOY_ACTIONS = [
 
 /**
  * openlander_project: Project groups & configuration
+ * - Create empty project groups for project-first deploy flows
  * - Global secrets (shared across all projects)
  * - Secret files (encrypted credential files)
  * - Temporary public share URLs
- * Total: 16 tools
+ * Total: 17 tools
  */
 export const PROJECT_ACTIONS = [
+  'create_project',
   'list_projects',
   'archive_project',
   'unarchive_project',
@@ -202,7 +204,7 @@ export const PLATFORM_ACTIONS = [
 /**
  * Verification: Total tool counts
  * - DEPLOY_ACTIONS: 18 tools
- * - PROJECT_ACTIONS: 16 tools
+ * - PROJECT_ACTIONS: 17 tools
  * - MANAGED_SERVICE_ACTIONS: 21 tools
  * - SERVICE_ACTIONS: 22 tools
  * - MONITOR_ACTIONS: 11 tools

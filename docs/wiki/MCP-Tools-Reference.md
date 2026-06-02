@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **74 unique default operations** surfaced through those composites
+- **75 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -21,6 +21,7 @@ Agent routing rule of thumb:
 | User asks for                                 | Call                                                                       |
 | --------------------------------------------- | -------------------------------------------------------------------------- |
 | "Deploy this new app/repo/image"              | `openlander_deploy.deploy_app`                                             |
+| "Create a new app project before DB/cache"    | `openlander_project.create_project`                                        |
 | "Redeploy/restart/rollback this existing app" | `openlander_service.redeploy_app` / `restart_service` / `rollback_service` |
 | "Set env vars or connect DB/Redis to an app"  | `openlander_service.set_env_vars`, then `redeploy_app`                     |
 | "Create PostgreSQL/Redis/MySQL/etc."          | `openlander_managed_service.create_service`                                |
@@ -74,7 +75,7 @@ Composite catalog:
 | Composite                    | Action slots | Purpose                                                                                 |
 | ---------------------------- | ------------ | --------------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 18           | Deploy plans, execution, previews, rollbacks, build logs, Git                           |
-| `openlander_project`         | 16           | Project groups, lifecycle, secrets, temporary share URLs; env actions route to services |
+| `openlander_project`         | 17           | Project groups, lifecycle, secrets, temporary share URLs; env actions route to services |
 | `openlander_service`         | 22           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary      |
 | `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage              |
 | `openlander_monitor`         | 11           | Logs, alerts, topology, system stats, host diagnosis, project stats, probes             |
@@ -87,7 +88,7 @@ Composite catalog:
 | -------------------------------------------------------- | ----- | ------------------------------------------------- |
 | [Deploy Plan](#deploy-plan)                              | 6     | Create, inspect, update, execute deploy plans     |
 | [Deployment Controls](#deployment-controls)              | 7     | Status, cancel, rollback, previews                |
-| [Project Operations](#project-operations)                | 6     | Group lifecycle, listing, and group-scoped config |
+| [Project Operations](#project-operations)                | 7     | Group lifecycle, listing, and group-scoped config |
 | [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files                   |
 | [Services](#services--infrastructure)                    | 17    | Create databases, manage infra                    |
 | [Domains](#domains)                                      | 2     | Register Host/path domain routes                  |
@@ -159,14 +160,17 @@ connection env (e.g. an external `DATABASE_URL`) or create them first.
 
 This auto-provisioning and env wiring applies to the deploy-plan approval flow
 only. Standalone `create_service` creates the managed service and returns
-`suggested_env`; the agent still calls `set_env_vars` and redeploys the app.
+`suggested_env`. If the target project already has a deployable service, redeploy
+that service to apply saved env. If the project is empty, deploy the first app
+with `deploy_app(target_project_id=...)`.
 
 Auto-provisioning is supported only for **existing** projects. Executing an approved plan for a
-brand-new app (no project row yet) returns `needs_target_project` and creates nothing. To deploy
-the new app now, pass an external connection URL (e.g. `DATABASE_URL`) in `env_vars` so no managed
-service needs provisioning; auto-provisioning becomes available when deploying under an existing
-project. OpenLander-managed shared services and external TCP database/cache endpoints are not part
-of the v0.1 MCP surface.
+brand-new app (no project row yet) returns `needs_target_project` and creates nothing. Create the
+project first with `create_project`, create any required managed service with that `project_id`,
+then deploy the app with `target_project_id`. If the user already has a real external connection
+URL such as RDS or Upstash, pass it in `env_vars` and skip managed-service creation.
+OpenLander-managed shared services and external TCP database/cache endpoints are not part of the
+v0.1 MCP surface.
 
 ### `deploy_app`
 
@@ -182,7 +186,9 @@ existing project group after the deploy succeeds. The attach is owned by the
 durable deploy-plan execution path, not request-local MCP post-processing, so
 agents should poll status and then use the returned `service_id` for follow-up
 service actions. It is not supported with `expose=true`, compose, or ambiguous
-monorepo deploys; expose the service after attach if needed.
+monorepo deploys; expose the service after attach if needed. Use `create_project`
+first when a brand-new app needs a project-scoped managed service before first
+boot.
 
 | Parameter           | Type    | Required | Description                                                     |
 | ------------------- | ------- | -------- | --------------------------------------------------------------- |
@@ -300,6 +306,25 @@ List active preview deployments. No parameters.
 ---
 
 ## Project Operations
+
+### `create_project`
+
+Create an empty project group before provisioning managed services or attaching
+the first deployable app/worker service. This creates no runtime container and
+does not set a repository source.
+
+| Parameter      | Type     | Required | Description                  |
+| -------------- | -------- | -------- | ---------------------------- |
+| `name`         | string   | Yes      | Project group slug           |
+| `display_name` | string   | No       | Human-readable display name  |
+| `description`  | string   | No       | Optional project description |
+| `tags`         | string[] | No       | Optional project tags        |
+
+For a new app that needs PostgreSQL/Redis/etc. before first boot, use:
+`create_project` -> `create_service(project_id=...)` -> `deploy_app(target_project_id=...)`.
+Do not deploy with a placeholder connection string just to create the project. If the user has a
+real external connection URL, pass it through `env_vars` instead of creating an OpenLander-managed
+service.
 
 ### `list_projects`
 

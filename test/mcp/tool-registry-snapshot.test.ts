@@ -26,6 +26,7 @@ const EXPECTED_TOOLS = [
   'cleanup_preview',
   'create_bucket',
   'create_deploy_plan',
+  'create_project',
   'create_service',
   'create_service_user',
   'delete_bucket',
@@ -132,8 +133,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 74 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(74);
+  it('maintains exactly 75 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(75);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

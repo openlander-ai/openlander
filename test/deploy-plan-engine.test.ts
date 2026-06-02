@@ -1639,6 +1639,7 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     expect(result.status).toBe('needs_target_project');
     expect(result.approval_required).toEqual({ create_resources: ['postgresql'] });
     expect(result._agent_guidance).toBeDefined();
+    expect(result._agent_guidance?.next_steps.join('\n')).toContain('create_project');
     // Nothing created: no managed service, no connection row, no deploy, and the
     // status was never persisted (no executing write).
     expect(mockServiceManager.create).not.toHaveBeenCalled();

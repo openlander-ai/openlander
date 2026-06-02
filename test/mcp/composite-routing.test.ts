@@ -261,6 +261,7 @@ describe('Composite Action Routing', () => {
       expect(result).toHaveProperty('actions');
       const actions = result['actions'] as Array<{ name: string }>;
       expect(actions.length).toBeGreaterThan(0);
+      expect(actions.map((action) => action.name)).toContain('create_project');
     });
 
     it('returns UNKNOWN_ACTION for unknown action', async () => {

@@ -363,6 +363,61 @@ function serviceKindMismatchResponse(service: { id: string; name: string; kind: 
   };
 }
 
+async function projectHasDeployableService(
+  appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
+  projectId: string,
+): Promise<boolean> {
+  if (typeof appCtx.db.getDeployablesByGroup === 'function') {
+    const deployables = await appCtx.db.getDeployablesByGroup(projectId);
+    return deployables.some((service) => !isManagedServiceKind(service.kind));
+  }
+
+  const deployable = await appCtx.db.getDeployableForProject(projectId);
+  return Boolean(deployable);
+}
+
+function createServiceGuidance(params: {
+  hasDeployableService: boolean;
+  autoInjectedEnvKeys: string[];
+}) {
+  if (!params.hasDeployableService) {
+    return {
+      next_steps: [
+        'Connection env was saved on the empty project group.',
+        'Deploy the first app with deploy_app using target_project_id so OpenLander attaches the deployable service to this group after readiness succeeds.',
+        'After deployment, use the returned service_id for runtime/env/domain actions.',
+      ],
+    };
+  }
+
+  return {
+    next_steps:
+      params.autoInjectedEnvKeys.length > 0
+        ? [
+            'Connection env was saved automatically on the target deployable service.',
+            'Call redeploy_app for the target service/project to apply it.',
+          ]
+        : [
+            'Call set_env_vars on the deployable service with suggested_env to save the binding.',
+            'Then call redeploy_app for the target service/project to apply it.',
+          ],
+  };
+}
+
+function firstAppDeploySuggestedCall(projectId: string) {
+  return {
+    tool: 'openlander_deploy',
+    arguments: {
+      action: 'deploy_app',
+      params: {
+        target_project_id: projectId,
+        name: '<app-service-name>',
+        repo_url: '<git-repo-url>',
+      },
+    },
+  };
+}
+
 export const serviceToolDefs: ToolDef[] = [
   {
     name: 'create_service',
@@ -370,7 +425,7 @@ export const serviceToolDefs: ToolDef[] = [
     description:
       'Create a new managed infrastructure service (database, cache, message broker, object storage, or custom container) inside a project. Requires project_id or project_name so the service is attached to the app network that will use it. Provide template (postgresql/mysql/redis/mongodb/rabbitmq/minio), custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17"). Returns { service, scope, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, REDIS_URL, S3_ENDPOINT) for connecting the project. Call set_env_vars with the suggested key/value to save the binding, then redeploy the running project/service to apply it. Errors: PROJECT_TARGET_REQUIRED, INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
     mcpDescription:
-      'Create a managed infrastructure service inside a project. Pass project_id or project_name. Returns suggested_env; call set_env_vars and redeploy to apply it to the app.',
+      'Create a managed infrastructure service inside a project. Pass project_id or project_name. Empty project: deploy the first app with deploy_app(target_project_id). Existing app: redeploy to apply saved env.',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolveCreateServiceScope(appCtx, args);
@@ -403,7 +458,7 @@ export const serviceToolDefs: ToolDef[] = [
         throw err;
       }
 
-      let resolvedProjectId: string | undefined;
+      let resolvedProjectId = target.projectId;
       let attachCleanupFailed: string | undefined;
       let droppedKeys: string[] | undefined;
       let autoInjectedEnvKeys: string[] = [];
@@ -451,13 +506,15 @@ export const serviceToolDefs: ToolDef[] = [
       const suggestedEnv = await appCtx.serviceManager.getSuggestedEnv(result, {
         targetProjectId: resolvedProjectId,
       });
+      const attachedProjectId = resolvedProjectId;
+      const hasDeployableService = await projectHasDeployableService(appCtx, attachedProjectId);
 
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       const legacyPort = result.assigned_port ?? result.port;
       return {
         status: 'created',
         scope: 'project',
-        attached_to: resolvedProjectId,
+        attached_to: attachedProjectId,
         attached_project_name: target.projectName,
         service: {
           id: result.id,
@@ -481,18 +538,13 @@ export const serviceToolDefs: ToolDef[] = [
         suggested_env: suggestedEnv,
         auto_injected_env_keys: autoInjectedEnvKeys,
         externalAccess: getServiceExternalAccess(legacyPort ?? null),
-        _agent_guidance: {
-          next_steps:
-            autoInjectedEnvKeys.length > 0
-              ? [
-                  'Connection env was saved automatically on the target deployable service.',
-                  'Call redeploy_app for the target service/project to apply it.',
-                ]
-              : [
-                  'Call set_env_vars on the deployable service with suggested_env to save the binding.',
-                  'Then call redeploy_app for the target service/project to apply it.',
-                ],
-        },
+        ...(!hasDeployableService
+          ? { suggested_call: firstAppDeploySuggestedCall(attachedProjectId) }
+          : {}),
+        _agent_guidance: createServiceGuidance({
+          hasDeployableService,
+          autoInjectedEnvKeys,
+        }),
       };
     },
     targets: ['mcp'],

@@ -17,6 +17,7 @@ const EXPECTED_TOOL_NAMES = [
   'execute_deploy_plan',
   'deploy_app',
   'get_logs',
+  'create_project',
   'list_projects',
   'list_env_vars',
   'set_env_vars',
