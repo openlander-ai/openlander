@@ -1,16 +1,23 @@
 import { z } from 'zod';
 import type { ToolContext, ToolDef } from '../tools/defs/types.js';
+import {
+  buildActionCall,
+  buildActionContract,
+  buildHelpCall,
+  buildToolInputContract,
+  suggestedParamsForRetry,
+} from './schema-guidance.js';
 
 /**
  * MCP Composite Tool Mapping
  *
- * Maps 74 unique non-platform MCP-exposed ToolDefs into 5 composite action groups.
+ * Maps 76 unique non-platform MCP-exposed ToolDefs into 5 composite action groups.
  * Platform tools (13 total) are gated separately via config.mcp.platformTools.
  *
  * Mapping Principles:
  * - Composite action names can intentionally overlap when aliases preserve compatibility
  * - Default MCP surface: 5 composite tools
- * - Non-platform total: 74 unique ToolDefs (verified by test/mcp/tool-registry-snapshot.test.ts)
+ * - Non-platform total: 76 unique ToolDefs (verified by test/mcp/tool-registry-snapshot.test.ts)
  * - Platform total: 13 direct tools (gated by config.mcp.platformTools)
  */
 
@@ -21,13 +28,15 @@ import type { ToolContext, ToolDef } from '../tools/defs/types.js';
  * - Build debugging & history
  * - Git integration (repo scanning)
  * - Infrastructure analysis
- * Total: 21 tools
+ * Total: 23 tools
  */
 export const DEPLOY_ACTIONS = [
   'create_deploy_plan',
+  'get_deploy_plan',
   'update_deploy_plan',
   'execute_deploy_plan',
   'validate_deploy_plan',
+  'cancel_deploy',
   'deploy',
   'get_deploy_status',
   'get_deploy_history',
@@ -281,13 +290,13 @@ export const PLATFORM_ACTIONS = [
 
 /**
  * Verification: Total tool counts
- * - DEPLOY_ACTIONS: 21 tools
+ * - DEPLOY_ACTIONS: 23 tools
  * - PROJECT_ACTIONS: 24 tools
  * - SERVICE_ACTIONS: 25 tools
  * - MONITOR_ACTIONS: 8 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
- * - Total non-platform ToolDefs: 74 (verified against test/mcp/tool-registry-snapshot.test.ts)
- * - Total with platform ToolDefs: 87
+ * - Total non-platform ToolDefs: 76 (verified against test/mcp/tool-registry-snapshot.test.ts)
+ * - Total with platform ToolDefs: 89
  */
 
 /**
@@ -350,6 +359,101 @@ function buildCompositeToolDefs(allToolDefs: ToolDef[], actions: readonly string
     .filter((def): def is ToolDef => def !== undefined);
 }
 
+function helpResponse(
+  toolName: string,
+  description: string,
+  toolDefs: ToolDef[],
+  params?: Record<string, unknown>,
+): Record<string, unknown> {
+  const actionName =
+    typeof params?.['action_name'] === 'string' && params['action_name'].length > 0
+      ? params['action_name']
+      : undefined;
+  const selectedDefs = actionName ? toolDefs.filter((def) => def.name === actionName) : toolDefs;
+
+  if (actionName && selectedDefs.length === 0) {
+    return {
+      error: 'UNKNOWN_ACTION',
+      action: actionName,
+      composite: toolName,
+      available_actions: toolDefs.map((item) => item.name).sort(),
+      suggested_call: buildHelpCall(toolName),
+      _agent_guidance: {
+        message: `Unknown action "${actionName}". Call help without action_name to list available operations.`,
+      },
+    };
+  }
+
+  return {
+    composite: toolName,
+    description,
+    ...(actionName ? { action: actionName } : {}),
+    actions: selectedDefs.map(buildActionContract),
+    _agent_guidance: {
+      message: actionName
+        ? `Use action "${actionName}" with params matching input_schema.`
+        : `Pick an action and call with params. Example: { action: "${toolDefs[0]?.name ?? 'help'}", params: { ... } }`,
+    },
+  };
+}
+
+function unknownActionResponse(
+  toolName: string,
+  action: string,
+  toolDefs: ToolDef[],
+): Record<string, unknown> {
+  return {
+    error: 'UNKNOWN_ACTION',
+    action,
+    composite: toolName,
+    available_actions: toolDefs.map((item) => item.name).sort(),
+    suggested_call: buildHelpCall(toolName),
+    _agent_guidance: {
+      message: `Unknown action "${action}". Use action="help" to see available operations.`,
+    },
+  };
+}
+
+function invalidParamsResponse(
+  toolName: string,
+  action: string,
+  def: ToolDef,
+  details: string,
+): Record<string, unknown> {
+  const retryParams = suggestedParamsForRetry(def);
+  return {
+    error: 'INVALID_PARAMS',
+    action,
+    composite: toolName,
+    details,
+    ...buildToolInputContract(def),
+    suggested_call: buildActionCall(
+      toolName,
+      action,
+      Object.keys(retryParams).length > 0 ? retryParams : undefined,
+    ),
+    _agent_guidance: {
+      message: `Invalid parameters for action "${action}". Use suggested_call as the retry shape and replace placeholder values.`,
+    },
+  };
+}
+
+async function executeToolDef(
+  toolName: string,
+  action: string,
+  params: Record<string, unknown> | undefined,
+  def: ToolDef,
+  context: ToolContext,
+): Promise<unknown> {
+  const parsed = def.inputSchema.safeParse(params ?? {});
+  if (!parsed.success) {
+    return invalidParamsResponse(toolName, action, def, parsed.error.message);
+  }
+
+  const result = await def.execute(parsed.data, context);
+  return def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
+}
+
 function createCompositeTool(
   toolName: keyof typeof COMPOSITE_REGISTRY,
   description: string,
@@ -366,47 +470,15 @@ function createCompositeTool(
       const { action, params } = args as { action: string; params?: Record<string, unknown> };
 
       if (action === 'help') {
-        return {
-          composite: toolName,
-          description,
-          actions: toolDefs.map((def) => ({
-            name: def.name,
-            description: def.mcpDescription ?? def.description,
-          })),
-          _agent_guidance: {
-            message: `Pick an action and call with params. Example: { action: "${toolDefs[0]?.name ?? 'help'}", params: { ... } }`,
-          },
-        };
+        return helpResponse(toolName, description, toolDefs, params);
       }
 
       const def = toolDefs.find((item) => item.name === action);
       if (!def) {
-        return {
-          error: 'UNKNOWN_ACTION',
-          action,
-          composite: toolName,
-          available_actions: toolDefs.map((item) => item.name).sort(),
-          _agent_guidance: {
-            message: `Unknown action "${action}". Use action="help" to see available operations.`,
-          },
-        };
+        return unknownActionResponse(toolName, action, toolDefs);
       }
 
-      const parsed = def.inputSchema.safeParse(params ?? {});
-      if (!parsed.success) {
-        return {
-          error: 'INVALID_PARAMS',
-          action,
-          composite: toolName,
-          details: parsed.error.message,
-          _agent_guidance: {
-            message: `Invalid parameters for action "${action}". Use action="help" to see parameter details.`,
-          },
-        };
-      }
-
-      const result = await def.execute(parsed.data, context);
-      return def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
+      return executeToolDef(toolName, action, params, def, context);
     },
   };
 }
@@ -441,17 +513,7 @@ export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): Compo
       const action = legacyAction ?? rawAction;
 
       if (action === 'help') {
-        return {
-          composite: toolName,
-          description,
-          actions: compositeToolDefs.map((def) => ({
-            name: def.name,
-            description: def.mcpDescription ?? def.description,
-          })),
-          _agent_guidance: {
-            message: `Pick an action and call with params. Example: { action: "${compositeToolDefs[0]?.name ?? 'help'}", params: { ... } }`,
-          },
-        };
+        return helpResponse(toolName, description, compositeToolDefs, params);
       }
 
       // Emit once-per-session deprecation warning for legacy *_project callers
@@ -473,32 +535,10 @@ export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): Compo
 
       const def = compositeToolDefs.find((item) => item.name === action);
       if (!def) {
-        return {
-          error: 'UNKNOWN_ACTION',
-          action: rawAction,
-          composite: toolName,
-          available_actions: compositeToolDefs.map((item) => item.name).sort(),
-          _agent_guidance: {
-            message: `Unknown action "${rawAction}". Use action="help" to see available operations.`,
-          },
-        };
+        return unknownActionResponse(toolName, rawAction, compositeToolDefs);
       }
 
-      const parsed = def.inputSchema.safeParse(params ?? {});
-      if (!parsed.success) {
-        return {
-          error: 'INVALID_PARAMS',
-          action: rawAction,
-          composite: toolName,
-          details: parsed.error.message,
-          _agent_guidance: {
-            message: `Invalid parameters for action "${rawAction}". Use action="help" to see parameter details.`,
-          },
-        };
-      }
-
-      const result = await def.execute(parsed.data, context);
-      return def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
+      return executeToolDef(toolName, rawAction, params, def, context);
     },
   };
 }
@@ -657,17 +697,7 @@ export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): Compo
       const { action, params } = args as { action: string; params?: Record<string, unknown> };
 
       if (action === 'help') {
-        return {
-          composite: toolName,
-          description,
-          actions: deployableToolDefs.map((def) => ({
-            name: def.name,
-            description: def.mcpDescription ?? def.description,
-          })),
-          _agent_guidance: {
-            message: `Pick an action and call with params. Example: { action: "${deployableToolDefs[0]?.name ?? 'help'}", params: { ... } }`,
-          },
-        };
+        return helpResponse(toolName, description, deployableToolDefs, params);
       }
 
       // (a) `create_service` is managed-only — auto-route + deprecation warn.
@@ -675,30 +705,9 @@ export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): Compo
         emitRenameWarn('create_service', 'openlander_managed_service', context);
         const def = managedToolDefs.find((item) => item.name === 'create_service');
         if (!def) {
-          return {
-            error: 'UNKNOWN_ACTION',
-            action,
-            composite: toolName,
-            available_actions: deployableToolDefs.map((item) => item.name).sort(),
-            _agent_guidance: {
-              message: `Unknown action "${action}". Use action="help" to see available operations.`,
-            },
-          };
+          return unknownActionResponse(toolName, action, deployableToolDefs);
         }
-        const parsed = def.inputSchema.safeParse(params ?? {});
-        if (!parsed.success) {
-          return {
-            error: 'INVALID_PARAMS',
-            action,
-            composite: toolName,
-            details: parsed.error.message,
-            _agent_guidance: {
-              message: `Invalid parameters for action "${action}". Use action="help" to see parameter details.`,
-            },
-          };
-        }
-        const result = await def.execute(parsed.data, context);
-        return def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
+        return executeToolDef(toolName, action, params, def, context);
       }
 
       // (b) Overlapping names — kind-first lookup → param-shape fallback → hard error.
@@ -718,61 +727,18 @@ export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): Compo
         const def = targetDefs.find((item) => item.name === action);
         if (!def) {
           // Should not happen — overlapping set guarantees both registries have the action.
-          return {
-            error: 'UNKNOWN_ACTION',
-            action,
-            composite: toolName,
-            available_actions: deployableToolDefs.map((item) => item.name).sort(),
-            _agent_guidance: {
-              message: `Unknown action "${action}". Use action="help" to see available operations.`,
-            },
-          };
+          return unknownActionResponse(toolName, action, deployableToolDefs);
         }
-        const parsed = def.inputSchema.safeParse(params ?? {});
-        if (!parsed.success) {
-          return {
-            error: 'INVALID_PARAMS',
-            action,
-            composite: toolName,
-            details: parsed.error.message,
-            _agent_guidance: {
-              message: `Invalid parameters for action "${action}". Use action="help" to see parameter details.`,
-            },
-          };
-        }
-        const result = await def.execute(parsed.data, context);
-        return def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
+        return executeToolDef(toolName, action, params, def, context);
       }
 
       // (c) Pure deployable action — direct dispatch.
       const def = deployableToolDefs.find((item) => item.name === action);
       if (!def) {
-        return {
-          error: 'UNKNOWN_ACTION',
-          action,
-          composite: toolName,
-          available_actions: deployableToolDefs.map((item) => item.name).sort(),
-          _agent_guidance: {
-            message: `Unknown action "${action}". Use action="help" to see available operations.`,
-          },
-        };
+        return unknownActionResponse(toolName, action, deployableToolDefs);
       }
 
-      const parsed = def.inputSchema.safeParse(params ?? {});
-      if (!parsed.success) {
-        return {
-          error: 'INVALID_PARAMS',
-          action,
-          composite: toolName,
-          details: parsed.error.message,
-          _agent_guidance: {
-            message: `Invalid parameters for action "${action}". Use action="help" to see parameter details.`,
-          },
-        };
-      }
-
-      const result = await def.execute(parsed.data, context);
-      return def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
+      return executeToolDef(toolName, action, params, def, context);
     },
   };
 }

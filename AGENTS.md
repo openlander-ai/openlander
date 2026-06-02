@@ -11,7 +11,7 @@ CLI (Commander)  →  AppContext  →  Hono HTTP Server
         ┌───────────────┼───────────────┐
         │               │               │
     Pipeline        Tools/MCP        Web API
-    (deploy,        (104 ToolDefs,   (routes,
+    (deploy,        (106 ToolDefs,   (routes,
      docker,         AI SDK +         middleware,
      traefik)        MCP adapters)    WebSocket)
         │               │               │
@@ -305,7 +305,7 @@ interface ToolDef {
 }
 ```
 
-20 tool definition files back the MCP/AI tool system (104 internal ToolDefs total). The MCP adapter exposes **5 composite tools** (`openlander_deploy|_project|_service|_managed_service|_monitor`) over 74 unique default operations, plus **13 platform tools** gated by `config.mcp.platformTools`. Two adapters convert ToolDefs to:
+20 tool definition files back the MCP/AI tool system (106 internal ToolDefs total). The MCP adapter exposes **5 composite tools** (`openlander_deploy|_project|_service|_managed_service|_monitor`) over 76 unique default operations, plus **13 platform tools** gated by `config.mcp.platformTools`. Two adapters convert ToolDefs to:
 
 - `src/tools/adapters/mcp.ts` — MCP protocol format (5 composite tools + gated platform tools)
 - `src/tools/adapters/ai-sdk.ts` — Vercel AI SDK format

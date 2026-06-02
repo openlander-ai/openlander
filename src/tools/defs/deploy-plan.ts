@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { DeployLockedError } from '../../errors.js';
+import type { DeployLogRow, DeployPlanRow, ProjectRow } from '../../db/types.js';
 import type { ToolDef } from './types.js';
 import type { DeployPlan } from '../../pipeline/deploy-plan/types.js';
 import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/engine.js';
@@ -13,11 +14,210 @@ import { buildDeployLockedResponse, tryAcquireDeployLockOrResponse } from './hel
 
 import {
   createDeployPlanSchema,
+  getDeployPlanSchema,
   updateDeployPlanSchema,
   executeDeployPlanSchema,
+  cancelDeploySchema,
   deploySchema,
   validateDeployPlanSchema,
 } from './schemas.js';
+
+function deployStatusCall(projectName?: string): Record<string, unknown> {
+  return {
+    tool: 'openlander_deploy',
+    arguments: {
+      action: 'get_deploy_status',
+      ...(projectName ? { params: { project_name: projectName } } : {}),
+    },
+  };
+}
+
+function deployPlanResponse(
+  plan: DeployPlan,
+  row?: Pick<
+    DeployPlanRow,
+    'project_id' | 'project_name' | 'status' | 'complexity' | 'commit_sha' | 'error_message'
+  >,
+): Record<string, unknown> {
+  const projectName = plan.app.name || row?.project_name || undefined;
+  const projectId = plan.project_id ?? row?.project_id ?? undefined;
+  const base = {
+    plan_id: plan.plan_id,
+    status: plan.status,
+    stored_status: row?.status,
+    complexity: plan.complexity,
+    stored_complexity: row?.complexity,
+    project_name: projectName,
+    project_id: projectId,
+    commit_sha: row?.commit_sha ?? undefined,
+    error: row?.error_message ?? undefined,
+    app: plan.app,
+    build: plan.build,
+    services: plan.services,
+    env: {
+      required: plan.env.required,
+      auto: plan.env.auto,
+      provided_count: Object.keys(plan.env.provided).length,
+      detected: plan.env.detected,
+    },
+    missing: plan.missing,
+    warnings: plan.warnings,
+    internal_url: plan.internal_url,
+    internal_url_note: plan.internal_url_note,
+  };
+
+  if (plan.status === 'needs_input') {
+    return {
+      ...base,
+      suggested_call: {
+        tool: 'openlander_deploy',
+        arguments: {
+          action: 'update_deploy_plan',
+          params: {
+            plan_id: plan.plan_id,
+            updates: '{"env":{"KEY":"value"}}',
+          },
+        },
+      },
+      _agent_guidance: {
+        message: 'Plan needs input before execution.',
+        next_steps: [
+          `Provide missing values: ${plan.missing.join(', ') || 'review missing[]'}`,
+          'Call update_deploy_plan, then call execute_deploy_plan.',
+        ],
+      },
+    };
+  }
+
+  if (plan.status === 'ready') {
+    return {
+      ...base,
+      suggested_call: {
+        tool: 'openlander_deploy',
+        arguments: {
+          action: 'execute_deploy_plan',
+          params: { plan_id: plan.plan_id },
+        },
+      },
+      _agent_guidance: {
+        message: 'Plan is ready to execute.',
+        next_steps: ['Call execute_deploy_plan to start deployment.'],
+      },
+    };
+  }
+
+  return {
+    ...base,
+    ...(projectName ? { status_call: deployStatusCall(projectName) } : {}),
+  };
+}
+
+function serviceIdToProjectId(serviceId: string): string {
+  return serviceId.endsWith('__svc') ? serviceId.slice(0, -'__svc'.length) : serviceId;
+}
+
+interface CancelResolverContext {
+  appCtx: {
+    db: {
+      getProject: (id: string) => Promise<ProjectRow | undefined> | ProjectRow | undefined;
+      getProjectByName: (name: string) => Promise<ProjectRow | undefined> | ProjectRow | undefined;
+      getDeployLog: (id: string) => Promise<DeployLogRow | undefined> | DeployLogRow | undefined;
+      getService: (
+        id: string,
+      ) =>
+        | Promise<{ project_id?: string | null } | undefined>
+        | { project_id?: string | null }
+        | undefined;
+    };
+  };
+}
+
+async function resolveCancelProject(
+  args: Record<string, unknown>,
+  context: CancelResolverContext,
+): Promise<
+  | { ok: true; project: ProjectRow; deployId?: string; resolvedFrom: string }
+  | { ok: false; code: string; message: string; attempted_id?: string }
+> {
+  const appCtx = context.appCtx;
+
+  const projectFromId = async (projectId: string): Promise<ProjectRow | undefined> =>
+    await appCtx.db.getProject(projectId);
+  const projectFromName = async (projectName: string): Promise<ProjectRow | undefined> =>
+    await appCtx.db.getProjectByName(projectName);
+  const projectFromDeployId = async (
+    deployId: string,
+  ): Promise<{ project?: ProjectRow; deploy?: DeployLogRow }> => {
+    const deploy = await appCtx.db.getDeployLog(deployId);
+    if (!deploy) return {};
+    const serviceProjectId = deploy.project_id ?? serviceIdToProjectId(deploy.service_id);
+    const service = await appCtx.db.getService(deploy.service_id);
+    const project = await appCtx.db.getProject(service?.project_id ?? serviceProjectId);
+    return project ? { project, deploy } : { deploy };
+  };
+
+  const deployId = args['deploy_id'];
+  if (typeof deployId === 'string' && deployId.length > 0) {
+    const resolved = await projectFromDeployId(deployId);
+    if (resolved.project) {
+      return { ok: true, project: resolved.project, deployId, resolvedFrom: 'deploy_id' };
+    }
+    return {
+      ok: false,
+      code: 'DEPLOY_NOT_FOUND',
+      message: `No deploy log was found for deploy_id "${deployId}".`,
+      attempted_id: deployId,
+    };
+  }
+
+  const projectId = args['project_id'];
+  if (typeof projectId === 'string' && projectId.length > 0) {
+    const project = await projectFromId(projectId);
+    if (project) return { ok: true, project, resolvedFrom: 'project_id' };
+    return {
+      ok: false,
+      code: 'PROJECT_NOT_FOUND',
+      message: `No project was found for project_id "${projectId}".`,
+      attempted_id: projectId,
+    };
+  }
+
+  const projectName = args['project_name'];
+  if (typeof projectName === 'string' && projectName.length > 0) {
+    const project = await projectFromName(projectName);
+    if (project) return { ok: true, project, resolvedFrom: 'project_name' };
+    return {
+      ok: false,
+      code: 'PROJECT_NOT_FOUND',
+      message: `No project was found for project_name "${projectName}".`,
+      attempted_id: projectName,
+    };
+  }
+
+  const id = args['id'];
+  if (typeof id === 'string' && id.length > 0) {
+    const byDeploy = await projectFromDeployId(id);
+    if (byDeploy.project) {
+      return { ok: true, project: byDeploy.project, deployId: id, resolvedFrom: 'id:deploy_id' };
+    }
+    const byProjectId = await projectFromId(id);
+    if (byProjectId) return { ok: true, project: byProjectId, resolvedFrom: 'id:project_id' };
+    const byProjectName = await projectFromName(id);
+    if (byProjectName) return { ok: true, project: byProjectName, resolvedFrom: 'id:project_name' };
+    return {
+      ok: false,
+      code: 'TARGET_NOT_FOUND',
+      message: `No deploy log, project id, or project name matched id "${id}".`,
+      attempted_id: id,
+    };
+  }
+
+  return {
+    ok: false,
+    code: 'INVALID_ARGS',
+    message: 'One of deploy_id, project_id, project_name, or id is required.',
+  };
+}
 
 export const deployPlanToolDefs: ToolDef[] = [
   {
@@ -47,46 +247,45 @@ export const deployPlanToolDefs: ToolDef[] = [
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
       });
 
-      return {
-        plan_id: plan.plan_id,
-        status: plan.status,
-        complexity: plan.complexity,
-        app: plan.app,
-        build: plan.build,
-        services: plan.services,
-        env: {
-          required: plan.env.required,
-          auto: plan.env.auto,
-          provided_count: Object.keys(plan.env.provided).length,
-          detected: plan.env.detected,
-        },
-        missing: plan.missing,
-        warnings: plan.warnings,
-        internal_url: plan.internal_url,
-        internal_url_note: plan.internal_url_note,
-        ...(context.target === 'agent' &&
-        typeof context.appCtx.db.getProject === 'function' &&
-        plan.status === 'needs_input'
-          ? {
-              _agent_guidance: {
-                next_steps: [
-                  `Plan has missing values. Call update_deploy_plan to provide: ${plan.missing.join(', ')}`,
-                  'After updating, call execute_deploy_plan to start deployment',
-                  'If DATABASE_URL is missing, call create_service with template="postgresql" to provision a database with persistent volume.',
-                ],
-              },
-            }
-          : {}),
-        ...(context.target === 'agent' &&
-        typeof context.appCtx.db.getProject === 'function' &&
-        plan.status === 'ready'
-          ? {
-              _agent_guidance: {
-                next_steps: ['Plan is ready. Call execute_deploy_plan to start deployment'],
-              },
-            }
-          : {}),
-      };
+      return deployPlanResponse(plan);
+    },
+  },
+  {
+    name: 'get_deploy_plan',
+    riskLevel: 'low',
+    description:
+      'Retrieve the current deployment plan by plan_id. Use after create_deploy_plan or update_deploy_plan to inspect status, missing inputs, build config, detected services, warnings, and the next suggested call.',
+    mcpDescription:
+      'Get deploy plan details by plan_id. Returns the same compact plan shape as create/update, plus suggested_call for the next step.',
+    inputSchema: getDeployPlanSchema,
+    execute: async (args, context) => {
+      const planId = args['plan_id'] as string;
+      const row = await context.appCtx.db.getDeployPlan(planId);
+      if (!row) {
+        return {
+          status: 'not_found',
+          error: 'DEPLOY_PLAN_NOT_FOUND',
+          code: 'DEPLOY_PLAN_NOT_FOUND',
+          plan_id: planId,
+          suggested_call: {
+            tool: 'openlander_deploy',
+            arguments: {
+              action: 'create_deploy_plan',
+              params: { repo_url: '<repo_url>' },
+            },
+          },
+          _agent_guidance: {
+            message: 'No deploy plan exists for that plan_id.',
+            next_steps: [
+              'Verify the plan_id from create_deploy_plan.',
+              'If you do not have one, call create_deploy_plan first.',
+            ],
+          },
+        };
+      }
+
+      const plan = JSON.parse(row.plan_json) as DeployPlan;
+      return deployPlanResponse(plan, row);
     },
   },
   {
@@ -105,22 +304,7 @@ export const deployPlanToolDefs: ToolDef[] = [
 
       const plan: DeployPlan = await appCtx.planEngine.updatePlan(planId, updates);
 
-      return {
-        plan_id: plan.plan_id,
-        status: plan.status,
-        complexity: plan.complexity,
-        app: plan.app,
-        build: plan.build,
-        services: plan.services,
-        env: {
-          required: plan.env.required,
-          auto: plan.env.auto,
-          provided_count: Object.keys(plan.env.provided).length,
-          detected: plan.env.detected,
-        },
-        missing: plan.missing,
-        warnings: plan.warnings,
-      };
+      return deployPlanResponse(plan);
     },
   },
   {
@@ -174,7 +358,18 @@ export const deployPlanToolDefs: ToolDef[] = [
             status: 'needs_input',
             error: msg,
             missing: planData?.missing ?? [],
+            suggested_call: {
+              tool: 'openlander_deploy',
+              arguments: {
+                action: 'update_deploy_plan',
+                params: {
+                  plan_id: planId,
+                  updates: '{"env":{"KEY":"value"}}',
+                },
+              },
+            },
             _agent_guidance: {
+              message: 'The plan still has missing environment variables.',
               next_steps: [
                 'Call update_deploy_plan with the missing env vars',
                 'Then call execute_deploy_plan again',
@@ -196,7 +391,9 @@ export const deployPlanToolDefs: ToolDef[] = [
           project_name: result.project_name,
           project_id: result.project_id,
           estimated_seconds: result.estimated_seconds,
+          status_call: deployStatusCall(result.project_name),
           _agent_guidance: {
+            message: 'Deployment started.',
             next_steps: ['Poll get_deploy_status to monitor build progress'],
           },
         };
@@ -205,7 +402,15 @@ export const deployPlanToolDefs: ToolDef[] = [
           plan_id: result.plan_id,
           status: 'failed',
           error: result.error,
+          suggested_call: {
+            tool: 'openlander_deploy',
+            arguments: {
+              action: 'get_deploy_plan',
+              params: { plan_id: result.plan_id },
+            },
+          },
           _agent_guidance: {
+            message: 'Deployment failed before the build started.',
             next_steps: [
               'Check the error message above — this is a preflight failure (before build started)',
               'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
@@ -213,6 +418,58 @@ export const deployPlanToolDefs: ToolDef[] = [
           },
         };
       }
+    },
+  },
+  {
+    name: 'cancel_deploy',
+    riskLevel: 'medium',
+    description:
+      'Cancel an active deployment build by deploy_id, project_id, project_name, or id. Stops the active Docker build stream if one is running and returns a status_call for follow-up.',
+    mcpDescription:
+      'Cancel an active deployment. Accepts deploy_id, project_id, project_name, or id. Returns cancelled=true only when an active build stream was stopped.',
+    inputSchema: cancelDeploySchema,
+    execute: async (args, context) => {
+      const resolved = await resolveCancelProject(args, context);
+      if (!resolved.ok) {
+        return {
+          status: 'not_found',
+          error: resolved.code,
+          code: resolved.code,
+          message: resolved.message,
+          ...(resolved.attempted_id ? { attempted_id: resolved.attempted_id } : {}),
+          suggested_call: {
+            tool: 'openlander_project',
+            arguments: {
+              action: 'list_projects',
+              params: {},
+            },
+          },
+          _agent_guidance: {
+            message: 'Cancel target could not be resolved.',
+            next_steps: [
+              'Use list_projects to verify project names and IDs.',
+              'Use get_deploy_status to check active deployments.',
+            ],
+          },
+        };
+      }
+
+      const cancelled = context.appCtx.docker.cancelBuild(resolved.project.id);
+      return {
+        status: cancelled ? 'cancelled' : 'not_active',
+        cancelled,
+        project_id: resolved.project.id,
+        project_name: resolved.project.name,
+        ...(resolved.deployId ? { deploy_id: resolved.deployId } : {}),
+        resolved_from: resolved.resolvedFrom,
+        status_call: deployStatusCall(resolved.project.name),
+        _agent_guidance: {
+          message: cancelled
+            ? 'Active deployment cancellation was requested.'
+            : 'No active build stream was found for that project.',
+          next_steps: ['Call get_deploy_status to confirm the final deployment state.'],
+        },
+      };
     },
   },
   {
@@ -279,7 +536,18 @@ export const deployPlanToolDefs: ToolDef[] = [
           status: 'needs_input',
           missing: plan.missing,
           warnings: plan.warnings,
+          suggested_call: {
+            tool: 'openlander_deploy',
+            arguments: {
+              action: 'update_deploy_plan',
+              params: {
+                plan_id: plan.plan_id,
+                updates: '{"env":{"KEY":"value"}}',
+              },
+            },
+          },
           _agent_guidance: {
+            message: 'The generated deploy plan needs more input before execution.',
             next_steps: [
               `Provide missing values: ${plan.missing.join(', ')}`,
               'Call update_deploy_plan with the values, then execute_deploy_plan',
@@ -325,7 +593,15 @@ export const deployPlanToolDefs: ToolDef[] = [
           status: 'failed',
           project_name: result.project_name,
           error: result.error,
+          diagnostic_call: {
+            tool: 'openlander_deploy',
+            arguments: {
+              action: 'debug_build_error',
+              params: { project_name: result.project_name },
+            },
+          },
           _agent_guidance: {
+            message: 'Deployment failed.',
             next_steps: [
               'Call debug_build_error for AI diagnosis',
               'Fix the issue, then call deploy again to retry',
@@ -347,7 +623,11 @@ export const deployPlanToolDefs: ToolDef[] = [
           project_name: result.project_name,
           project_id: result.project_id,
           estimated_seconds: result.estimated_seconds,
-          _agent_guidance: { next_steps: nextSteps },
+          status_call: deployStatusCall(result.project_name),
+          _agent_guidance: {
+            message: 'Deployment started.',
+            next_steps: nextSteps,
+          },
         };
       }
 
@@ -358,7 +638,9 @@ export const deployPlanToolDefs: ToolDef[] = [
           status: 'building',
           project_name: result.project_name,
           estimated_seconds: result.estimated_seconds,
+          status_call: deployStatusCall(result.project_name),
           _agent_guidance: {
+            message: 'Deployment started.',
             next_steps: ['Poll get_deploy_status to monitor build progress'],
           },
         };
@@ -448,6 +730,7 @@ export const deployPlanToolDefs: ToolDef[] = [
             status: 'done',
             project_name: result.project_name,
             project_id: projectIdOverride ?? projectId,
+            status_call: deployStatusCall(result.project_name),
             urls: payload.url ? [payload.url] : getProjectUrls(result.project_name),
             internal_host: projectContainerName(result.project_name),
             docker_host: getDockerHostType(),
@@ -475,6 +758,14 @@ export const deployPlanToolDefs: ToolDef[] = [
             status: 'failed',
             project_name: result.project_name,
             error: payload.error ?? job?.errorSummary,
+            status_call: deployStatusCall(result.project_name),
+            diagnostic_call: {
+              tool: 'openlander_deploy',
+              arguments: {
+                action: 'debug_build_error',
+                params: { project_name: result.project_name },
+              },
+            },
             ...(job?.buildLogTail ? { build_log_tail: job.buildLogTail } : {}),
             ...(job?.autoDiagnosis
               ? {
@@ -492,6 +783,7 @@ export const deployPlanToolDefs: ToolDef[] = [
             docker_host: getDockerHostType(),
             ...(timedOut ? { timeout: true } : {}),
             _agent_guidance: {
+              message: 'Deployment failed.',
               next_steps: [
                 ...(!job?.autoDiagnosis ? ['Call debug_build_error for AI diagnosis'] : []),
                 'Fix the issue, then call deploy again to retry',
@@ -518,7 +810,9 @@ export const deployPlanToolDefs: ToolDef[] = [
             status: job?.phase ?? 'unknown',
             project_name: result.project_name,
             timeout: true,
+            status_call: deployStatusCall(result.project_name),
             _agent_guidance: {
+              message: 'Deploy did not finish before the requested timeout.',
               next_steps: ['Poll get_deploy_status to check current progress'],
             },
           });
@@ -590,7 +884,26 @@ export const deployPlanToolDefs: ToolDef[] = [
 
       const row = await appCtx.db.getDeployPlan(planId);
       if (!row) {
-        throw new Error(`Deploy plan not found: ${planId}`);
+        return {
+          status: 'not_found',
+          error: 'DEPLOY_PLAN_NOT_FOUND',
+          code: 'DEPLOY_PLAN_NOT_FOUND',
+          plan_id: planId,
+          suggested_call: {
+            tool: 'openlander_deploy',
+            arguments: {
+              action: 'get_deploy_plan',
+              params: { plan_id: planId },
+            },
+          },
+          _agent_guidance: {
+            message: 'No deploy plan exists for that plan_id.',
+            next_steps: [
+              'Verify the plan_id from create_deploy_plan.',
+              'If you do not have a plan_id, call create_deploy_plan first.',
+            ],
+          },
+        };
       }
       const plan = JSON.parse(row.plan_json) as DeployPlan;
 

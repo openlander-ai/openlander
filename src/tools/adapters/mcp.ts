@@ -9,6 +9,11 @@ import { z } from 'zod';
 import type { AppContext } from '../../app.js';
 import { OpenLanderError } from '../../errors.js';
 import type { CompositeTool } from '../../mcp/composite-tools.js';
+import {
+  buildToolInputContract,
+  suggestedParamsForRetry,
+  unknownTopLevelParams,
+} from '../../mcp/schema-guidance.js';
 import type { ToolDef } from '../defs/types.js';
 
 function toInputSchema(schema: z.ZodType): Record<string, unknown> {
@@ -80,6 +85,54 @@ function isMcpTargeted(def: ToolDef): boolean {
   return !def.targets || def.targets.includes('mcp');
 }
 
+function invalidCompositeWrapperResponse(
+  toolName: string,
+  details: string,
+  rawArgs: unknown,
+): Record<string, unknown> {
+  const args = rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs) ? rawArgs : {};
+  const unknownParams = unknownTopLevelParams(args as Record<string, unknown>, [
+    'action',
+    'params',
+  ]);
+  return {
+    error: 'INVALID_PARAMS',
+    tool: toolName,
+    details,
+    allowed_params: ['action', 'params'],
+    required_params: ['action'],
+    optional_params: ['params'],
+    ...(unknownParams.length > 0 ? { unknown_params: unknownParams } : {}),
+    suggested_call: {
+      tool: toolName,
+      arguments: {
+        action: 'help',
+      },
+    },
+    _agent_guidance: {
+      message:
+        'Composite tools accept only top-level action and params. Put operation parameters inside params.',
+    },
+  };
+}
+
+function invalidPlatformParamsResponse(def: ToolDef, details: string): Record<string, unknown> {
+  const retryArgs = suggestedParamsForRetry(def);
+  return {
+    error: 'INVALID_PARAMS',
+    tool: def.name,
+    details,
+    ...buildToolInputContract(def),
+    suggested_call: {
+      tool: def.name,
+      arguments: retryArgs,
+    },
+    _agent_guidance: {
+      message: 'Invalid tool arguments. Use suggested_call as the retry shape.',
+    },
+  };
+}
+
 interface McpRequestHandlerServer {
   setRequestHandler(
     schema: unknown,
@@ -121,7 +174,9 @@ export function registerCompositeMcpTools(
       if (composite) {
         const parsed = composite.inputSchema.safeParse(rawArgs);
         if (!parsed.success) {
-          throw new McpError(ErrorCode.InvalidParams, parsed.error.message);
+          return successResponse(
+            invalidCompositeWrapperResponse(toolName, parsed.error.message, rawArgs),
+          );
         }
 
         const result = await composite.execute(parsed.data, { target: 'mcp', appCtx });
@@ -135,7 +190,7 @@ export function registerCompositeMcpTools(
 
       const parsed = def.inputSchema.safeParse(rawArgs);
       if (!parsed.success) {
-        throw new McpError(ErrorCode.InvalidParams, parsed.error.message);
+        return successResponse(invalidPlatformParamsResponse(def, parsed.error.message));
       }
 
       const result = await def.execute(parsed.data, { target: 'mcp', appCtx });

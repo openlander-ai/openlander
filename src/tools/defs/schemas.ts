@@ -625,6 +625,31 @@ export const executeDeployPlanSchema = z.object({
     ),
 });
 
+export const getDeployPlanSchema = z.object({
+  plan_id: z.string().min(1).describe('Plan ID returned from create_deploy_plan'),
+});
+
+export const cancelDeploySchema = z
+  .object({
+    deploy_id: z.string().min(1).optional().describe('Deploy log ID returned by deploy APIs'),
+    project_id: z.string().min(1).optional().describe('Project ID whose active build should stop'),
+    project_name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Project name whose active build should stop'),
+    id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Alias for deploy_id, project_id, or project_name when the caller has one id field',
+      ),
+  })
+  .refine((data) => Boolean(data.deploy_id ?? data.project_id ?? data.project_name ?? data.id), {
+    message: 'One of deploy_id, project_id, project_name, or id is required',
+  });
+
 // One-call deploy schema (create plan + execute + optionally wait)
 export const deploySchema = z
   .object({

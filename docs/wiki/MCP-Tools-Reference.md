@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **74 unique default operations** surfaced through those composites
+- **76 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g. `openlander_deploy({ action: "deploy", params: { repo_url: "..." } })`. Run `{ action: "help" }` on any composite to list its action catalog.
@@ -16,31 +16,31 @@ Composite catalog:
 
 | Composite                    | Action slots | Purpose                                                                    |
 | ---------------------------- | ------------ | -------------------------------------------------------------------------- |
-| `openlander_deploy`          | 21           | Deploy plans, execution, previews, rollbacks, build logs, Git, domains     |
+| `openlander_deploy`          | 23           | Deploy plans, execution, previews, rollbacks, build logs, Git, domains     |
 | `openlander_project`         | 24           | Legacy project lifecycle, env vars, secrets, public exposure, webhooks     |
 | `openlander_service`         | 25           | Deployable app/worker lifecycle and config vocabulary                      |
 | `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage |
 | `openlander_monitor`         | 8            | Logs, alerts, system stats, project stats, automation policy, probes       |
 
-`openlander_project` and `openlander_service` intentionally overlap while the API transitions from project vocabulary to deployable-service vocabulary. The unique default operation count remains 74.
+`openlander_project` and `openlander_service` intentionally overlap while the API transitions from project vocabulary to deployable-service vocabulary. The unique default operation count remains 76.
 
 ## Tool Categories
 
-| Category                                                 | Tools | Description                            |
-| -------------------------------------------------------- | ----- | -------------------------------------- |
-| [Deploy Plan](#deploy-plan)                              | 5     | Create, update, execute deploy plans   |
-| [Deployment Controls](#deployment-controls)              | 8     | Status, rollback, blue-green, previews |
-| [Project Operations](#project-operations)                | 8     | Start, stop, archive, redeploy, expose |
-| [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files        |
-| [Services](#services--infrastructure)                    | 17    | Create databases, manage infra         |
-| [Domains](#domains)                                      | 2     | Map custom domains                     |
-| [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos          |
-| [Monitoring](#monitoring--logs)                          | 5     | Logs, stats, alerts                    |
-| [Debug](#debug--troubleshooting)                         | 2     | Build logs, error analysis             |
-| [Volume Management](#volume-management)                  | 5     | Docker volumes, disk cleanup           |
-| [Webhooks](#webhooks)                                    | 3     | Auto-deploy webhooks                   |
-| [Infrastructure Analysis](#infrastructure-analysis)      | 2     | Repo analysis, web search              |
-| [Platform Admin](#platform-admin)                        | 13    | Health, events, docker inspect         |
+| Category                                                 | Tools | Description                                    |
+| -------------------------------------------------------- | ----- | ---------------------------------------------- |
+| [Deploy Plan](#deploy-plan)                              | 6     | Create, inspect, update, execute deploy plans  |
+| [Deployment Controls](#deployment-controls)              | 9     | Status, cancel, rollback, blue-green, previews |
+| [Project Operations](#project-operations)                | 8     | Start, stop, archive, redeploy, expose         |
+| [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files                |
+| [Services](#services--infrastructure)                    | 17    | Create databases, manage infra                 |
+| [Domains](#domains)                                      | 2     | Map custom domains                             |
+| [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos                  |
+| [Monitoring](#monitoring--logs)                          | 5     | Logs, stats, alerts                            |
+| [Debug](#debug--troubleshooting)                         | 2     | Build logs, error analysis                     |
+| [Volume Management](#volume-management)                  | 5     | Docker volumes, disk cleanup                   |
+| [Webhooks](#webhooks)                                    | 3     | Auto-deploy webhooks                           |
+| [Infrastructure Analysis](#infrastructure-analysis)      | 2     | Repo analysis, web search                      |
+| [Platform Admin](#platform-admin)                        | 13    | Health, events, docker inspect                 |
 
 ---
 
@@ -72,6 +72,14 @@ Update a deployment plan with missing values.
 | --------- | ------ | -------- | -------------------------------------- |
 | `plan_id` | string | Yes      | Plan ID                                |
 | `updates` | object | Yes      | JSON with env, dockerfile, or services |
+
+### `get_deploy_plan`
+
+Retrieve a deployment plan by ID.
+
+| Parameter | Type   | Required | Description |
+| --------- | ------ | -------- | ----------- |
+| `plan_id` | string | Yes      | Plan ID     |
 
 ### `execute_deploy_plan`
 
@@ -120,6 +128,17 @@ Get real-time deployment status.
 | `project_name` | string  | No       | Project name (omit for all) |
 | `wait`         | boolean | No       | Block until complete        |
 | `timeout`      | number  | No       | Max wait seconds            |
+
+### `cancel_deploy`
+
+Cancel an active deployment build.
+
+| Parameter      | Type   | Required | Description                              |
+| -------------- | ------ | -------- | ---------------------------------------- |
+| `deploy_id`    | string | No       | Deploy log ID                            |
+| `project_id`   | string | No       | Project ID                               |
+| `project_name` | string | No       | Project name                             |
+| `id`           | string | No       | Alias for deploy ID, project ID, or name |
 
 ### `get_deploy_history`
 

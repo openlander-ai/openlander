@@ -60,12 +60,39 @@ describe('Composite Action Routing', () => {
       expect(result).toHaveProperty('description');
       expect(result).toHaveProperty('actions');
       expect(result).toHaveProperty('_agent_guidance');
-      const actions = result['actions'] as Array<{ name: string; description: string }>;
+      const actions = result['actions'] as Array<{
+        name: string;
+        description: string;
+        input_schema: Record<string, unknown>;
+        allowed_params: string[];
+        required_params: string[];
+        optional_params: string[];
+      }>;
       expect(actions.length).toBeGreaterThan(0);
       for (const action of actions) {
         expect(action).toHaveProperty('name');
         expect(action).toHaveProperty('description');
+        expect(action).toHaveProperty('input_schema');
+        expect(Array.isArray(action.allowed_params)).toBe(true);
+        expect(Array.isArray(action.required_params)).toBe(true);
+        expect(Array.isArray(action.optional_params)).toBe(true);
       }
+    });
+
+    it('returns scoped help with conditional requirements for deploy', async () => {
+      const result = (await tool.execute(
+        { action: 'help', params: { action_name: 'deploy' } },
+        mockContext,
+      )) as Record<string, unknown>;
+      const actions = result['actions'] as Array<{
+        name: string;
+        required_one_of?: string[][];
+      }>;
+      expect(actions).toHaveLength(1);
+      expect(actions[0]).toMatchObject({
+        name: 'deploy',
+        required_one_of: [['repo_url'], ['source', 'image']],
+      });
     });
 
     it('returns UNKNOWN_ACTION for unknown action', async () => {
@@ -88,6 +115,18 @@ describe('Composite Action Routing', () => {
       expect(result).toHaveProperty('error', 'INVALID_PARAMS');
       expect(result).toHaveProperty('action', 'rollback_project');
       expect(result).toHaveProperty('composite', 'openlander_deploy');
+      expect(result).toMatchObject({
+        allowed_params: ['project_name'],
+        required_params: ['project_name'],
+        optional_params: [],
+        suggested_call: {
+          tool: 'openlander_deploy',
+          arguments: {
+            action: 'rollback_project',
+            params: { project_name: '<project_name>' },
+          },
+        },
+      });
     });
 
     it('routes rollback_service alias action (validates params)', async () => {

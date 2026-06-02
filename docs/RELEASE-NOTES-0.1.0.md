@@ -26,7 +26,7 @@ You bring your own LLM keys. Supported providers: Google Gemini, Anthropic Claud
 
 ### MCP integration
 
-Agents speak to OpenLander through 5 composite MCP tools (`openlander_deploy`, `openlander_project`, `openlander_service`, `openlander_managed_service`, `openlander_monitor`), each accepting an `action` parameter. The default surface covers 74 unique operations, with 13 additional platform admin tools behind a config flag.
+Agents speak to OpenLander through 5 composite MCP tools (`openlander_deploy`, `openlander_project`, `openlander_service`, `openlander_managed_service`, `openlander_monitor`), each accepting an `action` parameter. The default surface covers 76 unique operations, with 13 additional platform admin tools behind a config flag.
 
 Three transports are supported: stdio (for local agent processes), Streamable HTTP at `POST /mcp` (current MCP standard), and SSE at `GET /mcp/sse` for older clients. Bearer-token authentication protects remote transports.
 

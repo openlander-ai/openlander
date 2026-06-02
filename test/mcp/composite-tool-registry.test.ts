@@ -121,6 +121,43 @@ describe('registerCompositeMcpTools', () => {
     });
   });
 
+  it('returns structured guidance for invalid composite wrapper arguments', async () => {
+    const server = createMockServer();
+    const execute = vi.fn(async () => ({ ok: true }));
+
+    registerCompositeMcpTools(
+      server,
+      [createComposite('openlander_deploy', execute)],
+      [],
+      {} as AppContext,
+    );
+
+    const response = (await server.callHandler?.({
+      params: {
+        name: 'openlander_deploy',
+        arguments: { repo_url: 'https://github.com/acme/app' },
+      },
+    })) as {
+      content: Array<{ type: 'text'; text: string }>;
+      isError?: boolean;
+    };
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(response.isError).toBeUndefined();
+    expect(JSON.parse(response.content[0]?.text ?? '{}')).toMatchObject({
+      error: 'INVALID_PARAMS',
+      tool: 'openlander_deploy',
+      allowed_params: ['action', 'params'],
+      required_params: ['action'],
+      optional_params: ['params'],
+      unknown_params: ['repo_url'],
+      suggested_call: {
+        tool: 'openlander_deploy',
+        arguments: { action: 'help' },
+      },
+    });
+  });
+
   it('routes platform tool calls through ToolDef execution and transformResult', async () => {
     const server = createMockServer();
 
