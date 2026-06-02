@@ -200,6 +200,16 @@ refactor(pipeline): split routes.ts into domain modules
 test: add coverage for ServiceManager
 ```
 
+## Contributor License Terms
+
+OpenLander is released under AGPL-3.0. By submitting a pull request, you
+agree that your contribution is licensed under AGPL-3.0, and you grant the
+project maintainer a perpetual, irrevocable, worldwide right to relicense
+your contribution, including under separate commercial license terms.
+
+This lets the project offer commercial licenses to organizations that cannot
+use AGPL-3.0 while keeping the open-source codebase free for everyone.
+
 ## Code of Conduct
 
 We follow the Contributor Covenant Code of Conduct. Please be respectful and inclusive in all interactions.
