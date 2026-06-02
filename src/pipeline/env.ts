@@ -12,7 +12,8 @@ export type EnvVarChangeResult = EnvVarChange;
  *   - **Group compatibility env vars**: project-scoped rows used only for empty groups/legacy API.
  *   - **Global secrets**: shared across all projects, AES-256-GCM encrypted in `global_secrets` table.
  *
- * At deploy time, global secrets and service env vars are merged (service overrides global).
+ * At deploy time, global secrets, project vars, environment vars, service vars,
+ * and inline deploy vars are resolved by `resolveEnvVars()`.
  */
 export class EnvManager {
   constructor(private readonly db: Database) {}
@@ -41,16 +42,21 @@ export class EnvManager {
   }
 
   /** Get all env vars for a deployable service (values are raw, not masked). */
-  getAllForService(projectId: string, serviceId: string): Promise<Record<string, string>> {
-    return this.db.getEnvVarsForService(projectId, serviceId);
+  getAllForService(
+    projectId: string,
+    serviceId: string,
+    environmentId?: string,
+  ): Promise<Record<string, string>> {
+    return this.db.getEnvVarsForService(projectId, serviceId, environmentId);
   }
 
   /** Get all env vars for a deployable service with masked values. */
   async getAllForServiceMasked(
     projectId: string,
     serviceId: string,
+    environmentId?: string,
   ): Promise<Record<string, string>> {
-    const vars = await this.db.getEnvVarsForService(projectId, serviceId);
+    const vars = await this.db.getEnvVarsForService(projectId, serviceId, environmentId);
     const masked: Record<string, string> = {};
     for (const [key, value] of Object.entries(vars)) {
       masked[key] = EnvManager.maskForKey(key, value);
@@ -99,16 +105,16 @@ export class EnvManager {
     vars: Record<string, string>,
     environmentId?: string,
   ): Promise<EnvVarChangeResult[]> {
-    void environmentId;
-    return await this.db.mergeEnvVarsDetailed(projectId, vars);
+    return await this.db.mergeEnvVarsDetailed(projectId, vars, environmentId);
   }
 
   async setBulkForService(
     projectId: string,
     serviceId: string,
     vars: Record<string, string>,
+    environmentId?: string,
   ): Promise<boolean> {
-    const changes = await this.setBulkForServiceDetailed(projectId, serviceId, vars);
+    const changes = await this.setBulkForServiceDetailed(projectId, serviceId, vars, environmentId);
     return changes.some((change) => change.op !== 'noop');
   }
 
@@ -116,8 +122,9 @@ export class EnvManager {
     projectId: string,
     serviceId: string,
     vars: Record<string, string>,
+    environmentId?: string,
   ): Promise<EnvVarChangeResult[]> {
-    return await this.db.mergeEnvVarsForServiceDetailed(projectId, serviceId, vars);
+    return await this.db.mergeEnvVarsForServiceDetailed(projectId, serviceId, vars, environmentId);
   }
 
   async verifyRoundTrip(
@@ -139,8 +146,9 @@ export class EnvManager {
     projectId: string,
     serviceId: string,
     expected: Record<string, string>,
+    environmentId?: string,
   ): Promise<string[]> {
-    const stored = await this.db.getEnvVarsForService(projectId, serviceId);
+    const stored = await this.db.getEnvVarsForService(projectId, serviceId, environmentId);
     const mismatches: string[] = [];
     for (const [key, value] of Object.entries(expected)) {
       if (stored[key] !== value) {
@@ -160,10 +168,15 @@ export class EnvManager {
     return false;
   }
 
-  async deleteForService(projectId: string, serviceId: string, key: string): Promise<boolean> {
-    const existing = await this.db.getEnvVarsForService(projectId, serviceId);
+  async deleteForService(
+    projectId: string,
+    serviceId: string,
+    key: string,
+    environmentId?: string,
+  ): Promise<boolean> {
+    const existing = await this.db.getEnvVarsForService(projectId, serviceId, environmentId);
     if (key in existing) {
-      await this.db.deleteEnvVarForService(projectId, serviceId, key);
+      await this.db.deleteEnvVarForService(projectId, serviceId, key, environmentId);
       return true;
     }
     return false;
@@ -194,14 +207,15 @@ export class EnvManager {
     projectId: string,
     serviceId: string,
     keys: string[],
+    environmentId?: string,
   ): Promise<{ deleted: string[]; notFound: string[]; changed: boolean }> {
-    const existing = await this.db.getEnvVarsForService(projectId, serviceId);
+    const existing = await this.db.getEnvVarsForService(projectId, serviceId, environmentId);
     const deleted: string[] = [];
     const notFound: string[] = [];
 
     for (const key of keys) {
       if (key in existing) {
-        await this.db.deleteEnvVarForService(projectId, serviceId, key);
+        await this.db.deleteEnvVarForService(projectId, serviceId, key, environmentId);
         deleted.push(key);
       } else {
         notFound.push(key);

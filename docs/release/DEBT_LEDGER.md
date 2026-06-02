@@ -16,6 +16,18 @@ a release should be recorded here so follow-up work is explicit.
 - **Follow-up:** move the compose fixture to a prebuilt image or dedicated slow
   CI job before requiring it in every release candidate run.
 
+- **Environment-variable scope model:** the 0.1.x env surfaces remain
+  service-first and compatibility-oriented. Environment-specific project/service
+  variable behavior is intentionally deferred instead of patched through the
+  current UI alone.
+- **Why accepted:** 0.2 staging/preview/agent workflows need a single scope
+  contract across REST, MCP, UI, and deploy resolution. A UI-only patch would
+  keep project, service, and runtime-environment ownership ambiguous.
+- **Follow-up:** implement the explicit 0.2 variable scope model described in
+  `docs/release/ENVIRONMENT_VARIABLES_0_2_PLAN.md` as the first milestone in
+  `docs/release/V0_2_ROADMAP.md` before opening larger 0.2 environment,
+  preview, AI Ops, Swarm, or Kubernetes product surfaces.
+
 ## v0.1.7
 
 - **Deployable archived-list MCP action:** `openlander_service.list_archived_services`
