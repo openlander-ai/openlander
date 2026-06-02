@@ -28,12 +28,9 @@ export async function resolveEnvVars(
   params: ResolveEnvParams,
   deps: { env: EnvManager },
 ): Promise<Record<string, string>> {
-  const env = deps.env as EnvManager & {
-    getAllWithInheritance?: EnvManager['getAllWithInheritance'];
-  };
   const autoEnvVars = params.autoEnvVars ?? {};
   const globalSecrets = await deps.env.getGlobalSecrets();
-  const projectEnvVars = await resolveProjectEnvVars(params, { env });
+  const projectEnvVars = await resolveProjectEnvVars(params, deps);
   const serviceSharedEnvVars = params.serviceId
     ? await deps.env.getAllForService(params.projectId, params.serviceId)
     : {};
@@ -60,24 +57,13 @@ export async function resolveEnvVars(
 
 async function resolveProjectEnvVars(
   params: ResolveEnvParams,
-  deps: {
-    env: EnvManager & {
-      getAllWithInheritance?: EnvManager['getAllWithInheritance'];
-    };
-  },
+  deps: { env: EnvManager },
 ): Promise<Record<string, string>> {
   if (params.environmentId === undefined) {
     return await deps.env.getAll(params.projectId);
   }
 
-  if (typeof deps.env.getAllWithInheritance === 'function') {
-    return await deps.env.getAllWithInheritance(params.projectId, params.environmentId);
-  }
-
-  return {
-    ...(await deps.env.getAll(params.projectId)),
-    ...(await deps.env.getAll(params.projectId, params.environmentId)),
-  };
+  return await deps.env.getAllWithInheritance(params.projectId, params.environmentId);
 }
 
 /**

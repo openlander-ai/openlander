@@ -29,6 +29,7 @@ vi.mock('../src/health/probe-runner.js', () => ({
 type EnvLike = {
   getGlobalSecrets: () => Record<string, string>;
   getAll: (projectId: string, environmentId?: string) => Record<string, string>;
+  getAllWithInheritance: (projectId: string, environmentId: string) => Record<string, string>;
   getAllForService: (projectId: string, serviceId: string) => Record<string, string>;
   getMergedForDeploy: (projectId: string, environmentId?: string) => Record<string, string>;
   getSecretFilesForDeploy: (
@@ -273,6 +274,7 @@ describe('blue-green route target flip', () => {
     env = {
       getGlobalSecrets: vi.fn().mockReturnValue({}),
       getAll: vi.fn().mockReturnValue({}),
+      getAllWithInheritance: vi.fn().mockReturnValue({}),
       getAllForService: vi.fn().mockReturnValue({}),
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),

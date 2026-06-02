@@ -161,12 +161,18 @@ redeploy action unless immediate apply was explicitly requested.
 2. Refactor the env-var repository around explicit scope methods.
 3. Add or migrate storage so environment-scoped project/service variables do not
    collapse into project-scoped rows.
-4. Add a resolver that returns both raw layers and the effective masked view.
-5. Add interpolation validation and resolved preview behavior.
-6. Update REST routes to accept explicit scope and environment keys.
-7. Update MCP env tools to expose the same scope model.
-8. Replace the service-only web env editor with project/service variable views.
-9. Update docs and release-gate tests after the behavior is implemented.
+4. Add a deploy resolver with deterministic precedence across saved, inline, and
+   protected runtime-generated values.
+5. Add a resolver that returns both raw layers and the effective masked view.
+6. Add interpolation validation and resolved preview behavior.
+7. Update REST routes to accept explicit scope and environment keys.
+8. Update MCP env tools to expose the same scope model.
+9. Replace the service-only web env editor with project/service variable views.
+10. Update docs and release-gate tests after the behavior is implemented.
+
+The first storage/resolution PR intentionally covers steps 1-4 only. Steps 5-10
+are the producer/API/UI follow-up and must remove the remaining v0.1
+service-shared-only write path before 0.2 is considered complete.
 
 ## Out Of Scope For 0.2
 

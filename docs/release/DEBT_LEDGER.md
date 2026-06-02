@@ -5,6 +5,22 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.1.9
 
+- **0.2 env-scope storage first, producers later:** PR #341 makes
+  environment-scoped storage and deploy-time resolution real, but the existing
+  REST/MCP/UI write surfaces still save through the v0.1 service-shared path
+  unless a caller already has an internal `environment_id`. The new
+  `runtimeEnvVars` resolver layer is also a protected-value consumer hook; no
+  production call path populates it yet.
+- **Why accepted:** this first 0.2 step fixes the storage/index/resolution
+  foundation without opening a half-finished public scope API. Explicit
+  `environment_key` producers, generated managed-service bindings, and
+  effective preview UI need to land together in follow-up work.
+- **Follow-up:** wire REST and MCP env writes to explicit
+  project/service/environment scopes, populate protected generated runtime vars
+  from managed binding/runtime paths, and include an RC dry-run case proving
+  project-shared vars are newly inherited by service deploys while service vars
+  still override colliding project keys.
+
 - **Quality-gate compose lane:** compose E2E coverage remains supported but is
   no longer part of the default fast Playwright gate. Run it explicitly with
   `OPENLANDER_E2E_SLOW=1`.

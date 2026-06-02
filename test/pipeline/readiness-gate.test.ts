@@ -109,6 +109,7 @@ describe('Deploy runtime log capture', () => {
       env: {
         getGlobalSecrets: vi.fn().mockResolvedValue({}),
         getAll: vi.fn().mockResolvedValue({}),
+        getAllWithInheritance: vi.fn().mockResolvedValue({}),
         getAllForService: vi.fn().mockResolvedValue({}),
         getSecretFilesForDeploy: vi.fn().mockResolvedValue([]),
       },
