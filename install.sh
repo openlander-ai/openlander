@@ -491,7 +491,10 @@ smoke_check() {
   port="$(env_file_value OPENLANDER_PORT || printf '%s' "${OPENLANDER_PORT}")"
   url="http://127.0.0.1:${port}/"
   for _ in $(seq 1 30); do
-    if curl -fsS -o /dev/null --max-time 2 "${url}"; then
+    # Connection failures are expected while the server boots; stay quiet until
+    # it responds, otherwise the retry loop prints alarming "curl: (56) Recv
+    # failure" lines that read like an install error.
+    if curl -fsS -o /dev/null --max-time 2 "${url}" 2>/dev/null; then
       log "OpenLander responded at ${url}."
       return
     fi
