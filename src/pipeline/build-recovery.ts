@@ -150,6 +150,7 @@ const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
       'Check container logs for the root cause. The application may have a startup error.',
     patterns: [
       /Container crashed after start/i,
+      /Container failed readiness check/i,
       /Container is in restart loop/i,
       /Container exited with code/i,
     ],

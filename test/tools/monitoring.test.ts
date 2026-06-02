@@ -1270,6 +1270,43 @@ describe('service-targeted monitoring tools', () => {
     });
   });
 
+  it('diagnose_service calls out restart loops before HTTP probe guidance', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.docker.inspectContainer).mockResolvedValueOnce({
+      Name: '/ol-app',
+      State: {
+        Running: true,
+        Restarting: true,
+        Status: 'restarting',
+        ExitCode: 1,
+        Error: '',
+        StartedAt: new Date(Date.now() - 10_000).toISOString(),
+        FinishedAt: new Date(Date.now() - 8_000).toISOString(),
+      },
+      Config: { Image: 'app:latest' },
+      RestartCount: 4,
+    });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+    const guidance = result['_agent_guidance'] as { next_steps?: string[] };
+
+    expect(result.container).toMatchObject({
+      running: true,
+      status: 'restarting',
+      exitCode: 1,
+      restartCount: 4,
+    });
+    expect(guidance.next_steps).toEqual(
+      expect.arrayContaining([expect.stringContaining('restart loop')]),
+    );
+    expect(guidance.next_steps).not.toEqual(
+      expect.arrayContaining([expect.stringContaining('HTTP probe failed')]),
+    );
+  });
+
   it('diagnose_service accepts health_check_path as a path alias', async () => {
     const { ctx } = createServiceTargetContext();
     const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(

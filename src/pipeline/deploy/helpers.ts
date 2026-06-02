@@ -56,7 +56,12 @@ export function detectFailStep(buildLog: string): string {
   if (!buildLog.includes('[dockerfile]')) return 'dockerfile';
   if (!buildLog.includes('[build]')) return 'build';
   if (!buildLog.includes('[run]')) return 'run';
-  if (buildLog.includes('Container crashed after start')) return 'runtime';
+  if (
+    buildLog.includes('Container crashed after start') ||
+    buildLog.includes('Container failed readiness check')
+  ) {
+    return 'runtime';
+  }
   return 'unknown';
 }
 

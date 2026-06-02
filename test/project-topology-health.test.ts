@@ -37,7 +37,7 @@ interface TopologyResponse {
 }
 
 function createCtx(opts: {
-  inspectResult: { healthStatus: string | null } | 'throw';
+  inspectResult: { healthStatus: string | null; restarting?: boolean; running?: boolean } | 'throw';
   status?: 'running' | 'building' | 'stopped';
   managedServices?: Array<{
     id: string;
@@ -85,6 +85,8 @@ function createCtx(opts: {
     }
     return Promise.resolve({
       State: {
+        Running: opts.inspectResult.running ?? true,
+        Restarting: opts.inspectResult.restarting ?? false,
         Health:
           opts.inspectResult.healthStatus === null
             ? undefined
@@ -187,6 +189,13 @@ describe('project topology — health projection (Blocker 3)', () => {
   it("no HEALTHCHECK declared (Docker reports null) → UI 'healthy'", async () => {
     const ctx = createCtx({ inspectResult: { healthStatus: null } });
     expect(await fetchTopologyHealth(ctx)).toBe('healthy');
+  });
+
+  it("docker 'restarting' → UI 'crashed' even without HEALTHCHECK", async () => {
+    const ctx = createCtx({
+      inspectResult: { healthStatus: null, restarting: true, running: true },
+    });
+    expect(await fetchTopologyHealth(ctx)).toBe('crashed');
   });
 
   it("inspect throws → UI 'crashed' (parity with ServiceManager error path)", async () => {

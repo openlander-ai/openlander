@@ -1779,7 +1779,11 @@ function buildDiagnoseNextSteps(input: {
     );
   }
 
-  if (input.container['running'] !== true) {
+  if (input.container['status'] === 'restarting') {
+    nextSteps.push(
+      'Container is in a restart loop. Check logs.tail and recentDeployment.buildLogTail, then redeploy_app after fixing the startup crash.',
+    );
+  } else if (input.container['running'] !== true) {
     nextSteps.push(
       'Container is not running. Check recentDeployment.buildLogTail, then call redeploy_app after fixing the cause.',
     );

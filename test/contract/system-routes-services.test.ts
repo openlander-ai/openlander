@@ -635,4 +635,52 @@ describe("system-routes /api/services/:id/health — 'deploying' projection", ()
     // answer is already known.
     expect(mockCtx.serviceManager.getInspectionHealth).not.toHaveBeenCalled();
   });
+
+  it("returns { health: 'crashed' } when docker inspection reports an error state", async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+
+    const service = makeCanonicalServiceRow();
+    const runningProject = {
+      id: service.project_id,
+      name: 'test-redis',
+      status: 'running' as const,
+    };
+
+    const mockCtx = {
+      serviceManager: {
+        getInspectionHealth: vi.fn().mockResolvedValue({ status: 'error', healthStatus: null }),
+        listWithCardSummary: vi.fn(),
+        create: vi.fn(),
+        getDetail: vi.fn(),
+        getLogs: vi.fn(),
+        getStats: vi.fn(),
+        getConnectedProjects: vi.fn(),
+        listDatabases: vi.fn(),
+        createDatabase: vi.fn(),
+        listUsers: vi.fn(),
+        createUser: vi.fn(),
+        remove: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+        restart: vi.fn(),
+      },
+      db: {
+        getService: vi.fn().mockResolvedValue(service),
+        getProject: vi.fn().mockResolvedValue(runningProject),
+        getEnvVars: vi.fn().mockReturnValue({}),
+        getEnvVarsForService: vi.fn().mockReturnValue({}),
+        hasAnyServiceMetrics: vi.fn(),
+        listServiceMetricsSince: vi.fn(),
+      },
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request(`/api/services/${service.id}/health`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { health: string };
+    expect(body.health).toBe('crashed');
+  });
 });
