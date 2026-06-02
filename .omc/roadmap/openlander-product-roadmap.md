@@ -31,6 +31,10 @@ by making the common self-hosted path clear:
   - `projects` is the group boundary;
   - `services` owns deployable and managed runtime rows;
   - `service_connections` links consumer/provider services.
+- Env var storage and agent-facing management now understand explicit
+  project, project-environment, service-shared, and service-environment
+  scopes. Deploy-time resolution inherits project values into service deploys
+  and lets service scope override project scope.
 - Docker has a facade/runtime boundary in important paths, but Docker remains
   the only supported runtime.
 - Built-in autonomous AI/Ops is intentionally dormant in the 0.1 runtime.
@@ -38,6 +42,8 @@ by making the common self-hosted path clear:
 ### What Is Still Missing
 
 - Production/staging/development are not first-class project policy concepts.
+- Env var web editing, source visualization, and resolved previews still need
+  to catch up to the scoped storage/API foundation.
 - Agent-triggered production operations need a durable approval story.
 - Private artifact inputs are incomplete.
 - Notifications and approval delivery are not productized.
@@ -105,7 +111,8 @@ protect risky operations across web, REST, MCP, and pipeline paths.
 Scope:
 
 - project environments: `production`, `staging`, `development`;
-- environment-scoped env vars and deploy history;
+- environment-scoped env var web UX, resolved preview, and deploy history
+  using the 0.1.9 scoped storage/API foundation;
 - environment-aware deploy plans, status, logs, topology, rollback;
 - protected production policy and durable approval flow;
 - MCP environment identity and approval-aware responses;

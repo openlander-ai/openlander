@@ -7,6 +7,27 @@ Service = deployable) and the v1 backend, which fuses the two via the
 this ledger lists every still-open spot so 1.1 (API compat layer) and
 1.2 (schema split) work can be scoped without re-investigating.
 
+## Env scope status (0.1.9 prework)
+
+PR #341 and PR #342 close the storage/API side of the environment-variable
+scope work:
+
+- `env_vars` has distinct project-shared, project-environment,
+  service-shared, and service-environment uniqueness.
+- Deploy-time resolution inherits project values into service deploys and lets
+  service values override project values.
+- REST and MCP set/list/get/export/delete/bulk-delete paths accept explicit
+  `scope` and `environment_key` while preserving legacy no-scope service
+  behavior.
+
+Remaining v0.2 debt is product-surface work, not another persistence split:
+
+- web env editor scope selection;
+- resolved env preview with source metadata;
+- deploy-plan/log/status/topology environment identity;
+- release-gate coverage for project-shared inheritance into service deploy and
+  service override on key collision.
+
 ## Schema (1.2)
 
 | Surface | File:line | Note |

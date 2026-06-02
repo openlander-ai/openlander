@@ -46,3 +46,9 @@
   - Displayed inheritance source (`global`, `project`, `environment`) with distinct visual styles.
   - Updated save logic to handle environment-specific overrides correctly.
   - Verified with `bun run build` and LSP diagnostics.
+
+2026-06-02
+- Scope-aware writes must ship with scope-aware list/get/export/delete. Exposing project-environment or service-environment writes without matching reads creates invisible deploy-affecting rows.
+- The deploy resolver now intentionally changes legacy behavior: service deploys inherit project-shared env vars, and service-scoped keys override project keys. RC dry-runs should include a non-colliding inherited key and a colliding service override key.
+- Avoid duck-typed env-manager fallbacks in deploy resolution. The real `getAllWithInheritance()` includes production-base behavior that ad-hoc fallbacks tend to miss.
+- `runtimeEnvVars` remains a consumer hook until a producer path populates generated runtime values. Keep it documented as follow-up, not as finished product surface.
