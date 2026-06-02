@@ -149,12 +149,27 @@ export async function assertV01BaselineCompatible(client: MigrationSqlClient): P
   const hasLegacyMigrationAudit = await relationExists(client, 'public.migration_0009_audit');
   const hasLegacyProjectsRepoUrl = await columnExists(client, 'public', 'projects', 'repo_url');
   const migrationTables = await listDrizzleMigrationTables(client);
-  const drizzleMigrationCount = migrationTables.reduce((total, table) => total + table.rowCount, 0);
+  const migrationsFolder = resolveMigrationsFolder();
+  const publicMigrationCount = readMigrationFiles({ migrationsFolder }).length;
+  const officialMigrationTable = migrationTables.find(
+    (table) => table.schema === 'drizzle' && table.name === '__drizzle_migrations',
+  );
+  const officialMigrationCount = officialMigrationTable?.rowCount ?? 0;
+  const legacyMigrationTables = migrationTables.filter(
+    (table) =>
+      table.rowCount > 0 && !(table.schema === 'drizzle' && table.name === '__drizzle_migrations'),
+  );
+  const hasUnsupportedOfficialMigrationCount = officialMigrationCount > publicMigrationCount;
 
-  // The v0.1 public baseline records exactly one migration row after it has
-  // been applied. Pre-public histories carry 0001..0006+ rows, so any count
-  // above one means the database predates the baseline reset.
-  if (hasLegacyMigrationAudit || hasLegacyProjectsRepoUrl || drizzleMigrationCount > 1) {
+  // The public baseline stores migration history in drizzle.__drizzle_migrations.
+  // Pre-public histories used extra/custom migration tables or more rows than
+  // the current public journal contains.
+  if (
+    hasLegacyMigrationAudit ||
+    hasLegacyProjectsRepoUrl ||
+    legacyMigrationTables.length > 0 ||
+    hasUnsupportedOfficialMigrationCount
+  ) {
     throw new OpenLanderError(
       'This database was initialized with a pre-0.1 OpenLander migration history. OpenLander 0.1 uses a fresh Postgres baseline; start with a fresh database or export/import data manually before booting this release.',
       'DATABASE_BASELINE_RESET_REQUIRED',
@@ -162,7 +177,8 @@ export async function assertV01BaselineCompatible(client: MigrationSqlClient): P
       {
         hasLegacyMigrationAudit,
         hasLegacyProjectsRepoUrl,
-        drizzleMigrationCount,
+        drizzleMigrationCount: migrationTables.reduce((total, table) => total + table.rowCount, 0),
+        publicMigrationCount,
         migrationTables,
         remediation:
           'Back up the old database, create a fresh OpenLander 0.1 Postgres volume, then re-create projects/services through the supported API.',
@@ -357,16 +373,16 @@ export class Database implements AuthDatabase {
   updateEnvironment(id: string, updates: Parameters<EnvironmentRepo['updateEnvironment']>[1]) { return this.environmentRepo.updateEnvironment(id, updates); }
   deleteEnvironment(id: string) { return this.environmentRepo.deleteEnvironment(id); }
   getEnvVars(projectId: string, environmentId?: string) { return this.envVarRepo.getEnvVars(projectId, environmentId); }
-  getEnvVarsForService(projectId: string, serviceId: string) { return this.envVarRepo.getEnvVarsForService(projectId, serviceId); }
+  getEnvVarsForService(projectId: string, serviceId: string, environmentId?: string) { return this.envVarRepo.getEnvVarsForService(projectId, serviceId, environmentId); }
   setEnvVar(projectId: string, key: string, value: string, environmentId?: string) { return this.envVarRepo.setEnvVar(projectId, key, value, environmentId); }
-  setEnvVarForService(projectId: string, serviceId: string, key: string, value: string) { return this.envVarRepo.setEnvVarForService(projectId, serviceId, key, value); }
+  setEnvVarForService(projectId: string, serviceId: string, key: string, value: string, environmentId?: string) { return this.envVarRepo.setEnvVarForService(projectId, serviceId, key, value, environmentId); }
   setEnvVarsBulk(projectId: string, vars: Record<string, string>, environmentId?: string) { return this.envVarRepo.setEnvVarsBulk(projectId, vars, environmentId); }
   mergeEnvVars(projectId: string, vars: Record<string, string>, environmentId?: string) { return this.envVarRepo.mergeEnvVars(projectId, vars, environmentId); }
   deleteEnvVar(projectId: string, key: string, environmentId?: string) { return this.envVarRepo.deleteEnvVar(projectId, key, environmentId); }
-  deleteEnvVarForService(projectId: string, serviceId: string, key: string) { return this.envVarRepo.deleteEnvVarForService(projectId, serviceId, key); }
+  deleteEnvVarForService(projectId: string, serviceId: string, key: string, environmentId?: string) { return this.envVarRepo.deleteEnvVarForService(projectId, serviceId, key, environmentId); }
   assertEnvToolSchemaReady() { return this.envVarRepo.assertEnvToolSchemaReady(); }
-  mergeEnvVarsDetailed(projectId: string, vars: Record<string, string>) { return this.envVarRepo.mergeEnvVarsDetailed(projectId, vars); }
-  mergeEnvVarsForServiceDetailed(projectId: string, serviceId: string, vars: Record<string, string>) { return this.envVarRepo.mergeEnvVarsForServiceDetailed(projectId, serviceId, vars); }
+  mergeEnvVarsDetailed(projectId: string, vars: Record<string, string>, environmentId?: string) { return this.envVarRepo.mergeEnvVarsDetailed(projectId, vars, environmentId); }
+  mergeEnvVarsForServiceDetailed(projectId: string, serviceId: string, vars: Record<string, string>, environmentId?: string) { return this.envVarRepo.mergeEnvVarsForServiceDetailed(projectId, serviceId, vars, environmentId); }
   findProjectsByEnvKey(key: string) { return this.envVarRepo.findProjectsByEnvKey(key); }
   findServicesByEnvKey(key: string) { return this.envVarRepo.findServicesByEnvKey(key); }
   getGlobalSecrets() { return this.globalSecretRepo.getGlobalSecrets(); }

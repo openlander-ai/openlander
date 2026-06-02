@@ -102,11 +102,9 @@ async function withIsolatedPostgresDatabase(
     isolatedUrl.pathname = `/${dbName}`;
     await fn(isolatedUrl.toString());
   } finally {
-    await admin
-      .unsafe(`DROP DATABASE IF EXISTS ${quotedDbName} WITH (FORCE)`)
-      .catch(async () => {
-        await admin.unsafe(`DROP DATABASE IF EXISTS ${quotedDbName}`);
-      });
+    await admin.unsafe(`DROP DATABASE IF EXISTS ${quotedDbName} WITH (FORCE)`).catch(async () => {
+      await admin.unsafe(`DROP DATABASE IF EXISTS ${quotedDbName}`);
+    });
     await admin.end({ timeout: 5 });
   }
 }
@@ -249,21 +247,26 @@ describe('Postgres migration sanity gate', () => {
     expect(failures).toEqual([]);
   });
 
-  it('keeps v0.1 baseline as a single fresh-install migration with merged critical tables', () => {
+  it('keeps v0.1 baseline first and applies post-baseline env-scope migrations', () => {
     const journal = readMigrationJournal();
     const sql = readMigrationSqlInJournalOrder();
 
-    expect(journal.entries.map((entry) => entry.tag)).toEqual(['0000_v0_1_initial']);
-    expect(activeMigrationSqlFiles()).toEqual(['0000_v0_1_initial.sql']);
+    expect(journal.entries.map((entry) => entry.tag)).toEqual([
+      '0000_v0_1_initial',
+      '0001_env_var_scope',
+    ]);
+    expect(activeMigrationSqlFiles()).toEqual(['0000_v0_1_initial.sql', '0001_env_var_scope.sql']);
     expect(sql).toContain('CREATE TABLE "pat_tokens"');
     expect(sql).toContain('"active_scope_project_id" text');
     expect(sql).toContain('CREATE TABLE "domain_mappings"');
     expect(sql).toContain('"target_port" integer');
     expect(sql).toContain('CONSTRAINT "domain_mappings_path_prefix_check"');
     expect(sql).toContain('CONSTRAINT "domain_mappings_target_port_check"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "env_vars_service_environment_key_unique"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "env_vars_project_environment_key_unique"');
   });
 
-  it('allows a fresh database or already-applied single v0.1 baseline row', async () => {
+  it('allows a fresh database or already-applied public migration rows', async () => {
     await expect(
       assertV01BaselineCompatible(createFakePostgresClient({})),
     ).resolves.toBeUndefined();
@@ -271,6 +274,13 @@ describe('Postgres migration sanity gate', () => {
       assertV01BaselineCompatible(
         createFakePostgresClient({
           migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 1 }],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertV01BaselineCompatible(
+        createFakePostgresClient({
+          migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 2 }],
         }),
       ),
     ).resolves.toBeUndefined();
@@ -282,13 +292,19 @@ describe('Postgres migration sanity gate', () => {
     [
       'custom-schema drizzle migration history',
       {
-        migrationTables: [{ schema: 'custom_migrations', name: 'openlander_history', rowCount: 6 }],
+        migrationTables: [{ schema: 'custom_migrations', name: 'openlander_history', rowCount: 2 }],
       } satisfies FakePostgresState,
     ],
     [
       'public-schema drizzle migration history',
       {
         migrationTables: [{ schema: 'public', name: '__drizzle_migrations', rowCount: 2 }],
+      } satisfies FakePostgresState,
+    ],
+    [
+      'future unknown public migration count',
+      {
+        migrationTables: [{ schema: 'drizzle', name: '__drizzle_migrations', rowCount: 3 }],
       } satisfies FakePostgresState,
     ],
   ])('fails fast on pre-0.1 migration histories: %s', async (_label, state) => {
@@ -312,7 +328,7 @@ describeWithDatabase('Postgres baseline guard integration', () => {
         const rows = (await sql.unsafe(
           'SELECT COUNT(*)::integer AS "count" FROM drizzle.__drizzle_migrations',
         )) as ReadonlyArray<{ count: number }>;
-        expect(rows[0]?.count).toBe(1);
+        expect(rows[0]?.count).toBe(2);
         await expect(sql.unsafe('SELECT 1 FROM domain_mappings LIMIT 1')).resolves.toBeDefined();
       } finally {
         await sql.end({ timeout: 5 });

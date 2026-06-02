@@ -97,10 +97,16 @@ export const envVars = pgTable(
   (table) => [
     uniqueIndex('env_vars_service_key_unique')
       .on(table.service_id, table.key)
-      .where(sql`${table.service_id} IS NOT NULL`),
+      .where(sql`${table.service_id} IS NOT NULL AND ${table.environment_id} IS NULL`),
+    uniqueIndex('env_vars_service_environment_key_unique')
+      .on(table.service_id, table.environment_id, table.key)
+      .where(sql`${table.service_id} IS NOT NULL AND ${table.environment_id} IS NOT NULL`),
     uniqueIndex('env_vars_project_group_key_unique')
       .on(table.project_id, table.key)
-      .where(sql`${table.service_id} IS NULL`),
+      .where(sql`${table.service_id} IS NULL AND ${table.environment_id} IS NULL`),
+    uniqueIndex('env_vars_project_environment_key_unique')
+      .on(table.project_id, table.environment_id, table.key)
+      .where(sql`${table.service_id} IS NULL AND ${table.environment_id} IS NOT NULL`),
     index('idx_env_vars_project').on(table.project_id),
     index('idx_env_vars_service').on(table.service_id),
     index('idx_env_vars_environment').on(table.environment_id),
