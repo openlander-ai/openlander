@@ -6,8 +6,10 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 import {
+  getDeployableServiceAutoRouteName,
   getDeployableServiceRouteName,
   getDeployableServiceUrl,
+  loadDomainMappingsByService,
 } from './helpers/project-route-shared.js';
 import { exposeProjectTunnel } from './helpers/expose-tunnel.js';
 import { loadPreviewProjections } from './helpers/preview-projection.js';
@@ -68,6 +70,7 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
         if (groupServices.length > 0) {
           const { serviceConnections, connectedManagedServices } =
             await deriveConnectedManagedServices(ctx, project.id, groupServices);
+          const domainMappingsByService = await loadDomainMappingsByService(ctx, groupServices);
 
           const nodeIds = new Set(
             [...groupServices, ...connectedManagedServices].map((service) => service.id),
@@ -102,7 +105,10 @@ export function createServiceAuxRoutes(ctx: AppContext): Hono {
                 image,
                 health: runtime.health,
                 port,
-                url: getDeployableServiceUrl(service),
+                url: getDeployableServiceUrl(service, {
+                  domainMappings: domainMappingsByService.get(service.id),
+                  autoRouteName: getDeployableServiceAutoRouteName(project, service),
+                }),
                 cpu: runtime.cpuDisplay,
                 mem: runtime.memDisplay,
                 dependsOn: dependsOnMap.get(service.id) ?? [],

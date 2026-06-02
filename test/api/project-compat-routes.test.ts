@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../../src/app.js';
-import type { ServiceRow } from '../../src/db/types.js';
+import type { DomainMappingRow, ServiceRow } from '../../src/db/types.js';
 import { createProjectCompatRoutes } from '../../src/web/api/project-compat-routes.js';
 
 function createApp(ctx: Partial<AppContext> = {}) {
@@ -50,6 +50,26 @@ function makeServiceRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
     updated_at: '2026-01-01T00:00:00.000Z',
     archived_at: null,
     server_id: 'local',
+    ...overrides,
+  };
+}
+
+function makeDomainMappingRow(overrides: Partial<DomainMappingRow> = {}): DomainMappingRow {
+  return {
+    id: 'domain-1',
+    service_id: 'group-1__svc',
+    domain: 'workspace.example.com',
+    cloudflare_zone_id: null,
+    cloudflare_dns_record_id: null,
+    status: 'active',
+    path_prefix: '/',
+    strip_prefix: false,
+    upstream_path_prefix: null,
+    target_port: null,
+    tls_enabled: false,
+    tls_resolver: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };
 }
@@ -290,6 +310,80 @@ describe('createProjectCompatRoutes', () => {
         },
       ],
     });
+  });
+
+  it('uses service domain mappings instead of service-name sslip hosts in topology', async () => {
+    const previousPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
+    const previousContainerized = process.env['OPENLANDER_CONTAINERIZED'];
+    process.env['OPENLANDER_PUBLIC_HOST'] = '192.168.219.113';
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    const project = { id: 'hotdeal', name: 'hotdeal', container_id: null, status: null };
+    const webService = makeServiceRow({
+      id: 'hotdeal__web__svc',
+      project_id: project.id,
+      name: 'hotdeal/web__svc',
+      kind: 'compose-child',
+      parent_service_id: 'hotdeal__svc',
+      assigned_port: 20032,
+      container_name: 'ol-hotdeal-web',
+      image_url: 'hotdeal-web:latest',
+    });
+    const apiService = makeServiceRow({
+      id: 'hotdeal__api__svc',
+      project_id: project.id,
+      name: 'hotdeal/api__svc',
+      kind: 'compose-child',
+      parent_service_id: 'hotdeal__svc',
+      assigned_port: 20033,
+      container_name: 'ol-hotdeal-api',
+      image_url: 'hotdeal-api:latest',
+    });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup: vi.fn(async () => [webService, apiService]),
+        getEnvironmentsByProject: vi.fn(async () => []),
+        listDomainMappings: vi.fn(async () => [
+          makeDomainMappingRow({
+            id: 'domain-web',
+            service_id: webService.id,
+            domain: 'hotdeal.loancalc.kr',
+          }),
+          makeDomainMappingRow({
+            id: 'domain-api',
+            service_id: apiService.id,
+            domain: 'api-hotdeal.loancalc.kr',
+          }),
+        ]),
+        listServiceConnectionsByProject: vi.fn(async () => []),
+        findDependenciesByProject: vi.fn(async () => []),
+        getLatestServiceMetric: vi.fn(async () => null),
+      },
+    });
+
+    const res = await app.request('/api/projects/hotdeal/topology').finally(() => {
+      if (previousPublicHost === undefined) {
+        delete process.env['OPENLANDER_PUBLIC_HOST'];
+      } else {
+        process.env['OPENLANDER_PUBLIC_HOST'] = previousPublicHost;
+      }
+      if (previousContainerized === undefined) {
+        delete process.env['OPENLANDER_CONTAINERIZED'];
+      } else {
+        process.env['OPENLANDER_CONTAINERIZED'] = previousContainerized;
+      }
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { services: Array<{ id: string; url: string | null }> };
+    expect(body.services).toMatchObject([
+      { id: webService.id, url: 'http://hotdeal.loancalc.kr' },
+      { id: apiService.id, url: 'http://api-hotdeal.loancalc.kr' },
+    ]);
+    expect(body.services.map((service) => service.url)).not.toContain(
+      'http://hotdeal-web.192.168.219.113.sslip.io',
+    );
   });
 
   it('does not classify deployable app nodes as databases from the project name', async () => {

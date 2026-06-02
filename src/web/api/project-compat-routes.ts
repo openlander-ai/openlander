@@ -7,8 +7,10 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { encrypt } from '../../env/crypto.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 import {
+  getDeployableServiceAutoRouteName,
   getDeployableServiceRouteName,
   getDeployableServiceUrl,
+  loadDomainMappingsByService,
 } from './helpers/project-route-shared.js';
 import { exposeProjectTunnel } from './helpers/expose-tunnel.js';
 import { loadPreviewProjections } from './helpers/preview-projection.js';
@@ -31,7 +33,7 @@ import {
   deployableServiceIdToProjectId,
   projectIdToDeployableServiceId,
 } from '../../db/service-ids.js';
-import type { ServiceRow } from '../../db/types.js';
+import type { DomainMappingRow, ServiceRow } from '../../db/types.js';
 import { loadServiceView, loadServiceViewRecords } from '../../db/views/service-view.js';
 import { loadProjectRuntimeStats } from './helpers/service-runtime-stats.js';
 
@@ -189,6 +191,9 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
       const { serviceConnections, connectedManagedServices } = useServices
         ? await deriveConnectedManagedServices(ctx, project.id, groupServices)
         : { serviceConnections: [], connectedManagedServices: [] };
+      const domainMappingsByService: Map<string, DomainMappingRow[]> = useServices
+        ? await loadDomainMappingsByService(ctx, groupServices)
+        : new Map<string, DomainMappingRow[]>();
 
       const nodeIds = new Set(
         useServices
@@ -233,7 +238,10 @@ export function createProjectCompatRoutes(ctx: AppContext): Hono {
                 const port = svc.assigned_port ?? null;
                 // Display name strips __svc suffix and group-name prefix.
                 const displayName = deployableServiceIdToProjectId(svc.name);
-                const url = getDeployableServiceUrl(svc);
+                const url = getDeployableServiceUrl(svc, {
+                  domainMappings: domainMappingsByService.get(svc.id),
+                  autoRouteName: getDeployableServiceAutoRouteName(project, svc),
+                });
                 const image = svc.image_url ?? svc.image_tag ?? `${displayName}:latest`;
                 const kind = 'Application' as const;
                 const runtime = await getTopologyNodeRuntime(ctx, {

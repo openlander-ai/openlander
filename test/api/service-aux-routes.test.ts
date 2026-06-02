@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../../src/app.js';
-import type { ProjectRow, ServiceRow } from '../../src/db/types.js';
+import type { DomainMappingRow, ProjectRow, ServiceRow } from '../../src/db/types.js';
 import { createServiceAuxRoutes } from '../../src/web/api/service-aux-routes.js';
 import { TunnelStartError } from '../../src/errors.js';
 
@@ -63,6 +63,26 @@ function makeServiceRow(overrides: Partial<ServiceRow> = {}): ServiceRow {
     updated_at: '2026-01-01T00:00:00.000Z',
     archived_at: null,
     server_id: 'local',
+    ...overrides,
+  };
+}
+
+function makeDomainMappingRow(overrides: Partial<DomainMappingRow> = {}): DomainMappingRow {
+  return {
+    id: 'domain-1',
+    service_id: 'group-1__svc',
+    domain: 'workspace.example.com',
+    cloudflare_zone_id: null,
+    cloudflare_dns_record_id: null,
+    status: 'active',
+    path_prefix: '/',
+    strip_prefix: false,
+    upstream_path_prefix: null,
+    target_port: null,
+    tls_enabled: false,
+    tls_resolver: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };
 }
@@ -375,6 +395,69 @@ describe('createServiceAuxRoutes', () => {
           name: 'pgredis-fix2-redis',
           kind: 'Database',
           source: 'managed',
+        },
+      ],
+    });
+  });
+
+  it('uses service domain mappings instead of service-name sslip hosts in service topology', async () => {
+    const previousPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
+    const previousContainerized = process.env['OPENLANDER_CONTAINERIZED'];
+    process.env['OPENLANDER_PUBLIC_HOST'] = '192.168.219.113';
+    process.env['OPENLANDER_CONTAINERIZED'] = 'true';
+    const project = makeProjectRow({ id: 'hotdeal', name: 'hotdeal' });
+    const webService = makeServiceRow({
+      id: 'hotdeal__web__svc',
+      project_id: project.id,
+      name: 'hotdeal/web__svc',
+      kind: 'compose-child',
+      parent_service_id: 'hotdeal__svc',
+      assigned_port: 20032,
+      container_id: null,
+      image_url: 'hotdeal-web:latest',
+    });
+    const app = createApp({
+      db: {
+        getProject: vi.fn(async () => project),
+        getProjectByName: vi.fn(async () => undefined),
+        getDeployablesByGroup: vi.fn(async () => [webService]),
+        listDomainMappings: vi.fn(async () => [
+          makeDomainMappingRow({
+            service_id: webService.id,
+            domain: 'hotdeal.loancalc.kr',
+          }),
+        ]),
+        listServiceConnectionsByProject: vi.fn(async () => []),
+        findDependenciesByProject: vi.fn(async () => []),
+        getLatestServiceMetric: vi.fn(async () => null),
+      },
+      docker: {
+        inspectContainer: vi.fn(async () => ({ State: { Health: { Status: 'healthy' } } })),
+      },
+    });
+
+    const res = await app
+      .request('/api/projects/hotdeal/services/hotdeal__web__svc/topology')
+      .finally(() => {
+        if (previousPublicHost === undefined) {
+          delete process.env['OPENLANDER_PUBLIC_HOST'];
+        } else {
+          process.env['OPENLANDER_PUBLIC_HOST'] = previousPublicHost;
+        }
+        if (previousContainerized === undefined) {
+          delete process.env['OPENLANDER_CONTAINERIZED'];
+        } else {
+          process.env['OPENLANDER_CONTAINERIZED'] = previousContainerized;
+        }
+      });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      services: [
+        {
+          id: webService.id,
+          name: 'hotdeal/web',
+          url: 'http://hotdeal.loancalc.kr',
         },
       ],
     });

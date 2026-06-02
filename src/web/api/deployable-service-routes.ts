@@ -10,6 +10,8 @@ import {
 } from './helpers/deployable-service-route-shared.js';
 import {
   getAliasedField,
+  getDeployableServiceAutoRouteName,
+  loadDomainMappingsByService,
   mapEnvironment,
   mapProjectForApi,
   mapServiceForApi,
@@ -36,10 +38,16 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
     const visibleDeployables = includeArchived
       ? deployables
       : deployables.filter((service) => !service.archived_at);
+    const domainMappingsByService = await loadDomainMappingsByService(ctx, visibleDeployables);
 
     return c.json({
       count: visibleDeployables.length,
-      services: visibleDeployables.map((service) => mapServiceForApi(service, environments)),
+      services: visibleDeployables.map((service) =>
+        mapServiceForApi(service, environments, {
+          domainMappings: domainMappingsByService.get(service.id),
+          autoRouteName: getDeployableServiceAutoRouteName(project, service),
+        }),
+      ),
     });
   });
 
@@ -58,15 +66,21 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
     const envVars = service
       ? await ctx.env.getAllForService(project.id, service.id)
       : await ctx.env.getAll(project.id);
-    const [environments, deployLogs, serviceRecords] = await Promise.all([
+    const [environments, deployLogs, serviceRecords, domainMappingsByService] = await Promise.all([
       ctx.db.getEnvironmentsByProject(project.id),
       ctx.db.getDeployLogs(project.id, 5),
       loadServiceViewRecords(ctx.db, [project]),
+      loadDomainMappingsByService(ctx, service ? [service] : []),
     ]);
 
     return c.json({
       ...mapProjectForApi(project, serviceRecords.get(project.id)?.service ?? undefined),
-      service: service ? mapServiceForApi(service, environments) : null,
+      service: service
+        ? mapServiceForApi(service, environments, {
+            domainMappings: domainMappingsByService.get(service.id),
+            autoRouteName: getDeployableServiceAutoRouteName(project, service),
+          })
+        : null,
       environments: environments.map((env) => mapEnvironment(project.name, env)),
       envVars,
       recentDeploys: deployLogs.map((log) => ({
@@ -198,9 +212,15 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
     if (!updatedService) {
       return c.json({ error: 'NOT_FOUND', message: 'Service not found after update' }, 404);
     }
-    const environments = await ctx.db.getEnvironmentsByProject(project.id);
+    const [environments, domainMappingsByService] = await Promise.all([
+      ctx.db.getEnvironmentsByProject(project.id),
+      loadDomainMappingsByService(ctx, [updatedService]),
+    ]);
     return c.json({
-      service: mapServiceForApi(updatedService, environments),
+      service: mapServiceForApi(updatedService, environments, {
+        domainMappings: domainMappingsByService.get(updatedService.id),
+        autoRouteName: getDeployableServiceAutoRouteName(project, updatedService),
+      }),
       message: 'Service source updated. Redeploy the service to apply changes.',
     });
   });
