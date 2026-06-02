@@ -5,6 +5,17 @@ a release should be recorded here so follow-up work is explicit.
 
 ## v0.1.9
 
+- **MCP deploy-plan action additions during data-model freeze:**
+  `openlander_deploy.get_deploy_plan` and `openlander_deploy.cancel_deploy`
+  are added without changing the deployable data model.
+- **Why accepted:** `get_deploy_plan` is read-only recovery/continuation
+  surface for agents that only retain a `plan_id`, and `cancel_deploy` exposes
+  the existing active build-stream cancellation mechanism without adding
+  container, deploy-log, or service-state mutations.
+- **Follow-up:** when the 0.2 deployable/service/environment model is unfrozen,
+  review both actions against the final project/service/runtime ID vocabulary,
+  especially monorepo child-service cancellation and plan lookup fields.
+
 - **0.2 env-scope storage first, producers later:** PR #341 makes
   environment-scoped storage and deploy-time resolution real, but the existing
   REST/MCP/UI write surfaces still save through the v0.1 service-shared path

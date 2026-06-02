@@ -154,6 +154,7 @@ function invalidMcpToolParamsResponse(
     allowed_params: contract.allowed_params,
     required_params: contract.required_params,
     optional_params: contract.optional_params,
+    ...(contract.required_one_of ? { required_one_of: contract.required_one_of } : {}),
     input_schema: contract.input_schema,
     suggested_call: {
       tool: toolName,

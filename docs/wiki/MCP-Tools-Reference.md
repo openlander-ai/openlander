@@ -3,7 +3,7 @@
 OpenLander exposes its functionality to AI coding agents through a **composite-tool surface**:
 
 - **5 composite tools** — enabled by default
-- **72 unique default operations** surfaced through those composites
+- **74 unique default operations** surfaced through those composites
 - **13 platform tools** for server admin (health, Docker inspect, orphan adoption, etc.) — gated behind `config.mcp.platformTools: true`
 
 Each composite takes `{ action, params }` — e.g.
@@ -73,7 +73,7 @@ Composite catalog:
 
 | Composite                    | Action slots | Purpose                                                                                 |
 | ---------------------------- | ------------ | --------------------------------------------------------------------------------------- |
-| `openlander_deploy`          | 16           | Deploy plans, execution, previews, rollbacks, build logs, Git                           |
+| `openlander_deploy`          | 18           | Deploy plans, execution, previews, rollbacks, build logs, Git                           |
 | `openlander_project`         | 16           | Project groups, lifecycle, secrets, temporary share URLs; env actions route to services |
 | `openlander_service`         | 22           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary      |
 | `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage              |
@@ -85,8 +85,8 @@ Composite catalog:
 
 | Category                                                 | Tools | Description                                       |
 | -------------------------------------------------------- | ----- | ------------------------------------------------- |
-| [Deploy Plan](#deploy-plan)                              | 5     | Create, update, execute deploy plans              |
-| [Deployment Controls](#deployment-controls)              | 6     | Status, rollback, previews                        |
+| [Deploy Plan](#deploy-plan)                              | 6     | Create, inspect, update, execute deploy plans     |
+| [Deployment Controls](#deployment-controls)              | 7     | Status, cancel, rollback, previews                |
 | [Project Operations](#project-operations)                | 6     | Group lifecycle, listing, and group-scoped config |
 | [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files                   |
 | [Services](#services--infrastructure)                    | 17    | Create databases, manage infra                    |
@@ -128,6 +128,14 @@ Update a deployment plan with missing values.
 | --------- | ------ | -------- | -------------------------------------- |
 | `plan_id` | string | Yes      | Plan ID                                |
 | `updates` | object | Yes      | JSON with env, dockerfile, or services |
+
+### `get_deploy_plan`
+
+Retrieve a deployment plan by ID.
+
+| Parameter | Type   | Required | Description |
+| --------- | ------ | -------- | ----------- |
+| `plan_id` | string | Yes      | Plan ID     |
 
 ### `execute_deploy_plan`
 
@@ -224,6 +232,22 @@ Get real-time deployment status.
 Use `project_id`/`project_name` for current in-flight deploys. Use `deploy_id`
 or `job_id` to distinguish a completed deploy from an unknown id; unknown ids
 return `status: "not_found"` instead of the same empty list as "no active jobs".
+
+### `cancel_deploy`
+
+Cancel an active deployment build.
+
+At least one of `deploy_id`, `project_id`, `project_name`, or `id` is required.
+Cancellation targets the resolved parent project build stream. If a monorepo child service
+build is tracked under a different runtime ID, this action returns `not_active` rather than
+stopping that child stream.
+
+| Parameter      | Type   | Required | Description                              |
+| -------------- | ------ | -------- | ---------------------------------------- |
+| `deploy_id`    | string | No       | Deploy log ID                            |
+| `project_id`   | string | No       | Project ID                               |
+| `project_name` | string | No       | Project name                             |
+| `id`           | string | No       | Alias for deploy ID, project ID, or name |
 
 ### `get_deploy_history`
 

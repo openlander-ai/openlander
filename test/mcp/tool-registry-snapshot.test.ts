@@ -21,6 +21,7 @@ const EXPECTED_TOOLS = [
   'archive_service',
   'backup_service',
   'bulk_delete_env_vars',
+  'cancel_deploy',
   'cleanup_docker',
   'cleanup_preview',
   'create_bucket',
@@ -40,6 +41,7 @@ const EXPECTED_TOOLS = [
   'get_alerts',
   'get_build_log',
   'get_deploy_history',
+  'get_deploy_plan',
   'get_deploy_status',
   'get_disk_usage',
   'get_env_var',
@@ -130,8 +132,8 @@ describe('MCP Tool Registry Snapshot', () => {
     }
   });
 
-  it('maintains exactly 72 non-platform MCP tools', () => {
-    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(72);
+  it('maintains exactly 74 non-platform MCP tools', () => {
+    expect(getMcpToolDefs().filter(isMcpTargeted)).toHaveLength(74);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

@@ -10,7 +10,14 @@ export interface ToolInputContract {
   allowed_params: string[];
   required_params: string[];
   optional_params: string[];
+  required_one_of?: string[][];
 }
+
+const REQUIRED_ONE_OF_BY_ACTION: Record<string, string[][]> = {
+  create_deploy_plan: [['repo_url'], ['source', 'image']],
+  deploy_app: [['service_id'], ['service_name'], ['name'], ['repo_url'], ['source', 'image']],
+  cancel_deploy: [['deploy_id'], ['project_id'], ['project_name'], ['id']],
+};
 
 function asObject(value: unknown): JsonObject | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -52,6 +59,9 @@ export function buildToolInputContract(input: {
     allowed_params: allowedParams,
     required_params: requiredParams,
     optional_params: optionalParams,
+    ...(REQUIRED_ONE_OF_BY_ACTION[input.name]
+      ? { required_one_of: REQUIRED_ONE_OF_BY_ACTION[input.name] }
+      : {}),
   };
 }
 
@@ -86,8 +96,12 @@ export function unknownTopLevelParams(
 export function requiredParamsTemplate(contract: ToolInputContract): Record<string, unknown> {
   const properties = asObject(contract.input_schema['properties']) ?? {};
   const template: Record<string, unknown> = {};
+  const requiredParams =
+    contract.required_params.length > 0
+      ? contract.required_params
+      : (contract.required_one_of?.[0] ?? []);
 
-  for (const name of contract.required_params) {
+  for (const name of requiredParams) {
     const property = asObject(properties[name]);
     const type = property?.['type'];
     const enumValues = Array.isArray(property?.['enum']) ? property['enum'] : undefined;
