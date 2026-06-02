@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-06-02
+
+### Fixed
+
+- Avoided synthetic service host URLs in public topology responses so clients
+  only receive concrete service connection URLs.
+
 ## [0.1.9] - 2026-06-02
 
 ### Changed
