@@ -1,6 +1,7 @@
 import { createModuleLogger } from '../lib/logger.js';
 import { autoInjectServiceEnv, cleanupAutoInjectedEnv } from './env-inject.js';
 import { kindToLegacyType } from '../db/repos/service.repo.js';
+import { targetIdentityResolver } from '../db/target-identity-resolver.js';
 import type { Database } from '../db/index.js';
 import type { EnvManager } from './env.js';
 
@@ -29,6 +30,21 @@ export interface ManagedServiceConnectParams {
    * stays in the pipeline layer.
    */
   credentials?: Record<string, string>;
+  /**
+   * Standalone-attach guard. When true and the project group has NO deployable
+   * workload yet, skip the FK-bearing rows — the connection (`service_id_consumer`)
+   * and the dependency edge (`source_service_id`) both reference services.id and
+   * have no valid consumer to point at, so creating them would fabricate a phantom
+   * `<projectId>__svc` (the original empty-group attach bug). Env injection still
+   * runs (it is project-scoped for a workload-less group). Used by the standalone
+   * `create_service` / REST connect paths.
+   *
+   * Left false (default) by the deploy-plan auto-provision path: there the app
+   * deployable is created moments later in the same deploy, so the connection is
+   * still upserted against the derived `<projectId>__svc` consumer exactly as
+   * before — this preserves that path's established behavior.
+   */
+  deferIfNoWorkload?: boolean;
 }
 
 export interface ManagedServiceConnectResult {
@@ -71,18 +87,51 @@ export class ManagedServiceLinker {
    * and the injected-key metadata is preserved when nothing new is injected.
    */
   async connect(params: ManagedServiceConnectParams): Promise<ManagedServiceConnectResult> {
-    const { projectId, service, source, credentials } = params;
+    const { projectId, service, source, credentials, deferIfNoWorkload } = params;
 
     const moved = await this.db.attachServiceToProject(service.id, projectId);
     const resolvedProjectId = moved.targetProjectId;
-
-    await this.db.upsertServiceConnection({ projectId: resolvedProjectId, serviceId: service.id });
-    const connection = await this.db.getServiceConnectionByProjectAndService(
-      resolvedProjectId,
-      service.id,
-    );
-
     const serviceKind = service.type ?? kindToLegacyType(service.kind);
+
+    // Resolve the REAL deployable workload that consumes this managed service.
+    // Both the connection (service_id_consumer) and the dependency edge
+    // (source_service_id) are FKs to services.id. getDeployablesByGroup finds the
+    // row(s) by project_id — unlike the legacy `<projectId>__svc` derivation it
+    // also matches a workload ATTACHED into the group under its own runtime __svc
+    // id. Prefer the canonical <group>__svc when present, else the most recent.
+    const workloads = await this.db.getDeployablesByGroup(resolvedProjectId);
+    const canonicalId =
+      targetIdentityResolver.deployableServiceIdForRuntimeProject(resolvedProjectId);
+    const consumer = workloads.find((w) => w.id === canonicalId) ?? workloads[0];
+
+    // Connection row — `service_id_consumer` is a FK to services.id, so it needs
+    // a real consumer:
+    //  - resolved workload      → use its real id (also fixes the attached-into-a-
+    //    group case, whose id is its own runtime `__svc`, not `<group>__svc`).
+    //  - no workload, deploy path (deferIfNoWorkload omitted) → derive
+    //    `<projectId>__svc`; the app deployable is created moments later in the
+    //    same deploy, preserving that path's established behavior.
+    //  - no workload, standalone path (deferIfNoWorkload) → SKIP. An empty group
+    //    has no consumer; upserting would fabricate a phantom `<projectId>__svc`
+    //    and violate the FK — the original empty-group attach bug.
+    let connection: Awaited<
+      ReturnType<Database['getServiceConnectionByProjectAndService']>
+    >;
+    if (consumer || !deferIfNoWorkload) {
+      await this.db.upsertServiceConnection({
+        projectId: resolvedProjectId,
+        serviceId: service.id,
+        ...(consumer ? { consumerServiceId: consumer.id } : {}),
+      });
+      connection = await this.db.getServiceConnectionByProjectAndService(
+        resolvedProjectId,
+        service.id,
+      );
+    }
+
+    // Env injection always runs: autoInjectServiceEnv handles a group with no
+    // deployable workload (project-scoped injection), so a DB-first flow still
+    // seeds the env the app will read on its first deploy.
     const autoInjectedEnvKeys = await autoInjectServiceEnv({
       db: this.db,
       env: this.env,
@@ -104,34 +153,24 @@ export class ManagedServiceLinker {
       });
     }
 
-    // A dependency edge needs a concrete workload consumer. Previously the
-    // source was synthesized as `<projectId>__svc`, which fabricates a consumer
-    // id even for an EMPTY project group that has no deployable workload yet —
-    // creating a dependency row that points at a phantom service. Only wire the
-    // edge when the group actually has a deployable workload to consume the
-    // managed service; an empty-group attach must not create a connection /
-    // dependency row until a workload exists. Best-effort: a missing dependency
-    // edge must not fail the connect.
-    try {
-      const deployable = await this.db.getDeployableForProject(resolvedProjectId);
-      if (deployable) {
+    // Dependency edge: only when a real consumer workload resolved — its source is
+    // that workload's real services.id, never a derived `<projectId>__svc`. With
+    // no workload there is no valid source, so skip (matches the prior behavior of
+    // skipping when the deployable lookup came back empty). Best-effort.
+    if (consumer) {
+      try {
         await this.db.createProjectDependency({
-          source_service_id: deployable.id,
+          source_service_id: consumer.id,
           target_service_id: service.id,
           dependency_type: serviceDependencyType(serviceKind),
           source: 'auto',
         });
-      } else {
+      } catch (err) {
         log.debug(
-          { projectId: resolvedProjectId, serviceId: service.id },
-          'Skipping auto dependency edge: project group has no deployable workload yet',
+          { err, projectId: resolvedProjectId, serviceId: service.id },
+          'Auto dependency sync failed',
         );
       }
-    } catch (err) {
-      log.debug(
-        { err, projectId: resolvedProjectId, serviceId: service.id },
-        'Auto dependency sync failed',
-      );
     }
 
     log.debug(

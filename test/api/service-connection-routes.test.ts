@@ -98,6 +98,7 @@ describe('createServiceConnectionRoutes', () => {
       listServiceConnectionsByProject: vi.fn(async () => [
         { id: 'conn-1', service_id_provider: managed.id },
       ]),
+      getDeployablesByGroup: vi.fn(async () => [deployable]),
       getDeployableForProject: vi.fn(async () => deployable),
       createProjectDependency: vi.fn(async () => undefined),
     };
@@ -113,6 +114,7 @@ describe('createServiceConnectionRoutes', () => {
     expect(db.upsertServiceConnection).toHaveBeenCalledWith({
       projectId: 'group-1',
       serviceId: 'svc-pg',
+      consumerServiceId: 'group-1__svc',
     });
     expect(env.setBulkForService).toHaveBeenCalledWith('group-1', 'group-1__svc', {
       DATABASE_URL: 'postgresql://postgres:postgres@postgres-main:5432/app',
@@ -168,6 +170,7 @@ describe('createServiceConnectionRoutes', () => {
       listServiceConnectionsByProject: vi.fn(async () => [
         { id: 'conn-1', service_id_provider: managed.id },
       ]),
+      getDeployablesByGroup: vi.fn(async () => [deployable]),
       getDeployableForProject: vi.fn(async () => deployable),
       createProjectDependency: vi.fn(async () => undefined),
     };

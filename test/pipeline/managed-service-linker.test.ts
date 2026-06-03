@@ -26,10 +26,10 @@ function createMockDb(overrides?: Record<string, unknown>) {
     upsertServiceConnection: vi.fn().mockResolvedValue(undefined),
     getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue({ id: 'conn-1' }),
     updateServiceConnection: vi.fn().mockResolvedValue(undefined),
-    // Default: the group has a deployable workload (the canonical __svc row), so
-    // the auto dependency edge is wired. The empty-group case overrides this to
-    // undefined.
-    getDeployableForProject: vi.fn().mockResolvedValue({ id: 'p1__svc' }),
+    // Default: the group has the canonical deployable workload (`p1__svc`), so the
+    // consumer resolves and the full wiring (connection + env + dependency) runs.
+    // The empty-group case overrides this to [] (no workload yet).
+    getDeployablesByGroup: vi.fn().mockResolvedValue([{ id: 'p1__svc' }]),
     createProjectDependency: vi.fn().mockResolvedValue({}),
     deleteServiceConnectionByProjectAndService: vi.fn().mockResolvedValue(undefined),
     findDependenciesByProject: vi.fn().mockResolvedValue([]),
@@ -57,9 +57,11 @@ describe('ManagedServiceLinker.connect', () => {
     });
 
     expect(db.attachServiceToProject).toHaveBeenCalledWith('svc-pg', 'p1');
+    // The connection consumer is the resolved workload id, passed explicitly.
     expect(db.upsertServiceConnection).toHaveBeenCalledWith({
       projectId: 'p1',
       serviceId: 'svc-pg',
+      consumerServiceId: 'p1__svc',
     });
     expect(vi.mocked(autoInjectServiceEnv)).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -73,7 +75,12 @@ describe('ManagedServiceLinker.connect', () => {
       autoInjectedEnvKeys: JSON.stringify(['DATABASE_URL']),
     });
     expect(db.createProjectDependency).toHaveBeenCalledWith(
-      expect.objectContaining({ target_service_id: 'svc-pg', dependency_type: 'database', source: 'auto' }),
+      expect.objectContaining({
+        source_service_id: 'p1__svc',
+        target_service_id: 'svc-pg',
+        dependency_type: 'database',
+        source: 'auto',
+      }),
     );
 
     expect(result).toEqual({
@@ -115,17 +122,23 @@ describe('ManagedServiceLinker.connect', () => {
     expect(db.updateServiceConnection).toHaveBeenCalledTimes(1);
   });
 
-  it('wires the auto dependency edge from the actual deployable workload (not a synthesized id)', async () => {
+  it('uses the real attached workload id (not the derived <group>__svc) for both the connection consumer and the dependency source', async () => {
+    // A workload attached into the group keeps its own runtime __svc id, which is
+    // NOT the target group's `<group>__svc`. Resolving via getDeployablesByGroup
+    // (rather than deriving) is what makes the consumer FK valid for this case.
     const db = createMockDb({
-      getDeployableForProject: vi.fn().mockResolvedValue({ id: 'real-workload__svc' }),
+      getDeployablesByGroup: vi.fn().mockResolvedValue([{ id: 'real-workload__svc' }]),
     });
     const linker = new ManagedServiceLinker(db, mockEnv);
 
     await linker.connect({ projectId: 'p1', service: POSTGRES_SERVICE, source: 'deploy_plan' });
 
-    expect(db.getDeployableForProject).toHaveBeenCalledWith('p1');
-    // The dependency source is the real workload row id, looked up — never a
-    // string-synthesized `<projectId>__svc`.
+    expect(db.getDeployablesByGroup).toHaveBeenCalledWith('p1');
+    expect(db.upsertServiceConnection).toHaveBeenCalledWith({
+      projectId: 'p1',
+      serviceId: 'svc-pg',
+      consumerServiceId: 'real-workload__svc',
+    });
     expect(db.createProjectDependency).toHaveBeenCalledWith(
       expect.objectContaining({
         source_service_id: 'real-workload__svc',
@@ -134,15 +147,16 @@ describe('ManagedServiceLinker.connect', () => {
     );
   });
 
-  // The empty-group attach bug: connecting a managed service to a project group
-  // that has no deployable workload yet must NOT create a dependency edge that
-  // points at a phantom `<projectId>__svc` consumer. The connection row (the
-  // group attachment record, project-scoped) is still upserted idempotently —
-  // the linker remains the sole writer of service_connections — but no
-  // workload→service dependency row is created until a workload exists.
-  it('creates NO dependency row on an empty-group attach (no deployable workload yet)', async () => {
+  // The empty-group attach bug (Codex finding #1): a STANDALONE attach
+  // (deferIfNoWorkload) into a group with NO deployable workload must not create
+  // the FK-bearing rows — the connection (`service_id_consumer`) and the
+  // dependency edge (`source_service_id`) both reference services.id, and the
+  // derived `<group>__svc` row does not exist. Env injection still runs (it is
+  // project-scoped for a workload-less group), so a DB-first flow seeds the env
+  // the app will read on its first deploy.
+  it('skips the connection + dependency on a standalone empty-group attach, but still injects env', async () => {
     const db = createMockDb({
-      getDeployableForProject: vi.fn().mockResolvedValue(undefined),
+      getDeployablesByGroup: vi.fn().mockResolvedValue([]),
     });
     const linker = new ManagedServiceLinker(db, mockEnv);
 
@@ -150,36 +164,62 @@ describe('ManagedServiceLinker.connect', () => {
       projectId: 'empty-group',
       service: POSTGRES_SERVICE,
       source: 'mcp',
+      deferIfNoWorkload: true,
     });
 
-    expect(db.getDeployableForProject).toHaveBeenCalledWith('p1');
-    // No phantom dependency edge.
+    expect(db.getDeployablesByGroup).toHaveBeenCalledWith('p1');
+    // No FK-violating connection row, no phantom dependency.
+    expect(db.upsertServiceConnection).not.toHaveBeenCalled();
     expect(db.createProjectDependency).not.toHaveBeenCalled();
-    // The group-attachment connection record is still written (idempotent).
+    // Env injection still happens (project-scoped) — its keys are still returned.
+    expect(vi.mocked(autoInjectServiceEnv)).toHaveBeenCalled();
+    expect(result.autoInjectedEnvKeys).toEqual(['DATABASE_URL']);
+    // No connection row exists, so injected-key metadata is not written.
+    expect(db.updateServiceConnection).not.toHaveBeenCalled();
+    // The attach itself still succeeds (membership recorded by the move).
+    expect(result.resolvedProjectId).toBe('p1');
+  });
+
+  // The deploy-plan path omits deferIfNoWorkload: there the app deployable is
+  // created moments later in the same deploy, so an empty group must still upsert
+  // the connection against the derived `<projectId>__svc` consumer (the prior
+  // behavior). The dependency edge stays skipped while no workload resolves.
+  it('does NOT defer when deferIfNoWorkload is unset: empty group still upserts the connection (derived consumer)', async () => {
+    const db = createMockDb({
+      getDeployablesByGroup: vi.fn().mockResolvedValue([]),
+    });
+    const linker = new ManagedServiceLinker(db, mockEnv);
+
+    await linker.connect({ projectId: 'p1', service: POSTGRES_SERVICE, source: 'deploy_plan' });
+
+    // Connection upserted with the derived consumer (no explicit consumerServiceId).
     expect(db.upsertServiceConnection).toHaveBeenCalledWith({
       projectId: 'p1',
       serviceId: 'svc-pg',
     });
-    // The attach itself still succeeds.
-    expect(result.resolvedProjectId).toBe('p1');
+    // Env is still injected on this path.
+    expect(vi.mocked(autoInjectServiceEnv)).toHaveBeenCalled();
+    // No workload resolved → no dependency edge.
+    expect(db.createProjectDependency).not.toHaveBeenCalled();
   });
 
-  it('is idempotent on a repeat empty-group attach — still no dependency row, connection upsert is conflict-safe', async () => {
+  it('is idempotent on a repeat standalone empty-group attach — still wires nothing', async () => {
     const db = createMockDb({
-      getDeployableForProject: vi.fn().mockResolvedValue(undefined),
+      getDeployablesByGroup: vi.fn().mockResolvedValue([]),
     });
     const linker = new ManagedServiceLinker(db, mockEnv);
 
-    await linker.connect({ projectId: 'empty-group', service: POSTGRES_SERVICE, source: 'mcp' });
-    await linker.connect({ projectId: 'empty-group', service: POSTGRES_SERVICE, source: 'mcp' });
+    const params = {
+      projectId: 'empty-group',
+      service: POSTGRES_SERVICE,
+      source: 'mcp' as const,
+      deferIfNoWorkload: true,
+    };
+    await linker.connect(params);
+    await linker.connect(params);
 
+    expect(db.upsertServiceConnection).not.toHaveBeenCalled();
     expect(db.createProjectDependency).not.toHaveBeenCalled();
-    expect(db.upsertServiceConnection).toHaveBeenCalledTimes(2);
-    expect(
-      (db.upsertServiceConnection as unknown as { mock: { results: { type: string }[] } }).mock.results.every(
-        (r) => r.type === 'return',
-      ),
-    ).toBe(true);
   });
 
   it('propagates dropped env/secret keys from the attach step', async () => {

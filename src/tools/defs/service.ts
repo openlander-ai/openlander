@@ -470,6 +470,10 @@ export const serviceToolDefs: ToolDef[] = [
           service: result,
           source: 'mcp',
           credentials: parseStringCredentials(result.credentials),
+          // Standalone create_service: an empty target group has no workload to
+          // consume the managed service, so defer wiring rather than fabricate a
+          // phantom `<projectId>__svc` consumer (FK violation).
+          deferIfNoWorkload: true,
         });
         resolvedProjectId = linked.resolvedProjectId;
         autoInjectedEnvKeys = linked.autoInjectedEnvKeys;

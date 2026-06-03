@@ -56,6 +56,9 @@ export function createServiceConnectionRoutes(ctx: AppContext): Hono {
       service,
       source: 'web',
       credentials: parseServiceCredentials(service.credentials),
+      // Standalone REST connect: defer wiring for an empty group (no workload to
+      // consume) rather than fabricate a phantom `<projectId>__svc` consumer.
+      deferIfNoWorkload: true,
     });
     const connection = await ctx.db.getServiceConnectionByProjectAndService(
       linked.resolvedProjectId,

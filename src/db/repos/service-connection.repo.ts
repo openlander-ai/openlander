@@ -63,13 +63,20 @@ export class ServiceConnectionRepo {
    * nothing if one already exists for the (consumer, provider) pair. Uses the
    * service_connections_consumer_provider_idx unique index. Idempotent — safe to
    * call when provisioning the same approved plan twice.
+   *
+   * `consumerServiceId` lets the caller pass the resolved consumer workload's
+   * real id (a concrete services.id) when it is not the derived `<projectId>__svc`
+   * — e.g. a workload attached into the group keeps its own runtime __svc id. When
+   * omitted, the consumer falls back to the canonical `<projectId>__svc` derivation
+   * (the common deploy-into-own-project case).
    */
   async upsertConnection(opts: {
     projectId: string;
     serviceId: string;
+    consumerServiceId?: string;
     environmentId?: string;
   }): Promise<void> {
-    const consumerId = projectIdToDeployableServiceId(opts.projectId);
+    const consumerId = opts.consumerServiceId ?? projectIdToDeployableServiceId(opts.projectId);
     await this.db
       .insert(serviceConnections)
       .values({

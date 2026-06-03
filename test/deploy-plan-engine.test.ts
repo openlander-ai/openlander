@@ -1505,6 +1505,11 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
       getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue(undefined),
       listServiceConnectionsByProject: vi.fn().mockResolvedValue([]),
       getDeployableForProject: vi.fn().mockResolvedValue(null),
+      // Deploy-time provisioning: the app deployable is created later in the same
+      // deploy, so the group has no workload yet at connect() time. The linker's
+      // deploy path (no deferIfNoWorkload) still upserts the connection against
+      // the derived consumer; the dependency edge stays skipped.
+      getDeployablesByGroup: vi.fn().mockResolvedValue([]),
       createProjectDependency: vi.fn().mockResolvedValue(undefined),
       acquireDeployLock: vi.fn().mockResolvedValue(true),
       getDeployLockInfo: vi.fn().mockResolvedValue(null),

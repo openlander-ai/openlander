@@ -320,6 +320,7 @@ describe('MCP service tools (Task 8)', () => {
     expect(ctx.db.upsertServiceConnection).toHaveBeenCalledWith({
       projectId: 'proj-1',
       serviceId: 'svc-created',
+      consumerServiceId: 'proj-1__svc',
     });
     expect(ctx.env.setBulkForService).toHaveBeenCalledWith('proj-1', 'proj-1__svc', {
       DATABASE_URL: 'postgresql://openlander:pw@ol-svc-myapp-pg:5432/app',
@@ -354,8 +355,10 @@ describe('MCP service tools (Task 8)', () => {
       getDeployableForProject: ReturnType<typeof vi.fn>;
       getDeployablesByGroup: ReturnType<typeof vi.fn>;
     };
-    db.getDeployableForProject.mockResolvedValueOnce(null);
-    db.getDeployablesByGroup.mockResolvedValueOnce([]);
+    // Empty group across every lookup: the linker's consumer resolution AND the
+    // tool's projectHasDeployableService check both read getDeployablesByGroup.
+    db.getDeployableForProject.mockResolvedValue(null);
+    db.getDeployablesByGroup.mockResolvedValue([]);
     const tool = getTool(ctx, 'create_service');
 
     serviceManager.create.mockResolvedValueOnce(
