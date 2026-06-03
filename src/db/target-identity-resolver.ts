@@ -17,13 +17,20 @@ import {
  * vocab review + endpoint-collision grep + debt ledger). A persisted column is
  * deferred and only revisited if derivation proves insufficient.
  *
- * D3: the resolver must cover the **response path**, not only mutation paths, or
- * the synthetic `service_id` derived in the `building`/`failed` responses leaks
- * to MCP clients for unresolved targets. {@link deployableServiceIdForResponse}
- * is the single guard those builders call: it returns the canonical id for a
- * **resolved** runtime project, and `undefined` (never a synthetic id) when the
- * target is unresolved, so a missing/empty target degrades to "omit the field"
- * rather than emitting a fabricated id.
+ * D3 (scope, honest): the top-level `service_id` on the `building`/`failed`
+ * responses must not be fabricated for a target that did not resolve to a
+ * runtime project. {@link deployableServiceIdForResponse} is the single
+ * **null-guard** those two builders (engine `building` return +
+ * `buildTargetAttachFields`) call: given a runtime project id it derives the
+ * canonical `<id>__svc`, and given `undefined` it omits the field instead of
+ * emitting `undefined__svc`. NOTE the bound of this guard — it is a null-guard,
+ * NOT a workload-existence check: it does not query the DB to confirm a
+ * deployable row exists, so a present-but-empty group still derives an id. A
+ * persisted workload-existence check is out of 0.1.x scope (see D1). Diagnostic
+ * `diagnostic_call` hints elsewhere still derive via
+ * {@link deployableServiceIdForRuntimeProject} at points where the deploy has
+ * concretely run (projectId defined) — those are contextual next-call hints, not
+ * an unresolved-target leak.
  */
 export class TargetIdentityResolver {
   /**
@@ -38,13 +45,13 @@ export class TargetIdentityResolver {
   }
 
   /**
-   * Response-builder guard (D3). Given an optional runtime project id from an
-   * execute-plan result, return the canonical deployable id to surface to the
-   * client, or `undefined` when there is no resolved target. The previous inline
-   * derivation was only reached behind a truthy `project_id` check at every call
-   * site; centralizing the null-guard here means a future unresolved target can
-   * never leak a synthetic `<projectId>__svc` id to clients — it simply omits the
-   * `service_id` field.
+   * Response-builder null-guard (D3). Given an optional runtime project id from
+   * an execute-plan result, return the canonical deployable id to surface to the
+   * client, or `undefined` when there is no runtime project. Centralizing the
+   * null-guard here means an unresolved target (undefined) omits the `service_id`
+   * field rather than emitting a fabricated `undefined__svc`. It does NOT assert
+   * the workload exists — a defined id always derives; workload-existence
+   * verification is out of 0.1.x scope (D1).
    */
   deployableServiceIdForResponse(runtimeProjectId: string | undefined): string | undefined {
     if (!runtimeProjectId) {

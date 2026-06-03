@@ -186,14 +186,15 @@ function buildTargetAttachFields(result: ExecutePlanResult): Record<string, unkn
   }
 
   const runtimeProjectId = result.runtime_project_id ?? result.project_id;
+  // Route every response-path service_id through the single resolver guard so a
+  // missing runtime project omits the field instead of fabricating an id. An
+  // explicit result.service_id from the engine still wins when present.
+  const serviceId =
+    result.service_id ?? targetIdentityResolver.deployableServiceIdForResponse(runtimeProjectId);
   return {
     target_project_id: result.target_project_id,
     ...(runtimeProjectId ? { runtime_project_id: runtimeProjectId } : {}),
-    ...(result.service_id
-      ? { service_id: result.service_id }
-      : runtimeProjectId
-        ? { service_id: targetIdentityResolver.deployableServiceIdForRuntimeProject(runtimeProjectId) }
-        : {}),
+    ...(serviceId ? { service_id: serviceId } : {}),
   };
 }
 
