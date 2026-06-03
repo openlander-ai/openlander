@@ -318,6 +318,168 @@ function deployStatusCall(params: {
   };
 }
 
+function updateDeployPlanSuggestedCall(planId: string): Record<string, unknown> {
+  return {
+    tool: 'openlander_deploy',
+    action: 'update_deploy_plan',
+    params: {
+      plan_id: planId,
+      updates: '{"env":{"KEY":"value"}}',
+    },
+  };
+}
+
+function executeDeployPlanSuggestedCall(
+  planId: string,
+  approveAllSafeResources = false,
+): Record<string, unknown> {
+  return {
+    tool: 'openlander_deploy',
+    action: 'execute_deploy_plan',
+    params: {
+      plan_id: planId,
+      ...(approveAllSafeResources ? { approve_all_safe_resources: true } : {}),
+    },
+  };
+}
+
+function getDeployPlanSuggestedCall(planId: string): Record<string, unknown> {
+  return {
+    tool: 'openlander_deploy',
+    action: 'get_deploy_plan',
+    params: { plan_id: planId },
+  };
+}
+
+function safeProposedResourceIds(plan: Pick<DeployPlan, 'services'>): string[] {
+  return plan.services
+    .filter(
+      (svc) => svc.resolution === 'proposed_project_service' && svc.approval === 'safe_resource',
+    )
+    .map((svc) => svc.name ?? svc.type);
+}
+
+function buildPlanNeedsInputResponse(params: {
+  planId: string;
+  missing: string[];
+  warnings?: string[];
+  message: string;
+  nextSteps: string[];
+  error?: string;
+}): Record<string, unknown> {
+  const { planId, missing, warnings, message, nextSteps, error } = params;
+  return {
+    plan_id: planId,
+    status: 'needs_input',
+    ...(error ? { error } : {}),
+    missing,
+    ...(warnings ? { warnings } : {}),
+    suggested_call: updateDeployPlanSuggestedCall(planId),
+    _agent_guidance: {
+      message,
+      next_steps: nextSteps,
+    },
+  };
+}
+
+function buildPlanNeedsApprovalResponse(params: {
+  plan: DeployPlan;
+  message: string;
+  nextSteps: string[];
+  includeServices?: boolean;
+  includeWarnings?: boolean;
+}): Record<string, unknown> {
+  const { plan, message, nextSteps, includeServices = false, includeWarnings = false } = params;
+  return {
+    plan_id: plan.plan_id,
+    status: 'needs_approval',
+    ...(includeServices ? { services: plan.services } : {}),
+    approval_required: {
+      create_resources: safeProposedResourceIds(plan),
+    },
+    suggested_call: executeDeployPlanSuggestedCall(plan.plan_id, true),
+    ...(includeWarnings ? { warnings: plan.warnings } : {}),
+    _agent_guidance: {
+      message,
+      next_steps: nextSteps,
+    },
+  };
+}
+
+function buildExecutePlanNeedsApprovalResponse(result: ExecutePlanResult): Record<string, unknown> {
+  return {
+    plan_id: result.plan_id,
+    status: 'needs_approval',
+    approval_required: result.approval_required,
+    suggested_call: executeDeployPlanSuggestedCall(result.plan_id, true),
+    _agent_guidance: result._agent_guidance,
+  };
+}
+
+function buildExecutePlanNeedsTargetProjectResponse(
+  result: ExecutePlanResult,
+): Record<string, unknown> {
+  return {
+    plan_id: result.plan_id,
+    status: 'needs_target_project',
+    project_name: result.project_name,
+    message: result.message,
+    approval_required: result.approval_required,
+    _agent_guidance: result._agent_guidance,
+  };
+}
+
+function buildExecutePlanBuildingResponse(params: {
+  result: ExecutePlanResult;
+  includeTargetAttachFields?: boolean;
+  targetAttachStatus?: 'pending';
+  nextSteps?: string[];
+}): Record<string, unknown> {
+  const {
+    result,
+    includeTargetAttachFields = false,
+    targetAttachStatus,
+    nextSteps = ['Poll get_deploy_status to monitor build progress'],
+  } = params;
+  return {
+    plan_id: result.plan_id,
+    status: 'building',
+    project_name: result.project_name,
+    ...(result.project_id ? { project_id: result.project_id } : {}),
+    ...(includeTargetAttachFields ? buildTargetAttachFields(result) : {}),
+    ...(targetAttachStatus ? { target_attach_status: targetAttachStatus } : {}),
+    ...(result.estimated_seconds !== undefined
+      ? { estimated_seconds: result.estimated_seconds }
+      : {}),
+    status_call: deployStatusCall({
+      projectId: result.project_id,
+      projectName: result.project_name,
+    }),
+    _agent_guidance: {
+      message: 'Deployment started.',
+      next_steps: nextSteps,
+    },
+  };
+}
+
+function buildExecutePlanPreBuildFailureResponse(
+  result: ExecutePlanResult,
+): Record<string, unknown> {
+  return {
+    plan_id: result.plan_id,
+    status: 'failed',
+    error: result.error,
+    suggested_call: getDeployPlanSuggestedCall(result.plan_id),
+    _agent_guidance: {
+      message: 'Deployment failed before the build started.',
+      next_steps: [
+        'Check the error message above — this is a preflight failure (before build started)',
+        'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
+      ],
+    },
+  };
+}
+
 function deployPlanResponse(
   plan: DeployPlan,
   row?: Pick<
@@ -355,59 +517,36 @@ function deployPlanResponse(
   if (plan.status === 'needs_input') {
     return {
       ...base,
-      suggested_call: {
-        tool: 'openlander_deploy',
-        action: 'update_deploy_plan',
-        params: {
-          plan_id: plan.plan_id,
-          updates: '{"env":{"KEY":"value"}}',
-        },
-      },
-      _agent_guidance: {
+      ...buildPlanNeedsInputResponse({
+        planId: plan.plan_id,
+        missing: plan.missing,
         message: 'Plan needs input before execution.',
-        next_steps: [
+        nextSteps: [
           `Provide missing values: ${plan.missing.join(', ') || 'review missing[]'}`,
           'Call update_deploy_plan, then call execute_deploy_plan.',
         ],
-      },
+      }),
     };
   }
 
   if (plan.status === 'needs_approval') {
-    const safeProposals = plan.services.filter(
-      (svc) => svc.resolution === 'proposed_project_service' && svc.approval === 'safe_resource',
-    );
     return {
       ...base,
-      approval_required: {
-        create_resources: safeProposals.map((svc) => svc.name ?? svc.type),
-      },
-      suggested_call: {
-        tool: 'openlander_deploy',
-        action: 'execute_deploy_plan',
-        params: {
-          plan_id: plan.plan_id,
-          approve_all_safe_resources: true,
-        },
-      },
-      _agent_guidance: {
+      ...buildPlanNeedsApprovalResponse({
+        plan,
         message: 'Plan needs user approval before safe managed resources are provisioned.',
-        next_steps: [
+        nextSteps: [
           'Confirm the proposed managed services with the user.',
           'Then call execute_deploy_plan with approve_all_safe_resources=true or approvals.create_resources=[...].',
         ],
-      },
+      }),
     };
   }
 
   if (plan.status === 'ready') {
     return {
       ...base,
-      suggested_call: {
-        tool: 'openlander_deploy',
-        action: 'execute_deploy_plan',
-        params: { plan_id: plan.plan_id },
-      },
+      suggested_call: executeDeployPlanSuggestedCall(plan.plan_id),
       _agent_guidance: {
         message: 'Plan is ready to execute.',
         next_steps: ['Call execute_deploy_plan to start deployment.'],
@@ -812,27 +951,16 @@ export const deployPlanToolDefs: ToolDef[] = [
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes('missing environment variables')) {
           const planData = planRow ? (JSON.parse(planRow.plan_json) as DeployPlan) : undefined;
-          return {
-            plan_id: planId,
-            status: 'needs_input',
+          return buildPlanNeedsInputResponse({
+            planId,
             error: msg,
             missing: planData?.missing ?? [],
-            suggested_call: {
-              tool: 'openlander_deploy',
-              action: 'update_deploy_plan',
-              params: {
-                plan_id: planId,
-                updates: '{"env":{"KEY":"value"}}',
-              },
-            },
-            _agent_guidance: {
-              message: 'The plan still has missing environment variables.',
-              next_steps: [
-                'Call update_deploy_plan with the missing env vars',
-                'Then call execute_deploy_plan again',
-              ],
-            },
-          };
+            message: 'The plan still has missing environment variables.',
+            nextSteps: [
+              'Call update_deploy_plan with the missing env vars',
+              'Then call execute_deploy_plan again',
+            ],
+          });
         }
         throw err;
       }
@@ -843,20 +971,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         if (acquiredLockProjectId) {
           await appCtx.db.releaseDeployLock(acquiredLockProjectId, toolSessionId);
         }
-        return {
-          plan_id: result.plan_id,
-          status: 'needs_approval',
-          approval_required: result.approval_required,
-          suggested_call: {
-            tool: 'openlander_deploy',
-            action: 'execute_deploy_plan',
-            params: {
-              plan_id: result.plan_id,
-              approve_all_safe_resources: true,
-            },
-          },
-          _agent_guidance: result._agent_guidance,
-        };
+        return buildExecutePlanNeedsApprovalResponse(result);
       }
 
       if (result.status === 'needs_target_project') {
@@ -866,14 +981,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         if (acquiredLockProjectId) {
           await appCtx.db.releaseDeployLock(acquiredLockProjectId, toolSessionId);
         }
-        return {
-          plan_id: result.plan_id,
-          status: 'needs_target_project',
-          project_name: result.project_name,
-          message: result.message,
-          approval_required: result.approval_required,
-          _agent_guidance: result._agent_guidance,
-        };
+        return buildExecutePlanNeedsTargetProjectResponse(result);
       }
 
       if (result.project_id) {
@@ -881,39 +989,9 @@ export const deployPlanToolDefs: ToolDef[] = [
       }
 
       if (result.status === 'building') {
-        return {
-          plan_id: result.plan_id,
-          status: 'building',
-          project_name: result.project_name,
-          project_id: result.project_id,
-          estimated_seconds: result.estimated_seconds,
-          status_call: deployStatusCall({
-            projectId: result.project_id,
-            projectName: result.project_name,
-          }),
-          _agent_guidance: {
-            message: 'Deployment started.',
-            next_steps: ['Poll get_deploy_status to monitor build progress'],
-          },
-        };
+        return buildExecutePlanBuildingResponse({ result });
       } else {
-        return {
-          plan_id: result.plan_id,
-          status: 'failed',
-          error: result.error,
-          suggested_call: {
-            tool: 'openlander_deploy',
-            action: 'get_deploy_plan',
-            params: { plan_id: result.plan_id },
-          },
-          _agent_guidance: {
-            message: 'Deployment failed before the build started.',
-            next_steps: [
-              'Check the error message above — this is a preflight failure (before build started)',
-              'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
-            ],
-          },
-        };
+        return buildExecutePlanPreBuildFailureResponse(result);
       }
     },
   },
@@ -1111,70 +1189,41 @@ export const deployPlanToolDefs: ToolDef[] = [
       });
 
       if (plan.status === 'needs_input') {
-        return {
-          plan_id: plan.plan_id,
-          status: 'needs_input',
+        return buildPlanNeedsInputResponse({
+          planId: plan.plan_id,
           missing: plan.missing,
           warnings: plan.warnings,
-          suggested_call: {
-            tool: 'openlander_deploy',
-            action: 'update_deploy_plan',
-            params: {
-              plan_id: plan.plan_id,
-              updates: '{"env":{"KEY":"value"}}',
-            },
-          },
-          _agent_guidance: {
-            message: 'The generated deploy plan needs more input before execution.',
-            next_steps: [
-              `Provide missing values: ${plan.missing.join(', ')}`,
-              'Call update_deploy_plan with the values, then execute_deploy_plan',
-              'Or call deploy_app again with env_vars including the missing keys',
-            ],
-          },
-        };
+          message: 'The generated deploy plan needs more input before execution.',
+          nextSteps: [
+            `Provide missing values: ${plan.missing.join(', ')}`,
+            'Call update_deploy_plan with the values, then execute_deploy_plan',
+            'Or call deploy_app again with env_vars including the missing keys',
+          ],
+        });
       }
 
       if (plan.status === 'needs_approval') {
         // Surface the approval contract so the agent routes through
         // execute_deploy_plan with approvals. Do NOT proceed to lock or execute —
         // unapproved provisioning creates nothing and the caller must confirm.
-        const safeProposals = plan.services.filter(
-          (svc) =>
-            svc.resolution === 'proposed_project_service' && svc.approval === 'safe_resource',
-        );
-        return {
-          plan_id: plan.plan_id,
-          status: 'needs_approval',
-          services: plan.services,
-          approval_required: {
-            create_resources: safeProposals.map((svc) => svc.name ?? svc.type),
-          },
-          suggested_call: {
-            tool: 'openlander_deploy',
-            action: 'execute_deploy_plan',
-            params: {
-              plan_id: plan.plan_id,
-              approve_all_safe_resources: true,
-            },
-          },
-          warnings: plan.warnings,
-          _agent_guidance: {
-            message: 'The generated deploy plan needs user approval before execution.',
-            next_steps: [
-              'This plan proposes project-scoped managed services (see services[] with resolution="proposed_project_service"). Confirm with the user before proceeding.',
-              'Then call execute_deploy_plan with the plan_id and approve_all_safe_resources=true, or approvals.create_resources=[<identifiers>] to approve individually.',
-              'This auto-provision + env wiring path applies to deploy-plan approval; standalone create_service still returns suggested_env for set_env_vars.',
-              ...(targetProjectId
-                ? [
-                    'Because target_project_id is set, approved managed services are provisioned on that existing project group.',
-                  ]
-                : [
-                    'For a NEW app that needs an OpenLander-managed service before first boot, create the project first with openlander_project.create_project, create the managed service with that project_id, then deploy_app/create_deploy_plan with target_project_id. If the user already has a real external connection URL, pass it in env_vars instead of creating a managed service.',
-                  ]),
-            ],
-          },
-        };
+        return buildPlanNeedsApprovalResponse({
+          plan,
+          includeServices: true,
+          includeWarnings: true,
+          message: 'The generated deploy plan needs user approval before execution.',
+          nextSteps: [
+            'This plan proposes project-scoped managed services (see services[] with resolution="proposed_project_service"). Confirm with the user before proceeding.',
+            'Then call execute_deploy_plan with the plan_id and approve_all_safe_resources=true, or approvals.create_resources=[<identifiers>] to approve individually.',
+            'This auto-provision + env wiring path applies to deploy-plan approval; standalone create_service still returns suggested_env for set_env_vars.',
+            ...(targetProjectId
+              ? [
+                  'Because target_project_id is set, approved managed services are provisioned on that existing project group.',
+                ]
+              : [
+                  'For a NEW app that needs an OpenLander-managed service before first boot, create the project first with openlander_project.create_project, create the managed service with that project_id, then deploy_app/create_deploy_plan with target_project_id. If the user already has a real external connection URL, pass it in env_vars instead of creating a managed service.',
+                ]),
+          ],
+        });
       }
 
       if (plan.project_id) {
@@ -1236,8 +1285,9 @@ export const deployPlanToolDefs: ToolDef[] = [
               ? { service_id: result.service_id }
               : result.project_id
                 ? {
-                    service_id:
-                      targetIdentityResolver.deployableServiceIdForRuntimeProject(result.project_id),
+                    service_id: targetIdentityResolver.deployableServiceIdForRuntimeProject(
+                      result.project_id,
+                    ),
                   }
                 : { project_name: result.project_name },
           },
@@ -1269,43 +1319,21 @@ export const deployPlanToolDefs: ToolDef[] = [
             'The new service will attach to target_project_id after the deploy succeeds; use the returned service_id for follow-up service actions.',
           );
         }
-        return {
-          plan_id: plan.plan_id,
-          status: 'building',
-          project_name: result.project_name,
-          project_id: result.project_id,
-          ...buildTargetAttachFields(result),
-          ...(result.target_project_id ? { target_attach_status: 'pending' } : {}),
-          estimated_seconds: result.estimated_seconds,
-          status_call: deployStatusCall({
-            projectId: result.project_id,
-            projectName: result.project_name,
-          }),
-          _agent_guidance: {
-            message: 'Deployment started.',
-            next_steps: nextSteps,
-          },
-        };
+        return buildExecutePlanBuildingResponse({
+          result,
+          includeTargetAttachFields: true,
+          ...(result.target_project_id ? { targetAttachStatus: 'pending' } : {}),
+          nextSteps,
+        });
       }
 
       const projectId = result.project_id;
       if (!projectId) {
-        return {
-          plan_id: plan.plan_id,
-          status: 'building',
-          project_name: result.project_name,
-          estimated_seconds: result.estimated_seconds,
-          ...buildTargetAttachFields(result),
-          ...(result.target_project_id ? { target_attach_status: 'pending' } : {}),
-          status_call: deployStatusCall({
-            projectId: result.project_id,
-            projectName: result.project_name,
-          }),
-          _agent_guidance: {
-            message: 'Deployment started.',
-            next_steps: ['Poll get_deploy_status to monitor build progress'],
-          },
-        };
+        return buildExecutePlanBuildingResponse({
+          result,
+          includeTargetAttachFields: true,
+          ...(result.target_project_id ? { targetAttachStatus: 'pending' } : {}),
+        });
       }
 
       return await new Promise((resolve) => {
@@ -1368,9 +1396,9 @@ export const deployPlanToolDefs: ToolDef[] = [
                     tool: 'openlander_monitor',
                     action: 'diagnose_service',
                     params: {
-                    service_id:
-                      targetIdentityResolver.deployableServiceIdForRuntimeProject(projectId),
-                  },
+                      service_id:
+                        targetIdentityResolver.deployableServiceIdForRuntimeProject(projectId),
+                    },
                   },
                   docker_host: getDockerHostType(),
                   _agent_guidance: {
