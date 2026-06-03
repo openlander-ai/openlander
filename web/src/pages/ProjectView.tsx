@@ -129,7 +129,7 @@ function isDataResourceKind(kind: ServiceNode['kind']): boolean {
 
 function reportManagedServicesLoadFailure(err: unknown): void {
   if (import.meta.env.DEV) {
-    console.warn('[ProjectView] Failed to load connected managed services', err);
+    console.warn('[ProjectView] Failed to load connected Database/Cache/Storage resources', err);
   }
 }
 
@@ -172,7 +172,7 @@ export function ProjectView() {
   const [archivedServicesError, setArchivedServicesError] = useState<string | null>(null);
   const isBelowMd = useIsBelowMd();
   const [addServiceOpen, setAddServiceOpen] = useState(false);
-  // Managed databases/caches are agent-provisioned, not built here — this
+  // Database/Cache resources are agent-provisioned, not built here — this
   // secondary action hands the user to the MCP guide instead of a native DB
   // wizard (kind="add-managed-db", never "add-service").
   const [agentGuideOpen, setAgentGuideOpen] = useState(false);
@@ -353,7 +353,7 @@ export function ProjectView() {
 
   // Single helper so every internal navigation carries the project context.
   // Avoids drift where some callers forget to attach `?project=` and the
-  // service detail page falls back to a default.
+  // resource detail page falls back to a default.
   const openService = useCallback(
     (service: ServiceNode) => {
       if (isManagedServiceNode(service)) {

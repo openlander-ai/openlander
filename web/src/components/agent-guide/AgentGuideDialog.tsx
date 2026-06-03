@@ -7,7 +7,7 @@
  *   A) connected   — agent identity strip + active Copy buttons
  *   B) not connected — "First, connect your agent" banner + locked Copies
  *
- * Reused by ProjectView "+ Add service" and future Domain/Scale entry
+ * Reused by ProjectView "Add application" and future Domain/Scale entry
  * points. Caller passes `kind` + optional
  * context (`projectName`, `serviceName`) so prompts are pre-filled with
  * the right names.

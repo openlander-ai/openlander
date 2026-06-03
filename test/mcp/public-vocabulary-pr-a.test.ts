@@ -32,8 +32,10 @@ describe('public MCP/runtime vocabulary', () => {
     const projectOpsSource = readRepoFile('src/tools/defs/project-ops.ts');
     const serviceSource = readRepoFile('src/tools/defs/service.ts');
 
-    for (const source of [promptSource, serverSource, projectOpsSource, serviceSource]) {
+    for (const source of [promptSource, serverSource, projectOpsSource]) {
       expect(source).toContain('create_project');
+    }
+    for (const source of [promptSource, serverSource, projectOpsSource, serviceSource]) {
       expect(source).toContain('create_service');
       expect(source).toContain('target_project_id');
     }

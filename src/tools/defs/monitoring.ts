@@ -525,9 +525,9 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'diagnose_service',
     riskLevel: 'low',
     description:
-      'Diagnose a deployable app/worker service in one MCP call. Returns service/source summary, masked env key inventory, build-time env warnings, sanitized recent deployment status/log tail, container status, sanitized service logs, local HTTP probe, dependency probes, and recommended next actions. Use this after redeploy_app or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior. For raw live container logs only use get_logs; for full untruncated build output and captured deploy-time runtime logs use get_build_log.',
+      'Diagnose an Application/Compose workload in one MCP call. Returns workload/source summary, masked env key inventory, build-time env warnings, sanitized recent deployment status/log tail, container status, sanitized runtime logs, local HTTP probe, dependency probes, and recommended next actions. Use this after redeploy_app or get_deploy_status reports a failure, timeout, DB connection problem, or confusing runtime behavior. For raw live container logs only use get_logs; for full untruncated build output and captured deploy-time runtime logs use get_build_log.',
     mcpDescription:
-      'One-shot service diagnostics after deploy/runtime failures. For raw logs use get_logs; for full build output use get_build_log.',
+      'One-shot Application/Compose diagnostics after deploy/runtime failures. For raw logs use get_logs; for full build output use get_build_log.',
     inputSchema: diagnoseServiceSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;

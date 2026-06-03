@@ -127,7 +127,7 @@ export function CreateServiceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{'Create Service'}</DialogTitle>
+          <DialogTitle>{'Create resource'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
@@ -165,7 +165,7 @@ export function CreateServiceDialog({
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">
-                  {'Service Name'}
+                  {'Resource name'}
                 </label>
                 <Input
                   value={name}
@@ -282,7 +282,7 @@ export function CreateServiceDialog({
                 disabled={creating || !name || (createMode === 'custom' && !image)}
               >
                 {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {creating ? 'Creating...' : 'Create Service'}
+                {creating ? 'Creating...' : 'Create resource'}
               </Button>
             </div>
           </form>

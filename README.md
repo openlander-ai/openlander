@@ -179,16 +179,18 @@ is the human surface on top.
 
 ## Mental model
 
-- A **Project** is a workspace / group.
-- A **Service** is the deployable unit. It owns repository or image, branch,
-  Dockerfile, build config, runtime state, and deploy history.
-- A **Managed Service** is infrastructure such as Postgres, MySQL, Redis,
+- A **Project** is a workspace.
+- An **Application** is a Git or image workload. It owns repository or image,
+  branch, Dockerfile, build config, runtime state, and deploy history.
+- A **Compose** resource is one Project-level stack; its containers stay inside
+  that stack surface.
+- A **Database/Cache/Storage resource** is infrastructure such as Postgres, MySQL, Redis,
   MongoDB, or MinIO. In v0.1 these are project-scoped: they attach to the
   project that uses them and run on that project's Docker network. Cross-project
-  shared managed services and external TCP exposure are deferred.
+  shared Database/Cache/Storage resources and external TCP exposure are deferred.
 
 The dashboard and MCP both expose a one-step "deploy this repo" path for the
-common single-service case.
+common single-Application case.
 
 ---
 
@@ -262,8 +264,8 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 - Git-to-URL deploy pipeline.
 - MCP server with deploy / inspect / operate tools.
 - Dashboard for human oversight + intervention.
-- Project-scoped managed services for Postgres, MySQL, Redis, MongoDB, and
-  MinIO through agent/MCP workflows.
+- Project-scoped Database/Cache/Storage resources for Postgres, MySQL, Redis,
+  MongoDB, and MinIO through agent/MCP workflows.
 
 **Next**
 

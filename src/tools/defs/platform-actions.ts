@@ -99,9 +99,9 @@ export const platformActionToolDefs: ToolDef[] = [
     name: 'platform_adopt_orphan_service',
     riskLevel: 'high',
     description:
-      'Adopt an OpenLander-managed infrastructure container that exists in Docker but is missing from the services table. Without confirm=true, returns a preview only. Adopted custom image resources support logs/restart/stop/remove; build/redeploy remains unsupported.',
+      'Adopt an OpenLander infrastructure resource container that exists in Docker but is missing from the registered resource inventory. Without confirm=true, returns a preview only. Adopted custom image resources support logs/restart/stop/remove; build/redeploy remains unsupported.',
     mcpDescription:
-      'Adopt an orphan OpenLander service container into the services table (confirm-gated).',
+      'Adopt an orphan OpenLander resource container into the resource inventory (confirm-gated).',
     inputSchema: platformAdoptOrphanServiceSchema,
     execute: async (args, context) => {
       const containerId = args['container_id'] as string | undefined;
@@ -135,7 +135,7 @@ export const platformActionToolDefs: ToolDef[] = [
       }
       if (candidate.labels?.[DOCKER_LABELS.ROLE] !== 'service') {
         throw new OpenLanderError(
-          'Only OpenLander-managed infrastructure containers can be adopted.',
+          'Only OpenLander infrastructure resource containers can be adopted.',
           'SERVICE_OPERATION_UNSUPPORTED',
           400,
           { role: candidate.labels?.[DOCKER_LABELS.ROLE] ?? null },

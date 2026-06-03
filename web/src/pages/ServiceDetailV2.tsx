@@ -251,7 +251,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
         if (cancelled) return;
         setServiceDetail(null);
         setServiceDetailError(
-          err instanceof Error ? err.message : 'Failed to load service details',
+          err instanceof Error ? err.message : 'Failed to load resource details',
         );
       });
     return () => {
@@ -332,7 +332,7 @@ function DeployableServiceDetail({ canonicalServiceId }: { canonicalServiceId?: 
   // v0.1 spec mandates an observability-first order:
   //   Overview · Logs · Deployments · Monitoring · Environment · Domains.
   // OpenLander is an agent-first PaaS — agents do most env/domain
-  // configuration via MCP, and humans visit the Service Detail page
+  // configuration via MCP, and humans visit the resource detail page
   // mostly to diagnose, verify, or monitor. Tabs that surface runtime
   // signals (Logs/Deployments/Monitoring) come before the
   // configuration tabs (Environment/Domains) so the high-signal data
@@ -2145,14 +2145,14 @@ function RangeToggle<T extends string>({
 }
 
 /**
- * ManagedServiceDetail — operational detail surface for infrastructure services
+ * ManagedServiceDetail — operational detail surface for Database/Cache/Storage resources
  * (postgres / mysql / redis / mongo etc).
  *
  * Mounted at `/projects/:p/infrastructure/:id` via the route-prefix gate
  * at the top of `ServiceDetailV2`. v0.1.4 keeps native creation out of
  * the web UI but exposes Overview / Logs / Connections so existing
  * MCP-created infrastructure can be inspected and operated. Mutations live
- * in Overview to match deployable service detail.
+ * in Overview to match Application detail.
  */
 function ManagedServiceDetail({
   id,

@@ -554,9 +554,9 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'list_services',
     riskLevel: 'low',
     description:
-      'List all Database/Cache/Storage resources with status, type, and connection details. Agent responses include parsed credentials; MCP responses intentionally omit credential values and expose them only through get_service_credentials. Pass include_orphans=true to also list OpenLander-managed infrastructure containers that are not registered in the services table.',
+      'List all Database/Cache/Storage resources with status, type, and connection details. Agent responses include parsed credentials; MCP responses intentionally omit credential values and expose them only through get_service_credentials. Pass include_orphans=true to also list OpenLander infrastructure resource containers that are not registered in the resource inventory.',
     mcpDescription:
-      'List infrastructure services with type, status, exposed port, optional project_id/project_name filter, and optional orphan service containers. Credentials are omitted; use get_service_credentials when needed.',
+      'List Database/Cache/Storage resources with type, status, exposed port, optional project_id/project_name filter, and optional orphan resource containers. Credentials are omitted; use get_service_credentials when needed.',
     inputSchema: listServicesSchema,
     execute: async (_args, { appCtx, target }) => {
       const includeOrphans = (_args['include_orphans'] as boolean | undefined) ?? false;

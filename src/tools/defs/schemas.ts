@@ -573,7 +573,7 @@ export const listServicesSchema = z
     include_orphans: z
       .boolean()
       .optional()
-      .describe('Include OpenLander-managed infrastructure containers missing from the services table.'),
+      .describe('Include OpenLander infrastructure resource containers missing from the resource inventory.'),
   })
   .strict();
 

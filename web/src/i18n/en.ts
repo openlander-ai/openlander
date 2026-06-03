@@ -1425,7 +1425,7 @@ export const translations = {
       pendingFirstSync: 'pending first sync',
       empty: {
         title: 'Connect GitHub',
-        body: 'Authorize OpenLander to read your repositories so deploys, webhooks, and Add Service can find them.',
+        body: 'Authorize OpenLander to read your repositories so deploys, webhooks, and Add application can find them.',
         cta: 'Connect GitHub',
       },
       validationError: 'GitHub rejected this token: {message}',

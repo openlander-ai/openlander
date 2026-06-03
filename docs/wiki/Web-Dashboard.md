@@ -51,23 +51,27 @@ Grid-view list of all projects.
 
 ### New Project
 
-Create a project group first, then add deployable services inside it.
+Create a Project first, then add Applications inside it.
 
 In the 0.1 data model:
 
-| Noun        | Meaning                                                            |
-| ----------- | ------------------------------------------------------------------ |
-| **Project** | Workspace/group: shared env vars, settings, service list           |
-| **Service** | Deployable unit: Git repo app, worker, Docker image, compose stack |
+| Noun            | Meaning                                                  |
+| --------------- | -------------------------------------------------------- |
+| **Project**     | Workspace: settings and related resources                |
+| **Application** | Git repo app, worker, or Docker image workload           |
+| **Compose**     | Compose stack represented as one Project-level resource  |
+| **Database**    | PostgreSQL, MySQL, or MongoDB resource                   |
+| **Cache**       | Redis resource                                           |
+| **Storage**     | MinIO resource                                           |
 
 **Flow**:
 
 1. Click **New Project**
 2. Enter a project name
 3. Open the project
-4. Click **Add service**
+4. Click **Add application**
 5. Ask your agent to deploy a repo/image/compose stack into that project
-6. Open the service detail to watch deployments, logs, domains, and runtime config
+6. Open the Application detail to watch deployments, logs, domains, and runtime config
 
 The legacy one-call deploy path remains available through MCP/API for convenience, but the UI uses
 the group-first model so projects are not tied to a single repository.
@@ -76,7 +80,7 @@ the group-first model so projects are not tied to a single repository.
 
 ### Project Detail (`/projects/:id`)
 
-Detailed view for a project group and its services.
+Detailed view for a Project and its resources.
 
 **Actions** (header):
 
@@ -87,14 +91,14 @@ Detailed view for a project group and its services.
 
 | Tab             | Features                                                                                     |
 | --------------- | -------------------------------------------------------------------------------------------- |
-| **Overview**    | Latest deployment summary, quick actions, service health, live timeline excerpt              |
+| **Overview**    | Latest deployment summary, quick actions, resource health, live timeline excerpt             |
 | **Deployments** | History list with filters (all / success / failed / building), commit SHA, duration, trigger |
 | **Recovery**    | Historical incident/status information when available                                        |
 | **Runtime**     | Service logs + web terminal (xterm.js), ANSI colors, runtime state                           |
-| **Settings**    | Project metadata and danger actions. Deployable config lives on service detail pages.        |
+| **Settings**    | Project metadata and danger actions. Application config lives on detail pages.               |
 
-> **Note**: OpenLander's model is service-first for deployable configuration. Activity,
-> deployments, domains, env vars, and resource limits belong to service detail pages rather
+> **Note**: OpenLander's model is resource-first for runtime configuration. Activity,
+> deployments, domains, env vars, and resource limits belong to Application detail pages rather
 > than Project Settings.
 
 ---
@@ -112,22 +116,22 @@ Detailed view for a specific deployment.
 
 ---
 
-### Infrastructure Services
+### Database/Cache/Storage Resources
 
-Infrastructure services are shown inside each project, alongside deployable
-services. Open a project and use the Services tab to inspect project-scoped
-databases, caches, and storage containers wired to that project.
+Database/Cache/Storage resources are shown inside each Project, alongside Applications and Compose
+stacks. Open a Project and use the Resources tab to inspect project-scoped databases, caches, and
+storage containers wired to that Project.
 
-There is no global `/managed-services` web page in v0.1. Infrastructure service
+There is no global `/managed-services` web page in v0.1. Database/Cache/Storage resource
 creation stays on the MCP/agent path; the web UI is for visibility and
-operations on services already connected to a project.
+operations on resources already connected to a Project.
 
 ---
 
-### Service Detail
+### Application And Resource Detail
 
-> **0.1 routing**: deployable service detail is `/projects/:p/services/:s`.
-> Infrastructure service detail is `/projects/:p/infrastructure/:s`.
+> **0.1 routing**: Application detail is `/projects/:p/services/:s`.
+> Database/Cache/Storage resource detail is `/projects/:p/infrastructure/:s`.
 
 **Actions**: Deploy (header button), Delete (typed-confirm flow inside Overview).
 
@@ -137,16 +141,16 @@ operations on services already connected to a project.
 | --------------- | ----------------------------------------------------------------------------- |
 | **Overview**    | General details, resource limits, health, danger zone (typed-confirm delete). |
 | **Logs**        | Live runtime container logs.                                                  |
-| **Deployments** | Per-service deployment history with deploy-in-place log streaming.            |
+| **Deployments** | Per-Application deployment history with deploy-in-place log streaming.         |
 | **Monitoring**  | CPU / memory time-series and request-side health.                             |
-| **Environment** | Service env vars (read/write).                                                |
-| **Domains**     | Host/path routes registered for the service. DNS/TLS remain external in v0.1. |
+| **Environment** | Application env vars (read/write).                                            |
+| **Domains**     | Host/path routes registered for the Application. DNS/TLS remain external in v0.1. |
 
-Deployable services use the full service detail surface. Infrastructure services
+Applications use the full detail surface. Database/Cache/Storage resources
 use a narrower project-scoped detail surface with Overview, Logs, and
-Connections. Lifecycle and danger actions live in Overview to match deployable
-service detail. Project detail shows connected project-scoped infrastructure
-services in the Services tab; cross-project shared resources and external TCP
+Connections. Lifecycle and danger actions live in Overview to match Application
+detail. Project detail shows connected project-scoped Database/Cache/Storage
+resources in the Resources tab; cross-project shared resources and external TCP
 endpoints are deferred.
 
 ---
