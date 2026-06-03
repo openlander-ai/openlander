@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import {
   OpenLanderError,
   ProjectAlreadyExistsError,
@@ -431,27 +432,37 @@ export class ProjectRepo {
       addManagedService(row.projectId, row.serviceId);
     }
 
+    const consumerServices = alias(services, 'consumer_services');
     const managedConnectionRows = await this.db
       .select({
         consumerId: serviceConnections.service_id_consumer,
+        consumerProjectId: consumerServices.project_id,
         serviceId: serviceConnections.service_id_provider,
       })
       .from(serviceConnections)
       .innerJoin(services, eq(serviceConnections.service_id_provider, services.id))
+      .leftJoin(consumerServices, eq(serviceConnections.service_id_consumer, consumerServices.id))
       .where(
         and(
-          inArray(
-            serviceConnections.service_id_consumer,
-            uniqueProjectIds.map(projectIdToDeployableServiceId),
+          or(
+            inArray(
+              serviceConnections.service_id_consumer,
+              uniqueProjectIds.map(projectIdToDeployableServiceId),
+            ),
+            inArray(consumerServices.project_id, uniqueProjectIds),
           ),
           inArray(services.kind, [...MANAGED_SERVICE_KINDS]),
           opts.includeArchived === true ? undefined : isNull(services.archived_at),
         ),
       )
-      .groupBy(serviceConnections.service_id_consumer, serviceConnections.service_id_provider);
+      .groupBy(
+        serviceConnections.service_id_consumer,
+        consumerServices.project_id,
+        serviceConnections.service_id_provider,
+      );
 
     for (const row of managedConnectionRows) {
-      const projectId = deployableServiceIdToProjectId(row.consumerId);
+      const projectId = row.consumerProjectId ?? deployableServiceIdToProjectId(row.consumerId);
       addManagedService(projectId, row.serviceId);
     }
 

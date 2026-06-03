@@ -74,6 +74,7 @@ function createDbMock(
     projectEnv?: Record<string, Record<string, string>>;
     serviceEnv?: Record<string, Record<string, string>>;
     deployablesByProject?: Record<string, ServiceRow[]>;
+    composeChildrenByParent?: Record<string, ServiceRow[]>;
     serviceConnections?: ServiceConnectionRow[];
   } = {},
 ): Database {
@@ -89,6 +90,9 @@ function createDbMock(
     getEnvironmentsByProject: vi.fn(() => []),
     getDeployablesByGroup: vi.fn(
       (projectId: string) => opts.deployablesByProject?.[projectId] ?? [],
+    ),
+    getComposeChildren: vi.fn(
+      (parentServiceId: string) => opts.composeChildrenByParent?.[parentServiceId] ?? [],
     ),
     listServiceConsumersForProvider: vi.fn((serviceId: string) =>
       (opts.serviceConnections ?? []).filter(
@@ -220,6 +224,51 @@ describe('ServiceManager extended DB/user operations', () => {
         value: 'postgresql://openlander:pw@ol-svc-analytics-pg:5432/app',
       },
     ]);
+  });
+
+  it('prefixes suggested env keys when a Compose child already owns the bare key', async () => {
+    const projectPg = createService({
+      id: 'svc-project-pg',
+      name: 'analytics-pg',
+      kind: 'postgres',
+      credentials: JSON.stringify({
+        connectionString: 'postgresql://openlander:pw@ol-svc-analytics-pg:5432/app',
+      }),
+    });
+    const composeParent = createService({
+      id: 'stack__svc',
+      name: 'stack__svc',
+      kind: 'compose',
+      type: null,
+      container_name: 'ol-stack',
+    });
+    const composeChild = createService({
+      id: 'stack__web__svc',
+      name: 'stack/web__svc',
+      kind: 'compose-child',
+      type: null,
+      container_name: 'ol-stack-web',
+    });
+    const db = createDbMock([projectPg, composeParent, composeChild], [], {
+      deployablesByProject: { stack: [composeParent] },
+      composeChildrenByParent: { stack__svc: [composeChild] },
+      serviceEnv: {
+        [composeChild.id]: { DATABASE_URL: 'postgresql://compose-child-existing' },
+      },
+    });
+    const manager = new ServiceManager(createMockDockerHarness().docker, db);
+
+    await expect(manager.getSuggestedEnv(projectPg, { targetProjectId: 'stack' })).resolves.toEqual(
+      [
+        {
+          key: 'ANALYTICS_PG_DATABASE_URL',
+          value: 'postgresql://openlander:pw@ol-svc-analytics-pg:5432/app',
+        },
+      ],
+    );
+    expect(db.getDeployablesByGroup).toHaveBeenCalledWith('stack');
+    expect(db.getComposeChildren).toHaveBeenCalledWith('stack__svc');
+    expect(db.getEnvVarsForService).toHaveBeenCalledWith('stack', 'stack__web__svc');
   });
 
   it('createDatabase() creates postgres DB via mocked docker exec', async () => {

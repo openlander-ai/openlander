@@ -291,9 +291,9 @@ export class ServiceManager {
 
   private async getProjectRuntimeEnvKeys(projectId: string): Promise<Set<string>> {
     const keys = new Set(Object.keys(await this.db.getEnvVars(projectId)));
-    const deployables = await this.db.getDeployablesByGroup(projectId);
-    for (const deployable of deployables) {
-      const serviceEnv = await this.db.getEnvVarsForService(projectId, deployable.id);
+    const envServices = await this.getProjectRuntimeEnvServices(projectId);
+    for (const service of envServices) {
+      const serviceEnv = await this.db.getEnvVarsForService(projectId, service.id);
       for (const key of Object.keys(serviceEnv)) {
         keys.add(key);
       }
@@ -1353,11 +1353,38 @@ export class ServiceManager {
     for (const env of environments) {
       values.push(...Object.values(await this.db.getEnvVars(projectId, env.id)));
     }
-    const deployables = await this.db.getDeployablesByGroup(projectId);
-    for (const deployable of deployables) {
-      values.push(...Object.values(await this.db.getEnvVarsForService(projectId, deployable.id)));
+    const envServices = await this.getProjectRuntimeEnvServices(projectId);
+    for (const service of envServices) {
+      values.push(...Object.values(await this.db.getEnvVarsForService(projectId, service.id)));
     }
     return values;
+  }
+
+  private async getProjectRuntimeEnvServices(projectId: string): Promise<ServiceRow[]> {
+    const deployables = await this.db.getDeployablesByGroup(projectId);
+    const services: ServiceRow[] = [];
+    const seen = new Set<string>();
+
+    for (const deployable of deployables) {
+      if (!seen.has(deployable.id)) {
+        seen.add(deployable.id);
+        services.push(deployable);
+      }
+
+      if (deployable.kind !== 'compose' || typeof this.db.getComposeChildren !== 'function') {
+        continue;
+      }
+
+      const children = await this.db.getComposeChildren(deployable.id);
+      for (const child of children) {
+        if (!seen.has(child.id)) {
+          seen.add(child.id);
+          services.push(child);
+        }
+      }
+    }
+
+    return services;
   }
 
   async getConnectedProjects(serviceId: string): Promise<Array<{ id: string; name: string }>> {
