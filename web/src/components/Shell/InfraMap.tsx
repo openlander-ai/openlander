@@ -100,7 +100,7 @@ function InfraMapEmpty() {
           <Box className="h-3.5 w-3.5" />
         </span>
         <span className="topology-muted">
-          No services yet — your topology will appear here once you create one.
+          No resources yet — your topology will appear here once you create one.
         </span>
       </div>
     </div>
@@ -129,7 +129,7 @@ function InfraMapLonely({
     <div className="topology-strip lonely">
       <div className="topology-eyebrow">
         <span className="topology-eyebrow-label">Topology</span>
-        <span className="topology-eyebrow-meta">· 1 service</span>
+        <span className="topology-eyebrow-meta">· 1 resource</span>
         {isDemo && <DemoChip />}
       </div>
       <div className="lonely-row">
@@ -203,7 +203,7 @@ function InfraMapStandard(props: InfraMapProps) {
     <div className="topology-strip">
       <div className="topology-eyebrow">
         <span className="topology-eyebrow-label">Topology</span>
-        <span className="topology-eyebrow-meta">· {services.length} services</span>
+        <span className="topology-eyebrow-meta">· {services.length} resources</span>
         {isDemo && <DemoChip />}
         <HealthSummary counts={counts} />
       </div>
@@ -250,7 +250,7 @@ function InfraMapDense(props: InfraMapProps) {
     <div className="topology-strip dense">
       <div className="topology-eyebrow">
         <span className="topology-eyebrow-label">Topology</span>
-        <span className="topology-eyebrow-meta">· {services.length} services · grouped view</span>
+        <span className="topology-eyebrow-meta">· {services.length} resources · grouped view</span>
         {isDemo && <DemoChip />}
         <HealthSummary counts={counts} />
       </div>
@@ -427,7 +427,7 @@ function NodePopover({
           <span className="topology-muted popover-agent-time">{recentAgent.at}</span>
         </div>
       )}
-      <div className="popover-cta topology-muted">Click to open service →</div>
+      <div className="popover-cta topology-muted">Click to open resource →</div>
     </div>
   );
 }

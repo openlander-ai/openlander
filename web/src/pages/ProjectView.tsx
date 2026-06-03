@@ -3,14 +3,14 @@
  *
  * The project page. InfraMap topology strip above an OuterCard.
  * Tabs:
- *   - Services  → flat list of services with health pill + image + url
+ *   - Resources → flat list of project resources with health pill + image + url
  *   - Settings  → group metadata and danger actions
  *
  * MCP tab was removed for v0.1 (project-scoped MCP tokens deferred to v0.2).
  * Activity is no longer a project tab — the
  * global Activity sidebar entry filters by project instead.
  *
- * "Add service" opens a native 1-step dialog (git / image / template)
+ * "Add application" opens a native 1-step dialog (git / image / template)
  * that wires straight to /api/services/deploy. AgentGuideDialog handed
  * the user off to an external MCP agent; v0.1 spec puts the dialog
  * inside the product so the human path is self-contained.
@@ -56,7 +56,7 @@ function managedServiceToNode(service: ProjectManagedService): ServiceNode {
   return {
     id: service.id,
     name: service.name,
-    kind: 'Database',
+    kind: managedResourceKind(service.type),
     // `service` is the connected managed-service API shape, not a DB service row.
     // eslint-disable-next-line openlander-internal/no-dropped-columns
     port: service.port,
@@ -82,7 +82,7 @@ function groupServiceToNode(service: GroupService): ServiceNode {
   return {
     id: service.id,
     name: service.name,
-    kind: 'Application',
+    kind: workloadResourceKind(service),
     // `service` is the frontend GroupService wire shape, not a DB service row.
     // eslint-disable-next-line openlander-internal/no-dropped-columns
     port: service.port,
@@ -112,20 +112,19 @@ function isManagedServiceNode(service: ServiceNode): boolean {
   return service.source === 'managed';
 }
 
-function serviceRoleLabel(service: ServiceNode): string {
-  if (isManagedServiceNode(service)) {
-    // `service` is the frontend ServiceNode display shape, not a DB service row.
-    // eslint-disable-next-line openlander-internal/no-dropped-columns
-    const normalized = service.image?.toLowerCase() ?? '';
-    if (normalized.includes('postgres')) return 'PostgreSQL';
-    if (normalized.includes('timescale')) return 'Timescale';
-    if (normalized.includes('redis')) return 'Redis';
-    if (normalized.includes('minio')) return 'MinIO';
-    if (normalized.includes('mysql')) return 'MySQL';
-    if (normalized.includes('mongo')) return 'MongoDB';
-    return 'Infrastructure';
-  }
-  return service.kind === 'Database' ? 'Database' : 'Application';
+function workloadResourceKind(service: GroupService): ServiceNode['kind'] {
+  return service.kind === 'compose' || service.buildMethod === 'compose' ? 'Compose' : 'Application';
+}
+
+function managedResourceKind(type: string): ServiceNode['kind'] {
+  const normalized = type.toLowerCase();
+  if (normalized === 'redis') return 'Cache';
+  if (normalized === 'minio') return 'Storage';
+  return 'Database';
+}
+
+function isDataResourceKind(kind: ServiceNode['kind']): boolean {
+  return kind === 'Database' || kind === 'Cache' || kind === 'Storage';
 }
 
 function reportManagedServicesLoadFailure(err: unknown): void {
@@ -150,9 +149,8 @@ export function ProjectView() {
   const projectId = id ?? '';
   // 1.0-rc.2 (data-model fullsplit): `useProjectsContext()` returns
   // groups (formerly projects). Topology gives the deployable nodes for
-  // InfraMap + Services tab — the canonical `/api/projects/:p/services`
-  // endpoint (`useGroupServices`) is reserved for callers that need
-  // shaped GroupService data instead of the topology ServiceNode shape.
+  // InfraMap; the Resources tab prefers the canonical `/api/projects/:p/services`
+  // endpoint so Compose remains one Project-level resource card.
   const { projects, loading: projectsLoading, refetch: refetchProjects } = useProjectsContext();
   const contextProject = projects.find((p) => p.id === projectId) ?? null;
   const [fallbackProject, setFallbackProject] = useState<ProjectWithOptionalEnvironments | null>(
@@ -166,6 +164,7 @@ export function ProjectView() {
     isMockFallback,
     refetch: refetchTopology,
   } = useProjectTopology(projectId || null);
+  const [groupServiceNodes, setGroupServiceNodes] = useState<ServiceNode[] | null>(null);
   const [managedServiceNodes, setManagedServiceNodes] = useState<ServiceNode[]>([]);
   const [showArchivedServices, setShowArchivedServices] = useState(false);
   const [archivedServiceNodes, setArchivedServiceNodes] = useState<ServiceNode[]>([]);
@@ -230,6 +229,23 @@ export function ProjectView() {
     }
   }, [projectId]);
 
+  const refetchGroupServices = useCallback(async () => {
+    if (!projectId) {
+      setGroupServiceNodes(null);
+      return;
+    }
+    try {
+      const rows = await listGroupServices(projectId);
+      setGroupServiceNodes(rows.map(groupServiceToNode));
+    } catch {
+      setGroupServiceNodes(null);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    void refetchGroupServices();
+  }, [refetchGroupServices]);
+
   useEffect(() => {
     let active = true;
     if (!projectId) {
@@ -273,7 +289,7 @@ export function ProjectView() {
         if (!active) return;
         setArchivedServiceNodes([]);
         setArchivedServicesError(
-          err instanceof Error ? err.message : 'Failed to load archived services',
+          err instanceof Error ? err.message : 'Failed to load archived Applications',
         );
       })
       .finally(() => {
@@ -286,13 +302,20 @@ export function ProjectView() {
   }, [projectId, showArchivedServiceList]);
 
   const projectServiceRows = useMemo(() => {
-    const deployableServices = showArchivedServiceList ? archivedServiceNodes : services;
+    const resourceServiceNodes = groupServiceNodes ?? services;
+    const deployableServices = showArchivedServiceList ? archivedServiceNodes : resourceServiceNodes;
     const serviceIds = new Set(deployableServices.map((service) => service.id));
     const connectedManagedServices = managedServiceNodes.filter(
       (service) => !serviceIds.has(service.id),
     );
     return [...deployableServices, ...connectedManagedServices];
-  }, [archivedServiceNodes, managedServiceNodes, services, showArchivedServiceList]);
+  }, [
+    archivedServiceNodes,
+    groupServiceNodes,
+    managedServiceNodes,
+    services,
+    showArchivedServiceList,
+  ]);
 
   useEffect(() => {
     if (tabParam === 'activity' && projectId) {
@@ -430,7 +453,7 @@ export function ProjectView() {
           //   - keep the slug visible alongside when displayName
           //     diverges, since ops users key off the slug for CLI /
           //     compose paths.
-          // Always anchor the subtitle with the "Project group" label so the
+          // Always anchor the subtitle with the "Project" label so the
           // user keeps the containing-group context even when a custom
           // description is set. PR #59 follow-up: post-onboarding users were
           // losing the group-vs-service distinction once descriptions appeared.
@@ -467,7 +490,7 @@ export function ProjectView() {
               )}
             >
               <Database className="h-3.5 w-3.5" />
-              Ask Agent
+              {`${t('projectDetail.env.add')} ${t('vocab.database')}/${t('vocab.cache')}`}
             </button>
             <button
               type="button"
@@ -479,7 +502,7 @@ export function ProjectView() {
               )}
             >
               <Plus className="h-3.5 w-3.5" />
-              Add service
+              {t('projectDetail.addService.title')}
             </button>
           </div>
         }
@@ -541,6 +564,7 @@ export function ProjectView() {
           displayName={projectDisplayName}
           onCreated={() => {
             refetchTopology();
+            void refetchGroupServices();
             void refetchManagedServices();
             void refetchProjects();
           }}
@@ -620,7 +644,7 @@ function ServicesPanel({
               className="inline-flex items-center gap-1.5 rounded-md border border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] px-3 py-1.5 text-[12px] text-[color:var(--ol-fg-muted)] transition-colors hover:border-[color:var(--ol-border-strong)] hover:text-[color:var(--ol-fg)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5" />
-              Add service
+              {t('projectDetail.addService.title')}
             </button>
           </div>
         )}
@@ -660,7 +684,7 @@ function ServicesPanel({
       </div>
       <ul className="divide-y divide-[color:var(--ol-border-subtle)]">
         {services.map((s) => {
-          const KindIcon = s.kind === 'Database' ? Database : Box;
+          const KindIcon = isDataResourceKind(s.kind) ? Database : Box;
           const open = () => onOpen(s);
           const isArchived = s.archivedAt != null;
           return (
@@ -754,6 +778,7 @@ function ServicesPanel({
 
 function ServiceRoleBadge({ service }: { service: ServiceNode }) {
   const managed = isManagedServiceNode(service);
+  const { t } = useLanguage();
   return (
     <span
       className={cn(
@@ -763,9 +788,30 @@ function ServiceRoleBadge({ service }: { service: ServiceNode }) {
           : 'border-[color:var(--ol-border)] bg-[color:var(--ol-panel-2)] text-[color:var(--ol-fg-muted)]',
       )}
     >
-      {serviceRoleLabel(service)}
+      {t(resourceLabelKey(service))}
     </span>
   );
+}
+
+function resourceLabelKey(service: ServiceNode):
+  | 'vocab.application'
+  | 'vocab.compose'
+  | 'vocab.database'
+  | 'vocab.cache'
+  | 'vocab.storage' {
+  switch (service.kind) {
+    case 'Compose':
+      return 'vocab.compose';
+    case 'Database':
+      return 'vocab.database';
+    case 'Cache':
+      return 'vocab.cache';
+    case 'Storage':
+      return 'vocab.storage';
+    case 'Application':
+    default:
+      return 'vocab.application';
+  }
 }
 
 function HealthPill({ health }: { health: ServiceHealth }) {
