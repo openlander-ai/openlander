@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../src/app.js';
 import type { ServiceRow } from '../src/db/index.js';
-import { ManagedServicePersistenceCleanedError } from '../src/errors.js';
+import {
+  ManagedServiceNameConflictError,
+  ManagedServicePersistenceCleanedError,
+} from '../src/errors.js';
 import * as gitPipeline from '../src/pipeline/git.js';
 import * as traefikPipeline from '../src/pipeline/traefik.js';
 import * as infraAnalyzer from '../src/lib/infra-analyzer.js';
@@ -431,6 +434,46 @@ describe('MCP service tools (Task 8)', () => {
       },
       _agent_guidance: {
         message: expect.stringContaining('safe to retry'),
+      },
+    });
+  });
+
+  it('create_service returns orphan-inspection guidance on Docker name conflict', async () => {
+    const { ctx, serviceManager } = createMockContext();
+    const tool = getTool(ctx, 'create_service');
+
+    serviceManager.create.mockRejectedValueOnce(
+      new ManagedServiceNameConflictError('urlnest-db', {
+        containerName: 'ol-svc-urlnest-db',
+        volumeName: 'ol-svc-data-urlnest-db',
+        volumeRolledBack: true,
+      }),
+    );
+
+    await expect(
+      tool.execute(
+        { name: 'urlnest-db', template: 'postgresql', project_name: 'myapp' },
+        { target: 'mcp' },
+      ),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      error: 'MANAGED_SERVICE_NAME_CONFLICT',
+      suggested_call: {
+        tool: 'openlander_managed_service',
+        arguments: {
+          action: 'list_services',
+          params: { include_orphans: true },
+        },
+      },
+      details: {
+        containerName: 'ol-svc-urlnest-db',
+        retrySafe: false,
+      },
+      _agent_guidance: {
+        next_steps: expect.arrayContaining([
+          expect.stringContaining('include_orphans=true'),
+          expect.stringContaining('choose a different Database/Cache/Storage resource name'),
+        ]),
       },
     });
   });
