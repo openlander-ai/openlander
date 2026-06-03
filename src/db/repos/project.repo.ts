@@ -386,7 +386,6 @@ export class ProjectRepo {
         and(
           inArray(services.project_id, uniqueProjectIds),
           deployableServiceKindFilter(sql`${services.kind}`),
-          sql`NOT (${services.parent_service_id} IS NULL AND coalesce(${services.build_method}, '') = 'compose')`,
           opts.includeArchived === true ? undefined : isNull(services.archived_at),
         ),
       )
@@ -536,10 +535,9 @@ export class ProjectRepo {
       }
     }
 
-    // Count actual deployables: plain git/image services + compose children.
-    // Skip managed DBs (postgres etc.) and skip the synthetic 'compose' parent
-    // metadata service — users think of compose as "3 services," not "1 parent
-    // + 3 children = 4," so omit the parent meta from the badge.
+    // Count Project-level deployables: plain git/image services + one compose
+    // parent. Skip managed DBs and compose-child rows; compose children are
+    // internal nodes under the Compose stack, not separate Project cards.
     const [activeDeployableCountByParent, totalDeployableCountByParent] = await Promise.all([
       this.getDeployableServiceCountsByProjectIds(projectIds),
       this.getDeployableServiceCountsByProjectIds(projectIds, { includeArchived: true }),

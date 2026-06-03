@@ -17,7 +17,8 @@ export interface ServiceTemplate {
  * (preserved on the wire for backward-compat through 1.x).
  *
  * `kind` values:
- *   - Deployables: 'git' | 'image' | 'compose' | 'compose-child'
+ *   - Project-level deployables: 'git' | 'image' | 'compose'
+ *   - Internal Compose nodes: 'compose-child'
  *   - Managed:     'postgres' | 'mysql' | 'redis' | 'mongo' | 'minio'
  *
  * Fields like `status`, `container_id`, `port` remain populated on the row
@@ -82,8 +83,9 @@ export const managedServices = {
  * 1.0-rc.2 canonical: list deployable services for a group.
  *
  * `/api/projects/:p/services` is the canonical deployable list endpoint
- * (P2 returns rows where `kind NOT IN (managed kinds)`). Used by the new
- * `useGroupServices(groupId)` hook that powers ProjectView's Services tab.
+ * (P2 returns Project-level rows and keeps compose-child rows internal to the
+ * Compose detail/topology surface). Used by the new `useGroupServices(groupId)`
+ * hook that powers ProjectView's Services tab.
  *
  * The `ConnectedService` shape from `lib/api/projects.ts` (managed-services
  * via `service_connections`) is preserved unchanged at

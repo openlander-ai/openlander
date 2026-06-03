@@ -49,7 +49,7 @@ describe('ServiceRepo.getDeployablesByGroup', () => {
     expect(source).toContain('Repaired managed service rows stored with legacy image kind');
   });
 
-  it('treats compose children as user-addressable deployables and excludes compose parent metadata', () => {
+  it('treats compose parent as the user-addressable resource and keeps compose children internal', () => {
     const source = readFileSync('src/db/repos/service.repo.ts', 'utf8');
     const method = source.slice(
       source.indexOf('async getDeployablesByGroup'),
@@ -57,11 +57,10 @@ describe('ServiceRepo.getDeployablesByGroup', () => {
     );
 
     expect(source).toContain(
-      "export const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;",
+      "export const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose-child'] as const;",
     );
     expect(method).toContain('deployableServiceKindFilter(sql`${services.kind}`)');
-    expect(method).toContain("coalesce(${services.build_method}, '') = 'compose'");
-    expect(method).not.toContain("services.kind} != 'compose-child'");
+    expect(method).not.toContain("coalesce(${services.build_method}, '') = 'compose'");
   });
 
   it('keeps service status typing aligned with the recovering lifecycle state', () => {
@@ -74,7 +73,7 @@ describe('ServiceRepo.getDeployablesByGroup', () => {
 });
 
 describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
-  it('excludes compose parent metadata rows even when legacy rows have non-compose kind', () => {
+  it('counts compose parents and excludes compose-child internal nodes', () => {
     const source = readFileSync('src/db/repos/project.repo.ts', 'utf8');
     const method = source.slice(
       source.indexOf('async getDeployableServiceCountsByProjectIds'),
@@ -84,11 +83,11 @@ describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
       ),
     );
 
-    expect(method).toContain("coalesce(${services.build_method}, '') = 'compose'");
-    expect(method).toContain('${services.parent_service_id} IS NULL');
+    expect(method).not.toContain("coalesce(${services.build_method}, '') = 'compose'");
+    expect(method).not.toContain('${services.parent_service_id} IS NULL');
   });
 
-  it('keeps deployable counts limited to app and worker services', () => {
+  it('keeps deployable counts limited to Project-level workload resources', () => {
     const source = readFileSync('src/db/repos/project.repo.ts', 'utf8');
     const method = source.slice(
       source.indexOf('async getDeployableServiceCountsByProjectIds'),
@@ -126,7 +125,7 @@ describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
 });
 
 describe('ProjectRepo.listProjectsWithMetadata', () => {
-  it('derives list-card status from user-visible services, not compose parent metadata', () => {
+  it('derives list-card status from Project-level workload resources', () => {
     const source = readFileSync('src/db/repos/project.repo.ts', 'utf8');
     const method = source.slice(
       source.indexOf('async listProjectsWithMetadata'),

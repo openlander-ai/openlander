@@ -173,7 +173,7 @@ describe('createDeployableServiceRoutes', () => {
     });
   });
 
-  it('lists compose child services with host-port URLs when no advertised host is configured', async () => {
+  it('hides compose child services from the Project-level services list', async () => {
     const previousPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
     const previousContainerized = process.env['OPENLANDER_CONTAINERIZED'];
     delete process.env['OPENLANDER_PUBLIC_HOST'];
@@ -225,53 +225,31 @@ describe('createDeployableServiceRoutes', () => {
     expect(res.status).toBe(200);
     expect(getDeployablesByGroup).toHaveBeenCalledWith('stack');
     await expect(res.json()).resolves.toMatchObject({
-      count: 2,
-      services: [
-        {
-          id: 'stack__web__svc',
-          name: 'demo-stack/web',
-          kind: 'compose-child',
-          url: 'http://localhost:10006',
-          preferred_url: 'http://localhost:10006',
-          urls: [
-            {
-              url: 'http://localhost:10006',
-              type: 'host',
-              host: 'localhost',
-              reachable: 'host-only',
-            },
-          ],
-        },
-        {
-          id: 'stack__postgres__svc',
-          name: 'demo-stack/postgres',
-          kind: 'compose-child',
-          url: null,
-        },
-      ],
+      count: 0,
+      services: [],
     });
   });
 
-  it('does not synthesize service-name sslip URLs when an advertised public host is configured', async () => {
+  it('synthesizes advertised-host URLs for Project-level Compose resources', async () => {
     const previousPublicHost = process.env['OPENLANDER_PUBLIC_HOST'];
     const previousContainerized = process.env['OPENLANDER_CONTAINERIZED'];
     process.env['OPENLANDER_PUBLIC_HOST'] = '192.168.219.113';
     process.env['OPENLANDER_CONTAINERIZED'] = 'true';
     const project = makeProjectRow({ id: 'hotdeal', name: 'hotdeal' });
-    const webService = makeServiceRow({
-      id: 'hotdeal__web__svc',
-      name: 'hotdeal/web__svc',
+    const composeService = makeServiceRow({
+      id: 'hotdeal__svc',
+      name: 'hotdeal__svc',
       project_id: 'hotdeal',
-      kind: 'compose-child',
-      parent_service_id: 'hotdeal__svc',
+      kind: 'compose',
+      build_method: 'compose',
       assigned_port: 20032,
-      image_url: 'hotdeal-web:latest',
+      image_url: 'hotdeal:latest',
     });
     const app = createApp({
       db: {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
-        getDeployablesByGroup: vi.fn(async () => [webService]),
+        getDeployablesByGroup: vi.fn(async () => [composeService]),
         getEnvironmentsByProject: vi.fn(async () => []),
         listDomainMappings: vi.fn(async () => []),
       },
@@ -295,11 +273,18 @@ describe('createDeployableServiceRoutes', () => {
       count: 1,
       services: [
         {
-          id: webService.id,
-          name: 'hotdeal/web',
-          url: null,
-          preferred_url: null,
-          urls: [],
+          id: composeService.id,
+          name: 'hotdeal',
+          url: 'http://hotdeal.192.168.219.113.sslip.io',
+          preferred_url: 'http://hotdeal.192.168.219.113.sslip.io',
+          urls: [
+            {
+              url: 'http://hotdeal.192.168.219.113.sslip.io',
+              type: 'public',
+              host: '192.168.219.113',
+              reachable: 'external',
+            },
+          ],
         },
       ],
     });
@@ -311,24 +296,24 @@ describe('createDeployableServiceRoutes', () => {
     process.env['OPENLANDER_PUBLIC_HOST'] = '192.168.219.113';
     process.env['OPENLANDER_CONTAINERIZED'] = 'true';
     const project = makeProjectRow({ id: 'hotdeal', name: 'hotdeal' });
-    const webService = makeServiceRow({
-      id: 'hotdeal__web__svc',
-      name: 'hotdeal/web__svc',
+    const composeService = makeServiceRow({
+      id: 'hotdeal__svc',
+      name: 'hotdeal__svc',
       project_id: 'hotdeal',
-      kind: 'compose-child',
-      parent_service_id: 'hotdeal__svc',
+      kind: 'compose',
+      build_method: 'compose',
       assigned_port: 20032,
-      image_url: 'hotdeal-web:latest',
+      image_url: 'hotdeal:latest',
     });
     const app = createApp({
       db: {
         getProject: vi.fn(async () => project),
         getProjectByName: vi.fn(async () => undefined),
-        getDeployablesByGroup: vi.fn(async () => [webService]),
+        getDeployablesByGroup: vi.fn(async () => [composeService]),
         getEnvironmentsByProject: vi.fn(async () => []),
         listDomainMappings: vi.fn(async () => [
           makeDomainMappingRow({
-            service_id: webService.id,
+            service_id: composeService.id,
             domain: 'hotdeal.loancalc.kr',
           }),
         ]),
@@ -353,8 +338,8 @@ describe('createDeployableServiceRoutes', () => {
       count: 1,
       services: [
         {
-          id: webService.id,
-          name: 'hotdeal/web',
+          id: composeService.id,
+          name: 'hotdeal',
           url: 'http://hotdeal.loancalc.kr',
           preferred_url: 'http://hotdeal.loancalc.kr',
           urls: [
