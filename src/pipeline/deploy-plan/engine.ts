@@ -149,6 +149,33 @@ export interface ExecutePlanApproval {
   createResources?: string[];
 }
 
+interface ExecutePlanProjectTarget {
+  id: string;
+  name: string;
+}
+
+interface ExecuteApprovalGateResult {
+  approvedSafeResources: Set<string>;
+  response?: ExecutePlanResult;
+}
+
+interface ExecuteTargetResolutionResult {
+  attachTargetProject: ExecutePlanProjectTarget | null;
+  targetProject: ExecutePlanProjectTarget | null;
+  response?: ExecutePlanResult;
+}
+
+interface ExecuteDeployLock {
+  projectId: string | null;
+  release: () => void;
+}
+
+interface ExecuteDispatchResult {
+  startedProjectId: string;
+  startedProjectName: string;
+  preflightError?: string;
+}
+
 export class PlanEngine {
   private db: Database;
   private pipeline: DeployPipeline;
@@ -1224,48 +1251,51 @@ export class PlanEngine {
     return merged;
   }
 
-  async executePlan(
-    planId: string,
-    deployOnly?: string[],
-    lockSessionId?: string,
-    triggerOverride?: 'chat' | 'webhook' | 'api',
-    approval?: ExecutePlanApproval,
-  ): Promise<ExecutePlanResult> {
-    // Re-read from DB to prevent race condition
+  private async loadPlanForExecution(planId: string): Promise<DeployPlan> {
+    // Re-read from DB to prevent race condition.
     const freshRow = await this.db.getDeployPlan(planId);
     if (!freshRow) {
       throw new Error(`Plan not found: ${planId}`);
     }
-    const freshPlan = JSON.parse(freshRow.plan_json) as DeployPlan;
-    if (freshPlan.status === 'needs_input') {
-      const missingKeys = freshPlan.missing.join(', ') || 'unknown';
-      throw new Error(
-        `Plan requires missing environment variables: ${missingKeys}. ` +
-          `Call update_deploy_plan to provide them, then execute again.`,
-      );
+    return JSON.parse(freshRow.plan_json) as DeployPlan;
+  }
+
+  private assertPlanHasRequiredInput(plan: DeployPlan): void {
+    if (plan.status !== 'needs_input') {
+      return;
     }
 
-    // Approval gate. Runs BEFORE the deploy lock (acquired further below), so a
-    // throw past this point leaves the persisted status untouched at
-    // 'needs_approval'. When approved we flip the status IN MEMORY only via
-    // PlanStateMachine.transition(plan, 'ready') — it is never persisted, so the
-    // DB sequence stays needs_approval -> executing.
-    const approvedSafeResources = new Set<string>();
-    if (freshPlan.status === 'needs_approval') {
-      const safeProposals = this.safeProposedResources(freshPlan.services);
-      const approvedAll = approval?.approveAllSafeResources === true;
-      const approvedIds = new Set(approval?.createResources ?? []);
-      const allApproved = safeProposals.every(
-        (svc) => approvedAll || approvedIds.has(this.proposedResourceIdentifier(svc)),
-      );
+    const missingKeys = plan.missing.join(', ') || 'unknown';
+    throw new Error(
+      `Plan requires missing environment variables: ${missingKeys}. ` +
+        `Call update_deploy_plan to provide them, then execute again.`,
+    );
+  }
 
-      if (!allApproved) {
-        // SAFETY: unapproved needs_approval plans create NOTHING and return a
-        // structured response (no throw, no DB write).
-        return {
+  private evaluateApprovalGate(
+    planId: string,
+    plan: DeployPlan,
+    approval?: ExecutePlanApproval,
+  ): ExecuteApprovalGateResult {
+    const approvedSafeResources = new Set<string>();
+    if (plan.status !== 'needs_approval') {
+      return { approvedSafeResources };
+    }
+
+    const safeProposals = this.safeProposedResources(plan.services);
+    const approvedAll = approval?.approveAllSafeResources === true;
+    const approvedIds = new Set(approval?.createResources ?? []);
+    const allApproved = safeProposals.every(
+      (svc) => approvedAll || approvedIds.has(this.proposedResourceIdentifier(svc)),
+    );
+
+    if (!allApproved) {
+      return {
+        approvedSafeResources,
+        response: {
           status: 'needs_approval',
           plan_id: planId,
-          project_name: freshPlan.app.name,
+          project_name: plan.app.name,
           approval_required: {
             create_resources: safeProposals.map((svc) => this.proposedResourceIdentifier(svc)),
           },
@@ -1275,57 +1305,70 @@ export class PlanEngine {
               'Or pass approvals.create_resources with the identifiers above to approve individually. The identifiers are listed in approval_required.create_resources and in services[] (resolution="proposed_project_service").',
             ],
           },
-        };
-      }
-
-      for (const svc of safeProposals) {
-        approvedSafeResources.add(this.proposedResourceIdentifier(svc));
-      }
+        },
+      };
     }
 
-    if (freshPlan.status !== 'ready' && freshPlan.status !== 'needs_approval') {
-      throw new Error(`Plan status is "${freshPlan.status}" — only "ready" plans can be executed.`);
+    for (const svc of safeProposals) {
+      approvedSafeResources.add(this.proposedResourceIdentifier(svc));
     }
 
+    return { approvedSafeResources };
+  }
+
+  private assertPlanIsExecutable(plan: DeployPlan): void {
+    if (plan.status !== 'ready' && plan.status !== 'needs_approval') {
+      throw new Error(`Plan status is "${plan.status}" — only "ready" plans can be executed.`);
+    }
+  }
+
+  private assertValidProjectName(projectName: string): void {
     const PROJECT_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
-    if (!PROJECT_NAME_REGEX.test(freshPlan.app.name)) {
+    if (!PROJECT_NAME_REGEX.test(projectName)) {
       throw new Error(
-        `Invalid project name "${freshPlan.app.name}": must contain only lowercase letters, numbers, and hyphens, starting with a letter or number`,
+        `Invalid project name "${projectName}": must contain only lowercase letters, numbers, and hyphens, starting with a letter or number`,
       );
     }
+  }
 
+  private transitionApprovedPlanForExecution(plan: DeployPlan): DeployPlan {
     // In-memory only: bring an approved needs_approval plan to 'ready'. Never
     // persisted (no updateDeployPlan call here).
-    const plan =
-      freshPlan.status === 'needs_approval'
-        ? PlanStateMachine.transition(freshPlan, 'ready')
-        : freshPlan;
-    const planExecution = this.getExecutionContext(plan);
+    return plan.status === 'needs_approval' ? PlanStateMachine.transition(plan, 'ready') : plan;
+  }
+
+  private async resolveExecuteTarget(params: {
+    planId: string;
+    plan: DeployPlan;
+    planExecution: PlanExecutionContext;
+    approvedSafeResources: ReadonlySet<string>;
+  }): Promise<ExecuteTargetResolutionResult> {
+    const { planId, plan, planExecution, approvedSafeResources } = params;
     const attachTargetProject = await this.getExistingTargetProject(planExecution.targetProjectId);
     if (attachTargetProject) {
       const collidingProject = await this.db.getProjectByName(plan.app.name);
       if (collidingProject) {
         return {
-          status: 'failed',
-          plan_id: planId,
-          project_name: plan.app.name,
-          target_project_id: attachTargetProject.id,
-          error: `target_project_id deploy service name "${plan.app.name}" collides with an existing project group.`,
-          message:
-            'Choose a unique service name for the new deployable. Existing-group attach creates a temporary runtime project before it moves the service into the target group.',
+          attachTargetProject,
+          targetProject: null,
+          response: {
+            status: 'failed',
+            plan_id: planId,
+            project_name: plan.app.name,
+            target_project_id: attachTargetProject.id,
+            error: `target_project_id deploy service name "${plan.app.name}" collides with an existing project group.`,
+            message:
+              'Choose a unique service name for the new deployable. Existing-group attach creates a temporary runtime project before it moves the service into the target group.',
+          },
         };
       }
     }
 
-    // New-app guard: an approved create of a safe proposed managed service needs
-    // an existing target project to provision against, but for a NEW app the
-    // project row is only created later inside the pipeline. Block here BEFORE the
-    // deploy lock and provisioning loop, creating nothing. 'needs_target_project'
-    // is a response-only status (not a DeployPlanStatus / validTransitions edge).
     const targetProject =
       attachTargetProject ??
       (plan.project_id ? await this.db.getProject(plan.project_id) : null) ??
-      (await this.db.getProjectByName(plan.app.name));
+      (await this.db.getProjectByName(plan.app.name)) ??
+      null;
     const hasApprovedCreate = plan.services.some(
       (svc) =>
         svc.action === 'create' &&
@@ -1333,33 +1376,47 @@ export class PlanEngine {
         svc.approval === 'safe_resource' &&
         approvedSafeResources.has(this.proposedResourceIdentifier(svc)),
     );
+
     if (hasApprovedCreate && !targetProject) {
       return {
-        plan_id: planId,
-        status: 'needs_target_project',
-        project_name: plan.app.name,
-        message:
-          'Managed auto-provisioning needs an existing project group. This is a new app, so create the project first or execute the plan with target_project_id.',
-        approval_required: {
-          create_resources: this.safeProposedResources(plan.services)
-            .filter((svc) => approvedSafeResources.has(this.proposedResourceIdentifier(svc)))
-            .map((svc) => this.proposedResourceIdentifier(svc)),
-        },
-        _agent_guidance: {
-          next_steps: [
-            'Call openlander_project.create_project with the intended group name.',
-            'Create the managed service in that project with openlander_managed_service.create_service(project_id=...).',
-            'Retry deploy_app or execute_deploy_plan with target_project_id so the first deployable service attaches to the existing project group.',
-            'If the user already has a real external connection URL, pass it in env_vars and execute without approving managed-service creation.',
-          ],
+        attachTargetProject,
+        targetProject,
+        response: {
+          plan_id: planId,
+          status: 'needs_target_project',
+          project_name: plan.app.name,
+          message:
+            'Managed auto-provisioning needs an existing project group. This is a new app, so create the project first or execute the plan with target_project_id.',
+          approval_required: {
+            create_resources: this.safeProposedResources(plan.services)
+              .filter((svc) => approvedSafeResources.has(this.proposedResourceIdentifier(svc)))
+              .map((svc) => this.proposedResourceIdentifier(svc)),
+          },
+          _agent_guidance: {
+            next_steps: [
+              'Call openlander_project.create_project with the intended group name.',
+              'Create the managed service in that project with openlander_managed_service.create_service(project_id=...).',
+              'Retry deploy_app or execute_deploy_plan with target_project_id so the first deployable service attaches to the existing project group.',
+              'If the user already has a real external connection URL, pass it in env_vars and execute without approving managed-service creation.',
+            ],
+          },
         },
       };
     }
 
-    const existingProject = targetProject;
+    return { attachTargetProject, targetProject };
+  }
+
+  private async acquirePlanDeployLock(params: {
+    planId: string;
+    lockSessionId?: string;
+    targetProject: ExecutePlanProjectTarget | null;
+  }): Promise<ExecuteDeployLock> {
+    const { planId, lockSessionId, targetProject } = params;
     let lockProjectId: string | null = null;
     let deployLockReleased = false;
-    const safeReleaseDeployLock = () => {
+
+    const release = () => {
       if (!lockProjectId || deployLockReleased) {
         return;
       }
@@ -1373,368 +1430,511 @@ export class PlanEngine {
         });
     };
 
-    if (existingProject) {
+    if (targetProject) {
       const lockSession = lockSessionId ?? `plan-${planId}`;
       // Release happens asynchronously in event listeners (deploy:success /
-      // deploy:failed / compose:up / compose:failed) via `safeReleaseDeployLock`,
-      // so we use the bare acquire helper instead of `withDeployLock`.
+      // deploy:failed / compose:up / compose:failed) via `release`, so we use
+      // the bare acquire helper instead of `withDeployLock`.
       await acquireDeployLockOrThrow(this.db, {
-        projectId: existingProject.id,
+        projectId: targetProject.id,
         sessionId: lockSession,
       });
-      lockProjectId = existingProject.id;
+      lockProjectId = targetProject.id;
     }
 
+    return { projectId: lockProjectId, release };
+  }
+
+  private async persistExecutingPlan(planId: string, plan: DeployPlan): Promise<DeployPlan> {
     const executingPlan = PlanStateMachine.transition(plan, 'executing');
     await this.db.updateDeployPlan(planId, {
       status: 'executing',
       planJson: JSON.stringify(this.preparePlanForStorage(executingPlan)),
     });
+    return executingPlan;
+  }
 
-    // Durable approval audit: a needs_approval plan's safe managed resources
-    // were approved over MCP and execution is now committed (lock held, status
-    // persisted). Record it in the action_runs approval ledger so deploy-plan
-    // approvals are as observable as destructive_mcp ones. Best-effort — a
-    // failed audit write must never break the deploy (mirrors the floating
-    // releaseDeployLock pattern). Fires only when an approval was granted:
-    // approvedSafeResources is populated solely on the needs_approval branch.
-    if (approvedSafeResources.size > 0) {
-      void this.db
-        .recordDeployPlanApproval({
-          projectId: targetProject?.id ?? plan.project_id ?? '',
-          plan: JSON.stringify({
-            plan_id: planId,
-            approved_resources: [...approvedSafeResources],
-          }),
-          correlationId: planId,
-        })
-        .catch((error: unknown) => {
-          // Error-level: a failed write leaves approved provisioning un-audited
-          // (the deploy still proceeds — best-effort), so make the gap alertable.
-          log.error({ planId, error }, 'Failed to record deploy-plan approval audit');
-        });
+  private recordApprovalAudit(params: {
+    planId: string;
+    plan: DeployPlan;
+    targetProject: ExecutePlanProjectTarget | null;
+    approvedSafeResources: ReadonlySet<string>;
+  }): void {
+    const { planId, plan, targetProject, approvedSafeResources } = params;
+    if (approvedSafeResources.size === 0) {
+      return;
     }
 
-    try {
-      const mergedEnv = await resolveEnvVars(
-        {
-          projectId: attachTargetProject?.id ?? plan.project_id ?? plan.app.name,
-          autoEnvVars: plan.env.auto,
-          inlineEnvVars: plan.env.provided,
-        },
-        { env: this.env },
-      );
-
-      for (const planService of plan.services) {
-        const envVarName = planService.connect_via || SERVICE_ENV_VARS[planService.type];
-        if (!envVarName || this.hasExplicitEnvValue(plan.env.provided, envVarName)) {
-          if (envVarName) {
-            log.info(
-              { serviceType: planService.type, envVarName },
-              'Skipping managed service env injection because explicit env var was provided',
-            );
-          }
-          continue;
-        }
-
-        if (planService.action === 'create') {
-          const isApprovedSafeProposal =
-            planService.resolution === 'proposed_project_service' &&
-            planService.approval === 'safe_resource' &&
-            approvedSafeResources.has(this.proposedResourceIdentifier(planService));
-
-          if (!isApprovedSafeProposal) {
-            // compose_service / not_auto_creatable / unapproved: fail fast,
-            // create nothing.
-            throw new ServiceConfigError(
-              `Managed service ${planService.type} requires an explicit ${envVarName} value before deploy.`,
-              {
-                serviceType: planService.type,
-                envVarName,
-                nextSteps: [
-                  `Provide an external ${envVarName} value in env_vars.`,
-                  'Or call openlander_managed_service.create_service for the target project, set its suggested_env on the deployable service, then redeploy.',
-                ],
-              },
-            );
-          }
-
-          if (!targetProject) {
-            throw new ServiceConfigError(
-              `Provisioning managed service ${planService.type} requires an existing target project.`,
-              { serviceType: planService.type, envVarName },
-            );
-          }
-          const connectionString = await this.provisionApprovedService(
-            planService,
-            targetProject,
-            envVarName,
-          );
-          mergedEnv[envVarName] = connectionString;
-        } else {
-          if (!targetProject) {
-            throw new ServiceConfigError(
-              `Reusable managed service ${planService.name ?? planService.service_id ?? planService.type} requires an existing target project.`,
-              {
-                serviceType: planService.type,
-                serviceName: planService.name,
-                serviceId: planService.service_id,
-              },
-            );
-          }
-          const reusable = await this.resolveReusableService(planService, targetProject.id);
-          const connectionString = this.getServiceConnectionString(reusable, envVarName);
-          mergedEnv[envVarName] = connectionString;
-          await new ManagedServiceLinker(this.db, this.env).connect({
-            projectId: targetProject.id,
-            service: reusable,
-            source: 'deploy_plan',
-            credentials: { connectionString },
-          });
-        }
-      }
-
-      log.info({ planId, planCommit: plan.app.source.commit_sha }, 'Executing plan (non-blocking)');
-
-      const deployMode = this.getDeployMode(plan);
-      const execution = {
-        ...planExecution,
-        ...(triggerOverride ? { trigger: triggerOverride } : {}),
-      };
-      const isImage = plan.build.method === 'image';
-      const propagatedLockSession = lockProjectId ? (lockSessionId ?? `plan-${planId}`) : undefined;
-
-      let startedProjectId: string;
-      let startedProjectName: string;
-      let preflightError: string | undefined;
-
-      if (deployMode === 'monorepo') {
-        const cloneResult = await cloneRepo({
-          repoUrl: plan.app.source.repo_url,
-          branch: plan.app.source.branch,
-          sshKeyPath: execution.sshKeyPath,
-        });
-        const dockerfiles =
-          deployOnly && deployOnly.length > 0
-            ? deployOnly
-            : plan.build.dockerfiles_found && plan.build.dockerfiles_found.length > 0
-              ? plan.build.dockerfiles_found
-              : [plan.build.dockerfile];
-        const startResult = await this.pipeline.startMonorepoDeploy({
-          repoUrl: plan.app.source.repo_url,
-          branch: plan.app.source.branch,
-          clonePath: cloneResult.path,
-          commitSha: cloneResult.commitSha,
-          dockerfiles,
-          envVars: mergedEnv,
-          name: plan.app.name,
-          ...(execution.visibility ? { visibility: execution.visibility } : {}),
-          ...(execution.trigger
-            ? { trigger: execution.trigger as 'chat' | 'webhook' | 'api' }
-            : {}),
-          _lockSessionId: propagatedLockSession,
-        });
-
-        startedProjectId = startResult.parentProjectId;
-        startedProjectName = startResult.parentName;
-      } else {
-        const isCompose = deployMode === 'compose';
-        const startResult = await this.pipeline.startDeploy({
-          repoUrl: plan.app.source.repo_url,
-          branch: plan.app.source.branch,
-          name: plan.app.name,
-          envVars: mergedEnv,
-          ...(isImage ? { source: 'image' as const } : {}),
-          ...(isImage && plan.app.source.image_url ? { imageUrl: plan.app.source.image_url } : {}),
-          ...(execution.imageCmd ? { imageCmd: execution.imageCmd } : {}),
-          ...(execution.containerPort !== undefined
-            ? { containerPort: execution.containerPort }
-            : {}),
-          preferDockerfile: isCompose ? false : !plan.build.generated_dockerfile,
-          dockerfilePath:
-            !isCompose && plan.build.dockerfile !== 'Dockerfile'
-              ? plan.build.dockerfile
-              : undefined,
-          dockerTarget: plan.build.target,
-          buildContext: plan.build.context !== '.' ? plan.build.context : undefined,
-          composeServices: isCompose ? deployOnly : undefined,
-          ...(execution.visibility ? { visibility: execution.visibility } : {}),
-          ...(execution.environment ? { environment: execution.environment } : {}),
-          ...(execution.sshKeyPath ? { sshKeyPath: execution.sshKeyPath } : {}),
-          ...(execution.trigger
-            ? { trigger: execution.trigger as 'chat' | 'webhook' | 'api' }
-            : {}),
-          // Propagate the plan-engine's lock session so that startDeploy's
-          // inner deploy() runs inline under the same session (skipping a new
-          // acquire that would conflict with the already-held lock).
-          _lockSessionId: propagatedLockSession,
-        });
-
-        if (startResult.status === 'preflight_failed') {
-          preflightError = startResult.preflightError;
-        }
-
-        startedProjectId = startResult.projectId;
-        startedProjectName = startResult.projectName;
-      }
-
-      if (this.events) {
-        let cleanup = () => undefined;
-
-        const finishSuccess = async (projectId: string): Promise<void> => {
-          try {
-            let completed = PlanStateMachine.transition(executingPlan, 'completed');
-            if (attachTargetProject) {
-              const moved = await this.db.attachServiceToProject(
-                targetIdentityResolver.deployableServiceIdForRuntimeProject(projectId),
-                attachTargetProject.id,
-              );
-              completed = {
-                ...completed,
-                project_id: moved.targetProjectId,
-                target_project_id: moved.targetProjectId,
-              };
-            }
-            await this.db
-              .updateDeployPlan(planId, {
-                status: 'completed',
-                planJson: JSON.stringify(this.preparePlanForStorage(completed)),
-              })
-              .catch((error: unknown) => {
-                log.warn({ planId, error }, 'Failed to mark deploy plan completed');
-              });
-            log.info({ planId, projectId }, 'Plan completed via event');
-          } catch (error) {
-            const errMsg =
-              error instanceof Error
-                ? `Deploy succeeded but target attach failed: ${error.message}`
-                : `Deploy succeeded but target attach failed: ${String(error)}`;
-            const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
-            await this.db
-              .updateDeployPlan(planId, {
-                status: 'failed',
-                planJson: JSON.stringify(this.preparePlanForStorage(failed)),
-                errorMessage: errMsg,
-              })
-              .catch((updateError: unknown) => {
-                log.warn({ planId, updateError }, 'Failed to mark target attach failure');
-              });
-            log.error({ planId, projectId, error }, 'Deploy plan target attach failed');
-          } finally {
-            safeReleaseDeployLock();
-            cleanup();
-          }
-        };
-
-        const finishFailure = async (
-          projectId: string,
-          error: string | undefined,
-        ): Promise<void> => {
-          const errMsg = error || 'Deploy failed';
-          const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
-          await this.db
-            .updateDeployPlan(planId, {
-              status: 'failed',
-              planJson: JSON.stringify(this.preparePlanForStorage(failed)),
-              errorMessage: errMsg,
-            })
-            .catch((updateError: unknown) => {
-              log.warn({ planId, updateError }, 'Failed to mark deploy plan failed');
-            });
-          safeReleaseDeployLock();
-          log.info({ planId, projectId, error: errMsg }, 'Plan failed via event');
-          cleanup();
-        };
-
-        const unsubSuccess = this.events.on('deploy:success', (payload) => {
-          if (payload.projectId === startedProjectId) {
-            void finishSuccess(payload.projectId);
-          }
-        });
-
-        const unsubFailed = this.events.on('deploy:failed', (payload) => {
-          if (payload.projectId === startedProjectId) {
-            void finishFailure(payload.projectId, payload.error);
-          }
-        });
-
-        const unsubComposeUp = this.events.on('compose:up', (payload) => {
-          if (payload.projectId === startedProjectId) {
-            void finishSuccess(payload.projectId);
-          }
-        });
-
-        const unsubComposeFailed = this.events.on('compose:failed', (payload) => {
-          if (payload.projectId === startedProjectId) {
-            void finishFailure(payload.projectId, payload.error);
-          }
-        });
-
-        cleanup = () => {
-          unsubSuccess();
-          unsubFailed();
-          unsubComposeUp();
-          unsubComposeFailed();
-        };
-      }
-
-      if (preflightError) {
-        const errMsg = preflightError;
-        const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
-        await this.db.updateDeployPlan(planId, {
-          status: 'failed',
-          planJson: JSON.stringify(this.preparePlanForStorage(failedPlan)),
-          errorMessage: errMsg,
-        });
-        safeReleaseDeployLock();
-        return {
-          status: 'failed',
+    void this.db
+      .recordDeployPlanApproval({
+        projectId: targetProject?.id ?? plan.project_id ?? '',
+        plan: JSON.stringify({
           plan_id: planId,
-          project_name: startedProjectName,
-          error: errMsg,
-        };
+          approved_resources: [...approvedSafeResources],
+        }),
+        correlationId: planId,
+      })
+      .catch((error: unknown) => {
+        // Error-level: a failed write leaves approved provisioning un-audited
+        // (the deploy still proceeds — best-effort), so make the gap alertable.
+        log.error({ planId, error }, 'Failed to record deploy-plan approval audit');
+      });
+  }
+
+  private async resolvePlanEnv(params: {
+    plan: DeployPlan;
+    attachTargetProject: ExecutePlanProjectTarget | null;
+    targetProject: ExecutePlanProjectTarget | null;
+    approvedSafeResources: ReadonlySet<string>;
+  }): Promise<Record<string, string>> {
+    const { plan, attachTargetProject, targetProject, approvedSafeResources } = params;
+    const mergedEnv = await resolveEnvVars(
+      {
+        projectId: attachTargetProject?.id ?? plan.project_id ?? plan.app.name,
+        autoEnvVars: plan.env.auto,
+        inlineEnvVars: plan.env.provided,
+      },
+      { env: this.env },
+    );
+
+    await this.applyManagedResourceEnv({
+      plan,
+      targetProject,
+      approvedSafeResources,
+      mergedEnv,
+    });
+
+    return mergedEnv;
+  }
+
+  private async applyManagedResourceEnv(params: {
+    plan: DeployPlan;
+    targetProject: ExecutePlanProjectTarget | null;
+    approvedSafeResources: ReadonlySet<string>;
+    mergedEnv: Record<string, string>;
+  }): Promise<void> {
+    const { plan, targetProject, approvedSafeResources, mergedEnv } = params;
+    for (const planService of plan.services) {
+      const envVarName = planService.connect_via || SERVICE_ENV_VARS[planService.type];
+      if (!envVarName || this.hasExplicitEnvValue(plan.env.provided, envVarName)) {
+        if (envVarName) {
+          log.info(
+            { serviceType: planService.type, envVarName },
+            'Skipping managed service env injection because explicit env var was provided',
+          );
+        }
+        continue;
       }
 
-      const existingProject = await this.db.getProjectByName(startedProjectName);
-      let estimatedSeconds = 60;
-      if (existingProject) {
-        const lastLog = await this.db.getLastDeployLog(existingProject.id);
-        if (lastLog?.duration_ms != null && lastLog.status === 'success') {
-          estimatedSeconds = Math.ceil(lastLog.duration_ms / 1000);
+      if (planService.action === 'create') {
+        const isApprovedSafeProposal =
+          planService.resolution === 'proposed_project_service' &&
+          planService.approval === 'safe_resource' &&
+          approvedSafeResources.has(this.proposedResourceIdentifier(planService));
+
+        if (!isApprovedSafeProposal) {
+          // compose_service / not_auto_creatable / unapproved: fail fast,
+          // create nothing.
+          throw new ServiceConfigError(
+            `Managed service ${planService.type} requires an explicit ${envVarName} value before deploy.`,
+            {
+              serviceType: planService.type,
+              envVarName,
+              nextSteps: [
+                `Provide an external ${envVarName} value in env_vars.`,
+                'Or call openlander_managed_service.create_service for the target project, set its suggested_env on the deployable service, then redeploy.',
+              ],
+            },
+          );
         }
+
+        if (!targetProject) {
+          throw new ServiceConfigError(
+            `Provisioning managed service ${planService.type} requires an existing target project.`,
+            { serviceType: planService.type, envVarName },
+          );
+        }
+        const connectionString = await this.provisionApprovedService(
+          planService,
+          targetProject,
+          envVarName,
+        );
+        mergedEnv[envVarName] = connectionString;
+      } else {
+        if (!targetProject) {
+          throw new ServiceConfigError(
+            `Reusable managed service ${planService.name ?? planService.service_id ?? planService.type} requires an existing target project.`,
+            {
+              serviceType: planService.type,
+              serviceName: planService.name,
+              serviceId: planService.service_id,
+            },
+          );
+        }
+        const reusable = await this.resolveReusableService(planService, targetProject.id);
+        const connectionString = this.getServiceConnectionString(reusable, envVarName);
+        mergedEnv[envVarName] = connectionString;
+        await new ManagedServiceLinker(this.db, this.env).connect({
+          projectId: targetProject.id,
+          service: reusable,
+          source: 'deploy_plan',
+          credentials: { connectionString },
+        });
       }
+    }
+  }
+
+  private async dispatchPlanDeploy(params: {
+    plan: DeployPlan;
+    planExecution: PlanExecutionContext;
+    mergedEnv: Record<string, string>;
+    deployOnly?: string[];
+    triggerOverride?: 'chat' | 'webhook' | 'api';
+    deployLockProjectId: string | null;
+    lockSessionId?: string;
+    planId: string;
+  }): Promise<ExecuteDispatchResult> {
+    const {
+      plan,
+      planExecution,
+      mergedEnv,
+      deployOnly,
+      triggerOverride,
+      deployLockProjectId,
+      lockSessionId,
+      planId,
+    } = params;
+    log.info({ planId, planCommit: plan.app.source.commit_sha }, 'Executing plan (non-blocking)');
+
+    const deployMode = this.getDeployMode(plan);
+    const execution = {
+      ...planExecution,
+      ...(triggerOverride ? { trigger: triggerOverride } : {}),
+    };
+    const isImage = plan.build.method === 'image';
+    const propagatedLockSession = deployLockProjectId
+      ? (lockSessionId ?? `plan-${planId}`)
+      : undefined;
+
+    if (deployMode === 'monorepo') {
+      const cloneResult = await cloneRepo({
+        repoUrl: plan.app.source.repo_url,
+        branch: plan.app.source.branch,
+        sshKeyPath: execution.sshKeyPath,
+      });
+      const dockerfiles =
+        deployOnly && deployOnly.length > 0
+          ? deployOnly
+          : plan.build.dockerfiles_found && plan.build.dockerfiles_found.length > 0
+            ? plan.build.dockerfiles_found
+            : [plan.build.dockerfile];
+      const startResult = await this.pipeline.startMonorepoDeploy({
+        repoUrl: plan.app.source.repo_url,
+        branch: plan.app.source.branch,
+        clonePath: cloneResult.path,
+        commitSha: cloneResult.commitSha,
+        dockerfiles,
+        envVars: mergedEnv,
+        name: plan.app.name,
+        ...(execution.visibility ? { visibility: execution.visibility } : {}),
+        ...(execution.trigger ? { trigger: execution.trigger as 'chat' | 'webhook' | 'api' } : {}),
+        _lockSessionId: propagatedLockSession,
+      });
+
+      return {
+        startedProjectId: startResult.parentProjectId,
+        startedProjectName: startResult.parentName,
+      };
+    }
+
+    const isCompose = deployMode === 'compose';
+    const startResult = await this.pipeline.startDeploy({
+      repoUrl: plan.app.source.repo_url,
+      branch: plan.app.source.branch,
+      name: plan.app.name,
+      envVars: mergedEnv,
+      ...(isImage ? { source: 'image' as const } : {}),
+      ...(isImage && plan.app.source.image_url ? { imageUrl: plan.app.source.image_url } : {}),
+      ...(execution.imageCmd ? { imageCmd: execution.imageCmd } : {}),
+      ...(execution.containerPort !== undefined ? { containerPort: execution.containerPort } : {}),
+      preferDockerfile: isCompose ? false : !plan.build.generated_dockerfile,
+      dockerfilePath:
+        !isCompose && plan.build.dockerfile !== 'Dockerfile' ? plan.build.dockerfile : undefined,
+      dockerTarget: plan.build.target,
+      buildContext: plan.build.context !== '.' ? plan.build.context : undefined,
+      composeServices: isCompose ? deployOnly : undefined,
+      ...(execution.visibility ? { visibility: execution.visibility } : {}),
+      ...(execution.environment ? { environment: execution.environment } : {}),
+      ...(execution.sshKeyPath ? { sshKeyPath: execution.sshKeyPath } : {}),
+      ...(execution.trigger ? { trigger: execution.trigger as 'chat' | 'webhook' | 'api' } : {}),
+      // Propagate the plan-engine's lock session so that startDeploy's inner
+      // deploy() runs inline under the same session (skipping a new acquire that
+      // would conflict with the already-held lock).
+      _lockSessionId: propagatedLockSession,
+    });
+
+    return {
+      startedProjectId: startResult.projectId,
+      startedProjectName: startResult.projectName,
+      ...(startResult.status === 'preflight_failed'
+        ? { preflightError: startResult.preflightError }
+        : {}),
+    };
+  }
+
+  private registerPlanCompletionListeners(params: {
+    planId: string;
+    executingPlan: DeployPlan;
+    attachTargetProject: ExecutePlanProjectTarget | null;
+    startedProjectId: string;
+    releaseDeployLock: () => void;
+  }): void {
+    if (!this.events) {
+      return;
+    }
+
+    const { planId, executingPlan, attachTargetProject, startedProjectId, releaseDeployLock } =
+      params;
+    let cleanup = () => undefined;
+
+    const finishSuccess = async (projectId: string): Promise<void> => {
+      try {
+        let completed = PlanStateMachine.transition(executingPlan, 'completed');
+        if (attachTargetProject) {
+          const moved = await this.db.attachServiceToProject(
+            targetIdentityResolver.deployableServiceIdForRuntimeProject(projectId),
+            attachTargetProject.id,
+          );
+          completed = {
+            ...completed,
+            project_id: moved.targetProjectId,
+            target_project_id: moved.targetProjectId,
+          };
+        }
+        await this.db
+          .updateDeployPlan(planId, {
+            status: 'completed',
+            planJson: JSON.stringify(this.preparePlanForStorage(completed)),
+          })
+          .catch((error: unknown) => {
+            log.warn({ planId, error }, 'Failed to mark deploy plan completed');
+          });
+        log.info({ planId, projectId }, 'Plan completed via event');
+      } catch (error) {
+        const errMsg =
+          error instanceof Error
+            ? `Deploy succeeded but target attach failed: ${error.message}`
+            : `Deploy succeeded but target attach failed: ${String(error)}`;
+        const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
+        await this.db
+          .updateDeployPlan(planId, {
+            status: 'failed',
+            planJson: JSON.stringify(this.preparePlanForStorage(failed)),
+            errorMessage: errMsg,
+          })
+          .catch((updateError: unknown) => {
+            log.warn({ planId, updateError }, 'Failed to mark target attach failure');
+          });
+        log.error({ planId, projectId, error }, 'Deploy plan target attach failed');
+      } finally {
+        releaseDeployLock();
+        cleanup();
+      }
+    };
+
+    const finishFailure = async (projectId: string, error: string | undefined): Promise<void> => {
+      const errMsg = error || 'Deploy failed';
+      const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
+      await this.db
+        .updateDeployPlan(planId, {
+          status: 'failed',
+          planJson: JSON.stringify(this.preparePlanForStorage(failed)),
+          errorMessage: errMsg,
+        })
+        .catch((updateError: unknown) => {
+          log.warn({ planId, updateError }, 'Failed to mark deploy plan failed');
+        });
+      releaseDeployLock();
+      log.info({ planId, projectId, error: errMsg }, 'Plan failed via event');
+      cleanup();
+    };
+
+    const unsubSuccess = this.events.on('deploy:success', (payload) => {
+      if (payload.projectId === startedProjectId) {
+        void finishSuccess(payload.projectId);
+      }
+    });
+
+    const unsubFailed = this.events.on('deploy:failed', (payload) => {
+      if (payload.projectId === startedProjectId) {
+        void finishFailure(payload.projectId, payload.error);
+      }
+    });
+
+    const unsubComposeUp = this.events.on('compose:up', (payload) => {
+      if (payload.projectId === startedProjectId) {
+        void finishSuccess(payload.projectId);
+      }
+    });
+
+    const unsubComposeFailed = this.events.on('compose:failed', (payload) => {
+      if (payload.projectId === startedProjectId) {
+        void finishFailure(payload.projectId, payload.error);
+      }
+    });
+
+    cleanup = () => {
+      unsubSuccess();
+      unsubFailed();
+      unsubComposeUp();
+      unsubComposeFailed();
+    };
+  }
+
+  private async failCommittedPlan(params: {
+    planId: string;
+    executingPlan: DeployPlan;
+    projectName: string;
+    errorMessage: string;
+  }): Promise<ExecutePlanResult> {
+    const { planId, executingPlan, projectName, errorMessage } = params;
+    const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errorMessage);
+    await this.db.updateDeployPlan(planId, {
+      status: 'failed',
+      planJson: JSON.stringify(this.preparePlanForStorage(failedPlan)),
+      errorMessage,
+    });
+    return {
+      status: 'failed',
+      plan_id: planId,
+      project_name: projectName,
+      error: errorMessage,
+    };
+  }
+
+  private async estimatePlanDurationSeconds(projectName: string): Promise<number> {
+    const existingProject = await this.db.getProjectByName(projectName);
+    if (!existingProject) {
+      return 60;
+    }
+
+    const lastLog = await this.db.getLastDeployLog(existingProject.id);
+    if (lastLog?.duration_ms != null && lastLog.status === 'success') {
+      return Math.ceil(lastLog.duration_ms / 1000);
+    }
+    return 60;
+  }
+
+  async executePlan(
+    planId: string,
+    deployOnly?: string[],
+    lockSessionId?: string,
+    triggerOverride?: 'chat' | 'webhook' | 'api',
+    approval?: ExecutePlanApproval,
+  ): Promise<ExecutePlanResult> {
+    const freshPlan = await this.loadPlanForExecution(planId);
+    this.assertPlanHasRequiredInput(freshPlan);
+
+    const approvalGate = this.evaluateApprovalGate(planId, freshPlan, approval);
+    if (approvalGate.response) {
+      return approvalGate.response;
+    }
+
+    this.assertPlanIsExecutable(freshPlan);
+    this.assertValidProjectName(freshPlan.app.name);
+
+    const plan = this.transitionApprovedPlanForExecution(freshPlan);
+    const planExecution = this.getExecutionContext(plan);
+    const targetResolution = await this.resolveExecuteTarget({
+      planId,
+      plan,
+      planExecution,
+      approvedSafeResources: approvalGate.approvedSafeResources,
+    });
+    if (targetResolution.response) {
+      return targetResolution.response;
+    }
+
+    const { attachTargetProject, targetProject } = targetResolution;
+    const deployLock = await this.acquirePlanDeployLock({
+      planId,
+      lockSessionId,
+      targetProject,
+    });
+
+    const executingPlan = await this.persistExecutingPlan(planId, plan);
+    this.recordApprovalAudit({
+      planId,
+      plan,
+      targetProject,
+      approvedSafeResources: approvalGate.approvedSafeResources,
+    });
+
+    try {
+      const mergedEnv = await this.resolvePlanEnv({
+        plan,
+        attachTargetProject,
+        targetProject,
+        approvedSafeResources: approvalGate.approvedSafeResources,
+      });
+
+      const dispatch = await this.dispatchPlanDeploy({
+        plan,
+        planExecution,
+        mergedEnv,
+        deployOnly,
+        triggerOverride,
+        deployLockProjectId: deployLock.projectId,
+        lockSessionId,
+        planId,
+      });
+
+      this.registerPlanCompletionListeners({
+        planId,
+        executingPlan,
+        attachTargetProject,
+        startedProjectId: dispatch.startedProjectId,
+        releaseDeployLock: deployLock.release,
+      });
+
+      if (dispatch.preflightError) {
+        deployLock.release();
+        return await this.failCommittedPlan({
+          planId,
+          executingPlan,
+          projectName: dispatch.startedProjectName,
+          errorMessage: dispatch.preflightError,
+        });
+      }
+
+      const estimatedSeconds = await this.estimatePlanDurationSeconds(dispatch.startedProjectName);
 
       return {
         status: 'building',
         plan_id: planId,
-        project_name: startedProjectName,
-        project_id: startedProjectId,
+        project_name: dispatch.startedProjectName,
+        project_id: dispatch.startedProjectId,
         ...(attachTargetProject
           ? {
-              service_id: targetIdentityResolver.deployableServiceIdForResponse(startedProjectId),
+              service_id: targetIdentityResolver.deployableServiceIdForResponse(
+                dispatch.startedProjectId,
+              ),
               target_project_id: attachTargetProject.id,
-              runtime_project_id: startedProjectId,
+              runtime_project_id: dispatch.startedProjectId,
             }
           : {}),
         estimated_seconds: estimatedSeconds,
       };
     } catch (error) {
-      safeReleaseDeployLock();
+      deployLock.release();
       const errorMsg = error instanceof Error ? error.message : String(error);
-      const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errorMsg);
-      await this.db.updateDeployPlan(planId, {
-        status: 'failed',
-        planJson: JSON.stringify(this.preparePlanForStorage(failedPlan)),
+      log.error({ planId, error }, 'Plan execution failed');
+      return await this.failCommittedPlan({
+        planId,
+        executingPlan,
+        projectName: plan.app.name,
         errorMessage: errorMsg,
       });
-
-      log.error({ planId, error }, 'Plan execution failed');
-      return {
-        status: 'failed',
-        plan_id: planId,
-        project_name: plan.app.name,
-        error: errorMsg,
-      };
     }
   }
 }
