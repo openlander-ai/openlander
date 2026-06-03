@@ -38,6 +38,11 @@ function createEngine() {
     releaseDeployLock: vi.fn().mockResolvedValue(undefined),
     getDeployLockInfo: vi.fn().mockResolvedValue(null),
     upsertServiceConnection: vi.fn().mockResolvedValue(undefined),
+    getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue(undefined),
+    listServiceConnectionsByProject: vi.fn().mockResolvedValue([]),
+    getDeployableForProject: vi.fn().mockResolvedValue(null),
+    getDeployablesByGroup: vi.fn().mockResolvedValue([]),
+    createProjectDependency: vi.fn().mockResolvedValue(undefined),
     attachServiceToProject: vi.fn().mockResolvedValue({
       sourceProjectId: 'orphan',
       targetProjectId: 'p1',
@@ -53,6 +58,7 @@ function createEngine() {
   const mockEnv = {
     getAll: vi.fn().mockResolvedValue({}),
     getGlobalSecrets: vi.fn().mockResolvedValue({}),
+    set: vi.fn().mockResolvedValue(undefined),
   };
   const mockServiceManager = {
     create: vi.fn().mockResolvedValue({

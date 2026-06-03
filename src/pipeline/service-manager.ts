@@ -1365,16 +1365,15 @@ export class ServiceManager {
     const connections = await this.db.listServiceConsumersForProvider(serviceId);
     if (connections.length === 0) return [];
 
-    const consumerIds = new Set(connections.map((connection) => connection.service_id_consumer));
     const projectIds = new Set<string>();
     const unresolvedConsumerIds = new Set<string>();
 
-    for (const consumerId of consumerIds) {
-      if (consumerId.endsWith('__svc')) {
-        projectIds.add(consumerId.replace(/__svc$/, ''));
-      } else {
-        unresolvedConsumerIds.add(consumerId);
+    for (const connection of connections) {
+      if (connection.project_id) {
+        projectIds.add(connection.project_id);
+        continue;
       }
+      unresolvedConsumerIds.add(connection.service_id_consumer);
     }
 
     if (unresolvedConsumerIds.size > 0) {
@@ -1386,7 +1385,9 @@ export class ServiceManager {
         }
       }
       for (const consumerId of unresolvedConsumerIds) {
-        projectIds.add(consumerId);
+        projectIds.add(
+          consumerId.endsWith('__svc') ? consumerId.replace(/__svc$/, '') : consumerId,
+        );
       }
     }
 

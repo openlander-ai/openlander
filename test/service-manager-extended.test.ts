@@ -773,6 +773,33 @@ describe('ServiceManager remove with connected projects warning', () => {
     expect(db.deleteService).not.toHaveBeenCalled();
   });
 
+  it('resolves connected projects from hydrated project_id when the consumer is an attached runtime workload', async () => {
+    const database = createService({
+      id: 'svc-pg',
+      name: 'shared-pg',
+      container_name: 'ol-svc-shared-pg',
+    });
+    const projects = [{ id: 'group-1', name: 'target-group' }];
+    const db = createDbMock([database], projects, {
+      serviceConnections: [
+        createServiceConnection({
+          service_id_consumer: 'real-workload__svc',
+          service_id_provider: 'svc-pg',
+          project_id: 'group-1',
+        }),
+      ],
+    });
+
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    await expect(manager.remove('svc-pg')).rejects.toThrow(
+      'Service "shared-pg" is referenced by 1 project(s): target-group.',
+    );
+    expect(db.listServiceConsumersForProvider).toHaveBeenCalledWith('svc-pg');
+    expect(db.deleteService).not.toHaveBeenCalled();
+  });
+
   it('does not infer connected projects from env substrings without service_connections rows', async () => {
     const database = createService({
       id: 'svc-pg',

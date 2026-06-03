@@ -1,17 +1,18 @@
-import { and, desc, eq, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, or } from 'drizzle-orm';
 
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
-import { serviceConnections } from '../schema.drizzle.js';
+import { serviceConnections, services } from '../schema.drizzle.js';
 import { projectIdToDeployableServiceId } from '../service-ids.js';
 import type { ServiceConnectionRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
 
 /**
- * Post-0012: service_connections uses consumer/provider model. Callers
- * historically pass `projectId` (the consumer group) and `serviceId` (the
- * provider managed-service id); the repo maps:
- *   - projectId  -> service_id_consumer = projectIdToDeployableServiceId(projectId)
- *   - serviceId  -> service_id_provider (no transform)
+ * Post-0012: service_connections uses consumer/provider model. Callers pass
+ * `projectId` (the consumer group) and `serviceId` (the provider managed-service
+ * id). Writes may pass a concrete consumer workload id when the group contains
+ * an attached runtime workload; project-scoped reads resolve both the canonical
+ * `<projectId>__svc` row and any consumer service whose `services.project_id`
+ * points at the group.
  */
 export class ServiceConnectionRepo {
   constructor(
@@ -25,15 +26,26 @@ export class ServiceConnectionRepo {
    * Back-compat hydration: derive deprecated `project_id` and `service_id`
    * from the canonical consumer/provider fields so existing callers continue
    * to work through 1.0.
-   *   project_id = consumer id with __svc suffix stripped
+   *   project_id = joined consumer service.project_id when available, otherwise
+   *                consumer id with __svc suffix stripped
    *   service_id = provider id (no transform)
    */
-  private hydrateDeprecated(row: ServiceConnectionRow): ServiceConnectionRow {
+  private hydrateDeprecated(
+    row: ServiceConnectionRow,
+    projectIdOverride?: string | null,
+  ): ServiceConnectionRow {
     return {
       ...row,
-      project_id: row.service_id_consumer.replace(/__svc$/, ''),
+      project_id: projectIdOverride ?? row.service_id_consumer.replace(/__svc$/, ''),
       service_id: row.service_id_provider,
     };
+  }
+
+  private consumerBelongsToProject(projectId: string) {
+    return or(
+      eq(serviceConnections.service_id_consumer, projectIdToDeployableServiceId(projectId)),
+      eq(services.project_id, projectId),
+    );
   }
 
   async createConnection(opts: {
@@ -63,13 +75,20 @@ export class ServiceConnectionRepo {
    * nothing if one already exists for the (consumer, provider) pair. Uses the
    * service_connections_consumer_provider_idx unique index. Idempotent — safe to
    * call when provisioning the same approved plan twice.
+   *
+   * `consumerServiceId` lets the caller pass the resolved consumer workload's
+   * real id (a concrete services.id) when it is not the derived `<projectId>__svc`
+   * — e.g. a workload attached into the group keeps its own runtime __svc id. When
+   * omitted, the consumer falls back to the canonical `<projectId>__svc` derivation
+   * (the common deploy-into-own-project case).
    */
   async upsertConnection(opts: {
     projectId: string;
     serviceId: string;
+    consumerServiceId?: string;
     environmentId?: string;
   }): Promise<void> {
-    const consumerId = projectIdToDeployableServiceId(opts.projectId);
+    const consumerId = opts.consumerServiceId ?? projectIdToDeployableServiceId(opts.projectId);
     await this.db
       .insert(serviceConnections)
       .values({
@@ -84,12 +103,16 @@ export class ServiceConnectionRepo {
 
   async getConnection(id: string): Promise<ServiceConnectionRow | undefined> {
     const [selected] = await this.db
-      .select()
+      .select({
+        connection: serviceConnections,
+        consumerProjectId: services.project_id,
+      })
       .from(serviceConnections)
+      .leftJoin(services, eq(serviceConnections.service_id_consumer, services.id))
       .where(eq(serviceConnections.id, id))
       .limit(1);
-    const row = (selected ?? null) as ServiceConnectionRow | null;
-    return row ? this.hydrateDeprecated(row) : undefined;
+    const row = (selected?.connection ?? null) as ServiceConnectionRow | null;
+    return row ? this.hydrateDeprecated(row, selected?.consumerProjectId) : undefined;
   }
 
   async getConnectionByProjectAndService(
@@ -97,17 +120,20 @@ export class ServiceConnectionRepo {
     serviceId: string,
   ): Promise<ServiceConnectionRow | undefined> {
     const [selected] = await this.db
-      .select()
+      .select({
+        connection: serviceConnections,
+      })
       .from(serviceConnections)
+      .leftJoin(services, eq(serviceConnections.service_id_consumer, services.id))
       .where(
         and(
-          eq(serviceConnections.service_id_consumer, projectIdToDeployableServiceId(projectId)),
           eq(serviceConnections.service_id_provider, serviceId),
+          this.consumerBelongsToProject(projectId),
         ),
       )
       .limit(1);
-    const row = (selected ?? null) as ServiceConnectionRow | null;
-    return row ? this.hydrateDeprecated(row) : undefined;
+    const row = (selected?.connection ?? null) as ServiceConnectionRow | null;
+    return row ? this.hydrateDeprecated(row, projectId) : undefined;
   }
 
   async listConnectionsByProject(
@@ -116,16 +142,19 @@ export class ServiceConnectionRepo {
   ): Promise<ServiceConnectionRow[]> {
     const whereClause = environmentId
       ? and(
-          eq(serviceConnections.service_id_consumer, projectIdToDeployableServiceId(projectId)),
+          this.consumerBelongsToProject(projectId),
           eq(serviceConnections.environment_id, environmentId),
         )
-      : eq(serviceConnections.service_id_consumer, projectIdToDeployableServiceId(projectId));
+      : this.consumerBelongsToProject(projectId);
     const rows = (await this.db
-      .select()
+      .select({
+        connection: serviceConnections,
+      })
       .from(serviceConnections)
+      .leftJoin(services, eq(serviceConnections.service_id_consumer, services.id))
       .where(whereClause)
-      .orderBy(desc(serviceConnections.created_at))) as ServiceConnectionRow[];
-    return rows.map((r) => this.hydrateDeprecated(r));
+      .orderBy(desc(serviceConnections.created_at))) as Array<{ connection: ServiceConnectionRow }>;
+    return rows.map((r) => this.hydrateDeprecated(r.connection, projectId));
   }
 
   /**
@@ -135,25 +164,39 @@ export class ServiceConnectionRepo {
    */
   async listConnectionsByService(serviceId: string): Promise<ServiceConnectionRow[]> {
     const rows = (await this.db
-      .select()
+      .select({
+        connection: serviceConnections,
+        consumerProjectId: services.project_id,
+      })
       .from(serviceConnections)
+      .leftJoin(services, eq(serviceConnections.service_id_consumer, services.id))
       .where(
         or(
           eq(serviceConnections.service_id_consumer, serviceId),
           eq(serviceConnections.service_id_provider, serviceId),
         ),
       )
-      .orderBy(desc(serviceConnections.created_at))) as ServiceConnectionRow[];
-    return rows.map((r) => this.hydrateDeprecated(r));
+      .orderBy(desc(serviceConnections.created_at))) as Array<{
+      connection: ServiceConnectionRow;
+      consumerProjectId: string | null;
+    }>;
+    return rows.map((r) => this.hydrateDeprecated(r.connection, r.consumerProjectId));
   }
 
   async listConsumersForProvider(serviceId: string): Promise<ServiceConnectionRow[]> {
     const rows = (await this.db
-      .select()
+      .select({
+        connection: serviceConnections,
+        consumerProjectId: services.project_id,
+      })
       .from(serviceConnections)
+      .leftJoin(services, eq(serviceConnections.service_id_consumer, services.id))
       .where(eq(serviceConnections.service_id_provider, serviceId))
-      .orderBy(desc(serviceConnections.created_at))) as ServiceConnectionRow[];
-    return rows.map((r) => this.hydrateDeprecated(r));
+      .orderBy(desc(serviceConnections.created_at))) as Array<{
+      connection: ServiceConnectionRow;
+      consumerProjectId: string | null;
+    }>;
+    return rows.map((r) => this.hydrateDeprecated(r.connection, r.consumerProjectId));
   }
 
   async updateConnection(
@@ -182,13 +225,19 @@ export class ServiceConnectionRepo {
   }
 
   async deleteConnectionByProjectAndService(projectId: string, serviceId: string): Promise<void> {
-    await this.db
-      .delete(serviceConnections)
+    const rows = await this.db
+      .select({ id: serviceConnections.id })
+      .from(serviceConnections)
+      .leftJoin(services, eq(serviceConnections.service_id_consumer, services.id))
       .where(
         and(
-          eq(serviceConnections.service_id_consumer, projectIdToDeployableServiceId(projectId)),
           eq(serviceConnections.service_id_provider, serviceId),
+          this.consumerBelongsToProject(projectId),
         ),
       );
+    const ids = rows.map((row) => row.id);
+    if (ids.length === 0) return;
+
+    await this.db.delete(serviceConnections).where(inArray(serviceConnections.id, ids));
   }
 }

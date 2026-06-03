@@ -1483,11 +1483,13 @@ export class PlanEngine {
             );
           }
           const reusable = await this.resolveReusableService(planService, targetProject.id);
-          mergedEnv[envVarName] = this.getServiceConnectionString(reusable, envVarName);
-          // Backfill a connection row for the reused service (idempotent).
-          await this.db.upsertServiceConnection({
+          const connectionString = this.getServiceConnectionString(reusable, envVarName);
+          mergedEnv[envVarName] = connectionString;
+          await new ManagedServiceLinker(this.db, this.env).connect({
             projectId: targetProject.id,
-            serviceId: reusable.id,
+            service: reusable,
+            source: 'deploy_plan',
+            credentials: { connectionString },
           });
         }
       }
@@ -1709,8 +1711,7 @@ export class PlanEngine {
         project_id: startedProjectId,
         ...(attachTargetProject
           ? {
-              service_id:
-                targetIdentityResolver.deployableServiceIdForResponse(startedProjectId),
+              service_id: targetIdentityResolver.deployableServiceIdForResponse(startedProjectId),
               target_project_id: attachTargetProject.id,
               runtime_project_id: startedProjectId,
             }

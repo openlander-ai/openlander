@@ -4,6 +4,18 @@ import type { OpsAlert } from './ops-types.js';
 
 const log = createModuleLogger('ops-cascade');
 
+function connectionProjectId(connection: {
+  project_id?: string | null;
+  service_id_consumer: string;
+}): string {
+  if (connection.project_id) {
+    return connection.project_id;
+  }
+  return connection.service_id_consumer.endsWith('__svc')
+    ? connection.service_id_consumer.replace(/__svc$/, '')
+    : connection.service_id_consumer;
+}
+
 export interface CascadeResult {
   rootServiceId: string;
   rootServiceName: string;
@@ -57,9 +69,10 @@ export class CascadeDetector {
       for (const service of services) {
         const connections = await this.ctx.db.listServiceConnectionsByService(service.id);
         for (const conn of connections) {
-          // provider → consumers mapping (canonical post-0012 field names)
+          // provider → project consumers mapping. Hydrated project_id wins when
+          // the consumer service id is an attached runtime workload id.
           const existing = graph.get(conn.service_id_provider) ?? [];
-          existing.push(conn.service_id_consumer);
+          existing.push(connectionProjectId(conn));
           graph.set(conn.service_id_provider, existing);
         }
       }

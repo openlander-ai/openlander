@@ -67,7 +67,8 @@ export function createServiceConnectionRoutes(ctx: AppContext): Hono {
     const serviceKind = service.type ?? kindToLegacyType(service.kind);
     return c.json(
       {
-        id: connection?.id,
+        status: connection ? 'connected' : 'deferred',
+        id: connection?.id ?? null,
         service: {
           id: service.id,
           name: service.name,
@@ -79,7 +80,7 @@ export function createServiceConnectionRoutes(ctx: AppContext): Hono {
           port: service.assigned_port ?? service.port,
           containerName: service.container_name,
         },
-        createdAt: connection?.created_at,
+        createdAt: connection?.created_at ?? null,
         autoInjectedEnvKeys: linked.autoInjectedEnvKeys,
       },
       201,

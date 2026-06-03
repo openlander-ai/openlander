@@ -558,6 +558,7 @@ export class Database implements AuthDatabase {
   isCircuitBreakerOpen(projectId: string) { return this.circuitBreakerRepo.isOpen(projectId); }
   createProjectDependency(data: Parameters<ProjectDependencyRepo['create']>[0]) { return this.projectDependencyRepo.create(data); }
   findDependenciesByProject(projectId: string) { return this.projectDependencyRepo.findByProject(projectId); }
+  findDependenciesBySourceAndTargetService(sourceServiceId: string, targetServiceId: string) { return this.projectDependencyRepo.findBySourceAndTargetService(sourceServiceId, targetServiceId); }
   findProjectDependents(targetProjectId?: string, targetServiceId?: string) { return this.projectDependencyRepo.findDependents(targetProjectId, targetServiceId); }
   findAllProjectDependencies() { return this.projectDependencyRepo.findAll(); }
   deleteProjectDependency(id: string) { return this.projectDependencyRepo.delete(id); }

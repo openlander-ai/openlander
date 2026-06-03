@@ -60,6 +60,7 @@ function buildEngine() {
     getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue(undefined),
     listServiceConnectionsByProject: vi.fn().mockResolvedValue([]),
     getDeployableForProject: vi.fn().mockResolvedValue(null),
+    getDeployablesByGroup: vi.fn().mockResolvedValue([{ id: 'p1__svc' }]),
     createProjectDependency: vi.fn().mockResolvedValue(undefined),
     acquireDeployLock: vi.fn().mockResolvedValue(true),
     getDeployLockInfo: vi.fn().mockResolvedValue(null),
@@ -454,6 +455,7 @@ describe('executePlan Oracle — provisioning loop P1-P5', () => {
     expect(h.mockDb.upsertServiceConnection).toHaveBeenCalledWith({
       projectId: 'p1',
       serviceId: reusableService.id,
+      consumerServiceId: 'p1__svc',
     });
     expect(h.mockPipeline.startDeploy).toHaveBeenCalledWith(
       expect.objectContaining({
