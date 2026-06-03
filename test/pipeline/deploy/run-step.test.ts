@@ -117,6 +117,32 @@ describe('ContainerRunner', () => {
     );
   });
 
+  it('can keep the app route name while joining a target Project network', async () => {
+    const docker = createMockDocker();
+    const db = createMockDatabase();
+    const runner = new ContainerRunner(docker, db);
+    vi.spyOn(portPipeline, 'allocatePort').mockResolvedValue(14500);
+
+    await runner.run({
+      imageTag: 'openlander/urlnest-app:latest',
+      projectName: 'urlnest-app',
+      networkProjectName: 'urlnest',
+      projectId: 'runtime-project',
+      envVars: {},
+    });
+
+    expect(docker.ensureProjectNetwork as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'urlnest',
+    );
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'ol-urlnest-app',
+        network: 'ol-urlnest',
+        aliases: ['urlnest-app'],
+      }),
+    );
+  });
+
   it('returns deploy:run payload fields for upstream event emission', async () => {
     const docker = createMockDocker();
     const db = createMockDatabase();

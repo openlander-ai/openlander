@@ -164,6 +164,8 @@ export interface ProjectConfig {
   _projectId?: string;
   /** @internal Application/Compose service id that owns persisted deploy config. */
   _serviceId?: string;
+  /** @internal Docker network owner Project name for target_project_id first deploys. */
+  _networkProjectName?: string;
   _noCacheBuild?: boolean;
   _preferredPort?: number;
   /** @internal Deploy lock session for event-based session-scoped release. */

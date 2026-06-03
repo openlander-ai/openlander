@@ -39,9 +39,13 @@ export class EnvironmentRepo {
         previous_image_tag: environment.previousImageTag ?? null,
         public_url: environment.publicUrl ?? null,
       })
+      .onConflictDoNothing({ target: environments.id })
       .returning();
 
-    const row = (created ?? null) as EnvironmentRow | null;
+    const row =
+      ((created ?? null) as EnvironmentRow | null) ??
+      (await this.getEnvironment(environment.id)) ??
+      null;
     if (!row) throw new RepoPersistenceError('environment', environment.id);
     return { ...row, project_id: deployableServiceIdToProjectId(row.service_id) };
   }

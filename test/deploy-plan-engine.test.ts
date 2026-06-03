@@ -1254,6 +1254,7 @@ describe('PlanEngine.executePlan', () => {
     expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'new-worker',
+        _networkProjectName: 'ais-server',
         _lockSessionId: 'session-target',
       }),
     );
