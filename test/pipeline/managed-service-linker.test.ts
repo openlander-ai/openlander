@@ -220,6 +220,43 @@ describe('ManagedServiceLinker.connect', () => {
     expect(db.createProjectDependency).not.toHaveBeenCalled();
   });
 
+  it('backfills FK-bearing rows once a DB-first project later has a workload', async () => {
+    const db = createMockDb({
+      getDeployablesByGroup: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: 'p1__svc' }]),
+    });
+    const linker = new ManagedServiceLinker(db, mockEnv);
+    const params = {
+      projectId: 'empty-group',
+      service: POSTGRES_SERVICE,
+      source: 'mcp' as const,
+    };
+
+    await linker.connect(params);
+    await linker.connect(params);
+
+    expect(vi.mocked(autoInjectServiceEnv)).toHaveBeenCalledTimes(2);
+    expect(db.upsertServiceConnection).toHaveBeenCalledTimes(1);
+    expect(db.upsertServiceConnection).toHaveBeenCalledWith({
+      projectId: 'p1',
+      serviceId: 'svc-pg',
+      consumerServiceId: 'p1__svc',
+    });
+    expect(db.updateServiceConnection).toHaveBeenCalledWith('conn-1', {
+      autoInjectedEnvKeys: JSON.stringify(['DATABASE_URL']),
+    });
+    expect(db.createProjectDependency).toHaveBeenCalledTimes(1);
+    expect(db.createProjectDependency).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source_service_id: 'p1__svc',
+        target_service_id: 'svc-pg',
+        dependency_type: 'database',
+      }),
+    );
+  });
+
   it('propagates dropped env/secret keys from the attach step', async () => {
     const db = createMockDb({
       attachServiceToProject: vi.fn().mockResolvedValue({
