@@ -1,4 +1,4 @@
-import { asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import { environments } from '../schema.drizzle.js';
 import { deployableServiceIdToProjectId, projectIdToDeployableServiceId } from '../service-ids.js';
@@ -25,11 +25,12 @@ export class EnvironmentRepo {
     previousImageTag?: string | null;
     publicUrl?: string | null;
   }): Promise<EnvironmentRow> {
+    const serviceId = projectIdToDeployableServiceId(environment.projectId);
     const [created] = await this.db
       .insert(environments)
       .values({
         id: environment.id,
-        service_id: projectIdToDeployableServiceId(environment.projectId),
+        service_id: serviceId,
         type: environment.type,
         branch: environment.branch ?? null,
         status: environment.status ?? 'idle',
@@ -39,15 +40,28 @@ export class EnvironmentRepo {
         previous_image_tag: environment.previousImageTag ?? null,
         public_url: environment.publicUrl ?? null,
       })
-      .onConflictDoNothing({ target: environments.id })
+      .onConflictDoNothing({ target: [environments.service_id, environments.type] })
       .returning();
 
     const row =
       ((created ?? null) as EnvironmentRow | null) ??
       (await this.getEnvironment(environment.id)) ??
+      (await this.getEnvironmentByServiceAndType(serviceId, environment.type)) ??
       null;
     if (!row) throw new RepoPersistenceError('environment', environment.id);
     return { ...row, project_id: deployableServiceIdToProjectId(row.service_id) };
+  }
+
+  private async getEnvironmentByServiceAndType(
+    serviceId: string,
+    type: EnvironmentRow['type'],
+  ): Promise<EnvironmentRow | undefined> {
+    const [selected] = await this.db
+      .select()
+      .from(environments)
+      .where(and(eq(environments.service_id, serviceId), eq(environments.type, type)))
+      .limit(1);
+    return (selected ?? undefined) as EnvironmentRow | undefined;
   }
 
   async getEnvironment(id: string): Promise<EnvironmentRow | undefined> {

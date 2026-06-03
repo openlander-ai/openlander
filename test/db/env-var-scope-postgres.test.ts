@@ -40,6 +40,47 @@ async function withIsolatedPostgresDatabase(
 }
 
 describeWithDatabase('env var scope storage on Postgres', () => {
+  it('treats production environment creation as idempotent for a project', async () => {
+    await withIsolatedPostgresDatabase('env_idempotent', async (url) => {
+      const db = await Database.connect(url);
+      try {
+        const project = await db.createProject({
+          id: 'p-env-idempotent',
+          name: 'env-idempotent-app',
+          repoUrl: 'https://github.com/example/env-idempotent-app',
+        });
+
+        const bySameId = await db.createEnvironment({
+          id: 'p-env-idempotent-production',
+          projectId: project.id,
+          type: 'production',
+          branch: 'ignored-same-id',
+        });
+        expect(bySameId).toMatchObject({
+          id: 'p-env-idempotent-production',
+          project_id: project.id,
+          type: 'production',
+          branch: 'main',
+        });
+
+        const byServiceAndType = await db.createEnvironment({
+          id: 'p-env-idempotent-production-alt',
+          projectId: project.id,
+          type: 'production',
+          branch: 'ignored-service-type',
+        });
+        expect(byServiceAndType).toMatchObject({
+          id: 'p-env-idempotent-production',
+          project_id: project.id,
+          type: 'production',
+          branch: 'main',
+        });
+      } finally {
+        await db.close();
+      }
+    });
+  });
+
   it('stores the same key separately for project/service shared and environment scopes', async () => {
     await withIsolatedPostgresDatabase('env_scope', async (url) => {
       const db = await Database.connect(url);
