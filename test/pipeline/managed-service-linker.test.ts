@@ -257,6 +257,39 @@ describe('ManagedServiceLinker.connect', () => {
     );
   });
 
+  it('backfills FK-bearing rows with the real attached workload id, not a derived group id', async () => {
+    const db = createMockDb({
+      getDeployablesByGroup: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: 'real-workload__svc' }]),
+    });
+    const linker = new ManagedServiceLinker(db, mockEnv);
+    const params = {
+      projectId: 'empty-group',
+      service: POSTGRES_SERVICE,
+      source: 'mcp' as const,
+    };
+
+    await linker.connect(params);
+    await linker.connect(params);
+
+    expect(db.upsertServiceConnection).toHaveBeenCalledTimes(1);
+    expect(db.upsertServiceConnection).toHaveBeenCalledWith({
+      projectId: 'p1',
+      serviceId: 'svc-pg',
+      consumerServiceId: 'real-workload__svc',
+    });
+    expect(db.createProjectDependency).toHaveBeenCalledTimes(1);
+    expect(db.createProjectDependency).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source_service_id: 'real-workload__svc',
+        target_service_id: 'svc-pg',
+        dependency_type: 'database',
+      }),
+    );
+  });
+
   it('propagates dropped env/secret keys from the attach step', async () => {
     const db = createMockDb({
       attachServiceToProject: vi.fn().mockResolvedValue({

@@ -118,6 +118,10 @@ describe('ProjectRepo.getDeployableServiceCountsByProjectIds', () => {
     expect(method).toContain('serviceConnections');
     expect(method).toContain('service_id_consumer');
     expect(method).toContain('service_id_provider');
+    expect(method).toContain("alias(services, 'consumer_services')");
+    expect(method).toContain('consumerProjectId');
+    expect(method).toContain('consumerServices.project_id');
+    expect(method).toContain('deployableServiceIdToProjectId(row.consumerId)');
     expect(method).toContain('directManagedRows');
     expect(method).toContain('managedServiceIdsByProject');
     expect(method).toContain('serviceIds.size');

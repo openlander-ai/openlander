@@ -1240,6 +1240,99 @@ describe('service-targeted monitoring tools', () => {
     expect(ctx.db.getDeployableForProject).not.toHaveBeenCalled();
   });
 
+  it('get_topology expands Compose stacks into internal container nodes', async () => {
+    const project = { id: 'stack', name: 'demo-stack', status: 'running' };
+    const composeParent = {
+      id: 'stack__svc',
+      project_id: 'stack',
+      name: 'demo-stack__svc',
+      kind: 'compose',
+      source: 'git',
+      status: 'running',
+      assigned_port: null,
+      image_url: 'demo-stack:latest',
+    };
+    const web = {
+      id: 'stack__web__svc',
+      project_id: 'stack',
+      name: 'demo-stack/web__svc',
+      kind: 'compose-child',
+      source: 'git',
+      status: 'running',
+      assigned_port: 10001,
+      image_url: 'demo-stack-web:latest',
+    };
+    const postgres = {
+      id: 'stack__postgres__svc',
+      project_id: 'stack',
+      name: 'demo-stack/postgres__svc',
+      kind: 'compose-child',
+      source: 'git',
+      status: 'running',
+      assigned_port: 10002,
+      image_url: 'postgres:17-alpine',
+    };
+    const redis = {
+      id: 'stack__redis__svc',
+      project_id: 'stack',
+      name: 'demo-stack/redis__svc',
+      kind: 'compose-child',
+      source: 'git',
+      status: 'running',
+      assigned_port: 10003,
+      image_url: 'redis:8-alpine',
+    };
+    const ctx = {
+      db: {
+        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getDeployablesByGroup: vi.fn(async () => [composeParent]),
+        getComposeChildren: vi.fn(async () => [web, postgres, redis]),
+        getServices: vi.fn(async () => []),
+        listServiceConnectionsByProject: vi.fn(async () => []),
+        listServices: vi.fn(async () => [composeParent, web, postgres, redis]),
+        findDependenciesByProject: vi.fn(async (projectId: string) =>
+          projectId === 'stack__web'
+            ? [
+                { target_service_id: 'stack__postgres__svc' },
+                { target_service_id: 'stack__redis__svc' },
+              ]
+            : [],
+        ),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getMonitoringTool(ctx, 'get_topology').execute(
+      { project_id: 'stack' },
+      { target: 'mcp' },
+    )) as {
+      count: number;
+      services: Array<{ id: string; kind: string; dependsOn: string[] }>;
+      edges: Array<{ from: string; to: string }>;
+    };
+
+    expect(ctx.db.getComposeChildren).toHaveBeenCalledWith('stack__svc');
+    expect(result.count).toBe(3);
+    expect(result.services.map((service) => service.id)).toEqual([
+      'stack__web__svc',
+      'stack__postgres__svc',
+      'stack__redis__svc',
+    ]);
+    expect(result.services).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'stack__web__svc',
+          kind: 'compose',
+          dependsOn: ['stack__postgres__svc', 'stack__redis__svc'],
+        }),
+      ]),
+    );
+    expect(result.edges).toEqual([
+      { from: 'stack__web__svc', to: 'stack__postgres__svc' },
+      { from: 'stack__web__svc', to: 'stack__redis__svc' },
+    ]);
+  });
+
   it('get_project_stats points agents at explicit target parameters', () => {
     const { ctx } = createServiceTargetContext();
     const tool = getMonitoringTool(ctx, 'get_project_stats');
