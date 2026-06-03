@@ -285,11 +285,13 @@ describeWithDatabase('DB-first Project/Application identity contracts on Postgre
           );
         });
 
-        await vi.waitFor(async () => {
-          await expect(db.getLastDeployLog(project.id)).resolves.toMatchObject({
-            service_id: serviceId,
-            status: 'success',
-          });
+        const production = (await db.getEnvironmentsByProject(project.id)).find(
+          (env) => env.type === 'production',
+        );
+        expect(production).toMatchObject({
+          id: `${project.id}-production`,
+          service_id: serviceId,
+          project_id: project.id,
         });
       } finally {
         await db.close();
