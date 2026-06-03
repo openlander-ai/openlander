@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.13-rc.1] - 2026-06-04
+
+### Fixed
+
+- Fixed Project-first Database/Cache deploys so Applications started with
+  `target_project_id` run on the target Project network while keeping their
+  Application route/container identity.
+- Made Deployment Target creation idempotent for pre-created Projects by
+  returning the existing environment row for the canonical service/type target.
+- Allowed a first Application to use the same name as its target Project while
+  preserving collision protection against other Projects.
+- Returned actionable MCP guidance for Database/Cache/Storage resource Docker
+  name conflicts, including an orphan-inspection follow-up call.
+- Hardened managed cleanup and incident reporting paths used by release QA so
+  Project-owned resources and managed incidents are handled consistently.
+
 ## [0.1.12] - 2026-06-03
 
 ### Added
