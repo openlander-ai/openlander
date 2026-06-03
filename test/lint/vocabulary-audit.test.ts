@@ -166,7 +166,7 @@ describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () =
     );
 
     expect(serviceRepo).toContain(
-      "export const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;",
+      "export const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose-child'] as const;",
     );
     expect(projectRepo).not.toContain(
       "const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;",

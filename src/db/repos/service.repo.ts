@@ -19,7 +19,7 @@ export const MANAGED_SERVICE_KINDS: readonly ServiceKind[] = [
   'minio',
 ];
 
-export const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose'] as const;
+export const NON_DEPLOYABLE_SERVICE_KINDS = [...MANAGED_SERVICE_KINDS, 'compose-child'] as const;
 
 export function deployableServiceKindFilter(kindColumn: SQL): SQL {
   return notInArray(kindColumn, [...NON_DEPLOYABLE_SERVICE_KINDS]);
@@ -426,20 +426,17 @@ export class ServiceRepo {
   /**
    * Returns user-addressable deployable services for a project group.
    *
-   * A compose parent row (`kind='compose'`) is metadata for the stack as a
-   * whole; the actual runnable nodes are its `compose-child` rows. Keep this
-   * in sync with ProjectRepo serviceCount so list cards and detail pages agree.
+   * Compose is a single Project-level resource (`kind='compose'`). Its
+   * `compose-child` rows are internal container nodes and are not promoted to
+   * top-level service cards. Keep this in sync with ProjectRepo serviceCount so
+   * list cards and detail pages agree.
    */
   async getDeployablesByGroup(projectId: string): Promise<ServiceRow[]> {
     const rows = await this.db
       .select()
       .from(services)
       .where(
-        and(
-          eq(services.project_id, projectId),
-          deployableServiceKindFilter(sql`${services.kind}`),
-          sql`NOT (${services.parent_service_id} IS NULL AND coalesce(${services.build_method}, '') = 'compose')`,
-        ),
+        and(eq(services.project_id, projectId), deployableServiceKindFilter(sql`${services.kind}`)),
       )
       .orderBy(desc(services.updated_at));
     return rows as ServiceRow[];
@@ -474,7 +471,6 @@ export class ServiceRepo {
         and(
           inArray(services.project_id, [...projectIds]),
           deployableServiceKindFilter(sql`${services.kind}`),
-          sql`NOT (${services.parent_service_id} IS NULL AND coalesce(${services.build_method}, '') = 'compose')`,
         ),
       )
       .orderBy(desc(services.updated_at))) as ServiceRow[];

@@ -35,9 +35,12 @@ export function createDeployableServiceRoutes(ctx: AppContext): Hono {
       ctx.db.getDeployablesByGroup(project.id),
       ctx.db.getEnvironmentsByProject(project.id),
     ]);
+    const projectLevelDeployables = deployables.filter(
+      (service) => service.kind !== 'compose-child',
+    );
     const visibleDeployables = includeArchived
-      ? deployables
-      : deployables.filter((service) => !service.archived_at);
+      ? projectLevelDeployables
+      : projectLevelDeployables.filter((service) => !service.archived_at);
     const domainMappingsByService = await loadDomainMappingsByService(ctx, visibleDeployables);
 
     return c.json({
