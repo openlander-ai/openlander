@@ -828,6 +828,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
+        targetProjectId: (args['target_project_id'] as string | undefined) ?? undefined,
         trigger: deployTriggerForToolContext(context),
       });
 
@@ -989,7 +990,11 @@ export const deployPlanToolDefs: ToolDef[] = [
       }
 
       if (result.status === 'building') {
-        return buildExecutePlanBuildingResponse({ result });
+        return buildExecutePlanBuildingResponse({
+          result,
+          includeTargetAttachFields: true,
+          ...(result.target_project_id ? { targetAttachStatus: 'pending' } : {}),
+        });
       } else {
         return buildExecutePlanPreBuildFailureResponse(result);
       }

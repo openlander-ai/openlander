@@ -54,6 +54,7 @@ export default defineConfig({
       'test/mcp/client-manager-ssrf.test.ts',
       'test/mcp/composite-routing*.test.ts',
       'test/mcp/composite-tool-registry.test.ts',
+      'test/mcp/db-first-canonical-flow-postgres.test.ts',
       'test/mcp/destructive-executor.test.ts',
       'test/mcp/instance-identity.test.ts',
       'test/mcp/managed-service-rename.test.ts',
