@@ -118,6 +118,7 @@ Analyze a repository and create a deployment plan.
 | `prefer_dockerfile` | boolean | No       | Prefer existing Dockerfile     |
 | `dockerfile_path`   | string  | No       | Relative Dockerfile path       |
 | `docker_target`     | string  | No       | Docker build target stage      |
+| `target_project_id` | string  | No       | Deploy first Application into an existing Project |
 
 ### `update_deploy_plan`
 

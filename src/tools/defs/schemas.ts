@@ -8,10 +8,7 @@ const envVarsInputSchema = z.union([z.string().min(1), z.record(z.string(), z.st
 export const deployProjectSchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL (e.g., github.com/user/repo)'),
   branch: z.string().optional().describe('Branch to deploy (default: repo default branch)'),
-  name: z
-    .string()
-    .optional()
-    .describe('Project name (auto-generated from repo if not provided)'),
+  name: z.string().optional().describe('Project name (auto-generated from repo if not provided)'),
   dockerfile_path: z
     .string()
     .optional()
@@ -398,14 +395,8 @@ export const previewIdSchema = z.object({
 
 // Status & monitoring schemas
 export const deployStatusSchema = z.object({
-  project_id: z
-    .string()
-    .optional()
-    .describe('Project id for current in-flight status lookup'),
-  project_name: z
-    .string()
-    .optional()
-    .describe('Project name for current in-flight status lookup'),
+  project_id: z.string().optional().describe('Project id for current in-flight status lookup'),
+  project_name: z.string().optional().describe('Project name for current in-flight status lookup'),
   deploy_id: z.string().optional().describe('Completed deploy log id to look up'),
   job_id: z.string().optional().describe('Alias for deploy_id; also checks active in-memory jobs'),
   wait: z
@@ -573,7 +564,9 @@ export const listServicesSchema = z
     include_orphans: z
       .boolean()
       .optional()
-      .describe('Include OpenLander infrastructure resource containers missing from the resource inventory.'),
+      .describe(
+        'Include OpenLander infrastructure resource containers missing from the resource inventory.',
+      ),
   })
   .strict();
 
@@ -781,10 +774,7 @@ export const uploadSecretFileSchema = z.object({
 });
 
 export const listSecretFilesSchema = z.object({
-  project_name: z
-    .string()
-    .optional()
-    .describe('Project name. Omit to list global secret files.'),
+  project_name: z.string().optional().describe('Project name. Omit to list global secret files.'),
 });
 
 export const removeSecretFileSchema = z.object({
@@ -830,6 +820,12 @@ export const createDeployPlanSchema = z
       .string()
       .optional()
       .describe('Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)'),
+    target_project_id: z
+      .string()
+      .optional()
+      .describe(
+        'Create the plan for deploying the first single Application/worker into an existing Project. Use after create_project when the Project already contains Database/Cache resources needed before first boot.',
+      ),
   })
   .superRefine((data, ctx) => {
     if (data.image && data.source !== 'image') {
@@ -959,10 +955,7 @@ export const deploySchema = z
       .optional()
       .describe('Git repository URL (e.g., github.com/user/repo)'),
     branch: z.string().optional().describe('Branch to deploy (default: repo default branch)'),
-    name: z
-      .string()
-      .optional()
-      .describe('Project name (auto-generated from repo if not provided)'),
+    name: z.string().optional().describe('Project name (auto-generated from repo if not provided)'),
     source: z.enum(['git', 'image']).optional().describe('Deployment source type'),
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
@@ -1231,16 +1224,8 @@ export const probeHostSchema = z
       .min(1)
       .optional()
       .describe('Application/Compose name for internal probe context'),
-    project_id: z
-      .string()
-      .min(1)
-      .optional()
-      .describe('Project id for internal probe context'),
-    project_name: z
-      .string()
-      .min(1)
-      .optional()
-      .describe('Project name for internal probe context'),
+    project_id: z.string().min(1).optional().describe('Project id for internal probe context'),
+    project_name: z.string().min(1).optional().describe('Project name for internal probe context'),
   })
   .refine((value) => Boolean(value.target || value.host), {
     message: 'target or host is required',

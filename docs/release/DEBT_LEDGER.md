@@ -3,6 +3,28 @@
 Small compatibility or vocabulary decisions that were intentionally accepted for
 a release should be recorded here so follow-up work is explicit.
 
+## v0.1.13
+
+- **`create_deploy_plan(target_project_id=...)` during data-model freeze:**
+  `target_project_id` is added to the existing `openlander_deploy.create_deploy_plan`
+  action and is forwarded into durable plan execution.
+- **Why accepted:** the canonical DB-first MCP flow needs both the one-call
+  `deploy_app` front door and the explicit
+  `create_deploy_plan -> execute_deploy_plan` path to attach the first
+  Application to an existing Project that already contains Database/Cache
+  resources. The parameter reuses the existing `target_project_id` vocabulary
+  from `deploy_app`; no action, route, response field, or data model rename is
+  introduced.
+- **Vocab review:** `Project` remains the namespace. The attached runtime is an
+  Application/worker represented by the compatibility `service_id` field.
+  Database/Cache/Storage resources stay under `openlander_managed_service`.
+- **Endpoint collision check:** no new REST route or MCP action is added. The
+  existing `create_deploy_plan` action accepts one additional optional
+  parameter already used by `deploy_app`.
+- **Follow-up:** before stable `v0.1.13`, keep the DB-first MCP flow in the
+  release suite and run AWS clean-agent QA against a fixed RC tag instead of
+  `latest`.
+
 ## v0.1.12
 
 - **Managed resource force-delete confirmation during data-model freeze:**
