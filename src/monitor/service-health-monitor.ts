@@ -351,7 +351,8 @@ export class ServiceHealthMonitor {
   ): Promise<void> {
     try {
       await this.db.createRuntimeIncident({
-        projectId: affectedProjects[0] ?? 'unknown',
+        projectId: affectedProjects[0] ?? service.project_id,
+        serviceId: service.id,
         category: 'service_down',
         errorSnippet: JSON.stringify({
           serviceName: service.name,

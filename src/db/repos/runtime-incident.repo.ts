@@ -1,14 +1,15 @@
 import { and, desc, eq } from 'drizzle-orm';
 
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
-import { runtimeIncidents } from '../schema.drizzle.js';
+import { runtimeIncidents, services } from '../schema.drizzle.js';
 import type { RuntimeIncidentRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
 
 /**
- * Post-0012: runtime_incidents is service-scoped. Callers still pass
- * `projectId` for vocabulary continuity; the repo translates to the
- * canonical deployable service id.
+ * Post-0012: runtime_incidents is service-scoped. Legacy project callers still
+ * pass `projectId`; the repo translates it to the canonical deployable service
+ * id. Service-scoped callers can pass `serviceId` directly, which is required
+ * for Database/Cache/Storage resources whose ids are not derived from a Project.
  */
 function projectIdToServiceId(projectId: string): string {
   return projectId.endsWith('__svc') ? projectId : `${projectId}__svc`;
@@ -22,8 +23,16 @@ export class RuntimeIncidentRepo {
     void this.client;
   }
 
+  private hydrateDeprecated(
+    row: RuntimeIncidentRow,
+    serviceProjectId?: string | null,
+  ): RuntimeIncidentRow {
+    return { ...row, project_id: serviceProjectId ?? row.service_id.replace(/__svc$/, '') };
+  }
+
   async createIncident(opts: {
     projectId: string;
+    serviceId?: string;
     environmentId?: string | null;
     category: string;
     exitCode?: number | null;
@@ -40,7 +49,7 @@ export class RuntimeIncidentRepo {
           .insert(runtimeIncidents)
           .values({
             id,
-            service_id: projectIdToServiceId(opts.projectId),
+            service_id: opts.serviceId ?? projectIdToServiceId(opts.projectId),
             environment_id: opts.environmentId ?? null,
             category: opts.category,
             exit_code: opts.exitCode ?? null,
@@ -54,17 +63,25 @@ export class RuntimeIncidentRepo {
       )[0] ?? null;
 
     if (!row) throw new RepoPersistenceError('runtime incident', id);
-    return { ...row, project_id: row.service_id.replace(/__svc$/, '') };
+    return this.hydrateDeprecated(row, opts.serviceId ? opts.projectId : null);
   }
 
   async getIncident(id: string): Promise<RuntimeIncidentRow | undefined> {
-    const row =
+    const selected =
       (
-        await this.db.select().from(runtimeIncidents).where(eq(runtimeIncidents.id, id)).limit(1)
+        await this.db
+          .select({
+            incident: runtimeIncidents,
+            serviceProjectId: services.project_id,
+          })
+          .from(runtimeIncidents)
+          .leftJoin(services, eq(runtimeIncidents.service_id, services.id))
+          .where(eq(runtimeIncidents.id, id))
+          .limit(1)
       )[0] ?? null;
+    const row = (selected?.incident ?? null) as RuntimeIncidentRow | null;
     if (!row) return undefined;
-    // Back-compat: hydrate deprecated project_id from service_id (strip __svc).
-    return { ...row, project_id: row.service_id.replace(/__svc$/, '') };
+    return this.hydrateDeprecated(row, selected?.serviceProjectId);
   }
 
   /** @param _serverId - Reserved for future server-side filtering. Currently ignored. */
@@ -75,14 +92,15 @@ export class RuntimeIncidentRepo {
   ): Promise<RuntimeIncidentRow[]> {
     const serviceId = projectIdToServiceId(projectId);
     if (opts?.resolved === undefined) {
-      return await this.db
+      const rows = await this.db
         .select()
         .from(runtimeIncidents)
         .where(eq(runtimeIncidents.service_id, serviceId))
         .orderBy(desc(runtimeIncidents.created_at));
+      return rows.map((row) => this.hydrateDeprecated(row as RuntimeIncidentRow, projectId));
     }
 
-    return await this.db
+    const rows = await this.db
       .select()
       .from(runtimeIncidents)
       .where(
@@ -92,14 +110,22 @@ export class RuntimeIncidentRepo {
         ),
       )
       .orderBy(desc(runtimeIncidents.created_at));
+    return rows.map((row) => this.hydrateDeprecated(row as RuntimeIncidentRow, projectId));
   }
 
   async listUnresolved(): Promise<RuntimeIncidentRow[]> {
-    return await this.db
-      .select()
+    const rows = await this.db
+      .select({
+        incident: runtimeIncidents,
+        serviceProjectId: services.project_id,
+      })
       .from(runtimeIncidents)
+      .leftJoin(services, eq(runtimeIncidents.service_id, services.id))
       .where(eq(runtimeIncidents.resolved, 0))
       .orderBy(desc(runtimeIncidents.created_at));
+    return rows.map((selected) =>
+      this.hydrateDeprecated(selected.incident as RuntimeIncidentRow, selected.serviceProjectId),
+    );
   }
 
   /**
@@ -108,12 +134,19 @@ export class RuntimeIncidentRepo {
    * histories and slice in memory.
    */
   async listRecentResolved(limit = 50): Promise<RuntimeIncidentRow[]> {
-    return await this.db
-      .select()
+    const rows = await this.db
+      .select({
+        incident: runtimeIncidents,
+        serviceProjectId: services.project_id,
+      })
       .from(runtimeIncidents)
+      .leftJoin(services, eq(runtimeIncidents.service_id, services.id))
       .where(eq(runtimeIncidents.resolved, 1))
       .orderBy(desc(runtimeIncidents.resolved_at))
       .limit(limit);
+    return rows.map((selected) =>
+      this.hydrateDeprecated(selected.incident as RuntimeIncidentRow, selected.serviceProjectId),
+    );
   }
 
   async resolveIncident(id: string): Promise<void> {

@@ -3,6 +3,27 @@
 Small compatibility or vocabulary decisions that were intentionally accepted for
 a release should be recorded here so follow-up work is explicit.
 
+## v0.1.12
+
+- **Managed resource force-delete confirmation during data-model freeze:**
+  `DELETE /api/services/:id` accepts `force=true` only when paired with
+  `confirm=true`.
+- **Why accepted:** release QA teardown needs the same connected-resource escape
+  hatch that MCP already exposes through `remove_service force=true`, otherwise
+  project-scoped Database/Cache/Storage resources can block purge cleanup after
+  smoke runs. The route keeps the default safe behavior unchanged and requires
+  explicit confirmation before bypassing the connected-project guard and
+  permanently deleting the resource volume.
+- **Vocab review:** the route remains the legacy compatibility API for
+  Database/Cache/Storage resources; no public noun or wire-field rename is
+  introduced.
+- **Endpoint collision check:** no new route is added. The existing
+  `DELETE /api/services/:id` handler only recognizes the additional
+  `force=true&confirm=true` query combination.
+- **Follow-up:** move quality-gate teardown to a dedicated test-admin cleanup
+  endpoint or harness once release QA no longer relies on product HTTP routes
+  for destructive fixture cleanup.
+
 ## v0.1.9
 
 - **MCP deploy-plan action additions during data-model freeze:**

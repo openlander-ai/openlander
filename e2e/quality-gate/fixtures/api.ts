@@ -228,10 +228,26 @@ async function deleteDeployableServices(projectId: string): Promise<void> {
   }
 }
 
+async function deleteManagedServices(projectId: string): Promise<void> {
+  const servicesRes = await apiFetch(`/api/projects/${projectId}/managed-services`);
+  if (!servicesRes.ok) return;
+
+  const services = (await servicesRes.json()) as Array<{ id?: string; name?: string }>;
+  for (const service of services) {
+    if (!service.id) continue;
+    const detailRes = await apiFetch(`/api/services/${service.id}`);
+    if (!detailRes.ok) continue;
+    const detail = (await detailRes.json()) as { attached_project_id?: string | null };
+    if (detail.attached_project_id !== projectId) continue;
+    await apiFetch(`/api/services/${service.id}?force=true&confirm=true`, { method: 'DELETE' });
+  }
+}
+
 export async function deleteProject(projectId: string): Promise<void> {
   let res = await apiFetch(`/api/projects/${projectId}/purge?confirm=true`, { method: 'DELETE' });
   if (res.status === 409) {
     await deleteDeployableServices(projectId);
+    await deleteManagedServices(projectId);
     res = await apiFetch(`/api/projects/${projectId}/purge?confirm=true`, { method: 'DELETE' });
   }
 

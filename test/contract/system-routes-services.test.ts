@@ -398,6 +398,52 @@ describe('system-routes /api/services wire shape contract', () => {
     expect(mockCtx.serviceManager.remove).toHaveBeenCalledWith('svc-redis');
   });
 
+  it('DELETE /services/:id?force=true requires explicit confirmation', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+
+    const mockCtx = {
+      serviceManager: {
+        remove: vi.fn().mockResolvedValue({}),
+      },
+      db: {},
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services/svc-redis?force=true', { method: 'DELETE' });
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({
+      error: 'Confirmation required. Add ?confirm=true to force-delete this resource.',
+    });
+    expect(mockCtx.serviceManager.remove).not.toHaveBeenCalled();
+  });
+
+  it('DELETE /services/:id?force=true&confirm=true forwards forced removal', async () => {
+    const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
+    const app = new Hono();
+
+    const mockCtx = {
+      serviceManager: {
+        remove: vi.fn().mockResolvedValue({}),
+      },
+      db: {},
+      config: { gitProviders: { github: {} } },
+      docker: {},
+    } as unknown as Parameters<typeof createSystemRoutes>[0];
+
+    app.route('/api', createSystemRoutes(mockCtx));
+    const res = await app.request('/api/services/svc-redis?force=true&confirm=true', {
+      method: 'DELETE',
+    });
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ status: 'removed' });
+    expect(mockCtx.serviceManager.remove).toHaveBeenCalledWith('svc-redis', { force: true });
+  });
+
   it('DELETE /services/:id returns SERVICE_IN_USE with connected_projects', async () => {
     const { createSystemRoutes } = await import('../../src/web/api/system-routes.js');
     const app = new Hono();

@@ -700,8 +700,17 @@ export function createSystemRoutes(ctx: AppContext): Hono {
 
   api.delete('/services/:id', async (c) => {
     const id = c.req.param('id');
+    const force = c.req.query('force') === 'true' || c.req.query('force') === '1';
+    if (force && c.req.query('confirm') !== 'true') {
+      return c.json(
+        { error: 'Confirmation required. Add ?confirm=true to force-delete this resource.' },
+        400,
+      );
+    }
     try {
-      const result = await ctx.serviceManager.remove(id);
+      const result = force
+        ? await ctx.serviceManager.remove(id, { force: true })
+        : await ctx.serviceManager.remove(id);
       return c.json({ status: 'removed', ...result });
     } catch (err) {
       log.debug({ err, serviceId: id }, 'Remove service failed');
