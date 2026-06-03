@@ -204,8 +204,9 @@ export async function deleteProject(projectId: string): Promise<void> {
   }
 }
 
-export async function listProjects(): Promise<any[]> {
-  const res = await apiFetch(`/api/projects`);
+export async function listProjects(options: { includeArchived?: boolean } = {}): Promise<any[]> {
+  const query = options.includeArchived ? '?include_archived=true' : '';
+  const res = await apiFetch(`/api/projects${query}`);
 
   if (!res.ok) {
     const text = await res.text();
@@ -581,7 +582,9 @@ export async function resolveComposeChildAccessibleUrl(
   }
 
   const childName = `${parentName}/${serviceName}`;
-  const childProject = (await listProjects()).find((project) => project.name === childName);
+  const childProject = (await listProjects({ includeArchived: true })).find(
+    (project) => project.name === childName,
+  );
   if (!childProject) {
     throw new Error(`Compose child project not found: ${childName}`);
   }
