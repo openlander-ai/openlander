@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
-import { deploy_configs } from '../schema.drizzle.js';
+import { deploy_configs, services } from '../schema.drizzle.js';
 import type { DeployConfigRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 type DeployConfigSelect = typeof deploy_configs.$inferSelect;
 
@@ -37,8 +38,22 @@ export class DeployConfigRepo {
     void this.client;
   }
 
+  private async resolveExistingCanonicalServiceId(projectId: string): Promise<string> {
+    const serviceId = projectIdToServiceId(projectId);
+    const [service] = await this.db
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.id, serviceId))
+      .limit(1);
+    if (!service) {
+      throw new RepoPersistenceError('service', serviceId);
+    }
+    return service.id;
+  }
+
   async save(projectId: string, configJson: string, configVersion: number): Promise<void> {
-    await this.saveByServiceId(projectIdToServiceId(projectId), configJson, configVersion);
+    const serviceId = await this.resolveExistingCanonicalServiceId(projectId);
+    await this.saveByServiceId(serviceId, configJson, configVersion);
   }
 
   async saveByServiceId(

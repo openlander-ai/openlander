@@ -30,6 +30,19 @@ export class RuntimeIncidentRepo {
     return { ...row, project_id: serviceProjectId ?? row.service_id.replace(/__svc$/, '') };
   }
 
+  private async resolveExistingCanonicalServiceId(projectId: string): Promise<string> {
+    const serviceId = projectIdToServiceId(projectId);
+    const [service] = await this.db
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.id, serviceId))
+      .limit(1);
+    if (!service) {
+      throw new RepoPersistenceError('service', serviceId);
+    }
+    return service.id;
+  }
+
   async createIncident(opts: {
     projectId: string;
     serviceId?: string;
@@ -43,13 +56,14 @@ export class RuntimeIncidentRepo {
     diagnosis?: string | null;
   }): Promise<RuntimeIncidentRow> {
     const id = crypto.randomUUID();
+    const serviceId = opts.serviceId ?? (await this.resolveExistingCanonicalServiceId(opts.projectId));
     const row =
       (
         await this.db
           .insert(runtimeIncidents)
           .values({
             id,
-            service_id: opts.serviceId ?? projectIdToServiceId(opts.projectId),
+            service_id: serviceId,
             environment_id: opts.environmentId ?? null,
             category: opts.category,
             exit_code: opts.exitCode ?? null,
