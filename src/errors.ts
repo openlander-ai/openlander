@@ -874,7 +874,7 @@ export class ManagedServiceNameConflictError extends OpenLanderError {
         retrySafe: false,
         _agent_guidance: {
           message:
-            'Choose a different service name, or remove/rename the existing Docker container from the dashboard before retrying create_service.',
+            'Inspect existing Database/Cache/Storage resources and orphan containers before retrying create_service. Choose a different resource name unless you have confirmed the existing container is stale and safe to remove.',
         },
       },
     );

@@ -981,12 +981,6 @@ export class PlanEngine {
       const targetProject = await this.getExistingTargetProject(projectId);
       const attachTargetProject = await this.getExistingTargetProject(targetProjectId);
       const projectName = targetProject?.name ?? name ?? fallbackProjectName;
-      if (attachTargetProject && projectName === attachTargetProject.name) {
-        throw new ServiceConfigError(
-          `target_project_id Application name "${projectName}" collides with the target Project name.`,
-          { targetProjectId: attachTargetProject.id, projectName },
-        );
-      }
       // Image-source plans carry no detected service dependencies (services: []),
       // so computePlanStatus resolves to 'ready' here.
       const initialStatus: DeployPlan['status'] = this.computePlanStatus([], []);
@@ -1042,12 +1036,6 @@ export class PlanEngine {
     const attachTargetProject = await this.getExistingTargetProject(targetProjectId);
     const resourceProject = attachTargetProject ?? targetProject;
     const projectName = targetProject?.name ?? name ?? extractProjectName(repoUrl);
-    if (attachTargetProject && projectName === attachTargetProject.name) {
-      throw new ServiceConfigError(
-        `target_project_id Application name "${projectName}" collides with the target Project name.`,
-        { targetProjectId: attachTargetProject.id, projectName },
-      );
-    }
 
     log.info({ repoUrl, branch }, 'Cloning repository');
     const cloneResult = await cloneRepo({ repoUrl, branch, sshKeyPath });
@@ -1347,7 +1335,7 @@ export class PlanEngine {
     const attachTargetProject = await this.getExistingTargetProject(planExecution.targetProjectId);
     if (attachTargetProject) {
       const collidingProject = await this.db.getProjectByName(plan.app.name);
-      if (collidingProject) {
+      if (collidingProject && collidingProject.id !== attachTargetProject.id) {
         return {
           attachTargetProject,
           targetProject: null,

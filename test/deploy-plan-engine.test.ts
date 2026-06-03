@@ -1182,6 +1182,23 @@ describe('PlanEngine.executePlan', () => {
     expect(storedPlan.execution.targetProjectId).toBe('p1');
   });
 
+  it('allows target_project_id image plans to use the target Project name', async () => {
+    const plan = await engine.createPlan({
+      source: 'image',
+      imageUrl: 'nginx:latest',
+      name: 'test-app',
+      targetProjectId: 'p1',
+    });
+
+    expect(plan.app.name).toBe('test-app');
+    expect(plan.target_project_id).toBe('p1');
+    expect(mockDb.createDeployPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectName: 'test-app',
+      }),
+    );
+  });
+
   it('attaches a target_project_id service from the plan event listener after deploy success', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
@@ -1255,6 +1272,56 @@ describe('PlanEngine.executePlan', () => {
       expect(completedPlan.project_id).toBe('target');
       expect(completedPlan.target_project_id).toBe('target');
     });
+  });
+
+  it('executes target_project_id plan when Application name matches the target Project', async () => {
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      target_project_id: 'target',
+      app: {
+        name: 'ais-server',
+        source: {
+          repo_url: 'https://github.com/test/ais-server',
+          branch: 'main',
+          commit_sha: 'abc123',
+        },
+      },
+      execution: { targetProjectId: 'target' },
+    });
+
+    mockDb.getProject.mockImplementation((id: string) =>
+      id === 'target' ? { id: 'target', name: 'ais-server' } : null,
+    );
+    mockDb.getProjectByName.mockImplementation((name: string) =>
+      name === 'ais-server' ? { id: 'target', name: 'ais-server' } : null,
+    );
+    mockDb.getDeployPlan.mockReturnValue({
+      id: plan.plan_id,
+      status: 'ready',
+      plan_json: JSON.stringify(plan),
+    });
+    mockPipeline.startDeploy.mockResolvedValue({
+      status: 'building',
+      projectId: 'target',
+      projectName: 'ais-server',
+    });
+
+    const result = await engine.executePlan(plan.plan_id, undefined, 'session-target');
+
+    expect(result).toMatchObject({
+      status: 'building',
+      project_id: 'target',
+      runtime_project_id: 'target',
+      target_project_id: 'target',
+      service_id: 'target__svc',
+    });
+    expect(mockDb.acquireDeployLock).toHaveBeenCalledWith('target', 'session-target');
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'ais-server',
+        _lockSessionId: 'session-target',
+      }),
+    );
   });
 
   it('does not attach target_project_id services when deploy fails', async () => {

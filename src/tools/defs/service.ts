@@ -6,6 +6,7 @@ import { DOCKER_LABELS, SHARED_NETWORK_NAME } from '../../config/index.js';
 import { ORPHAN_MANAGED_GROUP_ID } from '../../db/service-ids.js';
 import {
   isDockerNotFoundError,
+  ManagedServiceNameConflictError,
   ManagedServicePersistenceCleanedError,
   ServiceNotFoundError,
   ServiceOperationUnsupportedError,
@@ -453,6 +454,31 @@ export const serviceToolDefs: ToolDef[] = [
             _agent_guidance: {
               message:
                 'The failed create_service attempt was rolled back at the Docker layer. It is safe to retry after fixing the database issue.',
+            },
+          };
+        }
+        if (err instanceof ManagedServiceNameConflictError) {
+          return {
+            status: 'failed',
+            error: err.code,
+            code: err.code,
+            message: err.message,
+            details: err.details,
+            suggested_call: {
+              tool: 'openlander_managed_service',
+              arguments: {
+                action: 'list_services',
+                params: { include_orphans: true },
+              },
+            },
+            _agent_guidance: {
+              message:
+                'A Docker container with this resource name already exists. Do not overwrite or delete it automatically; inspect existing resources and orphan containers first.',
+              next_steps: [
+                'Run openlander_managed_service.list_services with include_orphans=true to find the existing container.',
+                'If the container belongs to data you still need, choose a different Database/Cache/Storage resource name.',
+                'If it is a stale OpenLander resource from a previous test, remove it deliberately, then retry create_service.',
+              ],
             },
           };
         }
