@@ -21,6 +21,7 @@ export interface RunConfig {
   imageTag: string;
   projectName: string;
   containerName?: string;
+  networkProjectName?: string;
   projectId: string;
   serviceId?: string;
   environmentType?: OpenLanderEnv;
@@ -71,7 +72,8 @@ export class ContainerRunner {
 
     const containerName = projectContainerName(config.containerName ?? config.projectName);
     await this.runtime.safeRemoveContainer(containerName);
-    const projectNetwork = await this.runtime.ensureProjectNetwork(config.projectName);
+    const networkProjectName = config.networkProjectName ?? config.projectName;
+    const projectNetwork = await this.runtime.ensureProjectNetwork(networkProjectName);
     await ensureManagedTraefikNetwork(this.runtime, projectNetwork);
 
     for (let attempt = 0; attempt < 2; attempt++) {

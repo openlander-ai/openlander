@@ -556,6 +556,7 @@ export async function runAndVerify(
     imageTag,
     projectName,
     containerName: routeName,
+    ...(config._networkProjectName ? { networkProjectName: config._networkProjectName } : {}),
     projectId,
     serviceId: config._serviceId,
     environmentType,

@@ -1575,6 +1575,7 @@ export class PlanEngine {
   private async dispatchPlanDeploy(params: {
     plan: DeployPlan;
     planExecution: PlanExecutionContext;
+    attachTargetProject: ExecutePlanProjectTarget | null;
     mergedEnv: Record<string, string>;
     deployOnly?: string[];
     triggerOverride?: 'chat' | 'webhook' | 'api';
@@ -1585,6 +1586,7 @@ export class PlanEngine {
     const {
       plan,
       planExecution,
+      attachTargetProject,
       mergedEnv,
       deployOnly,
       triggerOverride,
@@ -1655,6 +1657,7 @@ export class PlanEngine {
       ...(execution.environment ? { environment: execution.environment } : {}),
       ...(execution.sshKeyPath ? { sshKeyPath: execution.sshKeyPath } : {}),
       ...(execution.trigger ? { trigger: execution.trigger as 'chat' | 'webhook' | 'api' } : {}),
+      ...(attachTargetProject ? { _networkProjectName: attachTargetProject.name } : {}),
       // Propagate the plan-engine's lock session so that startDeploy's inner
       // deploy() runs inline under the same session (skipping a new acquire that
       // would conflict with the already-held lock).
@@ -1869,6 +1872,7 @@ export class PlanEngine {
       const dispatch = await this.dispatchPlanDeploy({
         plan,
         planExecution,
+        attachTargetProject,
         mergedEnv,
         deployOnly,
         triggerOverride,
