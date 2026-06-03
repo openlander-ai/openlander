@@ -40,7 +40,7 @@ async function resolveManagedServiceTargetProject(
         error: 'PROJECT_TARGET_REQUIRED',
         code: 'PROJECT_TARGET_REQUIRED',
         message:
-          'Managed service creation requires project_id or project_name so the service is owned by the project that will use it.',
+          'Database/Cache/Storage resource creation requires project_id or project_name so the resource is owned by the Project that will use it.',
       },
     };
   }
@@ -346,10 +346,10 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       const envVars = await ctx.db.getEnvVarsForService(service.project_id, service.id);
       return c.json(toServiceWire(service, envVars));
     } catch (err) {
-      log.debug({ err }, 'Create service failed');
+      log.debug({ err }, 'Create resource failed');
       const detail = err instanceof Error ? err.message : String(err);
       return c.json(
-        { error: 'INTERNAL_ERROR', message: detail || 'Failed to create service' },
+        { error: 'INTERNAL_ERROR', message: detail || 'Failed to create resource' },
         500,
       );
     }
@@ -625,7 +625,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       const result = await ctx.serviceManager.createDatabase(id, body.name);
       return c.json(result);
     } catch (err) {
-      log.debug({ err, serviceId: id }, 'Create service database failed');
+      log.debug({ err, serviceId: id }, 'Create resource database failed');
       const message = err instanceof Error ? err.message : String(err);
       if (err instanceof ServiceNotFoundError) {
         return c.json(serviceNotFoundBody(id), 404);
@@ -639,7 +639,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       if (message.includes('Invalid')) {
         return c.json({ error: 'INVALID_FIELD', message }, 400);
       }
-      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to create service database' }, 500);
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to create resource database' }, 500);
     }
   });
 
@@ -680,7 +680,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       );
       return c.json(result);
     } catch (err) {
-      log.debug({ err, serviceId: id }, 'Create service user failed');
+      log.debug({ err, serviceId: id }, 'Create resource user failed');
       const message = err instanceof Error ? err.message : String(err);
       if (err instanceof ServiceNotFoundError) {
         return c.json(serviceNotFoundBody(id), 404);
@@ -694,7 +694,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       if (message.includes('Invalid')) {
         return c.json({ error: 'INVALID_FIELD', message }, 400);
       }
-      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to create service user' }, 500);
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to create resource user' }, 500);
     }
   });
 

@@ -550,6 +550,7 @@ export const translations = {
       deleteArchivedServiceInputLabel: '{slug} 삭제 확인 입력',
       error: '프로젝트 작업에 실패했습니다',
     },
+    addResourceWithAgent: '에이전트에게 Database/Cache 추가 요청',
     env: {
       // Chrome — form labels + buttons + status.
       add: 'Add',
