@@ -45,12 +45,45 @@ async function deleteDeployableServices(project: ProjectSummary): Promise<void> 
   }
 }
 
+async function deleteManagedServices(project: ProjectSummary): Promise<void> {
+  const response = await apiFetch(`/api/projects/${project.id}/managed-services`);
+  if (!response.ok) {
+    console.warn(
+      `    ⚠️  Failed to list managed resources for ${project.name}: HTTP ${response.status}`,
+    );
+    return;
+  }
+
+  const services = (await response.json()) as ServiceSummary[];
+  for (const service of services) {
+    if (!service.id) continue;
+    const detailResponse = await apiFetch(`/api/services/${service.id}`);
+    if (!detailResponse.ok) continue;
+    const detail = (await detailResponse.json()) as { attached_project_id?: string | null };
+    if (detail.attached_project_id !== project.id) continue;
+
+    const deleteResponse = await apiFetch(`/api/services/${service.id}?force=true&confirm=true`, {
+      method: 'DELETE',
+    });
+    if (deleteResponse.ok) {
+      console.log(
+        `    ✓ Deleted managed resource: ${project.name}/${service.name ?? service.id}`,
+      );
+      continue;
+    }
+    console.warn(
+      `    ⚠️  Failed to delete managed resource ${project.name}/${service.name ?? service.id}: HTTP ${deleteResponse.status}`,
+    );
+  }
+}
+
 async function deleteProject(project: ProjectSummary): Promise<void> {
   let response = await apiFetch(`/api/projects/${project.id}/purge?confirm=true`, {
     method: 'DELETE',
   });
   if (response.status === 409) {
     await deleteDeployableServices(project);
+    await deleteManagedServices(project);
     response = await apiFetch(`/api/projects/${project.id}/purge?confirm=true`, {
       method: 'DELETE',
     });

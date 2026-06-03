@@ -17,6 +17,7 @@ import type { ServiceManager } from '../src/pipeline/service-manager.js';
 function createService(partial: Partial<ServiceRow> = {}): ServiceRow {
   return {
     id: partial.id ?? 'svc-1',
+    project_id: partial.project_id ?? 'proj-1',
     name: partial.name ?? 'shared-pg',
     type: partial.type ?? 'postgresql',
     image: partial.image ?? 'postgres:16-alpine',
@@ -216,6 +217,9 @@ describe('ServiceHealthMonitor — recordMetricSample wiring (Blocker 1)', () =>
     expect(db.updateService).toHaveBeenCalledOnce();
     expect(db.updateService).toHaveBeenCalledWith('svc-1', { status: 'error' });
     expect(db.createRuntimeIncident).toHaveBeenCalledOnce();
+    expect(db.createRuntimeIncident).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: 'proj-1', serviceId: 'svc-1' }),
+    );
     expect(recordMetricSample).not.toHaveBeenCalled();
   });
 
