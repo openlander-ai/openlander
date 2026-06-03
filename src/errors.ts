@@ -308,7 +308,7 @@ export class ProjectAlreadyExistsError extends OpenLanderError {
 export class ProjectSourceRemovedError extends OpenLanderError {
   constructor() {
     super(
-      'Project-level repository source was removed. Create a project group first, then deploy a service with /api/services/deploy.',
+      'Project-level repository source was removed. Create a Project first, then deploy an Application with /api/services/deploy.',
       'PROJECT_SOURCE_REMOVED',
       400,
     );
@@ -395,7 +395,7 @@ export class ServiceSelectionRequiredError extends OpenLanderError {
   ) {
     const count = candidates.length;
     super(
-      `Project '${projectName}' has ${String(count)} deployable services. Specify a service.`,
+      `Project '${projectName}' has ${String(count)} Applications. Specify service_id for the target Application.`,
       'SERVICE_SELECTION_REQUIRED',
       400,
       { projectId, projectName, candidates },
@@ -810,7 +810,7 @@ export class ServiceOperationError extends OpenLanderError {
   }
 }
 
-/** Managed service DB persistence failed after Docker resources were created and cleaned up. */
+/** Database/Cache/Storage resource DB persistence failed after Docker resources were cleaned up. */
 export class ManagedServicePersistenceCleanedError extends OpenLanderError {
   constructor(
     serviceName: string,
@@ -823,7 +823,7 @@ export class ManagedServicePersistenceCleanedError extends OpenLanderError {
     },
   ) {
     super(
-      `Managed service "${serviceName}" could not be saved. Created Docker resources were rolled back; it is safe to retry after fixing the database error.`,
+      `Database/Cache/Storage resource "${serviceName}" could not be saved. Created Docker resources were rolled back; it is safe to retry after fixing the database error.`,
       'MANAGED_SERVICE_PERSIST_FAILED_CLEANED',
       500,
       {
@@ -852,7 +852,7 @@ export class ManagedServicePersistenceCleanedError extends OpenLanderError {
   }
 }
 
-/** Managed service creation failed because the target Docker container name already exists. */
+/** Database/Cache/Storage resource creation failed because the target container name exists. */
 export class ManagedServiceNameConflictError extends OpenLanderError {
   constructor(
     serviceName: string,
@@ -863,7 +863,7 @@ export class ManagedServiceNameConflictError extends OpenLanderError {
     },
   ) {
     super(
-      `Managed service "${serviceName}" cannot be created because container "${details.containerName}" already exists.`,
+      `Database/Cache/Storage resource "${serviceName}" cannot be created because container "${details.containerName}" already exists.`,
       'MANAGED_SERVICE_NAME_CONFLICT',
       409,
       {

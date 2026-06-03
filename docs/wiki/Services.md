@@ -1,17 +1,20 @@
 # Services
 
-OpenLander has two service concepts:
+OpenLander's user-facing resources are:
 
 | Kind               | What it is                                                          | MCP composite                |
 | ------------------ | ------------------------------------------------------------------- | ---------------------------- |
-| Deployable service | Your app, API, worker, or compose child.                            | `openlander_service`         |
-| Managed service    | Infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, or MinIO. | `openlander_managed_service` |
+| Application        | Your app, API, worker, or image workload.                           | `openlander_service`         |
+| Compose            | A compose stack represented as one Project-level resource.           | `openlander_service`         |
+| Database           | PostgreSQL, MySQL, or MongoDB.                                      | `openlander_managed_service` |
+| Cache              | Redis.                                                              | `openlander_managed_service` |
+| Storage            | MinIO.                                                              | `openlander_managed_service` |
 
-This page covers **managed services**. Project-scoped managed services run on
+This page covers **Database/Cache/Storage resources**. Project-scoped Database/Cache/Storage resources run on
 the same project Docker network as the app that uses them and are usually
 connected through environment variables such as `DATABASE_URL` or `REDIS_URL`.
-MCP-created managed services require a target project in v0.1. Cross-project
-shared managed services and external TCP exposure are deferred.
+MCP-created Database/Cache/Storage resources require a target project in v0.1. Cross-project
+shared Database/Cache/Storage resources and external TCP exposure are deferred.
 
 ## Available Templates
 
@@ -27,12 +30,12 @@ shared managed services and external TCP exposure are deferred.
 
 ---
 
-## Create a Managed Service
+## Create a Database/Cache/Storage resource
 
 ### Via Web Dashboard
 
-The web dashboard does not create managed services in v0.1. Use the project
-Services tab to inspect connected infrastructure services and open their
+The web dashboard does not create Database/Cache/Storage resources in v0.1. Use the Project
+Resources tab to inspect connected Database/Cache/Storage resources and open their
 project-scoped detail pages for logs, connections, start/stop, and typed-confirm
 delete.
 
@@ -43,11 +46,11 @@ create_service(name: "my-postgres", template: "postgresql", project_name: "my-ap
 ```
 
 This creates infrastructure and returns connection guidance. It does not write
-app env vars, deploy, or redeploy your app by itself. To use the new service
+app env vars, deploy, or redeploy your app by itself. To use the new resource
 from an app, read credentials or `suggested_env`, then call `set_env_vars` on
-the deployable service.
+the Application.
 
-`create_service` requires `project_id` or `project_name` so the service is
+`create_service` requires `project_id` or `project_name` so the resource is
 attached to the same isolated Docker network as the app that will use it.
 
 ---
@@ -64,7 +67,7 @@ Example: `create_service(name: "mydb", template: "postgresql", project_name: "my
 
 ### Via Web Dashboard
 
-Project → Services → infrastructure service detail → **Connections**.
+Project → Resources → Database/Cache/Storage resource detail → **Connections**.
 
 ### Via MCP
 
@@ -144,18 +147,17 @@ action there. Service-owned env vars, domains, and resource settings cascade wit
 the service. Managed project volumes are preserved by default and require an
 explicit checkbox to delete.
 
-Deployable app/worker cleanup is softer: MCP `archive_service` creates a human
-approval request and, after approval, archives the deployable while preserving
+Application cleanup is softer: MCP `archive_service` creates a human
+approval request and, after approval, archives the Application while preserving
 configuration and history. MCP `unarchive_service` uses the same approval queue
-to restore an archived deployable without redeploying it. These are not a
-substitute for managed service deletion and do not delete databases, volumes,
+to restore an archived Application without redeploying it. These are not a
+substitute for Database/Cache/Storage resource deletion and do not delete databases, volumes,
 buckets, or host-wide Docker resources.
 
-Project group archive/restore is also available to MCP agents through
+Project archive/restore is also available to MCP agents through
 `archive_project` / `unarchive_project`, but it enters the same human approval
-queue before executing. A group archive spans active deployable app/worker
-services in that project group; a restore does not redeploy services
-automatically. For one deployable, prefer a specific `service_id` with
+queue before executing. A Project archive spans active Applications; a restore does not redeploy
+Applications automatically. For one Application, prefer a specific `service_id` with
 `archive_service` / `unarchive_service`.
 
 ---
@@ -184,32 +186,32 @@ restore_service(service_name: "my-postgres", backup_id: "backup_xxx")
 
 ## Connecting Projects to Services
 
-Project-scoped managed services run on the same Docker network as their owning
-project. Deployable services in that project can connect using the managed
-service container name as hostname:
+Project-scoped Database/Cache/Storage resources run on the same Docker network as their owning
+project. Applications in that project can connect using the managed
+resource container name as hostname:
 
 ```
-# In the deployable service env vars:
+# In the Application env vars:
 DATABASE_URL=postgresql://user:pass@ol-svc-my-postgres:5432/myapp
 REDIS_URL=redis://ol-svc-my-redis:6379
 ```
 
-Use project-scoped managed services as the default app database/cache path.
-Creating cross-project shared services is not exposed in v0.1.
+Use project-scoped Database/Cache/Storage resources as the default app database/cache path.
+Creating cross-project shared resources is not exposed in v0.1.
 
-If an app previously used an unassigned/global managed service as its primary
-database or cache, recreate that managed service inside the app's project,
+If an app previously used an unassigned/global Database/Cache/Storage resource as its primary
+database or cache, recreate that Database/Cache/Storage resource inside the app's project,
 update the app env vars to the project-scoped connection string, and redeploy
 the app. After upgrading to v0.1, redeploy apps promptly so older app
-containers do not remain on the old shared network while managed services move
+containers do not remain on the old shared network while Database/Cache/Storage resources move
 to the project network.
 
-OpenLander does not publish managed database/cache ports outside Docker in
+OpenLander does not publish Database/Cache resource ports outside Docker in
 v0.1. If an app needs a database outside OpenLander, bring an external
 connection string and set it as an app env var; OpenLander will not create a
-shared managed service or public TCP endpoint for it.
+shared Database/Cache/Storage resource or public TCP endpoint for it.
 
-Set via MCP on the deployable service:
+Set via MCP on the Application:
 
 ```
 set_env_vars(
@@ -220,9 +222,9 @@ set_env_vars(
 )
 ```
 
-MCP env changes target deployable services and save only by default. Prefer `service_id` from
+MCP env changes target Applications and save only by default. Prefer `service_id` from
 `list_projects().projects[].deployable_service.service_id`; `project_name` works only for groups
-with exactly one deployable service. Redeploy the app with `redeploy_app`, or pass
+with exactly one Application. Redeploy the app with `redeploy_app`, or pass
 `defer_redeploy=false` to `set_env_vars`, for the new value to reach a running container.
 
 Typical agent flow:
@@ -235,7 +237,7 @@ redeploy_app(service_id: "my-app__svc")
 ```
 
 This standalone `create_service` flow is separate from deploy-plan approval.
-When `execute_deploy_plan` approves a proposed project-scoped managed service on
-an existing project, that plan execution may provision the service, write its
+When `execute_deploy_plan` approves a proposed project-scoped Database/Cache/Storage resource on
+an existing project, that plan execution may provision the resource, write its
 connection env, and deploy in one flow. Standalone `create_service` remains
 explicit: create infrastructure, then set env vars, then redeploy.

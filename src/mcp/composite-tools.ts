@@ -84,12 +84,12 @@ export const PROJECT_ACTIONS = [
 ] as const;
 
 /**
- * openlander_managed_service (rc.2): Infrastructure services & storage.
+ * openlander_managed_service (rc.2): Database/Cache/Storage resources.
  * Renamed from `SERVICE_ACTIONS` — see plan §6.7. The 21-action list is
  * frozen verbatim from the rc.1 SERVICE_ACTIONS baseline.
- * - Service provisioning (PostgreSQL, MySQL, Redis, MongoDB, MinIO)
- * - Service lifecycle (start, stop, remove)
- * - Service credentials & connection strings
+ * - Database/Cache/Storage resource provisioning (PostgreSQL, MySQL, Redis, MongoDB, MinIO)
+ * - Resource lifecycle (start, stop, remove)
+ * - Resource credentials & connection strings
  * - Service backups & restoration
  * - Database & user management
  * - S3 bucket management (MinIO)
@@ -233,8 +233,8 @@ export type AllAction = CompositeAction | PlatformAction;
 /**
  * Composite registry for routing.
  *
- * `openlander_service` is deployable apps/workers.
- * `openlander_managed_service` is infrastructure services.
+ * `openlander_service` is Applications/Compose workloads.
+ * `openlander_managed_service` is Database/Cache/Storage resources.
  */
 export const COMPOSITE_REGISTRY = {
   openlander_deploy: DEPLOY_ACTIONS,
@@ -381,7 +381,7 @@ function humanUiOnlyResponse(toolName: string, action: string): Record<string, u
     ],
     do_not_substitute: ['remove_service', 'cleanup_docker'],
     _agent_guidance: {
-      message: `"${action}" is not exposed to MCP. Project/app hard delete and purge are human UI-only operations; tell the user to use the web UI: Settings → Danger zone for that project or service.${lifecycleReason} Do not substitute remove_service, cleanup_docker, or other destructive tools — those target managed infrastructure services or Docker hosts, not deployable apps/projects.`,
+      message: `"${action}" is not exposed to MCP. Project/Application hard delete and purge are human UI-only operations; tell the user to use the web UI: Settings → Danger zone for that Project or resource.${lifecycleReason} Do not substitute remove_service, cleanup_docker, or other destructive tools — those target Database/Cache/Storage resources or Docker hosts, not Applications/Projects.`,
     },
   };
 }
@@ -527,7 +527,7 @@ export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): Compo
 export function createOpenLanderManagedServiceCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_managed_service',
-    'Managed infrastructure services (Postgres, MySQL, Redis, Mongo, MinIO): provisioning, credentials, backups, users, buckets, volumes, disk usage, Docker cleanup.',
+    'Database/Cache/Storage resources (Postgres, MySQL, Redis, Mongo, MinIO): provisioning, credentials, backups, users, buckets, volumes, disk usage, Docker cleanup.',
     toolDefs,
   );
 }

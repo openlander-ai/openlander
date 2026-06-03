@@ -12,9 +12,7 @@ Run `{ action: "help" }` on any composite to list its action catalog with machin
 `input_schema`, `required_params`, and `optional_params`. Run
 `{ action: "help", params: { action_name: "create_deploy_plan" } }` to fetch one action contract.
 
-Model note: **Project = workspace/group** and **Service = deployable unit**. Repository, image,
-branch, Dockerfile, and build context belong to services. Project-level runtime actions have been
-removed; use service runtime actions instead.
+Model note: **Project = workspace**. **Application**, **Compose**, **Database**, **Cache**, and **Storage** are resources inside a Project. Wire fields and MCP action names such as `service_id` and `openlander_service` remain compatible in v0.1.x.
 
 Agent routing rule of thumb:
 
@@ -28,10 +26,10 @@ Agent routing rule of thumb:
 | "Why is this failing?"                        | `openlander_monitor.diagnose_service` with `service_id`                    |
 | "Was this killed by host memory/Docker?"      | `openlander_monitor.diagnose_host_resources`                               |
 
-Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a project
-group contains exactly one deployable service.
+Prefer `service_id` for follow-up actions. `project_name` is a limited shortcut only when a Project
+contains exactly one Application.
 `list_projects().projects[].deployable_service_count` is the app/worker count for the group; it
-does not include managed databases, caches, buckets, or the compose parent metadata row.
+does not include Database resources, caches, buckets, or the compose parent metadata row.
 
 Remote MCP uses Bearer tokens. Mint one from the **Your Agent** page (`/mcp-server`) in the
 dashboard, or from the setup wizard's MCP step — both issue an org-scoped token, **shown only
@@ -42,17 +40,17 @@ already exists. Project-scoped tokens exist via the API (`POST /api/tokens` with
 dashboard origin + `/mcp` (`:10114` only when reaching OpenLander without a reverse proxy).
 
 Destructive MCP operations are intentionally gated. Some real ToolDefs appear in the action catalog
-but are blocked at the MCP boundary because they delete managed infrastructure or perform host-wide
-cleanup: `remove_service`, `remove_volume`, `delete_bucket`, `platform_force_remove`,
+but are blocked at the MCP boundary because they delete Database/Cache/Storage resources or perform
+host-wide cleanup: `remove_service`, `remove_volume`, `delete_bucket`, `platform_force_remove`,
 `recover_platform`, `platform_cleanup_orphans`, and `cleanup_docker`. MCP calls to these return
 `OPERATION_REQUIRES_HUMAN_UI`; use the web UI or host-maintenance path instead.
 
-Deployable app cleanup and restore use softer paths. `archive_project`,
+Application cleanup and restore use softer paths. `archive_project`,
 `unarchive_project`, `archive_service`, and `unarchive_service` are exposed
 through the project/service composites but enter the human approval hold queue
 before executing.
-Archive is reversible cleanup, not permanent deletion: archived deployable
-services are hidden from default active lists, can be inspected with
+Archive is reversible cleanup, not permanent deletion: archived Applications
+are hidden from default active lists, can be inspected with
 `list_archived_services`, and can be restored with `unarchive_service` or
 `unarchive_project`. Restore actions do not redeploy automatically.
 Approval-hold responses include both `actionRunId` and `action_run_id`, plus a
@@ -65,9 +63,9 @@ enter that queue.
 **Project/app hard delete and purge remain human UI-only.** Composites do not expose
 `delete_project`, `delete_app`, `remove_app`, or `purge_project`. Calls to those names return
 `{ error: "HUMAN_UI_ONLY", web_ui: { surface: "project_settings_danger" }, safe_alternatives: [...], do_not_substitute: [...] }`
-so agents do not silently substitute `remove_service` or `cleanup_docker` (those target managed
-infrastructure services, not deployable apps). For whole project-group lifecycle changes, use
-`archive_project` / `unarchive_project` with `project_id` or `project_name`; for one deployable,
+so agents do not silently substitute `remove_service` or `cleanup_docker` (those target
+Database/Cache/Storage resources, not Applications). For whole Project lifecycle changes, use
+`archive_project` / `unarchive_project` with `project_id` or `project_name`; for one Application,
 use `archive_service` / `unarchive_service` with a `service_id`.
 
 Composite catalog:
@@ -75,12 +73,12 @@ Composite catalog:
 | Composite                    | Action slots | Purpose                                                                                 |
 | ---------------------------- | ------------ | --------------------------------------------------------------------------------------- |
 | `openlander_deploy`          | 18           | Deploy plans, execution, previews, rollbacks, build logs, Git                           |
-| `openlander_project`         | 17           | Project groups, lifecycle, secrets, temporary share URLs; env actions route to services |
-| `openlander_service`         | 22           | Deployable app/worker lifecycle, config, domain routes, and service env vocabulary      |
-| `openlander_managed_service` | 21           | Managed infrastructure services, credentials, backups, volumes, disk usage              |
+| `openlander_project`         | 17           | Projects, lifecycle, secrets, temporary share URLs; env actions route to Applications |
+| `openlander_service`         | 22           | Application lifecycle, config, domain routes, and env vocabulary      |
+| `openlander_managed_service` | 21           | Database/Cache/Storage resources, credentials, backups, volumes, disk usage              |
 | `openlander_monitor`         | 11           | Logs, alerts, topology, system stats, host diagnosis, project stats, probes             |
 
-`openlander_project` owns group/config actions. `openlander_service` owns deployable runtime actions.
+`openlander_project` owns Project/config actions. `openlander_service` owns Application runtime actions.
 
 ## Tool Categories
 
@@ -88,9 +86,9 @@ Composite catalog:
 | -------------------------------------------------------- | ----- | ------------------------------------------------- |
 | [Deploy Plan](#deploy-plan)                              | 6     | Create, inspect, update, execute deploy plans     |
 | [Deployment Controls](#deployment-controls)              | 7     | Status, cancel, rollback, previews                |
-| [Project Operations](#project-operations)                | 7     | Group lifecycle, listing, and group-scoped config |
+| [Project Operations](#project-operations)                | 7     | Project lifecycle, listing, and Project-scoped config |
 | [Environment Variables](#environment-variables--secrets) | 11    | Env vars, secrets, secret files                   |
-| [Services](#services--infrastructure)                    | 17    | Create databases, manage infra                    |
+| [Resources](#services--infrastructure)                   | 17    | Create databases, manage infrastructure resources |
 | [Domains](#domains)                                      | 2     | Register Host/path domain routes                  |
 | [Git & Repository](#git--repository)                     | 4     | Scan repos, list GitHub repos                     |
 | [Monitoring](#monitoring--logs)                          | 10    | Logs, stats, alerts, host diagnosis               |
@@ -111,7 +109,7 @@ Analyze a repository and create a deployment plan.
 | ------------------- | ------- | -------- | ------------------------------ |
 | `repo_url`          | string  | No       | Git repository URL             |
 | `branch`            | string  | No       | Branch to deploy               |
-| `name`              | string  | No       | Project group name             |
+| `name`              | string  | No       | Project name             |
 | `source`            | string  | No       | `'git'` or `'image'`           |
 | `image`             | string  | No       | Docker image (if source=image) |
 | `cmd`               | string  | No       | Container command override     |
@@ -146,10 +144,10 @@ Execute a deployment plan (non-blocking).
 | ---------------------------- | -------- | -------- | -------------------------------------------------------------------- |
 | `plan_id`                    | string   | Yes      | Plan ID                                                              |
 | `deploy_only`                | string[] | No       | Service names for compose projects                                   |
-| `approve_all_safe_resources` | boolean  | No       | Approve every proposed project-scoped managed service on the plan    |
+| `approve_all_safe_resources` | boolean  | No       | Approve every proposed project-scoped Database/Cache/Storage resource on the plan    |
 | `approvals.create_resources` | string[] | No       | Approve specific proposed services by identifier (e.g. `postgresql`) |
 
-When a plan is in **`needs_approval`** status it proposes project-scoped managed services
+When a plan is in **`needs_approval`** status it proposes project-scoped Database/Cache/Storage resources
 (listed in `services[]` with `resolution="proposed_project_service"`) — for example a
 `postgresql` database OpenLander would auto-provision and wire to `DATABASE_URL`. The
 provisioning is gated: execute returns `needs_approval` with `approval_required.create_resources`
@@ -159,17 +157,17 @@ individually. Unapproved, compose, or not-auto-creatable services are never crea
 connection env (e.g. an external `DATABASE_URL`) or create them first.
 
 This auto-provisioning and env wiring applies to the deploy-plan approval flow
-only. Standalone `create_service` creates the managed service and returns
-`suggested_env`. If the target project already has a deployable service, redeploy
-that service to apply saved env. If the project is empty, deploy the first app
+only. Standalone `create_service` creates the Database/Cache/Storage resource and returns
+`suggested_env`. If the target project already has an Application, redeploy
+that Application to apply saved env. If the project is empty, deploy the first app
 with `deploy_app(target_project_id=...)`.
 
 Auto-provisioning is supported only for **existing** projects. Executing an approved plan for a
 brand-new app (no project row yet) returns `needs_target_project` and creates nothing. Create the
-project first with `create_project`, create any required managed service with that `project_id`,
+project first with `create_project`, create any required Database/Cache/Storage resource with that `project_id`,
 then deploy the app with `target_project_id`. If the user already has a real external connection
-URL such as RDS or Upstash, pass it in `env_vars` and skip managed-service creation.
-OpenLander-managed shared services and external TCP database/cache endpoints are not part of the
+URL such as RDS or Upstash, pass it in `env_vars` and skip Database/Cache/Storage resource creation.
+Shared OpenLander-provisioned Database/Cache resources and external TCP database/cache endpoints are not part of the
 v0.1 MCP surface.
 
 ### `deploy_app`
@@ -182,29 +180,29 @@ install layer while preserving normal Docker cache behavior for other repos. Use
 only when you need a fully uncached build.
 
 `target_project_id` attaches a newly deployed single app/worker service to an
-existing project group after the deploy succeeds. The attach is owned by the
+existing Project after the deploy succeeds. The attach is owned by the
 durable deploy-plan execution path, not request-local MCP post-processing, so
 agents should poll status and then use the returned `service_id` for follow-up
 service actions. It is not supported with `expose=true`, compose, or ambiguous
 monorepo deploys; expose the service after attach if needed. Use `create_project`
-first when a brand-new app needs a project-scoped managed service before first
+first when a brand-new app needs a project-scoped Database/Cache/Storage resource before first
 boot.
 
 | Parameter           | Type    | Required | Description                                                     |
 | ------------------- | ------- | -------- | --------------------------------------------------------------- |
-| `service_id`        | string  | No       | Existing deployable service id                                  |
-| `service_name`      | string  | No       | Existing deployable service name                                |
+| `service_id`        | string  | No       | Existing Application id                                  |
+| `service_name`      | string  | No       | Existing Application name                                |
 | `project_name`      | string  | No       | Existing group lookup or service name scope                     |
 | `repo_url`          | string  | No       | Git repository URL for a new app                                |
 | `branch`            | string  | No       | Branch                                                          |
-| `name`              | string  | No       | New project group name, or existing project alias               |
+| `name`              | string  | No       | New Project name, or existing project alias               |
 | `source`            | string  | No       | `'git'` or `'image'`                                            |
 | `image`             | string  | No       | Docker image                                                    |
 | `cmd`               | string  | No       | Command override                                                |
 | `port`              | number  | No       | Container port                                                  |
 | `env_vars`          | object  | No       | Environment variables                                           |
 | `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes |
-| `target_project_id` | string  | No       | Attach new single deployable service to an existing group       |
+| `target_project_id` | string  | No       | Attach new single Application to an existing group       |
 | `strategy`          | string  | No       | Redeploy strategy for existing services                         |
 | `health_check_path` | string  | No       | Health check path                                               |
 | `wait`              | boolean | No       | Block until complete (default: true)                            |
@@ -228,8 +226,8 @@ Get real-time deployment status.
 
 | Parameter      | Type    | Required | Description             |
 | -------------- | ------- | -------- | ----------------------- |
-| `project_id`   | string  | No       | Project group id        |
-| `project_name` | string  | No       | Project group name      |
+| `project_id`   | string  | No       | Project id        |
+| `project_name` | string  | No       | Project name      |
 | `deploy_id`    | string  | No       | Completed deploy log id |
 | `job_id`       | string  | No       | Alias for `deploy_id`   |
 | `wait`         | boolean | No       | Block until complete    |
@@ -261,22 +259,22 @@ Get deployment history.
 
 | Parameter      | Type   | Required | Description               |
 | -------------- | ------ | -------- | ------------------------- |
-| `project_id`   | string | No       | Project group id          |
-| `project_name` | string | No       | Project group name        |
+| `project_id`   | string | No       | Project id          |
+| `project_name` | string | No       | Project name        |
 | `limit`        | number | No       | Max entries (default: 10) |
 
 Provide either `project_id` or `project_name`.
 
 ### `rollback_service`
 
-Rollback a deployable app/worker service to the stored previous Docker image.
+Rollback an Application to the stored previous Docker image.
 This is an image rollback only: it does not restore databases, volumes,
 environment variables, secrets, or service configuration.
 
 | Parameter      | Type   | Required | Description                           |
 | -------------- | ------ | -------- | ------------------------------------- |
-| `service_id`   | string | No       | Deployable service id                 |
-| `service_name` | string | No       | Deployable service name               |
+| `service_id`   | string | No       | Application id                 |
+| `service_name` | string | No       | Application name               |
 | `project_name` | string | No       | Optional group scope for name lookups |
 
 Provide either `service_id` or `service_name`. If no previous image tag is
@@ -309,13 +307,13 @@ List active preview deployments. No parameters.
 
 ### `create_project`
 
-Create an empty project group before provisioning managed services or attaching
-the first deployable app/worker service. This creates no runtime container and
+Create an empty Project before provisioning Database/Cache/Storage resources or attaching
+the first Application. This creates no runtime container and
 does not set a repository source.
 
 | Parameter      | Type     | Required | Description                  |
 | -------------- | -------- | -------- | ---------------------------- |
-| `name`         | string   | Yes      | Project group slug           |
+| `name`         | string   | Yes      | Project slug           |
 | `display_name` | string   | No       | Human-readable display name  |
 | `description`  | string   | No       | Optional project description |
 | `tags`         | string[] | No       | Optional project tags        |
@@ -332,16 +330,16 @@ List all projects with status, ports, URLs. No parameters.
 
 ### `archive_project`
 
-Archive a project group by archiving its active deployable app/worker services
+Archive a Project by archiving its active Applications
 while preserving configuration and history. This is a soft lifecycle operation:
-it does not delete managed databases, volumes, buckets, or host-wide Docker
+it does not delete Database resources, volumes, buckets, or host-wide Docker
 resources. Services that were already archived before the group archive remain
 tracked separately for restore behavior.
 
 | Parameter      | Type   | Required | Description        |
 | -------------- | ------ | -------- | ------------------ |
-| `project_id`   | string | No       | Project group id   |
-| `project_name` | string | No       | Project group name |
+| `project_id`   | string | No       | Project id   |
+| `project_name` | string | No       | Project name |
 
 Provide either `project_id` or `project_name`. A successful initial MCP call
 returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
@@ -356,8 +354,8 @@ automatically; call `redeploy_app` with each `service_id` that should run again.
 
 | Parameter      | Type   | Required | Description        |
 | -------------- | ------ | -------- | ------------------ |
-| `project_id`   | string | No       | Project group id   |
-| `project_name` | string | No       | Project group name |
+| `project_id`   | string | No       | Project id   |
+| `project_name` | string | No       | Project name |
 
 Provide either `project_id` or `project_name`. A successful initial MCP call
 returns `status: "pending_approval"`, `actionRunId` / `action_run_id`, and
@@ -366,14 +364,14 @@ request.
 
 ### `redeploy_app` / `restart_service`
 
-Deploy or restart a deployable app/worker service. Project-level runtime actions have been removed.
+Deploy or restart an Application. Project-level runtime actions have been removed.
 Git-based dependency installs get a targeted dependency-layer refresh; `no_cache=true` remains the
 manual full-cache bypass.
 
 | Parameter           | Type    | Required | Description                                                                                      |
 | ------------------- | ------- | -------- | ------------------------------------------------------------------------------------------------ |
-| `service_id`        | string  | No       | Deployable service id                                                                            |
-| `service_name`      | string  | No       | Deployable service name                                                                          |
+| `service_id`        | string  | No       | Application id                                                                            |
+| `service_name`      | string  | No       | Application name                                                                          |
 | `project_name`      | string  | No       | Optional group scope for name lookups                                                            |
 | `no_cache`          | boolean | No       | Force fresh build when Docker cache may hide dependency changes                                  |
 | `strategy`          | string  | No       | `'force'` by default; `'blue-green'` only for eligible git/image services behind managed Traefik |
@@ -401,16 +399,16 @@ returning 2xx.
 
 ### `archive_service`
 
-Archive a deployable app/worker service while preserving configuration and
+Archive an Application while preserving configuration and
 history. This is the MCP-safe cleanup path when an agent created the wrong app
 or the user asks to clean up a deployable. It stops/removes the runtime and
 waits for human approval before executing. It does **not** permanently delete
-managed databases, volumes, buckets, or host-wide Docker resources.
+Database resources, volumes, buckets, or host-wide Docker resources.
 
 | Parameter      | Type   | Required | Description                           |
 | -------------- | ------ | -------- | ------------------------------------- |
-| `service_id`   | string | No       | Deployable service id                 |
-| `service_name` | string | No       | Deployable service name or group name |
+| `service_id`   | string | No       | Application id                 |
+| `service_name` | string | No       | Application name or group name |
 | `project_name` | string | No       | Optional group scope for name lookups |
 
 Provide either `service_id` or `service_name`. A successful initial MCP call
@@ -420,15 +418,15 @@ request.
 
 ### `list_archived_services`
 
-List archived deployable app/worker services in a project group. Use this after
+List archived Applications in a Project. Use this after
 `archive_service` / `archive_project`, or when the user asks what can be
-restored or permanently deleted. It returns deployable services only; managed
+restored or permanently deleted. It returns Applications only; managed
 databases, caches, buckets, volumes, and host resources are excluded.
 
 | Parameter      | Type   | Required | Description        |
 | -------------- | ------ | -------- | ------------------ |
-| `project_id`   | string | No       | Project group id   |
-| `project_name` | string | No       | Project group name |
+| `project_id`   | string | No       | Project id   |
+| `project_name` | string | No       | Project name |
 
 Provide either `project_id` or `project_name`. Hard delete remains web
 UI-only; this action is a read-only way for agents to inspect reversible
@@ -440,15 +438,15 @@ string the human must enter).
 
 ### `unarchive_service`
 
-Restore an archived deployable app/worker service while preserving the same
+Restore an archived Application while preserving the same
 configuration and history. This reverses `archive_service` after human approval
 and does **not** redeploy automatically; call `redeploy_app` if the service
 should run again.
 
 | Parameter      | Type   | Required | Description                           |
 | -------------- | ------ | -------- | ------------------------------------- |
-| `service_id`   | string | No       | Deployable service id                 |
-| `service_name` | string | No       | Deployable service name or group name |
+| `service_id`   | string | No       | Application id                 |
+| `service_name` | string | No       | Application name or group name |
 | `project_name` | string | No       | Optional group scope for name lookups |
 
 Provide either `service_id` or `service_name`. A successful initial MCP call
@@ -465,16 +463,16 @@ first.
 
 | Parameter      | Type   | Required | Description        |
 | -------------- | ------ | -------- | ------------------ |
-| `project_name` | string | Yes      | Project group name |
+| `project_name` | string | Yes      | Project name |
 
 ### `update_service_config`
 
-Update deployable service build configuration.
+Update Application build configuration.
 
 | Parameter         | Type   | Required | Description                           |
 | ----------------- | ------ | -------- | ------------------------------------- |
-| `service_id`      | string | No       | Deployable service id                 |
-| `service_name`    | string | No       | Deployable service name               |
+| `service_id`      | string | No       | Application id                 |
+| `service_name`    | string | No       | Application name               |
 | `project_name`    | string | No       | Optional group scope for name lookups |
 | `dockerfile_path` | string | No       | Dockerfile path                       |
 | `docker_target`   | string | No       | Build target                          |
@@ -488,14 +486,14 @@ Update deployable service build configuration.
 
 | Parameter      | Type    | Required       | Description                                  |
 | -------------- | ------- | -------------- | -------------------------------------------- |
-| `service_id`   | string  | No             | Deployable service id                        |
-| `service_name` | string  | No             | Deployable service name                      |
-| `project_name` | string  | No             | Convenience target for single-service groups |
+| `service_id`   | string  | No             | Application id                        |
+| `service_name` | string  | No             | Application name                      |
+| `project_name` | string  | No             | Convenience target for single-Application Projects |
 | `key`          | string  | Yes (get only) | Env var key                                  |
 | `reveal`       | boolean | No (list only) | Return raw values instead of masked values   |
 
-Env vars belong to deployable services. Prefer `service_id` or `service_name`; `project_name`
-is accepted only when the group has exactly one deployable service, otherwise the tool
+Env vars belong to Applications. Prefer `service_id` or `service_name`; `project_name`
+is accepted only when the Project has exactly one Application, otherwise the tool
 returns `SERVICE_SELECTION_REQUIRED` with candidates. `list_env_vars` masks by default.
 `NEXT_PUBLIC_*`, `PUBLIC_*`, `VITE_PUBLIC_*`, and `NUXT_PUBLIC_*` are treated as public and
 are not masked. Empty strings render as `""`; missing single-key lookups throw `NOT_FOUND`.
@@ -504,9 +502,9 @@ are not masked. Empty strings render as `""`; missing single-key lookups throw `
 
 | Parameter        | Type    | Required | Description                                       |
 | ---------------- | ------- | -------- | ------------------------------------------------- |
-| `service_id`     | string  | No       | Deployable service id                             |
-| `service_name`   | string  | No       | Deployable service name                           |
-| `project_name`   | string  | No       | Convenience target for single-service groups      |
+| `service_id`     | string  | No       | Application id                             |
+| `service_name`   | string  | No       | Application name                           |
+| `project_name`   | string  | No       | Convenience target for single-Application Projects      |
 | `variables`      | object  | Yes      | Key-value pairs; values must be strings           |
 | `defer_redeploy` | boolean | No       | Default `true`; pass `false` to apply immediately |
 
@@ -519,9 +517,9 @@ container, call `redeploy_app`, or pass `defer_redeploy=false`.
 
 | Parameter      | Type   | Required | Description                                  |
 | -------------- | ------ | -------- | -------------------------------------------- |
-| `service_id`   | string | No       | Deployable service id                        |
-| `service_name` | string | No       | Deployable service name                      |
-| `project_name` | string | No       | Convenience target for single-service groups |
+| `service_id`   | string | No       | Application id                        |
+| `service_name` | string | No       | Application name                      |
+| `project_name` | string | No       | Convenience target for single-Application Projects |
 
 Exports all service env vars as raw `.env` text and records an audit event without storing raw values in the audit log.
 
@@ -529,9 +527,9 @@ Exports all service env vars as raw `.env` text and records an audit event witho
 
 | Parameter        | Type     | Required            | Description                                       |
 | ---------------- | -------- | ------------------- | ------------------------------------------------- |
-| `service_id`     | string   | No                  | Deployable service id                             |
-| `service_name`   | string   | No                  | Deployable service name                           |
-| `project_name`   | string   | No                  | Convenience target for single-service groups      |
+| `service_id`     | string   | No                  | Application id                             |
+| `service_name`   | string   | No                  | Application name                           |
+| `project_name`   | string   | No                  | Convenience target for single-Application Projects      |
 | `key`            | string   | Yes (single delete) | Env var key                                       |
 | `keys`           | string[] | Yes (bulk delete)   | Env var keys                                      |
 | `confirm`        | boolean  | Yes (bulk apply)    | Omit or pass `false` for dry-run preview only     |
@@ -554,13 +552,13 @@ tunnel backend; it is not required for normal deploy/redeploy flows.
 
 | Parameter      | Type   | Required | Description        |
 | -------------- | ------ | -------- | ------------------ |
-| `project_name` | string | Yes      | Project group name |
+| `project_name` | string | Yes      | Project name |
 
 ### `upload_secret_file` / `list_secret_files` / `remove_secret_file`
 
 | Parameter      | Type   | Required     | Description                          |
 | -------------- | ------ | ------------ | ------------------------------------ |
-| `project_name` | string | No           | Project group name (omit for global) |
+| `project_name` | string | No           | Project name (omit for global) |
 | `filename`     | string | Yes          | Filename                             |
 | `content`      | string | Yes (upload) | File content                         |
 | `mount_path`   | string | No           | Mount dir (default: `/run/secrets`)  |
@@ -577,13 +575,13 @@ tunnel backend; it is not required for normal deploy/redeploy flows.
 | `template`     | string | No       | `postgresql`, `mysql`, `redis`, `mongodb`, `rabbitmq`, `minio` |
 | `image`        | string | No       | Custom Docker image                                            |
 | `port`         | number | No       | Port number                                                    |
-| `project_id`   | string | No       | Attach to this project group id                                |
-| `project_name` | string | No       | Attach to this project group name                              |
+| `project_id`   | string | No       | Attach to this Project id                                |
+| `project_name` | string | No       | Attach to this Project name                              |
 
 `create_service` requires `project_id` or `project_name`. This keeps new
 databases/caches attached to the isolated project Docker network used by the app
-that will consume them. Cross-project shared managed services are not exposed in
-v0.1, and OpenLander does not expose managed database/cache ports over external
+that will consume them. Cross-project shared Database/Cache/Storage resources are not exposed in
+v0.1, and OpenLander does not expose Database/Cache resource ports over external
 TCP. Create the service with the target app's `project_id` or `project_name`.
 The standalone action does not write env vars to the app; use the returned
 `suggested_env` with `openlander_service.set_env_vars`, then redeploy.
@@ -594,7 +592,7 @@ The standalone action does not write env vars to the app; use the returned
 | ----------------- | ------- | -------- | ----------------------------------------------- |
 | `include_orphans` | boolean | No       | Include unmanaged OpenLander service containers |
 
-`include_orphans=true` surfaces OpenLander-managed service containers that still exist in Docker but are missing from the `services` table.
+`include_orphans=true` surfaces OpenLander resource containers that still exist in Docker but are missing from the `services` table.
 
 MCP `list_services` intentionally omits credential values. Use `get_service_credentials` for connection strings, users, passwords, and database names.
 Project-scoped rows include `kind`, `attached_project_id`, and `attached_project_name` so agents can tell which app project can reach the database/cache over its Docker network.
@@ -603,22 +601,22 @@ Project-scoped rows include `kind`, `attached_project_id`, and `attached_project
 
 | Parameter      | Type   | Required | Description                         |
 | -------------- | ------ | -------- | ----------------------------------- |
-| `service_id`   | string | No       | Managed/infrastructure service id   |
-| `service_name` | string | No       | Managed/infrastructure service name |
+| `service_id`   | string | No       | Database/Cache/Storage resource id   |
+| `service_name` | string | No       | Database/Cache/Storage resource name |
 
-Provide either `service_id` or `service_name`. Deployable app/worker services are intentionally rejected; use `openlander_service` or `diagnose_service` for those.
+Provide either `service_id` or `service_name`. Applications are intentionally rejected; use `openlander_service` or `diagnose_service` for those.
 
 ### `start_service` / `stop_service`
 
 | Parameter      | Type   | Required | Description                         |
 | -------------- | ------ | -------- | ----------------------------------- |
-| `service_name` | string | Yes      | Managed/infrastructure service name |
+| `service_name` | string | Yes      | Database/Cache/Storage resource name |
 
 ### `exec_service_container`
 
 | Parameter         | Type     | Required | Description                         |
 | ----------------- | -------- | -------- | ----------------------------------- |
-| `service_name`    | string   | Yes      | Managed/infrastructure service name |
+| `service_name`    | string   | Yes      | Database/Cache/Storage resource name |
 | `command`         | string[] | Yes      | Command argv array                  |
 | `timeout_seconds` | number   | No       | Max execution time                  |
 
@@ -633,8 +631,8 @@ typed-confirm deletion with the managed-volume opt-in checkbox.
 
 | Parameter      | Type   | Required | Description                         |
 | -------------- | ------ | -------- | ----------------------------------- |
-| `service_id`   | string | No       | Managed/infrastructure service id   |
-| `service_name` | string | No       | Managed/infrastructure service name |
+| `service_id`   | string | No       | Database/Cache/Storage resource id   |
+| `service_name` | string | No       | Database/Cache/Storage resource name |
 
 Provide either `service_id` or `service_name`.
 
@@ -656,7 +654,7 @@ Provide either `service_id` or `service_name`.
 | `username`      | string | Yes (user) | Username                  |
 | `password`      | string | No         | Auto-generated if omitted |
 
-The managed database itself is provisioned by `create_service` (template `postgresql` /
+The Database resource itself is provisioned by `create_service` (template `postgresql` /
 `mysql` / `mongodb`). `create_database` and `list_databases` are not exposed on the MCP
 composite surface — calling them over MCP returns `UNKNOWN_ACTION`.
 
@@ -690,10 +688,10 @@ confirming the data-loss impact.
 
 | Parameter              | Type    | Required | Description                                              |
 | ---------------------- | ------- | -------- | -------------------------------------------------------- |
-| `service_id`           | string  | No       | Preferred deployable service id                          |
-| `service_name`         | string  | No       | Deployable service name                                  |
-| `project_id`           | string  | No       | Optional project group id for single-deployable groups   |
-| `project_name`         | string  | No       | Optional project group name for single-deployable groups |
+| `service_id`           | string  | No       | Preferred Application id                          |
+| `service_name`         | string  | No       | Application name                                  |
+| `project_id`           | string  | No       | Optional Project id for single-Application Projects   |
+| `project_name`         | string  | No       | Optional Project name for single-Application Projects |
 | `domain`               | string  | Yes      | Domain host that already points to OpenLander            |
 | `path_prefix`          | string  | No       | Public path prefix to match (default `/`)                |
 | `strip_prefix`         | boolean | No       | Strip `path_prefix` before forwarding                    |
@@ -755,10 +753,10 @@ Use this first when multiple OpenLander servers are connected to the same AI cli
 
 | Parameter      | Type   | Required | Description                                           |
 | -------------- | ------ | -------- | ----------------------------------------------------- |
-| `service_id`   | string | No       | Deployable service id; preferred from `list_projects` |
-| `service_name` | string | No       | Deployable service name                               |
-| `project_id`   | string | No       | Convenience target for single-service groups          |
-| `project_name` | string | No       | Convenience target for single-service groups          |
+| `service_id`   | string | No       | Application id; preferred from `list_projects` |
+| `service_name` | string | No       | Application name                               |
+| `project_id`   | string | No       | Convenience target for single-Application Projects          |
+| `project_name` | string | No       | Convenience target for single-Application Projects          |
 | `lines`        | number | No       | Number of tail lines; MCP default 200                 |
 
 Provide one of `service_id`, `service_name`, `project_id`, or `project_name`. Prefer
@@ -786,30 +784,30 @@ OOM, disk pressure, or Docker daemon instability.
 
 | Parameter      | Type   | Required | Description                                  |
 | -------------- | ------ | -------- | -------------------------------------------- |
-| `service_id`   | string | No       | Deployable service id; preferred             |
-| `service_name` | string | No       | Deployable service name                      |
-| `project_id`   | string | No       | Convenience target for single-service groups |
-| `project_name` | string | No       | Convenience target for single-service groups |
+| `service_id`   | string | No       | Application id; preferred             |
+| `service_name` | string | No       | Application name                      |
+| `project_id`   | string | No       | Convenience target for single-Application Projects |
+| `project_name` | string | No       | Convenience target for single-Application Projects |
 
 ### `get_topology`
 
-Read-only project service graph for agents. Returns deployable services,
-connected managed services, and `dependsOn`/`edges` so an agent can see which
+Read-only project service graph for agents. Returns Applications,
+connected Database/Cache/Storage resources, and `dependsOn`/`edges` so an agent can see which
 apps depend on which databases/caches over MCP.
 
 | Parameter      | Type   | Required | Description        |
 | -------------- | ------ | -------- | ------------------ |
-| `project_id`   | string | No       | Project group id   |
-| `project_name` | string | No       | Project group name |
+| `project_id`   | string | No       | Project id   |
+| `project_name` | string | No       | Project name |
 
 ### `diagnose_service`
 
 | Parameter           | Type   | Required | Description                                  |
 | ------------------- | ------ | -------- | -------------------------------------------- |
-| `service_id`        | string | No       | Deployable service id; preferred             |
-| `service_name`      | string | No       | Deployable service name                      |
-| `project_id`        | string | No       | Convenience target for single-service groups |
-| `project_name`      | string | No       | Convenience target for single-service groups |
+| `service_id`        | string | No       | Application id; preferred             |
+| `service_name`      | string | No       | Application name                      |
+| `project_id`        | string | No       | Convenience target for single-Application Projects |
+| `project_name`      | string | No       | Convenience target for single-Application Projects |
 | `path`              | string | No       | HTTP path to probe                           |
 | `health_check_path` | string | No       | Alias for `path`                             |
 | `lines`             | number | No       | Log lines to include                         |
@@ -827,8 +825,8 @@ If `path` is omitted, OpenLander uses a configured base path env such as
 | `protocol`     | string  | No       | `http`, `https`, or `tcp`; default auto-detect      |
 | `path`         | string  | No       | HTTP path                                           |
 | `internal`     | boolean | No       | Probe from the target project container when `true` |
-| `service_id`   | string  | No       | Deployable service context for internal probes      |
-| `service_name` | string  | No       | Deployable service name context for internal probes |
+| `service_id`   | string  | No       | Application context for internal probes      |
+| `service_name` | string  | No       | Application name context for internal probes |
 | `project_id`   | string  | No       | Project context for internal probes                 |
 | `project_name` | string  | No       | Project context for internal probes                 |
 | `timeout_ms`   | number  | No       | Probe timeout                                       |
@@ -868,8 +866,8 @@ Provide either `action_run_id` or `action_id`.
 | Parameter      | Type   | Required | Description                  |
 | -------------- | ------ | -------- | ---------------------------- |
 | `deploy_id`    | string | No       | Deploy log id                |
-| `project_id`   | string | No       | Project group id             |
-| `project_name` | string | No       | Project group name           |
+| `project_id`   | string | No       | Project id             |
+| `project_name` | string | No       | Project name           |
 | `deploy_index` | number | No       | Deploy index (0 = latest)    |
 | `tail`         | number | No       | Return only the last N lines |
 
@@ -893,7 +891,7 @@ apply config/repo changes and call `redeploy_app`.
 
 | Parameter      | Type   | Required | Description           |
 | -------------- | ------ | -------- | --------------------- |
-| `project_name` | string | Yes      | Project group name    |
+| `project_name` | string | Yes      | Project name    |
 | `volume_name`  | string | Yes      | Volume name           |
 | `mount_path`   | string | Yes      | Mount path (absolute) |
 
@@ -907,7 +905,7 @@ apply config/repo changes and call `redeploy_app`.
 
 | Parameter      | Type   | Required | Description        |
 | -------------- | ------ | -------- | ------------------ |
-| `project_name` | string | Yes      | Project group name |
+| `project_name` | string | Yes      | Project name |
 | `volume_name`  | string | Yes      | Volume name        |
 
 `remove_volume` is human-only in OpenLander 0.1 and returns

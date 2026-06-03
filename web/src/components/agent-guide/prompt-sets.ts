@@ -45,34 +45,34 @@ export function getAgentGuideContent(
     case 'add-service':
       return {
         heading: 'Tell your agent what to deploy',
-        lead: 'A project is the group; a service is the deployable app, API, or worker inside it. Paste a prompt and your agent will deploy through MCP.',
+        lead: 'A Project is the workspace; Applications and Compose stacks are the workloads inside it. Paste a prompt and your agent will deploy through MCP.',
         prompts: [
           {
-            text: `Deploy github.com/myorg/myapp to project ${projectName} as a new service.`,
+            text: `Deploy github.com/myorg/myapp to Project ${projectName} as a new Application.`,
           },
           {
-            text: `Add a PostgreSQL managed service, then wire DATABASE_URL into project ${projectName}.`,
-            hint: 'Infrastructure services are provisioned by the agent, then wired into deployable services through env vars.',
+            text: `Add a PostgreSQL Database resource, then wire DATABASE_URL into Project ${projectName}.`,
+            hint: 'Database/Cache/Storage resources are provisioned by the agent, then wired into Applications through env vars.',
           },
           {
-            text: `Connect the existing redis-prod managed service to the deployable service in ${projectName}.`,
+            text: `Connect the existing redis-prod Cache resource to the Application in ${projectName}.`,
           },
         ],
       };
     case 'add-managed-db':
       return {
         heading: 'Tell your agent what to provision',
-        lead: 'Infrastructure services are databases, caches, and shared resources. They are provisioned first, then wired into deployable services as env vars.',
+        lead: 'Database, Cache, and Storage resources are provisioned first, then wired into Applications or Compose stacks as env vars.',
         prompts: [
           {
-            text: 'Provision a managed postgres named cache.',
-            hint: 'Then: add the connection string to a deployable service as `DATABASE_URL` and redeploy it.',
+            text: 'Provision a PostgreSQL Database resource named app-db.',
+            hint: 'Then: add the connection string to an Application as `DATABASE_URL` and redeploy it.',
           },
           {
-            text: 'Provision a managed redis named sessions, then wire it into my app as `REDIS_URL`.',
+            text: 'Provision a Redis Cache resource named sessions, then wire it into my app as `REDIS_URL`.',
           },
           {
-            text: 'List existing infrastructure services and tell me which ones are unwired.',
+            text: 'List existing Database/Cache/Storage resources and tell me which ones are unwired.',
           },
         ],
       };

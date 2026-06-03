@@ -80,7 +80,7 @@ in v0.1.
 
 #### Via Web Dashboard
 
-Service Detail → **Domains** tab → Add Domain
+Application Detail → **Domains** tab → Add Domain
 
 This registers a Host/path route inside OpenLander's managed Traefik config.
 It does not create DNS records, Cloudflare Tunnel routes, ngrok endpoints, or
@@ -98,7 +98,7 @@ for the Host/path route that endpoint registers, not a separate
 
 ### List Domain Routes
 
-Use Service Detail → **Domains** tab for day-to-day management. The API returns
+Use Application Detail → **Domains** tab for day-to-day management. The API returns
 the same service-scoped Host/path route registrations used by the dashboard.
 
 ---

@@ -12,7 +12,7 @@
  * tabs inside the Activity page. Old `/activity?type=deploy` URLs
  * still route to the same view; the sidebar entry is just gone.
  *
- * Removed in v0.1: Logs (lives only inside Service detail), SSH Keys (→ v0.2),
+ * Removed in v0.1: Logs (lives only inside resource detail), SSH Keys (→ v0.2),
  * Notifications (→ v0.2). MCP Server item folded into Workspace as "Your Agent"
  * pointing at /mcp-server. Cloudflare Tunnel surface deferred to v0.2.
  */

@@ -5,7 +5,7 @@
  * Cross-service triage view answering "which service is degrading right
  * now?" — one row per service with name + project badge + health pill +
  * 60-min CPU sparkline + 60-min memory sparkline + last-sample
- * timestamp. Click row → service detail Monitoring tab.
+ * timestamp. Click row → resource detail Monitoring tab.
  *
  * Data comes from /api/monitoring/services (server-side fan-out, 15 s
  * polling). Per Principle 1 (no synthetic empty-state numbers): services

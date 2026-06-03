@@ -2,9 +2,9 @@
 
 ## Overview
 
-OpenLander deploys **deployable services** through a plan-first pipeline. A **project** is the
-workspace/group that holds related services; a repository, Docker image, or compose stack is attached
-to a service inside that project.
+OpenLander deploys **Applications** and **Compose** stacks through a plan-first pipeline. A
+**Project** is the workspace that holds related resources; a repository, Docker image, or compose
+stack is attached inside that Project.
 
 ```
 create_deploy_plan  →  validate_deploy_plan  →  execute_deploy_plan  →  get_deploy_status
@@ -15,19 +15,20 @@ create_deploy_plan  →  validate_deploy_plan  →  execute_deploy_plan  →  ge
 ```
 
 There's also a convenience `deploy_app` tool that combines all 3 steps.
-`deploy_app(target_project_id=...)` adds a newly deployed single app/worker
-service into an existing project group after the deploy succeeds. The attach is
+`deploy_app(target_project_id=...)` adds a newly deployed single Application
+into an existing Project after the deploy succeeds. The attach is
 owned by the durable deploy-plan execution path, so MCP disconnects or timeouts
 do not own the group move. It is not supported with `expose=true`, compose, or
 ambiguous monorepo deploys; expose the service after attach if needed.
 
 ## Mental Model
 
-| Term               | Meaning                                                                            | Use it for                                                   |
-| ------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Project group      | A workspace that groups related services.                                          | Organization, settings, service list.                        |
-| Deployable service | An app, API, worker, or compose child that OpenLander builds/runs.                 | Env vars, redeploys, domains, logs, diagnostics.             |
-| Managed service    | Project-scoped infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, or MinIO. | Credentials, backups, databases, buckets, service lifecycle. |
+| Term                          | Meaning                                                                            | Use it for                                       |
+| ----------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Project                       | A workspace that groups related resources.                                         | Organization, settings, resource list.           |
+| Application                   | An app, API, worker, or image workload that OpenLander builds/runs.                | Env vars, redeploys, domains, logs, diagnostics. |
+| Compose                       | A compose stack represented as one Project-level resource.                         | Stack deploys and stack-level diagnostics.       |
+| Database/Cache/Storage resource | Project-scoped infrastructure such as PostgreSQL, MySQL, Redis, MongoDB, or MinIO. | Credentials, backups, databases, buckets.        |
 
 After a deploy, call `list_projects` and keep `projects[].deployable_service.service_id`.
 Use that `service_id` for follow-up MCP actions such as `redeploy_app`, `set_env_vars`,
@@ -44,7 +45,7 @@ The fastest end-to-end check. From any connected agent:
 The agent runs `deploy_app(repo_url: "https://github.com/openlander-ai/openlander-demo-app", name: "demo")`,
 polls `get_deploy_status`, and returns the app URL. Confirm the app responds at its `/health` path.
 
-### Add a managed database (agent-driven, multi-step)
+### Add a Database resource (agent-driven, multi-step)
 
 A new-app deploy does **not** auto-provision a database in one shot. Wire one explicitly.
 First call `list_projects` and note the demo's `project_id` (or `project_name`) and its
@@ -61,21 +62,21 @@ database lands on the same isolated network as the app.
 
 ## Deploy via Web Dashboard
 
-### 1. Create a Project Group
+### 1. Create a Project
 
 1. Go to **Projects** → **New Project**
-2. Enter a project group name
-3. Open the project and click **Add service**
+2. Enter a Project name
+3. Open the project and click **Add application**
 4. Tell your agent what to deploy:
    - Git repository application/worker
    - Docker image
    - Docker Compose stack
-   - Managed database/cache service
-5. Review the deploy output in the service detail page
+   - Database/Cache resource
+5. Review the deploy output in the Application detail page
 
-This keeps the mental model aligned with Dokploy-style IA: project = group, service = deployable
-unit. The canonical deploy API is `POST /api/services/deploy`; it can create a project group plus
-the initial service in one request for the common single-repository case.
+This keeps the mental model aligned with Dokploy-style IA: Project first, then resources inside it.
+The canonical deploy API is `POST /api/services/deploy`; it can create a Project plus the initial
+Application in one request for the common single-repository case.
 
 ### 2. Monitor Deployment
 
@@ -106,8 +107,8 @@ deploy_app(
 )
 ```
 
-This is the app deploy front door. For a new app, pass `name` as the project group name. If `name`,
-`project_name`, `service_id`, or `service_name` matches an existing single-deployable app, it
+This is the app deploy front door. For a new app, pass `name` as the Project name. If `name`,
+`project_name`, `service_id`, or `service_name` matches an existing single Application, it
 redeploys that app. Once an app exists, prefer the returned `service_id` for follow-up actions.
 
 ### Step-by-Step Deploy
@@ -241,7 +242,7 @@ If `project_id` and `project_name` are both sent, `project_id` wins and a mismat
 | `image`   | Yes      | Docker image (e.g. `nginx:latest`) |
 | `port`    | No       | Container port                     |
 | `cmd`     | No       | Override command                   |
-| `name`    | No       | Project group name                 |
+| `name`    | No       | Project name                       |
 
 ### Docker Compose
 
