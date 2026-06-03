@@ -7,6 +7,7 @@ import {
   InvalidSourceFieldsError,
   PreflightCheckError,
 } from '../../errors.js';
+import { targetIdentityResolver } from '../../db/target-identity-resolver.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { classifyDeployError } from '../../pipeline/error-classifier.js';
 import { extractProjectName } from '../../pipeline/helpers.js';
@@ -198,7 +199,10 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
 
     let projectId = result.projectId;
     if (result.success && targetProject && result.projectId) {
-      await ctx.db.attachServiceToProject(`${result.projectId}__svc`, targetProject.id);
+      await ctx.db.attachServiceToProject(
+        targetIdentityResolver.deployableServiceIdForRuntimeProject(result.projectId),
+        targetProject.id,
+      );
       projectId = targetProject.id;
     }
 

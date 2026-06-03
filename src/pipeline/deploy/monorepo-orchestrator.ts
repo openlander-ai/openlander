@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { nanoid } from 'nanoid';
 
 import { createModuleLogger } from '../../lib/logger.js';
+import { targetIdentityResolver } from '../../db/target-identity-resolver.js';
 import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
 import { parseDockerfileExposePort } from '../dockerfile-gen.js';
@@ -127,7 +128,7 @@ export async function deployMonorepoService(
     const envVars = await resolveEnvVars(
       {
         projectId: childId,
-        serviceId: `${childId}__svc`,
+        serviceId: targetIdentityResolver.deployableServiceIdForRuntimeProject(childId),
         inlineEnvVars: config.envVars,
         serviceEnvVars: service.envVars,
       },

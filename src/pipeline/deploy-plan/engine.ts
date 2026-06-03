@@ -36,7 +36,7 @@ import type { EventBus } from '../../events/index.js';
 import type { ComposePipeline } from '../compose.js';
 import { acquireDeployLockOrThrow } from '../../db/repos/deploy-lock-helper.js';
 import { ProjectNotFoundError, ServiceConfigError } from '../../errors.js';
-import { projectIdToDeployableServiceId } from '../../db/service-ids.js';
+import { targetIdentityResolver } from '../../db/target-identity-resolver.js';
 
 const log = createModuleLogger('plan-engine');
 
@@ -1584,7 +1584,7 @@ export class PlanEngine {
             let completed = PlanStateMachine.transition(executingPlan, 'completed');
             if (attachTargetProject) {
               const moved = await this.db.attachServiceToProject(
-                projectIdToDeployableServiceId(projectId),
+                targetIdentityResolver.deployableServiceIdForRuntimeProject(projectId),
                 attachTargetProject.id,
               );
               completed = {
@@ -1709,7 +1709,8 @@ export class PlanEngine {
         project_id: startedProjectId,
         ...(attachTargetProject
           ? {
-              service_id: projectIdToDeployableServiceId(startedProjectId),
+              service_id:
+                targetIdentityResolver.deployableServiceIdForResponse(startedProjectId),
               target_project_id: attachTargetProject.id,
               runtime_project_id: startedProjectId,
             }
