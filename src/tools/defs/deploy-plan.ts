@@ -9,10 +9,8 @@ import { containerName as projectContainerName } from '../../pipeline/helpers.js
 import { getPreferredProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
 import { MANAGED_SERVICE_KINDS } from '../../db/repos/service.repo.js';
-import {
-  deployableServiceIdToProjectId,
-  projectIdToDeployableServiceId,
-} from '../../db/service-ids.js';
+import { deployableServiceIdToProjectId } from '../../db/service-ids.js';
+import { targetIdentityResolver } from '../../db/target-identity-resolver.js';
 import {
   loadServiceViewRecords,
   serviceViewFromRows,
@@ -188,14 +186,15 @@ function buildTargetAttachFields(result: ExecutePlanResult): Record<string, unkn
   }
 
   const runtimeProjectId = result.runtime_project_id ?? result.project_id;
+  // Route every response-path service_id through the single resolver guard so a
+  // missing runtime project omits the field instead of fabricating an id. An
+  // explicit result.service_id from the engine still wins when present.
+  const serviceId =
+    result.service_id ?? targetIdentityResolver.deployableServiceIdForResponse(runtimeProjectId);
   return {
     target_project_id: result.target_project_id,
     ...(runtimeProjectId ? { runtime_project_id: runtimeProjectId } : {}),
-    ...(result.service_id
-      ? { service_id: result.service_id }
-      : runtimeProjectId
-        ? { service_id: projectIdToDeployableServiceId(runtimeProjectId) }
-        : {}),
+    ...(serviceId ? { service_id: serviceId } : {}),
   };
 }
 
@@ -1236,7 +1235,10 @@ export const deployPlanToolDefs: ToolDef[] = [
             params: result.service_id
               ? { service_id: result.service_id }
               : result.project_id
-                ? { service_id: projectIdToDeployableServiceId(result.project_id) }
+                ? {
+                    service_id:
+                      targetIdentityResolver.deployableServiceIdForRuntimeProject(result.project_id),
+                  }
                 : { project_name: result.project_name },
           },
           _agent_guidance: {
@@ -1365,7 +1367,10 @@ export const deployPlanToolDefs: ToolDef[] = [
                   diagnostic_call: {
                     tool: 'openlander_monitor',
                     action: 'diagnose_service',
-                    params: { service_id: projectIdToDeployableServiceId(projectId) },
+                    params: {
+                    service_id:
+                      targetIdentityResolver.deployableServiceIdForRuntimeProject(projectId),
+                  },
                   },
                   docker_host: getDockerHostType(),
                   _agent_guidance: {
@@ -1525,7 +1530,10 @@ export const deployPlanToolDefs: ToolDef[] = [
                 diagnostic_call: {
                   tool: 'openlander_monitor',
                   action: 'diagnose_service',
-                  params: { service_id: projectIdToDeployableServiceId(projectId) },
+                  params: {
+                    service_id:
+                      targetIdentityResolver.deployableServiceIdForRuntimeProject(projectId),
+                  },
                 },
                 ...(job?.buildLogTail ? { build_log_tail: job.buildLogTail } : {}),
                 ...(job?.autoDiagnosis
@@ -1574,7 +1582,10 @@ export const deployPlanToolDefs: ToolDef[] = [
                 diagnostic_call: {
                   tool: 'openlander_monitor',
                   action: 'diagnose_service',
-                  params: { service_id: projectIdToDeployableServiceId(projectId) },
+                  params: {
+                    service_id:
+                      targetIdentityResolver.deployableServiceIdForRuntimeProject(projectId),
+                  },
                 },
                 docker_host: getDockerHostType(),
                 ...(timedOut ? { timeout: true } : {}),

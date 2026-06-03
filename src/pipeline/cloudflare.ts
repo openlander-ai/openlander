@@ -7,7 +7,7 @@ import type { CloudflareConfig } from '../config/index.js';
 import type { Database, DomainMappingRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import { CloudflareNotFoundError } from '../errors.js';
-import { projectIdToDeployableServiceId } from '../db/service-ids.js';
+import { targetIdentityResolver } from '../db/target-identity-resolver.js';
 import { containerName as projectContainerName } from './helpers.js';
 import { buildTraefikLabels } from './traefik.js';
 
@@ -59,7 +59,10 @@ export class CloudflareTunnelManager {
   }
 
   async createTunnel(projectId: string, domain: string): Promise<void> {
-    return this.createTunnelForService(projectIdToDeployableServiceId(projectId), domain);
+    return this.createTunnelForService(
+      targetIdentityResolver.deployableServiceIdForRuntimeProject(projectId),
+      domain,
+    );
   }
 
   async createTunnelForService(serviceId: string, domain: string): Promise<void> {
@@ -104,7 +107,10 @@ export class CloudflareTunnelManager {
   }
 
   async removeTunnel(projectId: string, domain: string): Promise<void> {
-    return this.removeTunnelForService(projectIdToDeployableServiceId(projectId), domain);
+    return this.removeTunnelForService(
+      targetIdentityResolver.deployableServiceIdForRuntimeProject(projectId),
+      domain,
+    );
   }
 
   async removeTunnelForService(serviceId: string, domain: string): Promise<void> {
