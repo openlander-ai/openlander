@@ -67,6 +67,9 @@ function createMockDb(existingProject: ReturnType<typeof makeExistingProjectRow>
     getDeployLockInfo: vi.fn().mockReturnValue(null),
     isCircuitBreakerOpen: vi.fn().mockReturnValue(false),
     getDeployableForProject: vi.fn().mockReturnValue(undefined),
+    ensureDeployableServiceForProject: vi.fn().mockResolvedValue({
+      id: `${existingProject?.id ?? 'p-new'}__svc`,
+    }),
     loadDeployConfig: vi.fn().mockResolvedValue(null),
     loadDeployConfigForService: vi.fn().mockResolvedValue(null),
     getEnvironmentsByProject: vi.fn().mockResolvedValue([]),

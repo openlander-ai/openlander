@@ -80,6 +80,15 @@ interface ProjectUpdateInput {
   assignedPort?: number | null;
 }
 
+interface EnsureDeployableServiceInput {
+  source?: 'git' | 'image';
+  repoUrl?: string | null;
+  branch?: string | null;
+  imageUrl?: string | null;
+  imageCmd?: string[] | null;
+  containerPort?: number | null;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -254,6 +263,30 @@ function createInMemoryDb(): Database {
     getProject: vi.fn((id: string) => projects.get(id)),
     getProjectByName: vi.fn((name: string) =>
       Array.from(projects.values()).find((project) => project.name === name),
+    ),
+    ensureDeployableServiceForProject: vi.fn(
+      (projectId: string, input: EnsureDeployableServiceInput) => {
+        const existing = services.get(`${projectId}__svc`);
+        if (existing) {
+          return existing;
+        }
+        const project = projects.get(projectId);
+        if (!project) {
+          throw new Error(`Project not found: ${projectId}`);
+        }
+        const service = makeServiceRow({
+          id: project.id,
+          name: project.name,
+          source: input.source ?? 'git',
+          repoUrl: input.repoUrl,
+          branch: input.branch,
+          imageUrl: input.imageUrl,
+          imageCmd: input.imageCmd,
+          containerPort: input.containerPort,
+        });
+        services.set(service.id, service);
+        return service;
+      },
     ),
     updateProject: vi.fn((id: string, updates: ProjectUpdateInput) => {
       const project = projects.get(id);

@@ -338,6 +338,9 @@ export class Database implements AuthDatabase {
   createProjectGroup(project: Parameters<ProjectRepo['createProjectGroup']>[0]) {
     return this.projectRepo.createProjectGroup(project);
   }
+  ensureDeployableServiceForProject(projectId: string, input: Parameters<ProjectRepo['ensureDeployableServiceForProject']>[1]) {
+    return this.projectRepo.ensureDeployableServiceForProject(projectId, input);
+  }
   getProject(id: string) { return this.projectRepo.getProject(id); }
   getProjectByName(name: string) { return this.projectRepo.getProjectByName(name); }
   listProjects(status?: ProjectRow['status'] | null, opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjects(status, opts); }

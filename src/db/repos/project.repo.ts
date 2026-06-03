@@ -50,6 +50,19 @@ export interface ProjectWithMetadata {
   partiallyArchived: boolean;
 }
 
+export interface EnsureDeployableServiceInput {
+  source?: 'git' | 'image';
+  repoUrl?: string | null;
+  branch?: string | null;
+  buildMethod?: 'dockerfile' | 'compose' | null;
+  dockerfilePath?: string | null;
+  dockerTarget?: string | null;
+  buildContext?: string | null;
+  imageUrl?: string | null;
+  imageCmd?: string[] | null;
+  containerPort?: number | null;
+}
+
 const log = createModuleLogger('project-repo');
 
 type ProjectSelectRow = typeof projects.$inferSelect;
@@ -254,6 +267,79 @@ export class ProjectRepo {
       if (err instanceof OpenLanderError) throw err;
       log.error({ err }, 'Failed to create project group');
       throw new RepoPersistenceError('project', project.id);
+    }
+  }
+
+  async ensureDeployableServiceForProject(
+    projectId: string,
+    input: EnsureDeployableServiceInput,
+  ): Promise<ServiceRow> {
+    const serviceId = projectIdToDeployableServiceId(projectId);
+    const [existing] = await this.db
+      .select()
+      .from(services)
+      .where(eq(services.id, serviceId))
+      .limit(1);
+    if (existing) {
+      return toServiceRow(existing);
+    }
+
+    const [project] = await this.db
+      .select({ id: projects.id, name: projects.name })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .limit(1);
+    if (!project) {
+      throw new ProjectNotFoundError(projectId);
+    }
+
+    const source = input.source ?? 'git';
+    const buildMethod = input.buildMethod ?? null;
+    const kind: 'git' | 'image' | 'compose' =
+      buildMethod === 'compose' ? 'compose' : source === 'image' ? 'image' : 'git';
+
+    try {
+      const [created] = await this.db
+        .insert(services)
+        .values({
+          id: serviceId,
+          project_id: project.id,
+          name: `${project.name}__svc`,
+          kind,
+          parent_service_id: null,
+          status: 'stopped',
+          visibility: 'internal',
+          source,
+          build_method: buildMethod,
+          repo_url: source === 'git' || kind === 'compose' ? (input.repoUrl ?? null) : null,
+          branch: source === 'git' || kind === 'compose' ? (input.branch ?? null) : null,
+          dockerfile_path: input.dockerfilePath ?? 'Dockerfile',
+          docker_target: input.dockerTarget ?? null,
+          build_context: input.buildContext ?? null,
+          image_url: input.imageUrl ?? null,
+          image_cmd: input.imageCmd !== undefined ? JSON.stringify(input.imageCmd) : null,
+          container_port: input.containerPort ?? null,
+        })
+        .returning();
+
+      if (!created) {
+        throw new RepoPersistenceError('service', serviceId);
+      }
+      return toServiceRow(created);
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const [raced] = await this.db
+        .select()
+        .from(services)
+        .where(eq(services.id, serviceId))
+        .limit(1);
+      if (raced) {
+        return toServiceRow(raced);
+      }
+      throw error;
     }
   }
 

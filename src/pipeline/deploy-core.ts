@@ -467,6 +467,25 @@ export class DeployPipeline {
     }
   }
 
+  private async ensureFirstApplicationService(
+    projectId: string,
+    config: ProjectConfig,
+  ): Promise<void> {
+    const source = config.source ?? 'git';
+    await this.db.ensureDeployableServiceForProject(projectId, {
+      source,
+      repoUrl: source === 'image' ? null : config.repoUrl,
+      branch: source === 'image' ? null : (config.branch ?? null),
+      buildMethod: config.composeServices ? 'compose' : null,
+      dockerfilePath: config.dockerfilePath ?? null,
+      dockerTarget: config.dockerTarget ?? null,
+      buildContext: config.buildContext ?? null,
+      imageUrl: config.imageUrl ?? null,
+      imageCmd: config.imageCmd ?? null,
+      containerPort: config.containerPort ?? null,
+    });
+  }
+
   /**
    * Start a deployment in the background (non-blocking).
    * Runs preflight check first and returns immediately if it fails.
@@ -1047,6 +1066,13 @@ export class DeployPipeline {
     trigger: 'chat' | 'webhook' | 'api',
   ): Promise<DeployResult> {
     const source = config.source ?? 'git';
+
+    if (config._projectId) {
+      await this.ensureFirstApplicationService(projectId, {
+        ...config,
+        name: projectName,
+      });
+    }
 
     // Project row creation now lives in deploy() so we can acquire the lock
     // immediately after. Here we only apply caller overrides for existing
