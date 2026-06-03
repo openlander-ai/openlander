@@ -116,6 +116,7 @@ export default defineConfig({
       'test/tools/registry-critical-tools.test.ts',
       'test/tools/server-tools.test.ts',
       'test/lint/public-vocabulary-audit.test.ts',
+      'test/lint/synthetic-service-id-write-audit.test.ts',
       // v0.1 frontend IA regression tests. Source-string assertions
       // pinning the IA contracts merged across PRs #196-#208. Adding
       // them to the release gate closes the project-wide test/web/*

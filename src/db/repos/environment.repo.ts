@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
-import { environments } from '../schema.drizzle.js';
+import { environments, services } from '../schema.drizzle.js';
 import { deployableServiceIdToProjectId, projectIdToDeployableServiceId } from '../service-ids.js';
 import type { EnvironmentRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
@@ -11,6 +11,19 @@ export class EnvironmentRepo {
     private readonly client: PostgresClient,
   ) {
     void this.client;
+  }
+
+  private async resolveExistingCanonicalServiceId(projectId: string): Promise<string> {
+    const serviceId = projectIdToDeployableServiceId(projectId);
+    const [service] = await this.db
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.id, serviceId))
+      .limit(1);
+    if (!service) {
+      throw new RepoPersistenceError('service', serviceId);
+    }
+    return service.id;
   }
 
   async createEnvironment(environment: {
@@ -25,7 +38,7 @@ export class EnvironmentRepo {
     previousImageTag?: string | null;
     publicUrl?: string | null;
   }): Promise<EnvironmentRow> {
-    const serviceId = projectIdToDeployableServiceId(environment.projectId);
+    const serviceId = await this.resolveExistingCanonicalServiceId(environment.projectId);
     const [created] = await this.db
       .insert(environments)
       .values({

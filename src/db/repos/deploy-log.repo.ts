@@ -1,9 +1,10 @@
 import { and, desc, eq } from 'drizzle-orm';
 
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
-import { deployLogs } from '../schema.drizzle.js';
+import { deployLogs, services } from '../schema.drizzle.js';
 import { projectIdToDeployableServiceId } from '../service-ids.js';
 import type { DeployLogRow } from '../types.js';
+import { RepoPersistenceError } from '../../errors.js';
 
 /**
  * Post-0012: deploy_logs is service-scoped. Callers still pass `projectId`
@@ -16,6 +17,19 @@ export class DeployLogRepo {
     private readonly client: PostgresClient,
   ) {
     void this.client;
+  }
+
+  private async resolveExistingCanonicalServiceId(projectId: string): Promise<string> {
+    const serviceId = projectIdToDeployableServiceId(projectId);
+    const [service] = await this.db
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.id, serviceId))
+      .limit(1);
+    if (!service) {
+      throw new RepoPersistenceError('service', serviceId);
+    }
+    return service.id;
   }
 
   async createDeployLog(log: {
@@ -31,9 +45,10 @@ export class DeployLogRepo {
     runtimeLog?: string;
     durationMs?: number;
   }): Promise<void> {
+    const serviceId = await this.resolveExistingCanonicalServiceId(log.projectId);
     await this.db.insert(deployLogs).values({
       id: log.id,
-      service_id: projectIdToDeployableServiceId(log.projectId),
+      service_id: serviceId,
       environment_id: log.environmentId ?? null,
       status: log.status,
       trigger: log.trigger,

@@ -48,12 +48,25 @@ export class ServiceConnectionRepo {
     );
   }
 
+  private async resolveExistingCanonicalConsumerId(projectId: string): Promise<string> {
+    const serviceId = projectIdToDeployableServiceId(projectId);
+    const [service] = await this.db
+      .select({ id: services.id })
+      .from(services)
+      .where(eq(services.id, serviceId))
+      .limit(1);
+    if (!service) {
+      throw new RepoPersistenceError('service', serviceId);
+    }
+    return service.id;
+  }
+
   async createConnection(opts: {
     projectId: string;
     serviceId: string;
     environmentId?: string;
   }): Promise<ServiceConnectionRow> {
-    const consumerId = projectIdToDeployableServiceId(opts.projectId);
+    const consumerId = await this.resolveExistingCanonicalConsumerId(opts.projectId);
     const [created] = await this.db
       .insert(serviceConnections)
       .values({
@@ -88,7 +101,8 @@ export class ServiceConnectionRepo {
     consumerServiceId?: string;
     environmentId?: string;
   }): Promise<void> {
-    const consumerId = opts.consumerServiceId ?? projectIdToDeployableServiceId(opts.projectId);
+    const consumerId =
+      opts.consumerServiceId ?? (await this.resolveExistingCanonicalConsumerId(opts.projectId));
     await this.db
       .insert(serviceConnections)
       .values({
