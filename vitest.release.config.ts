@@ -85,6 +85,7 @@ export default defineConfig({
       'test/pipeline/deploy-entry-lock.test.ts',
       'test/pipeline/deploy-lock-session-propagation.test.ts',
       'test/pipeline/deploy/run-step.test.ts',
+      'test/pipeline/deploy-plan/executeplan-oracle-char.test.ts',
       'test/pipeline/mutation-policy.test.ts',
       'test/pipeline/managed-service-create-regression.test.ts',
       'test/pipeline/managed-service-linker.test.ts',
