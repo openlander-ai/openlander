@@ -48,6 +48,7 @@ describeWithDatabase('env var scope storage on Postgres', () => {
           id: 'p-env-idempotent',
           name: 'env-idempotent-app',
           repoUrl: 'https://github.com/example/env-idempotent-app',
+          branch: 'main',
         });
 
         const bySameId = await db.createEnvironment({
