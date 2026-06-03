@@ -17,7 +17,7 @@
  *   render the Bot badge on nodes the agent recently acted on.
  *
  * 1.0-rc.2 (data-model fullsplit) note: `ServiceNode.kind` here is the
- * UI-display category (`Application | Database`); the canonical schema
+ * UI-display category (`Application | Compose | Database | Cache | Storage`); the canonical schema
  * `kind` discriminator (`git | image | compose | postgres | …`) lives on
  * `GroupService` from `lib/api/services.ts`. The two are intentionally
  * decoupled — InfraMap only cares about the visual category, while the
@@ -27,7 +27,7 @@ import type { ActivityEvent } from './agentActivity';
 
 export type ServiceHealth = 'healthy' | 'crashed' | 'deploying';
 
-export type ServiceKind = 'Application' | 'Database';
+export type ServiceKind = 'Application' | 'Compose' | 'Database' | 'Cache' | 'Storage';
 
 export interface ServiceNode {
   id: string;
@@ -319,6 +319,6 @@ export type Lane = 'entry' | 'app' | 'data';
 
 export function laneFor(svc: ServiceNode): Lane {
   if (svc.id === 'edge' || /caddy|nginx|gateway|edge/i.test(svc.id)) return 'entry';
-  if (svc.kind === 'Database') return 'data';
+  if (svc.kind === 'Database' || svc.kind === 'Cache' || svc.kind === 'Storage') return 'data';
   return 'app';
 }

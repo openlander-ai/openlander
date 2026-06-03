@@ -10,7 +10,7 @@ import type { ServiceNode } from '../projectTopology';
 export const ServiceNodeSchema = z.object({
   id: z.string(),
   name: z.string(),
-  kind: z.enum(['Application', 'Database']),
+  kind: z.enum(['Application', 'Compose', 'Database', 'Cache', 'Storage']),
   port: z.number().nullable(),
   image: z.string(),
   health: z.enum(['healthy', 'crashed', 'deploying']),
