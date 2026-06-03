@@ -232,6 +232,36 @@ describe('executePlan Oracle — pre-execution branches B1-B3 (zero persisted mu
     expect(h.mockDb.recordDeployPlanApproval).not.toHaveBeenCalled();
   });
 
+  it('B1 atomicity: a PARTIALLY-approved multi-resource safe set creates nothing and stays needs_approval (all-or-nothing)', async () => {
+    // Two safe proposed resources; the agent approves only one of them. The
+    // shipped contract is all-or-nothing for the safe proposal set: a subset
+    // approval must NOT provision the approved member — the plan stays
+    // needs_approval and zero resources are created. This pins the invariant the
+    // executePlan split must not regress into "create the approved subset first".
+    const plan = createMockDeployPlan({
+      status: 'needs_approval',
+      project_id: 'p1',
+      services: [
+        SAFE_PG_PROPOSAL,
+        { ...SAFE_PG_PROPOSAL, type: 'redis', connect_via: 'REDIS_URL', reason: 'cache' },
+      ],
+    });
+    h.mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+
+    // Approve postgresql only; redis is left unapproved.
+    const result = await h.engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
+      createResources: ['postgresql'],
+    });
+
+    expect(result.status).toBe('needs_approval');
+    expect(result.approval_required).toEqual({ create_resources: ['postgresql', 'redis'] });
+    // I1: a partially-approved safe set provisions NOTHING and persists nothing.
+    expect(h.mockServiceManager.create).not.toHaveBeenCalled();
+    expect(h.mockDb.upsertServiceConnection).not.toHaveBeenCalled();
+    expect(h.mockDb.attachServiceToProject).not.toHaveBeenCalled();
+    expect(wrotePlanStatus(h.mockDb, 'executing')).toBe(false);
+  });
+
   it('B2: attach target exists + app name collides with an existing group → failed, target_project_id, no write', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
