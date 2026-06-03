@@ -5,7 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.13-rc.2] - 2026-06-04
+
+### Fixed
+
+- Fixed DB-first Project/Application identity handling so an empty Project gets
+  its first Application service row before service-scoped environment and deploy
+  log writes.
+- Added release-gated MCP contracts for the canonical DB-first flows:
+  `create_project -> create_service(project_id) -> deploy_app(target_project_id)`
+  and
+  `create_project -> create_service(project_id) -> create_deploy_plan/execute_deploy_plan`.
+- Hardened service-scoped write repositories so `environments`, `deploy_logs`,
+  `deploy_configs`, `runtime_incidents`, and `service_connections` resolve an
+  existing service row before inserting FK-bearing records.
+- Added a release-suite audit guard to keep synthetic `__svc` id derivation out
+  of first-Application deploy ordering and managed-resource connection writes.
+
 ## [0.1.13-rc.1] - 2026-06-04
+
+> **YANKED / DO NOT USE:** release QA reproduced the DB-first plan path failure
+> this RC was meant to fix. Use `v0.1.13-rc.2` or later for AWS validation.
 
 ### Fixed
 
