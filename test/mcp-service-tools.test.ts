@@ -397,6 +397,7 @@ describe('MCP service tools (Task 8)', () => {
       },
     });
     expect(ctx.env.set).toHaveBeenCalledWith('proj-1', 'DATABASE_URL', expect.any(String));
+    expect(ctx.db.upsertServiceConnection).not.toHaveBeenCalled();
   });
 
   it('create_service returns retry-safe guidance after managed service rollback', async () => {

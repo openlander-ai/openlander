@@ -31,18 +31,9 @@ export interface ManagedServiceConnectParams {
    */
   credentials?: Record<string, string>;
   /**
-   * Standalone-attach guard. When true and the project group has NO deployable
-   * workload yet, skip the FK-bearing rows — the connection (`service_id_consumer`)
-   * and the dependency edge (`source_service_id`) both reference services.id and
-   * have no valid consumer to point at, so creating them would fabricate a phantom
-   * `<projectId>__svc` (the original empty-group attach bug). Env injection still
-   * runs (it is project-scoped for a workload-less group). Used by the standalone
-   * `create_service` / REST connect paths.
-   *
-   * Left false (default) by the deploy-plan auto-provision path: there the app
-   * deployable is created moments later in the same deploy, so the connection is
-   * still upserted against the derived `<projectId>__svc` consumer exactly as
-   * before — this preserves that path's established behavior.
+   * Caller annotation for standalone attach flows. FK safety is source-agnostic:
+   * when the project group has no deployable workload yet, the linker always skips
+   * FK-bearing rows and only writes project-scoped env.
    */
   deferIfNoWorkload?: boolean;
 }
@@ -105,27 +96,23 @@ export class ManagedServiceLinker {
     const consumer = workloads.find((w) => w.id === canonicalId) ?? workloads[0];
 
     // Connection row — `service_id_consumer` is a FK to services.id, so it needs
-    // a real consumer:
-    //  - resolved workload      → use its real id (also fixes the attached-into-a-
-    //    group case, whose id is its own runtime `__svc`, not `<group>__svc`).
-    //  - no workload, deploy path (deferIfNoWorkload omitted) → derive
-    //    `<projectId>__svc`; the app deployable is created moments later in the
-    //    same deploy, preserving that path's established behavior.
-    //  - no workload, standalone path (deferIfNoWorkload) → SKIP. An empty group
-    //    has no consumer; upserting would fabricate a phantom `<projectId>__svc`
-    //    and violate the FK — the original empty-group attach bug.
-    let connection: Awaited<
-      ReturnType<Database['getServiceConnectionByProjectAndService']>
-    >;
-    if (consumer || !deferIfNoWorkload) {
+    // a real consumer. A future app workload cannot satisfy this FK until its
+    // services row exists, so empty groups skip FK-bearing rows for every source.
+    let connection: Awaited<ReturnType<Database['getServiceConnectionByProjectAndService']>>;
+    if (consumer) {
       await this.db.upsertServiceConnection({
         projectId: resolvedProjectId,
         serviceId: service.id,
-        ...(consumer ? { consumerServiceId: consumer.id } : {}),
+        consumerServiceId: consumer.id,
       });
       connection = await this.db.getServiceConnectionByProjectAndService(
         resolvedProjectId,
         service.id,
+      );
+    } else {
+      log.debug(
+        { source, projectId: resolvedProjectId, serviceId: service.id, deferIfNoWorkload },
+        'Deferred managed-service connection row until a deployable workload exists',
       );
     }
 
@@ -215,7 +202,10 @@ export class ManagedServiceLinker {
 
     // Best-effort: drop the auto-created dependency edge.
     try {
-      const deps = await this.db.findDependenciesByProject(projectId);
+      const deps = await this.db.findDependenciesBySourceAndTargetService(
+        connection.service_id_consumer,
+        serviceId,
+      );
       const matchingDep = deps.find(
         (d) => d.target_service_id === serviceId && d.source === 'auto',
       );

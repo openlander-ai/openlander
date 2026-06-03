@@ -193,6 +193,55 @@ describe('createServiceConnectionRoutes', () => {
     });
   });
 
+  it('returns a deferred connection status for empty groups while still injecting project env', async () => {
+    const project = makeProjectRow();
+    const managed = makeServiceRow({
+      credentials: JSON.stringify({
+        connectionString: 'postgresql://openlander:pw@ol-svc-postgres-main:5432/app',
+      }),
+    });
+    const db = {
+      getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
+      getProjectByName: vi.fn(async () => undefined),
+      getService: vi.fn(async (id: string) => (id === managed.id ? managed : undefined)),
+      getServiceConnectionByProjectAndService: vi.fn(async () => undefined),
+      attachServiceToProject: vi.fn(async () => ({
+        sourceProjectId: 'group-1',
+        targetProjectId: 'group-1',
+        droppedEnvVarKeys: [],
+        droppedSecretFiles: [],
+      })),
+      upsertServiceConnection: vi.fn(async () => undefined),
+      updateServiceConnection: vi.fn(async () => undefined),
+      listServiceConnectionsByProject: vi.fn(async () => []),
+      getDeployablesByGroup: vi.fn(async () => []),
+      getDeployableForProject: vi.fn(async () => undefined),
+      createProjectDependency: vi.fn(async () => undefined),
+    };
+    const env = {
+      getAll: vi.fn(async () => ({})),
+      set: vi.fn(async () => true),
+    };
+    const app = createApp({ db, env } as Partial<AppContext>);
+
+    const res = await app.request('/api/projects/group-1/services/svc-pg', { method: 'POST' });
+
+    expect(res.status).toBe(201);
+    expect(db.upsertServiceConnection).not.toHaveBeenCalled();
+    expect(db.createProjectDependency).not.toHaveBeenCalled();
+    expect(env.set).toHaveBeenCalledWith(
+      'group-1',
+      'DATABASE_URL',
+      'postgresql://openlander:pw@ol-svc-postgres-main:5432/app',
+    );
+    await expect(res.json()).resolves.toMatchObject({
+      status: 'deferred',
+      id: null,
+      createdAt: null,
+      autoInjectedEnvKeys: ['DATABASE_URL'],
+    });
+  });
+
   it('rejects duplicate service connections', async () => {
     const project = makeProjectRow();
     const managed = makeServiceRow();
@@ -236,11 +285,12 @@ describe('createServiceConnectionRoutes', () => {
       getProjectByName: vi.fn(async () => undefined),
       getServiceConnectionByProjectAndService: vi.fn(async () => ({
         id: 'conn-1',
+        service_id_consumer: 'group-1__svc',
         auto_injected_env_keys: JSON.stringify(['DATABASE_URL', 123, 'REDIS_URL']),
       })),
       getDeployableForProject: vi.fn(async () => deployable),
       deleteServiceConnectionByProjectAndService: vi.fn(async () => undefined),
-      findDependenciesByProject: vi.fn(async () => [
+      findDependenciesBySourceAndTargetService: vi.fn(async () => [
         { id: 'dep-1', target_service_id: 'svc-pg', source: 'auto' },
         { id: 'dep-2', target_service_id: 'svc-pg', source: 'manual' },
       ]),
@@ -256,6 +306,10 @@ describe('createServiceConnectionRoutes', () => {
     expect(env.deleteForService).toHaveBeenCalledWith('group-1', 'group-1__svc', 'REDIS_URL');
     expect(env.deleteForService).toHaveBeenCalledTimes(2);
     expect(db.deleteServiceConnectionByProjectAndService).toHaveBeenCalledWith('group-1', 'svc-pg');
+    expect(db.findDependenciesBySourceAndTargetService).toHaveBeenCalledWith(
+      'group-1__svc',
+      'svc-pg',
+    );
     expect(db.deleteProjectDependency).toHaveBeenCalledWith('dep-1');
     await expect(res.json()).resolves.toMatchObject({
       message: 'Service disconnected',

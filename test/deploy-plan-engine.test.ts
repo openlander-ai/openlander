@@ -472,6 +472,11 @@ describe('PlanEngine.executePlan', () => {
       getDeployLockInfo: vi.fn().mockResolvedValue(null),
       releaseDeployLock: vi.fn().mockResolvedValue(undefined),
       upsertServiceConnection: vi.fn().mockResolvedValue(undefined),
+      getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue(undefined),
+      listServiceConnectionsByProject: vi.fn().mockResolvedValue([]),
+      getDeployableForProject: vi.fn().mockResolvedValue(null),
+      getDeployablesByGroup: vi.fn().mockResolvedValue([]),
+      createProjectDependency: vi.fn().mockResolvedValue(undefined),
       attachServiceToProject: vi.fn().mockResolvedValue({
         sourceProjectId: 'orphan',
         targetProjectId: 'p1',
@@ -1447,7 +1452,8 @@ describe('PlanEngine.executePlan', () => {
 // P2 safety: the approval gate on a needs_approval plan. These verify the gate
 // fires BEFORE any provisioning, that an unapproved plan creates nothing, that
 // approved provisioning is conflict-safe (idempotent), that a lock failure
-// never persists 'ready', and that the reuse path backfills a connection row.
+// never persists 'ready', and that the reuse path backfills a connection row
+// only when a real consumer workload exists.
 describe('PlanEngine.executePlan — P2 approval gate', () => {
   let engine: PlanEngine;
   let mockDb: any;
@@ -1505,10 +1511,9 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
       getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue(undefined),
       listServiceConnectionsByProject: vi.fn().mockResolvedValue([]),
       getDeployableForProject: vi.fn().mockResolvedValue(null),
-      // Deploy-time provisioning: the app deployable is created later in the same
-      // deploy, so the group has no workload yet at connect() time. The linker's
-      // deploy path (no deferIfNoWorkload) still upserts the connection against
-      // the derived consumer; the dependency edge stays skipped.
+      // Deploy-time provisioning may run before the app deployable exists. With
+      // no real workload consumer yet, FK-bearing connection/dependency rows are
+      // deferred while project-scoped env injection still runs.
       getDeployablesByGroup: vi.fn().mockResolvedValue([]),
       createProjectDependency: vi.fn().mockResolvedValue(undefined),
       acquireDeployLock: vi.fn().mockResolvedValue(true),
@@ -1672,13 +1677,16 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     expect(result.status).toBe('building');
     expect(mockDb.acquireDeployLock).toHaveBeenCalledWith('p1', 'session-1');
     expect(mockServiceManager.create).toHaveBeenCalledTimes(1);
+    expect(mockDb.upsertServiceConnection).not.toHaveBeenCalled();
   });
 
-  // (e) Idempotency: approved provisioning upserts a connection row, and a
-  // repeat (onConflictDoNothing) never throws.
-  it('upserts a connection row on approved provisioning and is conflict-safe when provisioned twice', async () => {
+  // (e) Idempotency: when the target project already has a real workload,
+  // approved provisioning upserts a connection row, and a repeat
+  // (onConflictDoNothing) never throws.
+  it('upserts a connection row on approved provisioning when a real workload exists and is conflict-safe when provisioned twice', async () => {
     const plan = createNeedsApprovalPlan();
     mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
+    mockDb.getDeployablesByGroup.mockResolvedValue([{ id: 'p1__svc' }]);
 
     const first = await engine.executePlan(plan.plan_id, undefined, undefined, undefined, {
       approveAllSafeResources: true,
@@ -1689,6 +1697,7 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     expect(mockDb.upsertServiceConnection).toHaveBeenCalledWith({
       projectId: 'p1',
       serviceId: 'svc-pg-1',
+      consumerServiceId: 'p1__svc',
     });
 
     // Re-running the same approved provisioning path must not throw — the
@@ -1799,6 +1808,7 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     mockDb.getDeployPlan.mockReturnValue({ plan_json: JSON.stringify(plan) });
     mockDb.getService.mockReturnValue(reusableService);
     mockDb.listServices.mockReturnValue([reusableService]);
+    mockDb.getDeployablesByGroup.mockResolvedValue([{ id: 'p1__svc' }]);
 
     const result = await engine.executePlan(plan.plan_id);
 
@@ -1806,6 +1816,7 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     expect(mockDb.upsertServiceConnection).toHaveBeenCalledWith({
       projectId: 'p1',
       serviceId: reusableService.id,
+      consumerServiceId: 'p1__svc',
     });
     // Reuse never creates a managed service.
     expect(mockServiceManager.create).not.toHaveBeenCalled();

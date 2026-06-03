@@ -33,6 +33,7 @@ function createMockDb(overrides?: Record<string, unknown>) {
     createProjectDependency: vi.fn().mockResolvedValue({}),
     deleteServiceConnectionByProjectAndService: vi.fn().mockResolvedValue(undefined),
     findDependenciesByProject: vi.fn().mockResolvedValue([]),
+    findDependenciesBySourceAndTargetService: vi.fn().mockResolvedValue([]),
     deleteProjectDependency: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as Database;
@@ -113,7 +114,11 @@ describe('ManagedServiceLinker.connect', () => {
     });
     const linker = new ManagedServiceLinker(db, mockEnv);
 
-    const result = await linker.connect({ projectId: 'p1', service: POSTGRES_SERVICE, source: 'web' });
+    const result = await linker.connect({
+      projectId: 'p1',
+      service: POSTGRES_SERVICE,
+      source: 'web',
+    });
 
     expect(result.resolvedProjectId).toBe('p1');
     expect(result.autoInjectedEnvKeys).toEqual(['DATABASE_URL']);
@@ -180,11 +185,10 @@ describe('ManagedServiceLinker.connect', () => {
     expect(result.resolvedProjectId).toBe('p1');
   });
 
-  // The deploy-plan path omits deferIfNoWorkload: there the app deployable is
-  // created moments later in the same deploy, so an empty group must still upsert
-  // the connection against the derived `<projectId>__svc` consumer (the prior
-  // behavior). The dependency edge stays skipped while no workload resolves.
-  it('does NOT defer when deferIfNoWorkload is unset: empty group still upserts the connection (derived consumer)', async () => {
+  // The deploy-plan path can also hit an empty group before the app workload row
+  // exists. The FK is checked immediately, so it must defer FK-bearing rows just
+  // like standalone attach.
+  it('defers FK-bearing rows when deploy-plan attach runs before a workload exists', async () => {
     const db = createMockDb({
       getDeployablesByGroup: vi.fn().mockResolvedValue([]),
     });
@@ -192,11 +196,7 @@ describe('ManagedServiceLinker.connect', () => {
 
     await linker.connect({ projectId: 'p1', service: POSTGRES_SERVICE, source: 'deploy_plan' });
 
-    // Connection upserted with the derived consumer (no explicit consumerServiceId).
-    expect(db.upsertServiceConnection).toHaveBeenCalledWith({
-      projectId: 'p1',
-      serviceId: 'svc-pg',
-    });
+    expect(db.upsertServiceConnection).not.toHaveBeenCalled();
     // Env is still injected on this path.
     expect(vi.mocked(autoInjectServiceEnv)).toHaveBeenCalled();
     // No workload resolved → no dependency edge.
@@ -252,9 +252,10 @@ describe('ManagedServiceLinker.disconnect', () => {
     const db = createMockDb({
       getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue({
         id: 'conn-1',
+        service_id_consumer: 'real-workload__svc',
         auto_injected_env_keys: JSON.stringify(['DATABASE_URL']),
       }),
-      findDependenciesByProject: vi
+      findDependenciesBySourceAndTargetService: vi
         .fn()
         .mockResolvedValue([{ id: 'dep-1', target_service_id: 'svc-pg', source: 'auto' }]),
     });
@@ -266,6 +267,10 @@ describe('ManagedServiceLinker.disconnect', () => {
       expect.objectContaining({ projectId: 'p1', autoInjectedEnvKeys: ['DATABASE_URL'] }),
     );
     expect(db.deleteServiceConnectionByProjectAndService).toHaveBeenCalledWith('p1', 'svc-pg');
+    expect(db.findDependenciesBySourceAndTargetService).toHaveBeenCalledWith(
+      'real-workload__svc',
+      'svc-pg',
+    );
     expect(db.deleteProjectDependency).toHaveBeenCalledWith('dep-1');
   });
 

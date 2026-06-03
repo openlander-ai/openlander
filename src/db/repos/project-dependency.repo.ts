@@ -1,4 +1,4 @@
-import { eq, or } from 'drizzle-orm';
+import { and, eq, or } from 'drizzle-orm';
 import type { DrizzleClient, PostgresClient } from '../drizzle.js';
 import {
   projectDependencies,
@@ -94,6 +94,22 @@ export class ProjectDependencyRepo {
       .select()
       .from(projectDependencies)
       .where(eq(projectDependencies.source_service_id, projectIdToServiceId(projectId)));
+    return rows.map((r) => this.hydrateDeprecated(r));
+  }
+
+  async findBySourceAndTargetService(
+    sourceServiceId: string,
+    targetServiceId: string,
+  ): Promise<ProjectDependencyRowHydrated[]> {
+    const rows = await this.db
+      .select()
+      .from(projectDependencies)
+      .where(
+        and(
+          eq(projectDependencies.source_service_id, sourceServiceId),
+          eq(projectDependencies.target_service_id, targetServiceId),
+        ),
+      );
     return rows.map((r) => this.hydrateDeprecated(r));
   }
 
