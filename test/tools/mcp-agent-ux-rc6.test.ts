@@ -152,7 +152,7 @@ describe('MCP agent UX rc6 regressions', () => {
     expect(plan.services).toEqual([]);
     expect(plan.env.auto).toEqual({});
     expect(plan.env.provided).toEqual({ DATABASE_URL: 'mysql://external.example.com/app' });
-    expect(plan.warnings.join('\n')).toContain('skipping automatic managed service provisioning');
+    expect(plan.warnings.join('\n')).toContain('skipping automatic Database/Cache provisioning');
   });
 
   it('removes pending auto services when update_deploy_plan provides the env var', async () => {

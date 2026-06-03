@@ -89,7 +89,7 @@ async function resolveDomainServiceTarget(
     );
     if (services.length > 1) {
       throw new OpenLanderError(
-        `Multiple deployable services named '${serviceName}' found. Specify service_id or project_name.`,
+        `Multiple Applications/Compose workloads named '${serviceName}' found. Specify service_id or project_name.`,
         'SERVICE_SELECTION_REQUIRED',
         400,
         { serviceName, candidates: serviceSelectionCandidates(services) },
@@ -234,7 +234,7 @@ export const infraToolDefs: ToolDef[] = [
     name: 'add_domain_route',
     riskLevel: 'medium',
     description:
-      'Register an internal Traefik Host/path route for a domain that already points to the OpenLander host or reverse proxy. This does not create DNS records, Cloudflare tunnels, ngrok endpoints, or TLS certificates. No redeploy is required. Prefer service_id; project_id/project_name works only when the group has exactly one deployable service. Returns { status: "route_registered", route, routing, urls }. Errors: DOMAIN_ROUTING_DISABLED, DOMAIN_ROUTE_EXISTS, PROJECT_NOT_FOUND, SERVICE_NOT_FOUND, SERVICE_SELECTION_REQUIRED.',
+      'Register an internal Traefik Host/path route for a domain that already points to the OpenLander host or reverse proxy. This does not create DNS records, Cloudflare tunnels, ngrok endpoints, or TLS certificates. No redeploy is required. Prefer service_id; project_id/project_name works only when the Project has exactly one Application/Compose workload. Returns { status: "route_registered", route, routing, urls }. Errors: DOMAIN_ROUTING_DISABLED, DOMAIN_ROUTE_EXISTS, PROJECT_NOT_FOUND, SERVICE_NOT_FOUND, SERVICE_SELECTION_REQUIRED.',
     mcpDescription:
       'Register a Traefik Host/path route for a domain that already points at OpenLander. Does not manage DNS, tunnels, or TLS.',
     inputSchema: addDomainRouteSchema,
@@ -317,7 +317,7 @@ export const infraToolDefs: ToolDef[] = [
     name: 'list_domain_routes',
     riskLevel: 'low',
     description:
-      'List registered domain routes. With no target, lists routes across all projects. With service_id/service_name/project_id/project_name, lists routes for that deployable service. These are internal Traefik routes; DNS/tunnel/TLS are external prerequisites.',
+      'List registered domain routes. With no target, lists routes across all Projects. With service_id/service_name/project_id/project_name, lists routes for that Application/Compose workload. These are internal Traefik routes; DNS/tunnel/TLS are external prerequisites.',
     mcpDescription: 'List registered domain routes. These do not imply DNS/tunnel/TLS ownership.',
     inputSchema: listDomainRoutesSchema,
     execute: async (args, { appCtx }) => {

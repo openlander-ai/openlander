@@ -637,7 +637,7 @@ export class PlanEngine {
     );
     if (!service) {
       throw new ServiceConfigError(
-        `Reusable managed service not found for ${planService.type}: ${planService.name ?? planService.service_id ?? 'unknown'}`,
+        `Reusable Database/Cache/Storage resource not found for ${planService.type}: ${planService.name ?? planService.service_id ?? 'unknown'}`,
         {
           serviceType: planService.type,
           serviceName: planService.name,
@@ -662,7 +662,7 @@ export class PlanEngine {
   ): Promise<string> {
     if (!this.docker) {
       throw new ServiceConfigError(
-        `Cannot provision managed service ${planService.type}: docker is unavailable.`,
+        `Cannot provision Database/Cache/Storage resource ${planService.type}: docker is unavailable.`,
         { serviceType: planService.type, envVarName },
       );
     }
@@ -692,7 +692,7 @@ export class PlanEngine {
       const connectionString = suggestedEnv[0]?.value;
       if (typeof connectionString !== 'string' || connectionString.trim().length === 0) {
         throw new ServiceConfigError(
-          `Provisioned managed service ${serviceName} did not provide a connection string for ${envVarName}`,
+          `Provisioned Database/Cache/Storage resource ${serviceName} did not provide a connection string for ${envVarName}`,
           { serviceId: created.id, envVarName },
         );
       }
@@ -713,7 +713,7 @@ export class PlanEngine {
       } catch (cleanupError) {
         log.warn(
           { err: cleanupError, serviceId: created.id, serviceType: planService.type },
-          'Failed to roll back orphaned managed service after provisioning failure',
+          'Failed to roll back orphaned Database/Cache/Storage resource after provisioning failure',
         );
       }
       throw provisionError;
@@ -725,7 +725,7 @@ export class PlanEngine {
     try {
       parsed = service.credentials ? JSON.parse(service.credentials) : null;
     } catch (error) {
-      throw new ServiceConfigError(`Invalid managed service credentials: ${service.id}`, {
+      throw new ServiceConfigError(`Invalid Database/Cache/Storage credentials: ${service.id}`, {
         serviceId: service.id,
         envVarName,
         cause: error instanceof Error ? error.message : String(error),
@@ -739,7 +739,7 @@ export class PlanEngine {
     const connectionString = credentials?.['connectionString'];
     if (typeof connectionString !== 'string' || connectionString.trim().length === 0) {
       throw new ServiceConfigError(
-        `Managed service ${service.name} did not provide a connection string for ${envVarName}`,
+        `Database/Cache/Storage resource ${service.name} did not provide a connection string for ${envVarName}`,
         { serviceId: service.id, envVarName },
       );
     }
@@ -772,7 +772,7 @@ export class PlanEngine {
     if (skipped.length > 0 && params.warnings) {
       const warning =
         `Explicit env var(s) provided for ${skipped.join(', ')}; ` +
-        'skipping automatic managed service provisioning for those dependencies.';
+        'skipping automatic Database/Cache provisioning for those dependencies.';
       if (!params.warnings.includes(warning)) {
         params.warnings.push(warning);
       }
@@ -983,7 +983,7 @@ export class PlanEngine {
       const projectName = targetProject?.name ?? name ?? fallbackProjectName;
       if (attachTargetProject && projectName === attachTargetProject.name) {
         throw new ServiceConfigError(
-          `target_project_id deploy service name "${projectName}" collides with the target project group name.`,
+          `target_project_id Application name "${projectName}" collides with the target Project name.`,
           { targetProjectId: attachTargetProject.id, projectName },
         );
       }
@@ -1044,7 +1044,7 @@ export class PlanEngine {
     const projectName = targetProject?.name ?? name ?? extractProjectName(repoUrl);
     if (attachTargetProject && projectName === attachTargetProject.name) {
       throw new ServiceConfigError(
-        `target_project_id deploy service name "${projectName}" collides with the target project group name.`,
+        `target_project_id Application name "${projectName}" collides with the target Project name.`,
         { targetProjectId: attachTargetProject.id, projectName },
       );
     }
@@ -1070,7 +1070,7 @@ export class PlanEngine {
         (userDockerfile === 'Dockerfile' && relativeDockerfiles.length > 1))
     ) {
       throw new ServiceConfigError(
-        'target_project_id currently supports a single deployable service only. Select one Dockerfile or deploy the compose/monorepo app as a separate project group.',
+        'target_project_id currently supports a single Application only. Select one Dockerfile or deploy the Compose/monorepo app as a separate Project.',
         {
           targetProjectId: attachTargetProject.id,
           buildMethod,
@@ -1356,9 +1356,9 @@ export class PlanEngine {
             plan_id: planId,
             project_name: plan.app.name,
             target_project_id: attachTargetProject.id,
-            error: `target_project_id deploy service name "${plan.app.name}" collides with an existing project group.`,
+            error: `target_project_id Application name "${plan.app.name}" collides with an existing Project.`,
             message:
-              'Choose a unique service name for the new deployable. Existing-group attach creates a temporary runtime project before it moves the service into the target group.',
+              'Choose a unique Application name. Existing-Project attach creates a temporary runtime Project before it moves the Application into the target Project.',
           },
         };
       }
@@ -1386,7 +1386,7 @@ export class PlanEngine {
           status: 'needs_target_project',
           project_name: plan.app.name,
           message:
-            'Managed auto-provisioning needs an existing project group. This is a new app, so create the project first or execute the plan with target_project_id.',
+            'Database/Cache auto-provisioning needs an existing Project. This is a new app, so create the Project first or execute the plan with target_project_id.',
           approval_required: {
             create_resources: this.safeProposedResources(plan.services)
               .filter((svc) => approvedSafeResources.has(this.proposedResourceIdentifier(svc)))
@@ -1394,10 +1394,10 @@ export class PlanEngine {
           },
           _agent_guidance: {
             next_steps: [
-              'Call openlander_project.create_project with the intended group name.',
-              'Create the managed service in that project with openlander_managed_service.create_service(project_id=...).',
-              'Retry deploy_app or execute_deploy_plan with target_project_id so the first deployable service attaches to the existing project group.',
-              'If the user already has a real external connection URL, pass it in env_vars and execute without approving managed-service creation.',
+              'Call openlander_project.create_project with the intended Project name.',
+              'Create the Database/Cache resource in that Project with openlander_managed_service.create_service(project_id=...).',
+              'Retry deploy_app or execute_deploy_plan with target_project_id so the first Application attaches to the existing Project.',
+              'If the user already has a real external connection URL, pass it in env_vars and execute without approving Database/Cache creation.',
             ],
           },
         },
@@ -1520,7 +1520,7 @@ export class PlanEngine {
         if (envVarName) {
           log.info(
             { serviceType: planService.type, envVarName },
-            'Skipping managed service env injection because explicit env var was provided',
+            'Skipping Database/Cache env injection because explicit env var was provided',
           );
         }
         continue;
@@ -1536,13 +1536,13 @@ export class PlanEngine {
           // compose_service / not_auto_creatable / unapproved: fail fast,
           // create nothing.
           throw new ServiceConfigError(
-            `Managed service ${planService.type} requires an explicit ${envVarName} value before deploy.`,
+            `Database/Cache resource ${planService.type} requires an explicit ${envVarName} value before deploy.`,
             {
               serviceType: planService.type,
               envVarName,
               nextSteps: [
                 `Provide an external ${envVarName} value in env_vars.`,
-                'Or call openlander_managed_service.create_service for the target project, set its suggested_env on the deployable service, then redeploy.',
+                'Or call openlander_managed_service.create_service for the target Project, set its suggested_env on the Application, then redeploy.',
               ],
             },
           );
@@ -1550,7 +1550,7 @@ export class PlanEngine {
 
         if (!targetProject) {
           throw new ServiceConfigError(
-            `Provisioning managed service ${planService.type} requires an existing target project.`,
+            `Provisioning Database/Cache resource ${planService.type} requires an existing target Project.`,
             { serviceType: planService.type, envVarName },
           );
         }
@@ -1563,7 +1563,7 @@ export class PlanEngine {
       } else {
         if (!targetProject) {
           throw new ServiceConfigError(
-            `Reusable managed service ${planService.name ?? planService.service_id ?? planService.type} requires an existing target project.`,
+            `Reusable Database/Cache/Storage resource ${planService.name ?? planService.service_id ?? planService.type} requires an existing target Project.`,
             {
               serviceType: planService.type,
               serviceName: planService.name,

@@ -11,7 +11,7 @@ export const deployProjectSchema = z.object({
   name: z
     .string()
     .optional()
-    .describe('Project group name (auto-generated from repo if not provided)'),
+    .describe('Project name (auto-generated from repo if not provided)'),
   dockerfile_path: z
     .string()
     .optional()
@@ -50,31 +50,31 @@ export const deployProjectSchema = z.object({
 });
 
 export const projectNameSchema = z.object({
-  project_name: z.string().min(1).describe('Project group name'),
+  project_name: z.string().min(1).describe('Project name'),
 });
 
 const monitoringTargetFields = {
-  service_id: z.string().min(1).optional().describe('Deployable service id'),
+  service_id: z.string().min(1).optional().describe('Application/Compose service_id'),
   service_name: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Deployable service row name. If no service has that name, a project group name with exactly one deployable service is accepted.',
+      'Application/Compose name. If no workload has that name, a Project name with exactly one workload is accepted.',
     ),
   project_id: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Project group id. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+      'Project id. If service_id/service_name is omitted, the Project must contain exactly one Application/Compose workload.',
     ),
   project_name: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Project group name. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+      'Project name. If service_id/service_name is omitted, the Project must contain exactly one Application/Compose workload.',
     ),
 } as const;
 
@@ -103,15 +103,15 @@ export const getLogsSchema = monitoringTargetSchema({
     .string()
     .min(1)
     .optional()
-    .describe('Docker container name for a deployable service, e.g. ol-my-worker'),
+    .describe('Docker container name for an Application/Compose workload, e.g. ol-my-worker'),
 });
 
 export const getProjectStatsSchema = monitoringTargetSchema({});
 
 export const getTopologySchema = z
   .object({
-    project_id: z.string().min(1).optional().describe('Project group id'),
-    project_name: z.string().min(1).optional().describe('Project group name'),
+    project_id: z.string().min(1).optional().describe('Project id'),
+    project_name: z.string().min(1).optional().describe('Project name'),
   })
   .refine((value) => Boolean(value.project_id || value.project_name), {
     message: 'project_id or project_name is required',
@@ -121,27 +121,27 @@ export const getInstanceInfoSchema = z.object({}).strict();
 
 export const diagnoseServiceSchema = z
   .object({
-    service_id: z.string().min(1).optional().describe('Deployable service id'),
+    service_id: z.string().min(1).optional().describe('Application/Compose service_id'),
     service_name: z
       .string()
       .min(1)
       .optional()
       .describe(
-        'Deployable service row name. If no service has that name, a project group name with exactly one deployable service is accepted.',
+        'Application/Compose name. If no workload has that name, a Project name with exactly one workload is accepted.',
       ),
     project_id: z
       .string()
       .min(1)
       .optional()
       .describe(
-        'Project group id. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+        'Project id. If service_id/service_name is omitted, the Project must contain exactly one Application/Compose workload.',
       ),
     project_name: z
       .string()
       .min(1)
       .optional()
       .describe(
-        'Project group name. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+        'Project name. If service_id/service_name is omitted, the Project must contain exactly one Application/Compose workload.',
       ),
     lines: z
       .number()
@@ -179,8 +179,8 @@ export const diagnoseServiceSchema = z
 
 export const managedServiceTargetSchema = z
   .object({
-    service_id: z.string().min(1).optional().describe('Managed/infrastructure service id'),
-    service_name: z.string().min(1).optional().describe('Managed/infrastructure service name'),
+    service_id: z.string().min(1).optional().describe('Database/Cache/Storage service_id'),
+    service_name: z.string().min(1).optional().describe('Database/Cache/Storage resource name'),
   })
   .refine((value) => Boolean(value.service_id || value.service_name), {
     message: 'service_id or service_name is required',
@@ -267,22 +267,22 @@ export const platformRecoverSchema = z.object({
 });
 
 const envTargetFields = {
-  service_id: z.string().min(1).optional().describe('Deployable service id'),
+  service_id: z.string().min(1).optional().describe('Application/Compose service_id'),
   service_name: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Deployable service row name. If no service has that name, a project group name with exactly one deployable service is accepted.',
+      'Application/Compose name. If no workload has that name, a Project name with exactly one workload is accepted.',
     ),
   project_name: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Project group name. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+      'Project name. If service_id/service_name is omitted, the Project must contain exactly one Application/Compose workload.',
     ),
-  project_id: z.string().min(1).optional().describe('Project group id'),
+  project_id: z.string().min(1).optional().describe('Project id'),
 } as const;
 
 const envScopeFields = {
@@ -371,14 +371,14 @@ export const setGlobalSecretSchema = z.object({
 // Domain & networking schemas
 export const domainSchema = z
   .object({
-    service_id: z.string().min(1).optional().describe('Deployable service id'),
-    service_name: z.string().min(1).optional().describe('Deployable service name'),
+    service_id: z.string().min(1).optional().describe('Application/Compose service_id'),
+    service_name: z.string().min(1).optional().describe('Application/Compose name'),
     project_name: z
       .string()
       .min(1)
       .optional()
       .describe(
-        'Optional project group name. Legacy fallback: if service_id/service_name is omitted, the group must contain exactly one deployable service.',
+        'Optional Project name. Legacy fallback: if service_id/service_name is omitted, the Project must contain exactly one Application/Compose workload.',
       ),
     domain: z.string().min(1).describe('Domain name'),
   })
@@ -401,11 +401,11 @@ export const deployStatusSchema = z.object({
   project_id: z
     .string()
     .optional()
-    .describe('Project group id for current in-flight status lookup'),
+    .describe('Project id for current in-flight status lookup'),
   project_name: z
     .string()
     .optional()
-    .describe('Project group name for current in-flight status lookup'),
+    .describe('Project name for current in-flight status lookup'),
   deploy_id: z.string().optional().describe('Completed deploy log id to look up'),
   job_id: z.string().optional().describe('Alias for deploy_id; also checks active in-memory jobs'),
   wait: z
@@ -457,7 +457,7 @@ export const deployComposeSchema = z.object({
 });
 
 export const listComposeServicesSchema = z.object({
-  project_name: z.string().min(1).describe('Project group name'),
+  project_name: z.string().min(1).describe('Project name'),
 });
 
 // Service management schemas
@@ -482,15 +482,15 @@ export const createServiceSchema = z.object({
     .max(65535)
     .optional()
     .describe('Port number (required when using image without template)'),
-  project_id: z.string().optional().describe('Attach the new service to this project group id.'),
+  project_id: z.string().optional().describe('Attach the new resource to this Project id.'),
   project_name: z
     .string()
     .optional()
-    .describe('Attach the new service to this project group name. Prefer project_id when known.'),
+    .describe('Attach the new resource to this Project name. Prefer project_id when known.'),
   target_project_id: z
     .string()
     .optional()
-    .describe('Legacy alias for project_id. Attach the new service to an existing project group.'),
+    .describe('Legacy alias for project_id. Attach the new resource to an existing Project.'),
 });
 
 export const serviceNameSchema = z.object({
@@ -564,16 +564,16 @@ export const listServicesSchema = z
       .string()
       .min(1)
       .optional()
-      .describe('Only list managed services attached to this project group id.'),
+      .describe('Only list Database/Cache/Storage resources attached to this Project id.'),
     project_name: z
       .string()
       .min(1)
       .optional()
-      .describe('Only list managed services attached to this project group name.'),
+      .describe('Only list Database/Cache/Storage resources attached to this Project name.'),
     include_orphans: z
       .boolean()
       .optional()
-      .describe('Include OpenLander-managed service containers missing from the services table.'),
+      .describe('Include OpenLander-managed infrastructure containers missing from the services table.'),
   })
   .strict();
 
@@ -605,8 +605,8 @@ export const getBuildLogSchema = z
       .min(1)
       .optional()
       .describe('Deploy log id. If provided, no project target is required.'),
-    project_id: z.string().min(1).optional().describe('Project group id'),
-    project_name: z.string().min(1).optional().describe('Project group name'),
+    project_id: z.string().min(1).optional().describe('Project id'),
+    project_name: z.string().min(1).optional().describe('Project name'),
     deploy_index: z
       .number()
       .int()
@@ -624,7 +624,7 @@ export const getBuildLogSchema = z
   });
 
 export const debugBuildErrorSchema = z.object({
-  project_name: z.string().min(1).describe('Project group name'),
+  project_name: z.string().min(1).describe('Project name'),
   build_log: z
     .string()
     .optional()
@@ -646,11 +646,11 @@ export const scanProjectSchema = z.object({
 
 // Expose/unexpose public schemas
 export const exposePublicSchema = z.object({
-  project_name: z.string().min(1).describe('Project group name'),
+  project_name: z.string().min(1).describe('Project name'),
 });
 
 export const unexposePublicSchema = z.object({
-  project_name: z.string().min(1).describe('Project group name'),
+  project_name: z.string().min(1).describe('Project name'),
 });
 
 // List previews schema
@@ -692,21 +692,21 @@ export const dismissAlertSchema = z.object({
 export const listGlobalSecretsSchema = z.object({}).strict();
 
 const domainRouteTargetFields = {
-  service_id: z.string().min(1).optional().describe('Deployable service id'),
-  service_name: z.string().min(1).optional().describe('Deployable service name'),
+  service_id: z.string().min(1).optional().describe('Application/Compose service_id'),
+  service_name: z.string().min(1).optional().describe('Application/Compose name'),
   project_id: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Project group id. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+      'Project id. If service_id/service_name is omitted, the Project must contain exactly one Application/Compose workload.',
     ),
   project_name: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Project group name. If service_id/service_name is omitted, the group must contain exactly one deployable service.',
+      'Project name. If service_id/service_name is omitted, the Project must contain exactly one Application/Compose workload.',
     ),
 } as const;
 
@@ -761,7 +761,7 @@ export const askUserQuestionSchema = z.object({
 
 // Fix dockerfile schema
 export const fixDockerfileSchema = z.object({
-  project_name: z.string().min(1).describe('Project group name'),
+  project_name: z.string().min(1).describe('Project name'),
   error: z.string().min(1).describe('Build error message'),
 });
 
@@ -769,7 +769,7 @@ export const uploadSecretFileSchema = z.object({
   project_name: z
     .string()
     .optional()
-    .describe('Project group name. Omit for global secret file (shared across all projects).'),
+    .describe('Project name. Omit for global secret file (shared across all projects).'),
   filename: z.string().min(1).describe('Filename (e.g. firebase-sa.json, tls-cert.pem)'),
   content: z.string().min(1).describe('File content (plaintext — will be encrypted at rest)'),
   mount_path: z
@@ -784,11 +784,11 @@ export const listSecretFilesSchema = z.object({
   project_name: z
     .string()
     .optional()
-    .describe('Project group name. Omit to list global secret files.'),
+    .describe('Project name. Omit to list global secret files.'),
 });
 
 export const removeSecretFileSchema = z.object({
-  project_name: z.string().optional().describe('Project group name. Omit for global secret file.'),
+  project_name: z.string().optional().describe('Project name. Omit for global secret file.'),
   filename: z.string().min(1).describe('Filename to remove'),
 });
 
@@ -805,10 +805,10 @@ export const createDeployPlanSchema = z
       .string()
       .regex(
         /^[a-z0-9][a-z0-9-]*$/,
-        'Project group name must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens',
+        'Project name must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens',
       )
       .optional()
-      .describe('Project group name (auto-generated from repo if not provided)'),
+      .describe('Project name (auto-generated from repo if not provided)'),
     source: z.enum(['git', 'image']).optional().describe('Deployment source type'),
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
@@ -937,21 +937,21 @@ export const deploySchema = z
       .min(1)
       .optional()
       .describe(
-        'Existing deployable service id. When provided, deploy_app acts as a redeploy front door.',
+        'Existing Application/Compose service_id. When provided, deploy_app acts as a redeploy front door.',
       ),
     service_name: z
       .string()
       .min(1)
       .optional()
       .describe(
-        'Existing deployable service row name. Project group name is accepted only when that group has exactly one deployable service.',
+        'Existing Application/Compose name. Project name is accepted only when that Project has exactly one workload.',
       ),
     project_name: z
       .string()
       .min(1)
       .optional()
       .describe(
-        'Existing project group name for redeploy lookup or service_name scoping. For new app names, use name.',
+        'Existing Project name for redeploy lookup or service_name scoping. For new app names, use name.',
       ),
     repo_url: z
       .string()
@@ -962,7 +962,7 @@ export const deploySchema = z
     name: z
       .string()
       .optional()
-      .describe('Project group name (auto-generated from repo if not provided)'),
+      .describe('Project name (auto-generated from repo if not provided)'),
     source: z.enum(['git', 'image']).optional().describe('Deployment source type'),
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
@@ -1024,7 +1024,7 @@ export const deploySchema = z
       .string()
       .optional()
       .describe(
-        'Attach a newly deployed single app/worker service to an existing project group after the deploy succeeds. The attach is owned by durable deploy-plan execution; failed deploys remain as separate failed attempts. Not supported with expose=true, compose, or monorepo deploys.',
+        'Attach a newly deployed single Application/worker to an existing Project after the deploy succeeds. The attach is owned by durable deploy-plan execution; failed deploys remain as separate failed attempts. Not supported with expose=true, compose, or monorepo deploys.',
       ),
   })
   .superRefine((data, ctx) => {
@@ -1070,7 +1070,7 @@ export const deploySchema = z
         code: 'custom',
         path: ['project_name'],
         message:
-          'project_name scopes existing app lookups only. For new app deploys, use name as the project group name.',
+          'project_name scopes existing app lookups only. For new app deploys, use name as the Project name.',
       });
     }
   });
@@ -1081,7 +1081,7 @@ export const validateDeployPlanSchema = z.object({
 
 export const updateProjectConfigSchema = z
   .object({
-    project_name: z.string().min(1).describe('Project group name'),
+    project_name: z.string().min(1).describe('Project name'),
     dockerfile_path: z
       .string()
       .optional()
@@ -1114,8 +1114,8 @@ export const updateProjectConfigSchema = z
 // Deployment history schema
 export const deployHistorySchema = z
   .object({
-    project_id: z.string().min(1).optional().describe('Project group id'),
-    project_name: z.string().min(1).optional().describe('Project group name'),
+    project_id: z.string().min(1).optional().describe('Project id'),
+    project_name: z.string().min(1).optional().describe('Project name'),
     limit: z.number().optional().describe('Max entries to return (default 10)'),
   })
   .refine((value) => Boolean(value.project_id || value.project_name), {
@@ -1123,7 +1123,7 @@ export const deployHistorySchema = z
   });
 
 export const addVolumeSchema = z.object({
-  project_name: z.string().min(1).describe('Project group name'),
+  project_name: z.string().min(1).describe('Project name'),
   volume_name: z
     .string()
     .min(1)
@@ -1140,11 +1140,11 @@ export const addVolumeSchema = z.object({
 });
 
 export const listVolumesSchema = z.object({
-  project_name: z.string().optional().describe('Project group name to filter managed volumes'),
+  project_name: z.string().optional().describe('Project name to filter Storage volumes'),
 });
 
 export const removeVolumeSchema = z.object({
-  project_name: z.string().min(1).describe('Project group name'),
+  project_name: z.string().min(1).describe('Project name'),
   volume_name: z
     .string()
     .min(1)
@@ -1219,28 +1219,28 @@ export const probeHostSchema = z
       .boolean()
       .optional()
       .describe(
-        'If true, probe from inside the target project service container. Provide service_id/service_name/project_id/project_name for isolated Docker DNS probes. Default: false.',
+        'If true, probe from inside the target Application/Compose container. Provide service_id/service_name/project_id/project_name for isolated Docker DNS probes. Default: false.',
       ),
     service_id: z
       .string()
       .min(1)
       .optional()
-      .describe('Deployable service id for internal probe context'),
+      .describe('Application/Compose service_id for internal probe context'),
     service_name: z
       .string()
       .min(1)
       .optional()
-      .describe('Deployable service row name for internal probe context'),
+      .describe('Application/Compose name for internal probe context'),
     project_id: z
       .string()
       .min(1)
       .optional()
-      .describe('Project group id for internal probe context'),
+      .describe('Project id for internal probe context'),
     project_name: z
       .string()
       .min(1)
       .optional()
-      .describe('Project group name for internal probe context'),
+      .describe('Project name for internal probe context'),
   })
   .refine((value) => Boolean(value.target || value.host), {
     message: 'target or host is required',

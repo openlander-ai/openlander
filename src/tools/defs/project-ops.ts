@@ -27,8 +27,8 @@ type ResolvedProjectRow = NonNullable<ProjectRow>;
 
 const projectLifecycleSchema = z
   .object({
-    project_id: z.string().min(1).optional().describe('Project group id'),
-    project_name: z.string().min(1).optional().describe('Project group name'),
+    project_id: z.string().min(1).optional().describe('Project id'),
+    project_name: z.string().min(1).optional().describe('Project name'),
   })
   .refine((value) => Boolean(value.project_id || value.project_name), {
     message: 'project_id or project_name is required',
@@ -43,13 +43,13 @@ const createProjectSchema = z.object({
       PROJECT_NAME_REGEX,
       'Project names must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens.',
     )
-    .describe('Project group slug. Use this before creating managed services for a brand-new app.'),
+    .describe('Project slug. Use this before creating Database/Cache resources for a brand-new app.'),
   display_name: z
     .string()
     .trim()
     .min(1)
     .optional()
-    .describe('Optional human-readable project group name.'),
+    .describe('Optional human-readable Project name.'),
   description: z.string().trim().min(1).optional().describe('Optional project description.'),
   tags: z.array(z.string().trim().min(1)).max(20).optional().describe('Optional project tags.'),
 });
@@ -106,8 +106,8 @@ function normalizeProjectTags(tags: unknown): string | null {
 function createProjectNextSteps(project: ResolvedProjectRow): string[] {
   return [
     `If this app needs a database/cache, call openlander_managed_service.create_service with project_id="${project.id}" before deploying.`,
-    `Deploy the first app with openlander_deploy.deploy_app using target_project_id="${project.id}" so the deployable service is attached to this project group after readiness succeeds.`,
-    'Use project_id for follow-up managed-service actions; use the returned deployable service_id for runtime/env/domain actions after deployment.',
+    `Deploy the first app with openlander_deploy.deploy_app using target_project_id="${project.id}" so the Application is attached to this Project after readiness succeeds.`,
+    'Use project_id for follow-up Database/Cache/Storage actions; use the returned Application service_id for runtime/env/domain actions after deployment.',
   ];
 }
 
@@ -177,9 +177,9 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'create_project',
     riskLevel: 'low',
     description:
-      'Create an empty project group before provisioning managed services or attaching deployable app/worker services. This does not deploy code, create a repository source, or start a container. Use it for the smooth first-deploy order: create_project -> create_service(project_id) when needed -> deploy_app(target_project_id).',
+      'Create an empty Project before provisioning Database/Cache resources or attaching Applications/workers. This does not deploy code, create a repository source, or start a container. Use it for the smooth first-deploy order: create_project -> create_service(project_id) when needed -> deploy_app(target_project_id).',
     mcpDescription:
-      'Create an empty project group. Use this before create_service(project_id) and deploy_app(target_project_id) for a brand-new app that needs project-scoped managed services.',
+      'Create an empty Project. Use this before create_service(project_id) and deploy_app(target_project_id) for a brand-new app that needs Project-scoped Database/Cache resources.',
     inputSchema: createProjectSchema,
     execute: async (args, context) => {
       const name = typeof args['name'] === 'string' ? args['name'].trim() : '';
@@ -207,7 +207,7 @@ export const projectOpsToolDefs: ToolDef[] = [
           suggested_call: createManagedServiceSuggestedCall(existing),
           _agent_guidance: {
             message:
-              'Project group already exists. Continue with this project_id instead of creating a placeholder deployment.',
+              'Project already exists. Continue with this project_id instead of creating a placeholder deployment.',
             next_steps: createProjectNextSteps(existing),
           },
         };
@@ -234,7 +234,7 @@ export const projectOpsToolDefs: ToolDef[] = [
               suggested_call: createManagedServiceSuggestedCall(racedProject),
               _agent_guidance: {
                 message:
-                  'Project group already exists. Continue with this project_id instead of creating a placeholder deployment.',
+                  'Project already exists. Continue with this project_id instead of creating a placeholder deployment.',
                 next_steps: createProjectNextSteps(racedProject),
               },
             };
@@ -251,7 +251,7 @@ export const projectOpsToolDefs: ToolDef[] = [
         suggested_call: createManagedServiceSuggestedCall(project),
         _agent_guidance: {
           message:
-            'Project group created without deploying code. This removes the first-deploy chicken-and-egg case for apps that need project-scoped managed services.',
+            'Project created without deploying code. This removes the first-deploy chicken-and-egg case for apps that need Project-scoped Database/Cache resources.',
           next_steps: createProjectNextSteps(project),
         },
       };
@@ -261,9 +261,9 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'list_projects',
     riskLevel: 'low',
     description:
-      'List project groups with status, ports, container names, local URLs, public URLs, deployable service count, and deployable service identifiers. Project groups organize deployable services; repo/image/build source lives on services. deployable_service is the primary service and deployable_services lists every app/worker service in the group. Returns { count, projects[] }. Always available, no errors.',
+      'List Projects with status, ports, container names, local URLs, public URLs, Application count, and Application identifiers. Projects organize Applications, Compose stacks, and Database/Cache/Storage resources. Compatibility fields deployable_service/deployable_services list app/worker service_id values. Returns { count, projects[] }. Always available, no errors.',
     mcpDescription:
-      'List project groups and deployable service identifiers for follow-up service actions. deployable_service_count is the app/worker count; deployable_service is the primary service; deployable_services includes app/worker siblings.',
+      'List Projects and Application service_id values for follow-up workload actions. deployable_service_count is the app/worker count; deployable_service is the primary workload; deployable_services includes app/worker siblings.',
     inputSchema: emptySchema,
     execute: async (_args, context) => {
       if (context.target === 'mcp') {
@@ -373,9 +373,9 @@ export const projectOpsToolDefs: ToolDef[] = [
           }),
           _agent_guidance: {
             networking: [
-              'Project app and managed-service containers are isolated on the project Docker network.',
+              'Application and Database/Cache/Storage containers are isolated on the Project Docker network.',
               'For same-project inter-container traffic, use the service DNS name on that project network. Do not create Docker networks manually.',
-              'Project groups are not deployable services. Use projects[].deployable_services[].service_id with openlander_service/openlander_monitor actions when a group has app, API, and worker services.',
+              'Projects are not Applications. Use projects[].deployable_services[].service_id with openlander_service/openlander_monitor actions when a Project has app, API, and worker workloads.',
             ],
           },
         };
@@ -417,9 +417,9 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'archive_project',
     riskLevel: 'high',
     description:
-      'Archive a project group by archiving its active deployable app/worker services. Preserves configuration/history and does not delete managed infrastructure.',
+      'Archive a Project by archiving its active Applications/workers. Preserves configuration/history and does not delete Database/Cache/Storage resources.',
     mcpDescription:
-      'Request human approval to archive a project group. Archives active deployable app/worker services in the group while preserving configuration/history.',
+      'Request human approval to archive a Project. Archives active Applications/workers while preserving configuration/history.',
     inputSchema: projectLifecycleSchema,
     execute: async (args, context) => {
       const project = await resolveProjectGroup(args, context);
@@ -431,11 +431,11 @@ export const projectOpsToolDefs: ToolDef[] = [
         project: projectGroupSummary(project),
         _agent_guidance: {
           message:
-            'Project group archive completed. Archive is reversible cleanup, not permanent deletion. OpenLander stops/removes deployable runtimes, hides archived services from default active lists, and preserves configuration/history. It does not delete managed databases, volumes, buckets, or host Docker resources.',
+            'Project archive completed. Archive is reversible cleanup, not permanent deletion. OpenLander stops/removes Application runtimes, hides archived Applications from default active lists, and preserves configuration/history. It does not delete databases, volumes, buckets, or host Docker resources.',
           next_steps: [
-            'Use list_projects to confirm the group lifecycle state.',
-            'Use list_archived_services if you need archived service ids for restore or cleanup review.',
-            'Use unarchive_project if the group should be restored later; restored services are not redeployed automatically.',
+            'Use list_projects to confirm the Project lifecycle state.',
+            'Use list_archived_services if you need archived Application service_id values for restore or cleanup review.',
+            'Use unarchive_project if the Project should be restored later; restored Applications are not redeployed automatically.',
           ],
         },
       };
@@ -445,9 +445,9 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'unarchive_project',
     riskLevel: 'medium',
     description:
-      'Restore a project group archive set. Does not redeploy services automatically; call redeploy_app for services that should run again.',
+      'Restore a Project archive set. Does not redeploy Applications automatically; call redeploy_app for workloads that should run again.',
     mcpDescription:
-      'Request human approval to restore a project group archive set. Restored services are not redeployed automatically.',
+      'Request human approval to restore a Project archive set. Restored Applications are not redeployed automatically.',
     inputSchema: projectLifecycleSchema,
     execute: async (args, context) => {
       const project = await resolveProjectGroup(args, context);
@@ -459,10 +459,10 @@ export const projectOpsToolDefs: ToolDef[] = [
         project: projectGroupSummary(project),
         _agent_guidance: {
           message:
-            'Project group restore completed. OpenLander restores the archive set to the active lifecycle path without redeploying services automatically.',
+            'Project restore completed. OpenLander restores the archive set to the active lifecycle path without redeploying Applications automatically.',
           next_steps: [
-            'Use list_projects to confirm which deployable services are active.',
-            'Call redeploy_app with service_id for each service that should run again.',
+            'Use list_projects to confirm which Applications are active.',
+            'Call redeploy_app with service_id for each Application that should run again.',
             'Call diagnose_service after redeploying to verify runtime health before reporting success.',
           ],
         },

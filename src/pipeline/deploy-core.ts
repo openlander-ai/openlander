@@ -162,7 +162,7 @@ export interface ProjectConfig {
   dryRun?: boolean;
   /** @internal Pre-allocated project ID from startDeploy(). Do not set manually. */
   _projectId?: string;
-  /** @internal Deployable service id that owns persisted deploy config. */
+  /** @internal Application/Compose service id that owns persisted deploy config. */
   _serviceId?: string;
   _noCacheBuild?: boolean;
   _preferredPort?: number;
@@ -823,7 +823,7 @@ export class DeployPipeline {
       reasons.push('Project not found.');
     }
     if (!deployable) {
-      reasons.push('No deployable service found.');
+      reasons.push('No Application or Compose workload found.');
     }
 
     if (deployable && view) {
@@ -831,7 +831,7 @@ export class DeployPipeline {
         reasons.push('Compose stacks are not eligible for blue-green deploys in v0.1.3.');
       }
       if (view.source !== 'git' && view.source !== 'image') {
-        reasons.push('Blue-green deploys require a git or image deployable service.');
+        reasons.push('Blue-green deploys require a git or image Application.');
       }
       if (view.status !== 'running') {
         reasons.push('The current service must be running before blue-green can preserve it.');

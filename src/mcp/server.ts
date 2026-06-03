@@ -80,17 +80,17 @@ Key actions: deploy_app, create_deploy_plan, execute_deploy_plan, get_deploy_sta
 All actions: action="help"
 
 ## openlander_project
-Project groups and shared config. A project group organizes deployable services; env actions route to service targets.
+Projects and shared config. A Project organizes Applications, Compose stacks, and Database/Cache/Storage resources; env actions route to workload targets.
 Key actions: create_project, list_projects, set_global_secret, upload_secret_file, expose_public
 All actions: action="help"
 
 ## openlander_service
-Deployable services (apps + workers): lifecycle, config, env vars, domains, and temporary public URLs. Prefer service_id from list_projects.
+Applications/Compose workloads: lifecycle, config, env vars, domains, and temporary public URLs. Prefer compatibility field service_id from list_projects.
 Key actions: redeploy_app, restart_service, list_archived_services, set_env_vars, list_env_vars, update_service_config, expose_public
 All actions: action="help"
 
 ## openlander_managed_service
-Managed infrastructure services & storage: databases, caches, backups, volumes, disk usage.
+Database/Cache/Storage resources and volumes. The action names are compatibility names; create_service creates a Database/Cache/Storage resource.
 Key actions: create_service, list_services, get_service_credentials, backup_service, add_volume, get_disk_usage
 All actions: action="help"
 
@@ -107,16 +107,16 @@ Example: openlander_managed_service({ action: "create_service", params: { name: 
 Example: openlander_service({ action: "set_env_vars", params: { service_name: "app-web", variables: '{"DATABASE_URL":"..."}' } })
 
 ## Environment Variable Changes
-- Env vars belong to deployable services. Prefer service_id or service_name; project_name works only when the group has exactly one deployable service.
+- Env vars belong to Applications/Compose workloads. Prefer service_id or service_name; project_name works only when the Project has exactly one workload.
 - set_env_vars/delete_env_var save only by default. To apply to a running container, call redeploy_app after the env change, or pass defer_redeploy=false for immediate apply.
 - list_env_vars masks values by default; pass reveal=true only when the user explicitly needs raw values for audit or migration.
 - export_env_vars returns raw .env text and should be used sparingly.
 
 ## Deploy Flow
 1. If the new app needs an OpenLander-managed database/cache before first boot, call openlander_project.create_project first, then openlander_managed_service.create_service with that project_id, then openlander_deploy.deploy_app with target_project_id. If the user already has a real external URL (RDS, Upstash, etc.), pass it in env_vars and skip create_service. Do not use a placeholder DATABASE_URL just to create the project.
-2. For a simple new app with no pre-created managed services, call openlander_deploy.deploy_app directly. New apps use params.name for the project group name. Existing apps can be targeted by service_id/service_name/project_name/name.
+2. For a simple new app with no pre-created Database/Cache resources, call openlander_deploy.deploy_app directly. New apps use params.name for the Project name. Existing apps can be targeted by service_id/service_name/project_name/name.
 3. openlander_deploy({ action: "get_deploy_status", params: { project_name: "..." } })  ← poll until done when deploy_app returns building/deploying
-4. openlander_project({ action: "list_projects" })  ← confirm running and use projects[].deployable_service.service_id for later service-level actions
+4. openlander_project({ action: "list_projects" })  ← confirm running and use projects[].deployable_service.service_id for later workload actions
 5. If anything fails, times out, or looks unhealthy, call openlander_monitor.diagnose_service with service_id before retrying.
 
 ## Networking
@@ -125,7 +125,7 @@ Example: openlander_service({ action: "set_env_vars", params: { service_name: "a
 - Never create Docker networks manually
 
 ## Human UI-only operations
-Project/app hard delete and purge are intentionally NOT exposed as MCP actions. If the user asks to delete, remove, purge, or destroy a project/app group, tell them to use the web UI: Settings → Danger zone for that project/service. For soft lifecycle cleanup, use archive_project/unarchive_project for a whole project group or archive_service/unarchive_service for one deployable service; all four enter the human approval queue before executing. Follow the returned poll_call or poll mcp_action_status with action_run_id. Archive is reversible cleanup, not permanent deletion: archived services disappear from default active lists but remain inspectable with list_archived_services and restorable with unarchive_service/unarchive_project. Do NOT substitute remove_service or cleanup_docker — those target managed infrastructure services and Docker hosts, not deployable apps.`;
+Project/app hard delete and purge are intentionally NOT exposed as MCP actions. If the user asks to delete, remove, purge, or destroy a Project/Application, tell them to use the web UI: Settings → Danger zone for that Project/Application. For soft lifecycle cleanup, use archive_project/unarchive_project for a whole Project or archive_service/unarchive_service for one Application/worker; all four enter the human approval queue before executing. Follow the returned poll_call or poll mcp_action_status with action_run_id. Archive is reversible cleanup, not permanent deletion: archived Applications disappear from default active lists but remain inspectable with list_archived_services and restorable with unarchive_service/unarchive_project. Do NOT substitute remove_service or cleanup_docker — those target Database/Cache/Storage resources and Docker hosts, not Applications.`;
 
 function buildServerInstructions(ctx: AppContext, incidentBriefing: string): string {
   const instance = getMcpInstanceContext(ctx.config);

@@ -263,7 +263,7 @@ describe('executePlan Oracle — pre-execution branches B1-B3 (zero persisted mu
     expect(wrotePlanStatus(h.mockDb, 'executing')).toBe(false);
   });
 
-  it('B2: attach target exists + app name collides with an existing group → failed, target_project_id, no write', async () => {
+  it('B2: attach target exists + app name collides with an existing Project → failed, target_project_id, no write', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
       target_project_id: 'target',
@@ -273,7 +273,7 @@ describe('executePlan Oracle — pre-execution branches B1-B3 (zero persisted mu
     h.mockDb.getProject.mockImplementation((id: string) =>
       id === 'target' ? { id: 'target', name: 'ais-server' } : null,
     );
-    // The new deployable's app name (test-app) collides with an existing group.
+    // The new Application name (test-app) collides with an existing Project.
     h.mockDb.getProjectByName.mockImplementation((name: string) =>
       name === 'test-app' ? { id: 'existing', name: 'test-app' } : null,
     );
@@ -282,7 +282,7 @@ describe('executePlan Oracle — pre-execution branches B1-B3 (zero persisted mu
 
     expect(result.status).toBe('failed');
     expect(result.target_project_id).toBe('target');
-    expect(result.error).toContain('collides with an existing project group');
+    expect(result.error).toContain('collides with an existing Project');
     // I1: zero persisted state — collision is detected before the commit point.
     expect(wrotePlanStatus(h.mockDb, 'executing')).toBe(false);
     expect(h.mockPipeline.startDeploy).not.toHaveBeenCalled();
@@ -487,7 +487,7 @@ describe('executePlan Oracle — provisioning loop P1-P5', () => {
     const result = await h.engine.executePlan(plan.plan_id);
 
     expect(result.status).toBe('failed');
-    expect(result.error).toContain('requires an existing target project');
+    expect(result.error).toContain('requires an existing target Project');
     expect(h.mockPipeline.startDeploy).not.toHaveBeenCalled();
   });
 });

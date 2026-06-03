@@ -113,7 +113,7 @@ async function resolveSingleDeployableProjectAlias(
   if (filtered.length > 1) {
     await throwEnvServiceSelectionRequired(
       appCtx,
-      `Project '${project.name}' has ${String(filtered.length)} deployable services. Specify service_name or service_id.`,
+      `Project '${project.name}' has ${String(filtered.length)} Applications/Compose workloads. Specify service_name or service_id.`,
       filtered,
     );
   }
@@ -148,7 +148,7 @@ async function resolveEnvTarget(args: Record<string, unknown>, appCtx: AppCtx): 
     if (deployableServices.length > 1) {
       await throwEnvServiceSelectionRequired(
         appCtx,
-        `Multiple deployable services named '${serviceName}' found. Specify project_name or service_id.`,
+        `Multiple Applications/Compose workloads named '${serviceName}' found. Specify project_name or service_id.`,
         deployableServices,
       );
     }
@@ -168,7 +168,7 @@ async function resolveEnvTarget(args: Record<string, unknown>, appCtx: AppCtx): 
     if (deployables.length !== 1) {
       await throwEnvServiceSelectionRequired(
         appCtx,
-        `Project '${project.name}' has ${String(deployables.length)} deployable services. Specify service_name or service_id.`,
+        `Project '${project.name}' has ${String(deployables.length)} Applications/Compose workloads. Specify service_name or service_id.`,
         deployables,
       );
     }
@@ -180,7 +180,7 @@ async function resolveEnvTarget(args: Record<string, unknown>, appCtx: AppCtx): 
   }
   if (isManagedService(service.kind)) {
     throw new OpenLanderError(
-      `Environment variables are supported for deployable services, not managed ${service.kind} services.`,
+      `Environment variables are supported for Applications/Compose workloads, not ${service.kind} resources.`,
       'SERVICE_OPERATION_UNSUPPORTED',
       400,
       { serviceId: service.id, serviceName: service.name, kind: service.kind },
@@ -628,7 +628,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'set_env_vars',
     riskLevel: 'medium',
     description:
-      'Set environment variables for a project or deployable service. Defaults to legacy service scope. Pass scope=project/project_environment/service/service_environment; environment scopes require environment_key. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false for immediate service redeploy. variables may be an object or JSON-stringified object with string values only; null is rejected. Returns { status, project, service?, scope when explicit or non-service, keys, changed, needs_redeploy }.',
+      'Set environment variables for a Project or Application/Compose workload. Defaults to legacy service scope. Pass scope=project/project_environment/service/service_environment; environment scopes require environment_key. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running container, or pass defer_redeploy=false for immediate workload redeploy. variables may be an object or JSON-stringified object with string values only; null is rejected. Returns { status, project, service?, scope when explicit or non-service, keys, changed, needs_redeploy }.',
     mcpDescription:
       'Set project/service env vars. Use scope and environment_key for environment-specific writes. Default saves only.',
     inputSchema: setEnvVarsSchema,
@@ -784,7 +784,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'delete_env_var',
     riskLevel: 'medium',
     description:
-      'Delete one project/service environment variable. Use scope and environment_key for environment-specific vars. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running service, or pass defer_redeploy=false for immediate service redeploy.',
+      'Delete one Project or Application/Compose environment variable. Use scope and environment_key for environment-specific vars. By default this saves only and does NOT redeploy; call redeploy_app separately to apply to a running workload, or pass defer_redeploy=false for immediate redeploy.',
     mcpDescription: 'Delete one project/service env var. Default saves only.',
     inputSchema: deleteEnvVarSchema,
     execute: async (args, context) => {
@@ -825,7 +825,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'bulk_delete_env_vars',
     riskLevel: 'high',
     description:
-      'Delete multiple project/service environment variables. Use scope and environment_key for environment-specific vars. Omitting confirm=true returns a dry-run preview only. By default confirmed deletes do NOT redeploy; call redeploy_app separately to apply, or pass defer_redeploy=false for immediate service redeploy.',
+      'Delete multiple Project or Application/Compose environment variables. Use scope and environment_key for environment-specific vars. Omitting confirm=true returns a dry-run preview only. By default confirmed deletes do NOT redeploy; call redeploy_app separately to apply, or pass defer_redeploy=false for immediate redeploy.',
     mcpDescription: 'Bulk delete project/service env vars with confirm-gated dry-run behavior.',
     inputSchema: bulkDeleteEnvVarsSchema,
     execute: async (args, context) => {
