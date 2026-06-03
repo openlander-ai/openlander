@@ -22,6 +22,43 @@ function repoNameFromUrl(repoUrl: string): string {
   return slugifyName(last);
 }
 
+function configuredPublicHost(): string | null {
+  const raw = process.env['OPENLANDER_PUBLIC_HOST']?.trim();
+  if (!raw) return null;
+  const withoutWildcard = raw.startsWith('*.') ? raw.slice(2) : raw;
+  try {
+    const parsed = new URL(
+      withoutWildcard.includes('://') ? withoutWildcard : `http://${withoutWildcard}`,
+    );
+    return parsed.hostname || null;
+  } catch {
+    return withoutWildcard.replace(/\/.*$/, '').replace(/:\d+$/, '') || null;
+  }
+}
+
+function isIpv4Address(value: string): boolean {
+  const parts = value.split('.');
+  return (
+    parts.length === 4 &&
+    parts.every((part) => {
+      if (!/^\d{1,3}$/.test(part)) return false;
+      const n = Number(part);
+      return n >= 0 && n <= 255;
+    })
+  );
+}
+
+function routeUrl(routeName: string): string {
+  const publicHost = configuredPublicHost();
+  if (!publicHost) {
+    return `http://${routeName}.localhost`;
+  }
+  const hostname = isIpv4Address(publicHost)
+    ? `${routeName}.${publicHost}.sslip.io`
+    : `${routeName}.${publicHost}`;
+  return `http://${hostname}`;
+}
+
 export function uniqueProjectName(prefix: string): string {
   const base = slugifyName(prefix).slice(0, 36).replace(/-+$/g, '') || 'quality-gate';
   const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -581,15 +618,7 @@ export async function resolveComposeChildAccessibleUrl(
     throw new Error(`Compose parent project has no name: ${JSON.stringify(parentProject)}`);
   }
 
-  const childName = `${parentName}/${serviceName}`;
-  const childProject = (await listProjects({ includeArchived: true })).find(
-    (project) => project.name === childName,
-  );
-  if (!childProject) {
-    throw new Error(`Compose child project not found: ${childName}`);
-  }
-
-  return resolveProjectAccessibleUrl(childProject);
+  return routeUrl(slugifyName(`${parentName}/${serviceName}`));
 }
 
 export async function resolveServiceAccessibleUrl(projectId: string): Promise<string> {
