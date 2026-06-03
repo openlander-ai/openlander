@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { Database } from '../../src/db/index.js';
 import { projectIdToDeployableServiceId } from '../../src/db/service-ids.js';
 import { DeployPipeline } from '../../src/pipeline/deploy.js';
+import { PlanEngine } from '../../src/pipeline/deploy-plan/engine.js';
+import type { PlanEngineDeps } from '../../src/pipeline/deploy-plan/engine.js';
+import { createMockDeployPlan } from '../helpers/deploy-plan-mocks.js';
 import type { OpenLanderConfig } from '../../src/config/index.js';
 import type { Docker } from '../../src/pipeline/docker.js';
 
@@ -81,6 +84,26 @@ function buildPipeline(db: Database): DeployPipeline {
     } as never,
     { ai: { secretScan: { enabled: false } } } as OpenLanderConfig,
   );
+}
+
+function buildPlanEngine(db: Database, pipeline: DeployPipeline): PlanEngine {
+  return new PlanEngine({
+    db,
+    pipeline,
+    env: {
+      getGlobalSecrets: vi.fn().mockResolvedValue({}),
+      getAll: vi.fn().mockResolvedValue({}),
+      getAllForService: vi.fn().mockResolvedValue({}),
+      getAllWithInheritance: vi.fn().mockResolvedValue({}),
+    },
+    serviceManager: {
+      create: vi.fn(),
+      getSuggestedEnv: vi.fn(),
+      remove: vi.fn(),
+    },
+    autoDetector: {},
+    config: { ai: { secretScan: { enabled: false } } },
+  } as unknown as PlanEngineDeps);
 }
 
 describeWithDatabase('DB-first Project/Application identity contracts on Postgres', () => {
@@ -167,6 +190,107 @@ describeWithDatabase('DB-first Project/Application identity contracts on Postgre
             name: project.name,
           }),
         );
+      } finally {
+        await db.close();
+      }
+    });
+  });
+
+  it('executes a target_project_id deploy plan into an empty Project without FK drift', async () => {
+    await withIsolatedPostgresDatabase('db_first_execute_plan', async (url) => {
+      const db = await Database.connect(url);
+      try {
+        const project = await db.createProjectGroup({
+          id: 'p-db-plan-first',
+          name: 'db-plan-first',
+          displayName: 'DB Plan First',
+        });
+
+        await db.createService({
+          id: 'svc-db-plan-first-postgres',
+          name: 'db-plan-first-postgres',
+          projectId: project.id,
+          type: 'postgresql',
+          image: 'postgres:16',
+          containerName: 'ol-svc-db-plan-first-postgres',
+          port: 5432,
+          credentials: JSON.stringify({
+            connectionString: 'postgres://db-plan-first-postgres:5432/app',
+          }),
+        });
+
+        const pipeline = buildPipeline(db);
+        const deployEnvironment = vi.spyOn(pipeline, 'deployEnvironment').mockResolvedValue({
+          success: true,
+          projectId: project.id,
+          projectName: project.name,
+          buildDurationMs: 0,
+        });
+        const engine = buildPlanEngine(db, pipeline);
+        const plan = createMockDeployPlan({
+          plan_id: 'plan-db-first-target',
+          target_project_id: project.id,
+          app: {
+            name: project.name,
+            source: {
+              repo_url: 'https://github.com/openlander-ai/urlnest',
+              branch: 'main',
+              commit_sha: 'contract-plan-sha',
+            },
+          },
+          env: {
+            auto: {},
+            required: ['DATABASE_URL'],
+            provided: {
+              DATABASE_URL: 'postgres://db-plan-first-postgres:5432/app',
+            },
+            detected: [],
+          },
+          execution: { targetProjectId: project.id },
+        });
+
+        await db.createDeployPlan({
+          id: plan.plan_id,
+          projectName: project.name,
+          status: plan.status,
+          complexity: plan.complexity,
+          planJson: JSON.stringify(plan),
+          commitSha: plan.app.source.commit_sha,
+        });
+
+        await expect(
+          engine.executePlan(plan.plan_id, undefined, 'contract-session'),
+        ).resolves.toMatchObject({
+          status: 'building',
+          plan_id: plan.plan_id,
+          project_id: project.id,
+          target_project_id: project.id,
+          runtime_project_id: project.id,
+        });
+
+        const serviceId = projectIdToDeployableServiceId(project.id);
+        await vi.waitFor(async () => {
+          await expect(db.getService(serviceId)).resolves.toMatchObject({
+            id: serviceId,
+            project_id: project.id,
+            kind: 'git',
+          });
+          expect(deployEnvironment).toHaveBeenCalledWith(
+            project.id,
+            `${project.id}-production`,
+            expect.objectContaining({
+              _projectId: project.id,
+              name: project.name,
+            }),
+          );
+        });
+
+        await vi.waitFor(async () => {
+          await expect(db.getLastDeployLog(project.id)).resolves.toMatchObject({
+            service_id: serviceId,
+            status: 'success',
+          });
+        });
       } finally {
         await db.close();
       }
