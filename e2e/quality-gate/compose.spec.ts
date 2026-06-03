@@ -6,7 +6,7 @@ import {
   deleteProject,
   deployGitProject,
   getProject,
-  resolveProjectAccessibleUrl,
+  resolveComposeChildAccessibleUrl,
   waitForStatus,
 } from './fixtures/api.js';
 
@@ -79,7 +79,7 @@ test.describe('Quality Gate — Compose multi-service deploy', () => {
     expect(runningProject.status).toBe('running');
 
     const latestProject = await getProject(projectId);
-    const countUrl = new URL(resolveProjectAccessibleUrl(latestProject));
+    const countUrl = new URL(await resolveComposeChildAccessibleUrl(latestProject, 'web'));
     countUrl.pathname = '/count';
 
     const countResponse = await fetchWithRetry(countUrl.toString());

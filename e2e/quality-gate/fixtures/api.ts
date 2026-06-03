@@ -571,6 +571,24 @@ export function resolveProjectAccessibleUrl(project: Record<string, unknown>): s
   );
 }
 
+export async function resolveComposeChildAccessibleUrl(
+  parentProject: Record<string, unknown>,
+  serviceName: string,
+): Promise<string> {
+  const parentName = parentProject['name'];
+  if (typeof parentName !== 'string' || parentName.length === 0) {
+    throw new Error(`Compose parent project has no name: ${JSON.stringify(parentProject)}`);
+  }
+
+  const childName = `${parentName}/${serviceName}`;
+  const childProject = (await listProjects()).find((project) => project.name === childName);
+  if (!childProject) {
+    throw new Error(`Compose child project not found: ${childName}`);
+  }
+
+  return resolveProjectAccessibleUrl(childProject);
+}
+
 export async function resolveServiceAccessibleUrl(projectId: string): Promise<string> {
   const project = (await getProject(projectId)) as Record<string, unknown>;
   return resolveProjectAccessibleUrl(project);
