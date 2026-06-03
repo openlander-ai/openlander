@@ -26,6 +26,10 @@ function createMockDb(overrides?: Record<string, unknown>) {
     upsertServiceConnection: vi.fn().mockResolvedValue(undefined),
     getServiceConnectionByProjectAndService: vi.fn().mockResolvedValue({ id: 'conn-1' }),
     updateServiceConnection: vi.fn().mockResolvedValue(undefined),
+    // Default: the group has a deployable workload (the canonical __svc row), so
+    // the auto dependency edge is wired. The empty-group case overrides this to
+    // undefined.
+    getDeployableForProject: vi.fn().mockResolvedValue({ id: 'p1__svc' }),
     createProjectDependency: vi.fn().mockResolvedValue({}),
     deleteServiceConnectionByProjectAndService: vi.fn().mockResolvedValue(undefined),
     findDependenciesByProject: vi.fn().mockResolvedValue([]),
@@ -109,6 +113,73 @@ describe('ManagedServiceLinker.connect', () => {
     // The connection itself was still wired despite the dependency failure.
     expect(db.upsertServiceConnection).toHaveBeenCalledTimes(1);
     expect(db.updateServiceConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it('wires the auto dependency edge from the actual deployable workload (not a synthesized id)', async () => {
+    const db = createMockDb({
+      getDeployableForProject: vi.fn().mockResolvedValue({ id: 'real-workload__svc' }),
+    });
+    const linker = new ManagedServiceLinker(db, mockEnv);
+
+    await linker.connect({ projectId: 'p1', service: POSTGRES_SERVICE, source: 'deploy_plan' });
+
+    expect(db.getDeployableForProject).toHaveBeenCalledWith('p1');
+    // The dependency source is the real workload row id, looked up — never a
+    // string-synthesized `<projectId>__svc`.
+    expect(db.createProjectDependency).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source_service_id: 'real-workload__svc',
+        target_service_id: 'svc-pg',
+      }),
+    );
+  });
+
+  // The empty-group attach bug: connecting a managed service to a project group
+  // that has no deployable workload yet must NOT create a dependency edge that
+  // points at a phantom `<projectId>__svc` consumer. The connection row (the
+  // group attachment record, project-scoped) is still upserted idempotently —
+  // the linker remains the sole writer of service_connections — but no
+  // workload→service dependency row is created until a workload exists.
+  it('creates NO dependency row on an empty-group attach (no deployable workload yet)', async () => {
+    const db = createMockDb({
+      getDeployableForProject: vi.fn().mockResolvedValue(undefined),
+    });
+    const linker = new ManagedServiceLinker(db, mockEnv);
+
+    const result = await linker.connect({
+      projectId: 'empty-group',
+      service: POSTGRES_SERVICE,
+      source: 'mcp',
+    });
+
+    expect(db.getDeployableForProject).toHaveBeenCalledWith('p1');
+    // No phantom dependency edge.
+    expect(db.createProjectDependency).not.toHaveBeenCalled();
+    // The group-attachment connection record is still written (idempotent).
+    expect(db.upsertServiceConnection).toHaveBeenCalledWith({
+      projectId: 'p1',
+      serviceId: 'svc-pg',
+    });
+    // The attach itself still succeeds.
+    expect(result.resolvedProjectId).toBe('p1');
+  });
+
+  it('is idempotent on a repeat empty-group attach — still no dependency row, connection upsert is conflict-safe', async () => {
+    const db = createMockDb({
+      getDeployableForProject: vi.fn().mockResolvedValue(undefined),
+    });
+    const linker = new ManagedServiceLinker(db, mockEnv);
+
+    await linker.connect({ projectId: 'empty-group', service: POSTGRES_SERVICE, source: 'mcp' });
+    await linker.connect({ projectId: 'empty-group', service: POSTGRES_SERVICE, source: 'mcp' });
+
+    expect(db.createProjectDependency).not.toHaveBeenCalled();
+    expect(db.upsertServiceConnection).toHaveBeenCalledTimes(2);
+    expect(
+      (db.upsertServiceConnection as unknown as { mock: { results: { type: string }[] } }).mock.results.every(
+        (r) => r.type === 'return',
+      ),
+    ).toBe(true);
   });
 
   it('propagates dropped env/secret keys from the attach step', async () => {

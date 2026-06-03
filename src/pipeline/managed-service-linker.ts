@@ -1,6 +1,5 @@
 import { createModuleLogger } from '../lib/logger.js';
 import { autoInjectServiceEnv, cleanupAutoInjectedEnv } from './env-inject.js';
-import { projectIdToDeployableServiceId } from '../db/service-ids.js';
 import { kindToLegacyType } from '../db/repos/service.repo.js';
 import type { Database } from '../db/index.js';
 import type { EnvManager } from './env.js';
@@ -105,14 +104,29 @@ export class ManagedServiceLinker {
       });
     }
 
-    // Best-effort: a missing dependency edge must not fail the connect.
+    // A dependency edge needs a concrete workload consumer. Previously the
+    // source was synthesized as `<projectId>__svc`, which fabricates a consumer
+    // id even for an EMPTY project group that has no deployable workload yet —
+    // creating a dependency row that points at a phantom service. Only wire the
+    // edge when the group actually has a deployable workload to consume the
+    // managed service; an empty-group attach must not create a connection /
+    // dependency row until a workload exists. Best-effort: a missing dependency
+    // edge must not fail the connect.
     try {
-      await this.db.createProjectDependency({
-        source_service_id: projectIdToDeployableServiceId(resolvedProjectId),
-        target_service_id: service.id,
-        dependency_type: serviceDependencyType(serviceKind),
-        source: 'auto',
-      });
+      const deployable = await this.db.getDeployableForProject(resolvedProjectId);
+      if (deployable) {
+        await this.db.createProjectDependency({
+          source_service_id: deployable.id,
+          target_service_id: service.id,
+          dependency_type: serviceDependencyType(serviceKind),
+          source: 'auto',
+        });
+      } else {
+        log.debug(
+          { projectId: resolvedProjectId, serviceId: service.id },
+          'Skipping auto dependency edge: project group has no deployable workload yet',
+        );
+      }
     } catch (err) {
       log.debug(
         { err, projectId: resolvedProjectId, serviceId: service.id },
