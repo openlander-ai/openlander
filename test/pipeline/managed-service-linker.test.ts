@@ -152,8 +152,8 @@ describe('ManagedServiceLinker.connect', () => {
     );
   });
 
-  // The empty-group attach bug (Codex finding #1): a STANDALONE attach
-  // (deferIfNoWorkload) into a group with NO deployable workload must not create
+  // The empty-group attach bug (Codex finding #1): attaching a managed service
+  // into a group with NO deployable workload must not create
   // the FK-bearing rows — the connection (`service_id_consumer`) and the
   // dependency edge (`source_service_id`) both reference services.id, and the
   // derived `<group>__svc` row does not exist. Env injection still runs (it is
@@ -169,7 +169,6 @@ describe('ManagedServiceLinker.connect', () => {
       projectId: 'empty-group',
       service: POSTGRES_SERVICE,
       source: 'mcp',
-      deferIfNoWorkload: true,
     });
 
     expect(db.getDeployablesByGroup).toHaveBeenCalledWith('p1');
@@ -213,7 +212,6 @@ describe('ManagedServiceLinker.connect', () => {
       projectId: 'empty-group',
       service: POSTGRES_SERVICE,
       source: 'mcp' as const,
-      deferIfNoWorkload: true,
     };
     await linker.connect(params);
     await linker.connect(params);

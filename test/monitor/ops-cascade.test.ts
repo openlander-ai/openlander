@@ -42,9 +42,9 @@ describe('CascadeDetector', () => {
   describe('detectCascade', () => {
     it('detects cascade when multiple projects sharing a service fail', async () => {
       const detector = new CascadeDetector(mockCtx);
-      detector.recordFailure('proj-1');
-      detector.recordFailure('proj-2');
-      detector.recordFailure('proj-3');
+      await detector.recordFailure('proj-1');
+      await detector.recordFailure('proj-2');
+      await detector.recordFailure('proj-3');
 
       const result = await detector.detectCascade(['proj-1', 'proj-2', 'proj-3']);
 
@@ -57,7 +57,7 @@ describe('CascadeDetector', () => {
 
     it('returns null when fewer than 2 recent failures', async () => {
       const detector = new CascadeDetector(mockCtx);
-      detector.recordFailure('proj-1');
+      await detector.recordFailure('proj-1');
 
       const result = await detector.detectCascade(['proj-1']);
       expect(result).toBeNull();
@@ -67,8 +67,8 @@ describe('CascadeDetector', () => {
       mockCtx.db.listServiceConnectionsByService.mockReturnValue([]);
 
       const detector = new CascadeDetector(mockCtx);
-      detector.recordFailure('proj-1');
-      detector.recordFailure('proj-2');
+      await detector.recordFailure('proj-1');
+      await detector.recordFailure('proj-2');
 
       const result = await detector.detectCascade(['proj-1', 'proj-2']);
       expect(result).toBeNull();
@@ -79,9 +79,9 @@ describe('CascadeDetector', () => {
       try {
         const detector = new CascadeDetector(mockCtx);
 
-        detector.recordFailure('proj-1');
+        await detector.recordFailure('proj-1');
         vi.advanceTimersByTime(31_000);
-        detector.recordFailure('proj-2');
+        await detector.recordFailure('proj-2');
 
         const result = await detector.detectCascade(['proj-1', 'proj-2']);
         expect(result).toBeNull();
@@ -102,9 +102,9 @@ describe('CascadeDetector', () => {
       });
 
       const detector = new CascadeDetector(mockCtx);
-      detector.recordFailure('proj-1');
-      detector.recordFailure('proj-2');
-      detector.recordFailure('proj-4');
+      await detector.recordFailure('proj-1');
+      await detector.recordFailure('proj-2');
+      await detector.recordFailure('proj-4');
 
       const result = await detector.detectCascade(['proj-1', 'proj-2', 'proj-4']);
 
@@ -170,9 +170,9 @@ describe('CascadeDetector', () => {
       try {
         const detector = new CascadeDetector(mockCtx);
 
-        detector.recordFailure('proj-old');
+        await detector.recordFailure('proj-old');
         vi.advanceTimersByTime(61_000);
-        detector.recordFailure('proj-new');
+        await detector.recordFailure('proj-new');
 
         detector.cleanupOldFailures();
 
@@ -185,18 +185,18 @@ describe('CascadeDetector', () => {
   });
 
   describe('recordFailure', () => {
-    it('records failure without error', () => {
+    it('records failure without error', async () => {
       const detector = new CascadeDetector(mockCtx);
-      detector.recordFailure('proj-1');
-      detector.recordFailure('proj-2');
+      await detector.recordFailure('proj-1');
+      await detector.recordFailure('proj-2');
     });
 
     it('overwrites previous timestamp on repeated calls', async () => {
       const detector = new CascadeDetector(mockCtx);
 
-      detector.recordFailure('proj-1');
-      detector.recordFailure('proj-1');
-      detector.recordFailure('proj-2');
+      await detector.recordFailure('proj-1');
+      await detector.recordFailure('proj-1');
+      await detector.recordFailure('proj-2');
 
       const result = await detector.detectCascade(['proj-1', 'proj-2']);
       expect(result).not.toBeNull();

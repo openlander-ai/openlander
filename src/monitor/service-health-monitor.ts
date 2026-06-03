@@ -58,6 +58,22 @@ function restartLoopError(exitCode: unknown): string {
   return `Container is restarting (exit code: ${String(exitCode)})`;
 }
 
+function connectedProjectIds(
+  connections: Array<{ project_id?: string | null; service_id_consumer: string }>,
+): string[] {
+  return [
+    ...new Set(
+      connections.map(
+        (connection) =>
+          connection.project_id ??
+          (connection.service_id_consumer.endsWith('__svc')
+            ? connection.service_id_consumer.replace(/__svc$/, '')
+            : connection.service_id_consumer),
+      ),
+    ),
+  ];
+}
+
 export class ServiceHealthMonitor {
   private readonly intervalMs: number;
   private readonly serviceManager?: ServiceManager;
@@ -173,7 +189,7 @@ export class ServiceHealthMonitor {
         if (service.status !== 'error') {
           await this.db.updateService(service.id, { status: 'error' });
           const conns = await this.db.listServiceConnectionsByService(service.id);
-          const affectedProjects = [...new Set(conns.map((c) => c.service_id_consumer))];
+          const affectedProjects = connectedProjectIds(conns);
 
           await this.recordServiceDownIncident(service, affectedProjects);
 
@@ -195,7 +211,7 @@ export class ServiceHealthMonitor {
         if (service.status === 'running') {
           await this.db.updateService(service.id, { status: 'stopped' });
           const conns = await this.db.listServiceConnectionsByService(service.id);
-          const affectedProjects = [...new Set(conns.map((c) => c.service_id_consumer))];
+          const affectedProjects = connectedProjectIds(conns);
 
           await this.recordServiceDownIncident(service, affectedProjects);
 
@@ -293,7 +309,7 @@ export class ServiceHealthMonitor {
           // Record incident only on transition (status was 'running' before)
           if (service.status === 'running') {
             const conns2 = await this.db.listServiceConnectionsByService(service.id);
-            const affectedProjects2 = [...new Set(conns2.map((c) => c.service_id_consumer))];
+            const affectedProjects2 = connectedProjectIds(conns2);
             await this.recordServiceDownIncident(service, affectedProjects2);
           }
         }
@@ -317,7 +333,7 @@ export class ServiceHealthMonitor {
 
       await this.db.updateService(service.id, { status: 'error' });
       const conns3 = await this.db.listServiceConnectionsByService(service.id);
-      const affectedProjects3 = [...new Set(conns3.map((c) => c.service_id_consumer))];
+      const affectedProjects3 = connectedProjectIds(conns3);
 
       await this.recordServiceDownIncident(service, affectedProjects3);
     }

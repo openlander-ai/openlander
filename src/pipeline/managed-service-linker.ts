@@ -30,12 +30,6 @@ export interface ManagedServiceConnectParams {
    * stays in the pipeline layer.
    */
   credentials?: Record<string, string>;
-  /**
-   * Caller annotation for standalone attach flows. FK safety is source-agnostic:
-   * when the project group has no deployable workload yet, the linker always skips
-   * FK-bearing rows and only writes project-scoped env.
-   */
-  deferIfNoWorkload?: boolean;
 }
 
 export interface ManagedServiceConnectResult {
@@ -78,7 +72,7 @@ export class ManagedServiceLinker {
    * and the injected-key metadata is preserved when nothing new is injected.
    */
   async connect(params: ManagedServiceConnectParams): Promise<ManagedServiceConnectResult> {
-    const { projectId, service, source, credentials, deferIfNoWorkload } = params;
+    const { projectId, service, source, credentials } = params;
 
     const moved = await this.db.attachServiceToProject(service.id, projectId);
     const resolvedProjectId = moved.targetProjectId;
@@ -111,7 +105,7 @@ export class ManagedServiceLinker {
       );
     } else {
       log.debug(
-        { source, projectId: resolvedProjectId, serviceId: service.id, deferIfNoWorkload },
+        { source, projectId: resolvedProjectId, serviceId: service.id },
         'Deferred managed-service connection row until a deployable workload exists',
       );
     }

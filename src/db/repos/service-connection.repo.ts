@@ -7,11 +7,12 @@ import type { ServiceConnectionRow } from '../types.js';
 import { RepoPersistenceError } from '../../errors.js';
 
 /**
- * Post-0012: service_connections uses consumer/provider model. Callers
- * historically pass `projectId` (the consumer group) and `serviceId` (the
- * provider managed-service id); the repo maps:
- *   - projectId  -> service_id_consumer = projectIdToDeployableServiceId(projectId)
- *   - serviceId  -> service_id_provider (no transform)
+ * Post-0012: service_connections uses consumer/provider model. Callers pass
+ * `projectId` (the consumer group) and `serviceId` (the provider managed-service
+ * id). Writes may pass a concrete consumer workload id when the group contains
+ * an attached runtime workload; project-scoped reads resolve both the canonical
+ * `<projectId>__svc` row and any consumer service whose `services.project_id`
+ * points at the group.
  */
 export class ServiceConnectionRepo {
   constructor(
@@ -25,7 +26,8 @@ export class ServiceConnectionRepo {
    * Back-compat hydration: derive deprecated `project_id` and `service_id`
    * from the canonical consumer/provider fields so existing callers continue
    * to work through 1.0.
-   *   project_id = consumer id with __svc suffix stripped
+   *   project_id = joined consumer service.project_id when available, otherwise
+   *                consumer id with __svc suffix stripped
    *   service_id = provider id (no transform)
    */
   private hydrateDeprecated(
@@ -101,12 +103,16 @@ export class ServiceConnectionRepo {
 
   async getConnection(id: string): Promise<ServiceConnectionRow | undefined> {
     const [selected] = await this.db
-      .select()
+      .select({
+        connection: serviceConnections,
+        consumerProjectId: services.project_id,
+      })
       .from(serviceConnections)
+      .leftJoin(services, eq(serviceConnections.service_id_consumer, services.id))
       .where(eq(serviceConnections.id, id))
       .limit(1);
-    const row = (selected ?? null) as ServiceConnectionRow | null;
-    return row ? this.hydrateDeprecated(row) : undefined;
+    const row = (selected?.connection ?? null) as ServiceConnectionRow | null;
+    return row ? this.hydrateDeprecated(row, selected?.consumerProjectId) : undefined;
   }
 
   async getConnectionByProjectAndService(
