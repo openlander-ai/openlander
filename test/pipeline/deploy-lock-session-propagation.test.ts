@@ -67,6 +67,9 @@ function createMockDb(existingProject: ReturnType<typeof makeExistingProjectRow>
     getDeployLockInfo: vi.fn().mockReturnValue(null),
     isCircuitBreakerOpen: vi.fn().mockReturnValue(false),
     getDeployableForProject: vi.fn().mockReturnValue(undefined),
+    ensureDeployableServiceForProject: vi.fn().mockResolvedValue({
+      id: `${existingProject?.id ?? 'p-new'}__svc`,
+    }),
     loadDeployConfig: vi.fn().mockResolvedValue(null),
     loadDeployConfigForService: vi.fn().mockResolvedValue(null),
     getEnvironmentsByProject: vi.fn().mockResolvedValue([]),
@@ -120,6 +123,13 @@ describe('BUG: plan-engine deploy-lock session propagation through startDeploy',
       });
 
       expect(result.status).toBe('building');
+      expect(db.ensureDeployableServiceForProject).toHaveBeenCalledWith(
+        'p-existing',
+        expect.objectContaining({
+          repoUrl: 'https://github.com/test/my-app',
+          source: 'git',
+        }),
+      );
       expect(deployCalls).toHaveLength(1);
       expect(deployCalls[0]?._lockSessionId).toBe('plan-abc123');
     });

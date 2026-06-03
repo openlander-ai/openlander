@@ -467,6 +467,25 @@ export class DeployPipeline {
     }
   }
 
+  private async ensureFirstApplicationService(
+    projectId: string,
+    config: ProjectConfig,
+  ): Promise<void> {
+    const source = config.source ?? 'git';
+    await this.db.ensureDeployableServiceForProject(projectId, {
+      source,
+      repoUrl: source === 'image' ? null : config.repoUrl,
+      branch: source === 'image' ? null : (config.branch ?? null),
+      buildMethod: config.composeServices ? 'compose' : null,
+      dockerfilePath: config.dockerfilePath ?? null,
+      dockerTarget: config.dockerTarget ?? null,
+      buildContext: config.buildContext ?? null,
+      imageUrl: config.imageUrl ?? null,
+      imageCmd: config.imageCmd ?? null,
+      containerPort: config.containerPort ?? null,
+    });
+  }
+
   /**
    * Start a deployment in the background (non-blocking).
    * Runs preflight check first and returns immediately if it fails.
@@ -569,6 +588,11 @@ export class DeployPipeline {
       // for callers that bypass the API route (e.g. webhook branch-target,
       // /api/deploy/start, plan engine, AI-approved fix flow).
       await this.assertProjectMutable(existing);
+
+      await this.ensureFirstApplicationService(existing.id, {
+        ...config,
+        name: projectName,
+      });
 
       const isStale = existing.status === 'error';
       if (isStale) {
@@ -780,6 +804,11 @@ export class DeployPipeline {
       });
       await this.transitionProjectState(projectId, 'building', 'deploy-started');
       this.jobManager?.trackJob(projectId, projectName);
+    } else {
+      await this.ensureFirstApplicationService(projectId, {
+        ...config,
+        name: projectName,
+      });
     }
 
     // Day 12 (MAJOR #1): every entry point is now lock-protected. When the
