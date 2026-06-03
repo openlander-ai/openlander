@@ -237,7 +237,7 @@ function buildProjectGroups(
   }
 
   if (lines.length === 0) return '';
-  return `Project groups (same repo or monorepo):\n${lines.join('\n')}`;
+  return `Related Projects (same repo or monorepo):\n${lines.join('\n')}`;
 }
 
 // ---------------------------------------------------------------------------

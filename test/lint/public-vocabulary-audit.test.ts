@@ -14,10 +14,12 @@ const EXCLUDED_PUBLIC_DOC_PATHS = [
 
 const USER_FACING_SOURCE_PATHS = [
   'src/mcp',
+  'src/llm',
   'src/tools/defs',
   'src/pipeline/deploy-plan',
   'src/pipeline/deploy-core.ts',
   'src/errors.ts',
+  'src/web/api/system-routes.ts',
   'web/src/i18n',
   'web/src/components/agent-guide',
   'web/src/components/service/CreateServiceDialog.tsx',
@@ -27,11 +29,11 @@ const USER_FACING_SOURCE_PATHS = [
 ] as const;
 
 const FORBIDDEN_PUBLIC_NOUNS = [
-  /\bproject group\b/i,
-  /\bdeployable service\b/i,
-  /\bmanaged service\b/i,
-  /\bCreate service\b/,
-  /\bAdd service\b/,
+  /\bproject groups?\b/i,
+  /\bdeployable services?\b/i,
+  /\bmanaged services?\b/i,
+  /\bcreate services?\b/i,
+  /\badd services?\b/i,
 ] as const;
 
 const SCANNED_EXTENSIONS = new Set(['.md', '.ts', '.tsx']);

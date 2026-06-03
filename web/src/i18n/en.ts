@@ -465,6 +465,7 @@ export const translations = {
       deleteArchivedServiceInputLabel: 'Delete confirmation for {slug}',
       error: 'Project action failed',
     },
+    addResourceWithAgent: 'Ask agent to add Database/Cache',
     env: {
       title: 'Application environment variables',
       description:

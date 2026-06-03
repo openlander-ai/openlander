@@ -490,7 +490,7 @@ export function ProjectView() {
               )}
             >
               <Database className="h-3.5 w-3.5" />
-              {`${t('projectDetail.env.add')} ${t('vocab.database')}/${t('vocab.cache')}`}
+              {t('projectDetail.addResourceWithAgent')}
             </button>
             <button
               type="button"

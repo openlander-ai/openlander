@@ -17,6 +17,7 @@ describe('Project resources IA', () => {
     expect(projectViewSource).toContain("label: t('projectDetail.tabs.services')");
     expect(projectViewSource).toContain("panelId=\"projectpanel-services\"");
     expect(projectViewSource).not.toContain('Add service');
+    expect(projectViewSource).toContain("t('projectDetail.addResourceWithAgent')");
     expect(projectViewSource).toContain("t('projectDetail.addService.title')");
   });
 

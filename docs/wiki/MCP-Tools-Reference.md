@@ -348,8 +348,8 @@ request.
 
 ### `unarchive_project`
 
-Restore the archive set from a project-group archive. OpenLander restores the
-services archived by that group operation and does **not** redeploy them
+Restore the archive set from a Project archive. OpenLander restores the
+Applications archived by that Project operation and does **not** redeploy them
 automatically; call `redeploy_app` with each `service_id` that should run again.
 
 | Parameter      | Type   | Required | Description        |
