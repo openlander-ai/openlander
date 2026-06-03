@@ -589,11 +589,6 @@ export class DeployPipeline {
       // /api/deploy/start, plan engine, AI-approved fix flow).
       await this.assertProjectMutable(existing);
 
-      await this.ensureFirstApplicationService(existing.id, {
-        ...config,
-        name: projectName,
-      });
-
       const isStale = existing.status === 'error';
       if (isStale) {
         await this.db.updateProject(existing.id, {
@@ -804,11 +799,6 @@ export class DeployPipeline {
       });
       await this.transitionProjectState(projectId, 'building', 'deploy-started');
       this.jobManager?.trackJob(projectId, projectName);
-    } else {
-      await this.ensureFirstApplicationService(projectId, {
-        ...config,
-        name: projectName,
-      });
     }
 
     // Day 12 (MAJOR #1): every entry point is now lock-protected. When the
@@ -1076,6 +1066,13 @@ export class DeployPipeline {
     trigger: 'chat' | 'webhook' | 'api',
   ): Promise<DeployResult> {
     const source = config.source ?? 'git';
+
+    if (config._projectId) {
+      await this.ensureFirstApplicationService(projectId, {
+        ...config,
+        name: projectName,
+      });
+    }
 
     // Project row creation now lives in deploy() so we can acquire the lock
     // immediately after. Here we only apply caller overrides for existing

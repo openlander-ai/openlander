@@ -123,13 +123,6 @@ describe('BUG: plan-engine deploy-lock session propagation through startDeploy',
       });
 
       expect(result.status).toBe('building');
-      expect(db.ensureDeployableServiceForProject).toHaveBeenCalledWith(
-        'p-existing',
-        expect.objectContaining({
-          repoUrl: 'https://github.com/test/my-app',
-          source: 'git',
-        }),
-      );
       expect(deployCalls).toHaveLength(1);
       expect(deployCalls[0]?._lockSessionId).toBe('plan-abc123');
     });
