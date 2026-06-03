@@ -56,8 +56,8 @@ export const DEPLOY_ACTIONS = [
 ] as const;
 
 /**
- * openlander_project: Project groups & configuration
- * - Create empty project groups for project-first deploy flows
+ * openlander_project: Projects & configuration
+ * - Create empty Projects for project-first deploy flows
  * - Global secrets (shared across all projects)
  * - Secret files (encrypted credential files)
  * - Temporary public share URLs
@@ -123,7 +123,7 @@ export const MANAGED_SERVICE_ACTIONS = [
 ] as const;
 
 /**
- * openlander_service: Deployable services (apps + workers).
+ * openlander_service: Applications/Compose workloads.
  * Total: 22 tools
  */
 export const SERVICE_ACTIONS = [
@@ -349,7 +349,7 @@ function invalidParamsResponse(
 
 function humanUiOnlyResponse(toolName: string, action: string): Record<string, unknown> {
   const lifecycleReason = PROJECT_LIFECYCLE_ALIAS_SET.has(action)
-    ? ' For whole project groups, use archive_project or unarchive_project with project_id/project_name and wait for human approval. For one deployable app/worker, use archive_service or unarchive_service with service_id. Archive is reversible cleanup; use list_archived_services to inspect archived deployable services.'
+    ? ' For whole Projects, use archive_project or unarchive_project with project_id/project_name and wait for human approval. For one Application/worker, use archive_service or unarchive_service with service_id. Archive is reversible cleanup; use list_archived_services to inspect archived Applications.'
     : '';
   const isRestore = action.startsWith('unarchive');
   const isServiceAction = action.includes('service');
@@ -511,7 +511,7 @@ export function createOpenLanderDeployCompositeTool(toolDefs: ToolDef[]): Compos
 export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_project',
-    'Project groups and shared config. Project groups organize deployable services; env actions route to service targets.',
+    'Projects and shared config. Projects organize Applications, Compose stacks, and Database/Cache/Storage resources; env actions route to workload targets.',
     toolDefs,
   );
 }
@@ -519,7 +519,7 @@ export function createOpenLanderProjectCompositeTool(toolDefs: ToolDef[]): Compo
 export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_service',
-    'Deployable services (apps + workers): redeploy, restart, rollback, config, env vars, domains, and temporary public URLs. Prefer service_id.',
+    'Applications/Compose workloads: redeploy, restart, rollback, config, env vars, domains, and temporary public URLs. Prefer compatibility field service_id.',
     toolDefs,
   );
 }

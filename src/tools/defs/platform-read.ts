@@ -224,7 +224,7 @@ export const platformReadToolDefs: ToolDef[] = [
       const dockerNames = new Set(managedContainers.map((container) => container.name));
 
       // Batch-resolve service views so each container_id read uses the
-      // canonical deployable service row with legacy project-column fallback.
+      // canonical Application/Compose service row with legacy project-column fallback.
       const deployableContainerIds = new Map<string, string | null>();
       const serviceRecords = await loadServiceViewRecords(appCtx.db, projects);
       for (const p of projects) {

@@ -18,7 +18,7 @@ import {
 const log = createModuleLogger('tools-defs-compose');
 
 const deployComposeInputSchema = deployComposeSchema.extend({
-  name: z.string().optional().describe('Project group name (auto-generated from repo if omitted)'),
+  name: z.string().optional().describe('Project name (auto-generated from repo if omitted)'),
   profiles: z
     .array(z.string())
     .optional()

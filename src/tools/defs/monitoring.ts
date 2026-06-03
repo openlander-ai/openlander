@@ -238,10 +238,10 @@ async function getProjectTopology(args: Record<string, unknown>, appCtx: AppCtx)
     ),
     _agent_guidance: {
       message:
-        'Topology is read-only. Deployable services depend on managed services listed in dependsOn.',
+        'Topology is read-only. Applications/Compose workloads depend on Database/Cache/Storage resources listed in dependsOn.',
       next_steps: [
-        'Use openlander_monitor.diagnose_service with a deployable service_id to inspect failures.',
-        'Use openlander_managed_service.get_service_credentials for managed service connection details when needed.',
+        'Use openlander_monitor.diagnose_service with an Application/Compose service_id to inspect failures.',
+        'Use openlander_managed_service.get_service_credentials for Database/Cache/Storage connection details when needed.',
       ],
     },
   };
@@ -270,9 +270,9 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'get_logs',
     riskLevel: 'low',
     description:
-      'Get recent container stdout/stderr logs for a deployable service or project. Prefer service_id from list_projects.deployable_service when available. Use when user asks about errors, crashes, or app behavior. Returns { project, service, logs } where logs is a string of recent lines (agent default: 80, MCP default: 200). Errors: PROJECT_NOT_FOUND, SERVICE_NOT_FOUND. If logs show a build error, call get_build_log for the raw build output. For deployment history (past deploys, triggers, durations), use get_deploy_history instead.',
+      'Get recent container stdout/stderr logs for an Application/Compose workload or Project. Prefer service_id from list_projects when available. Use when user asks about errors, crashes, or app behavior. Returns { project, service, logs } where logs is a string of recent lines (agent default: 80, MCP default: 200). Errors: PROJECT_NOT_FOUND, SERVICE_NOT_FOUND. If logs show a build error, call get_build_log for the raw build output. For deployment history (past deploys, triggers, durations), use get_deploy_history instead.',
     mcpDescription:
-      'Get recent deployable service/project logs. Prefer service_id. MCP default is 200 lines; pass lines=500+ for long tracebacks.',
+      'Get recent Application/Compose or Project logs. Prefer service_id. MCP default is 200 lines; pass lines=500+ for long tracebacks.',
     inputSchema: getLogsSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -399,7 +399,7 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'get_project_stats',
     riskLevel: 'low',
     description:
-      'Get CPU, memory, restarts, and uptime for a deployable service or project container. Prefer service_id from list_projects.deployable_service when available. Use when user asks about resource usage, container health, or performance metrics. Returns { cpu_percent, memory_usage_mb, memory_limit_mb, restarts, uptime_seconds, status }. Errors: PROJECT_NOT_FOUND, SERVICE_NOT_FOUND.',
+      'Get CPU, memory, restarts, and uptime for an Application/Compose or Project container. Prefer service_id from list_projects when available. Use when user asks about resource usage, container health, or performance metrics. Returns { cpu_percent, memory_usage_mb, memory_limit_mb, restarts, uptime_seconds, status }. Errors: PROJECT_NOT_FOUND, SERVICE_NOT_FOUND.',
     mcpDescription: 'Get per-container CPU, memory, restarts, and uptime for a service/project.',
     inputSchema: getProjectStatsSchema,
     execute: async (args, context) => {
@@ -515,9 +515,9 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'get_topology',
     riskLevel: 'low',
     description:
-      'Return the read-only service topology for a project group. Shows deployable services, connected managed services, and dependsOn edges so agents can understand app-to-database/cache ownership over MCP. Requires project_id or project_name. Does not inspect Docker or mutate state.',
+      'Return the read-only resource topology for a Project. Shows Applications/Compose workloads, connected Database/Cache/Storage resources, and dependsOn edges so agents can understand app-to-database/cache ownership over MCP. Requires project_id or project_name. Does not inspect Docker or mutate state.',
     mcpDescription:
-      'Return project service topology: deployables, managed services, and dependency edges.',
+      'Return Project resource topology: Applications/Compose, Database/Cache/Storage resources, and dependency edges.',
     inputSchema: getTopologySchema,
     execute: async (args, context) => getProjectTopology(args, context.appCtx),
   },
@@ -745,7 +745,7 @@ export const monitoringToolDefs: ToolDef[] = [
                     message:
                       'Archive completed. Archive is reversible cleanup, not permanent deletion.',
                     next_steps: [
-                      'Use suggested_call to inspect archived deployable services.',
+                      'Use suggested_call to inspect archived Applications/Compose workloads.',
                       'Use unarchive_service or unarchive_project to restore later; hard delete remains Web UI-only.',
                     ],
                   }
@@ -1190,7 +1190,7 @@ async function resolveSingleDeployableProjectAlias(
   const filtered = deployables.filter((item) => !isManagedService(item.kind));
   if (filtered.length > 1) {
     throw new OpenLanderError(
-      `Project '${projectName}' has multiple deployable services. Specify service_id or the service row name.`,
+      `Project '${projectName}' has multiple Applications/Compose workloads. Specify service_id or service_name.`,
       'SERVICE_SELECTION_REQUIRED',
       400,
       {
@@ -1234,7 +1234,7 @@ async function resolveDeployableServiceForMonitoring(
     const deployable = scoped.filter((item) => !isManagedService(item.kind));
     if (deployable.length > 1) {
       throw new OpenLanderError(
-        `Multiple deployable services named '${serviceName}' found. Specify project_name or service_id.`,
+        `Multiple Applications/Compose workloads named '${serviceName}' found. Specify project_name or service_id.`,
         'SERVICE_SELECTION_REQUIRED',
         400,
         {
@@ -1262,7 +1262,7 @@ async function resolveDeployableServiceForMonitoring(
     );
     if (scoped.length > 1) {
       throw new OpenLanderError(
-        `Multiple deployable services use container '${containerName}'. Specify project_name or service_id.`,
+        `Multiple Applications/Compose workloads use container '${containerName}'. Specify project_name or service_id.`,
         'SERVICE_SELECTION_REQUIRED',
         400,
         {
@@ -1286,7 +1286,7 @@ async function resolveDeployableServiceForMonitoring(
     const filtered = deployables.filter((item) => !isManagedService(item.kind));
     if (filtered.length > 1) {
       throw new OpenLanderError(
-        `Project '${projectIdentifier}' has multiple deployable services. Specify service_id or service_name.`,
+        `Project '${projectIdentifier}' has multiple Applications/Compose workloads. Specify service_id or service_name.`,
         'SERVICE_SELECTION_REQUIRED',
         400,
         {

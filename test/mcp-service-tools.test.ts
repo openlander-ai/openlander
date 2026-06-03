@@ -261,7 +261,7 @@ describe('MCP service tools (Task 8)', () => {
       ],
       _agent_guidance: {
         next_steps: [
-          'Connection env was saved automatically on the target deployable service.',
+          'Connection env was saved automatically on the target Application/Compose workload.',
           'Call redeploy_app for the target service/project to apply it.',
         ],
       },
@@ -393,7 +393,7 @@ describe('MCP service tools (Task 8)', () => {
         },
       },
       _agent_guidance: {
-        next_steps: expect.arrayContaining([expect.stringContaining('empty project group')]),
+        next_steps: expect.arrayContaining([expect.stringContaining('empty Project')]),
       },
     });
     expect(ctx.env.set).toHaveBeenCalledWith('proj-1', 'DATABASE_URL', expect.any(String));
@@ -481,7 +481,7 @@ describe('MCP service tools (Task 8)', () => {
       ],
       _agent_guidance: {
         next_steps: [
-          'Connection env was saved automatically on the target deployable service.',
+          'Connection env was saved automatically on the target Application/Compose workload.',
           'Call redeploy_app for the target service/project to apply it.',
         ],
       },
@@ -540,7 +540,7 @@ describe('MCP service tools (Task 8)', () => {
       ],
       _agent_guidance: {
         next_steps: [
-          'Connection env was saved automatically on the target deployable service.',
+          'Connection env was saved automatically on the target Application/Compose workload.',
           'Call redeploy_app for the target service/project to apply it.',
         ],
       },
@@ -590,8 +590,8 @@ describe('MCP service tools (Task 8)', () => {
       ]),
       _agent_guidance: {
         networking: [
-          'Managed services created through MCP are project-scoped and attached only to their project Docker network.',
-          'Create app databases/caches in the same project as the app that uses them. Cross-project shared services are not exposed in OpenLander 0.1.',
+          'Database/Cache/Storage resources created through MCP are Project-scoped and attached only to their Project Docker network.',
+          'Create app databases/caches in the same Project as the app that uses them. Cross-project shared resources are not exposed in OpenLander 0.1.',
           'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
         ],
       },

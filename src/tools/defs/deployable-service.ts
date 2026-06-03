@@ -26,19 +26,19 @@ import type { ToolContext, ToolDef } from './types.js';
 const log = createModuleLogger('tools-defs-deployable-service');
 
 const serviceTargetFields = {
-  service_id: z.string().min(1).optional().describe('Deployable service id'),
+  service_id: z.string().min(1).optional().describe('Application/Compose service_id'),
   service_name: z
     .string()
     .min(1)
     .optional()
     .describe(
-      'Deployable service row name. If no service has that name, a project group name with exactly one deployable service is accepted as a convenience.',
+      'Application/Compose name. If no workload has that name, a Project name with exactly one workload is accepted as a convenience.',
     ),
   project_name: z
     .string()
     .min(1)
     .optional()
-    .describe('Optional project group name to scope service_name lookups'),
+    .describe('Optional Project name to scope service_name lookups'),
 } as const;
 
 const serviceTargetSchema = z
@@ -49,8 +49,8 @@ const serviceTargetSchema = z
 
 const archivedServicesSchema = z
   .object({
-    project_id: z.string().min(1).optional().describe('Project group id'),
-    project_name: z.string().min(1).optional().describe('Project group name'),
+    project_id: z.string().min(1).optional().describe('Project id'),
+    project_name: z.string().min(1).optional().describe('Project name'),
   })
   .refine((value) => Boolean(value.project_id || value.project_name), {
     message: 'project_id or project_name is required',
@@ -156,7 +156,7 @@ async function throwServiceSelectionRequired(
   context: ToolContext,
 ): Promise<never> {
   throw new OpenLanderError(
-    `Multiple deployable services named '${serviceName}' found. Specify project_name or service_id.`,
+    `Multiple Applications/Compose workloads named '${serviceName}' found. Specify project_name or service_id.`,
     'SERVICE_SELECTION_REQUIRED',
     400,
     {
@@ -177,7 +177,7 @@ async function resolveSingleDeployableProjectAlias(
   const deployables = services.filter((item) => !isManagedService(item.kind));
   if (deployables.length > 1) {
     throw new OpenLanderError(
-      `Project '${projectName}' has multiple deployable services. Specify service_id or the service row name.`,
+      `Project '${projectName}' has multiple Applications/Compose workloads. Specify service_id or the workload name.`,
       'SERVICE_SELECTION_REQUIRED',
       400,
       {
@@ -363,13 +363,13 @@ function parseInternalRedeployEnvVars(args: Record<string, unknown>): Record<str
 
 function rollbackServiceGuidance(result: { success?: unknown }, serviceId: string) {
   const sharedLimit =
-    'Rollback only switches the deployable service back to the stored previous Docker image. It does not restore databases, volumes, environment variables, secrets, or service configuration.';
+    'Rollback only switches the Application/Compose workload back to the stored previous Docker image. It does not restore databases, volumes, environment variables, secrets, or configuration.';
   if (result.success === true) {
     return {
       message: `${sharedLimit} Verify the service after rollback before reporting recovery.`,
       next_steps: [
         `Call openlander_monitor.diagnose_service with service_id="${serviceId}" to confirm the rollback is healthy.`,
-        'If data/config drift caused the incident, inspect env vars, managed services, and volumes separately.',
+        'If data/config drift caused the incident, inspect env vars, Database/Cache/Storage resources, and volumes separately.',
       ],
     };
   }
@@ -425,7 +425,7 @@ export async function runDeployableServiceAction(
           'This service has no reproducible deploy source, so redeploy/restart was not started and the existing container was left untouched.',
         next_steps: [
           'Use the web UI to inspect the live container before making changes.',
-          'Create a new deployable service from GitHub or an image if you need a reproducible redeploy path.',
+          'Create a new Application from GitHub or an image if you need a reproducible redeploy path.',
         ],
       },
     };
@@ -587,9 +587,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'list_archived_services',
     riskLevel: 'low',
     description:
-      'List archived deployable app/worker services in a project group. Use this after archive_service/archive_project or when the user asks what can be restored or permanently deleted.',
+      'List archived Applications/workers in a Project. Use this after archive_service/archive_project or when the user asks what can be restored or permanently deleted.',
     mcpDescription:
-      'List archived deployable app/worker services for a project group. Archived means reversible cleanup, not permanent deletion.',
+      'List archived Applications/workers for a Project. Archived means reversible cleanup, not permanent deletion.',
     inputSchema: archivedServicesSchema,
     execute: async (args, context) => {
       const project = await resolveProjectGroupTarget(args, context);
@@ -606,8 +606,8 @@ export const deployableServiceToolDefs: ToolDef[] = [
         _agent_guidance: {
           message:
             archivedServices.length > 0
-              ? 'These services are archived. They are hidden from default active lists but are not permanently deleted.'
-              : 'No archived deployable services were found for this project group.',
+              ? 'These Applications are archived. They are hidden from default active lists but are not permanently deleted.'
+              : 'No archived Applications were found for this Project.',
           next_steps:
             archivedServices.length > 0
               ? [
@@ -615,7 +615,7 @@ export const deployableServiceToolDefs: ToolDef[] = [
                   'For permanent deletion, ask the user to use the Web UI service Danger zone; MCP hard delete remains blocked.',
                 ]
               : [
-                  'Use list_projects for active project groups and deployable service ids.',
+                  'Use list_projects for active Projects and Application service_id values.',
                   'If a service was meant to be cleaned up, archive_service enters the human approval queue.',
                 ],
         },
@@ -626,9 +626,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'redeploy_app',
     riskLevel: 'medium',
     description:
-      'Deploy or redeploy a deployable app/worker service. Provide service_id or service_name. Runs in background; poll get_deploy_status for progress.',
+      'Deploy or redeploy an Application/worker. Provide service_id or service_name. Runs in background; poll get_deploy_status for progress.',
     mcpDescription:
-      'Deploy/redeploy a deployable app/worker service. Provide service_id or service_name.',
+      'Deploy/redeploy an Application/worker. Provide service_id or service_name.',
     inputSchema: deployServiceSchema,
     execute: (args, context) => runDeployableServiceAction(args, context, 'redeploy_app'),
   },
@@ -636,8 +636,8 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'restart_service',
     riskLevel: 'medium',
     description:
-      'Restart a deployable app/worker service by stopping and redeploying it. Provide service_id or service_name.',
-    mcpDescription: 'Restart a deployable app/worker service by stopping and redeploying it.',
+      'Restart an Application/worker by stopping and redeploying it. Provide service_id or service_name.',
+    mcpDescription: 'Restart an Application/worker by stopping and redeploying it.',
     inputSchema: restartServiceSchema,
     execute: (args, context) => runDeployableServiceAction(args, context, 'restart_service'),
   },
@@ -645,9 +645,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'rollback_service',
     riskLevel: 'high',
     description:
-      'Rollback a deployable app/worker service to its stored previous Docker image. This does not restore databases, volumes, environment variables, secrets, or config. Provide service_id or service_name.',
+      'Rollback an Application/worker to its stored previous Docker image. This does not restore databases, volumes, environment variables, secrets, or config. Provide service_id or service_name.',
     mcpDescription:
-      'Rollback a deployable app/worker service to its stored previous Docker image only. Does not restore DB/env/volumes/config.',
+      'Rollback an Application/worker to its stored previous Docker image only. Does not restore DB/env/volumes/config.',
     inputSchema: serviceTargetSchema,
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(
@@ -732,9 +732,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'archive_service',
     riskLevel: 'high',
     description:
-      'Archive a deployable app/worker service. Provide service_id or service_name. Stops runtime and preserves configuration/history.',
+      'Archive an Application/worker. Provide service_id or service_name. Stops runtime and preserves configuration/history.',
     mcpDescription:
-      'Request human approval to archive a deployable app/worker service while preserving configuration/history.',
+      'Request human approval to archive an Application/worker while preserving configuration/history.',
     inputSchema: serviceTargetSchema,
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(
@@ -759,9 +759,9 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'unarchive_service',
     riskLevel: 'medium',
     description:
-      'Restore an archived deployable app/worker service. Provide service_id or service_name. Does not deploy automatically.',
+      'Restore an archived Application/worker. Provide service_id or service_name. Does not deploy automatically.',
     mcpDescription:
-      'Restore an archived deployable app/worker service. Call redeploy_app to run it.',
+      'Restore an archived Application/worker. Call redeploy_app to run it.',
     inputSchema: serviceTargetSchema,
     execute: async (args, context) => {
       const { service, project, runtimeProject } = await resolveDeployableService(
@@ -783,8 +783,8 @@ export const deployableServiceToolDefs: ToolDef[] = [
     name: 'update_service_config',
     riskLevel: 'medium',
     description:
-      'Update deployable service build config (dockerfile_path, docker_target, build_context). Takes effect on next redeploy_app.',
-    mcpDescription: 'Update deployable service build config. Takes effect on next redeploy_app.',
+      'Update Application/Compose build config (dockerfile_path, docker_target, build_context). Takes effect on next redeploy_app.',
+    mcpDescription: 'Update Application/Compose build config. Takes effect on next redeploy_app.',
     inputSchema: updateServiceConfigSchema,
     execute: async (args, context) => {
       const { service, project } = await resolveDeployableService(

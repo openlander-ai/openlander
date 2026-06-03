@@ -22,7 +22,7 @@ const PROMPTS: PromptDef[] = [
   {
     name: 'deployment-guide',
     description:
-      'Recommended deployment workflow for OpenLander. Covers the step-by-step flow, service linking pattern, common mistakes, and env var conventions.',
+      'Recommended deployment workflow for OpenLander. Covers Project-first Database/Cache setup, Application/Compose deployment, common mistakes, and env var conventions.',
     arguments: [
       {
         name: 'project_type',
@@ -45,23 +45,23 @@ const PROMPTS: PromptDef[] = [
 ## Recommended Deployment Flow
 
 1. **Preflight** — Call \`get_system_stats\` to check disk/memory.
-2. **Choose project order** — For a simple app with no pre-created managed services, \`deploy_app\` is the one-call front door: pass \`repo_url\` (or \`image\`) + \`name\`. If the app needs an OpenLander-managed database/cache before first boot, call \`create_project\` first, then \`create_service(project_id=...)\`, then \`deploy_app(target_project_id=...)\`. If the user already has a real external URL such as RDS or Upstash, pass it in \`env_vars\` and skip \`create_service\`. Do not use placeholder connection strings just to force project creation.
-3. **Approve proposed managed services** — When a plan would auto-provision a project-scoped managed service (e.g. a \`postgresql\` it can wire to \`DATABASE_URL\`), \`execute_deploy_plan\` returns status \`needs_approval\` with \`approval_required.create_resources\` and creates nothing. Re-run with \`approve_all_safe_resources: true\` (approve all) or \`approvals.create_resources: ["postgresql", ...]\` (approve specific identifiers). Auto-provisioning works only when the target project already exists; for a brand-new app that needs a managed service before first boot, use \`create_project\` before creating/executing the plan. If the dependency is external and the user provides a real connection URL, pass it in \`env_vars\` instead of creating a managed service.
-4. **Link a service manually (alternative)** — For compose stacks, not-auto-creatable services, or an external/shared dependency: \`create_service\` (template + \`project_id\`/\`project_name\`) returns \`suggested_env\`. If the project already has a deployable service, redeploy it to apply saved env. If the project is empty, deploy the first app with \`deploy_app(target_project_id=...)\`.
-5. **Monitor** — Behavior depends on the path. A **new-app** \`deploy_app\` blocks until terminal by default (\`wait: true\`) and returns the final result; pass \`wait: false\` to return immediately. But when \`deploy_app\` resolves to an **existing** service (\`service_id\`/\`service_name\`, or a single-service \`name\`) it delegates to \`redeploy_app\` and returns \`deploying\` immediately — non-blocking, like \`execute_deploy_plan\`. For every non-blocking path, poll \`get_deploy_status\` until terminal. \`get_build_log\` for raw output if it fails.
+2. **Choose Project order** — For a simple Application with no pre-created Database/Cache resources, \`deploy_app\` is the one-call front door: pass \`repo_url\` (or \`image\`) + \`name\`. If the Application needs an OpenLander-created Database/Cache before first boot, call \`create_project\` first, then compatibility action \`create_service(project_id=...)\`, then \`deploy_app(target_project_id=...)\`. If the user already has a real external URL such as RDS or Upstash, pass it in \`env_vars\` and skip \`create_service\`. Do not use placeholder connection strings just to force Project creation.
+3. **Approve proposed Database/Cache creation** — When a plan would auto-provision a Project-scoped Database/Cache resource (e.g. a \`postgresql\` it can wire to \`DATABASE_URL\`), \`execute_deploy_plan\` returns status \`needs_approval\` with \`approval_required.create_resources\` and creates nothing. Re-run with \`approve_all_safe_resources: true\` (approve all) or \`approvals.create_resources: ["postgresql", ...]\` (approve specific identifiers). Auto-provisioning works only when the target Project already exists; for a brand-new Application that needs a Database/Cache before first boot, use \`create_project\` before creating/executing the plan. If the dependency is external and the user provides a real connection URL, pass it in \`env_vars\` instead of creating an OpenLander Database/Cache.
+4. **Link a resource manually (alternative)** — For Compose stacks, not-auto-creatable resources, or an external/shared dependency: compatibility action \`create_service\` (template + \`project_id\`/\`project_name\`) returns \`suggested_env\`. If the Project already has an Application/Compose workload, redeploy it to apply saved env. If the Project is empty, deploy the first Application with \`deploy_app(target_project_id=...)\`.
+5. **Monitor** — Behavior depends on the path. A **new Application** \`deploy_app\` blocks until terminal by default (\`wait: true\`) and returns the final result; pass \`wait: false\` to return immediately. But when \`deploy_app\` resolves to an **existing** Application/Compose workload (\`service_id\`/\`service_name\`, or a single-workload \`name\`) it delegates to \`redeploy_app\` and returns \`deploying\` immediately — non-blocking, like \`execute_deploy_plan\`. For every non-blocking path, poll \`get_deploy_status\` until terminal. \`get_build_log\` for raw output if it fails.
 6. **On failure** — use the \`recover-failed-deploy\` prompt: gather evidence (\`get_build_log\`, \`get_logs\`, \`diagnose_service\`, \`diagnose_host_resources\`), apply the fix, and \`redeploy_app\`.
 
 ## Manual Service-Link Pattern (alternative to step 3 auto-provisioning)
 
 \`\`\`
-// 1. Create project group before the first app if the app needs DB/cache on boot
+// 1. Create the Project before the first Application if it needs DB/cache on boot
 create_project({ name: "myapp" })
 
-// 2. Create service in that project
+// 2. Create the Database/Cache resource in that Project
 create_service({ name: "mydb", template: "postgresql", project_id: "proj_..." })
 // Returns: { suggested_env: [{ key: "DATABASE_URL", value: "postgresql://..." }] }
 
-// 3. Deploy first app into the existing project group
+// 3. Deploy the first Application into the existing Project
 deploy_app({ target_project_id: "proj_...", name: "myapp-web", repo_url: "https://github.com/user/repo" })
 
 // Later updates: set_env_vars({ service_name: "myapp-web", variables: '{"DATABASE_URL": "..."}' }) then redeploy_app(...)
@@ -79,7 +79,7 @@ deploy_app({ target_project_id: "proj_...", name: "myapp-web", repo_url: "https:
 - The hostname in connection strings is the container name (\`ol-svc-*\`), NOT localhost.
 - For host services outside Docker, use \`host.docker.internal\` as hostname.
 - Second service of the same type gets a prefixed key (e.g. \`ANALYTICS_DATABASE_URL\`).
-- Env vars belong to deployable services. Use \`service_id\` or \`service_name\`; \`project_name\` is only a shortcut for groups with exactly one deployable service.
+- Env vars belong to Applications/Compose workloads. Use compatibility field \`service_id\` or \`service_name\`; \`project_name\` is only a shortcut for Projects with exactly one workload.
 
 ## Common Mistakes
 
@@ -141,7 +141,7 @@ ${typeSpecific}`,
 2. **Gather evidence (all read-only)**:
     - \`get_build_log\` — clone / image / build failures. Pass \`deploy_id\`, or \`project_name\` + \`deploy_index\` (0 = latest).
     - \`get_logs\` — runtime crashes that happen *after* the container started.
-    - \`diagnose_service\` — combined health + recent logs for a deployable service. Prefer \`service_id\`; pass \`path\` to probe a specific route.
+    - \`diagnose_service\` — combined health + recent logs for an Application/Compose workload. Prefer \`service_id\`; pass \`path\` to probe a specific route.
     - \`diagnose_host_resources\` — run this BEFORE falling back to SSH/Docker whenever logs show \`SIGKILL\`, OOM, disk pressure, or Docker daemon instability.
 3. **Decide the fix** from the failed phase (table below).
 4. **Apply the smallest fix**, then:
@@ -165,10 +165,10 @@ ${typeSpecific}`,
 ## Safety Gates (do not flail against these)
 
 - \`remove_service\`, \`delete_app\`, \`delete_project\`, \`purge_project\`, and hard-delete aliases are **human-UI-only** and return \`HUMAN_UI_ONLY\` / \`OPERATION_REQUIRES_HUMAN_UI\`. Do **not** substitute \`remove_service\` or \`cleanup_docker\` for deployable app/project cleanup (those target managed infrastructure, not deployable apps).
-- \`archive_project\` / \`unarchive_project\` are the MCP-safe soft lifecycle path for a whole project group. \`archive_service\` / \`unarchive_service\` target one deployable app/worker. All four enter the **human approval queue** before executing — follow the returned \`poll_call\` or poll \`mcp_action_status\` with \`action_run_id\`. Archive is reversible cleanup, not permanent deletion: archived services are hidden from default active lists but can be inspected with \`list_archived_services\` and restored with \`unarchive_service\`. Restore actions do not redeploy automatically.
-- \`deploy_app(target_project_id=...)\` can add one new app/worker service into an existing group. It is durable-plan owned after deploy success and returns \`target_project_id\`, \`runtime_project_id\`, and \`service_id\`; use the returned \`service_id\` for follow-up service actions. Do not combine it with \`expose=true\`; expose after attach if needed.
+- \`archive_project\` / \`unarchive_project\` are the MCP-safe soft lifecycle path for a whole Project. \`archive_service\` / \`unarchive_service\` target one Application/worker. All four enter the **human approval queue** before executing — follow the returned \`poll_call\` or poll \`mcp_action_status\` with \`action_run_id\`. Archive is reversible cleanup, not permanent deletion: archived Applications are hidden from default active lists but can be inspected with \`list_archived_services\` and restored with \`unarchive_service\`. Restore actions do not redeploy automatically.
+- \`deploy_app(target_project_id=...)\` can add one new Application/worker into an existing Project. It is durable-plan owned after deploy success and returns \`target_project_id\`, \`runtime_project_id\`, and \`service_id\`; use the returned compatibility \`service_id\` for follow-up workload actions. Do not combine it with \`expose=true\`; expose after attach if needed.
 - Other destructive actions that remain exposed (e.g. \`bulk_delete_env_vars confirm=true\`) also enter the **human approval queue** before executing.
-- Prefer \`service_id\` for every follow-up action. \`project_name\` only resolves when the group has exactly one deployable service.
+- Prefer compatibility field \`service_id\` for every follow-up workload action. \`project_name\` only resolves when the Project has exactly one Application/Compose workload.
 
 ## Common Mistakes
 

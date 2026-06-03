@@ -534,9 +534,9 @@ function deployPlanResponse(
       ...base,
       ...buildPlanNeedsApprovalResponse({
         plan,
-        message: 'Plan needs user approval before safe managed resources are provisioned.',
+        message: 'Plan needs user approval before safe Database/Cache resources are provisioned.',
         nextSteps: [
-          'Confirm the proposed managed services with the user.',
+          'Confirm the proposed Database/Cache resources with the user.',
           'Then call execute_deploy_plan with approve_all_safe_resources=true or approvals.create_resources=[...].',
         ],
       }),
@@ -790,7 +790,7 @@ async function resolveExistingDeployAppTarget(
         candidate_services: candidates,
         _agent_guidance: {
           message:
-            'This project already has multiple deployable services. Pick the intended service_id and call deploy_app or openlander_service.redeploy_app with that service_id.',
+            'This Project already has multiple Applications/Compose workloads. Pick the intended service_id and call deploy_app or openlander_service.redeploy_app with that service_id.',
           next_steps: [
             'Choose one candidate_services[].service_id.',
             'Call openlander_deploy.deploy_app with service_id for a front-door redeploy, or openlander_service.redeploy_app with service_id.',
@@ -808,9 +808,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'create_deploy_plan',
     riskLevel: 'medium',
     description:
-      'Analyze a repository/image and create a deployment plan for a new deployable service. Use name for the project group name. Returns detected services, required env vars, and build config. Use update_deploy_plan to fill missing values before executing.',
+      'Analyze a repository/image and create a deployment plan for a new Application/Compose workload. Use name for the Project name. Returns detected resources, required env vars, and build config. Use update_deploy_plan to fill missing values before executing.',
     mcpDescription:
-      'Create a deployment plan for a new app/service. New app names use name, not project_name. Returns plan_id, status, detected services, missing vars, warnings.',
+      'Create a deployment plan for a new Application/Compose workload. New app names use name, not project_name. Returns plan_id, status, detected resources, missing vars, warnings.',
     inputSchema: createDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -893,9 +893,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'execute_deploy_plan',
     riskLevel: 'medium',
     description:
-      'Execute a deployment plan. A plan in "needs_approval" status lists proposed project-scoped managed services in services[] (resolution="proposed_project_service"); pass approve_all_safe_resources=true or approvals.create_resources=[...] to approve and OpenLander provisions the approved safe managed services (DB/cache), wires their connection env (e.g. DATABASE_URL), and deploys. This auto-wiring is for the deploy-plan approval flow only; standalone create_service returns suggested_env and still requires set_env_vars. Unapproved, compose, or not_auto_creatable services are never created — supply their env or create them first. Plans already in "ready" status execute directly.',
+      'Execute a deployment plan. A plan in "needs_approval" status lists proposed Project-scoped Database/Cache resources in services[] (resolution="proposed_project_service"); pass approve_all_safe_resources=true or approvals.create_resources=[...] to approve and OpenLander provisions the approved safe resources, wires their connection env (e.g. DATABASE_URL), and deploys. This auto-wiring is for the deploy-plan approval flow only; standalone compatibility action create_service returns suggested_env and still requires set_env_vars. Unapproved, Compose-declared, or not_auto_creatable resources are never created — supply their env or create them first. Plans already in "ready" status execute directly.',
     mcpDescription:
-      'Execute a deployment plan asynchronously. Returns immediately with project_id and status. Use get_deploy_status to poll progress. A "needs_approval" plan lists proposed managed services in services[]; pass approve_all_safe_resources=true or approvals.create_resources=[...] and OpenLander provisions the approved safe managed services (DB/cache), wires their connection env, and deploys. This auto-wiring is deploy-plan-only; standalone create_service returns suggested_env and still requires set_env_vars. Unapproved/compose/not_auto_creatable services are not created. "ready" plans execute directly; injects env vars and starts deployment.',
+      'Execute a deployment plan asynchronously. Returns immediately with project_id and status. Use get_deploy_status to poll progress. A "needs_approval" plan lists proposed Database/Cache resources in services[]; pass approve_all_safe_resources=true or approvals.create_resources=[...] and OpenLander provisions the approved safe resources, wires their connection env, and deploys. This auto-wiring is deploy-plan-only; standalone create_service returns suggested_env and still requires set_env_vars. Unapproved/Compose-declared/not_auto_creatable resources are not created. "ready" plans execute directly; injects env vars and starts deployment.',
     inputSchema: executeDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -1053,9 +1053,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'deploy_app',
     riskLevel: 'medium',
     description:
-      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing project with exactly one deployable service, this redeploys that service. Otherwise it creates a new app from repo_url or image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. target_project_id attaches a newly deployed single app/worker service to an existing project group after successful deploy; use create_project first when a brand-new app needs managed services before first boot. expose=true is not supported with target_project_id. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list; if it proposes project-scoped managed services, returns status "needs_approval" with approval_required (approve via execute_deploy_plan using approve_all_safe_resources / approvals.create_resources).',
+      'One-call app deploy front door. If service_id/service_name is provided, or name matches an existing Project with exactly one Application/Compose workload, this redeploys that workload. Otherwise it creates a new app from repo_url or image. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status for new apps. target_project_id attaches a newly deployed single Application/worker to an existing Project after successful deploy; use create_project first when a brand-new app needs Database/Cache resources before first boot. expose=true is not supported with target_project_id. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and readiness; status "unhealthy" means the container runs but Docker HEALTHCHECK is failing. On failure, returns auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list; if it proposes Project-scoped Database/Cache resources, returns status "needs_approval" with approval_required (approve via execute_deploy_plan using approve_all_safe_resources / approvals.create_resources).',
     mcpDescription:
-      'App deploy front door. New app: pass repo_url/image and use name for the project group name. Existing app: prefer service_id, or use service_name/project_name/name lookup. To add one new deployable service into an existing group, pass target_project_id without expose=true; create_project can create that group before managed services. Poll get_deploy_status; diagnose failures with diagnose_service.',
+      'App deploy front door. New app: pass repo_url/image and use name for the Project name. Existing app: prefer service_id, or use service_name/project_name/name lookup. To add one new Application/worker into an existing Project, pass target_project_id without expose=true; create_project can create that Project before Database/Cache resources. Poll get_deploy_status; diagnose failures with diagnose_service.',
     inputSchema: deploySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -1128,7 +1128,7 @@ export const deployPlanToolDefs: ToolDef[] = [
           error: 'INVALID_PARAMS',
           action: 'deploy_app',
           details:
-            'project_name scopes existing app lookups only. For new app deploys, use name as the project group name.',
+            'project_name scopes existing app lookups only. For new app deploys, use name as the Project name.',
           invalid_params: ['project_name'],
           allowed_params: [
             'name',
@@ -1148,7 +1148,7 @@ export const deployPlanToolDefs: ToolDef[] = [
             message:
               'For a new app deploy, pass params.name. Keep params.project_name only for existing project lookup/scoping.',
             next_steps: [
-              'Retry deploy_app with name set to the desired new project group name.',
+              'Retry deploy_app with name set to the desired new Project name.',
               'If you intended to redeploy an existing app, omit repo_url/image or pass service_id.',
             ],
           },
@@ -1162,11 +1162,11 @@ export const deployPlanToolDefs: ToolDef[] = [
           project_name: projectName,
           _agent_guidance: {
             message: projectName
-              ? 'No existing deployable service matched this name, and no repo_url/image was provided for a new app.'
+              ? 'No existing Application/Compose workload matched this name, and no repo_url/image was provided for a new app.'
               : 'deploy_app needs repo_url/image for a new app, or service_id/service_name/name for an existing app.',
             next_steps: [
               'For a new app, call deploy_app with repo_url or source="image" plus image.',
-              'For an existing app, call deploy_app with service_id, service_name, or the project group name.',
+              'For an existing app, call deploy_app with service_id, service_name, or the Project name.',
             ],
           },
         };
@@ -1212,15 +1212,15 @@ export const deployPlanToolDefs: ToolDef[] = [
           includeWarnings: true,
           message: 'The generated deploy plan needs user approval before execution.',
           nextSteps: [
-            'This plan proposes project-scoped managed services (see services[] with resolution="proposed_project_service"). Confirm with the user before proceeding.',
+            'This plan proposes Project-scoped Database/Cache resources (see services[] with resolution="proposed_project_service"). Confirm with the user before proceeding.',
             'Then call execute_deploy_plan with the plan_id and approve_all_safe_resources=true, or approvals.create_resources=[<identifiers>] to approve individually.',
             'This auto-provision + env wiring path applies to deploy-plan approval; standalone create_service still returns suggested_env for set_env_vars.',
             ...(targetProjectId
               ? [
-                  'Because target_project_id is set, approved managed services are provisioned on that existing project group.',
+                  'Because target_project_id is set, approved Database/Cache resources are provisioned on that existing Project.',
                 ]
               : [
-                  'For a NEW app that needs an OpenLander-managed service before first boot, create the project first with openlander_project.create_project, create the managed service with that project_id, then deploy_app/create_deploy_plan with target_project_id. If the user already has a real external connection URL, pass it in env_vars instead of creating a managed service.',
+                  'For a NEW app that needs an OpenLander Database/Cache before first boot, create the Project first with openlander_project.create_project, create the resource with openlander_managed_service.create_service(project_id=...), then deploy_app/create_deploy_plan with target_project_id. If the user already has a real external connection URL, pass it in env_vars instead of creating an OpenLander resource.',
                 ]),
           ],
         });
@@ -1296,7 +1296,7 @@ export const deployPlanToolDefs: ToolDef[] = [
             next_steps: [
               ...(existingGuidance['suggested_call']
                 ? [
-                    'This project already has a deployable service. Use openlander_service.redeploy_app with the suggested service_id to redeploy it.',
+                    'This Project already has an Application/Compose workload. Use openlander_service.redeploy_app with the suggested service_id to redeploy it.',
                   ]
                 : []),
               'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
@@ -1316,7 +1316,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         }
         if (result.target_project_id) {
           nextSteps.push(
-            'The new service will attach to target_project_id after the deploy succeeds; use the returned service_id for follow-up service actions.',
+            'The new Application will attach to target_project_id after the deploy succeeds; use the returned service_id for follow-up workload actions.',
           );
         }
         return buildExecutePlanBuildingResponse({
@@ -1473,8 +1473,8 @@ export const deployPlanToolDefs: ToolDef[] = [
                         message:
                           'Deployment finished; target_project_id attach is still being finalized.',
                         next_steps: [
-                          'Poll get_deploy_status or list_projects before taking follow-up service actions.',
-                          'Use the returned service_id once it appears under the target project group.',
+                          'Poll get_deploy_status or list_projects before taking follow-up workload actions.',
+                          'Use the returned service_id once it appears under the target Project.',
                         ],
                       },
                     }
@@ -1585,7 +1585,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                   next_steps: [
                     ...(existingGuidance['suggested_call']
                       ? [
-                          'This project already has a deployable service. Use openlander_service.redeploy_app with the suggested service_id to redeploy it.',
+                          'This Project already has an Application/Compose workload. Use openlander_service.redeploy_app with the suggested service_id to redeploy it.',
                         ]
                       : []),
                     'Call openlander_monitor.diagnose_service for service/env/container/log diagnostics',
@@ -1902,8 +1902,8 @@ export const deployPlanToolDefs: ToolDef[] = [
         warnings: plan.warnings,
         _agent_guidance: {
           networking: [
-            'Project-scoped app and managed-service containers are isolated on the project Docker network. Do NOT create Docker networks manually.',
-            'Use managed services created in the same project as the default app DB/cache path.',
+            'Application and Database/Cache/Storage containers are isolated on the Project Docker network. Do NOT create Docker networks manually.',
+            'Use Database/Cache resources created in the same Project as the default app DB/cache path.',
             'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
           ],
         },

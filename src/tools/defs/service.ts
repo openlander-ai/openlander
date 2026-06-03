@@ -161,7 +161,7 @@ async function getServiceByName(
     throw new ServiceNotFoundError(serviceName);
   }
   if (!(MANAGED_SERVICE_KINDS as readonly string[]).includes(service.kind)) {
-    throw new ServiceOperationUnsupportedError('managed service operation', service.kind);
+    throw new ServiceOperationUnsupportedError('Database/Cache/Storage operation', service.kind);
   }
   return service;
 }
@@ -216,7 +216,7 @@ async function resolveCreateServiceScope(
         error: 'SCOPE_NOT_ACCEPTED',
         code: 'SCOPE_NOT_ACCEPTED',
         message:
-          'create_service no longer accepts scope. Create managed services inside the project that will use them by passing project_id or project_name.',
+          'create_service no longer accepts scope. Create Database/Cache/Storage resources inside the Project that will use them by passing project_id or project_name.',
         _agent_guidance: {
           next_steps: [
             'Call openlander_project.list_projects to get the target project id.',
@@ -282,7 +282,7 @@ async function resolveCreateServiceScope(
       error: 'PROJECT_TARGET_REQUIRED',
       code: 'PROJECT_TARGET_REQUIRED',
       message:
-        'create_service requires a project target. Pass project_id or project_name so the managed service is created on the same isolated network as the app that will use it.',
+        'create_service requires a Project target. Pass project_id or project_name so the Database/Cache/Storage resource is created on the same isolated network as the app that will use it.',
       required_params: ['project_id | project_name'],
       _agent_guidance: {
         next_steps: [
@@ -353,11 +353,11 @@ function serviceKindMismatchResponse(service: { id: string; name: string; kind: 
     code: 'SERVICE_KIND_MISMATCH',
     service: { id: service.id, name: service.name, kind: service.kind },
     message:
-      'This tool manages infrastructure services only. Use openlander_service for deployable app/worker actions.',
+      'This tool manages Database/Cache/Storage resources only. Use openlander_service for Application/Compose lifecycle/config actions.',
     _agent_guidance: {
       next_steps: [
-        `Use openlander_monitor.diagnose_service with service_id="${service.id}" for deployable service diagnostics.`,
-        `Use openlander_service actions with service_id="${service.id}" for deployable service lifecycle/config changes.`,
+        `Use openlander_monitor.diagnose_service with service_id="${service.id}" for Application/Compose diagnostics.`,
+        `Use openlander_service actions with service_id="${service.id}" for Application/Compose lifecycle/config changes.`,
       ],
     },
   };
@@ -383,8 +383,8 @@ function createServiceGuidance(params: {
   if (!params.hasDeployableService) {
     return {
       next_steps: [
-        'Connection env was saved on the empty project group.',
-        'Deploy the first app with deploy_app using target_project_id so OpenLander attaches the deployable service to this group after readiness succeeds.',
+        'Connection env was saved on the empty Project.',
+        'Deploy the first Application with deploy_app using target_project_id so OpenLander attaches it to this Project after readiness succeeds.',
         'After deployment, use the returned service_id for runtime/env/domain actions.',
       ],
     };
@@ -394,11 +394,11 @@ function createServiceGuidance(params: {
     next_steps:
       params.autoInjectedEnvKeys.length > 0
         ? [
-            'Connection env was saved automatically on the target deployable service.',
+            'Connection env was saved automatically on the target Application/Compose workload.',
             'Call redeploy_app for the target service/project to apply it.',
           ]
         : [
-            'Call set_env_vars on the deployable service with suggested_env to save the binding.',
+            'Call set_env_vars on the Application/Compose workload with suggested_env to save the binding.',
             'Then call redeploy_app for the target service/project to apply it.',
           ],
   };
@@ -423,9 +423,9 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_service',
     riskLevel: 'medium',
     description:
-      'Create a new managed infrastructure service (database, cache, message broker, object storage, or custom container) inside a project. Requires project_id or project_name so the service is attached to the app network that will use it. Provide template (postgresql/mysql/redis/mongodb/rabbitmq/minio), custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17"). Returns { service, scope, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, REDIS_URL, S3_ENDPOINT) for connecting the project. Call set_env_vars with the suggested key/value to save the binding, then redeploy the running project/service to apply it. Errors: PROJECT_TARGET_REQUIRED, INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+      'Create a new Database/Cache/Storage resource (postgresql/mysql/redis/mongodb/rabbitmq/minio, or a custom container) inside a Project. Requires project_id or project_name so the resource is attached to the Application network that will use it. Provide template, custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17"). Returns { service, scope, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, REDIS_URL, S3_ENDPOINT) for connecting the Project. Call set_env_vars with the suggested key/value to save the binding, then redeploy the running Application/Compose workload to apply it. Errors: PROJECT_TARGET_REQUIRED, INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
     mcpDescription:
-      'Create a managed infrastructure service inside a project. Pass project_id or project_name. Empty project: deploy the first app with deploy_app(target_project_id). Existing app: redeploy to apply saved env.',
+      'Create a Database/Cache/Storage resource inside a Project. Pass project_id or project_name. Empty Project: deploy the first Application with deploy_app(target_project_id). Existing Application: redeploy to apply saved env.',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
       const target = await resolveCreateServiceScope(appCtx, args);
@@ -554,7 +554,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'list_services',
     riskLevel: 'low',
     description:
-      'List all services (databases, caches, custom containers) with status, type, and connection details. Agent responses include parsed credentials; MCP responses intentionally omit credential values and expose them only through get_service_credentials. Pass include_orphans=true to also list OpenLander-managed service containers that are not registered in the services table.',
+      'List all Database/Cache/Storage resources with status, type, and connection details. Agent responses include parsed credentials; MCP responses intentionally omit credential values and expose them only through get_service_credentials. Pass include_orphans=true to also list OpenLander-managed infrastructure containers that are not registered in the services table.',
     mcpDescription:
       'List infrastructure services with type, status, exposed port, optional project_id/project_name filter, and optional orphan service containers. Credentials are omitted; use get_service_credentials when needed.',
     inputSchema: listServicesSchema,
@@ -646,8 +646,8 @@ export const serviceToolDefs: ToolDef[] = [
             : {}),
           _agent_guidance: {
             networking: [
-              'Managed services created through MCP are project-scoped and attached only to their project Docker network.',
-              'Create app databases/caches in the same project as the app that uses them. Cross-project shared services are not exposed in OpenLander 0.1.',
+              'Database/Cache/Storage resources created through MCP are Project-scoped and attached only to their Project Docker network.',
+              'Create app databases/caches in the same Project as the app that uses them. Cross-project shared resources are not exposed in OpenLander 0.1.',
               'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
             ],
           },
@@ -893,8 +893,8 @@ export const serviceToolDefs: ToolDef[] = [
         externalAccess: getServiceExternalAccess(svcPort ?? null),
         _agent_guidance: {
           networking: [
-            'Managed services are attached to their project Docker network.',
-            'Use project services as the app database/cache path. Cross-project shared services are not exposed in OpenLander 0.1.',
+            'Database/Cache/Storage resources are attached to their Project Docker network.',
+            'Use Project resources as the app database/cache path. Cross-project shared resources are not exposed in OpenLander 0.1.',
             'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
           ],
         },

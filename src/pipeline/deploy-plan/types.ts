@@ -53,8 +53,8 @@ export interface PlanService {
   /**
    * How this service is satisfied. Metadata classification only — does not
    * change execution behavior.
-   * - existing_project_service: a reusable managed service already in the project
-   * - proposed_project_service: a managed service the plan proposes creating
+   * - existing_project_service: a reusable Database/Cache resource already in the project
+   * - proposed_project_service: a Database/Cache resource the plan proposes creating
    * - compose_service: the dependency is declared in the compose stack
    * - needs_user_input: requires the user to supply the connection
    */
