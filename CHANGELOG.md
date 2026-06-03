@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.12-rc.1] - 2026-06-03
+
+### Added
+
+- Added release-gated public vocabulary audits for launch docs, MCP/runtime/LLM
+  copy, web copy, and web API runtime string literals.
+- Added execute-plan characterization coverage for approval atomicity,
+  pre-commit failure paths, and deploy response behavior.
+
+### Changed
+
+- Aligned public product vocabulary and Project detail IA around Projects,
+  Applications, Compose stacks, and Database/Cache/Storage resources while
+  preserving existing MCP and REST compatibility names.
+- Split deploy-plan execution phases and centralized deploy-plan response
+  builders without changing wire response helper fields.
+- Aligned Compose read surfaces so a Compose stack is represented as one
+  Project-level resource with internal runtime nodes.
+
+### Fixed
+
+- Fixed Database/Cache/Storage resource linking for empty Projects and attached
+  Applications by resolving real consumer workloads instead of relying on
+  synthetic `__svc` identifiers.
+- Hardened DB-first and existing-Project deployment flows so approved resources,
+  env injection, and connection records stay consistent.
+- Made archive approval policy context-aware so non-production archive actions
+  can proceed automatically while running production resources still require
+  approval.
+
 ## [0.1.11] - 2026-06-03
 
 ### Added
