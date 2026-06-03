@@ -38,10 +38,10 @@ export const translations = {
       // Content — count phrases with units. Korean does not mark plural
       // on counted nouns, so _one and _other resolve to the same string.
       // Keys mirror en.ts so call sites can switch by count uniformly.
-      deployableServices_one: '배포 서비스 {count}개',
-      deployableServices_other: '배포 서비스 {count}개',
-      services_one: '서비스 {count}개',
-      services_other: '서비스 {count}개',
+      deployableServices_one: 'Application {count}개',
+      deployableServices_other: 'Application {count}개',
+      services_one: '리소스 {count}개',
+      services_other: '리소스 {count}개',
       projects_one: '프로젝트 {count}개',
       projects_other: '프로젝트 {count}개',
     },
@@ -188,7 +188,7 @@ export const translations = {
       recoveries: 'Recoveries',
       approvals: 'Approvals',
       incidents: 'Alerts',
-      services: 'Unhealthy Services',
+      services: 'Unhealthy Resources',
       aiSpend: 'AI Spend',
     },
     activity: {
@@ -205,7 +205,7 @@ export const translations = {
       empty: '모든 시스템이 정상입니다.',
       projectError: '{name} 배포 실패',
       pendingApprovals: '승인 대기 {count}건',
-      unhealthyServices: '비정상 서비스 {count}개',
+      unhealthyServices: '비정상 리소스 {count}개',
     },
     health: {
       // Chrome — section title.
@@ -244,13 +244,13 @@ export const translations = {
     // Content — descriptive subtitle + empty states + footer + relative
     // time (seconds-precision since the poll cadence is 15s).
     pageSubtitle:
-      '서비스별 CPU와 메모리를 한눈에 확인합니다. 행을 클릭하면 서비스 상세 차트로 이동합니다.',
+      '리소스별 CPU와 메모리를 한눈에 확인합니다. 행을 클릭하면 리소스 상세 차트로 이동합니다.',
     empty: {
       noServices:
-        '아직 서비스가 없습니다. 에이전트에게 배포해 달라고 말해보세요. 측정값이 여기에 나타납니다.',
-      noSamples: '아직 측정값이 있는 서비스가 없습니다.',
+        '아직 리소스가 없습니다. 에이전트에게 배포해 달라고 말해보세요. 측정값이 여기에 나타납니다.',
+      noSamples: '아직 측정값이 있는 리소스가 없습니다.',
     },
-    excludedFooter: '서비스 {total}개 중 {shown}개 표시 — {excluded}개는 측정값 없음',
+    excludedFooter: '리소스 {total}개 중 {shown}개 표시 — {excluded}개는 측정값 없음',
     relative: {
       never: '없음',
       seconds: '{count}초 전',
@@ -423,7 +423,7 @@ export const translations = {
     filterPlaceholder: '프로젝트 검색…',
     emptyTitle: '아직 프로젝트가 없습니다',
     emptyDescription:
-      '프로젝트는 환경 변수를 공유하고 함께 배포되는 관련 서비스(웹, API, 워커, 데이터베이스)를 묶어줍니다.',
+      'Project는 관련 Application, Compose, Database/Cache/Storage 리소스를 묶어줍니다.',
     searchEmpty: '"{query}"와 일치하는 프로젝트가 없습니다',
     deployedAgo: '배포 · {time}',
     createdAgo: '생성 · {time}',
@@ -449,7 +449,7 @@ export const translations = {
       namePlaceholder: 'Hotdeal Tracker',
       // Content — descriptive prose + close-aria + errors.
       description:
-        '프로젝트는 관련 서비스의 작업 공간입니다. 생성 후 레포지토리, 이미지, 데이터베이스, compose 스택을 추가하세요.',
+        'Project는 관련 Application, Compose, Database/Cache/Storage 리소스의 workspace입니다.',
       closeAria: '프로젝트 만들기 대화상자 닫기',
       errors: {
         nameRequired: '프로젝트 이름을 입력하세요.',
@@ -474,7 +474,7 @@ export const translations = {
       description:
         '이 프로젝트를 보관하시겠습니까? 컨테이너는 중지되지만 모든 구성과 기록은 보존됩니다.',
       remainingDescription:
-        '이 프로젝트의 남은 활성 서비스를 아카이브하시겠습니까? 이미 아카이브된 서비스는 그대로 유지됩니다.',
+        '이 Project의 남은 활성 Application을 아카이브하시겠습니까? 이미 아카이브된 Application은 그대로 유지됩니다.',
     },
     unarchive: {
       // Chrome — button.
@@ -501,7 +501,7 @@ export const translations = {
     confirmDelete: '이 프로젝트를 삭제하시겠습니까?',
     tabs: {
       // Chrome — nav tabs.
-      services: 'Services',
+      services: 'Resources',
       settings: 'Settings',
     },
     diagnosis: {
@@ -522,31 +522,31 @@ export const translations = {
       nav: 'Danger',
       title: 'Danger zone',
       archiveTitle: 'Archive project',
-      partialArchiveTitle: 'Archive remaining services',
+      partialArchiveTitle: 'Archive remaining Applications',
       restoreTitle: 'Restore project',
       deleteTitle: 'Permanently delete project',
       // Content — descriptive copy + error.
-      description: '프로젝트 그룹을 보관하거나 영구 삭제합니다.',
+      description: 'Project를 아카이브하거나 영구 삭제합니다.',
       archiveBody: '컨테이너를 중지하고 기본 목록에서 숨기되 설정은 보존합니다.',
       partialArchiveBody:
-        '일부 서비스가 이미 아카이브되어 있습니다. 프로젝트 그룹 아카이브를 완료하려면 남은 활성 서비스를 아카이브하세요.',
+        '일부 Application이 이미 아카이브되어 있습니다. Project 아카이브를 완료하려면 남은 활성 Application을 아카이브하세요.',
       restoreBody: '보관된 프로젝트를 기본 프로젝트 목록으로 되돌립니다.',
-      deleteBody: '프로젝트 그룹, 서비스, 컨테이너, 설정, 기록을 삭제합니다.',
+      deleteBody: 'Project, Application, 컨테이너, 설정, 기록을 삭제합니다.',
       purgeDescription:
-        '프로젝트 그룹과 관련 런타임 리소스를 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
+        'Project와 관련 런타임 리소스를 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
       unarchiveDescription: '보관된 프로젝트를 활성 프로젝트 목록으로 복원합니다.',
-      archivedServicesTitle: 'Archived services',
+      archivedServicesTitle: 'Archived Applications',
       archivedServicesBody:
-        '아카이브된 배포 서비스는 기본 목록에서 숨겨집니다. 여기에서 복원하거나 typed confirmation으로 영구 삭제하세요.',
-      archivedServicesLoading: '아카이브된 서비스를 불러오는 중…',
-      archivedServicesEmpty: '이 프로젝트 그룹에 아카이브된 배포 서비스가 없습니다.',
-      archivedServicesLoadError: '아카이브된 서비스를 불러오지 못했습니다',
+        '아카이브된 Application은 기본 목록에서 숨겨집니다. 여기에서 복원하거나 typed confirmation으로 영구 삭제하세요.',
+      archivedServicesLoading: '아카이브된 Application을 불러오는 중…',
+      archivedServicesEmpty: '이 Project에 아카이브된 Application이 없습니다.',
+      archivedServicesLoadError: '아카이브된 Application을 불러오지 못했습니다',
       archivedServiceId: 'service_id: {id}',
       archivedServiceArchivedAt: '아카이브 시간 {value}',
       restoreService: 'Restore',
       deleteService: 'Delete',
       deleteArchivedServiceHint:
-        '{slug}를 입력하면 이 아카이브된 배포 서비스를 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
+        '{slug}를 입력하면 이 아카이브된 Application을 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
       deleteArchivedServiceInputLabel: '{slug} 삭제 확인 입력',
       error: '프로젝트 작업에 실패했습니다',
     },
@@ -564,15 +564,15 @@ export const translations = {
       save: 'Save',
       saving: 'Saving…',
       // Content — section copy, errors, hints, success toasts.
-      title: '서비스 환경 변수',
+      title: 'Application 환경 변수',
       description:
-        '이 변수들은 이 배포 서비스에만 적용됩니다. 먼저 저장한 뒤, 실행 중인 컨테이너에 반영하려면 이 서비스를 재배포하세요.',
+        '이 변수들은 이 Application/Compose workload에만 적용됩니다. 먼저 저장한 뒤, 실행 중인 컨테이너에 반영하려면 다시 배포하세요.',
       loading: '환경 변수를 불러오는 중…',
-      empty: '이 서비스에 설정된 환경 변수가 없습니다.',
+      empty: '이 Application에 설정된 환경 변수가 없습니다.',
       pasteTitle: '.env 내용 붙여넣기',
       saved: '환경 변수를 저장했습니다.',
       savedNeedsRedeploy:
-        '환경 변수를 저장했습니다. 변경사항을 반영하려면 이 서비스를 재배포하세요.',
+        '환경 변수를 저장했습니다. 변경사항을 반영하려면 이 Application을 재배포하세요.',
       unsavedChanges: '저장되지 않은 변경사항입니다. 저장하거나 새로고침해서 버릴 수 있습니다.',
       loadError: '환경 변수를 불러오지 못했습니다',
       saveError: '환경 변수 저장에 실패했습니다',
@@ -582,14 +582,14 @@ export const translations = {
     },
     addService: {
       // Chrome — modal title + source option labels + form labels + buttons.
-      title: 'Add a service',
+      title: 'Add application',
       descriptionPrefix: 'Project',
       git: 'From GitHub',
       image: 'From image',
       template: 'From template',
       templateDescription: 'Curated stacks',
       soon: '곧 출시',
-      serviceName: 'Service name',
+      serviceName: 'Application name',
       repo: 'GitHub repository',
       branch: 'Branch',
       dockerfilePath: 'Dockerfile path',
@@ -598,10 +598,10 @@ export const translations = {
       imageReference: 'Image reference',
       containerPort: 'Container port',
       cancel: 'Cancel',
-      create: 'Create service',
+      create: 'Create application',
       creating: 'Creating…',
       // Content — descriptive copy + hints + error messages + success toast.
-      descriptionSuffix: '· 소스를 고르고 배포 서비스 이름을 지정하세요.',
+      descriptionSuffix: '· Git 또는 image 소스를 고르고 Application 이름을 지정하세요.',
       gitDescription: '레포지토리에서 빌드',
       imageDescription: 'OCI 이미지 pull',
       templateSoon: '템플릿은 곧 제공됩니다.',
@@ -610,71 +610,71 @@ export const translations = {
       serviceNameHint: '{path} 경로에 사용됩니다.',
       imageReferenceHint:
         'Docker Hub, GHCR 또는 OCI 레지스트리. 태그를 고정하세요 — :latest는 배포마다 달라질 수 있습니다.',
-      success: '{name} 서비스를 배포 중입니다.',
-      errorName: '서비스 이름을 입력하거나 OpenLander가 이름을 추론할 수 있는 소스를 입력하세요.',
+      success: '{name} Application을 배포 중입니다.',
+      errorName: 'Application 이름을 입력하거나 OpenLander가 이름을 추론할 수 있는 소스를 입력하세요.',
       errorRepo: 'GitHub 레포지토리 URL을 입력하세요.',
       errorImage: '이미지 레퍼런스를 입력하세요.',
       errorPort: '포트는 양의 정수여야 합니다.',
-      errorCreate: '서비스 생성에 실패했습니다',
+      errorCreate: 'Application 생성에 실패했습니다',
     },
     serviceDelete: {
       // Chrome — card title + modal title + form label + buttons.
-      title: 'Delete this service',
-      confirmTitle: 'Delete deployable service',
+      title: 'Delete this Application',
+      confirmTitle: 'Delete Application',
       confirmLabel: 'Type',
       deleting: 'Deleting…',
-      confirmButton: 'Delete service',
+      confirmButton: 'Delete Application',
       // Content — descriptive body + confirmation prose + error + checkbox label.
-      body: '컨테이너와 서비스 소유 설정을 제거합니다. 관리 볼륨은 명시적으로 선택하지 않으면 보존됩니다.',
+      body: '컨테이너와 Application 소유 설정을 제거합니다. Project 볼륨은 명시적으로 선택하지 않으면 보존됩니다.',
       confirmDescription:
-        '실행 중인 컨테이너를 중지/제거하고 서비스 소유 환경 변수, 도메인, 리소스 설정을 삭제합니다. 프로젝트 볼륨은 기본 보존됩니다.',
-      deleteVolumes: '이 그룹의 마지막 배포 서비스일 때 프로젝트 소유 Docker 볼륨도 삭제합니다.',
-      error: '서비스 삭제에 실패했습니다',
+        '실행 중인 컨테이너를 중지/제거하고 Application 소유 환경 변수, 도메인, 리소스 설정을 삭제합니다. Project 볼륨은 기본 보존됩니다.',
+      deleteVolumes: '이 Project의 마지막 Application일 때 Project 소유 Docker 볼륨도 삭제합니다.',
+      error: 'Application 삭제에 실패했습니다',
     },
     serviceLifecycle: {
       // Chrome — section heading.
-      title: '서비스 라이프사이클',
+      title: 'Application lifecycle',
       archivedBadge: '아카이브됨',
     },
     serviceArchive: {
       // Chrome — card title + modal title + buttons.
-      title: '이 서비스 아카이브',
-      confirmTitle: '배포 서비스 아카이브',
+      title: '이 Application 아카이브',
+      confirmTitle: 'Application 아카이브',
       archiving: '아카이브 중…',
-      confirmButton: '서비스 아카이브',
+      confirmButton: 'Application 아카이브',
       // Content — descriptive body + confirmation prose + error.
-      body: '런타임을 중지하고 설정과 기록은 보존한 채 이 배포 서비스를 아카이브 상태로 표시합니다.',
+      body: '런타임을 중지하고 설정과 기록은 보존한 채 이 Application을 아카이브 상태로 표시합니다.',
       confirmDescription:
-        '런타임을 중지하고 서비스를 아카이브 상태로 표시합니다. 설정, 환경 변수, 도메인, 기록은 보존됩니다.',
-      error: '서비스 아카이브에 실패했습니다',
+        '런타임을 중지하고 Application을 아카이브 상태로 표시합니다. 설정, 환경 변수, 도메인, 기록은 보존됩니다.',
+      error: 'Application 아카이브에 실패했습니다',
     },
     serviceRestore: {
       // Chrome — card title + modal title + buttons.
-      title: '이 서비스 복원',
-      confirmTitle: '배포 서비스 복원',
+      title: '이 Application 복원',
+      confirmTitle: 'Application 복원',
       restoring: '복원 중…',
-      confirmButton: '서비스 복원',
+      confirmButton: 'Application 복원',
       // Content — descriptive body + confirmation prose + error.
-      body: '아카이브된 배포 서비스를 다시 활성 라이프사이클로 되돌립니다. 런타임은 복원 후 재배포로 시작하세요.',
+      body: '아카이브된 Application을 다시 활성 라이프사이클로 되돌립니다. 런타임은 복원 후 재배포로 시작하세요.',
       confirmDescription:
-        '아카이브 표시를 해제합니다. 컨테이너를 자동으로 시작하지는 않으므로, 복원 후 서비스를 재배포하세요.',
-      error: '서비스 복원에 실패했습니다',
+        '아카이브 표시를 해제합니다. 컨테이너를 자동으로 시작하지는 않으므로, 복원 후 Application을 재배포하세요.',
+      error: 'Application 복원에 실패했습니다',
     },
     servicesGuide: {
       empty:
-        '아직 이 프로젝트에 서비스가 없습니다. 앱, 워커, 데이터베이스, 캐시 또는 compose 서비스를 추가하세요.',
-      help: '프로젝트는 그룹이고, 서비스는 그 안에 연결된 앱, 워커, 데이터베이스, 캐시, 스토리지입니다. MCP 후속 작업은 service_id를 사용하는 것이 가장 안전합니다.',
+        '아직 이 Project에 리소스가 없습니다. Application을 추가하거나 에이전트에게 Database/Cache/Storage 리소스를 추가해 달라고 요청하세요.',
+      help: 'Project는 workspace입니다. Resources는 연결된 Application, Compose, Database, Cache, Storage입니다. MCP 후속 작업은 service_id를 사용하는 것이 가장 안전합니다.',
       banner:
-        '아래 목록은 이 프로젝트의 애플리케이션 서비스와 인프라 서비스를 함께 보여줍니다. 후속 작업에는 표시된 MCP service_id를 사용하세요.',
+        '아래 목록은 이 Project의 Application, Compose, Database/Cache/Storage 리소스를 함께 보여줍니다. 후속 작업에는 표시된 MCP service_id를 사용하세요.',
       archivedVisible:
-        '아카이브된 서비스도 표시 중입니다. 서비스를 열어 복원하거나 서비스 Danger zone에서 삭제할 수 있습니다.',
-      showArchived: 'Show archived services',
-      hideArchived: 'Hide archived services',
-      loadingArchived: 'Loading archived services…',
-      archivedLoadError: '아카이브된 서비스를 불러오지 못했습니다: {message}',
+        '아카이브된 Application도 표시 중입니다. Application을 열어 복원하거나 Application Danger zone에서 삭제할 수 있습니다.',
+      showArchived: 'Show archived Applications',
+      hideArchived: 'Hide archived Applications',
+      loadingArchived: 'Loading archived Applications…',
+      archivedLoadError: '아카이브된 Application을 불러오지 못했습니다: {message}',
       serviceId: 'MCP service_id: {id}',
       serviceIdTooltip:
-        'MCP 액션에 이 값을 전달하세요. 애플리케이션 서비스는 배포/환경 변수/도메인/진단 작업을, 인프라 서비스는 로그/연결/라이프사이클 작업을 지원합니다.',
+        '선택한 Application/Compose/Database/Cache/Storage 리소스의 호환 id입니다. MCP 후속 작업에는 이 service_id를 전달하세요.',
     },
     domains: {
       // Chrome — action button + retry + badge.
@@ -741,9 +741,9 @@ export const translations = {
         invalidPath: '경로는 "/"로 시작해야 합니다.',
         invalidPort: '대상 포트는 1-65535 범위여야 합니다.',
         missingDomain: '도메인은 필수입니다.',
-        invalidServiceKind: '도메인은 deployable 서비스에만 연결할 수 있습니다.',
+        invalidServiceKind: '도메인은 Application/Compose workload에만 연결할 수 있습니다.',
         serviceSelectionRequired:
-          '프로젝트에 deployable 서비스가 여러 개 있습니다. 서비스 단위 API를 사용하세요.',
+          'Project에 Application/Compose workload가 여러 개 있습니다. service_id를 사용하세요.',
         notFound: '매핑을 찾을 수 없습니다.',
         serverError: '서버 오류가 발생했습니다.',
       },
@@ -839,7 +839,7 @@ export const translations = {
       save: 'Save changes',
       saving: 'Saving...',
       // Content — descriptive prose, hints, errors, success toasts.
-      description: '프로젝트 그룹의 표시 정보를 수정합니다. 슬러그는 고정됩니다.',
+      description: 'Project의 표시 정보를 수정합니다. 슬러그는 고정됩니다.',
       displayNameRequired: '표시 이름을 입력하세요.',
       slugHelp: '안정적인 URL, 컨테이너, Traefik 라벨, MCP project_name에 사용됩니다.',
       saved: '프로젝트 정보가 저장되었습니다.',
@@ -865,9 +865,9 @@ export const translations = {
     },
     managedDetail: {
       // Content — error titles + subtitle.
-      notFound: '서비스를 찾을 수 없습니다',
-      loadFailed: '서비스를 불러오지 못했습니다',
-      notFoundSubtitle: 'id "{id}"에 해당하는 서비스가 없습니다',
+      notFound: '리소스를 찾을 수 없습니다',
+      loadFailed: '리소스를 불러오지 못했습니다',
+      notFoundSubtitle: 'id "{id}"에 해당하는 리소스가 없습니다',
       // Chrome — back-navigation links.
       backToProjects: '← Back to Projects',
       backToProject: '← Back to project',
@@ -879,7 +879,7 @@ export const translations = {
       },
       logs: {
         title: 'Container logs',
-        description: '서비스 컨테이너의 런타임 로그입니다.',
+        description: '리소스 컨테이너의 런타임 로그입니다.',
         refresh: 'Refresh',
         loading: 'Loading…',
         empty: '반환된 로그가 없습니다.',
@@ -887,10 +887,10 @@ export const translations = {
       },
       connections: {
         title: 'Connected projects',
-        description: '이 서비스를 참조하는 프로젝트입니다.',
+        description: '이 리소스를 참조하는 Project입니다.',
         refresh: 'Refresh',
         loading: 'Loading…',
-        empty: '이 서비스에 연결된 프로젝트가 없습니다.',
+        empty: '이 리소스에 연결된 Project가 없습니다.',
         openProject: 'Open project',
       },
       settings: {
@@ -900,19 +900,19 @@ export const translations = {
         starting: 'Starting…',
         stop: 'Stop',
         stopping: 'Stopping…',
-        updated: '서비스 상태가 업데이트되었습니다.',
-        actionError: '서비스 작업에 실패했습니다',
-        deleteBody: '이 서비스 컨테이너와 영구 볼륨을 삭제합니다.',
-        delete: 'Delete service',
+        updated: '리소스 상태가 업데이트되었습니다.',
+        actionError: '리소스 작업에 실패했습니다',
+        deleteBody: '이 리소스 컨테이너와 영구 볼륨을 삭제합니다.',
+        delete: 'Delete resource',
         deleting: 'Deleting…',
-        confirmTitle: 'Delete infrastructure service',
+        confirmTitle: 'Delete Database/Cache/Storage resource',
         confirmDescription:
-          '서비스 컨테이너, 저장된 인증 정보, 영구 볼륨을 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
-        confirmLabel: '삭제하려면 이 서비스 이름을 입력하세요:',
+          '리소스 컨테이너, 저장된 인증 정보, 영구 볼륨을 삭제합니다. 이 작업은 되돌릴 수 없습니다.',
+        confirmLabel: '삭제하려면 이 리소스 이름을 입력하세요:',
         confirmDelete: 'Delete permanently',
-        deleteError: '서비스를 삭제하지 못했습니다',
+        deleteError: '리소스를 삭제하지 못했습니다',
         deleteBlocked:
-          '{count}개 프로젝트가 이 서비스를 참조하고 있어 삭제할 수 없습니다. 먼저 연결을 해제하세요.',
+          '{count}개 Project가 이 리소스를 참조하고 있어 삭제할 수 없습니다. 먼저 연결을 해제하세요.',
         connectionCheckFailed: '연결 상태를 확인하지 못해 삭제가 차단되었습니다.',
       },
       // Chrome — field labels match the services.detail.overview.*
@@ -930,12 +930,12 @@ export const translations = {
     },
     detail: {
       // Content — empty state.
-      notFound: '서비스를 찾을 수 없습니다',
-      // Content — error-card subtitles explaining why the service wasn't found.
+      notFound: 'Application을 찾을 수 없습니다',
+      // Content — error-card subtitles explaining why the Application wasn't found.
       notFoundReason: {
         noProjectParam:
-          '서비스를 찾으려면 프로젝트 페이지에서 열어주세요. /services/{id} 직접 링크에는 ?project= 쿼리 파라미터가 필요합니다.',
-        serviceNotInProject: '프로젝트 "{projectId}"에 서비스 "{id}"가 없습니다.',
+          'Application을 찾으려면 Project 페이지에서 열어주세요. /services/{id} 직접 링크에는 ?project= 쿼리 파라미터가 필요합니다.',
+        serviceNotInProject: 'Project "{projectId}"에 Application "{id}"가 없습니다.',
       },
       // Chrome — back-navigation link.
       backToHome: '← Back to Home',
@@ -996,7 +996,7 @@ export const translations = {
         monitoring: 'Monitoring',
         environment: 'Environment',
         domains: 'Domains',
-        // Legacy keys retained for managed-service tabs that have not
+        // Legacy keys retained for Database/Cache/Storage tabs that have not
         // moved to the new v0.1 tab strip yet.
         connection: 'Connection',
         databases: 'Databases',
@@ -1004,12 +1004,12 @@ export const translations = {
       },
       toasts: {
         // Content — toast prose.
-        started: '서비스가 시작되었습니다',
-        stopped: '서비스가 중지되었습니다',
-        deleted: '서비스가 삭제되었습니다',
-        startFailed: '서비스 시작에 실패했습니다',
-        stopFailed: '서비스 중지에 실패했습니다',
-        deleteFailed: '서비스 삭제에 실패했습니다',
+        started: 'Application이 시작되었습니다',
+        stopped: 'Application이 중지되었습니다',
+        deleted: 'Application이 삭제되었습니다',
+        startFailed: 'Application 시작에 실패했습니다',
+        stopFailed: 'Application 중지에 실패했습니다',
+        deleteFailed: 'Application 삭제에 실패했습니다',
         loadDatabasesFailed: '데이터베이스를 불러오지 못했습니다',
         dbCreated: '데이터베이스가 생성되었습니다',
         dbCreateFailed: '데이터베이스 생성에 실패했습니다',
@@ -1020,7 +1020,7 @@ export const translations = {
       },
       header: {
         // Chrome — back link + action buttons.
-        backToServices: 'Back to services',
+        backToServices: 'Back to Resources',
         start: 'Start',
         stop: 'Stop',
         delete: 'Delete',
@@ -1029,10 +1029,10 @@ export const translations = {
       refresh: 'Refresh',
       // Content — loading / empty / format strings.
       loadingDatabases: '데이터베이스 로딩 중...',
-      serviceIsStopped: '서비스가 중지되었습니다',
-      serviceStoppedHint: '로그를 보려면 서비스를 시작하세요.',
+      serviceIsStopped: 'Application이 중지되었습니다',
+      serviceStoppedHint: '로그를 보려면 Application을 시작하세요.',
       showingLast: '최근',
-      noProjectsUsing: '이 서비스를 사용하는 프로젝트가 없습니다',
+      noProjectsUsing: '이 리소스를 사용하는 Project가 없습니다',
       // Chrome — dropdown labels.
       selectDatabase: 'Select a database',
       selectVersion: 'Select a version',
@@ -1059,14 +1059,14 @@ export const translations = {
     },
     empty: {
       // Content — empty state.
-      title: '서비스가 없습니다',
-      description: '데이터베이스, 캐시 또는 기타 인프라 서비스 생성을 에이전트에게 요청하세요.',
+      title: '리소스가 없습니다',
+      description: 'Database, Cache 또는 Storage 리소스 생성을 에이전트에게 요청하세요.',
     },
     create: {
       toasts: {
         // Content — toast prose.
-        success: '서비스가 생성되었습니다',
-        errorFallback: '서비스 생성에 실패했습니다',
+        success: '리소스가 생성되었습니다',
+        errorFallback: '리소스 생성에 실패했습니다',
       },
     },
   },
@@ -1397,7 +1397,7 @@ export const translations = {
     // Chrome — brand title. English per chrome-stays-English convention.
     title: 'Your Agent',
     // Content — description.
-    subtitle: 'Claude 또는 다른 MCP 클라이언트에서 서비스를 관리하세요.',
+    subtitle: 'Claude 또는 다른 MCP 클라이언트에서 리소스를 관리하세요.',
     row: {
       // Chrome — bare labels + actions.
       status: '상태',
@@ -1552,11 +1552,11 @@ export const translations = {
       },
       // Content — descriptive copy + loading / empty messages.
       subtitle:
-        'OpenLander가 감지한 읽기 전용 라우팅 상태입니다. 커스텀 도메인 추가와 삭제는 서비스 상세의 Domains 탭에서 관리하세요.',
+        'OpenLander가 감지한 읽기 전용 라우팅 상태입니다. 커스텀 도메인 추가와 삭제는 Application 상세의 Domains 탭에서 관리하세요.',
       loading: '라우트를 불러오는 중…',
       loadFailed: '라우트를 불러오지 못했습니다.',
       empty:
-        '아직 감지된 공개 라우트가 없습니다. 서비스를 외부에 노출하거나 서비스 상세의 Domains 탭에서 커스텀 도메인을 추가하세요.',
+        '아직 감지된 공개 라우트가 없습니다. Application을 외부에 노출하거나 Application 상세의 Domains 탭에서 커스텀 도메인을 추가하세요.',
     },
     ports: {
       // Chrome — section title + table headers + status pills.
@@ -1621,7 +1621,7 @@ export const translations = {
       disconnectConfirm: {
         title: 'GitHub 연결을 해제할까요?',
         description:
-          'OpenLander가 GitHub 저장소에 접근할 수 없게 됩니다. 이미 배포된 서비스는 계속 동작하지만, 비공개 저장소에서 새 배포는 다시 연결할 때까지 실패합니다.',
+          'OpenLander가 GitHub 저장소에 접근할 수 없게 됩니다. 이미 배포된 Application은 계속 동작하지만, 비공개 저장소에서 새 배포는 다시 연결할 때까지 실패합니다.',
         confirmLabel: 'Disconnect GitHub',
       },
       authMethod: {
@@ -1653,7 +1653,7 @@ export const translations = {
         // Chrome — empty state CTA button + heading.
         title: 'Connect GitHub',
         // Content — empty state body.
-        body: 'OpenLander가 저장소를 읽을 수 있도록 인증하세요. 배포·웹훅·서비스 추가에서 저장소를 찾을 수 있게 됩니다.',
+        body: 'OpenLander가 저장소를 읽을 수 있도록 인증하세요. 배포·웹훅·Application 추가에서 저장소를 찾을 수 있게 됩니다.',
         // Chrome — CTA button.
         cta: 'Connect GitHub',
       },
@@ -1680,10 +1680,18 @@ export const translations = {
   // 자유롭게 번역되지만, 엔티티 종류를 가리키는 chrome — 헤더 키커,
   // breadcrumb, 페이지 뱃지 — 은 하드코딩하지 말고 이 키를 사용하세요.
   vocab: {
-    projectGroup: 'Project group',
-    deployableService: 'Deployable service',
-    managedService: 'Managed service',
-    infrastructureService: 'Infrastructure service',
+    project: 'Project',
+    projectGroup: 'Project',
+    application: 'Application',
+    compose: 'Compose',
+    database: 'Database',
+    cache: 'Cache',
+    storage: 'Storage',
+    resource: 'Resource',
+    resources: 'Resources',
+    deployableService: 'Application',
+    managedService: 'Database/Cache/Storage resource',
+    infrastructureService: 'Database/Cache/Storage resource',
   },
   serviceDetail: {
     runtime: {

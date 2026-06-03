@@ -50,9 +50,9 @@ describe('partial archive UI wiring', () => {
   it('keeps partial-archive chrome labels English in Korean locale', () => {
     expect(koSource).toContain("partiallyArchivedBadge: 'Partially archived'");
     expect(koSource).toContain("remainingButton: 'Archive remaining'");
-    expect(koSource).toContain("partialArchiveTitle: 'Archive remaining services'");
-    expect(koSource).toContain("showArchived: 'Show archived services'");
-    expect(koSource).toContain("hideArchived: 'Hide archived services'");
+    expect(koSource).toContain("partialArchiveTitle: 'Archive remaining Applications'");
+    expect(koSource).toContain("showArchived: 'Show archived Applications'");
+    expect(koSource).toContain("hideArchived: 'Hide archived Applications'");
   });
 
   it('keeps archived service cleanup reachable after default lists hide archived rows', () => {
@@ -99,6 +99,6 @@ describe('partial archive UI wiring', () => {
   });
 
   it('keeps Korean loading copy localized for archived-service cleanup', () => {
-    expect(koSource).toContain("archivedServicesLoading: '아카이브된 서비스를 불러오는 중…'");
+    expect(koSource).toContain("archivedServicesLoading: '아카이브된 Application을 불러오는 중…'");
   });
 });

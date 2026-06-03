@@ -14,7 +14,7 @@ describe('Project detail v0.1 tabs', () => {
   const enSource = readRepoFile('web/src/i18n/en.ts');
   const koSource = readRepoFile('web/src/i18n/ko.ts');
 
-  it('exposes only Services and Settings tabs', () => {
+  it('exposes only Resources and Settings tabs', () => {
     expect(projectViewSource).toContain("type ProjectTabId = 'services' | 'settings'");
     expect(projectViewSource).toContain("id: 'services'");
     expect(projectViewSource).toContain("id: 'settings'");
@@ -35,7 +35,7 @@ describe('Project detail v0.1 tabs', () => {
     ).toBe(false);
   });
 
-  it('shows connected managed services in the project Services tab', () => {
+  it('shows connected Database/Cache/Storage resources in the project Resources tab', () => {
     expect(servicesApiSource).toContain(
       'apiGet<ProjectManagedService[]>(`/api/projects/${groupId}/managed-services`)',
     );
@@ -66,9 +66,9 @@ describe('Project detail v0.1 tabs', () => {
     expect(koTabs).not.toMatch(/mcp:/);
     // Per docs/i18n-policy.md, tab labels are Chrome — same English
     // string in both locales (no Korean translation).
-    expect(enTabs).toContain("services: 'Services'");
+    expect(enTabs).toContain("services: 'Resources'");
     expect(enTabs).toContain("settings: 'Settings'");
-    expect(koTabs).toContain("services: 'Services'");
+    expect(koTabs).toContain("services: 'Resources'");
     expect(koTabs).toContain("settings: 'Settings'");
   });
 });
