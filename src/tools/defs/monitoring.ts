@@ -570,6 +570,7 @@ export const monitoringToolDefs: ToolDef[] = [
         timeoutMs,
         service.container_id ?? undefined,
         true,
+        { excludedHosts: await managedPublicDependencyHosts(appCtx, service) },
       );
       const nextSteps = buildDiagnoseNextSteps({
         service,
@@ -1752,14 +1753,80 @@ function defaultPortForProtocol(protocol: string): number | undefined {
   }
 }
 
-function envDependencyTargets(env: Record<string, string>): DependencyTarget[] {
+function hostnameFromUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+async function managedPublicDependencyHosts(
+  appCtx: AppCtx,
+  service: ServiceRow,
+): Promise<Set<string>> {
+  const hosts = new Set<string>();
+  const candidates = [(service as { public_url?: string | null }).public_url];
+  for (const candidate of candidates) {
+    const host = hostnameFromUrl(candidate);
+    if (host) {
+      hosts.add(host);
+    }
+  }
+  if (typeof appCtx.db.listDomainMappingsForService === 'function') {
+    try {
+      const mappings = await appCtx.db.listDomainMappingsForService(service.id);
+      for (const mapping of mappings) {
+        const domain = typeof mapping.domain === 'string' ? mapping.domain : '';
+        if (domain) {
+          hosts.add(domain.toLowerCase());
+        }
+      }
+    } catch (error) {
+      log.debug({ error, serviceId: service.id }, 'Failed to list domain mappings for diagnosis');
+    }
+  }
+  return hosts;
+}
+
+function isSelfPublicUrlEnvKey(key: string): boolean {
+  const normalized = key.toUpperCase();
+  if (
+    [
+      'APP_BASE_URL',
+      'BASE_URL',
+      'PUBLIC_URL',
+      'NEXTAUTH_URL',
+      'NEXT_PUBLIC_URL',
+      'NEXT_PUBLIC_BASE_URL',
+    ].includes(normalized)
+  ) {
+    return true;
+  }
+  return (
+    /^NEXT_PUBLIC_[A-Z0-9_]*URL$/.test(normalized) ||
+    /^VITE_[A-Z0-9_]*URL$/.test(normalized) ||
+    /^PUBLIC_[A-Z0-9_]*URL$/.test(normalized) ||
+    /^REACT_APP_[A-Z0-9_]*URL$/.test(normalized)
+  );
+}
+
+function envDependencyTargets(
+  env: Record<string, string>,
+  options: { excludedHosts?: Set<string> } = {},
+): DependencyTarget[] {
   const targets: DependencyTarget[] = [];
   for (const [key, value] of Object.entries(env)) {
+    if (isSelfPublicUrlEnvKey(key)) continue;
     if (!/(URL|URI|DSN|DATABASE|REDIS|POSTGRES|MYSQL|MONGO)/i.test(key)) continue;
     try {
       const parsed = new URL(value);
       const port = parsed.port ? Number(parsed.port) : defaultPortForProtocol(parsed.protocol);
       if (!parsed.hostname || !port || port < 1 || port > 65535) continue;
+      if (options.excludedHosts?.has(parsed.hostname.toLowerCase())) continue;
       const probeProtocol =
         parsed.protocol === 'http:' || parsed.protocol === 'https:'
           ? parsed.protocol.slice(0, -1)
@@ -1784,8 +1851,9 @@ async function probeEnvDependencies(
   timeoutMs: number,
   preferredContainerId?: string,
   requirePreferredContainer = false,
+  options: { excludedHosts?: Set<string> } = {},
 ): Promise<Record<string, unknown>> {
-  const targets = envDependencyTargets(env);
+  const targets = envDependencyTargets(env, options);
   if (targets.length === 0) {
     return { count: 0, checks: [] };
   }
@@ -2274,6 +2342,9 @@ function buildSynthesizedServiceDiagnosis(input: {
         .find((item): item is Record<string, unknown> => item?.['reachable'] === false)
     : undefined;
   if (failedDependency) {
+    if (input.container['running'] === true && input.httpCheck['reachable'] === false) {
+      return null;
+    }
     const failed = failedDependency;
     const key = typeof failed['key'] === 'string' ? failed['key'] : 'endpoint';
     return {

@@ -316,6 +316,26 @@ describe('Composite Action Routing', () => {
       expect(result).toHaveProperty('action', 'create_service');
     });
 
+    it('rejects branch as an unknown redeploy_app action param', async () => {
+      const result = (await tool.execute(
+        {
+          action: 'redeploy_app',
+          params: { service_id: 'app__svc', branch: 'staging' },
+        },
+        mockContext,
+      )) as Record<string, unknown>;
+
+      expect(result).toMatchObject({
+        error: 'INVALID_PARAMS',
+        action: 'redeploy_app',
+        composite: 'openlander_service',
+        unknown_params: ['branch'],
+        allowed_params: expect.not.arrayContaining(['branch']),
+      });
+      const guidance = result['_agent_guidance'] as Record<string, unknown>;
+      expect(String(guidance['message'])).toContain('branch');
+    });
+
     it('rc.2: remove_service is in MANAGED_SERVICE_ACTIONS, not openlander_service', async () => {
       // rc.2 split: openlander_service is the deployable-vocab composite,
       // and remove_service moved to openlander_managed_service. Calling

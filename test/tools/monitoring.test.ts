@@ -973,6 +973,7 @@ describe('service-targeted monitoring tools', () => {
         ),
         getDeployablesByGroup: vi.fn(async () => [service]),
         listServices: vi.fn(async () => [service]),
+        listDomainMappingsForService: vi.fn(async () => []),
         getEnvVars: vi.fn(async () => ({})),
         getEnvVarsForService: vi.fn(async () => ({ NODE_ENV: 'production' })),
         getDeployLogs: vi.fn(async () => []),
@@ -1433,6 +1434,161 @@ describe('service-targeted monitoring tools', () => {
         next_steps: expect.arrayContaining([expect.stringContaining('route_verification')]),
       },
     });
+  });
+
+  it('diagnose_service keeps PORT_MISMATCH when APP_BASE_URL is unreachable', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      APP_BASE_URL: 'https://ledgerly.example.com',
+    });
+    vi.mocked(ctx.pipeline.getLogs).mockResolvedValueOnce('Server listening on port 4000');
+    vi.mocked(ctx.docker.execSimple).mockResolvedValueOnce({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'connection refused',
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('ENOTFOUND ledgerly.example.com');
+    });
+
+    try {
+      const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+        { project_id: 'app', lines: 5 },
+        { target: 'mcp' },
+      )) as Record<string, unknown>;
+
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        dependencies: { count: 0, checks: [] },
+        diagnosis: {
+          code: 'PORT_MISMATCH',
+          confidence: 'high',
+          evidence: {
+            configured_container_port: 3000,
+            detected_listening_port: 4000,
+          },
+        },
+        suggested_call: {
+          tool: 'openlander_service',
+          action: 'apply_route_config',
+          params: { service_id: 'app__svc', container_port: 4000 },
+        },
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('diagnose_service does not diagnose self public URL failures as dependencies', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      APP_BASE_URL: 'https://ledgerly.example.com',
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('ENOTFOUND ledgerly.example.com');
+    });
+
+    try {
+      const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+        { project_id: 'app', lines: 5 },
+        { target: 'mcp' },
+      )) as Record<string, unknown>;
+
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(result['diagnosis']).toBeUndefined();
+      expect(result['suggested_call']).toBeUndefined();
+      expect(result).toMatchObject({
+        dependencies: { count: 0, checks: [] },
+        httpCheck: expect.objectContaining({ reachable: true }),
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('diagnose_service excludes managed public route hosts from dependency diagnosis', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.listDomainMappingsForService).mockResolvedValueOnce([
+      {
+        id: 'domain-1',
+        service_id: 'app__svc',
+        domain: 'app.example.com',
+        cloudflare_zone_id: null,
+        cloudflare_dns_record_id: null,
+        status: 'active',
+        path_prefix: '/',
+        strip_prefix: false,
+        upstream_path_prefix: null,
+        target_port: null,
+        tls_enabled: null,
+        tls_resolver: null,
+        created_at: '2026-06-04T00:00:00.000Z',
+        updated_at: null,
+      },
+    ]);
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      API_URL: 'https://app.example.com/api',
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('ENOTFOUND app.example.com');
+    });
+
+    try {
+      const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+        { project_id: 'app', lines: 5 },
+        { target: 'mcp' },
+      )) as Record<string, unknown>;
+
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(result['diagnosis']).toBeUndefined();
+      expect(result).toMatchObject({
+        dependencies: { count: 0, checks: [] },
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('diagnose_service still reports real dependency failures', async () => {
+    const { ctx } = createServiceTargetContext();
+    vi.mocked(ctx.db.getEnvVarsForService).mockResolvedValueOnce({
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgres://db.example.com:5432/app',
+    });
+    vi.mocked(ctx.docker.execSimple)
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'OK', stderr: '' })
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'connection refused' });
+
+    const result = (await getMonitoringTool(ctx, 'diagnose_service').execute(
+      { project_id: 'app', lines: 5 },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      dependencies: {
+        count: 1,
+        checks: [
+          expect.objectContaining({
+            key: 'DATABASE_URL',
+            reachable: false,
+          }),
+        ],
+      },
+      diagnosis: {
+        code: 'DEPENDENCY_UNREACHABLE',
+        confidence: 'high',
+        evidence: {
+          key: 'DATABASE_URL',
+        },
+      },
+    });
+    expect(result['suggested_call']).toBeUndefined();
   });
 
   it('diagnose_service omits diagnosis for healthy ambiguous output and keeps raw fields', async () => {

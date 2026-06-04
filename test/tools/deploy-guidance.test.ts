@@ -59,7 +59,6 @@ describe('deploy MCP guidance', () => {
 
     const result = (await getTool(ctx, 'deploy_app').execute(
       {
-        repo_url: 'https://github.com/acme/app',
         name: 'app',
         env_vars: { DATABASE_URL: 'postgresql://example' },
         wait: false,
@@ -91,6 +90,104 @@ describe('deploy MCP guidance', () => {
       ),
     );
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
+  });
+
+  it('rejects source/build overrides when deploy_app resolves an existing service by name', async () => {
+    const project = { id: 'app', name: 'app', status: 'running', archived_at: null };
+    const service = {
+      id: 'app__svc',
+      name: 'web',
+      project_id: 'app',
+      kind: 'git',
+      source: 'git',
+      repo_url: 'https://github.com/acme/app',
+      image_url: null,
+      status: 'running',
+    };
+    const ctx = {
+      db: {
+        getProject: vi.fn((id: string) => (id === project.id ? project : undefined)),
+        getProjectByName: vi.fn((name: string) => (name === project.name ? project : undefined)),
+        getDeployablesByGroup: vi.fn(async () => [service]),
+        listServices: vi.fn(async () => [service]),
+      },
+      pipeline: {
+        redeployService: vi.fn(async () => undefined),
+      },
+      planEngine: {
+        createPlan: vi.fn(),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      {
+        name: 'app',
+        repo_url: 'https://github.com/acme/app',
+        branch: 'staging',
+        dockerfile_path: 'Dockerfile.broken',
+        wait: false,
+      },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'EXISTING_SERVICE_SOURCE_OVERRIDE_UNSUPPORTED',
+      code: 'EXISTING_SERVICE_SOURCE_OVERRIDE_UNSUPPORTED',
+      action: 'deploy_app',
+      invalid_params: ['repo_url', 'branch', 'dockerfile_path'],
+      allowed_params: expect.arrayContaining(['no_cache', 'strategy', 'health_check_path']),
+      existing_service: {
+        service_id: 'app__svc',
+        service_name: 'web',
+      },
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'redeploy_app',
+        params: { service_id: 'app__svc' },
+      },
+    });
+    expect(result['allowed_params']).toEqual(
+      expect.not.arrayContaining(['wait', 'wait_healthy', 'timeout']),
+    );
+    const guidance = result['_agent_guidance'] as Record<string, unknown>;
+    expect(String(guidance['message'])).toContain('did not start a redeploy');
+    expect((guidance['next_steps'] as string[]).join('\n')).toContain('update_service_config');
+    expect((guidance['next_steps'] as string[]).join('\n')).toContain('stored branch');
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
+    expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
+  });
+
+  it('rejects source overrides when deploy_app resolves an existing service by service_id', async () => {
+    const ctx = {
+      pipeline: {
+        redeployService: vi.fn(async () => undefined),
+      },
+      planEngine: {
+        createPlan: vi.fn(),
+      },
+    } as unknown as AppContext;
+
+    const result = (await getTool(ctx, 'deploy_app').execute(
+      {
+        service_id: 'app__svc',
+        branch: 'staging',
+        repo_url: 'https://github.com/acme/app',
+        wait: false,
+      },
+      { target: 'mcp' },
+    )) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      error: 'EXISTING_SERVICE_SOURCE_OVERRIDE_UNSUPPORTED',
+      invalid_params: ['repo_url', 'branch'],
+      suggested_call: {
+        tool: 'openlander_service',
+        action: 'redeploy_app',
+        params: { service_id: 'app__svc' },
+      },
+    });
+    expect(ctx.pipeline.redeployService).not.toHaveBeenCalled();
+    expect(ctx.planEngine.createPlan).not.toHaveBeenCalled();
   });
 
   it('routes deploy_app to redeploy_app when project_name matches one existing deployable service', async () => {
