@@ -31,6 +31,7 @@ export interface RunContainerOptions {
     start_period?: number;
   };
   labels?: Record<string, string>;
+  volumeProjectName?: string;
   resourceLimits?: ResourceLimitConfig;
 }
 

@@ -9,7 +9,13 @@ interface TraefikConfigResponse {
   http: {
     routers: Record<
       string,
-      { rule: string; entryPoints: string[]; service: string; middlewares?: string[] }
+      {
+        rule: string;
+        entryPoints: string[];
+        service: string;
+        priority?: number;
+        middlewares?: string[];
+      }
     >;
     services: Record<string, { loadBalancer: { servers: Array<{ url: string }> } }>;
     middlewares?: Record<
@@ -176,6 +182,50 @@ describe('GET /api/traefik/config domain routing', () => {
     );
     expect(harness.db.listServices).toHaveBeenCalledOnce();
     expect(harness.db.getDeployableForProject).not.toHaveBeenCalled();
+  });
+
+  it('flips auto routes from the service row with priority over Docker label routers', async () => {
+    const project = makeProject({ name: 'stack' });
+    const service = makeService({
+      id: 'stack__svc',
+      project_id: 'stack',
+      name: 'stack__svc',
+      assigned_port: 10010,
+      container_name: 'ol-stack',
+      container_port: 3000,
+      container_id: 'container-old',
+    });
+    const harness = createTraefikConfigApp({
+      projects: [project],
+      services: [service],
+      mappings: [],
+    });
+
+    const before = await requestTraefikConfig(harness.app);
+    const beforeRouter = Object.values(before.http.routers).find(
+      (router) => router.service === 'svc-stack',
+    );
+    expect(before.http.services['svc-stack']?.loadBalancer.servers[0]?.url).toBe(
+      'http://ol-stack:3000',
+    );
+    expect(beforeRouter?.priority).toBeGreaterThan(beforeRouter?.rule.length ?? 0);
+
+    service.assigned_port = 12001;
+    service.container_name = 'ol-stack-env-abc123';
+    service.container_id = 'container-new';
+
+    const after = await requestTraefikConfig(harness.app);
+    const afterRouter = Object.values(after.http.routers).find(
+      (router) => router.service === 'svc-stack',
+    );
+
+    expect(after.http.services['svc-stack']?.loadBalancer.servers[0]?.url).toBe(
+      'http://ol-stack-env-abc123:3000',
+    );
+    expect(after.http.services['svc-stack']?.loadBalancer.servers[0]?.url).not.toContain(
+      'ol-stack:3000',
+    );
+    expect(afterRouter?.priority).toBeGreaterThan(afterRouter?.rule.length ?? 0);
   });
 
   it('routes custom domains through mapping.service_id, not the parent project container', async () => {

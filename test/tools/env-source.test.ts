@@ -72,6 +72,7 @@ function createEnvToolContext() {
   const pipeline = {
     redeploy: vi.fn().mockResolvedValue({ status: 'redeployed' }),
     redeployService: vi.fn().mockResolvedValue({ status: 'redeployed' }),
+    recreateServiceRuntime: vi.fn().mockResolvedValue({ success: true }),
   };
 
   const ctx = { db, env, pipeline } as unknown as AppContext;
@@ -375,7 +376,7 @@ describe('env MCP tools', () => {
     });
   });
 
-  it('set_env_vars immediate redeploy preserves MCP trigger attribution', async () => {
+  it('set_env_vars immediate apply recreates from the same image for runtime env', async () => {
     const { ctx, pipeline } = createEnvToolContext();
 
     const result = await getEnvTool('set_env_vars').execute(
@@ -387,11 +388,42 @@ describe('env MCP tools', () => {
       { appCtx: ctx, target: 'mcp' },
     );
 
-    expect(pipeline.redeployService).toHaveBeenCalledWith('svc1', { trigger: 'chat' });
+    expect(pipeline.recreateServiceRuntime).toHaveBeenCalledWith('svc1', { trigger: 'chat' });
+    expect(pipeline.redeployService).not.toHaveBeenCalled();
     expect(pipeline.redeploy).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       status: 'updated_and_redeployed',
       needs_redeploy: false,
+      apply_mode: 'same_image_recreate',
+      diagnostic_call: {
+        tool: 'openlander_monitor',
+        action: 'diagnose_service',
+        params: { service_id: 'svc1' },
+      },
+    });
+  });
+
+  it('set_env_vars immediate apply keeps full redeploy for build-time env', async () => {
+    const { ctx, env, pipeline } = createEnvToolContext();
+    env.setBulkForServiceDetailed.mockResolvedValueOnce([
+      { key: 'NEXT_PUBLIC_API_URL', op: 'update' },
+    ]);
+
+    const result = await getEnvTool('set_env_vars').execute(
+      {
+        project_name: 'my-app',
+        variables: { NEXT_PUBLIC_API_URL: 'https://api.example.com' },
+        defer_redeploy: false,
+      },
+      { appCtx: ctx, target: 'mcp' },
+    );
+
+    expect(pipeline.redeployService).toHaveBeenCalledWith('svc1', { trigger: 'chat' });
+    expect(pipeline.recreateServiceRuntime).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: 'updated_and_redeployed',
+      needs_redeploy: false,
+      apply_mode: 'full_redeploy',
     });
   });
 

@@ -66,7 +66,8 @@ export class ContainerOps {
         },
       },
     };
-    const volumeBinds = await getProjectVolumeBinds(this.ctx.client, projectName);
+    const volumeProjectName = options.volumeProjectName ?? projectName;
+    const volumeBinds = await getProjectVolumeBinds(this.ctx.client, volumeProjectName);
     const binds = [...secretBinds, ...volumeBinds, ...(options.extraBinds ?? [])];
 
     const healthcheck = options.healthcheck

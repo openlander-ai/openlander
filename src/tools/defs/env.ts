@@ -32,6 +32,7 @@ import {
   resolveEnvironmentByKeyOrThrow,
   type EnvironmentKey,
 } from '../../pipeline/env-scope.js';
+import { BUILD_TIME_PREFIXES } from '../../pipeline/build-args.js';
 
 type AppCtx = Parameters<ToolDef['execute']>[1]['appCtx'];
 type ServiceRow = Awaited<ReturnType<AppCtx['db']['getService']>>;
@@ -39,6 +40,7 @@ type ProjectRow = Awaited<ReturnType<AppCtx['db']['getProject']>>;
 type ResolvedServiceRow = NonNullable<ServiceRow>;
 type ResolvedProjectRow = NonNullable<ProjectRow>;
 type EnvWriteScope = 'project' | 'project_environment' | 'service' | 'service_environment';
+type EnvApplyMode = 'same_image_recreate' | 'full_redeploy';
 
 const MAX_AUDIT_KEYS = 50;
 const ENV_WRITE_SCOPES: readonly EnvWriteScope[] = [
@@ -373,11 +375,13 @@ async function computeRedeployForTarget(
   appCtx: AppCtx,
   target: EnvWriteTarget,
   changed: boolean,
+  changedKeys: string[],
   deferRedeploy: boolean,
   trigger: ToolDeployTrigger,
 ): Promise<{
   redeployed: boolean;
   needsRedeploy: boolean;
+  applyMode?: EnvApplyMode;
   redeploySkipped?: { reason: string; message: string };
 }> {
   if (target.service && target.runtimeProject) {
@@ -389,6 +393,7 @@ async function computeRedeployForTarget(
         runtimeProject: target.runtimeProject,
       },
       changed,
+      changedKeys,
       deferRedeploy,
       trigger,
     );
@@ -504,6 +509,14 @@ function serviceNeedsRedeploy(service: ResolvedServiceRow): boolean {
   return hasRuntimeContainer || statusImpliesRuntime;
 }
 
+function isBuildTimeEnvKey(key: string): boolean {
+  return BUILD_TIME_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+function changedEnvKeys(changes: Array<{ key: string; op: string }>): string[] {
+  return changes.filter((change) => change.op !== 'noop').map((change) => change.key);
+}
+
 async function projectScopeNeedsRedeploy(
   appCtx: AppCtx,
   project: ResolvedProjectRow,
@@ -518,11 +531,13 @@ async function applyRedeployIfRequested(
   appCtx: AppCtx,
   target: EnvTarget,
   changed: boolean,
+  changedKeys: string[],
   deferRedeploy: boolean,
   trigger: ToolDeployTrigger,
 ): Promise<{
   redeployed: boolean;
   needsRedeploy: boolean;
+  applyMode?: EnvApplyMode;
   redeploySkipped?: { reason: string; message: string };
 }> {
   const { project, service, runtimeProject } = target;
@@ -548,8 +563,25 @@ async function applyRedeployIfRequested(
   }
 
   try {
-    await appCtx.pipeline.redeployService(service.id, { trigger });
-    return { redeployed: true, needsRedeploy: false };
+    if (changedKeys.some(isBuildTimeEnvKey)) {
+      await appCtx.pipeline.redeployService(service.id, { trigger });
+      return { redeployed: true, needsRedeploy: false, applyMode: 'full_redeploy' };
+    }
+
+    const result = await appCtx.pipeline.recreateServiceRuntime(service.id, { trigger });
+    if (result.success) {
+      return { redeployed: true, needsRedeploy: false, applyMode: 'same_image_recreate' };
+    }
+
+    return {
+      redeployed: false,
+      needsRedeploy: true,
+      applyMode: 'same_image_recreate',
+      redeploySkipped: {
+        reason: result.code ?? 'RUNTIME_ENV_RECREATE_FAILED',
+        message: `Env vars saved but runtime apply was skipped for ${project.name}/${service.name}: ${result.error ?? 'same-image recreate failed'}`,
+      },
+    };
   } catch (err) {
     if (
       err instanceof ProjectArchivedError ||
@@ -689,6 +721,7 @@ export const envToolDefs: ToolDef[] = [
                 runtimeProject: target.runtimeProject,
               },
               changed,
+              changedEnvKeys(changes),
               deferRedeploy,
               deployTriggerForToolContext(context),
             )
@@ -705,6 +738,7 @@ export const envToolDefs: ToolDef[] = [
         changed_count: changes.filter((change) => change.op !== 'noop').length,
         needs_redeploy: redeploy.needsRedeploy,
         deferred: deferRedeploy,
+        ...(redeploy.applyMode ? { apply_mode: redeploy.applyMode } : {}),
       });
 
       if (redeploy.redeployed) {
@@ -717,6 +751,16 @@ export const envToolDefs: ToolDef[] = [
           keys: Object.keys(vars),
           changed: changes,
           needs_redeploy: false,
+          ...(redeploy.applyMode ? { apply_mode: redeploy.applyMode } : {}),
+          ...(target.service
+            ? {
+                diagnostic_call: {
+                  tool: 'openlander_monitor',
+                  action: 'diagnose_service',
+                  params: { service_id: target.service.id },
+                },
+              }
+            : {}),
         };
       }
 
@@ -732,6 +776,7 @@ export const envToolDefs: ToolDef[] = [
           needs_redeploy: true,
           reason: redeploy.redeploySkipped.reason,
           message: redeploy.redeploySkipped.message,
+          ...(redeploy.applyMode ? { apply_mode: redeploy.applyMode } : {}),
         };
       }
 
@@ -798,6 +843,7 @@ export const envToolDefs: ToolDef[] = [
         appCtx,
         target,
         deleted,
+        deleted ? [key] : [],
         deferRedeploy,
         deployTriggerForToolContext(context),
       );
@@ -810,6 +856,7 @@ export const envToolDefs: ToolDef[] = [
           ...(target.environmentKey ? { environment_key: target.environmentKey } : {}),
           needs_redeploy: redeploy.needsRedeploy,
           deferred: deferRedeploy,
+          ...(redeploy.applyMode ? { apply_mode: redeploy.applyMode } : {}),
         });
       }
       return {
@@ -818,6 +865,7 @@ export const envToolDefs: ToolDef[] = [
         ...targetResponseFields(target),
         key,
         needs_redeploy: redeploy.needsRedeploy,
+        ...(redeploy.applyMode ? { apply_mode: redeploy.applyMode } : {}),
       };
     },
   },
@@ -856,6 +904,7 @@ export const envToolDefs: ToolDef[] = [
         appCtx,
         target,
         result.changed,
+        result.deleted,
         deferRedeploy,
         deployTriggerForToolContext(context),
       );
@@ -868,6 +917,7 @@ export const envToolDefs: ToolDef[] = [
           ...(target.environmentKey ? { environment_key: target.environmentKey } : {}),
           needs_redeploy: redeploy.needsRedeploy,
           deferred: deferRedeploy,
+          ...(redeploy.applyMode ? { apply_mode: redeploy.applyMode } : {}),
         });
       }
       return {
@@ -878,6 +928,7 @@ export const envToolDefs: ToolDef[] = [
         not_found: result.notFound,
         count_deleted: result.deleted.length,
         needs_redeploy: redeploy.needsRedeploy,
+        ...(redeploy.applyMode ? { apply_mode: redeploy.applyMode } : {}),
       };
     },
   },

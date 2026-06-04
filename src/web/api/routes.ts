@@ -41,8 +41,19 @@ type TraefikHttpRouter = {
   rule: string;
   entryPoints: string[];
   service: string;
+  priority?: number;
   middlewares?: string[];
 };
+
+const TRAEFIK_HTTP_PROVIDER_PRIORITY_BASE = 100_000;
+
+function httpProviderPriority(rule: string): number {
+  // Managed Traefik runs both Docker and HTTP providers. During swaps, the
+  // old container can still expose a Docker-label router for the same Host
+  // rule, so DB-driven HTTP-provider routers must win deterministically while
+  // preserving rule-length ordering inside this config.
+  return TRAEFIK_HTTP_PROVIDER_PRIORITY_BASE + rule.length;
+}
 
 function readApprovalActionName(actionRun: { approval_tool: string | null; plan: string | null }) {
   if (actionRun.approval_tool === 'destructive_mcp' && actionRun.plan) {
@@ -397,6 +408,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
         rule,
         entryPoints: ['web'],
         service: svcName,
+        priority: httpProviderPriority(rule),
         ...(routerMiddlewares.length > 0 ? { middlewares: routerMiddlewares } : {}),
       };
     }
@@ -407,10 +419,12 @@ export function createApiRoutes(ctx: AppContext): Hono {
       for (const route of getProjectUrls(project.name)) {
         const host = new URL(route.url).hostname;
         if (host) {
+          const rule = `Host(\`${host}\`)`;
           routers[`route-${project.name}-${traefikObjectName(`${route.type}-${host}`)}`] = {
-            rule: `Host(\`${host}\`)`,
+            rule,
             entryPoints: ['web'],
             service: svcName,
+            priority: httpProviderPriority(rule),
           };
         }
       }
@@ -425,10 +439,12 @@ export function createApiRoutes(ctx: AppContext): Hono {
       if ((visibility === 'quick-share' || visibility === 'shared') && publicUrl) {
         try {
           const host = new URL(publicUrl).hostname;
+          const rule = `Host(\`${host}\`)`;
           routers[`qs-${project.name}`] = {
-            rule: `Host(\`${host}\`)`,
+            rule,
             entryPoints: ['web'],
             service: svcName,
+            priority: httpProviderPriority(rule),
           };
         } catch {
           // skip invalid URL
