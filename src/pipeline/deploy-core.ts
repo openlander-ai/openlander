@@ -705,7 +705,7 @@ export class DeployPipeline {
     projectId: string,
     errMsg: string,
     trigger: 'chat' | 'webhook' | 'api' = 'api',
-    options: { emitTerminalEvent?: boolean } = {},
+    options: { emitTerminalEvent?: boolean; attemptDeployLogWithoutServiceCheck?: boolean } = {},
   ): Promise<void> {
     log.error({ projectId, error: errMsg }, 'Background deploy failed');
     this.jobManager?.updatePhase(projectId, 'failed', errMsg);
@@ -714,7 +714,15 @@ export class DeployPipeline {
       await this.db.updateEnvironment(env.id, { status: 'error' });
     }
     try {
-      if ((await this.db.getLastDeployLog(projectId))?.status !== 'failed') {
+      const hasDeployable =
+        options.attemptDeployLogWithoutServiceCheck ||
+        Boolean(await this.db.getDeployableForProject(projectId));
+      if (!hasDeployable) {
+        log.warn(
+          { projectId, originalError: errMsg },
+          'Skipping background failure deploy log because no Application service row exists',
+        );
+      } else if ((await this.db.getLastDeployLog(projectId))?.status !== 'failed') {
         const environments = await this.db.getEnvironmentsByProject(projectId);
         const envId = environments[0]?.id;
         await this.db.createDeployLog({
@@ -1924,6 +1932,7 @@ export class DeployPipeline {
           this.jobManager?.trackJob(projectId, project.name);
           await this.recordBackgroundFailure(projectId, error, options?.trigger, {
             emitTerminalEvent: true,
+            attemptDeployLogWithoutServiceCheck: true,
           });
           return {
             success: false,
