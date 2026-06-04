@@ -366,6 +366,42 @@ describe('blue-green route target flip', () => {
     );
   });
 
+  it('does not accept a managed route 2xx before the provider poll window elapses', async () => {
+    mockRouteProbe(200);
+
+    const result = await pipeline.verifyManagedTraefikRoute({
+      projectName: 'demo-app',
+      path: '/',
+      probeTimeoutMs: 5,
+      maxWaitMs: 60,
+      intervalMs: 5,
+      minimumSuccessAgeMs: 25,
+    });
+
+    expect(result).toMatchObject({ ok: true, status: 200 });
+    expect(result.attempts).toBeGreaterThan(1);
+    expect(result.elapsedMs).toBeGreaterThanOrEqual(25);
+  });
+
+  it('fails instead of accepting a pre-poll route 2xx when the deadline expires', async () => {
+    mockRouteProbe(200);
+
+    const result = await pipeline.verifyManagedTraefikRoute({
+      projectName: 'demo-app',
+      path: '/',
+      probeTimeoutMs: 5,
+      maxWaitMs: 0,
+      intervalMs: 1,
+      minimumSuccessAgeMs: 1_000,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('before Traefik HTTP provider poll window elapsed'),
+      attempts: 1,
+    });
+  });
+
   it('recreates runtime env from the same image before removing the previous container', async () => {
     (env.getAllForService as ReturnType<typeof vi.fn>).mockReturnValue({
       DATABASE_URL: 'postgres://new-runtime',
@@ -481,7 +517,7 @@ describe('blue-green route target flip', () => {
       strategy: 'blue-green',
       route_switched: true,
     });
-    expect(mockHttpRequest.mock.calls.length - previousProbeCalls).toBe(2);
+    expect(mockHttpRequest.mock.calls.length - previousProbeCalls).toBeGreaterThan(2);
   });
 
   it('keeps blue serving when green health fails', async () => {

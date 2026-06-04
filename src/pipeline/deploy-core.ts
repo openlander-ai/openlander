@@ -1114,9 +1114,11 @@ export class DeployPipeline {
     probeTimeoutMs: number;
     maxWaitMs: number;
     intervalMs: number;
+    minimumSuccessAgeMs?: number;
   }): Promise<ManagedRouteVerificationResult> {
     const startedAt = Date.now();
     const deadline = startedAt + Math.max(0, params.maxWaitMs);
+    const minimumSuccessAgeMs = Math.max(0, params.minimumSuccessAgeMs ?? 0);
     let attempts = 0;
     let lastError = 'Route probe did not run';
 
@@ -1129,10 +1131,16 @@ export class DeployPipeline {
       });
       const elapsedMs = Date.now() - startedAt;
       if (probe.ok) {
-        return { ok: true, status: probe.status, attempts, elapsedMs };
+        if (elapsedMs >= minimumSuccessAgeMs) {
+          return { ok: true, status: probe.status, attempts, elapsedMs };
+        }
+        // A just-flipped route can still be served by Traefik's previous HTTP
+        // provider snapshot. Do not treat that stale 2xx as proof of cutover.
+        lastError = `Route probe returned HTTP ${String(probe.status)} before Traefik HTTP provider poll window elapsed`;
+      } else {
+        lastError = probe.error;
       }
 
-      lastError = probe.error;
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) {
         return { ok: false, error: lastError, attempts, elapsedMs };
@@ -1148,13 +1156,17 @@ export class DeployPipeline {
     probeTimeoutMs?: number;
     maxWaitMs?: number;
     intervalMs?: number;
+    minimumSuccessAgeMs?: number;
   }): Promise<ManagedRouteVerificationResult> {
+    const maxWaitMs = params.maxWaitMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS;
     return await this.waitForManagedTraefikRoute({
       projectName: params.projectName,
       path: params.path,
       probeTimeoutMs: params.probeTimeoutMs ?? 5_000,
-      maxWaitMs: params.maxWaitMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS,
+      maxWaitMs,
       intervalMs: params.intervalMs ?? DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS,
+      minimumSuccessAgeMs:
+        params.minimumSuccessAgeMs ?? Math.min(TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS, maxWaitMs),
     });
   }
 
@@ -2530,6 +2542,10 @@ export class DeployPipeline {
             probeTimeoutMs: options?.routeProbeTimeoutMs ?? 5_000,
             maxWaitMs: options?.routeSwitchDelayMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS,
             intervalMs: options?.routeProbeIntervalMs ?? DEFAULT_BLUE_GREEN_ROUTE_PROBE_INTERVAL_MS,
+            minimumSuccessAgeMs: Math.min(
+              TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS,
+              options?.routeSwitchDelayMs ?? DEFAULT_BLUE_GREEN_ROUTE_SWITCH_TIMEOUT_MS,
+            ),
           });
           if (!routeProbe.ok) {
             const restoredStatus: ServiceRow['status'] =
@@ -3079,6 +3095,7 @@ export class DeployPipeline {
         probeTimeoutMs: routeProbeTimeoutMs,
         maxWaitMs: routeSwitchDelayMs,
         intervalMs: routeProbeIntervalMs,
+        minimumSuccessAgeMs: Math.min(TRAEFIK_HTTP_PROVIDER_POLL_INTERVAL_MS, routeSwitchDelayMs),
       });
       if (!routeProbe.ok) {
         buildLog += `[route] Failed after switch: ${routeProbe.error}\n`;
