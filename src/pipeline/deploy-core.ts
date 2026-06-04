@@ -235,6 +235,8 @@ export interface RedeployOptions {
   routeProbeTimeoutMs?: number;
   /** @internal Public route path used only to verify ingress reachability after a flip. */
   routeProbePath?: string;
+  /** @internal Non-interactive callers cannot ask the user; fall back to a deterministic workload. */
+  allowMultiServiceProjectFallback?: boolean;
   cmd?: string[];
   lockSessionId?: string;
   trigger?: 'chat' | 'webhook' | 'api';
@@ -1905,6 +1907,7 @@ export class DeployPipeline {
 
   private async resolveRedeployServiceForProject(
     project: ProjectRow,
+    options?: { allowMultiServiceProjectFallback?: boolean },
   ): Promise<ServiceRow | DeployResult> {
     const candidates = new Map<string, ServiceRow>();
     const dbWithGroupLookup = this.db as Pick<Database, 'getDeployableForProject'> &
@@ -1934,6 +1937,13 @@ export class DeployPipeline {
       };
     }
     if (deployables.length > 1) {
+      if (options?.allowMultiServiceProjectFallback) {
+        if (canonical && this.isDeployableService(canonical)) {
+          return canonical;
+        }
+        const fallback = [...deployables].sort((a, b) => a.id.localeCompare(b.id))[0];
+        if (fallback) return fallback;
+      }
       throw new ServiceSelectionRequiredError(
         project.id,
         project.name,
@@ -1974,7 +1984,9 @@ export class DeployPipeline {
       };
     }
 
-    const service = await this.resolveRedeployServiceForProject(project);
+    const service = await this.resolveRedeployServiceForProject(project, {
+      allowMultiServiceProjectFallback: options?.allowMultiServiceProjectFallback,
+    });
     if ('success' in service) {
       return service;
     }
@@ -2764,7 +2776,10 @@ export class DeployPipeline {
           prNumber: options.prNumber,
         });
 
-        const result = await this.redeploy(existing.id);
+        const result = await this.redeploy(existing.id, {
+          trigger: 'webhook',
+          allowMultiServiceProjectFallback: true,
+        });
         if (!result.success) {
           return { success: false, error: result.error };
         }

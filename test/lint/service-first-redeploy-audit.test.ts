@@ -84,4 +84,29 @@ describe('service-first redeploy audit', () => {
     expect(source).toContain('ctx.db.getDeployLogsForService(service.id');
     expect(source).not.toContain('ctx.db.getDeployLogs(service.id');
   });
+
+  it('marks non-interactive project redeploy compatibility callers with deterministic fallback', () => {
+    const expectations = [
+      {
+        file: 'src/pipeline/auto-recovery.ts',
+        call: 'allowMultiServiceProjectFallback: true',
+      },
+      {
+        file: 'src/webhook/index.ts',
+        call: 'allowMultiServiceProjectFallback: true',
+      },
+      {
+        file: 'src/pipeline/deploy-core.ts',
+        call: 'allowMultiServiceProjectFallback: true',
+      },
+    ] as const;
+
+    for (const expectation of expectations) {
+      const source = readFileSync(path.join(REPO_ROOT, expectation.file), 'utf8');
+      expect(
+        source,
+        `${expectation.file} must opt non-interactive redeploy into fallback`,
+      ).toContain(expectation.call);
+    }
+  });
 });

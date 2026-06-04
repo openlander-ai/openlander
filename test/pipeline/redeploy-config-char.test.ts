@@ -129,7 +129,10 @@ class FakeRedeployDb {
     const service = makeServiceRow(project, input);
     this.projects.set(project.id, project);
     this.services.set(service.id, service);
-    this.environments.set(`${project.id}-production`, makeEnvironmentRow(service.id, service.branch));
+    this.environments.set(
+      `${project.id}-production`,
+      makeEnvironmentRow(service.id, service.branch),
+    );
     return project;
   }
 
@@ -570,5 +573,33 @@ describe('redeploy() config reconstruction characterization', () => {
       ServiceSelectionRequiredError,
     );
     expect(deploySpy).not.toHaveBeenCalled();
+  });
+
+  it('project compatibility redeploy can deterministically fallback for non-interactive callers', async () => {
+    await db.createProjectGroup({
+      id: 'ambiguous-auto-group',
+      name: 'ambiguous-auto-group',
+    });
+    await db.createProject({
+      id: 'runtime-z',
+      name: 'runtime-z',
+      repoUrl: 'https://github.com/example/runtime-z',
+    });
+    await db.createProject({
+      id: 'runtime-a',
+      name: 'runtime-a',
+      repoUrl: 'https://github.com/example/runtime-a',
+    });
+    await db.attachServiceToProject('runtime-z__svc', 'ambiguous-auto-group');
+    await db.attachServiceToProject('runtime-a__svc', 'ambiguous-auto-group');
+
+    const result = await pipeline.redeploy('ambiguous-auto-group', {
+      allowMultiServiceProjectFallback: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(deploySpy).toHaveBeenCalledOnce();
+    const capturedConfig = deploySpy.mock.calls[0][0] as ProjectConfig;
+    expect(capturedConfig._serviceId).toBe('runtime-z__svc');
   });
 });

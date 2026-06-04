@@ -862,7 +862,9 @@ ${plan.agentGuidance}
       try {
         const retryResult = await pipeline.redeploy(
           projectId,
-          useNoCache ? { noCache: true } : undefined,
+          useNoCache
+            ? { noCache: true, allowMultiServiceProjectFallback: true }
+            : { allowMultiServiceProjectFallback: true },
         );
         redeploySuccess = retryResult.success;
         redeployError = retryResult.error ?? error;

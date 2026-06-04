@@ -293,7 +293,10 @@ export class WebhookManager {
     }
 
     try {
-      const redeploy = await this.pipeline.redeploy(projectId, { trigger: 'webhook' });
+      const redeploy = await this.pipeline.redeploy(projectId, {
+        trigger: 'webhook',
+        allowMultiServiceProjectFallback: true,
+      });
       if (!redeploy.success) {
         return {
           accepted: false,
