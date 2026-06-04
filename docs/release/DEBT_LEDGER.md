@@ -46,6 +46,20 @@ a release should be recorded here so follow-up work is explicit.
   keep live route mutations behind the same service-target vocabulary and add
   deterministic tests that assert which Traefik provider serves the route.
 
+- **`create_deploy_plan(health_check_path=...)` during data-model freeze:**
+  the existing `openlander_deploy.create_deploy_plan` action accepts the
+  optional `health_check_path` parameter already supported by `deploy_app`.
+- **Why accepted:** the explicit
+  `create_deploy_plan -> execute_deploy_plan` flow must preserve the same route
+  verification input as the one-call `deploy_app` front door. Without it, apps
+  deployed through the explicit plan path skip Day-2 route verification and
+  rollback with `missing_health_check_path`.
+- **Vocab review:** this reuses the existing `health_check_path` parameter name
+  already used by `deploy_app`, `redeploy_app`, and `diagnose_service`.
+- **Endpoint collision check:** no new MCP action, composite slot, REST route,
+  response field, or database field is added; the existing
+  `create_deploy_plan` action schema accepts one additional optional parameter.
+
 - **Deploy-plan execute oracle for build/provision overlap:** approved safe
   managed-resource provisioning for single-app Dockerfile plans may now run as a
   deferred runtime-env phase after deploy dispatch, instead of completing before

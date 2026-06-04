@@ -61,6 +61,7 @@ export interface EnsureDeployableServiceInput {
   imageUrl?: string | null;
   imageCmd?: string[] | null;
   containerPort?: number | null;
+  healthCheckPath?: string | null;
 }
 
 const log = createModuleLogger('project-repo');
@@ -147,6 +148,7 @@ export class ProjectRepo {
     imageUrl?: string;
     imageCmd?: string[];
     containerPort?: number;
+    healthCheckPath?: string;
   }): Promise<ProjectRow> {
     const source = project.source ?? 'git';
     const buildMethod = project.buildMethod ?? null;
@@ -210,6 +212,7 @@ export class ProjectRepo {
             image_url: project.imageUrl ?? null,
             image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
             container_port: project.containerPort ?? null,
+            health_check_path: project.healthCheckPath ?? null,
           })
           .returning({ id: services.id });
 
@@ -319,6 +322,7 @@ export class ProjectRepo {
           image_url: input.imageUrl ?? null,
           image_cmd: input.imageCmd !== undefined ? JSON.stringify(input.imageCmd) : null,
           container_port: input.containerPort ?? null,
+          health_check_path: input.healthCheckPath ?? null,
         })
         .returning();
 
@@ -693,6 +697,7 @@ export class ProjectRepo {
       dockerfilePath: string | null;
       dockerTarget: string | null;
       imageCmd: string | null;
+      healthCheckPath: string | null;
       isPreview: number | null;
       prNumber: number | null;
       accessCode: string | null;
@@ -741,6 +746,8 @@ export class ProjectRepo {
     if (updates.dockerfilePath !== undefined) svcSetValues.dockerfile_path = updates.dockerfilePath;
     if (updates.dockerTarget !== undefined) svcSetValues.docker_target = updates.dockerTarget;
     if (updates.imageCmd !== undefined) svcSetValues.image_cmd = updates.imageCmd;
+    if (updates.healthCheckPath !== undefined)
+      svcSetValues.health_check_path = updates.healthCheckPath;
     if (updates.isPreview !== undefined) svcSetValues.is_preview = updates.isPreview;
     if (updates.prNumber !== undefined) svcSetValues.pr_number = updates.prNumber;
     if (updates.accessCode !== undefined) svcSetValues.access_code = updates.accessCode;

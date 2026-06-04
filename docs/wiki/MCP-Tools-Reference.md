@@ -115,6 +115,7 @@ Analyze a repository and create a deployment plan.
 | `image`             | string  | No       | Docker image (if source=image)                    |
 | `cmd`               | string  | No       | Container command override                        |
 | `port`              | number  | No       | Container port                                    |
+| `health_check_path` | string  | No       | Health check path                                 |
 | `env_vars`          | object  | No       | Environment variables                             |
 | `prefer_dockerfile` | boolean | No       | Prefer existing Dockerfile                        |
 | `dockerfile_path`   | string  | No       | Relative Dockerfile path                          |

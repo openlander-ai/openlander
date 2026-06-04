@@ -823,6 +823,10 @@ export const createDeployPlanSchema = z
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
     port: z.number().int().positive().max(65535).optional().describe('Container port'),
+    health_check_path: z
+      .string()
+      .optional()
+      .describe('Health check path for the deployed service.'),
     env_vars: envVarsInputSchema
       .optional()
       .describe(

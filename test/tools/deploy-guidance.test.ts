@@ -361,6 +361,7 @@ describe('deploy MCP guidance', () => {
         source: 'image',
         image: 'httpd:latest',
         name: 'my-custom-name-123',
+        health_check_path: '/healthz',
         wait: false,
       },
       { target: 'mcp' },
@@ -372,6 +373,7 @@ describe('deploy MCP guidance', () => {
         imageUrl: 'httpd:latest',
         name: 'my-custom-name-123',
         source: 'image',
+        healthCheckPath: '/healthz',
         trigger: 'chat',
       }),
     );
@@ -399,6 +401,7 @@ describe('deploy MCP guidance', () => {
         source: 'image',
         image: 'httpd:latest',
         name: 'qa-name-check',
+        health_check_path: '/ready',
       },
       { target: 'mcp' },
     )) as Record<string, unknown>;
@@ -412,6 +415,7 @@ describe('deploy MCP guidance', () => {
         imageUrl: 'httpd:latest',
         name: 'qa-name-check',
         source: 'image',
+        healthCheckPath: '/ready',
         trigger: 'chat',
       }),
     );
