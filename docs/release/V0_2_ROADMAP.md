@@ -68,17 +68,23 @@ agent workflows, Swarm, and Kubernetes all need the same answers:
 - Keep "service" as the deployable app/worker or managed infrastructure unit.
 - Use public `environment_key` values for logical environments instead of
   leaking service-runtime row ids into user-facing workflows.
+- Treat `environment_key` as the deployment **target** key (omitted =
+  production). `Environment` stays reserved as a future project-level product
+  noun, not a 0.2 grouping object; the 0.2 model is flat `Project -> Resource`.
 - Preserve compatibility for existing v0.1 project/service routes while adding
   clearer 0.2 paths where needed.
 
-### 3. Staging Workflow
+### 3. Deployment Targets (production / development, staging-ready)
 
-- Support `production`, `staging`, and `development` as first-class logical
-  environment keys.
-- Add branch-to-environment mapping that works for webhooks and manual deploys.
+- Ship `production` and `development` as the default deployment targets.
+- Keep the target-key model forward-compatible so `staging` becomes an additive
+  target later, not a rewrite: the schema and `environment_key` already accept a
+  `staging` key, but staging is **not** shipped as a default 0.2 target or UI
+  tab.
+- Add branch-to-target mapping that works for webhooks and manual deploys.
 - Make production-impacting changes visibly protected in UI and MCP guidance.
-- Keep custom arbitrary environment names out of 0.2 unless the fixed-key model
-  is already stable.
+- Keep custom arbitrary environment names, and staging as a default product
+  surface, out of 0.2 until the fixed-key model is stable.
 
 ### 4. Managed Service Binding Across Environments
 

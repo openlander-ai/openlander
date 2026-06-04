@@ -33,15 +33,15 @@ environment variables without a clear inherited/effective view.
 
 0.2 should support these scopes as the canonical model:
 
-| Scope                   | Owner                                | Purpose                                                                        |
-| ----------------------- | ------------------------------------ | ------------------------------------------------------------------------------ |
-| Global secret           | Instance                             | Legacy/admin-wide defaults. Lowest user-configurable precedence.               |
-| Project shared          | Project group                        | Values reused by every service in the project.                                 |
-| Project environment     | Project group + environment key      | Values shared by all services in `production`, `staging`, or `development`.    |
-| Service shared          | Deployable service                   | Values specific to one app/worker, regardless of environment.                  |
-| Service environment     | Deployable service + environment key | Final per-service override for a specific environment.                         |
-| Inline deploy override  | Deploy request or plan               | One-shot values supplied by a deploy plan or API call.                         |
-| System/runtime reserved | OpenLander                           | Protected runtime values such as platform-managed connection/runtime metadata. |
+| Scope                   | Owner                                | Purpose                                                                                                                                        |
+| ----------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Global secret           | Instance                             | Legacy/admin-wide defaults. Lowest user-configurable precedence.                                                                               |
+| Project shared          | Project group                        | Values reused by every service in the project.                                                                                                 |
+| Project environment     | Project group + environment key      | Values shared by all services in a deployment target (`production` / `development`; a `staging` key is accepted but not a default 0.2 target). |
+| Service shared          | Deployable service                   | Values specific to one app/worker, regardless of environment.                                                                                  |
+| Service environment     | Deployable service + environment key | Final per-service override for a specific environment.                                                                                         |
+| Inline deploy override  | Deploy request or plan               | One-shot values supplied by a deploy plan or API call.                                                                                         |
+| System/runtime reserved | OpenLander                           | Protected runtime values such as platform-managed connection/runtime metadata.                                                                 |
 
 Effective runtime precedence should be:
 
@@ -61,11 +61,12 @@ that OpenLander must control.
 
 ## Environment Identity
 
-Use `environment_key` as the public contract for variable scope:
+Use `environment_key` as the public contract for variable scope. It is the
+deployment **target** key (omitted = production):
 
 - `production`
-- `staging`
 - `development`
+- `staging` (schema-accepted, not a default 0.2 target)
 
 The existing `environments` table is service-runtime oriented in the current
 schema. 0.2 should avoid using a single service runtime `environment_id` as the
@@ -101,12 +102,14 @@ Rules:
 
 ## Web UX
 
-Project pages should expose a `Variables` surface with environment selection:
+Project pages should expose a `Variables` surface with deployment-target
+selection:
 
 - Shared
 - Production
-- Staging
 - Development
+
+`staging` is schema-compatible but is not shipped as a default 0.2 tab.
 
 Service pages should expose a `Variables` surface that shows:
 
