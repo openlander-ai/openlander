@@ -9,7 +9,10 @@ import type { Database, EnvironmentRow, ProjectRow } from '../../src/db/index.js
 import type { DeployLogRow, ServiceRow } from '../../src/db/types.js';
 import { eventBus } from '../../src/events/index.js';
 import { DockerBuildCancelledError } from '../../src/errors.js';
-import type { ProjectStatus, StateTransitionOptions } from '../../src/monitor/project-state-manager.js';
+import type {
+  ProjectStatus,
+  StateTransitionOptions,
+} from '../../src/monitor/project-state-manager.js';
 import type { Docker } from '../../src/pipeline/docker.js';
 import * as gitPipeline from '../../src/pipeline/git.js';
 import type { EnvManager } from '../../src/pipeline/env.js';
@@ -152,6 +155,8 @@ describe('DeployPipeline build cancellation', () => {
   });
 
   it('persists user-cancelled Docker builds as cancelled deploy logs', async () => {
+    const deferredEnv = { DATABASE_URL: 'postgres://managed/cancel-app' };
+    const mergeEnvVarsForServiceDetailed = vi.fn(async () => []);
     const db = {
       getProject: vi.fn(async (id: string) => (id === project.id ? project : undefined)),
       getProjectByName: vi.fn(async () => project),
@@ -159,7 +164,9 @@ describe('DeployPipeline build cancellation', () => {
       listServices: vi.fn(async () => [service]),
       getDeployableForProject: vi.fn(async () => service),
       isCircuitBreakerOpen: vi.fn(async () => false),
-      getEnvironment: vi.fn(async (id: string) => (id === environment.id ? environment : undefined)),
+      getEnvironment: vi.fn(async (id: string) =>
+        id === environment.id ? environment : undefined,
+      ),
       getEnvironmentsByProject: vi.fn(async () => [environment]),
       updateEnvironment: vi.fn(async (_id: string, updates: Partial<EnvironmentRow>) => {
         environment = { ...environment, ...updates };
@@ -174,6 +181,7 @@ describe('DeployPipeline build cancellation', () => {
       createDeployLog: vi.fn(async (log: Partial<DeployLogRow> & { buildLog?: string }) => {
         deployLogs.push(log);
       }),
+      mergeEnvVarsForServiceDetailed,
     } as unknown as Database;
     const stateTransitions: Array<{ projectId: string; status: ProjectStatus; reason: string }> =
       [];
@@ -203,6 +211,7 @@ describe('DeployPipeline build cancellation', () => {
       const pipeline = new DeployPipeline(makeDocker(), db, makeEnv(), testConfig, stateManager);
       const result = await pipeline.deployEnvironment(project.id, environment.id, {
         repoUrl: 'https://github.com/openlander/cancel-app',
+        _deferredRuntimeEnvVars: () => Promise.resolve({ ok: true, envVars: deferredEnv }),
       });
 
       expect(result).toMatchObject({
@@ -217,6 +226,11 @@ describe('DeployPipeline build cancellation', () => {
         environmentId: environment.id,
       });
       expect(deployLogs[0]?.buildLog).toContain('[cancelled] Build cancelled by user');
+      expect(mergeEnvVarsForServiceDetailed).toHaveBeenCalledWith(
+        project.id,
+        service.id,
+        deferredEnv,
+      );
       expect(environment.status).toBe('stopped');
       expect(stateTransitions).toContainEqual({
         projectId: project.id,

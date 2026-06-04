@@ -384,6 +384,10 @@ describe('executePlan Oracle — commit point C2', () => {
     });
 
     expect(wrotePlanStatus(h.mockDb, 'ready')).toBe(false);
+    expect(h.mockServiceManager.create).not.toHaveBeenCalled();
+    const deferredRuntimeEnvVars = h.mockPipeline.startDeploy.mock.calls[0][0]
+      ._deferredRuntimeEnvVars as () => Promise<{ ok: boolean }>;
+    await deferredRuntimeEnvVars();
     expect(executingWrittenBeforeProvision).toBe(true);
   });
 });
@@ -397,7 +401,7 @@ describe('executePlan Oracle — provisioning loop P1-P5', () => {
     vi.clearAllMocks();
   });
 
-  it('P1: create + approved-safe + target project → provisions and merges the env value', async () => {
+  it('P1: create + approved-safe + target project → dispatches build before deferred provisioning', async () => {
     const plan = createMockDeployPlan({
       status: 'needs_approval',
       project_id: 'p1',
@@ -410,15 +414,27 @@ describe('executePlan Oracle — provisioning loop P1-P5', () => {
     });
 
     expect(result.status).toBe('building');
-    expect(h.mockServiceManager.create).toHaveBeenCalledTimes(1);
+    expect(h.mockServiceManager.create).not.toHaveBeenCalled();
     expect(h.mockPipeline.startDeploy).toHaveBeenCalledWith(
       expect.objectContaining({
-        envVars: expect.objectContaining({ DATABASE_URL: 'postgres://provisioned/db' }),
+        envVars: expect.not.objectContaining({ DATABASE_URL: expect.any(String) }),
+        _deferredRuntimeEnvVars: expect.any(Function),
       }),
     );
+    const deferredRuntimeEnvVars = h.mockPipeline.startDeploy.mock.calls[0][0]
+      ._deferredRuntimeEnvVars as () => Promise<{
+      ok: boolean;
+      envVars?: Record<string, string>;
+    }>;
+    const runtimeEnv = await deferredRuntimeEnvVars();
+    expect(runtimeEnv).toMatchObject({
+      ok: true,
+      envVars: { DATABASE_URL: 'postgres://provisioned/db' },
+    });
+    expect(h.mockServiceManager.create).toHaveBeenCalledTimes(1);
   });
 
-  it('P1b: approved safe resources provision concurrently and merge env after all complete', async () => {
+  it('P1b: approved safe resources provision concurrently after deploy dispatch', async () => {
     const plan = createMockDeployPlan({
       status: 'needs_approval',
       project_id: 'p1',
@@ -458,11 +474,24 @@ describe('executePlan Oracle — provisioning loop P1-P5', () => {
       approveAllSafeResources: true,
     });
 
+    const result = await resultPromise;
+    expect(result.status).toBe('building');
+    expect(h.mockPipeline.startDeploy).toHaveBeenCalledTimes(1);
+    expect(h.mockServiceManager.create).not.toHaveBeenCalled();
+
+    const deferredRuntimeEnvVars = h.mockPipeline.startDeploy.mock.calls[0][0]
+      ._deferredRuntimeEnvVars as () => Promise<{
+      ok: boolean;
+      envVars?: Record<string, string>;
+    }>;
+    const runtimeEnvPromise = deferredRuntimeEnvVars();
+    let runtimeEnvSettled = false;
+    void runtimeEnvPromise.then(() => {
+      runtimeEnvSettled = true;
+    });
     await vi.waitFor(() => {
       expect(h.mockServiceManager.create).toHaveBeenCalledTimes(2);
     });
-    expect(h.mockPipeline.startDeploy).not.toHaveBeenCalled();
-
     pgCreate.resolve({
       id: 'svc-pg-1',
       name: 'test-app-postgresql',
@@ -470,7 +499,7 @@ describe('executePlan Oracle — provisioning loop P1-P5', () => {
       container_name: 'ol-svc-test-app-postgresql',
     });
     await Promise.resolve();
-    expect(h.mockPipeline.startDeploy).not.toHaveBeenCalled();
+    expect(runtimeEnvSettled).toBe(false);
 
     redisCreate.resolve({
       id: 'svc-redis-1',
@@ -478,17 +507,15 @@ describe('executePlan Oracle — provisioning loop P1-P5', () => {
       kind: 'redis',
       container_name: 'ol-svc-test-app-redis',
     });
-    const result = await resultPromise;
+    const runtimeEnv = await runtimeEnvPromise;
 
-    expect(result.status).toBe('building');
-    expect(h.mockPipeline.startDeploy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        envVars: expect.objectContaining({
-          DATABASE_URL: 'postgres://parallel/db',
-          REDIS_URL: 'redis://parallel/cache',
-        }),
-      }),
-    );
+    expect(runtimeEnv).toMatchObject({
+      ok: true,
+      envVars: {
+        DATABASE_URL: 'postgres://parallel/db',
+        REDIS_URL: 'redis://parallel/cache',
+      },
+    });
   });
 
   it('P2: create + non-safe (unapproved/compose/not_auto_creatable) throws ServiceConfigError, provisions nothing, ends failed (post-commit)', async () => {

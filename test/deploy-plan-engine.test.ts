@@ -1641,6 +1641,21 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     vi.clearAllMocks();
   });
 
+  type DeferredRuntimeEnvFactory = () => Promise<{
+    ok: boolean;
+    envVars?: Record<string, string>;
+  }>;
+
+  const getLastDeferredRuntimeEnvVars = (): DeferredRuntimeEnvFactory => {
+    const startDeployCall = mockPipeline.startDeploy.mock.calls.at(-1);
+    expect(startDeployCall).toBeDefined();
+    const deployConfig = startDeployCall![0] as {
+      _deferredRuntimeEnvVars?: DeferredRuntimeEnvFactory;
+    };
+    expect(deployConfig._deferredRuntimeEnvVars).toEqual(expect.any(Function));
+    return deployConfig._deferredRuntimeEnvVars!;
+  };
+
   // (c) Gate fires before provisioning when no approval is supplied.
   it('returns a structured needs_approval result (no throw) and never enters the provisioning loop when unapproved', async () => {
     const plan = createNeedsApprovalPlan();
@@ -1744,6 +1759,8 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
 
     expect(result.status).toBe('building');
     expect(mockDb.acquireDeployLock).toHaveBeenCalledWith('p1', 'session-1');
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+    await getLastDeferredRuntimeEnvVars()();
     expect(mockServiceManager.create).toHaveBeenCalledTimes(1);
     expect(mockDb.upsertServiceConnection).not.toHaveBeenCalled();
   });
@@ -1761,6 +1778,8 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     });
 
     expect(first.status).toBe('building');
+    expect(mockServiceManager.create).not.toHaveBeenCalled();
+    await getLastDeferredRuntimeEnvVars()();
     expect(mockServiceManager.create).toHaveBeenCalledTimes(1);
     expect(mockDb.upsertServiceConnection).toHaveBeenCalledWith({
       projectId: 'p1',
@@ -1775,6 +1794,8 @@ describe('PlanEngine.executePlan — P2 approval gate', () => {
     });
 
     expect(second.status).toBe('building');
+    await getLastDeferredRuntimeEnvVars()();
+    expect(mockServiceManager.create).toHaveBeenCalledTimes(2);
     expect(mockDb.upsertServiceConnection).toHaveBeenCalledTimes(2);
     expect(mockDb.upsertServiceConnection.mock.results.every((r: any) => r.type === 'return')).toBe(
       true,

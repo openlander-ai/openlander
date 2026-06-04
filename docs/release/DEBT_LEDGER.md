@@ -46,6 +46,26 @@ a release should be recorded here so follow-up work is explicit.
   keep live route mutations behind the same service-target vocabulary and add
   deterministic tests that assert which Traefik provider serves the route.
 
+- **Deploy-plan execute oracle for build/provision overlap:** approved safe
+  managed-resource provisioning for single-app Dockerfile plans may now run as a
+  deferred runtime-env phase after deploy dispatch, instead of completing before
+  dispatch.
+- **Why accepted:** OpenLander keeps the composite `execute_deploy_plan`
+  contract while letting app builds overlap Database/Cache creation. The build
+  uses base env only; the generated managed-resource env is joined and persisted
+  before any container run or live swap.
+- **Vocab review:** no MCP action, REST route, schema field, or public wire name
+  is added. The behavior is limited to already-approved safe proposed resources
+  on an existing target Project; unapproved, non-safe, image, compose, monorepo,
+  reuse, or ambiguous targets keep the sequential path.
+- **Safety invariant:** `executePlan` may return `building` before provisioning
+  has finished, but the deploy pipeline must not call `runContainer` until the
+  deferred runtime env settles successfully. Characterization tests pin the
+  updated P1/P1b/C2 oracle and the join-before-run invariant.
+- **Follow-up:** consider explicit cleanup or operator surfacing for partially
+  provisioned managed resources if one approved resource succeeds and a later one
+  fails; this remains equivalent to the previous sequential behavior.
+
 ## v0.1.13
 
 - **`create_deploy_plan(target_project_id=...)` during data-model freeze:**
