@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.6] - 2026-06-05
+
+> `v0.1.14-rc.5` is superseded for release QA. Live Day-2 and
+> honest-failure QA found that runtime diagnostics could hide route/port
+> failures behind host-port fallback probes and could report recent crash loops
+> as successful deploys.
+
+### Fixed
+
+- Keep `diagnose_service` from letting host-port fallback mask a broken
+  service/container-port route, so route or port mismatches surface as
+  actionable `PORT_MISMATCH`/route diagnostics instead of all-green output.
+- Avoid dependency-cause synthesis when the service container is unavailable,
+  preventing dead containers from being misreported as
+  `DEPENDENCY_UNREACHABLE`.
+- Report recent repeated container restarts as unhealthy/restart-loop signals
+  in both `diagnose_service` and `deploy_app` readiness instead of returning
+  successful/running status.
+
 ## [0.1.14-rc.5] - 2026-06-04
 
 > `v0.1.14-rc.4` is superseded for release QA. Source changes for existing
