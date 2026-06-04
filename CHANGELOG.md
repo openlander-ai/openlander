@@ -5,12 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.1.14-rc.4] - 2026-06-04
+## [0.1.14-rc.5] - 2026-06-04
 
-> `v0.1.14-rc.3` is superseded for release QA. Live MCP QA found that
-> existing-service `deploy_app` requests could accept source/build override
-> inputs that the redeploy path does not apply, and that app self URLs could be
-> reported as high-confidence external dependency failures.
+> `v0.1.14-rc.4` is superseded for release QA. Source changes for existing
+> Applications/Compose workloads now have a dedicated save-only MCP action
+> instead of being mixed into `deploy_app` or `redeploy_app`.
 
 ### Added
 
@@ -21,11 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Route existing-service `deploy_app` source override attempts to
+  `update_application_source`, while keeping Dockerfile/build config changes on
+  `update_service_config`.
+- Return `status: "unchanged"` and `needs_redeploy: false` for same-value source
+  update requests so agents do not trigger unnecessary redeploys.
+
+## [0.1.14-rc.4] - 2026-06-04
+
+> `v0.1.14-rc.3` is superseded for release QA. Live MCP QA found that
+> existing-service `deploy_app` requests could accept source/build override
+> inputs that the redeploy path does not apply, and that app self URLs could be
+> reported as high-confidence external dependency failures.
+
+### Fixed
+
 - Reject unsupported source/build override inputs when `deploy_app` resolves to
   an existing Application/Compose service, so agents do not assume `branch`,
-  `repo_url`, image, port, or Dockerfile overrides were applied to a redeploy.
-  Source changes are now routed to `update_application_source`; build config
-  changes stay on `update_service_config`.
+  `repo_url`, or Dockerfile overrides were applied to a redeploy.
 - Keep `diagnose_service` from treating OpenLander-managed public routes and
   self URL environment variables as external dependency failures, so route and
   port failures are not hidden behind misleading `DEPENDENCY_UNREACHABLE`
