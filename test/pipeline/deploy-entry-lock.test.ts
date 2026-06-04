@@ -304,6 +304,8 @@ function createInMemoryDb(): Database {
     getChildProjects: vi.fn(() => []),
     getComposeChildProjects: vi.fn(() => []),
     getEnvironmentsByProject: vi.fn((projectId: string) => environments.get(projectId) ?? []),
+    getLastDeployLog: vi.fn(() => undefined),
+    createDeployLog: vi.fn(() => undefined),
     createEnvironment: vi.fn((environment: EnvironmentRow) => {
       const projectId = environment.project_id ?? environment.service_id.replace(/__svc$/, '');
       const rows = environments.get(projectId) ?? [];
@@ -524,6 +526,20 @@ describe('Day 12 MAJOR #1: deploy() / blueGreenRedeploy() lock guards', () => {
       expect(result.success).toBe(true);
       // Lock is released after completion.
       expect(db.getDeployLockInfo(result.projectId)).toBeNull();
+    });
+
+    it('does not write crash deploy logs before an Application service row exists', async () => {
+      vi.spyOn(pipeline, 'deploy').mockRejectedValueOnce(new Error('pre-service crash'));
+      vi.spyOn(db, 'getDeployableForProject').mockReturnValue(undefined);
+
+      const result = await pipeline.startDeploy({
+        repoUrl: 'https://github.com/test/pre-service-crash-app',
+      });
+
+      await vi.waitFor(() => {
+        expect(db.getDeployableForProject).toHaveBeenCalledWith(result.projectId);
+      });
+      expect(db.createDeployLog).not.toHaveBeenCalled();
     });
   });
 

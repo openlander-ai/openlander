@@ -714,8 +714,13 @@ export class DeployPipeline {
       await this.db.updateEnvironment(env.id, { status: 'error' });
     }
     try {
-      const lastLog = await this.db.getLastDeployLog(projectId);
-      if (lastLog?.status !== 'failed') {
+      const deployable = await this.db.getDeployableForProject(projectId);
+      if (!deployable) {
+        log.warn(
+          { projectId, originalError: errMsg },
+          'Skipping background failure deploy log because no Application service row exists',
+        );
+      } else if ((await this.db.getLastDeployLog(projectId))?.status !== 'failed') {
         const environments = await this.db.getEnvironmentsByProject(projectId);
         const envId = environments[0]?.id;
         await this.db.createDeployLog({
