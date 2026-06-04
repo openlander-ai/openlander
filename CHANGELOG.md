@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.14-rc.7] - 2026-06-05
+
+> `v0.1.14-rc.6` is superseded for release QA. This candidate adds the
+> local operator path needed to rotate OpenLander MCP tokens safely during
+> repeated QA host preparation without exposing setup-password flows over the
+> public HTTP surface.
+
+### Added
+
+- Add local `openlander mcp token ensure` and guarded
+  `openlander mcp token rotate --yes` commands for server-side MCP org token
+  creation and rotation, with JSON output for QA/operator scripts.
+
 ## [0.1.14-rc.6] - 2026-06-05
 
 > `v0.1.14-rc.5` is superseded for release QA. Live Day-2 and
