@@ -33,6 +33,7 @@ import {
   MissingImageUrlError,
   PreflightCheckError,
   ProjectNotFoundError,
+  ServiceConfigError,
   ServiceSelectionRequiredError,
   ServiceSourceMissingError,
   isDockerNotFoundError,
@@ -194,6 +195,10 @@ export interface ProjectConfig {
   _preferredPort?: number;
   /** @internal Preserve the live container until the new image is ready to run. */
   _preserveLiveContainerUntilRun?: boolean;
+  /** @internal Runtime env that may still be provisioning while clone/build runs. */
+  _deferredRuntimeEnvVars?: () => Promise<
+    { ok: true; envVars: Record<string, string> } | { ok: false; error: string }
+  >;
   /** @internal Deploy lock session for event-based session-scoped release. */
   _lockSessionId?: string;
   /** Specific docker-compose services to deploy. Deploys all if omitted. */
@@ -1400,6 +1405,7 @@ export class DeployPipeline {
         await this.db.mergeEnvVars(projectId, deployConfig.envVars);
       }
     }
+    const deferredRuntimeEnvVars = deployConfig._deferredRuntimeEnvVars?.();
     const preserveLiveContainerUntilRun = deployConfig._preserveLiveContainerUntilRun === true;
     const liveContainerId = environment.container_id;
     const liveContainerView = serviceViewFromRows(project, deployService);
@@ -1462,6 +1468,56 @@ export class DeployPipeline {
     let imageTag = `openlander/${routeName}:${String(Date.now())}`;
     const previousTag = `openlander/${routeName}:previous`;
     let preservedPreviousTag: string | null = null;
+    let deferredRuntimeEnvFinalized = false;
+    const applyDeferredRuntimeEnvVars = async (
+      mode: 'before-run' | 'after-failure' = 'before-run',
+    ): Promise<void> => {
+      if (!deferredRuntimeEnvVars || deferredRuntimeEnvFinalized) {
+        return;
+      }
+      if (mode === 'before-run') {
+        buildLog += '[env] Waiting for managed resource env before container start\n';
+      }
+      let runtimeEnv: { ok: true; envVars: Record<string, string> } | { ok: false; error: string };
+      try {
+        runtimeEnv = await deferredRuntimeEnvVars;
+      } catch (error) {
+        deferredRuntimeEnvFinalized = true;
+        const envError = error instanceof Error ? error.message : String(error);
+        if (mode === 'before-run') {
+          throw new ServiceConfigError(`Managed resource provisioning failed: ${envError}`);
+        }
+        buildLog += `[env] Managed resource provisioning failed after deploy error: ${envError}\n`;
+        return;
+      }
+      if (!runtimeEnv.ok) {
+        deferredRuntimeEnvFinalized = true;
+        if (mode === 'before-run') {
+          throw new ServiceConfigError(`Managed resource provisioning failed: ${runtimeEnv.error}`);
+        }
+        buildLog += `[env] Managed resource provisioning failed after deploy error: ${runtimeEnv.error}\n`;
+        return;
+      }
+      deployConfig.envVars = runtimeEnv.envVars;
+      try {
+        if (deployService) {
+          await this.db.mergeEnvVarsForServiceDetailed(
+            projectId,
+            deployService.id,
+            runtimeEnv.envVars,
+          );
+        } else {
+          await this.db.mergeEnvVars(projectId, runtimeEnv.envVars);
+        }
+        deferredRuntimeEnvFinalized = true;
+      } catch (error) {
+        if (mode === 'before-run') {
+          throw error;
+        }
+        const persistError = error instanceof Error ? error.message : String(error);
+        buildLog += `[env] Failed to persist managed resource env after deploy error: ${persistError}\n`;
+      }
+    };
     if (source !== 'image') {
       const currentRunningTag = environment.image_tag ?? project.image_tag;
       if (currentRunningTag && currentRunningTag !== previousTag) {
@@ -1557,6 +1613,8 @@ export class DeployPipeline {
         dockerfilePath = buildResult.dockerfilePath;
       }
 
+      await applyDeferredRuntimeEnvVars();
+
       if (preserveLiveContainerUntilRun) {
         const containersToRemove = Array.from(
           new Set(
@@ -1624,8 +1682,9 @@ export class DeployPipeline {
       if (isDockerBuildCancelledError(error)) {
         const durationMs = Date.now() - startTime;
         const cancelMessage = 'Build cancelled by user';
-        const buildLogWithCancel = buildLog + `[cancelled] ${cancelMessage}\n`;
         this.jobManager?.updatePhase(projectId, 'failed', cancelMessage);
+        await applyDeferredRuntimeEnvVars('after-failure');
+        const buildLogWithCancel = buildLog + `[cancelled] ${cancelMessage}\n`;
         if (preserveLiveContainerUntilRun && !liveContainerRemovedForSwap) {
           await this.db.updateEnvironment(environmentId, { status: 'running' });
           await this.transitionProjectState(projectId, 'running', 'deploy-cancelled');
@@ -1666,6 +1725,7 @@ export class DeployPipeline {
           cancelled: true,
         };
       }
+      await applyDeferredRuntimeEnvVars('after-failure');
       const failStep = this.detectFailStep(buildLog);
       const attachedRuntimeLog = extractRuntimeLogFromDeployError(error);
       const runtimeLog =

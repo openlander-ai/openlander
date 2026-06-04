@@ -61,6 +61,8 @@ function createMockDocker(): Docker {
     disconnectContainerFromNetwork: vi.fn().mockResolvedValue(undefined),
     runContainer: vi.fn().mockResolvedValue('container-new-123456'),
     startContainer: vi.fn().mockResolvedValue(undefined),
+    ensureProjectNetwork: vi.fn().mockResolvedValue('ol-deferred-env-app'),
+    connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
     listManagedContainers: vi.fn().mockResolvedValue([]),
     listContainers: vi.fn().mockResolvedValue([]),
@@ -70,7 +72,18 @@ function createMockDocker(): Docker {
     cleanupSecretFiles: vi.fn(),
     buildImage: vi.fn().mockResolvedValue(undefined),
     tagImage: vi.fn().mockResolvedValue(undefined),
+    waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
   } as unknown as Docker;
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 interface ProjectCreateInput {
@@ -411,6 +424,10 @@ function createInMemoryDb(): Database {
     }),
     loadDeployConfig: vi.fn(() => null),
     loadDeployConfigForService: vi.fn(() => null),
+    saveDeployConfig: vi.fn(() => undefined),
+    saveDeployConfigForService: vi.fn(() => undefined),
+    mergeEnvVarsForServiceDetailed: vi.fn(() => []),
+    mergeEnvVars: vi.fn(() => []),
     isCircuitBreakerOpen: vi.fn(() => false),
     acquireDeployLock: vi.fn((projectId: string, sessionId: string) => {
       const current = locks.get(projectId);
@@ -533,6 +550,119 @@ describe('Day 12 MAJOR #1: deploy() / blueGreenRedeploy() lock guards', () => {
       expect(lockSessionsObserved[0]).toMatch(/^deploy-/);
       // After the body completed the lock is released.
       expect(db.getDeployLockInfo('p-acquire')).toBeNull();
+    });
+
+    it('starts deferred runtime env provisioning during build and joins before container run', async () => {
+      writeFileSync(
+        join(tmpDir, 'Dockerfile'),
+        'FROM node:22-alpine\nEXPOSE 3000\nCMD ["node", "server.js"]\n',
+        'utf8',
+      );
+      db.createProject({
+        id: 'p-deferred',
+        name: 'deferred-env-app',
+        repoUrl: 'https://github.com/test/deferred-env-app',
+        branch: 'main',
+      });
+      const productionEnvironment = db
+        .getEnvironmentsByProject('p-deferred')
+        .find((environment) => environment.type === 'production');
+      expect(productionEnvironment).toBeDefined();
+
+      const deferredRuntimeEnv = createDeferred<
+        { ok: true; envVars: Record<string, string> } | { ok: false; error: string }
+      >();
+      let deferredStarted = 0;
+      (docker.buildImage as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+        expect(deferredStarted).toBe(1);
+      });
+
+      const resultPromise = pipeline.deployEnvironment('p-deferred', productionEnvironment!.id, {
+        repoUrl: 'https://github.com/test/deferred-env-app',
+        _projectId: 'p-deferred',
+        _serviceId: 'p-deferred__svc',
+        _deferredRuntimeEnvVars: () => {
+          deferredStarted += 1;
+          return deferredRuntimeEnv.promise;
+        },
+      });
+
+      await vi.waitFor(() => {
+        expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalled();
+      });
+      expect(docker.runContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+
+      deferredRuntimeEnv.resolve({
+        ok: true,
+        envVars: { DATABASE_URL: 'postgres://managed/db' },
+      });
+      const result = await resultPromise;
+
+      expect(result).toEqual(expect.objectContaining({ success: true }));
+      expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+        expect.objectContaining({
+          envVars: expect.objectContaining({ DATABASE_URL: 'postgres://managed/db' }),
+        }),
+      );
+    });
+
+    it('persists deferred runtime env when the overlapped build fails', async () => {
+      writeFileSync(
+        join(tmpDir, 'Dockerfile'),
+        'FROM node:22-alpine\nEXPOSE 3000\nCMD ["node", "server.js"]\n',
+        'utf8',
+      );
+      db.createProject({
+        id: 'p-deferred-build-fail',
+        name: 'deferred-build-fail-app',
+        repoUrl: 'https://github.com/test/deferred-build-fail-app',
+        branch: 'main',
+      });
+      const productionEnvironment = db
+        .getEnvironmentsByProject('p-deferred-build-fail')
+        .find((environment) => environment.type === 'production');
+      expect(productionEnvironment).toBeDefined();
+
+      const deferredRuntimeEnv = createDeferred<
+        { ok: true; envVars: Record<string, string> } | { ok: false; error: string }
+      >();
+      let deferredStarted = 0;
+      (docker.buildImage as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+        expect(deferredStarted).toBe(1);
+        throw new Error('synthetic build failure');
+      });
+
+      const resultPromise = pipeline.deployEnvironment(
+        'p-deferred-build-fail',
+        productionEnvironment!.id,
+        {
+          repoUrl: 'https://github.com/test/deferred-build-fail-app',
+          _projectId: 'p-deferred-build-fail',
+          _serviceId: 'p-deferred-build-fail__svc',
+          _deferredRuntimeEnvVars: () => {
+            deferredStarted += 1;
+            return deferredRuntimeEnv.promise;
+          },
+        },
+      );
+
+      await vi.waitFor(() => {
+        expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalled();
+      });
+      deferredRuntimeEnv.resolve({
+        ok: true,
+        envVars: { DATABASE_URL: 'postgres://managed/db' },
+      });
+      const result = await resultPromise;
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('synthetic build failure');
+      expect(db.mergeEnvVarsForServiceDetailed).toHaveBeenCalledWith(
+        'p-deferred-build-fail',
+        'p-deferred-build-fail__svc',
+        { DATABASE_URL: 'postgres://managed/db' },
+      );
+      expect(docker.runContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
     });
 
     it('releases the lock even when the inner deploy fails', async () => {

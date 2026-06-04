@@ -176,6 +176,10 @@ interface ExecuteDispatchResult {
   preflightError?: string;
 }
 
+type DeferredRuntimeEnvVars = Promise<
+  { ok: true; envVars: Record<string, string> } | { ok: false; error: string }
+>;
+
 export class PlanEngine {
   private db: Database;
   private pipeline: DeployPipeline;
@@ -1475,8 +1479,25 @@ export class PlanEngine {
     targetProject: ExecutePlanProjectTarget | null;
     approvedSafeResources: ReadonlySet<string>;
   }): Promise<Record<string, string>> {
-    const { plan, attachTargetProject, targetProject, approvedSafeResources } = params;
-    const mergedEnv = await resolveEnvVars(
+    const { targetProject, approvedSafeResources } = params;
+    const mergedEnv = await this.resolvePlanBaseEnv(params);
+
+    await this.applyManagedResourceEnv({
+      plan: params.plan,
+      targetProject,
+      approvedSafeResources,
+      mergedEnv,
+    });
+
+    return mergedEnv;
+  }
+
+  private async resolvePlanBaseEnv(params: {
+    plan: DeployPlan;
+    attachTargetProject: ExecutePlanProjectTarget | null;
+  }): Promise<Record<string, string>> {
+    const { plan, attachTargetProject } = params;
+    return await resolveEnvVars(
       {
         projectId: attachTargetProject?.id ?? plan.project_id ?? plan.app.name,
         autoEnvVars: plan.env.auto,
@@ -1484,15 +1505,58 @@ export class PlanEngine {
       },
       { env: this.env },
     );
+  }
 
-    await this.applyManagedResourceEnv({
-      plan,
-      targetProject,
-      approvedSafeResources,
-      mergedEnv,
-    });
+  private async resolvePlanEnvSettled(params: {
+    plan: DeployPlan;
+    attachTargetProject: ExecutePlanProjectTarget | null;
+    targetProject: ExecutePlanProjectTarget | null;
+    approvedSafeResources: ReadonlySet<string>;
+    baseEnv: Record<string, string>;
+  }): DeferredRuntimeEnvVars {
+    try {
+      const mergedEnv = { ...params.baseEnv };
+      await this.applyManagedResourceEnv({
+        plan: params.plan,
+        targetProject: params.targetProject,
+        approvedSafeResources: params.approvedSafeResources,
+        mergedEnv,
+      });
+      return { ok: true, envVars: mergedEnv };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
 
-    return mergedEnv;
+  private canOverlapBuildAndProvision(params: {
+    plan: DeployPlan;
+    targetProject: ExecutePlanProjectTarget | null;
+    approvedSafeResources: ReadonlySet<string>;
+  }): boolean {
+    const { plan, targetProject, approvedSafeResources } = params;
+    if (this.getDeployMode(plan) !== 'single' || plan.build.method === 'image') {
+      return false;
+    }
+    if (!targetProject) {
+      return false;
+    }
+    let hasDeferrableProvisioning = false;
+    for (const planService of plan.services) {
+      const envVarName = planService.connect_via || SERVICE_ENV_VARS[planService.type];
+      if (!envVarName || this.hasExplicitEnvValue(plan.env.provided, envVarName)) {
+        continue;
+      }
+      const isApprovedSafeProposal =
+        planService.action === 'create' &&
+        planService.resolution === 'proposed_project_service' &&
+        planService.approval === 'safe_resource' &&
+        approvedSafeResources.has(this.proposedResourceIdentifier(planService));
+      if (!isApprovedSafeProposal) {
+        return false;
+      }
+      hasDeferrableProvisioning = true;
+    }
+    return hasDeferrableProvisioning;
   }
 
   private async applyManagedResourceEnv(params: {
@@ -1601,6 +1665,7 @@ export class PlanEngine {
     deployLockProjectId: string | null;
     lockSessionId?: string;
     planId: string;
+    deferredRuntimeEnvVars?: () => DeferredRuntimeEnvVars;
   }): Promise<ExecuteDispatchResult> {
     const {
       plan,
@@ -1612,6 +1677,7 @@ export class PlanEngine {
       deployLockProjectId,
       lockSessionId,
       planId,
+      deferredRuntimeEnvVars,
     } = params;
     log.info({ planId, planCommit: plan.app.source.commit_sha }, 'Executing plan (non-blocking)');
 
@@ -1677,6 +1743,7 @@ export class PlanEngine {
       ...(execution.sshKeyPath ? { sshKeyPath: execution.sshKeyPath } : {}),
       ...(execution.trigger ? { trigger: execution.trigger as 'chat' | 'webhook' | 'api' } : {}),
       ...(attachTargetProject ? { _networkProjectName: attachTargetProject.name } : {}),
+      ...(deferredRuntimeEnvVars ? { _deferredRuntimeEnvVars: deferredRuntimeEnvVars } : {}),
       // Propagate the plan-engine's lock session so that startDeploy's inner
       // deploy() runs inline under the same session (skipping a new acquire that
       // would conflict with the already-held lock).
@@ -1881,12 +1948,30 @@ export class PlanEngine {
     });
 
     try {
-      const mergedEnv = await this.resolvePlanEnv({
+      let deferredRuntimeEnvVars: (() => DeferredRuntimeEnvVars) | undefined;
+      const shouldOverlapBuildAndProvision = this.canOverlapBuildAndProvision({
         plan,
-        attachTargetProject,
         targetProject,
         approvedSafeResources: approvalGate.approvedSafeResources,
       });
+      const mergedEnv = shouldOverlapBuildAndProvision
+        ? await this.resolvePlanBaseEnv({ plan, attachTargetProject })
+        : await this.resolvePlanEnv({
+            plan,
+            attachTargetProject,
+            targetProject,
+            approvedSafeResources: approvalGate.approvedSafeResources,
+          });
+      if (shouldOverlapBuildAndProvision) {
+        deferredRuntimeEnvVars = () =>
+          this.resolvePlanEnvSettled({
+            plan,
+            attachTargetProject,
+            targetProject,
+            approvedSafeResources: approvalGate.approvedSafeResources,
+            baseEnv: mergedEnv,
+          });
+      }
 
       const dispatch = await this.dispatchPlanDeploy({
         plan,
@@ -1898,6 +1983,7 @@ export class PlanEngine {
         deployLockProjectId: deployLock.projectId,
         lockSessionId,
         planId,
+        deferredRuntimeEnvVars,
       });
 
       this.registerPlanCompletionListeners({
