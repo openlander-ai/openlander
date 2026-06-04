@@ -551,6 +551,14 @@ with a verified same-image recreate (`apply_mode: same_image_recreate`); build-t
 `NEXT_PUBLIC_*`, `VITE_*`, `REACT_APP_*`, `NUXT_PUBLIC_*`, `PUBLIC_*`, and `GATSBY_*` still require a
 full redeploy (`apply_mode: full_redeploy`).
 
+Immediate applies include `runtime_apply`. For same-image recreates, `runtime_apply.status`
+is `verified` when route verification passed, `applied` when the recreate succeeded but
+route verification was skipped because no health path is configured, and `failed` when
+the runtime apply did not complete. Failed same-image applies include
+`previous_version_still_serving` and `fallback: "redeploy_app"` so agents can inspect
+before escalating to a full rebuild. Build-time env updates return
+`runtime_apply: { mode: "full_redeploy", status: "started" }`.
+
 ### `export_env_vars`
 
 | Parameter      | Type   | Required | Description                                        |
@@ -862,6 +870,13 @@ confidence, evidence }` and, when a safe next operation exists, top-level
 `NO_RUNTIME_IMAGE`. Ambiguous cases omit `diagnosis` and keep raw `env`,
 `buildTimeEnv`, `container`, `logs`, `httpCheck`, `route`, and `dependencies`
 fields for agent review.
+
+Day-2 recovery loop: call `diagnose_service`, execute its top-level
+`suggested_call` when present, then read the action result's verification detail
+(`route_verification` for route changes or `runtime_apply` for env changes).
+Use `diagnostic_call` when verification is skipped or failed; full redeploy is
+the fallback for build-time env changes, missing runtime images, or failed hot
+paths that diagnostics cannot resolve.
 
 ### `probe_host`
 
