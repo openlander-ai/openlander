@@ -205,9 +205,10 @@ common single-Application case.
 
 - Git → Docker → URL pipeline. Auto-detects ports, proxies, and containers
   before deploying.
-- Deploy apps from Git repos or public container images, and provision
+- Deploy apps from public Git repos, connected private GitHub repos, or public
+  container images, and provision
   project-scoped Postgres, MySQL, Redis, MongoDB, and MinIO services alongside
-  them. Private registry support is on the roadmap.
+  them. Private container registry support is on the roadmap.
 - Cancel a stuck build mid-flight. The cancel goes through the same SSE log
   channel agents are watching.
 
@@ -271,12 +272,17 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
 - Dashboard for human oversight + intervention.
 - Project-scoped Database/Cache/Storage resources for Postgres, MySQL, Redis,
   MongoDB, and MinIO through agent/MCP workflows.
+- Deterministic Day-2 recovery primitives for external agents: structured
+  `diagnose_service` findings, safe route re-pointing, same-image runtime env
+  apply, verification details, and rollback when a hot path fails.
 
 **Next**
 
-- **Internal AI Ops** — optional incident response inside a policy you set.
-  Today the platform records failures and exposes structured MCP diagnostics;
-  external agents decide and call each remediation step explicitly.
+- **Recovery loop hardening** — expand high-confidence diagnostics and verified
+  hot paths before turning on built-in automation. External agents still decide
+  and call each remediation step explicitly.
+- **Environment contract** — first-class project / environment / service /
+  generated runtime variable scopes, with clear redeploy guidance.
 - **Private container registries** — AWS ECR, Google Artifact Registry, and
   any OCI registry behind cloud-provider auth.
 - **Service templates** — beyond Postgres / Redis. Object storage, message
@@ -285,6 +291,9 @@ The shape of v0.2 is driven by what makes agentic operation more reliable.
   with environment-scoped env vars and approvals.
 - **Notifications** — Slack and Discord webhooks for deploy / health /
   approval events.
+- **Internal AI Ops** — optional incident response inside a policy you set,
+  built on the deterministic recovery contracts above rather than a separate
+  chat-first automation path.
 
 If a roadmap item matters to you, opening an issue moves it up the queue
 more than waiting for it does.

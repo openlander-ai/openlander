@@ -786,7 +786,11 @@ lists all registered domain routes.
 | --------- | ------ | -------- | ------------ |
 | `query`   | string | Yes      | Search query |
 
-GitHub repository discovery returns safe HTTPS clone URLs only. Private-repo credentials are injected internally at clone time and are never included in MCP responses.
+GitHub repository discovery returns safe HTTPS clone URLs only. Private or
+internal repository credentials are injected internally at clone time and are
+never included in MCP responses, deployment status payloads, or build-log
+guidance. Agents should pass the returned `clone_url`/`repo_url` as-is instead
+of embedding tokens in URLs.
 
 ---
 
@@ -878,6 +882,11 @@ Day-2 recovery loop: call `diagnose_service`, execute its top-level
 Use `diagnostic_call` when verification is skipped or failed; full redeploy is
 the fallback for build-time env changes, missing runtime images, or failed hot
 paths that diagnostics cannot resolve.
+
+For route hot paths, `route_verification.status: "verified"` means the managed
+Traefik HTTP provider had enough time to poll the updated backend and the public
+route still returned a 2xx. OpenLander does not accept an immediate stale 2xx
+from the previous route snapshot as proof of cutover.
 
 ### `probe_host`
 
