@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.13] - 2026-06-04
+
+### Release Validation
+
+- Promoted from `v0.1.13-rc.3` after clean AWS QA on the exact release
+  candidate image. The validated path was
+  `create_project -> create_service(project_id) -> deploy_app(target_project_id)`
+  with a Project-scoped PostgreSQL resource and the first Application attached
+  to that Project.
+- `v0.1.13-rc.1` is yanked and should not be used. `v0.1.13-rc.2` is
+  superseded by `v0.1.13-rc.3`.
+
+### Fixed
+
+- Fixed DB-first Project/Application identity handling so an empty Project gets
+  its first Application service row before service-scoped environment and deploy
+  log writes.
+- Fixed Project-first Database/Cache deploys so Applications started with
+  `target_project_id` run on the target Project network while keeping their
+  Application route/container identity.
+- Fixed agent-facing URL projection for attached Applications and Compose
+  stacks so Project-level responses advertise the actual service route rather
+  than the Project namespace route.
+- Made Deployment Target creation idempotent for pre-created Projects by
+  returning the existing environment row for the canonical service/type target.
+- Allowed a first Application to use the same name as its target Project while
+  preserving collision protection against other Projects.
+- Returned actionable MCP guidance for Database/Cache/Storage resource Docker
+  name conflicts, including an orphan-inspection follow-up call.
+- Hardened service-scoped write repositories so `environments`, `deploy_logs`,
+  `deploy_configs`, `runtime_incidents`, and `service_connections` resolve an
+  existing service row before inserting FK-bearing records.
+- Hardened DB-first failure handling so pre-service deploy crashes preserve the
+  original failure and do not write secondary deploy-log records against a
+  missing Application service row.
+- Hardened managed cleanup and incident reporting paths used by release QA so
+  Project-owned resources and managed incidents are handled consistently.
+- Added release-gated MCP contracts and audit coverage for DB-first flows,
+  synthetic `__svc` write paths, and the reported Project/Application route
+  mismatch.
+
 ## [0.1.13-rc.3] - 2026-06-04
 
 > `v0.1.13-rc.2` is superseded for release QA. It fixed the DB-first
