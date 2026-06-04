@@ -147,6 +147,7 @@ ${typeSpecific}`,
 4. **Apply the smallest fix**, then:
     - \`redeploy_app\` for code/config fixes (add \`no_cache:true\` when a dependency or lockfile changed but the build still reuses stale layers).
     - \`set_env_vars\` then \`redeploy_app\` for missing/incorrect env (MCP env writes save-only by default — redeploy to apply, or pass \`defer_redeploy:false\`).
+    - \`update_application_source\` then \`redeploy_app\` for branch / repo_url / image / saved container_port changes.
     - \`update_service_config\` for Dockerfile path / build target / build context fixes.
     - \`rollback_service\` to get the app back up fast when the new build is broken. NOTE: rollback is **image-only** — it does NOT restore databases, volumes, env vars, or service config.
 5. **Confirm — do not trust the execute call.** \`execute_deploy_plan\` and \`redeploy_app\` are non-blocking. Poll \`get_deploy_status\` until terminal, then \`diagnose_service\` (or \`probe_host\`) to confirm health. Follow \`status_call\` / \`diagnostic_call\` links in responses when present.
@@ -228,6 +229,7 @@ function getRecoveryAdvice(failureType: string): string {
 - Read \`get_build_log\` to the actual error line; the failing phase marker (\`build\`) narrows it.
 - Missing build-time env? Prefixes \`NEXT_PUBLIC_*\`, \`VITE_*\`, \`REACT_APP_*\`, \`NUXT_PUBLIC_*\`, \`PUBLIC_*\`, \`GATSBY_*\` are auto-injected as Docker build args — set them via \`set_env_vars\` and redeploy.
 - Dependency/lockfile changed but the build reused old layers? \`redeploy_app\` with \`no_cache:true\`.
+- Wrong branch, repo, image, or saved port? \`update_application_source\`, then \`redeploy_app\`.
 - Wrong Dockerfile or build target? \`update_service_config\` (\`dockerfile_path\`, \`docker_target\`, \`build_context\`).`;
 
     case 'oom':

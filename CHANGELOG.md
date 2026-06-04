@@ -12,11 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 > inputs that the redeploy path does not apply, and that app self URLs could be
 > reported as high-confidence external dependency failures.
 
+### Added
+
+- Add `openlander_service.update_application_source` as the dedicated save-only
+  MCP action for changing an existing Application/Compose Git repo, branch,
+  image source, image command, or saved container port before calling
+  `redeploy_app`.
+
 ### Fixed
 
 - Reject unsupported source/build override inputs when `deploy_app` resolves to
   an existing Application/Compose service, so agents do not assume `branch`,
-  `repo_url`, or Dockerfile overrides were applied to a redeploy.
+  `repo_url`, image, port, or Dockerfile overrides were applied to a redeploy.
+  Source changes are now routed to `update_application_source`; build config
+  changes stay on `update_service_config`.
 - Keep `diagnose_service` from treating OpenLander-managed public routes and
   self URL environment variables as external dependency failures, so route and
   port failures are not hidden behind misleading `DEPENDENCY_UNREACHABLE`

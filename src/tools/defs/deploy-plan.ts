@@ -736,6 +736,9 @@ const EXISTING_SERVICE_SOURCE_OVERRIDE_PARAMS = [
   'docker_target',
 ] as const;
 
+const EXISTING_SERVICE_SOURCE_UPDATE_PARAMS = ['repo_url', 'branch', 'source', 'image', 'port'];
+const EXISTING_SERVICE_BUILD_CONFIG_PARAMS = ['dockerfile_path', 'docker_target'];
+
 const EXISTING_SERVICE_REDEPLOY_ALLOWED_PARAMS = [
   'service_id',
   'service_name',
@@ -754,6 +757,7 @@ function existingServiceSourceOverrideParams(args: Record<string, unknown>): str
 
 function buildExistingServiceSourceOverrideResponse(params: {
   invalidParams: string[];
+  originalArgs: Record<string, unknown>;
   frontDoorTarget:
     | {
         kind: 'service_target';
@@ -769,6 +773,26 @@ function buildExistingServiceSourceOverrideResponse(params: {
     typeof params.frontDoorTarget.params['service_id'] === 'string'
       ? params.frontDoorTarget.params['service_id']
       : undefined;
+  const hasSourceUpdate = params.invalidParams.some((name) =>
+    EXISTING_SERVICE_SOURCE_UPDATE_PARAMS.includes(name),
+  );
+  const hasBuildConfig = params.invalidParams.some((name) =>
+    EXISTING_SERVICE_BUILD_CONFIG_PARAMS.includes(name),
+  );
+  const sourceUpdateParams: Record<string, unknown> = serviceId ? { service_id: serviceId } : {};
+  for (const name of EXISTING_SERVICE_SOURCE_UPDATE_PARAMS) {
+    const value = params.originalArgs[name];
+    if (value !== undefined) {
+      sourceUpdateParams[name === 'port' ? 'container_port' : name] = value;
+    }
+  }
+  const buildConfigParams: Record<string, unknown> = serviceId ? { service_id: serviceId } : {};
+  for (const name of EXISTING_SERVICE_BUILD_CONFIG_PARAMS) {
+    const value = params.originalArgs[name];
+    if (value !== undefined) {
+      buildConfigParams[name] = value;
+    }
+  }
 
   return {
     error: 'EXISTING_SERVICE_SOURCE_OVERRIDE_UNSUPPORTED',
@@ -781,11 +805,15 @@ function buildExistingServiceSourceOverrideResponse(params: {
       : {}),
     ...(serviceId
       ? {
-          suggested_call: {
-            tool: 'openlander_service',
-            action: 'redeploy_app',
-            params: { service_id: serviceId },
-          },
+          ...(hasSourceUpdate && hasBuildConfig
+            ? {}
+            : {
+                suggested_call: {
+                  tool: 'openlander_service',
+                  action: hasSourceUpdate ? 'update_application_source' : 'update_service_config',
+                  params: hasSourceUpdate ? sourceUpdateParams : buildConfigParams,
+                },
+              }),
         }
       : {}),
     _agent_guidance: {
@@ -793,8 +821,8 @@ function buildExistingServiceSourceOverrideResponse(params: {
         'deploy_app resolved an existing Application/Compose service, but the request included source/build override params that this existing-service path does not apply. OpenLander did not start a redeploy.',
       next_steps: [
         'To rebuild the latest HEAD of the stored branch, retry deploy_app for the existing target without source/build override params, or call openlander_service.redeploy_app.',
+        'To change branch, repo_url, source, image, or saved container_port, call openlander_service.update_application_source, then call redeploy_app.',
         'To change Dockerfile/build config, call openlander_service.update_service_config, then call redeploy_app.',
-        'Changing branch, repo_url, source, image, or port for an existing service is not exposed through MCP in this release; use the Web/API service settings until a dedicated MCP source-update action is added.',
       ],
     },
   };
@@ -1229,6 +1257,7 @@ export const deployPlanToolDefs: ToolDef[] = [
         if (invalidParams.length > 0) {
           return buildExistingServiceSourceOverrideResponse({
             invalidParams,
+            originalArgs: args,
             frontDoorTarget,
           });
         }

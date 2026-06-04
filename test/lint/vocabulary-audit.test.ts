@@ -77,7 +77,9 @@ const FROZEN_DEPLOYABLE_SERVICE_ACTIONS = [
   'restart_service',
   'redeploy_app',
   'rollback_service',
+  'apply_route_config',
   'update_service_config',
+  'update_application_source',
   'list_env_vars',
   'get_env_var',
   'set_env_vars',
@@ -113,7 +115,9 @@ describe('vocabulary-audit (Project=group / Service=deployable guardrail)', () =
         'redeploy_app',
         'restart_service',
         'rollback_service',
+        'apply_route_config',
         'update_service_config',
+        'update_application_source',
       ]),
     );
   });

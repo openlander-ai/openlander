@@ -118,6 +118,7 @@ export default defineConfig({
       'test/tools/project-ops-restart.test.ts',
       'test/tools/registry-critical-tools.test.ts',
       'test/tools/server-tools.test.ts',
+      'test/tools/update-application-source.test.ts',
       'test/lint/public-vocabulary-audit.test.ts',
       'test/lint/service-first-redeploy-audit.test.ts',
       'test/lint/synthetic-service-id-write-audit.test.ts',

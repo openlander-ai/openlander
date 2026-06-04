@@ -124,7 +124,7 @@ export const MANAGED_SERVICE_ACTIONS = [
 
 /**
  * openlander_service: Applications/Compose workloads.
- * Total: 23 tools
+ * Total: 24 tools
  */
 export const SERVICE_ACTIONS = [
   'list_archived_services',
@@ -135,6 +135,7 @@ export const SERVICE_ACTIONS = [
   'rollback_service',
   'apply_route_config',
   'update_service_config',
+  'update_application_source',
   'list_env_vars',
   'get_env_var',
   'set_env_vars',
@@ -207,7 +208,7 @@ export const PLATFORM_ACTIONS = [
  * - DEPLOY_ACTIONS: 18 tools
  * - PROJECT_ACTIONS: 17 tools
  * - MANAGED_SERVICE_ACTIONS: 21 tools
- * - SERVICE_ACTIONS: 23 tools
+ * - SERVICE_ACTIONS: 24 tools
  * - MONITOR_ACTIONS: 11 tools
  * - PLATFORM_ACTIONS: 13 tools (gated separately)
  * - Platform tools: 13 direct tools (gated separately)
